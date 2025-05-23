@@ -1,6 +1,7 @@
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/file_system.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/extension_util.hpp"
 #include "ast_parser.hpp"
@@ -66,7 +67,8 @@ static void ReadASTFunction(ClientContext &context, TableFunctionInput &data_p, 
 	if (data.nodes.empty() && data.current_index == 0) {
 		try {
 			TreeSitterParser parser(data.language);
-			data.nodes = parser.ParseFile(data.file_path);
+			auto &fs = FileSystem::GetFileSystem(context);
+			data.nodes = parser.ParseFile(data.file_path, fs);
 		} catch (std::exception &e) {
 			throw IOException("Failed to parse file: %s", e.what());
 		}

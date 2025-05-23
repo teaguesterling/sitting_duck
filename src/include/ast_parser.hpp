@@ -2,12 +2,12 @@
 
 #include "duckdb.hpp"
 #include "duckdb/common/vector.hpp"
+#include <tree_sitter/api.h>
 
 // Forward declarations for tree-sitter types
 extern "C" {
     typedef struct TSParser TSParser;
     typedef struct TSTree TSTree;
-    typedef struct TSNode TSNode;
     typedef struct TSLanguage TSLanguage;
 }
 
@@ -35,7 +35,7 @@ public:
 
 public:
 	//! Parse a file and return the AST
-	vector<ASTNode> ParseFile(const string &file_path);
+	vector<ASTNode> ParseFile(const string &file_path, FileSystem &fs);
 	
 	//! Parse a string and return the AST
 	vector<ASTNode> ParseString(const string &content, const string &file_path = "");

@@ -39,8 +39,7 @@ TreeSitterParser::~TreeSitterParser() {
 	}
 }
 
-vector<ASTNode> TreeSitterParser::ParseFile(const string &file_path) {
-	auto &fs = FileSystem::GetFileSystem();
+vector<ASTNode> TreeSitterParser::ParseFile(const string &file_path, FileSystem &fs) {
 	if (!fs.FileExists(file_path)) {
 		throw IOException("File not found: %s", file_path);
 	}
