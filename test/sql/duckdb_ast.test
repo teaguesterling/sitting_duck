@@ -51,7 +51,7 @@ SELECT type, COUNT(*) as count
 FROM read_ast('test/data/python/simple.py', 'python')
 WHERE type IN ('function_definition', 'class_definition', 'identifier', 'string')
 GROUP BY type
-ORDER BY count DESC;
+ORDER BY count DESC, type ASC;
 ----
 identifier	19
 function_definition	4

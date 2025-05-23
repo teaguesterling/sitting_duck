@@ -4,23 +4,29 @@
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/main/extension_util.hpp"
+#include "duckdb/main/extension_helper.hpp"
+#include "read_ast_objects_hybrid.hpp"
 
 namespace duckdb {
 
 // Forward declaration of registration functions
 void RegisterReadASTFunction(DatabaseInstance &instance);
+void RegisterReadASTObjectsHybridFunction(DatabaseInstance &instance);
 // Temporarily disabled:
-// void RegisterReadASTObjectsFunction(DatabaseInstance &instance);
+// void RegisterASTObjectsFunction(DatabaseInstance &instance);
 // void RegisterASTHelperFunctions(DatabaseInstance &instance);
 
 static void LoadInternal(DatabaseInstance &instance) {
+	// Auto-load JSON extension dependency
+	ExtensionHelper::AutoLoadExtension(instance, "json");
+	
 	// Register the read_ast table function
 	RegisterReadASTFunction(instance);
 	
-	// TODO: Re-enable once we fix the issues
-	// Register the read_ast_objects table function
-	// RegisterReadASTObjectsFunction(instance);
+	// Register the hybrid read_ast_objects table function
+	RegisterReadASTObjectsHybridFunction(instance);
 	
+	// TODO: Re-enable once we fix the issues
 	// Register AST helper functions  
 	// RegisterASTHelperFunctions(instance);
 }

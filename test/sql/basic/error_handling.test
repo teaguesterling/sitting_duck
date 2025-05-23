@@ -1,0 +1,23 @@
+# name: test/sql/basic/error_handling.test
+# description: Test error handling for invalid inputs
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: Error handling - non-existent file
+statement error
+SELECT * FROM read_ast('test/data/python/nonexistent.py', 'python');
+----
+IO Error: Failed to parse file
+
+# Test 2: Error handling - unsupported language
+statement error
+SELECT * FROM read_ast('test/data/python/simple.py', 'javascript');
+----
+IO Error: Failed to parse file
+
+# Test 3: read_ast_objects - non-existent file
+statement error
+SELECT * FROM read_ast_objects('test/data/python/nonexistent.py', 'python');
+----
+IO Error: File not found: test/data/python/nonexistent.py

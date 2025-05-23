@@ -1,0 +1,38 @@
+# name: test/sql/parsing/python_functions.test
+# description: Test Python function extraction and naming
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: Find all function definitions with names
+query III
+SELECT type, name, start_line
+FROM read_ast('test/data/python/simple.py', 'python')
+WHERE type = 'function_definition'
+ORDER BY start_line;
+----
+function_definition	hello	1
+function_definition	__init__	7
+function_definition	add	10
+function_definition	main	13
+
+# Test 2: Count function definitions
+query II
+SELECT type, COUNT(*) as count
+FROM read_ast('test/data/python/simple.py', 'python')
+WHERE type = 'function_definition'
+GROUP BY type;
+----
+function_definition	4
+
+# Test 3: Verify function depth (functions inside classes are deeper)
+query III
+SELECT name, depth, parent_id IS NOT NULL as has_parent
+FROM read_ast('test/data/python/simple.py', 'python')
+WHERE type = 'function_definition'
+ORDER BY start_line;
+----
+hello	1	true
+__init__	3	true
+add	3	true
+main	1	true
