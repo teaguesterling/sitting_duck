@@ -9,10 +9,20 @@ namespace duckdb {
 
 // Forward declaration of registration functions
 void RegisterReadASTFunction(DatabaseInstance &instance);
+// Temporarily disabled:
+// void RegisterReadASTObjectsFunction(DatabaseInstance &instance);
+// void RegisterASTHelperFunctions(DatabaseInstance &instance);
 
 static void LoadInternal(DatabaseInstance &instance) {
 	// Register the read_ast table function
 	RegisterReadASTFunction(instance);
+	
+	// TODO: Re-enable once we fix the issues
+	// Register the read_ast_objects table function
+	// RegisterReadASTObjectsFunction(instance);
+	
+	// Register AST helper functions  
+	// RegisterASTHelperFunctions(instance);
 }
 
 void DuckdbAstExtension::Load(DuckDB &db) {
