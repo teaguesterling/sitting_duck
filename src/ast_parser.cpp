@@ -4,6 +4,7 @@
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types/hash.hpp"
+#include <cstring>
 
 // Tree-sitter headers
 extern "C" {
@@ -89,9 +90,30 @@ void TreeSitterParser::ProcessNode(TSNode node, const string &content, const str
 	ast_node.type = ts_node_type(node);
 	
 	// Try to get node name (for named nodes like function names)
-	if (ts_node_is_named(node)) {
-		// For now, we'll leave name extraction for phase 2
-		ast_node.name = "";
+	ast_node.name = "";
+	
+	// Extract names for specific node types
+	const char* node_type_str = ts_node_type(node);
+	if (strcmp(node_type_str, "function_definition") == 0 || 
+	    strcmp(node_type_str, "class_definition") == 0) {
+		// For functions and classes, the name is typically the first or second identifier child
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count && i < 3; i++) {
+			TSNode child = ts_node_child(node, i);
+			if (strcmp(ts_node_type(child), "identifier") == 0) {
+				uint32_t name_start = ts_node_start_byte(child);
+				uint32_t name_end = ts_node_end_byte(child);
+				if (name_start < name_end && name_end <= content.length()) {
+					ast_node.name = content.substr(name_start, name_end - name_start);
+					break;
+				}
+			}
+		}
+	} else if (strcmp(node_type_str, "identifier") == 0) {
+		// For identifier nodes, the name is the node's text itself
+		if (start_byte < end_byte && end_byte <= content.length()) {
+			ast_node.name = content.substr(start_byte, end_byte - start_byte);
+		}
 	}
 	
 	// File and position information
