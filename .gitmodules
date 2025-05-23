@@ -6,3 +6,6 @@
 	path = extension-ci-tools
 	url = https://github.com/duckdb/extension-ci-tools
 	branch = main
+[submodule "grammars/tree-sitter-python"]
+	path = grammars/tree-sitter-python
+	url = https://github.com/tree-sitter/tree-sitter-python.git

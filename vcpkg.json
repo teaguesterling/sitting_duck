@@ -1,6 +1,6 @@
 {
         "dependencies": [
-                "openssl"
+                "tree-sitter"
         ],
         "vcpkg-configuration": {
                 "overlay-ports": [

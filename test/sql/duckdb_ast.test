@@ -1,0 +1,69 @@
+# name: test/sql/duckdb_ast.test
+# description: Test duckdb_ast extension
+# group: [duckdb_ast]
+
+# Before we load the extension, this will fail
+statement error
+SELECT * FROM read_ast('test.py', 'python');
+----
+Catalog Error: Table Function with name read_ast does not exist!
+
+# Require statement will ensure this test is run with this extension loaded
+require duckdb_ast
+
+# Create a test Python file
+statement ok
+COPY (SELECT 'def hello():
+    print("Hello, World!")
+
+class MyClass:
+    def __init__(self):
+        self.value = 42
+        
+def main():
+    obj = MyClass()
+    hello()
+    
+if __name__ == "__main__":
+    main()
+' AS content) TO '__TEST_DIR__/test.py' (FORMAT CSV, QUOTE '', HEADER FALSE);
+
+# Test basic read_ast functionality
+query IIIIIIIIIIII
+SELECT node_id, type, name, file_path, start_line, start_column, 
+       end_line, end_column, parent_id, depth, sibling_index, 
+       LENGTH(source_text) as source_len
+FROM read_ast('__TEST_DIR__/test.py', 'python')
+WHERE depth <= 1
+ORDER BY depth, sibling_index;
+----
+# Results will be added after implementation is complete
+
+# Test that we can filter by node type
+query II
+SELECT type, COUNT(*) as count
+FROM read_ast('__TEST_DIR__/test.py', 'python')
+GROUP BY type
+ORDER BY count DESC
+LIMIT 5;
+----
+# Results will be added after implementation is complete
+
+# Test with non-existent file
+statement error
+SELECT * FROM read_ast('__TEST_DIR__/nonexistent.py', 'python');
+----
+IO Error: File not found
+
+# Test with unsupported language
+statement error
+SELECT * FROM read_ast('__TEST_DIR__/test.py', 'javascript');
+----
+Invalid Input Error: Unsupported language
+
+# Clean up test file
+statement ok
+DROP TABLE IF EXISTS test_cleanup;
+
+statement ok
+CREATE TABLE test_cleanup AS SELECT 1;
