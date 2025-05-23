@@ -17,8 +17,9 @@ void RegisterReadASTObjectsHybridFunction(DatabaseInstance &instance);
 // void RegisterASTHelperFunctions(DatabaseInstance &instance);
 
 static void LoadInternal(DatabaseInstance &instance) {
-	// Auto-load JSON extension dependency
-	ExtensionHelper::AutoLoadExtension(instance, "json");
+	// TODO: Fix JSON auto-loading - currently requires manual load
+	// The extension is built but not found in the expected location
+	// ExtensionHelper::AutoLoadExtension(instance, "json");
 	
 	// Register the read_ast table function
 	RegisterReadASTFunction(instance);

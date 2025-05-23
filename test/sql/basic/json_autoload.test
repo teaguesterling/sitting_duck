@@ -1,0 +1,28 @@
+# name: test/sql/basic/json_autoload.test
+# description: Test JSON extension auto-loading (currently requires manual load)
+# group: [duckdb_ast]
+
+# This test documents that JSON auto-loading needs investigation
+# For now, we manually require json in tests that need it
+
+require duckdb_ast
+
+# Test if JSON functions are available without explicit require
+# NOTE: Auto-loading is disabled, must load manually
+statement error
+SELECT json_valid('{"test": true}');
+----
+
+# After requiring json, it works
+require json
+
+query I
+SELECT json_valid('{"test": true}');
+----
+true
+
+# Now our AST JSON functions work
+query I
+SELECT json_valid(nodes) FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true
