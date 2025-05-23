@@ -4,7 +4,7 @@
 
 namespace duckdb {
 
-class DuckDBASTExtension : public Extension {
+class DuckdbAstExtension : public Extension {
 public:
 	void Load(DuckDB &db) override;
 	string Name() override;

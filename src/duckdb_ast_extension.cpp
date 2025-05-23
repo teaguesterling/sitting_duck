@@ -15,15 +15,15 @@ static void LoadInternal(DatabaseInstance &instance) {
 	RegisterReadASTFunction(instance);
 }
 
-void DuckDBASTExtension::Load(DuckDB &db) {
+void DuckdbAstExtension::Load(DuckDB &db) {
 	LoadInternal(*db.instance);
 }
 
-string DuckDBASTExtension::Name() {
+string DuckdbAstExtension::Name() {
 	return "duckdb_ast";
 }
 
-string DuckDBASTExtension::Version() const {
+string DuckdbAstExtension::Version() const {
 #ifdef EXT_VERSION_DUCKDB_AST
 	return EXT_VERSION_DUCKDB_AST;
 #else
@@ -37,7 +37,7 @@ extern "C" {
 
 DUCKDB_EXTENSION_API void duckdb_ast_init(duckdb::DatabaseInstance &db) {
 	duckdb::DuckDB db_wrapper(db);
-	db_wrapper.LoadExtension<duckdb::DuckDBASTExtension>();
+	db_wrapper.LoadExtension<duckdb::DuckdbAstExtension>();
 }
 
 DUCKDB_EXTENSION_API const char *duckdb_ast_version() {
