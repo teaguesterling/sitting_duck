@@ -4,8 +4,7 @@ cmake_minimum_required(VERSION 3.5)
 set(TARGET_NAME duckdb_ast)
 
 # Tree-sitter is our main dependency for AST parsing
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(tree-sitter REQUIRED tree-sitter)
+find_package(unofficial-tree-sitter CONFIG REQUIRED)
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
@@ -24,13 +23,9 @@ set(EXTENSION_SOURCES
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 
-# Include tree-sitter headers
-target_include_directories(${EXTENSION_NAME} PRIVATE ${tree-sitter_INCLUDE_DIRS})
-target_include_directories(${LOADABLE_EXTENSION_NAME} PRIVATE ${tree-sitter_INCLUDE_DIRS})
-
 # Link tree-sitter library
-target_link_libraries(${EXTENSION_NAME} ${tree-sitter_LIBRARIES})
-target_link_libraries(${LOADABLE_EXTENSION_NAME} ${tree-sitter_LIBRARIES})
+target_link_libraries(${EXTENSION_NAME} unofficial::tree-sitter::tree-sitter)
+target_link_libraries(${LOADABLE_EXTENSION_NAME} unofficial::tree-sitter::tree-sitter)
 
 install(
   TARGETS ${EXTENSION_NAME}
