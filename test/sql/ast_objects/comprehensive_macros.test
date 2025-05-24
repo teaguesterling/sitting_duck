@@ -1,0 +1,128 @@
+# name: test/sql/ast_objects/comprehensive_macros.test
+# description: Comprehensive tests for SQL macros with json_each
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+require json
+
+# Load all our SQL macros
+statement ok
+CREATE OR REPLACE MACRO ast_find_type(nodes, node_type) AS (
+    (SELECT json_group_array(je.value) 
+     FROM json_each(nodes) AS je
+     WHERE json_extract_string(je.value, '$.type') = node_type)
+);
+
+statement ok
+CREATE OR REPLACE MACRO ast_function_names(nodes) AS (
+    (SELECT json_group_array(json_extract_string(je.value, '$.name'))
+     FROM json_each(nodes) AS je
+     WHERE json_extract_string(je.value, '$.type') = 'function_definition')
+);
+
+statement ok
+CREATE OR REPLACE MACRO ast_class_names(nodes) AS (
+    (SELECT json_group_array(json_extract_string(je.value, '$.name'))
+     FROM json_each(nodes) AS je
+     WHERE json_extract_string(je.value, '$.type') = 'class_definition')
+);
+
+statement ok
+CREATE OR REPLACE MACRO ast_type_counts(nodes) AS (
+    (SELECT json_group_object(node_type, cnt)
+     FROM (
+         SELECT json_extract_string(je.value, '$.type') as node_type, COUNT(*) as cnt
+         FROM json_each(nodes) AS je
+         GROUP BY node_type
+     ))
+);
+
+statement ok
+CREATE OR REPLACE MACRO ast_at_depth(nodes, target_depth) AS (
+    (SELECT json_group_array(je.value)
+     FROM json_each(nodes) AS je
+     WHERE json_extract(je.value, '$.depth')::INTEGER = target_depth)
+);
+
+statement ok
+CREATE OR REPLACE MACRO ast_identifiers(nodes) AS (
+    (SELECT json_group_array(json_extract_string(je.value, '$.name'))
+     FROM json_each(nodes) AS je
+     WHERE json_extract_string(je.value, '$.type') = 'identifier'
+       AND json_extract_string(je.value, '$.name') IS NOT NULL)
+);
+
+# Test 1: Basic function names extraction
+query I
+SELECT nodes.ast_function_names()::VARCHAR as functions
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+["hello","__init__","add","main"]
+
+# Test 2: Class names extraction
+query I
+SELECT json_array_length(nodes.ast_class_names()) as class_count
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+1
+
+# Test 3: Node type counting
+query I
+SELECT json_extract_string(nodes.ast_type_counts(), '$.function_definition') IS NOT NULL as has_functions
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true
+
+# Test 4: Find specific node types
+query I
+SELECT json_array_length(nodes.ast_find_type('function_definition')) as function_node_count
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+# Test 5: Nodes at specific depth
+query I
+SELECT json_array_length(nodes.ast_at_depth(1)) > 0 as has_depth_1_nodes
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true
+
+# Test 6: Extract identifiers
+query I
+SELECT json_array_length(nodes.ast_identifiers()) > 0 as has_identifiers
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true
+
+# Test 7: Chained operations
+query II
+SELECT 
+    json_array_length(nodes.ast_function_names()) as func_count,
+    json_array_length(nodes.ast_class_names()) as class_count
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4	1
+
+# Test 8: Complex query with multiple macros
+query I
+SELECT 
+    json_extract_string(nodes.ast_type_counts(), '$.function_definition')::INTEGER = 
+    json_array_length(nodes.ast_function_names()) as counts_match
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true
+
+# Test 9: Empty results for non-existent types
+query I
+SELECT json_array_length(nodes.ast_find_type('nonexistent_type')) as empty_result
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+0
+
+# Test 10: Macro with parameters works correctly
+query I
+SELECT json_array_length(nodes.ast_at_depth(0)) as root_nodes
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+1

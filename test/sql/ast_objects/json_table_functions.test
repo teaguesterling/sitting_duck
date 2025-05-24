@@ -1,0 +1,86 @@
+# name: test/sql/ast_objects/json_table_functions.test
+# description: Test json_each and json_tree with AST objects
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+require json
+
+# Test 1: Use json_each to iterate over all nodes
+query II
+SELECT COUNT(*) as node_count, COUNT(DISTINCT json_extract_string(je.value, '$.type')) as unique_types
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS je;
+----
+110	32
+
+# Test 2: Find all function definitions using json_each
+query I
+SELECT json_extract_string(je.value, '$.content') as function_name
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS je
+WHERE json_extract_string(je.value, '$.type') = 'function_definition'
+ORDER BY function_name;
+----
+greet
+main
+
+# Test 3: Get node types and their counts
+query II
+SELECT json_extract_string(je.value, '$.type') as node_type, COUNT(*) as count
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS je
+GROUP BY node_type
+HAVING count > 5
+ORDER BY count DESC, node_type;
+----
+identifier	29
+(	10
+)	10
+string	7
+
+# Test 4: Find nodes at specific positions using key
+query II
+SELECT je.key::INTEGER as position, json_extract_string(je.value, '$.type') as node_type
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS je
+WHERE je.key::INTEGER < 5
+ORDER BY position;
+----
+0	module
+1	function_definition
+2	def
+3	identifier
+4	(
+
+# Test 5: Use json_tree to explore nested structure of a single node
+query III
+SELECT jt.key, json_extract_string(jt.value, '$.type') as type, jt.type as json_type
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_tree(json_extract(ast.nodes, '$[1]')) AS jt
+WHERE jt.type != 'ARRAY' AND jt.type != 'OBJECT' AND jt.key IS NOT NULL
+ORDER BY jt.id
+LIMIT 5;
+----
+type	function_definition	VARCHAR
+content	greet	VARCHAR
+start_row	0	UBIGINT
+start_col	4	UBIGINT
+end_row	2	UBIGINT
+
+# Test 6: Find all string literals using json_each
+query I
+SELECT json_extract_string(je.value, '$.content') as string_content
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS je
+WHERE json_extract_string(je.value, '$.type') = 'string'
+   AND json_extract_string(je.value, '$.content') IS NOT NULL
+ORDER BY string_content;
+----
+"Hello, "
+"!"
+"Python"
+"World"
+"python"
+__main__
+greet
