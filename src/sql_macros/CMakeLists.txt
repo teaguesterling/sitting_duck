@@ -10,6 +10,7 @@ set(SQL_MACRO_FILES
     clean_api_core.sql
     clean_api_analysis.sql
     clean_api_chains.sql
+    short_names.sql
 )
 
 # Create header file with embedded SQL
