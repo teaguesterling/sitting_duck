@@ -92,6 +92,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # ============================================
 
 # Functional style nested operations
+query III
 WITH functional AS (
     SELECT json_array_length(
         ast_function_names(
