@@ -8,7 +8,7 @@ require json
 
 # First, create the SQL macros
 statement ok
-CREATE OR REPLACE MACRO ast_function_names(nodes) AS (
+CREATE OR REPLACE MACRO ast_get_names(nodes, node_type:='function_definition') AS (
     (SELECT json_group_array(json_extract_string(node, '$.name'))
      FROM (SELECT unnest(json_extract(nodes, '$[*]')::JSON[]) as node)
      WHERE json_extract_string(node, '$.type') = 'function_definition')
@@ -26,7 +26,7 @@ CREATE OR REPLACE MACRO ast_type_counts(nodes) AS (
 
 # Test 1: Get function names using dot notation
 query I
-SELECT nodes.ast_function_names()::VARCHAR as functions
+SELECT nodes.ast_get_names(nodes, node_type:='function_definition')::VARCHAR as functions
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 ["hello","__init__","add","main"]
@@ -42,21 +42,21 @@ true
 query II
 SELECT 
     nodes.json_array_length() as total_nodes,
-    json_array_length(nodes.ast_function_names()) as function_count
+    json_array_length(nodes.ast_get_names(nodes, node_type:='function_definition')) as function_count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 110	4
 
 # Test 4: Macro with parameters
 statement ok
-CREATE OR REPLACE MACRO ast_find_type(nodes, node_type) AS (
+CREATE OR REPLACE MACRO ast_get_type(nodes, node_type) AS (
     (SELECT json_group_array(node) 
      FROM (SELECT unnest(json_extract(nodes, '$[*]')::JSON[]) as node)
      WHERE json_extract_string(node, '$.type') = node_type)
 );
 
 query I
-SELECT json_array_length(nodes.ast_find_type('class_definition')) as class_count
+SELECT json_array_length(nodes.ast_get_type('class_definition')) as class_count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 1

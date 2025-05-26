@@ -10,14 +10,14 @@ require json
 
 # Test 1: Basic function names extraction
 query I
-SELECT ast_function_names(nodes)::VARCHAR as functions
+SELECT ast_get_names(nodes, node_type:='function_definition')::VARCHAR as functions
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 ["hello","__init__","add","main"]
 
 # Test 2: Class names extraction
 query I
-SELECT json_array_length(ast_class_names(nodes)) as class_count
+SELECT json_array_length(ast_get_names(nodes, node_type:='class_definition')) as class_count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 1
@@ -31,21 +31,21 @@ true
 
 # Test 4: Find specific node types
 query I
-SELECT json_array_length(ast_find_type(nodes, 'function_definition')) as function_node_count
+SELECT json_array_length(ast_get_type(nodes, 'function_definition')) as function_node_count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
 
 # Test 5: Nodes at specific depth
 query I
-SELECT json_array_length(ast_at_depth(nodes, 1)) > 0 as has_depth_1_nodes
+SELECT json_array_length(ast_get_depth(nodes, 1)) > 0 as has_depth_1_nodes
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 true
 
 # Test 6: Extract identifiers
 query I
-SELECT json_array_length(ast_identifiers(nodes)) > 0 as has_identifiers
+SELECT json_array_length(ast_get_names(nodes, node_type:='identifier')) > 0 as has_identifiers
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 true
@@ -53,8 +53,8 @@ true
 # Test 7: Chained operations
 query II
 SELECT 
-    json_array_length(ast_function_names(nodes)) as func_count,
-    json_array_length(ast_class_names(nodes)) as class_count
+    json_array_length(ast_get_names(nodes, node_type:='function_definition')) as func_count,
+    json_array_length(ast_get_names(nodes, node_type:='class_definition')) as class_count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4	1
@@ -63,21 +63,21 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 query I
 SELECT 
     json_extract_string(ast_type_counts(nodes), '$.function_definition')::INTEGER = 
-    json_array_length(ast_function_names(nodes)) as counts_match
+    json_array_length(ast_get_names(nodes, node_type:='function_definition')) as counts_match
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 true
 
 # Test 9: Empty results for non-existent types
 query I
-SELECT json_array_length(ast_find_type(nodes, 'nonexistent_type')) as empty_result
+SELECT json_array_length(ast_get_type(nodes, 'nonexistent_type')) as empty_result
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 0
 
 # Test 10: Macro with parameters works correctly
 query I
-SELECT json_array_length(nodes.ast_at_depth(0)) as root_nodes
+SELECT json_array_length(nodes.ast_get_depth(0)) as root_nodes
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 1

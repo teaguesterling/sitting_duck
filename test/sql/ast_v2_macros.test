@@ -40,14 +40,14 @@ CREATE OR REPLACE MACRO read_source_lines(file_path, start_line, end_line) AS (
 
 # Single type
 query I
-SELECT json_array_length(ast_find_type(nodes, 'function_definition')) as count
+SELECT json_array_length(ast_get_type(nodes, 'function_definition')) as count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
 
 # List of types - using ensure_array utility
 query I
-SELECT json_array_length(ast_find_type(nodes, ['function_definition', 'class_definition'])) as count
+SELECT json_array_length(ast_get_type(nodes, ['function_definition', 'class_definition'])) as count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 5

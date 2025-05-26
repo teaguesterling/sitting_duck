@@ -9,23 +9,23 @@ require json
 # Test 1: Core Finding Functions
 # =============================
 
-# ast_find_type - single type
+# ast_get_type - single type
 query I
-SELECT json_array_length(ast_find_type(nodes, 'function_definition'))
+SELECT json_array_length(ast_get_type(nodes, 'function_definition'))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
 
-# ast_find_type - multiple types (array)
+# ast_get_type - multiple types (array)
 query I
-SELECT json_array_length(ast_find_type(nodes, ['function_definition', 'class_definition']))
+SELECT json_array_length(ast_get_type(nodes, ['function_definition', 'class_definition']))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 5
 
-# ast_find_type - nonexistent type (should return empty array, not null)
+# ast_get_type - nonexistent type (should return empty array, not null)
 query I
-SELECT json_array_length(ast_find_type(nodes, 'nonexistent_type'))
+SELECT json_array_length(ast_get_type(nodes, 'nonexistent_type'))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 0
@@ -35,21 +35,21 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 
 # ast_function_names
 query I
-SELECT json_array_length(ast_function_names(nodes))
+SELECT json_array_length(ast_get_names(nodes, node_type:='function_definition'))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
 
 # ast_class_names  
 query I
-SELECT json_array_length(ast_class_names(nodes))
+SELECT json_array_length(ast_get_names(nodes, node_type:='class_definition'))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 1
 
 # ast_identifiers
 query I
-SELECT json_array_length(ast_identifiers(nodes))
+SELECT json_array_length(ast_get_names(nodes, node_type:='identifier'))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 19
@@ -64,23 +64,23 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # Test 3: Depth and Hierarchy Functions
 # =====================================
 
-# ast_at_depth - single depth
+# ast_get_depth - single depth
 query I
-SELECT json_array_length(ast_at_depth(nodes, 1))
+SELECT json_array_length(ast_get_depth(nodes, 1))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
 
-# ast_at_depth - multiple depths (array)
+# ast_get_depth - multiple depths (array)
 query I
-SELECT json_array_length(ast_at_depth(nodes, [1, 2]))
+SELECT json_array_length(ast_get_depth(nodes, [1, 2]))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 22
 
-# ast_children_of - get children of root node (id=0)
+# ast_nav_children - get children of root node (id=0)
 query I
-SELECT json_array_length(ast_children_of(nodes, 0))
+SELECT json_array_length(ast_nav_children(nodes, 0))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
@@ -117,19 +117,19 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 
 # Empty input
 query I
-SELECT json_array_length(ast_find_type('[]'::JSON, 'function_definition'));
+SELECT json_array_length(ast_get_type('[]'::JSON, 'function_definition'));
 ----
 0
 
 # Null input handling
 query I
-SELECT json_array_length(ast_find_type(NULL, 'function_definition'));
+SELECT json_array_length(ast_get_type(NULL, 'function_definition'));
 ----
 0
 
 # Invalid node structure
 query I
-SELECT json_array_length(ast_find_type('[{"invalid": "node"}]'::JSON, 'function_definition'));
+SELECT json_array_length(ast_get_type('[{"invalid": "node"}]'::JSON, 'function_definition'));
 ----
 0
 
@@ -172,9 +172,9 @@ SELECT array_length(ensure_integer_array([1, 2, 3]));
 # Combine multiple extraction functions
 query IIII
 SELECT 
-    json_array_length(ast_find_type(nodes, 'function_definition')) as functions,
-    json_array_length(ast_find_type(nodes, 'class_definition')) as classes,
-    json_array_length(ast_identifiers(nodes)) as identifiers,
+    json_array_length(ast_get_type(nodes, 'function_definition')) as functions,
+    json_array_length(ast_get_type(nodes, 'class_definition')) as classes,
+    json_array_length(ast_get_names(nodes, node_type:='identifier')) as identifiers,
     json_extract(ast_summary(nodes), '$.total_nodes') as total_nodes
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
@@ -183,8 +183,8 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # Filter nodes and analyze
 query II
 SELECT 
-    json_array_length(ast_at_depth(nodes, 1)) as depth_1_count,
-    json_array_length(ast_at_depth(nodes, 2)) as depth_2_count
+    json_array_length(ast_get_depth(nodes, 1)) as depth_1_count,
+    json_array_length(ast_get_depth(nodes, 2)) as depth_2_count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4	18
@@ -194,7 +194,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 
 # Get function names from function nodes
 query I
-SELECT json_array_length(ast_function_names(ast_find_type(nodes, 'function_definition')))
+SELECT json_array_length(ast_get_names(ast_get_type(nodes, 'function_definition', node_type:='function_definition')))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
@@ -202,9 +202,9 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # Get children of first function
 query I
 SELECT json_array_length(
-    ast_children_of(
+    ast_nav_children(
         nodes, 
-        json_extract(json_extract(ast_find_type(nodes, 'function_definition'), '$[0]'), '$.id')::INTEGER
+        json_extract(json_extract(ast_get_type(nodes, 'function_definition'), '$[0]'), '$.id')::INTEGER
     )
 )
 FROM read_ast_objects('test/data/python/simple.py', 'python');

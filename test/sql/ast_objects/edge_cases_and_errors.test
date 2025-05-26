@@ -12,11 +12,11 @@ require json
 # Null inputs should return empty arrays, not null
 query IIIIII
 SELECT 
-    json_array_length(ast_find_type(NULL, 'function_definition')) as null_nodes,
-    json_array_length(ast_find_type('[]'::JSON, 'function_definition')) as empty_array,
-    json_array_length(ast_function_names(NULL)) as null_func_names,
-    json_array_length(ast_class_names('[]'::JSON)) as empty_class_names,
-    json_array_length(ast_identifiers(NULL)) as null_identifiers,
+    json_array_length(ast_get_type(NULL, 'function_definition')) as null_nodes,
+    json_array_length(ast_get_type('[]'::JSON, 'function_definition')) as empty_array,
+    json_array_length(ast_get_names(NULL, node_type:='function_definition')) as null_func_names,
+    json_array_length(ast_get_names('[]'::JSON, node_type:='class_definition')) as empty_class_names,
+    json_array_length(ast_get_names(NULL, node_type:='identifier')) as null_identifiers,
     json_array_length(ast_strings('[]'::JSON)) as empty_strings
 ----
 0	0	0	0	0	0
@@ -37,18 +37,18 @@ SELECT
 # Nodes without required fields
 query III
 SELECT 
-    json_array_length(ast_find_type('[{"no_type": "field"}]'::JSON, 'function_definition')) as no_type,
-    json_array_length(ast_function_names('[{"type": "function_definition"}]'::JSON)) as no_name,
-    json_array_length(ast_identifiers('[{"type": "identifier"}]'::JSON)) as id_no_name
+    json_array_length(ast_get_type('[{"no_type": "field"}]'::JSON, 'function_definition')) as no_type,
+    json_array_length(ast_get_names('[{"type": "function_definition"}]'::JSON, node_type:='function_definition')) as no_name,
+    json_array_length(ast_get_names('[{"type": "identifier"}]'::JSON, node_type:='identifier')) as id_no_name
 ----
 0	0	0
 
 # Malformed JSON structures
 query III
 SELECT 
-    json_array_length(ast_find_type('[{"type": null}]'::JSON, 'function_definition')) as null_type,
-    json_array_length(ast_find_type('[{"type": 123}]'::JSON, 'function_definition')) as numeric_type,
-    json_array_length(ast_find_type('[null]'::JSON, 'function_definition')) as null_node
+    json_array_length(ast_get_type('[{"type": null}]'::JSON, 'function_definition')) as null_type,
+    json_array_length(ast_get_type('[{"type": 123}]'::JSON, 'function_definition')) as numeric_type,
+    json_array_length(ast_get_type('[null]'::JSON, 'function_definition')) as null_node
 ----
 0	0	0
 
@@ -58,9 +58,9 @@ SELECT
 # Empty string types and names
 query III
 SELECT 
-    json_array_length(ast_find_type(nodes, '')) as empty_type,
-    json_array_length(ast_find_type(nodes, [])) as empty_type_array,
-    json_array_length(ast_at_depth(nodes, [])) as empty_depth_array
+    json_array_length(ast_get_type(nodes, '')) as empty_type,
+    json_array_length(ast_get_type(nodes, [])) as empty_type_array,
+    json_array_length(ast_get_depth(nodes, [])) as empty_depth_array
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 0	0	0
@@ -68,8 +68,8 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # Very large depth values
 query II
 SELECT 
-    json_array_length(ast_at_depth(nodes, 999)) as huge_depth,
-    json_array_length(ast_at_depth(nodes, -1)) as negative_depth
+    json_array_length(ast_get_depth(nodes, 999)) as huge_depth,
+    json_array_length(ast_get_depth(nodes, -1)) as negative_depth
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 0	0
@@ -77,8 +77,8 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # Invalid parent IDs
 query II
 SELECT 
-    json_array_length(ast_children_of(nodes, 99999)) as huge_parent_id,
-    json_array_length(ast_children_of(nodes, -1)) as negative_parent_id
+    json_array_length(ast_nav_children(nodes, 99999)) as huge_parent_id,
+    json_array_length(ast_nav_children(nodes, -1)) as negative_parent_id
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 0	0
@@ -129,9 +129,9 @@ FROM generate_series(0, 999) as t(i);
 query IIII
 SELECT 
     json_array_length(large_nodes) as total_nodes,
-    json_array_length(ast_find_type(large_nodes, 'function_definition')) as functions,
-    json_array_length(ast_find_type(large_nodes, ['function_definition', 'class_definition'])) as func_and_class,
-    json_array_length(ast_at_depth(large_nodes, [0, 1, 2])) as shallow_nodes
+    json_array_length(ast_get_type(large_nodes, 'function_definition')) as functions,
+    json_array_length(ast_get_type(large_nodes, ['function_definition', 'class_definition'])) as func_and_class,
+    json_array_length(ast_get_depth(large_nodes, [0, 1, 2])) as shallow_nodes
 FROM large_test;
 ----
 1000	334	667	3
@@ -151,9 +151,9 @@ FROM large_test;
 # Multiple AST operations in single query
 query IIIIII
 SELECT 
-    json_array_length(ast_find_type(nodes, 'function_definition')) as funcs,
-    json_array_length(ast_find_type(nodes, 'class_definition')) as classes,
-    json_array_length(ast_identifiers(nodes)) as identifiers,
+    json_array_length(ast_get_type(nodes, 'function_definition')) as funcs,
+    json_array_length(ast_get_type(nodes, 'class_definition')) as classes,
+    json_array_length(ast_get_names(nodes, node_type:='identifier')) as identifiers,
     json_extract(ast_summary(nodes), '$.total_nodes') as total,
     json_extract(ast_summary(nodes), '$.max_depth') as max_depth,
     json_array_length(ast_function_details(nodes)) as func_details
@@ -164,9 +164,8 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # Nested operations
 query I
 SELECT json_array_length(
-    ast_function_names(
-        ast_find_type(
-            ast_at_depth(nodes, [1, 2]),
+    ast_get_names(ast_get_type(
+            ast_get_depth(nodes, [1, 2], node_type:='function_definition'),
             'function_definition'
         )
     )
@@ -219,7 +218,7 @@ FROM generate_series(0, 99) as t(i);
 query III
 SELECT 
     json_array_length(deep_nodes) as total,
-    json_array_length(ast_at_depth(deep_nodes, 50)) as at_depth_50,
+    json_array_length(ast_get_depth(deep_nodes, 50)) as at_depth_50,
     json_extract(ast_summary(deep_nodes), '$.max_depth') as calculated_max_depth
 FROM deep_nest;
 ----
@@ -277,8 +276,8 @@ SELECT json_array(
 # Test operations with unicode content
 query III
 SELECT 
-    json_array_length(ast_function_names(unicode_nodes)) as unicode_funcs,
-    json_array_length(ast_identifiers(unicode_nodes)) as unicode_ids,
+    json_array_length(ast_get_names(unicode_nodes, node_type:='function_definition')) as unicode_funcs,
+    json_array_length(ast_get_names(unicode_nodes, node_type:='identifier')) as unicode_ids,
     json_array_length(ast_strings(unicode_nodes)) as unicode_strings
 FROM unicode_test;
 ----
@@ -303,8 +302,8 @@ SELECT json_array(
 # Operations should work despite extra fields
 query II
 SELECT 
-    json_array_length(ast_find_type(extended_nodes, 'function_definition')) as found,
-    json_array_length(ast_function_names(extended_nodes)) as names
+    json_array_length(ast_get_type(extended_nodes, 'function_definition')) as found,
+    json_array_length(ast_get_names(extended_nodes, node_type:='function_definition')) as names
 FROM extra_fields;
 ----
 1	1

@@ -36,6 +36,7 @@ set(EXTENSION_SOURCES
     src/read_ast_function.cpp
     src/read_ast_objects_hybrid.cpp
     src/ast_sql_macros.cpp
+    src/short_names_function.cpp
     src/grammars.cpp
     grammars/tree-sitter-python/src/parser.c
     grammars/tree-sitter-python/src/scanner.c)
