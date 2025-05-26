@@ -19,10 +19,6 @@ void RegisterASTSQLMacros(DatabaseInstance &instance);
 // void RegisterASTHelperFunctions(DatabaseInstance &instance);
 
 static void LoadInternal(DatabaseInstance &instance) {
-	// TODO: Fix JSON auto-loading - currently requires manual load
-	// The extension is built but not found in the expected location
-	// ExtensionHelper::AutoLoadExtension(instance, "json");
-	
 	// Register the read_ast table function
 	RegisterReadASTFunction(instance);
 	
@@ -31,11 +27,13 @@ static void LoadInternal(DatabaseInstance &instance) {
 	
 	// Register SQL macros for natural AST querying
 	// Note: These require json_each which is available in DuckDB 1.3+
+	// Try to auto-load the JSON extension
 	try {
+		ExtensionHelper::AutoLoadExtension(instance, "json");
 		RegisterASTSQLMacros(instance);
 	} catch (...) {
-		// Silently ignore if macros can't be registered
-		// This allows the extension to work on older DuckDB versions
+		// If JSON extension can't be loaded, skip macro registration
+		// This allows the extension to work even without JSON support
 	}
 	
 	// TODO: Re-enable once we fix the issues

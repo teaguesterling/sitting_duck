@@ -12,6 +12,24 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 project(${TARGET_NAME})
 include_directories(src/include)
 
+# Find Python for script execution
+find_package(Python3 COMPONENTS Interpreter)
+
+# Generate embedded SQL macros header before building
+if(Python3_FOUND)
+    execute_process(
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_sql_macros.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        RESULT_VARIABLE EMBED_SQL_RESULT
+    )
+    
+    if(NOT EMBED_SQL_RESULT EQUAL 0)
+        message(WARNING "Failed to generate embedded SQL macros header")
+    endif()
+else()
+    message(WARNING "Python not found - using existing embedded SQL macros header")
+endif()
+
 set(EXTENSION_SOURCES 
     src/duckdb_ast_extension.cpp
     src/ast_parser.cpp

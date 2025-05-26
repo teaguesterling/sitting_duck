@@ -3,12 +3,28 @@
 #include "duckdb/main/extension_util.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/connection.hpp"
+#include "embedded_sql_macros.hpp"
 
 namespace duckdb {
 
 void RegisterASTSQLMacros(DatabaseInstance &instance) {
     // Get a connection to execute SQL
     auto conn = make_uniq<Connection>(instance);
+    
+    // Load embedded SQL macros
+    for (const auto &macro_pair : EMBEDDED_SQL_MACROS) {
+        const string &filename = macro_pair.first;
+        const string &sql_content = macro_pair.second;
+        
+        auto result = conn->Query(sql_content);
+        if (result->HasError()) {
+            // Throw error to see what's failing
+            throw InvalidInputException("Failed to register macro from %s: %s", filename, result->GetError());
+        }
+    }
+    
+    // If embedded macros were loaded, we're done
+    return;
     
     // SQL macros to register
     vector<string> macro_definitions = {
