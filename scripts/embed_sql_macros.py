@@ -24,7 +24,10 @@ def generate_header(sql_dir, output_file):
         'extract_macros.sql',
         'source_macros.sql',
         'ai_macros.sql',
-        'utility_macros.sql'
+        'utility_macros.sql',
+        'clean_api_core.sql',
+        'clean_api_analysis.sql',
+        'clean_api_chains.sql'
     ]
     
     header_content = """// Auto-generated file - DO NOT EDIT

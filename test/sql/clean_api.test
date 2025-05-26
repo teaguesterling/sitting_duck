@@ -1,0 +1,176 @@
+# name: test/sql/clean_api.test
+# description: Test the new clean API functions
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+require json
+
+# Test 1: Basic Extraction Functions
+# ==================================
+
+# ast_get_type - single type
+query I
+SELECT json_array_length(ast_get_type(nodes, 'function_definition'))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+# ast_get_names - all names
+query I
+SELECT json_array_length(ast_get_names(nodes))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+19
+
+# ast_get_names - filtered by type
+query I
+SELECT json_array_length(ast_get_names(nodes, 'function_definition'))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+# ast_get_depth - single depth
+query I
+SELECT json_array_length(ast_get_depth(nodes, 1))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+# ast_get_depth - multiple depths
+query I
+SELECT json_array_length(ast_get_depth(nodes, [1, 2]))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+22
+
+# Test 2: Filtering Functions
+# ===========================
+
+# ast_filter_pattern - name contains 'a'
+query I
+SELECT json_array_length(ast_filter_pattern(nodes, '%a%'))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+2
+
+# ast_filter_depth_range
+query I
+SELECT json_array_length(ast_filter_depth_range(nodes, 1, 3))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+40
+
+# ast_filter_has_name
+query I
+SELECT json_array_length(ast_filter_has_name(nodes))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+19
+
+# Test 3: Navigation Functions
+# ============================
+
+# ast_nav_children - root node children
+query I
+SELECT json_array_length(ast_nav_children(nodes, 0))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+# Test 4: Analysis Functions
+# ==========================
+
+# ast_analyze_summary
+query I
+SELECT json_extract(ast_analyze_summary(nodes), '$.total_nodes')
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+110
+
+# ast_analyze_types - check it returns JSON object
+query I
+SELECT json_extract_string(ast_analyze_types(nodes), '$.function_definition') IS NOT NULL
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true
+
+# Test 5: Chain Methods with ast() Entrypoint
+# ============================================
+
+# Basic chaining
+query I
+SELECT ast(nodes).get_type('function_definition').count()
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+# Complex chaining with filtering
+query I
+SELECT ast(nodes).get_type('function_definition').filter_depth_range(1, 2).count()
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+2
+
+# Extract names through chaining
+query I
+SELECT array_length(ast(nodes).get_type('function_definition').extract_names())
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+# Test 6: Help System
+# ===================
+
+# ast_help returns JSON with expected structure
+query I
+SELECT json_extract_string(ast_help(), '$.categories."ast_get_*"') IS NOT NULL
+----
+true
+
+# Test 7: Backward Compatibility
+# ==============================
+
+# Old function names still work as aliases
+query I
+SELECT json_array_length(find_type(nodes, 'function_definition')) = 
+       json_array_length(ast_get_type(nodes, 'function_definition'))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true
+
+# Test 8: Edge Cases and Null Safety
+# ==================================
+
+# Functions handle NULL input gracefully
+query III
+SELECT 
+    json_array_length(ast_get_type(NULL, 'function_definition')) as null_input,
+    json_array_length(ast_get_names('[]'::JSON)) as empty_input,
+    json_array_length(ast_get_depth(nodes, 999)) as nonexistent_depth
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+0	0	0
+
+# Test 9: Type Consistency
+# ========================
+
+# All get functions return JSON arrays
+query I
+SELECT 
+    typeof(ast_get_type(nodes, 'function_definition')) = 'JSON' AND
+    typeof(ast_get_names(nodes)) = 'JSON' AND 
+    typeof(ast_get_depth(nodes, 1)) = 'JSON'
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true
+
+# Extract functions return SQL arrays
+query I
+SELECT 
+    typeof(ast(nodes).extract_names()) = 'VARCHAR[]' AND
+    typeof(ast(nodes).extract_types()) = 'VARCHAR[]' AND
+    typeof(ast(nodes).extract_ids()) = 'INTEGER[]'
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true
