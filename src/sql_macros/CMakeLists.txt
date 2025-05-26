@@ -6,6 +6,10 @@ set(SQL_MACRO_FILES
     source_macros.sql
     ai_macros.sql
     utility_macros.sql
+    entrypoint_macros.sql
+    clean_api_core.sql
+    clean_api_analysis.sql
+    clean_api_chains.sql
 )
 
 # Create header file with embedded SQL
