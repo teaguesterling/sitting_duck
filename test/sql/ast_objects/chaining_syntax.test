@@ -1,0 +1,80 @@
+# name: test/sql/ast_objects/chaining_syntax.test
+# description: Test chaining syntax with single vs double parentheses
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+require json
+
+# Setup helper macros for testing
+statement ok
+CREATE OR REPLACE MACRO double_value(x) AS x * 2;
+
+statement ok
+CREATE OR REPLACE MACRO add_ten(x) AS x + 10;
+
+statement ok
+CREATE OR REPLACE MACRO make_object(x) AS {'original': x, 'doubled': x * 2};
+
+statement ok
+CREATE OR REPLACE MACRO get_field(obj, field) AS json_extract(obj, '$.' || field);
+
+# Test 1: Single parentheses chaining works
+query I
+SELECT (5).double_value().add_ten();
+----
+20
+
+# Test 2: Double parentheses also work but are unnecessary
+query I
+SELECT ((5).double_value()).add_ten();
+----
+20
+
+# Test 3: Both are equivalent
+query B
+SELECT (5).double_value().add_ten() = ((5).double_value()).add_ten();
+----
+true
+
+# Test 4: Chaining with struct results
+query I
+SELECT (5).make_object().get_field('doubled');
+----
+10
+
+# Test 5: Complex chaining with columns
+statement ok
+CREATE TABLE test_values (value INTEGER);
+
+statement ok
+INSERT INTO test_values VALUES (3), (7), (12);
+
+query III
+SELECT 
+    value,
+    (value).double_value(),
+    (value).double_value().add_ten()
+FROM test_values
+ORDER BY value;
+----
+3	6	16
+7	14	24
+12	24	34
+
+# Test 6: Chaining in WHERE clause
+query I
+SELECT COUNT(*)
+FROM test_values
+WHERE (value).double_value().add_ten() > 20;
+----
+2
+
+# Test 7: Three-level chaining
+statement ok
+CREATE OR REPLACE MACRO subtract_five(x) AS x - 5;
+
+query I
+SELECT (10).double_value().add_ten().subtract_five();
+----
+25

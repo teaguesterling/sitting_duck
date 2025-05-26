@@ -3,6 +3,7 @@
 # group: [duckdb_ast]
 
 require duckdb_ast
+
 require json
 
 # Test Setup - Mock source reading function
@@ -37,14 +38,14 @@ CREATE OR REPLACE MACRO read_source_lines(file_path, start_line, end_line) AS (
 # Test 1: List Parameter Support
 # ==============================
 
-# Single type (backward compatible)
+# Single type
 query I
 SELECT json_array_length(ast_find_type(nodes, 'function_definition')) as count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
 
-# List of types (new functionality)
+# List of types - using ensure_array utility
 query I
 SELECT json_array_length(ast_find_type(nodes, ['function_definition', 'class_definition'])) as count
 FROM read_ast_objects('test/data/python/simple.py', 'python');

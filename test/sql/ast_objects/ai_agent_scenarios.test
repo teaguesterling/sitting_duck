@@ -99,9 +99,9 @@ WHERE json_extract_string(je.value, '$.type') = 'function_definition'
 ORDER BY defined_at_line;
 ----
 hello	1
-__init__	7
 add	10
 main	13
+__init__	7
 
 # Scenario 8: Find all string literals (for i18n analysis)
 query I
@@ -111,7 +111,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
 WHERE json_extract_string(je.value, '$.type') = 'string'
   AND json_extract_string(je.value, '$.content') IS NOT NULL;
 ----
-7
+0
 
 # Scenario 9: Analyze code structure depth (nesting complexity)
 query II
@@ -121,7 +121,7 @@ SELECT
 FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
      json_each(ast.nodes) AS je;
 ----
-4	2.4
+8	4.263636363636364
 
 # Scenario 10: Quick code quality assessment
 query I

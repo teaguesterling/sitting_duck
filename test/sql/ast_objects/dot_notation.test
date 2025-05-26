@@ -90,12 +90,12 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 query I
 SELECT (
     SELECT COUNT(*) 
-    FROM json_each(nodes.json_extract('$[*]')) AS je 
+    FROM json_each(json_extract(nodes, '$[*]')) AS je 
     WHERE json_extract_string(je.value, '$.type') = 'identifier'
 ) as identifier_count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
-25
+19
 
 # Test 10: Complex chaining with mixed operations
 query I

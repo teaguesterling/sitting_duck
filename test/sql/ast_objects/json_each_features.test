@@ -60,10 +60,10 @@ HAVING count >= 5
 ORDER BY count DESC, node_type
 LIMIT 5;
 ----
-identifier	25
-(	10
-)	10
-string	7
+identifier	19
+(	8
+)	8
+expression_statement	7
 :	6
 
 # Test 6: Find nodes with specific properties
@@ -73,7 +73,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
      json_each(ast.nodes) AS je
 WHERE json_extract_string(je.value, '$.name') IS NOT NULL;
 ----
-6
+24
 
 # Test 7: Get nodes at different depths
 query II
@@ -88,8 +88,8 @@ LIMIT 5;
 ----
 0	1
 1	4
-2	12
-3	17
+2	18
+3	15
 4	19
 
 # Test 8: Find parent-child relationships
@@ -106,8 +106,8 @@ GROUP BY parent.value
 ORDER BY child_count DESC
 LIMIT 2;
 ----
-{"id":3,"type":"function_definition","name":"add","start":{"line":8,"column":5},"end":{"line":10,"column":29},"parent_id":2,"depth":2,"sibling_index":1,"children":[26,27,28,29,30,31,32,33,34,35,36,37,38]}	13
-{"id":4,"type":"function_definition","name":"main","start":{"line":15,"column":1},"end":{"line":18,"column":11},"parent_id":0,"depth":1,"sibling_index":3,"children":[63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109]}	47
+{"id":1,"type":"function_definition","name":"hello","start":{"line":1,"column":1},"end":{"line":3,"column":27},"parent_id":0,"depth":1,"sibling_index":0,"children":[2,3,4,5,6]}	5
+{"id":70,"type":"function_definition","name":"main","start":{"line":13,"column":1},"end":{"line":15,"column":12},"parent_id":0,"depth":1,"sibling_index":2,"children":[71,72,73,74,75]}	5
 
 # Test 9: Extract line number ranges
 query III

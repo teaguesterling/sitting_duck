@@ -1,0 +1,299 @@
+# name: test/sql/ast_objects/performance_tests.test
+# description: Performance tests and benchmarks for AST macros
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+require json
+
+# Test 1: Large Data Performance
+# ==============================
+
+# Create a large synthetic AST for performance testing
+statement ok
+CREATE TABLE large_ast AS
+SELECT json_group_array(
+    json_object(
+        'type', 
+        CASE (i % 10)
+            WHEN 0 THEN 'function_definition'
+            WHEN 1 THEN 'class_definition' 
+            WHEN 2 THEN 'identifier'
+            WHEN 3 THEN 'string'
+            WHEN 4 THEN 'expression_statement'
+            WHEN 5 THEN 'block'
+            WHEN 6 THEN 'call'
+            WHEN 7 THEN 'argument_list'
+            WHEN 8 THEN 'def'
+            ELSE 'other'
+        END,
+        'name', 
+        CASE 
+            WHEN (i % 10) IN (0, 1, 2) THEN 'name_' || i
+            ELSE NULL
+        END,
+        'id', i,
+        'parent_id', CASE WHEN i = 0 THEN NULL ELSE GREATEST(0, i - (i % 5) - 1) END,
+        'depth', (i % 8) + 1,
+        'start', json_object('line', (i % 100) + 1, 'column', (i % 50) + 1),
+        'end', json_object('line', (i % 100) + 2, 'column', (i % 50) + 10),
+        'children', 
+        CASE 
+            WHEN i < 9990 THEN json_array(i + 1, i + 2, i + 3, i + 4, i + 5)
+            ELSE json_array()
+        END,
+        'sibling_index', i % 3
+    )
+) as nodes
+FROM generate_series(0, 9999) as t(i);
+
+# Test basic operations with large data
+query IIIII
+SELECT 
+    json_array_length(nodes) as total_nodes,
+    json_array_length(ast_find_type(nodes, 'function_definition')) as functions,
+    json_array_length(ast_find_type(nodes, 'class_definition')) as classes,
+    json_array_length(ast_identifiers(nodes)) as identifiers,
+    json_extract(ast_summary(nodes), '$.max_depth') as max_depth
+FROM large_ast;
+----
+10000	1000	1000	1000	8
+
+# Test 2: Comparative Performance of Syntax Styles
+# ================================================
+
+# Time-sensitive operations to compare performance
+# (Results should be identical, we're testing execution time)
+query BBBBB
+SELECT 
+    -- Compare functional vs entrypoint for find operations
+    json_array_length(ast_find_type(nodes, 'function_definition')) = 
+        ast(nodes).find_type('function_definition').count_elements() as find_perf,
+    
+    -- Compare functional vs entrypoint for name extraction
+    json_array_length(ast_function_names(nodes)) = 
+        ast(nodes).function_names().count_elements() as names_perf,
+    
+    -- Compare functional vs entrypoint for depth operations
+    json_array_length(ast_at_depth(nodes, [1, 2, 3])) = 
+        ast(nodes).at_depth([1, 2, 3]).count_elements() as depth_perf,
+    
+    -- Compare complex nested operations
+    json_array_length(ast_function_names(ast_find_type(nodes, 'function_definition'))) = 
+        ast(nodes).find_type('function_definition').extract_names().count_elements() as nested_perf,
+    
+    -- Compare summary operations
+    ast_summary(nodes) = ast(nodes).summary() as summary_perf
+FROM large_ast;
+----
+true	true	true	true	true
+
+# Test 3: Memory Efficiency with Repeated Operations
+# ==================================================
+
+# Perform same operation multiple times to test memory usage
+query IIIII
+SELECT 
+    ast(nodes).find_type('function_definition').count_elements() as op1,
+    ast(nodes).find_type('function_definition').count_elements() as op2,
+    ast(nodes).find_type('function_definition').count_elements() as op3,
+    ast(nodes).find_type('function_definition').count_elements() as op4,
+    ast(nodes).find_type('function_definition').count_elements() as op5
+FROM large_ast;
+----
+1000	1000	1000	1000	1000
+
+# Test 4: Complex Query Performance
+# ================================
+
+# Multi-step analysis that exercises multiple macros
+query IIIIII
+SELECT 
+    ast(nodes).find_type('function_definition').count_elements() as func_count,
+    ast(nodes).find_type('class_definition').count_elements() as class_count,
+    ast(nodes).find_type(['function_definition', 'class_definition']).count_elements() as combined_count,
+    ast(nodes).at_depth([1, 2]).count_elements() as shallow_count,
+    ast(nodes).identifiers().count_elements() as id_count,
+    json_extract(ast(nodes).summary(), '$.total_nodes') as total_summary
+FROM large_ast;
+----
+1000	1000	2000	2500	1000	10000
+
+# Test 5: Join Performance with AST Operations
+# ============================================
+
+# Create a second table to test joins with AST operations
+statement ok
+CREATE TABLE file_metadata AS
+SELECT 
+    'large_file.py' as filename,
+    'python' as language,
+    nodes
+FROM large_ast
+UNION ALL
+SELECT 
+    'simple_file.py' as filename,
+    'python' as language,
+    nodes
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+
+# Join with AST operations
+query III
+SELECT 
+    fm.filename,
+    ast(fm.nodes).find_type('function_definition').count_elements() as func_count,
+    ast(fm.nodes).find_type('class_definition').count_elements() as class_count
+FROM file_metadata fm
+ORDER BY func_count DESC;
+----
+large_file.py	1000	1000
+simple_file.py	4	1
+
+# Test 6: Aggregation Performance
+# ===============================
+
+# Aggregate AST statistics across multiple files
+query IIII
+SELECT 
+    COUNT(*) as file_count,
+    SUM(ast(nodes).find_type('function_definition').count_elements()) as total_functions,
+    SUM(ast(nodes).find_type('class_definition').count_elements()) as total_classes,
+    AVG(json_extract(ast(nodes).summary(), '$.max_depth')::DOUBLE) as avg_depth
+FROM file_metadata;
+----
+2	1004	1001	8.0
+
+# Test 7: Nested Subquery Performance
+# ===================================
+
+# Complex nested queries with AST operations
+query I
+SELECT COUNT(*)
+FROM file_metadata fm
+WHERE ast(fm.nodes).find_type('function_definition').count_elements() > (
+    SELECT AVG(ast(nodes).find_type('function_definition').count_elements())
+    FROM file_metadata
+);
+----
+1
+
+# Test 8: Window Function Performance
+# ==================================
+
+# Use AST operations in window functions
+query III
+SELECT 
+    filename,
+    ast(nodes).find_type('function_definition').count_elements() as func_count,
+    ROW_NUMBER() OVER (ORDER BY ast(nodes).find_type('function_definition').count_elements() DESC) as rank
+FROM file_metadata;
+----
+large_file.py	1000	1
+simple_file.py	4	2
+
+# Test 9: CTE Performance with AST Operations
+# ===========================================
+
+WITH ast_analysis AS (
+    SELECT 
+        filename,
+        ast(nodes).find_type('function_definition') as functions,
+        ast(nodes).find_type('class_definition') as classes,
+        ast(nodes).summary() as summary
+    FROM file_metadata
+),
+function_details AS (
+    SELECT 
+        filename,
+        functions.count_elements() as func_count,
+        classes.count_elements() as class_count,
+        json_extract(summary, '$.max_depth') as max_depth
+    FROM ast_analysis
+)
+SELECT 
+    filename,
+    func_count,
+    class_count,
+    max_depth
+FROM function_details
+ORDER BY func_count DESC;
+----
+large_file.py	1000	1000	8
+simple_file.py	4	1	8
+
+# Test 10: Stress Test - Multiple Concurrent Operations
+# =====================================================
+
+# Perform many different AST operations simultaneously
+query IIIIIIIII
+SELECT 
+    ast(nodes).find_type('function_definition').count_elements() as func,
+    ast(nodes).find_type('class_definition').count_elements() as class,
+    ast(nodes).find_type('identifier').count_elements() as id,
+    ast(nodes).find_type('string').count_elements() as str,
+    ast(nodes).at_depth(1).count_elements() as d1,
+    ast(nodes).at_depth(2).count_elements() as d2,
+    ast(nodes).at_depth(3).count_elements() as d3,
+    ast(nodes).children_of(0).count_elements() as root_children,
+    json_extract(ast(nodes).summary(), '$.total_nodes') as total
+FROM large_ast;
+----
+1000	1000	1000	1000	1250	1250	1250	5	10000
+
+# Test 11: Chain Operation Performance
+# ====================================
+
+# Test performance of complex chaining operations
+query IIII
+SELECT 
+    ast(nodes).find_type('function_definition').extract_names().count_elements() as func_names,
+    ast(nodes).find_type('class_definition').extract_names().count_elements() as class_names,
+    ast(nodes).where_depth([1, 2]).where_type('function_definition').count_elements() as filtered_funcs,
+    ast(nodes).at_depth([1, 2, 3]).extract_names().count_elements() as shallow_names
+FROM large_ast;
+----
+1000	1000	500	3000
+
+# Test 12: Error Recovery Performance
+# ==================================
+
+# Test performance when operations return empty results
+query IIII
+SELECT 
+    ast(nodes).find_type('nonexistent_type').count_elements() as empty1,
+    ast(nodes).at_depth(999).count_elements() as empty2,
+    ast(nodes).children_of(99999).count_elements() as empty3,
+    ast(NULL).find_type('anything').count_elements() as empty4
+FROM large_ast;
+----
+0	0	0	0
+
+# Test 13: Memory Cleanup Test
+# ============================
+
+# Test that large operations clean up memory properly
+# by performing operations on progressively smaller datasets
+WITH size_test AS (
+    SELECT 
+        size_limit,
+        json_extract(nodes, '$[0:' || size_limit || ']') as limited_nodes
+    FROM large_ast
+    CROSS JOIN (VALUES (100), (1000), (5000), (10000)) as sizes(size_limit)
+)
+SELECT 
+    size_limit,
+    ast(limited_nodes).find_type('function_definition').count_elements() as func_count
+FROM size_test
+ORDER BY size_limit;
+----
+100	10
+1000	100
+5000	500
+10000	1000
+
+# Cleanup large test data
+statement ok
+DROP TABLE IF EXISTS large_ast;
+
+statement ok
+DROP TABLE IF EXISTS file_metadata;

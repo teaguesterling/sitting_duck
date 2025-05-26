@@ -6,54 +6,11 @@ require duckdb_ast
 
 require json
 
-# Load our improved macros that handle JSON types internally
-statement ok
-CREATE OR REPLACE MACRO ast_function_names(nodes) AS (
-    (SELECT json_group_array(json_extract_string(je.value, '$.name'))
-     FROM json_each(nodes) AS je
-     WHERE json_extract_string(je.value, '$.type') = 'function_definition'
-       AND json_extract_string(je.value, '$.name') IS NOT NULL)
-);
-
-statement ok
-CREATE OR REPLACE MACRO ast_function_details(nodes) AS (
-    (SELECT json_group_array(
-        json_object(
-            'name', json_extract_string(je.value, '$.name'),
-            'start_line', json_extract(je.value, '$.start.line')::INTEGER,
-            'end_line', json_extract(je.value, '$.end.line')::INTEGER,
-            'depth', json_extract(je.value, '$.depth')::INTEGER
-        ))
-     FROM json_each(nodes) AS je
-     WHERE json_extract_string(je.value, '$.type') = 'function_definition'
-       AND json_extract_string(je.value, '$.name') IS NOT NULL)
-);
-
-statement ok
-CREATE OR REPLACE MACRO ast_summary(nodes) AS (
-    json_object(
-        'total_nodes', json_array_length(nodes),
-        'functions', ast_function_names(nodes),
-        'max_depth', (SELECT MAX(json_extract(je.value, '$.depth')::INTEGER) 
-                      FROM json_each(nodes) AS je),
-        'function_count', (SELECT COUNT(*) FROM json_each(nodes) AS je 
-                          WHERE json_extract_string(je.value, '$.type') = 'function_definition')
-    )
-);
-
-statement ok
-CREATE OR REPLACE MACRO ast_safe_find_type(nodes, node_type) AS (
-    COALESCE(
-        (SELECT json_group_array(je.value) 
-         FROM json_each(nodes) AS je
-         WHERE json_extract_string(je.value, '$.type') = node_type),
-        '[]'::JSON
-    )
-);
+# Macros are now auto-loaded by the extension
 
 # Test 1: Function names with improved macro
 query I
-SELECT nodes.ast_function_names()::VARCHAR as functions
+SELECT ast_function_names(nodes)::VARCHAR as functions
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 ["hello","__init__","add","main"]
@@ -62,25 +19,25 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 query I
 SELECT func_detail.value::VARCHAR as function_info
 FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
-     json_each(ast.nodes.ast_function_details()) AS func_detail
+     json_each(ast_function_details(ast.nodes)) AS func_detail
 ORDER BY json_extract(func_detail.value, '$.start_line')::INTEGER
 LIMIT 1;
 ----
-{"name":"hello","start_line":1,"end_line":3,"depth":1}
+{"name":"hello","start_line":1,"end_line":3,"depth":1,"id":1}
 
 # Test 3: Summary with all type casting handled internally
 query III
 SELECT 
-    json_extract(nodes.ast_summary(), '$.total_nodes') as total,
-    json_extract(nodes.ast_summary(), '$.max_depth') as depth,
-    json_extract(nodes.ast_summary(), '$.function_count') as func_count
+    json_extract(ast_summary(nodes), '$.total_nodes') as total,
+    json_extract(ast_summary(nodes), '$.max_depth') as depth,
+    json_extract(ast_summary(nodes), '$.function_count') as func_count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 110	8	4
 
 # Test 4: Safe handling of empty results
 query I
-SELECT json_array_length(nodes.ast_safe_find_type('nonexistent_type')) as empty_result
+SELECT json_array_length(ast_find_type(nodes, 'nonexistent_type')) as empty_result
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 0
@@ -89,7 +46,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 WITH functions AS (
     SELECT func_detail.value as func
     FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
-         json_each(ast.nodes.ast_function_details()) AS func_detail
+         json_each(ast_function_details(ast.nodes)) AS func_detail
 )
 SELECT json_extract_string(func, '$.name') as name
 FROM functions
@@ -104,8 +61,8 @@ main
 query I
 SELECT 
     CASE 
-        WHEN json_extract(nodes.ast_summary(), '$.function_count')::INTEGER > 3 THEN 'Module'
-        WHEN json_extract(nodes.ast_summary(), '$.function_count')::INTEGER > 1 THEN 'Library'
+        WHEN json_extract(ast_summary(nodes), '$.function_count')::INTEGER > 3 THEN 'Module'
+        WHEN json_extract(ast_summary(nodes), '$.function_count')::INTEGER > 1 THEN 'Library'
         ELSE 'Script'
     END as file_type
 FROM read_ast_objects('test/data/python/simple.py', 'python');

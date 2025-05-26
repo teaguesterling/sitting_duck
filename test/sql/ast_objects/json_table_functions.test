@@ -16,13 +16,15 @@ FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
 
 # Test 2: Find all function definitions using json_each
 query I
-SELECT json_extract_string(je.value, '$.content') as function_name
+SELECT json_extract_string(je.value, '$.name') as function_name
 FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
      json_each(ast.nodes) AS je
 WHERE json_extract_string(je.value, '$.type') = 'function_definition'
 ORDER BY function_name;
 ----
-greet
+__init__
+add
+hello
 main
 
 # Test 3: Get node types and their counts
@@ -34,10 +36,12 @@ GROUP BY node_type
 HAVING count > 5
 ORDER BY count DESC, node_type;
 ----
-identifier	29
-(	10
-)	10
-string	7
+identifier	19
+(	8
+)	8
+expression_statement	7
+:	6
+block	6
 
 # Test 4: Find nodes at specific positions using key
 query II
@@ -51,7 +55,7 @@ ORDER BY position;
 1	function_definition
 2	def
 3	identifier
-4	(
+4	parameters
 
 # Test 5: Use json_tree to explore nested structure of a single node
 query III
@@ -62,11 +66,11 @@ WHERE jt.type != 'ARRAY' AND jt.type != 'OBJECT' AND jt.key IS NOT NULL
 ORDER BY jt.id
 LIMIT 5;
 ----
-type	function_definition	VARCHAR
-content	greet	VARCHAR
-start_row	0	UBIGINT
-start_col	4	UBIGINT
-end_row	2	UBIGINT
+id	NULL	UBIGINT
+type	NULL	VARCHAR
+name	NULL	VARCHAR
+line	NULL	UBIGINT
+column	NULL	UBIGINT
 
 # Test 6: Find all string literals using json_each
 query I

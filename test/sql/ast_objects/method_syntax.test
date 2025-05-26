@@ -1,0 +1,58 @@
+# name: test/sql/ast_objects/method_syntax.test
+# description: Test method-like syntax with parentheses for AST macros
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+require json
+
+# Test 1: Both syntaxes are equivalent
+query B
+SELECT 
+    ast_find_type(nodes, 'function_definition') = 
+    (nodes).ast_find_type('function_definition') as syntaxes_equal
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true
+
+# Test 2: Method syntax with various macros
+query IIII
+SELECT 
+    json_array_length((nodes).ast_find_type('function_definition')) as functions,
+    json_array_length((nodes).ast_find_type('class_definition')) as classes,
+    json_array_length((nodes).ast_identifiers()) as identifiers,
+    json_extract((nodes).ast_summary(), '$.total_nodes') as total
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4	1	19	110
+
+# Test 3: Chaining with json_each
+query I
+SELECT COUNT(*)
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each((nodes).ast_find_type('function_definition')) AS func
+WHERE json_extract_string(func.value, '$.name') LIKE '%a%';
+----
+2
+
+# Test 4: Complex expressions need proper parentheses
+query I
+SELECT json_array_length((json_extract(nodes, '$[0:10]')).ast_find_type('identifier'))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+1
+
+# Test 5: Using method syntax in WHERE clause
+query I
+SELECT COUNT(*)
+FROM read_ast_objects('test/data/python/simple.py', 'python')
+WHERE json_array_length((nodes).ast_find_type('function_definition')) > 3;
+----
+1
+
+# Test 6: Combining with other JSON operations
+query I
+SELECT json_array_length((nodes).ast_find_type(['function_definition', 'class_definition']))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+5
