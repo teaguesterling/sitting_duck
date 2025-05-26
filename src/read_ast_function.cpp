@@ -29,12 +29,13 @@ static unique_ptr<FunctionData> ReadASTBind(ClientContext &context, TableFunctio
 	auto language = input.inputs[1].GetValue<string>();
 	
 	// Define output columns
-	names = {"node_id", "type", "name", "file_path", "start_line", "start_column", 
+	names = {"node_id", "type", "normalized_type", "name", "file_path", "start_line", "start_column", 
 	         "end_line", "end_column", "parent_id", "depth", "sibling_index", "source_text"};
 	
 	return_types = {
 		LogicalType::BIGINT,      // node_id
 		LogicalType::VARCHAR,     // type
+		LogicalType::VARCHAR,     // normalized_type
 		LogicalType::VARCHAR,     // name
 		LogicalType::VARCHAR,     // file_path
 		LogicalType::INTEGER,     // start_line
@@ -114,8 +115,11 @@ static void ReadASTFunction(ClientContext &context, TableFunctionInput &data_p, 
 				ast_node.end_line = end.row + 1;
 				ast_node.end_column = end.column + 1;
 				
+				// Get language handler for name extraction and normalization
+				const LanguageHandler* handler = parser.GetLanguageHandler(data.language);
+				
 				// Extract name
-				ast_node.name = parser.ExtractNodeName(entry.node, content);
+				ast_node.name = handler ? handler->ExtractNodeName(entry.node, content) : "";
 				
 				// Extract source text
 				uint32_t start_byte = ts_node_start_byte(entry.node);
@@ -148,20 +152,21 @@ static void ReadASTFunction(ClientContext &context, TableFunctionInput &data_p, 
 	// Get output vectors
 	auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
 	auto type_vec = FlatVector::GetData<string_t>(output.data[1]);
-	auto name_vec = FlatVector::GetData<string_t>(output.data[2]);
-	auto file_path_vec = FlatVector::GetData<string_t>(output.data[3]);
-	auto start_line_vec = FlatVector::GetData<int32_t>(output.data[4]);
-	auto start_column_vec = FlatVector::GetData<int32_t>(output.data[5]);
-	auto end_line_vec = FlatVector::GetData<int32_t>(output.data[6]);
-	auto end_column_vec = FlatVector::GetData<int32_t>(output.data[7]);
-	auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[8]);
-	auto depth_vec = FlatVector::GetData<int32_t>(output.data[9]);
-	auto sibling_index_vec = FlatVector::GetData<int32_t>(output.data[10]);
-	auto source_text_vec = FlatVector::GetData<string_t>(output.data[11]);
+	auto normalized_type_vec = FlatVector::GetData<string_t>(output.data[2]);
+	auto name_vec = FlatVector::GetData<string_t>(output.data[3]);
+	auto file_path_vec = FlatVector::GetData<string_t>(output.data[4]);
+	auto start_line_vec = FlatVector::GetData<int32_t>(output.data[5]);
+	auto start_column_vec = FlatVector::GetData<int32_t>(output.data[6]);
+	auto end_line_vec = FlatVector::GetData<int32_t>(output.data[7]);
+	auto end_column_vec = FlatVector::GetData<int32_t>(output.data[8]);
+	auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[9]);
+	auto depth_vec = FlatVector::GetData<int32_t>(output.data[10]);
+	auto sibling_index_vec = FlatVector::GetData<int32_t>(output.data[11]);
+	auto source_text_vec = FlatVector::GetData<string_t>(output.data[12]);
 	
 	// Get validity masks
-	auto &name_validity = FlatVector::Validity(output.data[2]);
-	auto &parent_validity = FlatVector::Validity(output.data[8]);
+	auto &name_validity = FlatVector::Validity(output.data[3]);
+	auto &parent_validity = FlatVector::Validity(output.data[9]);
 	
 	while (data.current_index < data.nodes.size() && count < max_count) {
 		const auto &node = data.nodes[data.current_index];
@@ -170,13 +175,19 @@ static void ReadASTFunction(ClientContext &context, TableFunctionInput &data_p, 
 		node_id_vec[count] = node.node_id;
 		type_vec[count] = StringVector::AddString(output.data[1], node.type);
 		
+		// Add normalized type using language handler
+		ASTParser parser;
+		const LanguageHandler* handler = parser.GetLanguageHandler(data.language);
+		string normalized = handler ? handler->GetNormalizedType(node.type) : node.type;
+		normalized_type_vec[count] = StringVector::AddString(output.data[2], normalized);
+		
 		if (node.name.empty()) {
 			name_validity.SetInvalid(count);
 		} else {
-			name_vec[count] = StringVector::AddString(output.data[2], node.name);
+			name_vec[count] = StringVector::AddString(output.data[3], node.name);
 		}
 		
-		file_path_vec[count] = StringVector::AddString(output.data[3], data.file_path);
+		file_path_vec[count] = StringVector::AddString(output.data[4], data.file_path);
 		start_line_vec[count] = node.start_line;
 		start_column_vec[count] = node.start_column;
 		end_line_vec[count] = node.end_line;
@@ -190,7 +201,7 @@ static void ReadASTFunction(ClientContext &context, TableFunctionInput &data_p, 
 		
 		depth_vec[count] = node.depth;
 		sibling_index_vec[count] = node.sibling_index;
-		source_text_vec[count] = StringVector::AddStringOrBlob(output.data[11], node.source_text);
+		source_text_vec[count] = StringVector::AddStringOrBlob(output.data[12], node.source_text);
 		
 		count++;
 		data.current_index++;

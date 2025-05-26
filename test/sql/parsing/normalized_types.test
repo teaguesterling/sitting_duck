@@ -1,0 +1,67 @@
+# name: test/sql/parsing/normalized_types.test
+# description: Test normalized type functionality across languages
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: Python normalized types
+# ================================
+
+query III
+SELECT type, normalized_type, COUNT(*) as cnt
+FROM read_ast('test/data/python/simple.py', 'python')
+WHERE normalized_type IN ('function_declaration', 'class_declaration', 'variable_declaration')
+GROUP BY type, normalized_type
+ORDER BY normalized_type, type;
+----
+class_definition	class_declaration	1
+function_definition	function_declaration	4
+assignment	variable_declaration	2
+
+# Test 2: JavaScript normalized types
+# ===================================
+
+query III
+SELECT type, normalized_type, COUNT(*) as cnt
+FROM read_ast('test/data/javascript/simple.js', 'javascript')
+WHERE normalized_type IN ('function_declaration', 'class_declaration', 'variable_declaration')
+GROUP BY type, normalized_type
+ORDER BY normalized_type, type;
+----
+class_declaration	class_declaration	1
+arrow_function	function_declaration	2
+function_declaration	function_declaration	2
+function_expression	function_declaration	1
+const	variable_declaration	7
+lexical_declaration	variable_declaration	7
+
+# Test 3: Cross-language function count using normalized types
+# ============================================================
+
+query II
+SELECT 
+    (SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python') 
+     WHERE normalized_type = 'function_declaration') as python_functions,
+    (SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript')
+     WHERE normalized_type = 'function_declaration') as js_functions;
+----
+4	5
+
+# Test 4: Normalized types work with SQL macros
+# =============================================
+
+query I
+SELECT json_array_length(ast_get_type(nodes, 'function_declaration'))
+FROM (
+    SELECT json_group_array(
+        json_object(
+            'id', node_id,
+            'type', normalized_type,
+            'name', name,
+            'depth', depth
+        )
+    ) as nodes
+    FROM read_ast('test/data/javascript/simple.js', 'javascript')
+);
+----
+5

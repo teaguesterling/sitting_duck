@@ -110,7 +110,7 @@ IO Error: Failed to parse file
 
 # Test 12: Error handling - unsupported language
 statement error
-SELECT * FROM read_ast('test/data/python/simple.py', 'javascript');
+SELECT * FROM read_ast('test/data/python/simple.py', 'unsupported_language');
 ----
 IO Error: Failed to parse file
 

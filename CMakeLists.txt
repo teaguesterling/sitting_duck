@@ -33,13 +33,16 @@ endif()
 set(EXTENSION_SOURCES 
     src/duckdb_ast_extension.cpp
     src/ast_parser.cpp
+    src/language_handler.cpp
     src/read_ast_function.cpp
     src/read_ast_objects_hybrid.cpp
     src/ast_sql_macros.cpp
     src/short_names_function.cpp
     src/grammars.cpp
     grammars/tree-sitter-python/src/parser.c
-    grammars/tree-sitter-python/src/scanner.c)
+    grammars/tree-sitter-python/src/scanner.c
+    grammars/tree-sitter-javascript/src/parser.c
+    grammars/tree-sitter-javascript/src/scanner.c)
     # Temporarily disabled while fixing issues:
     # src/ast_type.cpp
     # src/read_ast_objects_function.cpp

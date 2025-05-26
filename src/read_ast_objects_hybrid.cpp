@@ -110,8 +110,9 @@ string ReadASTObjectsHybridFunction::ParseFileToJSON(ClientContext &context, con
         json << "\"id\":" << node_counter << ",";
         json << "\"type\":\"" << ts_node_type(entry.node) << "\",";
         
-        // Extract name
-        string name = parser.ExtractNodeName(entry.node, content);
+        // Extract name using language handler
+        const LanguageHandler* handler = parser.GetLanguageHandler(language);
+        string name = handler ? handler->ExtractNodeName(entry.node, content) : "";
         if (!name.empty()) {
             json << "\"name\":\"" << StringUtil::Replace(name, "\"", "\\\"") << "\",";
         }

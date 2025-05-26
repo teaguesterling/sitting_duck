@@ -2,6 +2,7 @@
 
 #include "duckdb.hpp"
 #include "duckdb/common/vector.hpp"
+#include "language_handler.hpp"
 #include <tree_sitter/api.h>
 
 // Forward declarations for tree-sitter types
@@ -28,8 +29,8 @@ public:
 	//! Parse a string and return the tree
 	TSTree* ParseString(const string &content, TSParser *parser);
 	
-	//! Extract node name
-	string ExtractNodeName(TSNode node, const string &content);
+	//! Get language handler for a language
+	const LanguageHandler* GetLanguageHandler(const string &language);
 };
 
 } // namespace duckdb

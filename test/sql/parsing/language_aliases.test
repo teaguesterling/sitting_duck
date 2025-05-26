@@ -1,0 +1,33 @@
+# name: test/sql/parsing/language_aliases.test
+# description: Test language aliases work correctly
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: Python 'py' alias works
+# ===============================
+
+query I
+SELECT COUNT(*) > 0 as parsed
+FROM read_ast('test/data/python/simple.py', 'py');
+----
+true
+
+# Test 2: JavaScript 'js' alias works
+# ==================================
+
+query I
+SELECT COUNT(*) > 0 as parsed
+FROM read_ast('test/data/javascript/simple.js', 'js');
+----
+true
+
+# Test 3: Full names still work
+# =============================
+
+query II
+SELECT 
+    (SELECT COUNT(*) > 0 FROM read_ast('test/data/python/simple.py', 'python')) as python_works,
+    (SELECT COUNT(*) > 0 FROM read_ast('test/data/javascript/simple.js', 'javascript')) as js_works;
+----
+true	true
