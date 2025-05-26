@@ -2,54 +2,108 @@
 
 **Last Updated:** 2025-05-26
 
-## Critical (P0) - Blocking Issues
-1. **[BUG] Clean API Not Loaded** - New SQL macro files not included in build
-   - Blocks all clean API functionality
-   - Fix: Update CMakeLists.txt
+## Priority Levels
 
-## High Priority (P1) - Core Functionality
-1. **[BUG] Test Syntax Errors** - Multiple tests have syntax issues
-   - Fix alias/subquery issues
-   - Add missing query declarations
+- **P0 (Critical)**: Blocking issues that prevent basic functionality
+- **P1 (High)**: Important features or bugs affecting user experience  
+- **P2 (Medium)**: Nice-to-have features or minor bugs
+- **P3 (Low)**: Future enhancements or cosmetic issues
+
+## Current Status
+
+✅ **Completed:**
+- Clean API implementation (13 core macros)
+- Test suite fixes for DuckDB 1.3
+- All tests passing (19 test cases, 387 assertions)
+
+## Immediate Priorities (Phase 1)
+
+### P1 - Core Functionality
+1. **[FEATURE] Chain Methods Implementation** - C++ function for method chaining
+   - Enable `ast(nodes).get_type().count()` syntax
+   - Already have ast() entrypoint, need chain methods
    
-2. **[FEATURE] Pragma Short Names** - Register unprefixed aliases
-   - Improves usability significantly
-   - Easy to implement
+2. **[FEATURE] Language Support** - Add JavaScript, C++, SQL
+   - Core value proposition of the extension
+   - Tree-sitter grammars ready
    
-3. **[FEATURE] Error Context Tracking** - Enhanced error messages
-   - Critical for debugging chained operations
-   - Helps users and AI agents
+3. **[FEATURE] Performance Optimization** - C++ hot-path macros
+   - Critical for 10K+ node files
+   - 10-100x improvement expected
 
-## Medium Priority (P2) - Quality & Performance
-1. **[BUG] ensure_integer_array** - Wrong behavior with [NULL]
-   - Inconsistent with ensure_varchar_array
+### P2 - Quality & UX
+1. **[FEATURE] Error Context Tracking** - Enhanced error messages
+   - Add file path, line numbers to errors
+   - Critical for debugging
    
-2. **[BUG] Performance Test Expectations** - Wrong expected values
-   - Simple fix to update expectations
+2. **[FEATURE] Source Code Extraction** - ast_source_* functions
+   - Extract code snippets with context
+   - Highly requested by AI agents
    
-3. **[FEATURE] Performance Caching** - Session-level AST cache
-   - Major performance improvement
-   - Useful for interactive sessions
+3. **[FEATURE] Short Names Registration** - Unprefixed aliases
+   - Better ergonomics for interactive use
+   - Optional feature
 
-## Low Priority (P3) - Nice to Have
-1. **[BUG] AST v2 Macros Test** - Investigate failure
-   - May be obsolete with clean API
+## Medium-term Priorities (Phase 2)
 
-## Implementation Order
+### P1 - Performance at Scale
+1. **[FEATURE] Filter Pushdown** - Parse-time filtering
+   - Reduce nodes loaded into memory
+   - Essential for large codebases
+   
+2. **[FEATURE] AST Caching** - Session-level cache
+   - Avoid re-parsing same files
+   - Major UX improvement
 
-### Phase 1: Fix Critical Issues (Today)
-1. Fix CMakeLists.txt to include clean API files
-2. Fix test syntax errors
-3. Update test expectations
+### P2 - AI Agent Experience  
+1. **[FEATURE] Semantic Functions** - High-level helpers
+   - `code_functions()`, `code_classes()`, etc.
+   - 90% of AI agent use cases
+   
+2. **[FEATURE] Progressive Disclosure** - Layered API
+   - Simple queries for common cases
+   - Full power when needed
 
-### Phase 2: Quick Wins (This Week)
-1. Implement pragma/macro for short names
-2. Fix ensure_integer_array bug
+## Long-term Vision (Phase 3)
 
-### Phase 3: Enhanced UX (Next Week)
-1. Add error context tracking
-2. Create performance caching helpers
+### P3 - Architecture Evolution
+1. **[FEATURE] Native AST Type** - Custom DuckDB type
+   - Eliminate JSON overhead
+   - Requires significant engineering
+   
+2. **[FEATURE] Incremental Parsing** - Parse only changes
+   - Essential for IDE integration
+   - Complex implementation
+   
+3. **[FEATURE] Distributed Processing** - Multi-machine support
+   - Handle entire repositories
+   - Cloud deployment ready
 
-### Phase 4: Cleanup
-1. Remove obsolete tests/functions
-2. Update documentation
+## Implementation Roadmap
+
+### Week 1-2: Foundation
+- [ ] Implement chain methods in C++
+- [ ] Add JavaScript language support
+- [ ] Create performance benchmarks
+
+### Week 3-4: Performance
+- [ ] C++ implementation of core macros
+- [ ] Add filter pushdown
+- [ ] Implement basic caching
+
+### Week 5-6: AI Agent UX
+- [ ] Create semantic helper functions
+- [ ] Add error context propagation
+- [ ] Write AI agent cookbook
+
+### Week 7-8: Polish
+- [ ] Performance testing suite
+- [ ] Documentation update
+- [ ] Example notebooks
+
+## Success Metrics
+
+1. **Performance**: <1s query on 10K+ node files
+2. **Usability**: 90% queries use high-level API
+3. **Reliability**: Zero regression in test suite
+4. **Adoption**: Positive AI agent feedback
