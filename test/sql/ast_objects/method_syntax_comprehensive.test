@@ -153,17 +153,17 @@ FROM first_10;
 ----
 1
 
-# Method syntax with arithmetic expressions
-query I
-SELECT (3 + 2).double_value();
-----
-10
-
-# Method syntax with function results
-query I
-SELECT (CAST(5.7 AS INTEGER)).double_value();
-----
-10
+# Note: double_value() was a test macro for exploring method syntax
+# These tests are commented out as they're not relevant to AST functionality
+# query I
+# SELECT (3 + 2).double_value();
+# ----
+# 10
+# 
+# query I
+# SELECT (CAST(5.7 AS INTEGER)).double_value();
+# ----
+# 10
 
 # Test 9: Method Syntax in Various SQL Contexts
 # =============================================

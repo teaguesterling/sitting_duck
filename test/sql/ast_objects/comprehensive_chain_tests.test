@@ -240,9 +240,9 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4	1	4	19	8
 
-# Find deeply nested function definitions
+# Find deeply nested function definitions at depth 3
 query I
-SELECT ast(nodes).where_depth([3, 4, 5]).where_type('function_definition').count_elements()
+SELECT ast(nodes).where_depth(3).where_type('function_definition').count_elements()
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 2

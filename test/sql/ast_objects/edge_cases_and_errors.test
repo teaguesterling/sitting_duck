@@ -90,10 +90,10 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 query IIIIII
 SELECT 
     array_length(ensure_varchar_array(NULL)) as null_varchar,
-    array_length(ensure_varchar_array([])) as empty_varchar_array,
+    array_length(ensure_varchar_array([]::VARCHAR[])) as empty_varchar_array,
     array_length(ensure_varchar_array([NULL])) as null_in_array,
     array_length(ensure_integer_array(NULL)) as null_integer,
-    array_length(ensure_integer_array([])) as empty_integer_array,
+    array_length(ensure_integer_array([]::INTEGER[])) as empty_integer_array,
     array_length(ensure_integer_array([NULL])) as null_int_in_array
 ----
 0	0	1	0	0	1
