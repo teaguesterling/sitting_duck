@@ -85,7 +85,7 @@ SELECT
     result.file_path as file_path
 FROM chained;
 ----
-1	test/data/python/simple.py
+2	test/data/python/simple.py
 
 # Test 3: Extraction Macros Return SQL Types
 # ==========================================

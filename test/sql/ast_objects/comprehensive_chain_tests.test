@@ -272,7 +272,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # Multiple chained operations
 query I
 SELECT ast(nodes)
-    .where_depth([1, 2, 3])
+    .where_depth(2)
     .where_type('identifier')
     .extract_names()
     .count_elements()

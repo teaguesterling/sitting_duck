@@ -180,7 +180,7 @@ WHERE json_array_length((nodes).ast_find_type('function_definition')) > 3;
 query I
 SELECT json_array_length((nodes).ast_find_type('function_definition')) as func_count
 FROM read_ast_objects('test/data/python/simple.py', 'python')
-ORDER BY (func_count).double_value()
+ORDER BY json_array_length((nodes).ast_find_type('function_definition'))
 LIMIT 1;
 ----
 4

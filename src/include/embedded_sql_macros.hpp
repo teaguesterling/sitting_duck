@@ -1383,6 +1383,582 @@ CREATE OR REPLACE MACRO ast_deep_nodes(nodes) AS (
      WHERE json_extract(je.value, '$.depth')::INTEGER > 5)
 );
 )SQLMACRO"},
+    {"clean_api_core.sql", R"SQLMACRO(
+-- Clean API Core Functions
+-- Implementation of the simplified, consistent AST API
+
+-- ===================================
+-- 1. ENTRYPOINT & UTILITIES  
+-- ===================================
+
+-- ast() function already exists in entrypoint_macros.sql - reuse as-is
+
+-- Interactive help system
+CREATE OR REPLACE MACRO ast_help() AS (
+    json_object(
+        'getting_started', json_array(
+            'SELECT ast_get_type(nodes, ''function_definition'') FROM read_ast_objects(''file.py'', ''python'')',
+            'SELECT ast_get_names(nodes) FROM read_ast_objects(''file.py'', ''python'')',
+            'SELECT ast(nodes).get_type(''function_definition'').count() FROM read_ast_objects(''file.py'', ''python'')'
+        ),
+        'categories', json_object(
+            'ast_get_*', 'Simple extraction returning JSON arrays',
+            'ast_filter_*', 'Filtering operations returning filtered JSON arrays', 
+            'ast_nav_*', 'Tree navigation (parent, children, siblings, etc.)',
+            'ast_analyze_*', 'Analysis and metrics',
+            'ast_source_*', 'Source code extraction (reads from files)'
+        ),
+        'core_functions', json_array(
+            'ast_get_type(nodes, types) - Find nodes by type(s)',
+            'ast_get_names(nodes, node_type?) - Extract names, optionally by type',
+            'ast_get_depth(nodes, depths) - Find nodes at depth(s)',
+            'ast_get_line(nodes, lines) - Find nodes at line(s)',
+            'ast_nav_children(nodes, parent_id) - Get direct children',
+            'ast_analyze_summary(nodes) - Overall statistics'
+        ),
+        'examples_url', 'Use ast_examples() for more detailed examples'
+    )
+);
+
+-- ===================================
+-- 2. BASIC EXTRACTION (ast_get_*)
+-- ===================================
+
+-- Find nodes by type(s) - accepts single type or array of types
+CREATE OR REPLACE MACRO ast_get_type(nodes, types) AS (
+    COALESCE(
+        (SELECT json_group_array(je.value) 
+         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+         WHERE list_contains(ensure_varchar_array(types), json_extract_string(je.value, '$.type'))),
+        '[]'::JSON
+    )
+);
+
+-- Extract names, optionally filtered by node type
+CREATE OR REPLACE MACRO ast_get_names(nodes, node_type := NULL) AS (
+    COALESCE(
+        (SELECT json_group_array(json_extract_string(je.value, '$.name'))
+         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+         WHERE json_extract_string(je.value, '$.name') IS NOT NULL
+           AND (node_type IS NULL OR json_extract_string(je.value, '$.type') = node_type)),
+        '[]'::JSON
+    )
+);
+
+-- Find nodes at specific depth(s) - accepts single depth or array of depths  
+CREATE OR REPLACE MACRO ast_get_depth(nodes, depths) AS (
+    COALESCE(
+        (SELECT json_group_array(je.value)
+         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+         WHERE list_contains(ensure_integer_array(depths), json_extract(je.value, '$.depth')::INTEGER)),
+        '[]'::JSON
+    )
+);
+
+-- Find nodes at specific line(s) - accepts single line or array of lines
+CREATE OR REPLACE MACRO ast_get_line(nodes, lines) AS (
+    COALESCE(
+        (SELECT json_group_array(je.value)
+         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+         WHERE EXISTS (
+             SELECT 1 FROM unnest(ensure_integer_array(lines)) as line
+             WHERE line BETWEEN json_extract(je.value, '$.start.line')::INTEGER 
+                           AND json_extract(je.value, '$.end.line')::INTEGER
+         )),
+        '[]'::JSON
+    )
+);
+
+-- Find nodes in line range
+CREATE OR REPLACE MACRO ast_get_range(nodes, start_line, end_line) AS (
+    COALESCE(
+        (SELECT json_group_array(je.value)
+         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+         WHERE json_extract(je.value, '$.start.line')::INTEGER >= start_line
+           AND json_extract(je.value, '$.end.line')::INTEGER <= end_line),
+        '[]'::JSON
+    )
+);
+
+-- ===================================
+-- 3. FILTERING (ast_filter_*)
+-- ===================================
+
+-- Filter by pattern using LIKE (field defaults to 'name')
+CREATE OR REPLACE MACRO ast_filter_pattern(nodes, pattern, field := 'name') AS (
+    COALESCE(
+        (SELECT json_group_array(je.value)
+         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+         WHERE json_extract_string(je.value, '$.' || field) LIKE pattern),
+        '[]'::JSON
+    )
+);
+
+-- Filter by depth range
+CREATE OR REPLACE MACRO ast_filter_depth_range(nodes, min_depth := 0, max_depth := NULL) AS (
+    COALESCE(
+        (SELECT json_group_array(je.value)
+         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+         WHERE json_extract(je.value, '$.depth')::INTEGER >= min_depth
+           AND (max_depth IS NULL OR json_extract(je.value, '$.depth')::INTEGER <= max_depth)),
+        '[]'::JSON
+    )
+);
+
+-- Filter to nodes that have a name field
+CREATE OR REPLACE MACRO ast_filter_has_name(nodes) AS (
+    COALESCE(
+        (SELECT json_group_array(je.value)
+         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+         WHERE json_extract_string(je.value, '$.name') IS NOT NULL),
+        '[]'::JSON
+    )
+);
+
+-- ===================================
+-- 4. TREE NAVIGATION (ast_nav_*)
+-- ===================================
+
+-- Get direct children of a node by parent ID
+CREATE OR REPLACE MACRO ast_nav_children(nodes, parent_id) AS (
+    COALESCE(
+        (SELECT json_group_array(je.value)
+         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+         WHERE json_extract(je.value, '$.parent_id')::INTEGER = parent_id),
+        '[]'::JSON
+    )
+);
+
+-- Get parent node by child ID
+CREATE OR REPLACE MACRO ast_nav_parent(nodes, child_id) AS (
+    COALESCE(
+        (WITH child_node AS (
+            SELECT json_extract(je.value, '$.parent_id')::BIGINT as parent_id
+            FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+            WHERE json_extract(je.value, '$.id')::BIGINT = child_id
+            LIMIT 1
+        )
+        SELECT json_group_array(je.value)
+        FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je, child_node
+        WHERE json_extract(je.value, '$.id')::BIGINT = child_node.parent_id),
+        '[]'::JSON
+    )
+);
+
+-- Get sibling nodes (excluding the node itself by default)
+CREATE OR REPLACE MACRO ast_nav_siblings(nodes, node_id, include_self := false) AS (
+    COALESCE(
+        (WITH node_info AS (
+            SELECT json_extract(je.value, '$.parent_id')::BIGINT as parent_id
+            FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+            WHERE json_extract(je.value, '$.id')::BIGINT = node_id
+            LIMIT 1
+        )
+        SELECT json_group_array(je.value)
+        FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je, node_info
+        WHERE json_extract(je.value, '$.parent_id')::BIGINT = node_info.parent_id
+          AND (include_self OR json_extract(je.value, '$.id')::BIGINT != node_id)),
+        '[]'::JSON
+    )
+);
+
+-- Get ancestor nodes with optional level limit
+CREATE OR REPLACE MACRO ast_nav_ancestors(nodes, node_id, max_levels := NULL) AS (
+    COALESCE(
+        (WITH RECURSIVE ancestors AS (
+            -- Start with the parent of the given node
+            SELECT 
+                je.value as node,
+                json_extract(je.value, '$.id')::BIGINT as id,
+                json_extract(je.value, '$.parent_id')::BIGINT as parent_id,
+                1 as level
+            FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+            WHERE json_extract(je.value, '$.id')::BIGINT = (
+                SELECT json_extract(n.value, '$.parent_id')::BIGINT
+                FROM json_each(COALESCE(nodes, '[]'::JSON)) AS n
+                WHERE json_extract(n.value, '$.id')::BIGINT = node_id
+                LIMIT 1
+            )
+            
+            UNION ALL
+            
+            -- Recursively find ancestors
+            SELECT 
+                je.value as node,
+                json_extract(je.value, '$.id')::BIGINT as id,
+                json_extract(je.value, '$.parent_id')::BIGINT as parent_id,
+                a.level + 1 as level
+            FROM ancestors a
+            JOIN json_each(COALESCE(nodes, '[]'::JSON)) AS je 
+              ON json_extract(je.value, '$.id')::BIGINT = a.parent_id
+            WHERE a.parent_id IS NOT NULL
+              AND (max_levels IS NULL OR a.level < max_levels)
+        )
+        SELECT json_group_array(node)
+        FROM ancestors),
+        '[]'::JSON
+    )
+);
+
+-- Get descendant nodes with optional level limit
+CREATE OR REPLACE MACRO ast_nav_descendants(nodes, node_id, max_levels := NULL) AS (
+    COALESCE(
+        (WITH RECURSIVE descendants AS (
+            -- Start with direct children
+            SELECT 
+                je.value as node,
+                json_extract(je.value, '$.id')::BIGINT as id,
+                json_extract(je.value, '$.parent_id')::BIGINT as parent_id,
+                1 as level
+            FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+            WHERE json_extract(je.value, '$.parent_id')::BIGINT = node_id
+            
+            UNION ALL
+            
+            -- Recursively find descendants
+            SELECT 
+                je.value as node,
+                json_extract(je.value, '$.id')::BIGINT as id,
+                json_extract(je.value, '$.parent_id')::BIGINT as parent_id,
+                d.level + 1 as level
+            FROM descendants d
+            JOIN json_each(COALESCE(nodes, '[]'::JSON)) AS je 
+              ON json_extract(je.value, '$.parent_id')::BIGINT = d.id
+            WHERE (max_levels IS NULL OR d.level < max_levels)
+        )
+        SELECT json_group_array(node)
+        FROM descendants),
+        '[]'::JSON
+    )
+);
+)SQLMACRO"},
+    {"clean_api_analysis.sql", R"SQLMACRO(
+-- Clean API Analysis Functions
+-- Analysis and metrics functions with consistent naming
+
+-- ===================================
+-- 5. ANALYSIS (ast_analyze_*)
+-- ===================================
+
+-- Overall AST statistics and summary
+CREATE OR REPLACE MACRO ast_analyze_summary(nodes) AS (
+    json_object(
+        'total_nodes', json_array_length(COALESCE(nodes, '[]'::JSON)),
+        'node_types', ast_analyze_types(nodes),
+        'max_depth', COALESCE(
+            (SELECT MAX(json_extract(je.value, '$.depth')::INTEGER) 
+             FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je),
+            0
+        ),
+        'functions', ast_get_names(nodes, 'function_definition'),
+        'classes', ast_get_names(nodes, 'class_definition'), 
+        'function_count', json_array_length(ast_get_type(nodes, 'function_definition')),
+        'class_count', json_array_length(ast_get_type(nodes, 'class_definition')),
+        'has_names_count', json_array_length(ast_filter_has_name(nodes)),
+        'line_span', CASE 
+            WHEN json_array_length(COALESCE(nodes, '[]'::JSON)) = 0 THEN NULL
+            ELSE json_object(
+                'start', (SELECT MIN(json_extract(je.value, '$.start.line')::INTEGER) 
+                         FROM json_each(nodes) AS je),
+                'end', (SELECT MAX(json_extract(je.value, '$.end.line')::INTEGER) 
+                       FROM json_each(nodes) AS je)
+            )
+        END
+    )
+);
+
+-- Complexity metrics for code analysis
+CREATE OR REPLACE MACRO ast_analyze_complexity(nodes) AS (
+    json_object(
+        'total_nodes', json_array_length(COALESCE(nodes, '[]'::JSON)),
+        'avg_depth', COALESCE(
+            (SELECT AVG(json_extract(je.value, '$.depth')::INTEGER) 
+             FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je),
+            0.0
+        ),
+        'max_depth', COALESCE(
+            (SELECT MAX(json_extract(je.value, '$.depth')::INTEGER) 
+             FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je),
+            0
+        ),
+        'depth_distribution', (
+            SELECT json_group_object(
+                CAST(json_extract(je.value, '$.depth')::INTEGER AS VARCHAR), 
+                COUNT(*)
+            )
+            FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+            GROUP BY json_extract(je.value, '$.depth')::INTEGER
+        ),
+        'function_count', json_array_length(ast_get_type(nodes, 'function_definition')),
+        'class_count', json_array_length(ast_get_type(nodes, 'class_definition')),
+        'lines_of_code', CASE 
+            WHEN json_array_length(COALESCE(nodes, '[]'::JSON)) = 0 THEN 0
+            ELSE COALESCE(
+                (SELECT MAX(json_extract(je.value, '$.end.line')::INTEGER) 
+                 FROM json_each(nodes) AS je),
+                0
+            )
+        END,
+        'complexity_score', CASE 
+            WHEN json_array_length(COALESCE(nodes, '[]'::JSON)) = 0 THEN 0
+            ELSE COALESCE(
+                (SELECT AVG(json_extract(je.value, '$.depth')::INTEGER) * 
+                        COUNT(*) / 100.0
+                 FROM json_each(nodes) AS je),
+                0.0
+            )
+        END
+    )
+);
+
+-- Count of each node type
+CREATE OR REPLACE MACRO ast_analyze_types(nodes) AS (
+    COALESCE(
+        (SELECT json_group_object(node_type, cnt)
+         FROM (
+             SELECT json_extract_string(je.value, '$.type') as node_type, COUNT(*) as cnt
+             FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+             WHERE json_extract_string(je.value, '$.type') IS NOT NULL
+             GROUP BY node_type
+             ORDER BY cnt DESC
+         )),
+        '{}'::JSON
+    )
+);
+
+-- Depth analysis - distribution of nodes across depth levels
+CREATE OR REPLACE MACRO ast_analyze_depth_distribution(nodes) AS (
+    COALESCE(
+        (SELECT json_group_object(
+            'depth_' || CAST(depth AS VARCHAR), 
+            json_object(
+                'count', cnt,
+                'percentage', ROUND(cnt * 100.0 / total_nodes, 2)
+            )
+        )
+         FROM (
+             SELECT 
+                 json_extract(je.value, '$.depth')::INTEGER as depth,
+                 COUNT(*) as cnt,
+                 SUM(COUNT(*)) OVER () as total_nodes
+             FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+             GROUP BY depth
+             ORDER BY depth
+         )),
+        '{}'::JSON
+    )
+);
+
+-- Line coverage analysis - which lines have AST nodes
+CREATE OR REPLACE MACRO ast_analyze_line_coverage(nodes) AS (
+    json_object(
+        'total_lines', CASE 
+            WHEN json_array_length(COALESCE(nodes, '[]'::JSON)) = 0 THEN 0
+            ELSE COALESCE(
+                (SELECT MAX(json_extract(je.value, '$.end.line')::INTEGER) 
+                 FROM json_each(nodes) AS je),
+                0
+            )
+        END,
+        'covered_lines', (
+            SELECT COUNT(DISTINCT line_num)
+            FROM (
+                SELECT generate_series(
+                    json_extract(je.value, '$.start.line')::INTEGER,
+                    json_extract(je.value, '$.end.line')::INTEGER
+                ) as line_num
+                FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+            )
+        ),
+        'coverage_percentage', CASE 
+            WHEN json_array_length(COALESCE(nodes, '[]'::JSON)) = 0 THEN 0.0
+            ELSE COALESCE(
+                (SELECT COUNT(DISTINCT line_num) * 100.0 / MAX(json_extract(je.value, '$.end.line')::INTEGER)
+                 FROM (
+                     SELECT generate_series(
+                         json_extract(je.value, '$.start.line')::INTEGER,
+                         json_extract(je.value, '$.end.line')::INTEGER
+                     ) as line_num
+                     FROM json_each(nodes) AS je
+                 ), json_each(nodes) AS je),
+                0.0
+            )
+        END
+    )
+);
+)SQLMACRO"},
+    {"clean_api_chains.sql", R"SQLMACRO(
+-- Clean API Chain Methods
+-- These work with the ast() entrypoint for method chaining
+
+-- ===================================
+-- CHAIN METHODS FOR ast() ENTRYPOINT
+-- ===================================
+
+-- Chain-friendly versions of core functions (use clean API internally)
+CREATE OR REPLACE MACRO get_type(nodes, types) AS (
+    ast_get_type(nodes, types)
+);
+
+CREATE OR REPLACE MACRO get_names(nodes, node_type := NULL) AS (
+    ast_get_names(nodes, node_type)
+);
+
+CREATE OR REPLACE MACRO get_depth(nodes, depths) AS (
+    ast_get_depth(nodes, depths)
+);
+
+CREATE OR REPLACE MACRO get_line(nodes, lines) AS (
+    ast_get_line(nodes, lines)
+);
+
+CREATE OR REPLACE MACRO get_range(nodes, start_line, end_line) AS (
+    ast_get_range(nodes, start_line, end_line)
+);
+
+CREATE OR REPLACE MACRO filter_pattern(nodes, pattern, field := 'name') AS (
+    ast_filter_pattern(nodes, pattern, field)
+);
+
+CREATE OR REPLACE MACRO filter_depth_range(nodes, min_depth := 0, max_depth := NULL) AS (
+    ast_filter_depth_range(nodes, min_depth, max_depth)
+);
+
+CREATE OR REPLACE MACRO filter_has_name(nodes) AS (
+    ast_filter_has_name(nodes)
+);
+
+-- Navigation methods
+CREATE OR REPLACE MACRO nav_children(nodes, parent_id) AS (
+    ast_nav_children(nodes, parent_id)
+);
+
+CREATE OR REPLACE MACRO nav_parent(nodes, child_id) AS (
+    ast_nav_parent(nodes, child_id)
+);
+
+CREATE OR REPLACE MACRO nav_siblings(nodes, node_id, include_self := false) AS (
+    ast_nav_siblings(nodes, node_id, include_self)
+);
+
+-- Analysis methods
+CREATE OR REPLACE MACRO analyze_summary(nodes) AS (
+    ast_analyze_summary(nodes)
+);
+
+CREATE OR REPLACE MACRO analyze_complexity(nodes) AS (
+    ast_analyze_complexity(nodes)
+);
+
+CREATE OR REPLACE MACRO analyze_types(nodes) AS (
+    ast_analyze_types(nodes)
+);
+
+-- ===================================
+-- TERMINATING CHAIN METHODS
+-- ===================================
+
+-- Count elements (terminates chain, returns INTEGER)
+CREATE OR REPLACE MACRO count(arr) AS (
+    json_array_length(COALESCE(arr, '[]'::JSON))
+);
+
+-- Get first element (terminates chain, returns JSON)
+CREATE OR REPLACE MACRO first(arr) AS (
+    json_extract(COALESCE(arr, '[]'::JSON), '$[0]')
+);
+
+-- Get last element (terminates chain, returns JSON)
+CREATE OR REPLACE MACRO last(arr) AS (
+    json_extract(
+        COALESCE(arr, '[]'::JSON), 
+        '$[' || (json_array_length(COALESCE(arr, '[]'::JSON)) - 1) || ']'
+    )
+);
+
+-- Extract names as VARCHAR array (terminates chain)
+CREATE OR REPLACE MACRO extract_names(nodes) AS (
+    COALESCE(
+        (SELECT array_agg(json_extract_string(je.value, '$.name'))
+         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+         WHERE json_extract_string(je.value, '$.name') IS NOT NULL),
+        []::VARCHAR[]
+    )
+);
+
+-- Extract types as VARCHAR array (terminates chain)
+CREATE OR REPLACE MACRO extract_types(nodes) AS (
+    COALESCE(
+        (SELECT array_agg(DISTINCT json_extract_string(je.value, '$.type'))
+         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+         WHERE json_extract_string(je.value, '$.type') IS NOT NULL),
+        []::VARCHAR[]
+    )
+);
+
+-- Extract IDs as INTEGER array (terminates chain)
+CREATE OR REPLACE MACRO extract_ids(nodes) AS (
+    COALESCE(
+        (SELECT array_agg(json_extract(je.value, '$.id')::INTEGER)
+         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+         WHERE json_extract(je.value, '$.id') IS NOT NULL),
+        []::INTEGER[]
+    )
+);
+
+-- ===================================
+-- UTILITY CHAIN METHODS
+-- ===================================
+
+-- Check if result is empty (returns BOOLEAN)
+CREATE OR REPLACE MACRO is_empty(arr) AS (
+    json_array_length(COALESCE(arr, '[]'::JSON)) = 0
+);
+
+-- Check if result has any elements (returns BOOLEAN)  
+CREATE OR REPLACE MACRO has_any(arr) AS (
+    json_array_length(COALESCE(arr, '[]'::JSON)) > 0
+);
+
+-- Get specific element by index (returns JSON)
+CREATE OR REPLACE MACRO at_index(arr, idx) AS (
+    json_extract(COALESCE(arr, '[]'::JSON), '$[' || idx || ']')
+);
+
+-- ===================================
+-- BACKWARD COMPATIBILITY ALIASES
+-- ===================================
+
+-- Keep some common old names as aliases during transition
+CREATE OR REPLACE MACRO find_type(nodes, types) AS (
+    ast_get_type(nodes, types)
+);
+
+CREATE OR REPLACE MACRO function_names(nodes) AS (
+    ast_get_names(nodes, 'function_definition')
+);
+
+CREATE OR REPLACE MACRO class_names(nodes) AS (
+    ast_get_names(nodes, 'class_definition')
+);
+
+CREATE OR REPLACE MACRO at_depth(nodes, depths) AS (
+    ast_get_depth(nodes, depths)
+);
+
+CREATE OR REPLACE MACRO children_of(nodes, parent_id) AS (
+    ast_nav_children(nodes, parent_id)
+);
+
+CREATE OR REPLACE MACRO summary(nodes) AS (
+    ast_analyze_summary(nodes)
+);
+
+-- Chain count method (backward compatibility)
+CREATE OR REPLACE MACRO count_elements(arr) AS (
+    json_array_length(COALESCE(arr, '[]'::JSON))
+);
+)SQLMACRO"},
 };
 
 } // namespace duckdb

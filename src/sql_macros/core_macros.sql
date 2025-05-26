@@ -16,6 +16,7 @@ CREATE OR REPLACE MACRO ensure_integer_array(val) AS (
         WHEN val IS NULL THEN []::INTEGER[]
         WHEN typeof(val) = 'INTEGER[]' THEN val::INTEGER[]
         WHEN typeof(val) = 'BIGINT[]' THEN val::INTEGER[]
+        WHEN typeof(val) = '"NULL"[]' THEN val::INTEGER[]
         WHEN typeof(val) = 'INTEGER' THEN [val::INTEGER]::INTEGER[]
         WHEN typeof(val) = 'BIGINT' THEN [val::INTEGER]::INTEGER[]
         ELSE []::INTEGER[]

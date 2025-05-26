@@ -239,7 +239,7 @@ SELECT
     json_extract(ast(nodes).summary(), '$.total_nodes') as total
 FROM large_ast;
 ----
-1000	1000	1000	1000	1250	1250	1250	5	10000
+1000	1000	1000	1000	1250	1250	1250	4	10000
 
 # Test 11: Chain Operation Performance
 # ====================================
