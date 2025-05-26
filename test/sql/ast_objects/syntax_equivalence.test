@@ -112,13 +112,14 @@ entrypoint AS (
     SELECT ast(nodes).find_type('function_definition').extract_names().count_elements() as result
     FROM read_ast_objects('test/data/python/simple.py', 'python')
 )
+query III
 SELECT 
-    f.result = m.result as func_vs_method,
-    f.result = e.result as func_vs_entry,
-    m.result = e.result as method_vs_entry
+    (f.result = m.result)::INTEGER as func_vs_method,
+    (f.result = e.result)::INTEGER as func_vs_entry,
+    (m.result = e.result)::INTEGER as method_vs_entry
 FROM functional f, method m, entrypoint e;
 ----
-true	true	true
+1	1	1
 
 # Test 6: Edge Case Equivalence
 # =============================
@@ -251,27 +252,28 @@ WITH all_results AS (
         
     FROM read_ast_objects('test/data/python/simple.py', 'python')
 )
+query IIIIII
 SELECT 
     -- All find_type results equal
-    (func_find = method_find AND method_find = entry_find) as find_equal,
+    (func_find = method_find AND method_find = entry_find)::INTEGER as find_equal,
     
     -- All function_names results equal
-    (func_names = method_names AND method_names = entry_names) as names_equal,
+    (func_names = method_names AND method_names = entry_names)::INTEGER as names_equal,
     
     -- All class_names results equal
-    (func_classes = method_classes AND method_classes = entry_classes) as classes_equal,
+    (func_classes = method_classes AND method_classes = entry_classes)::INTEGER as classes_equal,
     
     -- All identifiers results equal
-    (func_ids = method_ids AND method_ids = entry_ids) as ids_equal,
+    (func_ids = method_ids AND method_ids = entry_ids)::INTEGER as ids_equal,
     
     -- All at_depth results equal
-    (func_depth = method_depth AND method_depth = entry_depth) as depth_equal,
+    (func_depth = method_depth AND method_depth = entry_depth)::INTEGER as depth_equal,
     
     -- All summary results equal
-    (func_summary = method_summary AND method_summary = entry_summary) as summary_equal
+    (func_summary = method_summary AND method_summary = entry_summary)::INTEGER as summary_equal
 FROM all_results;
 ----
-true	true	true	true	true	true
+1	1	1	1	1	1
 
 # Cleanup
 statement ok

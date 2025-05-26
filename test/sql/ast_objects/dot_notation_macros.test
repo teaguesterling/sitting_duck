@@ -13,7 +13,8 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
 
-# Test 2: Without parentheses, it fails
+# Test 2: Without parentheses, it also works (surprisingly!)
+query I
 SELECT json_array_length(nodes.ast_find_type('function_definition')) as count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
