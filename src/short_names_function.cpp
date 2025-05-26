@@ -2,8 +2,59 @@
 #include "duckdb/main/extension_util.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "ast_sql_macros.hpp"
+#include "embedded_sql_macros.hpp"
 
 namespace duckdb {
+
+// Helper function to get embedded SQL macro by filename
+static const char* GetEmbeddedSqlMacro(const string &filename) {
+    for (const auto &macro_pair : EMBEDDED_SQL_MACROS) {
+        if (macro_pair.first == filename) {
+            return macro_pair.second.c_str();
+        }
+    }
+    return nullptr;
+}
+
+// Same SQL splitter as in ast_sql_macros.cpp
+static vector<string> SplitSQLStatements(const string &sql) {
+    vector<string> statements;
+    string current_statement;
+    bool in_single_quote = false;
+    bool in_double_quote = false;
+    
+    for (size_t i = 0; i < sql.length(); i++) {
+        char ch = sql[i];
+        
+        // Handle quotes
+        if (ch == '\'' && !in_double_quote && (i == 0 || sql[i-1] != '\\')) {
+            in_single_quote = !in_single_quote;
+        } else if (ch == '"' && !in_single_quote && (i == 0 || sql[i-1] != '\\')) {
+            in_double_quote = !in_double_quote;
+        }
+        
+        current_statement += ch;
+        
+        // If we hit a semicolon outside of quotes, it's end of statement
+        if (ch == ';' && !in_single_quote && !in_double_quote) {
+            // Trim whitespace
+            size_t start = current_statement.find_first_not_of(" \t\n\r");
+            if (start != string::npos) {
+                statements.push_back(current_statement.substr(start));
+            }
+            current_statement.clear();
+        }
+    }
+    
+    // Don't forget the last statement if it doesn't end with semicolon
+    size_t start = current_statement.find_first_not_of(" \t\n\r");
+    if (start != string::npos) {
+        statements.push_back(current_statement.substr(start));
+    }
+    
+    return statements;
+}
 
 static void RegisterShortNamesFunction(DataChunk &args, ExpressionState &state, Vector &result) {
     auto &context = state.GetContext();
@@ -11,57 +62,63 @@ static void RegisterShortNamesFunction(DataChunk &args, ExpressionState &state, 
     auto conn = make_uniq<Connection>(db);
     
     try {
-        // Query for all ast_* macros (excluding internal ones)
-        auto query_result = conn->Query(R"(
-            SELECT function_name 
-            FROM duckdb_functions() 
-            WHERE function_name LIKE 'ast_%' 
-              AND function_type = 'macro' 
-              AND function_name NOT LIKE '_ast_internal_%'
-            ORDER BY function_name
-        )");
+        // Load the chain methods SQL file
+        // This file contains all the unprefixed aliases for chain methods
+        const char* chain_methods_sql = GetEmbeddedSqlMacro("02b_chain_methods.sql");
         
-        if (query_result->HasError()) {
-            result.SetValue(0, Value("Error querying functions: " + query_result->GetError()));
+        if (!chain_methods_sql) {
+            // Fall back to loading from embedded macros if available
+            result.SetValue(0, Value("Chain methods SQL file not found in embedded resources"));
             return;
         }
         
-        int created = 0;
+        // Split and execute the chain methods SQL statements
+        auto statements = SplitSQLStatements(chain_methods_sql);
+        int loaded = 0;
         int failed = 0;
-        string error_details = "";
         
-        // For now, create simple aliases - we'll enhance this to handle parameters properly later
-        while (auto chunk = query_result->Fetch()) {
-            for (idx_t i = 0; i < chunk->size(); i++) {
-                auto func_name = chunk->GetValue(0, i).ToString();
-                if (func_name.substr(0, 4) == "ast_") {
-                    auto short_name = func_name.substr(4); // Remove "ast_" prefix
-                    
-                    // TODO: Handle parameter lists properly
-                    // For now, create basic aliases for parameterless functions
-                    string alias_sql = "CREATE OR REPLACE MACRO " + short_name + "() AS " + func_name + "()";
-                    
-                    auto alias_result = conn->Query(alias_sql);
-                    if (alias_result->HasError()) {
-                        failed++;
-                        if (error_details.length() < 200) { // Keep error message reasonable
-                            error_details += short_name + " (failed), ";
-                        }
-                    } else {
-                        created++;
-                    }
-                }
+        for (const auto &statement : statements) {
+            // Skip empty statements
+            if (statement.empty() || statement.find_first_not_of(" \t\n\r") == string::npos) {
+                continue;
+            }
+            
+            auto load_result = conn->Query(statement);
+            if (load_result->HasError()) {
+                failed++;
+            } else {
+                loaded++;
             }
         }
         
-        string message = "Created " + std::to_string(created) + " short name aliases";
+        // Count how many macros were created
+        auto count_result = conn->Query(R"(
+            SELECT COUNT(*) as cnt
+            FROM duckdb_functions() 
+            WHERE function_name IN (
+                'get_type', 'get_names', 'get_depth', 
+                'filter_pattern', 'filter_has_name',
+                'nav_children', 'nav_parent', 'summary',
+                'count_nodes', 'first_node', 'last_node',
+                'find_type', 'find_depth', 'extract_names',
+                'children', 'parent', 'len', 'size'
+            )
+            AND function_type = 'macro'
+        )");
+        
+        if (count_result->HasError()) {
+            result.SetValue(0, Value("Chain methods loaded but could not verify: " + count_result->GetError()));
+            return;
+        }
+        
+        auto count = count_result->GetValue(0, 0).GetValue<int32_t>();
+        
+        string message = "Successfully loaded " + std::to_string(loaded) + " SQL statements, ";
+        message += "created " + std::to_string(count) + " chain methods. ";
         if (failed > 0) {
-            message += ", " + std::to_string(failed) + " failed";
-            if (!error_details.empty()) {
-                message += " (" + error_details + ")";
-            }
+            message += std::to_string(failed) + " statements failed. ";
         }
-        message += ". Note: Parameter handling is not yet implemented.";
+        message += "\nYou can now use ast(nodes).method() syntax for chaining.";
         
         result.SetValue(0, Value(message));
         

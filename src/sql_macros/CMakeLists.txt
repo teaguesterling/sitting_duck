@@ -1,7 +1,8 @@
 # SQL Macro files to embed
 set(SQL_MACRO_FILES
     01_core.sql
-    02_entrypoint.sql
+    02a_entrypoint.sql
+    02b_chain_methods.sql
     03_legacy.sql
     04_optional.sql
 )

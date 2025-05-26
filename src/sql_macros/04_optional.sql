@@ -5,12 +5,8 @@
 -- SHORT NAME REGISTRATION
 -- ===================================
 
--- Register unprefixed aliases for common functions
-CREATE OR REPLACE MACRO duckdb_ast_register_short_names() AS (
-    -- This would need to be implemented differently since we can't
-    -- dynamically create macros from within a macro in DuckDB
-    'Short name registration not yet implemented - use ast_* prefixed functions'
-);
+-- Note: duckdb_ast_register_short_names() is now implemented as a C++ function
+-- that loads the chain methods from 02b_chain_methods.sql
 
 -- ===================================
 -- HELP SYSTEM

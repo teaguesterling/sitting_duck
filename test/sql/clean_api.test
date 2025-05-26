@@ -93,27 +93,56 @@ true
 # Test 5: Chain Methods with ast() Entrypoint
 # ============================================
 
-# Chain methods not yet implemented - waiting for C++ implementation
-# Basic chaining
-#query I
-#SELECT ast(nodes).get_type('function_definition').count()
-#FROM read_ast_objects('test/data/python/simple.py', 'python');
-#----
-#4
+# Test 5: Short Name Registration and Method Syntax
+# =================================================
 
-# Complex chaining with filtering  
-#query I
-#SELECT ast(nodes).get_type('function_definition').filter_depth_range(1, 2).count()
-#FROM read_ast_objects('test/data/python/simple.py', 'python');
-#----
-#2
+# Register short names (creates unprefixed aliases)
+statement ok
+SELECT duckdb_ast_register_short_names();
 
-# Extract names through chaining
-#query I
-#SELECT array_length(ast(nodes).get_type('function_definition').extract_names())
-#FROM read_ast_objects('test/data/python/simple.py', 'python');
-#----
-#4
+# Single-level method syntax works after registration
+query I
+SELECT json_array_length(nodes.get_type('function_definition'))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+# Alternative: use ast() normalizer with method syntax
+query I 
+SELECT json_array_length(ast(nodes).get_type('function_definition'))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+# Can use short names as regular functions too
+query I
+SELECT json_array_length(get_type(nodes, 'class_definition'))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+1
+
+# Test 6: Method chaining works with non-conflicting names
+# =========================================================
+
+query I
+SELECT ast(nodes).get_type('function_definition').count_nodes()
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+# Longer chain with filtering
+query I
+SELECT ast(nodes).get_type('function_definition').filter_pattern('%hello%').count_nodes()
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+1
+
+# Get first node and extract name
+query I
+SELECT json_extract_string(ast(nodes).get_type('function_definition').first_node(), '$.name')
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+hello
 
 # Test 6: Help System
 # ===================

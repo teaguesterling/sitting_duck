@@ -19,20 +19,29 @@ Catalog Error: Scalar Function with name get_type does not exist!
 # ============================
 
 query I
-SELECT duckdb_ast_register_short_names();
+SELECT duckdb_ast_register_short_names() LIKE '%Successfully loaded%chain methods%';
 ----
-Short name registration not yet implemented - use ast_* prefixed functions
+true
 
-# Test 3: Short names don't work since not implemented yet
-# =======================================================
+# Test 3: Short names work after registration
+# ===========================================
 
-statement error
-SELECT get_type(nodes, 'function_definition')
+query I
+SELECT json_array_length(get_type(nodes, 'function_definition'))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
-Catalog Error: Scalar Function with name get_type does not exist!
+4
 
-# Test 8: Full names still work
+# Test 4: Method syntax also works
+# ================================
+
+query I
+SELECT json_array_length(nodes.get_type('function_definition'))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+# Test 5: Full names still work
 # =============================
 
 query I

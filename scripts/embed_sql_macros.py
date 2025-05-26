@@ -19,7 +19,8 @@ def generate_header(sql_dir, output_file):
     
     sql_files = [
         '01_core.sql',
-        '02_entrypoint.sql',
+        '02a_entrypoint.sql',
+        '02b_chain_methods.sql',
         '03_legacy.sql',
         '04_optional.sql'
     ]

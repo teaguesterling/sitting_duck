@@ -55,10 +55,15 @@ void RegisterASTSQLMacros(DatabaseInstance &instance) {
     int total_statements = 0;
     int successful_statements = 0;
     
-    // Load embedded SQL macros
+    // Load embedded SQL macros (excluding chain methods which are loaded on demand)
     for (const auto &macro_pair : EMBEDDED_SQL_MACROS) {
         const string &filename = macro_pair.first;
         const string &sql_content = macro_pair.second;
+        
+        // Skip chain methods - these are loaded by duckdb_ast_register_short_names()
+        if (filename == "02b_chain_methods.sql") {
+            continue;
+        }
         
         // Split the SQL content into individual statements
         auto statements = SplitSQLStatements(sql_content);
