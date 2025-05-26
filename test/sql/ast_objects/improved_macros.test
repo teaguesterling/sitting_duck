@@ -10,7 +10,7 @@ require json
 
 # Test 1: Function names with improved macro
 query I
-SELECT ast_function_names(nodes)::VARCHAR as functions
+SELECT ast_get_names(nodes, node_type:='function_definition')::VARCHAR as functions
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 ["hello","__init__","add","main"]
@@ -37,7 +37,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 
 # Test 4: Safe handling of empty results
 query I
-SELECT json_array_length(ast_find_type(nodes, 'nonexistent_type')) as empty_result
+SELECT json_array_length(ast_get_type(nodes, 'nonexistent_type')) as empty_result
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 0

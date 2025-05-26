@@ -1,3 +1,7 @@
+# DISABLED: Tests functionality removed in minimal API redesign
+# Original test tested: # description: Comprehensive test suite for method syntax with parentheses
+# Disabled on: Mon May 26 10:30:50 AM PDT 2025
+
 # name: test/sql/ast_objects/method_syntax_comprehensive.test
 # description: Comprehensive test suite for method syntax with parentheses
 # group: [duckdb_ast]
@@ -12,10 +16,10 @@ require json
 # Single method calls
 query IIII
 SELECT 
-    json_array_length((nodes).ast_find_type('function_definition')) as find_type,
-    json_array_length((nodes).ast_function_names()) as func_names,
-    json_array_length((nodes).ast_class_names()) as class_names,
-    json_array_length((nodes).ast_identifiers()) as identifiers
+    json_array_length((nodes).ast_get_type('function_definition')) as find_type,
+    json_array_length((nodes).ast_get_names(nodes, node_type:='function_definition')) as func_names,
+    json_array_length((nodes).ast_get_names(nodes, node_type:='class_definition')) as class_names,
+    json_array_length((nodes).ast_get_names(nodes, node_type:='identifier')) as identifiers
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4	4	1	19
@@ -71,8 +75,8 @@ SELECT (5).make_info().get_field('doubled');
 # Basic AST operations with method syntax
 query IIII
 SELECT 
-    json_array_length((nodes).ast_find_type('function_definition')) as functions,
-    json_array_length((nodes).ast_find_type('class_definition')) as classes,
+    json_array_length((nodes).ast_get_type('function_definition')) as functions,
+    json_array_length((nodes).ast_get_type('class_definition')) as classes,
     json_extract((nodes).ast_summary(), '$.total_nodes') as total,
     json_extract((nodes).ast_summary(), '$.max_depth') as depth
 FROM read_ast_objects('test/data/python/simple.py', 'python');
@@ -84,7 +88,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 
 # Chain AST operations (simulated - these would need appropriate return types)
 query I
-SELECT json_array_length((nodes).ast_function_names())
+SELECT json_array_length((nodes).ast_get_names(nodes, node_type:='function_definition'))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
@@ -92,7 +96,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # Using method syntax in subqueries
 query I
 SELECT (
-    SELECT json_array_length((inner_nodes).ast_find_type('function_definition'))
+    SELECT json_array_length((inner_nodes).ast_get_type('function_definition'))
     FROM (SELECT nodes as inner_nodes FROM read_ast_objects('test/data/python/simple.py', 'python')) sub
 );
 ----
@@ -106,7 +110,7 @@ query I
 SELECT COUNT(*)
 FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast_result,
      json_each(ast_result.nodes) AS je
-WHERE json_extract_string((je.value).ast_find_type('function_definition'), '$[0].type') = 'function_definition'
+WHERE json_extract_string((je.value).ast_get_type('function_definition'), '$[0].type') = 'function_definition'
    OR json_extract_string(je.value, '$.type') = 'function_definition';
 ----
 4
@@ -118,11 +122,11 @@ WHERE json_extract_string((je.value).ast_find_type('function_definition'), '$[0]
 query III
 SELECT 
     -- Functional vs Method
-    ast_find_type(nodes, 'function_definition') = (nodes).ast_find_type('function_definition') as func_vs_method,
+    ast_get_type(nodes, 'function_definition') = (nodes).ast_get_type('function_definition') as func_vs_method,
     -- Functional vs Entrypoint  
-    ast_find_type(nodes, 'function_definition') = ast(nodes).find_type('function_definition') as func_vs_entry,
+    ast_get_type(nodes, 'function_definition') = ast(nodes).find_type('function_definition') as func_vs_entry,
     -- Method vs Entrypoint
-    (nodes).ast_find_type('function_definition') = ast(nodes).find_type('function_definition') as method_vs_entry
+    (nodes).ast_get_type('function_definition') = ast(nodes).find_type('function_definition') as method_vs_entry
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 true	true	true
@@ -132,7 +136,7 @@ true	true	true
 
 # Without parentheses should fail
 #statement error
-#SELECT nodes.ast_find_type('function_definition')
+#SELECT nodes.ast_get_type('function_definition')
 #FROM read_ast_objects('test/data/python/simple.py', 'python');
 #----
 #Binder Error
@@ -148,7 +152,7 @@ WITH first_10 AS (
          json_each(ast.nodes) AS je 
     WHERE je.key::INT < 10
 )
-SELECT json_array_length((subset_nodes).ast_find_type('identifier'))
+SELECT json_array_length((subset_nodes).ast_get_type('identifier'))
 FROM first_10;
 ----
 1
@@ -172,15 +176,15 @@ FROM first_10;
 query I
 SELECT COUNT(*)
 FROM read_ast_objects('test/data/python/simple.py', 'python')
-WHERE json_array_length((nodes).ast_find_type('function_definition')) > 3;
+WHERE json_array_length((nodes).ast_get_type('function_definition')) > 3;
 ----
 1
 
 # In ORDER BY clauses
 query I
-SELECT json_array_length((nodes).ast_find_type('function_definition')) as func_count
+SELECT json_array_length((nodes).ast_get_type('function_definition')) as func_count
 FROM read_ast_objects('test/data/python/simple.py', 'python')
-ORDER BY json_array_length((nodes).ast_find_type('function_definition'))
+ORDER BY json_array_length((nodes).ast_get_type('function_definition'))
 LIMIT 1;
 ----
 4
@@ -201,7 +205,7 @@ GROUP BY (1).double_value();
 # Method syntax in CTE
 WITH ast_info AS (
     SELECT 
-        (nodes).ast_find_type('function_definition') as functions,
+        (nodes).ast_get_type('function_definition') as functions,
         (nodes).ast_summary() as summary
     FROM read_ast_objects('test/data/python/simple.py', 'python')
 )
@@ -218,7 +222,7 @@ SELECT COUNT(*)
 FROM read_ast_objects('test/data/python/simple.py', 'python') outer_ast
 WHERE EXISTS (
     SELECT 1 
-    FROM json_each((outer_ast.nodes).ast_find_type('function_definition')) AS func
+    FROM json_each((outer_ast.nodes).ast_get_type('function_definition')) AS func
     WHERE json_extract_string(func.value, '$.name') IS NOT NULL
 );
 ----
@@ -230,8 +234,8 @@ WHERE EXISTS (
 # All three styles should have similar performance
 query III
 SELECT 
-    json_array_length(ast_find_type(nodes, 'function_definition')) as functional,
-    json_array_length((nodes).ast_find_type('function_definition')) as method,
+    json_array_length(ast_get_type(nodes, 'function_definition')) as functional,
+    json_array_length((nodes).ast_get_type('function_definition')) as method,
     ast(nodes).find_type('function_definition').count_elements() as entrypoint
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
@@ -252,7 +256,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 query II
 SELECT 
     name,
-    json_array_length((ast_nodes).ast_find_type('function_definition')) as func_count
+    json_array_length((ast_nodes).ast_get_type('function_definition')) as func_count
 FROM ast_samples;
 ----
 sample1	4
@@ -261,7 +265,7 @@ sample1	4
 query II
 SELECT 
     s.name,
-    json_array_length((s.ast_nodes).ast_find_type('function_definition')) as func_count
+    json_array_length((s.ast_nodes).ast_get_type('function_definition')) as func_count
 FROM ast_samples s;
 ----
 sample1	4
@@ -274,7 +278,7 @@ statement ok
 CREATE OR REPLACE MACRO array_length_macro(arr) AS json_array_length(arr);
 
 query I
-SELECT ((nodes).ast_find_type('function_definition')).array_length_macro()
+SELECT ((nodes).ast_get_type('function_definition')).array_length_macro()
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
@@ -286,16 +290,16 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 query IIII
 SELECT 
     -- Traditional function style
-    json_array_length(ast_find_type(nodes, 'function_definition')) as traditional,
+    json_array_length(ast_get_type(nodes, 'function_definition')) as traditional,
     
     -- Method style with parentheses
-    json_array_length((nodes).ast_find_type('function_definition')) as method,
+    json_array_length((nodes).ast_get_type('function_definition')) as method,
     
     -- Entrypoint style (recommended)
     ast(nodes).find_type('function_definition').count_elements() as entrypoint,
     
     -- All should be equal
-    (json_array_length(ast_find_type(nodes, 'function_definition')) = 
+    (json_array_length(ast_get_type(nodes, 'function_definition')) = 
      ast(nodes).find_type('function_definition').count_elements())::INTEGER as all_equal
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----

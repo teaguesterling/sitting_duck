@@ -18,16 +18,10 @@ def generate_header(sql_dir, output_file):
     """Generate C++ header with embedded SQL macros."""
     
     sql_files = [
-        'core_macros.sql',
-        'entrypoint_macros.sql',
-        'structure_macros.sql', 
-        'extract_macros.sql',
-        'source_macros.sql',
-        'ai_macros.sql',
-        'utility_macros.sql',
-        'clean_api_core.sql',
-        'clean_api_analysis.sql',
-        'clean_api_chains.sql'
+        '01_core.sql',
+        '02_entrypoint.sql',
+        '03_legacy.sql',
+        '04_optional.sql'
     ]
     
     header_content = """// Auto-generated file - DO NOT EDIT

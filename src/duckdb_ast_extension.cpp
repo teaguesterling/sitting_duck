@@ -7,6 +7,7 @@
 #include "duckdb/main/extension_helper.hpp"
 #include "read_ast_objects_hybrid.hpp"
 #include "ast_sql_macros.hpp"
+#include "short_names_function.hpp"
 
 namespace duckdb {
 
@@ -14,6 +15,7 @@ namespace duckdb {
 void RegisterReadASTFunction(DatabaseInstance &instance);
 void RegisterReadASTObjectsHybridFunction(DatabaseInstance &instance);
 void RegisterASTSQLMacros(DatabaseInstance &instance);
+void RegisterDuckDBASTShortNamesFunction(DatabaseInstance &instance);
 // Temporarily disabled:
 // void RegisterASTObjectsFunction(DatabaseInstance &instance);
 // void RegisterASTHelperFunctions(DatabaseInstance &instance);
@@ -31,6 +33,9 @@ static void LoadInternal(DatabaseInstance &instance) {
 	try {
 		ExtensionHelper::AutoLoadExtension(instance, "json");
 		RegisterASTSQLMacros(instance);
+		
+		// Register the short names function
+		RegisterDuckDBASTShortNamesFunction(instance);
 	} catch (...) {
 		// If JSON extension can't be loaded, skip macro registration
 		// This allows the extension to work even without JSON support

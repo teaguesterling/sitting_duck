@@ -51,9 +51,9 @@ FROM generate_series(0, 9999) as t(i);
 query IIIII
 SELECT 
     json_array_length(nodes) as total_nodes,
-    json_array_length(ast_find_type(nodes, 'function_definition')) as functions,
-    json_array_length(ast_find_type(nodes, 'class_definition')) as classes,
-    json_array_length(ast_identifiers(nodes)) as identifiers,
+    json_array_length(ast_get_type(nodes, 'function_definition')) as functions,
+    json_array_length(ast_get_type(nodes, 'class_definition')) as classes,
+    json_array_length(ast_get_names(nodes, node_type:='identifier')) as identifiers,
     json_extract(ast_summary(nodes), '$.max_depth') as max_depth
 FROM large_ast;
 ----
@@ -67,19 +67,19 @@ FROM large_ast;
 query IIIII
 SELECT 
     -- Compare functional vs entrypoint for find operations
-    (json_array_length(ast_find_type(nodes, 'function_definition')) = 
+    (json_array_length(ast_get_type(nodes, 'function_definition')) = 
         ast(nodes).find_type('function_definition').count_elements())::INTEGER as find_perf,
     
     -- Compare functional vs entrypoint for name extraction
-    (json_array_length(ast_function_names(nodes)) = 
+    (json_array_length(ast_get_names(nodes, node_type:='function_definition')) = 
         ast(nodes).function_names().count_elements())::INTEGER as names_perf,
     
     -- Compare functional vs entrypoint for depth operations
-    (json_array_length(ast_at_depth(nodes, [1, 2, 3])) = 
+    (json_array_length(ast_get_depth(nodes, [1, 2, 3])) = 
         ast(nodes).at_depth([1, 2, 3]).count_elements())::INTEGER as depth_perf,
     
     -- Compare complex nested operations
-    (json_array_length(ast_function_names(ast_find_type(nodes, 'function_definition'))) = 
+    (json_array_length(ast_get_names(ast_get_type(nodes, 'function_definition', node_type:='function_definition'))) = 
         ast(nodes).find_type('function_definition').extract_names().count_elements())::INTEGER as nested_perf,
     
     -- Compare summary operations

@@ -1,6 +1,9 @@
 -- SQL Macros for AST querying with proper JSON type handling
 -- These handle JSON type casting internally for clean user experience
 
+-- TEST MACRO: Verify new macros get loaded
+CREATE OR REPLACE MACRO ast_test_loading() AS ('TEST_MACRO_LOADED_SUCCESSFULLY');
+
 -- Utility macro to ensure a value is a VARCHAR array
 CREATE OR REPLACE MACRO ensure_varchar_array(val) AS (
     CASE 

@@ -1,12 +1,19 @@
-# SQL Macro files to embed
+# Generate header file with embedded SQL macros
 set(SQL_MACRO_FILES
-    01_core.sql
-    02_entrypoint.sql
-    03_legacy.sql
-    04_optional.sql
+    core_macros.sql
+    structure_macros.sql
+    extract_macros.sql
+    source_macros.sql
+    ai_macros.sql
+    utility_macros.sql
+    entrypoint_macros.sql
+    clean_api_core.sql
+    clean_api_analysis.sql
+    clean_api_chains.sql
+    short_names.sql
 )
 
-# Generate header file with embedded SQL
+# Create header file with embedded SQL
 set(EMBEDDED_SQL_HEADER "${CMAKE_CURRENT_BINARY_DIR}/embedded_sql_macros.hpp")
 
 file(WRITE ${EMBEDDED_SQL_HEADER} 

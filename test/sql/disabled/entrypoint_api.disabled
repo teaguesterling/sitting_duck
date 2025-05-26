@@ -1,3 +1,7 @@
+# DISABLED: Tests functionality removed in minimal API redesign
+# Original test tested: # description: Test the new ast() entrypoint API with method chaining
+# Disabled on: Mon May 26 10:30:50 AM PDT 2025
+
 # name: test/sql/ast_objects/entrypoint_api.test
 # description: Test the new ast() entrypoint API with method chaining
 # group: [duckdb_ast]
@@ -23,7 +27,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # Test 3: Compare old vs new syntax (should be equivalent)
 query I
 SELECT 
-    (ast_find_type(nodes, 'function_definition') = 
+    (ast_get_type(nodes, 'function_definition') = 
     ast(nodes).find_type('function_definition'))::INTEGER as equivalent
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----

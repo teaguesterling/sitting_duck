@@ -1,3 +1,7 @@
+# DISABLED: Tests functionality removed in minimal API redesign
+# Original test tested: # description: Comprehensive test suite for all AST macros - entrypoint chain style
+# Disabled on: Mon May 26 10:30:50 AM PDT 2025
+
 # name: test/sql/ast_objects/comprehensive_chain_tests.test
 # description: Comprehensive test suite for all AST macros - entrypoint chain style
 # group: [duckdb_ast]
@@ -195,10 +199,10 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # Verify functional and chain styles produce same results
 query IIII
 SELECT 
-    ast_find_type(nodes, 'function_definition') = ast(nodes).find_type('function_definition') as find_equiv,
-    ast_function_names(nodes) = ast(nodes).function_names() as names_equiv,
+    ast_get_type(nodes, 'function_definition') = ast(nodes).find_type('function_definition') as find_equiv,
+    ast_get_names(nodes, node_type:='function_definition') = ast(nodes).function_names() as names_equiv,
     ast_summary(nodes) = ast(nodes).summary() as summary_equiv,
-    ast_at_depth(nodes, 1) = ast(nodes).at_depth(1) as depth_equiv
+    ast_get_depth(nodes, 1) = ast(nodes).at_depth(1) as depth_equiv
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 true	true	true	true

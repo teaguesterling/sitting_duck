@@ -1,3 +1,7 @@
+# DISABLED: Tests functionality removed in minimal API redesign
+# Original test tested: # description: Test dot notation with macros using parentheses
+# Disabled on: Mon May 26 10:30:50 AM PDT 2025
+
 # name: test/sql/ast_objects/dot_notation_macros.test
 # description: Test dot notation with macros using parentheses
 # group: [duckdb_ast]
@@ -8,14 +12,14 @@ require json
 
 # Test 1: Basic dot notation with parentheses works for macros
 query I
-SELECT json_array_length((nodes).ast_find_type('function_definition')) as count
+SELECT json_array_length((nodes).ast_get_type('function_definition')) as count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
 
 # Test 2: Without parentheses, it also works (surprisingly!)
 query I
-SELECT json_array_length(nodes.ast_find_type('function_definition')) as count
+SELECT json_array_length(nodes.ast_get_type('function_definition')) as count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
@@ -44,7 +48,7 @@ function_definition	true	1
 
 # Test 4: Multiple parentheses levels
 query I
-SELECT ((nodes).ast_function_names())::VARCHAR as functions
+SELECT ast_get_names(nodes, node_type:='function_definition')::VARCHAR as functions
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 ["hello","__init__","add","main"]
@@ -52,9 +56,9 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # Test 5: Complex chaining example
 statement ok
 CREATE OR REPLACE MACRO ast_analysis(nodes) AS {
-    'functions': (nodes).ast_find_type('function_definition'),
-    'classes': (nodes).ast_find_type('class_definition'),
-    'identifiers': (nodes).ast_identifiers(),
+    'functions': (nodes).ast_get_type('function_definition'),
+    'classes': (nodes).ast_get_type('class_definition'),
+    'identifiers': (nodes).ast_get_names(nodes, node_type:='identifier'),
     'summary': (nodes).ast_summary()
 };
 

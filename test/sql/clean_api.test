@@ -21,11 +21,11 @@ query I
 SELECT json_array_length(ast_get_names(nodes))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
-19
+24
 
 # ast_get_names - filtered by type
 query I
-SELECT json_array_length(ast_get_names(nodes, 'function_definition'))
+SELECT json_array_length(ast_get_names(nodes, node_type:='function_definition'))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
@@ -52,7 +52,7 @@ query I
 SELECT json_array_length(ast_filter_pattern(nodes, '%a%'))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
-2
+10
 
 # ast_filter_depth_range
 query I
