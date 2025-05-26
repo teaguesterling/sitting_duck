@@ -1,0 +1,259 @@
+# name: test/sql/ast_v2_macros.test
+# description: Test enhanced AST v2 macros with structure preservation
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+require json
+
+# Test Setup - Mock source reading function
+# =========================================
+statement ok
+CREATE OR REPLACE MACRO read_source_lines(file_path, start_line, end_line) AS (
+    SELECT string_agg(
+        CASE 
+            WHEN lineno BETWEEN start_line AND end_line 
+            THEN format('{:4d}: {}', lineno, line)
+            ELSE NULL 
+        END, 
+        E'\n' 
+        ORDER BY lineno
+    ) as source_text
+    FROM (
+        SELECT 
+            lineno,
+            content as line
+        FROM (
+            SELECT unnest(generate_series(1, array_length(lines))) as lineno,
+                   lines[lineno] as content
+            FROM (
+                SELECT string_split(content, E'\n') as lines
+                FROM read_text(file_path)
+            )
+        )
+    )
+    WHERE lineno BETWEEN GREATEST(1, start_line) AND end_line
+);
+
+# Test 1: List Parameter Support
+# ==============================
+
+# Single type
+query I
+SELECT json_array_length(ast_find_type(nodes, 'function_definition')) as count
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+# List of types - using ensure_array utility
+query I
+SELECT json_array_length(ast_find_type(nodes, ['function_definition', 'class_definition'])) as count
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+5
+
+# Test 2: Structure-Preserving Macros
+# ===================================
+
+# ast_filter_type preserves metadata
+query IIII
+WITH filtered AS (
+    SELECT ast_filter_type(ast_obj, 'function_definition') as result
+    FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj
+)
+SELECT 
+    result.file_path = 'test/data/python/simple.py' as path_preserved,
+    result.language = 'python' as lang_preserved,
+    result.node_count = 4 as correct_count,
+    json_array_length(result.nodes) = 4 as nodes_match_count
+FROM filtered;
+----
+true	true	true	true
+
+# Chained operations
+query II
+WITH chained AS (
+    SELECT 
+        ast_filter_type(
+            ast_filter_depth_range(ast_obj, min_depth := 2, max_depth := 4),
+            'function_definition'
+        ) as result
+    FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj
+)
+SELECT 
+    result.node_count as filtered_count,
+    result.file_path as file_path
+FROM chained;
+----
+1	test/data/python/simple.py
+
+# Test 3: Extraction Macros Return SQL Types
+# ==========================================
+
+# Extract names as VARCHAR[]
+query I
+SELECT array_length(ast_extract_names(ast_obj, types := 'function_definition')) as count
+FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj;
+----
+4
+
+# Extract entities as table
+query III
+SELECT entity_type, entity_name, start_line
+FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj,
+     TABLE(ast_extract_entities(ast_obj, types := ['function_definition', 'class_definition'])) as e
+ORDER BY start_line;
+----
+function_definition	hello	1
+class_definition	MyClass	5
+function_definition	__init__	7
+function_definition	add	10
+function_definition	main	13
+
+# Test 4: Named Parameters with Defaults
+# ======================================
+
+# Using defaults
+query I
+SELECT COUNT(*) 
+FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj,
+     TABLE(ast_extract_source(ast_obj)) as src
+WHERE src.node_type = 'function_definition';
+----
+4
+
+# Using named parameters
+query III
+SELECT node_name, context_start, context_end
+FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj,
+     TABLE(ast_extract_source(
+         ast_filter_type(ast_obj, 'function_definition'),
+         pad_lines := 2
+     )) as src
+WHERE node_name = 'hello';
+----
+hello	1	5
+
+# Test 5: Safe Variants
+# ====================
+
+# Safe extraction returns empty array instead of NULL
+query I
+SELECT array_length(ast_safe_extract_names(ast_obj, types := 'nonexistent_type')) as count
+FROM read_ast_objects('test/data/python/empty.py', 'python') as ast_obj;
+----
+0
+
+# Safe filter returns empty AST object
+query II
+WITH safe_filtered AS (
+    SELECT ast_safe_filter_type(ast_obj, 'nonexistent_type') as result
+    FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj
+)
+SELECT 
+    result.node_count as count,
+    json_array_length(result.nodes) as json_count
+FROM safe_filtered;
+----
+0	0
+
+# Test 6: Tree Navigation
+# ======================
+
+# Find parent of a node
+query II
+WITH class_node AS (
+    SELECT json_extract(nodes, '$[?(@.type == "class_definition")][0].id')::BIGINT as class_id
+    FROM read_ast_objects('test/data/python/simple.py', 'python')
+),
+methods AS (
+    SELECT ast_descendants_of(ast_obj, class_node.class_id) as desc
+    FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj,
+         class_node
+)
+SELECT 
+    desc.node_count as descendant_count,
+    array_length(ast_extract_names(desc, types := 'function_definition')) as method_count
+FROM methods;
+----
+29	2
+
+# Test 7: AI-Friendly Features
+# ============================
+
+# Discover available types
+query I
+SELECT list_contains(
+    ast_available_types(ast_obj), 
+    'function_definition'
+) as has_functions
+FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj;
+----
+true
+
+# Semantic shortcuts
+query I
+SELECT array_length(ast_extract_names(ast_test_functions(ast_obj))) as test_count
+FROM read_ast_objects('test/data/python/test_functions.py', 'python') as ast_obj;
+----
+3
+
+# Test 8: Source Extraction with Context
+# =====================================
+
+# Extract function source with padding
+query IIII
+SELECT 
+    node_name,
+    start_line,
+    end_line,
+    length(source_with_context) > length(source_text) as has_padding
+FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj,
+     TABLE(ast_extract_source(
+         ast_filter_type(ast_obj, 'function_definition'),
+         pad_lines := 2
+     )) as src
+WHERE node_name = 'hello';
+----
+hello	1	3	true
+
+# Test 9: Complex Analysis Query
+# =============================
+
+# Build analysis table with multiple operations
+query IIIII
+WITH analysis AS (
+    SELECT 
+        ast_obj.file_path,
+        ast_obj,
+        ast_filter_type(ast_obj, 'function_definition') as functions,
+        ast_test_functions(ast_obj) as test_funcs,
+        ast_public_api(ast_obj) as public_api
+    FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj
+)
+SELECT 
+    file_path,
+    ast_extract_summary(ast_obj).total_nodes as total_nodes,
+    ast_extract_summary(functions).function_count as func_count,
+    ast_extract_summary(test_funcs).function_count as test_count,
+    ast_extract_summary(public_api).function_count as public_count
+FROM analysis;
+----
+test/data/python/simple.py	110	4	0	3
+
+# Test 10: Error Handling
+# ======================
+
+# Helpful error for wrong type
+statement error
+SELECT ast_filter_type(ast_obj, 'function') 
+FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj;
+----
+Unknown node type 'function'. Did you mean 'function_definition'?
+
+# Warning for positional parameters
+statement error
+SELECT * FROM ast_extract_source(ast_obj, 5)
+FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj;
+----
+Use named parameter: ast_extract_source(ast_obj, pad_lines := 5)

@@ -4,15 +4,41 @@
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/main/extension_util.hpp"
+#include "duckdb/main/extension_helper.hpp"
+#include "read_ast_objects_hybrid.hpp"
+#include "ast_sql_macros.hpp"
 
 namespace duckdb {
 
 // Forward declaration of registration functions
 void RegisterReadASTFunction(DatabaseInstance &instance);
+void RegisterReadASTObjectsHybridFunction(DatabaseInstance &instance);
+void RegisterASTSQLMacros(DatabaseInstance &instance);
+// Temporarily disabled:
+// void RegisterASTObjectsFunction(DatabaseInstance &instance);
+// void RegisterASTHelperFunctions(DatabaseInstance &instance);
 
 static void LoadInternal(DatabaseInstance &instance) {
 	// Register the read_ast table function
 	RegisterReadASTFunction(instance);
+	
+	// Register the hybrid read_ast_objects table function
+	RegisterReadASTObjectsHybridFunction(instance);
+	
+	// Register SQL macros for natural AST querying
+	// Note: These require json_each which is available in DuckDB 1.3+
+	// Try to auto-load the JSON extension
+	try {
+		ExtensionHelper::AutoLoadExtension(instance, "json");
+		RegisterASTSQLMacros(instance);
+	} catch (...) {
+		// If JSON extension can't be loaded, skip macro registration
+		// This allows the extension to work even without JSON support
+	}
+	
+	// TODO: Re-enable once we fix the issues
+	// Register AST helper functions  
+	// RegisterASTHelperFunctions(instance);
 }
 
 void DuckdbAstExtension::Load(DuckDB &db) {

@@ -1,0 +1,24 @@
+# name: test/sql/basic/extension_loading.test
+# description: Test extension loading and basic availability
+# group: [duckdb_ast]
+
+# Before we load the extension, this will fail
+statement error
+SELECT * FROM read_ast('test.py', 'python');
+----
+Catalog Error: Table Function with name read_ast does not exist!
+
+# Require statement will ensure this test is run with this extension loaded
+require duckdb_ast
+
+# Test 1: Basic read_ast function is available
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/python/simple.py', 'python');
+----
+true
+
+# Test 2: read_ast_objects function is available  
+query I
+SELECT COUNT(*) FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+1

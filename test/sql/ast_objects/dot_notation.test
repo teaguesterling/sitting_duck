@@ -1,0 +1,110 @@
+# name: test/sql/ast_objects/dot_notation.test
+# description: Test dot notation syntax with AST data and macros
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+require json
+
+# Create essential macros for testing
+statement ok
+CREATE OR REPLACE MACRO ast_function_names(nodes) AS (
+    (SELECT json_group_array(json_extract_string(je.value, '$.name'))
+     FROM json_each(nodes) AS je
+     WHERE json_extract_string(je.value, '$.type') = 'function_definition')
+);
+
+statement ok
+CREATE OR REPLACE MACRO ast_summary(nodes) AS (
+    json_object(
+        'total_nodes', json_array_length(nodes),
+        'functions', ast_function_names(nodes),
+        'max_depth', (SELECT MAX(json_extract(je.value, '$.depth')::INTEGER) 
+                      FROM json_each(nodes) AS je)
+    )
+);
+
+# Test 1: Basic dot notation with built-in JSON functions
+query I
+SELECT nodes.json_array_length() as node_count
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+110
+
+# Test 2: Dot notation with json_extract
+query I
+SELECT nodes.json_extract('$[0].type')::VARCHAR as root_type
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+"module"
+
+# Test 3: Dot notation with custom macro
+query I
+SELECT nodes.ast_function_names()::VARCHAR as functions
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+["hello","__init__","add","main"]
+
+# Test 4: Chained dot notation operations
+query I
+SELECT nodes.json_extract('$[1]').json_extract_string('$.name') as second_node_name
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+hello
+
+# Test 5: Complex macro with dot notation
+query III
+SELECT 
+    json_extract(nodes.ast_summary(), '$.total_nodes') as total,
+    json_extract(nodes.ast_summary(), '$.max_depth') as depth,
+    json_array_length(json_extract(nodes.ast_summary(), '$.functions')) as func_count
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+110	8	4
+
+# Test 6: Multiple dot operations in same query
+query II
+SELECT 
+    nodes.json_array_length() as total_nodes,
+    nodes.ast_function_names().json_array_length() as function_count
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+110	4
+
+# Test 7: Dot notation in WHERE clause
+query I
+SELECT COUNT(*) as files_with_functions
+FROM read_ast_objects('test/data/python/simple.py', 'python')
+WHERE nodes.ast_function_names().json_array_length() > 0;
+----
+1
+
+# Test 8: Dot notation with JSON path extraction
+query I
+SELECT nodes.json_extract('$[*].type').json_array_length() as type_array_length
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+110
+
+# Test 9: Using dot notation for filtering specific elements
+query I
+SELECT (
+    SELECT COUNT(*) 
+    FROM json_each(json_extract(nodes, '$[*]')) AS je 
+    WHERE json_extract_string(je.value, '$.type') = 'identifier'
+) as identifier_count
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+19
+
+# Test 10: Complex chaining with mixed operations
+query I
+SELECT 
+    CASE 
+        WHEN nodes.json_array_length() > 100 THEN 'Large'
+        WHEN nodes.json_array_length() > 50 THEN 'Medium' 
+        ELSE 'Small'
+    END as complexity
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+Large

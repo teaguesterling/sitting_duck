@@ -1,0 +1,278 @@
+# name: test/sql/ast_objects/syntax_equivalence.test
+# description: Verify equivalence between functional, method, and entrypoint syntax styles
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+require json
+
+# Test 1: Basic Operation Equivalence
+# ===================================
+
+# All three styles should produce identical results for find_type
+query III
+SELECT 
+    (ast_find_type(nodes, 'function_definition') = 
+        (nodes).ast_find_type('function_definition'))::INTEGER as func_vs_method,
+    
+    (ast_find_type(nodes, 'function_definition') = 
+        ast(nodes).find_type('function_definition'))::INTEGER as func_vs_entry,
+    
+    ((nodes).ast_find_type('function_definition') = 
+        ast(nodes).find_type('function_definition'))::INTEGER as method_vs_entry
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+1	1	1
+
+# Test 2: All Core Functions Equivalence
+# ======================================
+
+query IIIIIIII
+SELECT 
+    -- function_names equivalence
+    (ast_function_names(nodes) = (nodes).ast_function_names())::INTEGER as func_names_1,
+    (ast_function_names(nodes) = ast(nodes).function_names())::INTEGER as func_names_2,
+    
+    -- class_names equivalence  
+    (ast_class_names(nodes) = (nodes).ast_class_names())::INTEGER as class_names_1,
+    (ast_class_names(nodes) = ast(nodes).class_names())::INTEGER as class_names_2,
+    
+    -- identifiers equivalence
+    (ast_identifiers(nodes) = (nodes).ast_identifiers())::INTEGER as identifiers_1,
+    (ast_identifiers(nodes) = ast(nodes).identifiers())::INTEGER as identifiers_2,
+    
+    -- summary equivalence
+    (ast_summary(nodes) = (nodes).ast_summary())::INTEGER as summary_1,
+    (ast_summary(nodes) = ast(nodes).summary())::INTEGER as summary_2
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+1	1	1	1	1	1	1	1
+
+# Test 3: Depth and Hierarchy Function Equivalence
+# =================================================
+
+query IIIIII
+SELECT 
+    -- at_depth equivalence
+    (ast_at_depth(nodes, 1) = (nodes).ast_at_depth(1))::INTEGER as depth_1,
+    (ast_at_depth(nodes, 1) = ast(nodes).at_depth(1))::INTEGER as depth_2,
+    
+    -- children_of equivalence
+    (ast_children_of(nodes, 0) = (nodes).ast_children_of(0))::INTEGER as children_1,
+    (ast_children_of(nodes, 0) = ast(nodes).children_of(0))::INTEGER as children_2,
+    
+    -- function_details equivalence
+    (ast_function_details(nodes) = (nodes).ast_function_details())::INTEGER as details_1,
+    (ast_function_details(nodes) = ast(nodes).function_details())::INTEGER as details_2
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+1	1	1	1	1	1
+
+# Test 4: Array Parameter Equivalence
+# ===================================
+
+# Multi-type and multi-depth parameters
+query IIII
+SELECT 
+    -- Multiple types
+    (ast_find_type(nodes, ['function_definition', 'class_definition']) = 
+        (nodes).ast_find_type(['function_definition', 'class_definition']))::INTEGER as multi_type_1,
+    
+    (ast_find_type(nodes, ['function_definition', 'class_definition']) = 
+        ast(nodes).find_type(['function_definition', 'class_definition']))::INTEGER as multi_type_2,
+    
+    -- Multiple depths
+    (ast_at_depth(nodes, [1, 2]) = (nodes).ast_at_depth([1, 2]))::INTEGER as multi_depth_1,
+    (ast_at_depth(nodes, [1, 2]) = ast(nodes).at_depth([1, 2]))::INTEGER as multi_depth_2
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+1	1	1	1
+
+# Test 5: Complex Nested Operation Equivalence
+# ============================================
+
+# Functional style nested operations
+WITH functional AS (
+    SELECT json_array_length(
+        ast_function_names(
+            ast_find_type(nodes, 'function_definition')
+        )
+    ) as result
+    FROM read_ast_objects('test/data/python/simple.py', 'python')
+),
+-- Method style equivalent
+method AS (
+    SELECT json_array_length(
+        (ast_find_type(nodes, 'function_definition')).ast_function_names()
+    ) as result
+    FROM read_ast_objects('test/data/python/simple.py', 'python')
+),
+-- Entrypoint style equivalent
+entrypoint AS (
+    SELECT ast(nodes).find_type('function_definition').extract_names().count_elements() as result
+    FROM read_ast_objects('test/data/python/simple.py', 'python')
+)
+SELECT 
+    f.result = m.result as func_vs_method,
+    f.result = e.result as func_vs_entry,
+    m.result = e.result as method_vs_entry
+FROM functional f, method m, entrypoint e;
+----
+true	true	true
+
+# Test 6: Edge Case Equivalence
+# =============================
+
+# Null and empty inputs
+query IIIIII
+SELECT 
+    -- Null inputs
+    (ast_find_type(NULL, 'function_definition') = 
+        ast(NULL).find_type('function_definition'))::INTEGER as null_1,
+    
+    (ast_function_names(NULL) = ast(NULL).function_names())::INTEGER as null_2,
+    
+    -- Empty arrays
+    (ast_find_type('[]'::JSON, 'function_definition') = 
+        ast('[]').find_type('function_definition'))::INTEGER as empty_1,
+    
+    (ast_function_names('[]'::JSON) = ast('[]').function_names())::INTEGER as empty_2,
+    
+    -- Nonexistent types
+    (ast_find_type(nodes, 'nonexistent_type') = 
+        ast(nodes).find_type('nonexistent_type'))::INTEGER as nonexistent_1,
+    
+    (json_array_length(ast_find_type(nodes, 'nonexistent_type')) = 
+        ast(nodes).find_type('nonexistent_type').count_elements())::INTEGER as nonexistent_2
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+1	1	1	1	1	1
+
+# Test 7: Performance Equivalence Test
+# ====================================
+
+# All three styles should return same results when executed multiple times
+query IIIIIIIII
+SELECT 
+    -- Execute each style multiple times and compare
+    (ast_find_type(nodes, 'function_definition') = ast_find_type(nodes, 'function_definition'))::INTEGER as func_consistent,
+    ((nodes).ast_find_type('function_definition') = (nodes).ast_find_type('function_definition'))::INTEGER as method_consistent,
+    (ast(nodes).find_type('function_definition') = ast(nodes).find_type('function_definition'))::INTEGER as entry_consistent,
+    
+    -- Cross-compare results
+    (ast_find_type(nodes, 'function_definition') = (nodes).ast_find_type('function_definition'))::INTEGER as func_method,
+    (ast_find_type(nodes, 'function_definition') = ast(nodes).find_type('function_definition'))::INTEGER as func_entry,
+    ((nodes).ast_find_type('function_definition') = ast(nodes).find_type('function_definition'))::INTEGER as method_entry,
+    
+    -- All count operations should be equal
+    (json_array_length(ast_find_type(nodes, 'function_definition')) = 
+        json_array_length((nodes).ast_find_type('function_definition')))::INTEGER as count_1,
+    (json_array_length(ast_find_type(nodes, 'function_definition')) = 
+        ast(nodes).find_type('function_definition').count_elements())::INTEGER as count_2,
+    (json_array_length((nodes).ast_find_type('function_definition')) = 
+        ast(nodes).find_type('function_definition').count_elements())::INTEGER as count_3
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+1	1	1	1	1	1	1	1	1
+
+# Test 8: Type Handling Equivalence
+# =================================
+
+# Single values vs arrays should be handled consistently
+query IIII
+SELECT 
+    -- Single type
+    (ast_find_type(nodes, 'function_definition') = 
+        ast(nodes).find_type('function_definition'))::INTEGER as single_type,
+    
+    -- Array with single element
+    (ast_find_type(nodes, ['function_definition']) = 
+        ast(nodes).find_type(['function_definition']))::INTEGER as array_single,
+    
+    -- Single depth
+    (ast_at_depth(nodes, 1) = ast(nodes).at_depth(1))::INTEGER as single_depth,
+    
+    -- Array with single depth
+    (ast_at_depth(nodes, [1]) = ast(nodes).at_depth([1]))::INTEGER as array_depth
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+1	1	1	1
+
+# Test 9: Struct Input Equivalence
+# ================================
+
+# Create struct test data
+statement ok
+CREATE TABLE struct_test AS 
+SELECT {'nodes': nodes, 'metadata': {'test': true}} as ast_struct
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+
+# Test equivalence with struct inputs
+query II
+SELECT 
+    (ast_find_type(struct_extract(ast_struct, 'nodes'), 'function_definition') = 
+        ast(ast_struct).find_type('function_definition'))::INTEGER as struct_equiv_1,
+    
+    (json_array_length(ast_find_type(struct_extract(ast_struct, 'nodes'), 'function_definition')) = 
+        ast(ast_struct).find_type('function_definition').count_elements())::INTEGER as struct_equiv_2
+FROM struct_test;
+----
+1	1
+
+# Test 10: Comprehensive Feature Matrix
+# =====================================
+
+# Test every combination of style and function to ensure complete equivalence
+WITH all_results AS (
+    SELECT 
+        -- Functional style results
+        ast_find_type(nodes, 'function_definition') as func_find,
+        ast_function_names(nodes) as func_names,
+        ast_class_names(nodes) as func_classes,
+        ast_identifiers(nodes) as func_ids,
+        ast_at_depth(nodes, 1) as func_depth,
+        ast_summary(nodes) as func_summary,
+        
+        -- Method style results  
+        (nodes).ast_find_type('function_definition') as method_find,
+        (nodes).ast_function_names() as method_names,
+        (nodes).ast_class_names() as method_classes,
+        (nodes).ast_identifiers() as method_ids,
+        (nodes).ast_at_depth(1) as method_depth,
+        (nodes).ast_summary() as method_summary,
+        
+        -- Entrypoint style results
+        ast(nodes).find_type('function_definition') as entry_find,
+        ast(nodes).function_names() as entry_names,
+        ast(nodes).class_names() as entry_classes,
+        ast(nodes).identifiers() as entry_ids,
+        ast(nodes).at_depth(1) as entry_depth,
+        ast(nodes).summary() as entry_summary
+        
+    FROM read_ast_objects('test/data/python/simple.py', 'python')
+)
+SELECT 
+    -- All find_type results equal
+    (func_find = method_find AND method_find = entry_find) as find_equal,
+    
+    -- All function_names results equal
+    (func_names = method_names AND method_names = entry_names) as names_equal,
+    
+    -- All class_names results equal
+    (func_classes = method_classes AND method_classes = entry_classes) as classes_equal,
+    
+    -- All identifiers results equal
+    (func_ids = method_ids AND method_ids = entry_ids) as ids_equal,
+    
+    -- All at_depth results equal
+    (func_depth = method_depth AND method_depth = entry_depth) as depth_equal,
+    
+    -- All summary results equal
+    (func_summary = method_summary AND method_summary = entry_summary) as summary_equal
+FROM all_results;
+----
+true	true	true	true	true	true
+
+# Cleanup
+statement ok
+DROP TABLE IF EXISTS struct_test;

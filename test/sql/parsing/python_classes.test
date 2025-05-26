@@ -1,0 +1,42 @@
+# name: test/sql/parsing/python_classes.test
+# description: Test Python class extraction and analysis
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: Find class definition
+query III
+SELECT type, name, start_line
+FROM read_ast('test/data/python/simple.py', 'python')
+WHERE type = 'class_definition';
+----
+class_definition	MyClass	5
+
+# Test 2: Count class definitions
+query II
+SELECT type, COUNT(*) as count
+FROM read_ast('test/data/python/simple.py', 'python')
+WHERE type = 'class_definition'
+GROUP BY type;
+----
+class_definition	1
+
+# Test 3: Find methods in classes (functions with class parent)
+query IIII
+WITH class_nodes AS (
+    SELECT node_id, name as class_name, start_line as class_start, end_line as class_end
+    FROM read_ast('test/data/python/simple.py', 'python')
+    WHERE type = 'class_definition'
+),
+method_nodes AS (
+    SELECT node_id, name as method_name, start_line, end_line
+    FROM read_ast('test/data/python/simple.py', 'python')
+    WHERE type = 'function_definition'
+)
+SELECT c.class_name, m.method_name, m.start_line, m.end_line - m.start_line + 1 as lines
+FROM method_nodes m
+JOIN class_nodes c ON m.start_line > c.class_start AND m.end_line <= c.class_end
+ORDER BY m.start_line;
+----
+MyClass	__init__	7	2
+MyClass	add	10	2

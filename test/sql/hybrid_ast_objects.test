@@ -1,0 +1,63 @@
+# name: test/sql/hybrid_ast_objects.test
+# description: Test hybrid read_ast_objects function
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+require json
+
+# Test 1: Basic functionality - returns one row per file
+query I
+SELECT COUNT(*) FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+1
+
+# Test 2: Check structured metadata columns
+query IIII
+SELECT 
+    file_path = 'test/data/python/simple.py' as correct_path,
+    language = 'python' as correct_language,
+    node_count > 0 as has_nodes,
+    max_depth > 0 as has_depth
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true	true	true	true
+
+# Test 3: JSON nodes column contains valid JSON array
+query I
+SELECT json_valid(nodes) FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true
+
+# Test 4: JSON contains expected node structure
+query I
+SELECT json_array_length(nodes) > 0 FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true
+
+# Test 5: Can extract specific values from JSON
+query I
+SELECT json_extract_string(nodes, '$[0].type') IS NOT NULL as has_root_type
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true
+
+# Test 6: Check that we have named nodes in the JSON
+query I
+SELECT nodes LIKE '%"name"%' as has_named_nodes
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true
+
+# Test 7: Error handling - non-existent file
+statement error
+SELECT * FROM read_ast_objects('test/data/python/nonexistent.py', 'python');
+----
+IO Error: File not found: test/data/python/nonexistent.py
+
+# Test 8: Node count matches JSON array length
+query I
+SELECT node_count = json_array_length(nodes) as counts_match
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+true

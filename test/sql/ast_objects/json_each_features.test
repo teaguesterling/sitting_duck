@@ -1,0 +1,138 @@
+# name: test/sql/ast_objects/json_each_features.test
+# description: Test json_each specific features with AST data
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+require json
+
+# Test 1: Basic json_each iteration
+query II
+SELECT COUNT(*) as total_nodes, COUNT(DISTINCT json_extract_string(je.value, '$.type')) as unique_types
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS je;
+----
+110	32
+
+# Test 2: json_each provides array indices
+query I
+SELECT je.key::INTEGER as first_index
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS je
+ORDER BY je.key::INTEGER
+LIMIT 1;
+----
+0
+
+# Test 3: Filter by node type using json_each
+query I
+SELECT COUNT(*) as function_count
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS je
+WHERE json_extract_string(je.value, '$.type') = 'function_definition';
+----
+4
+
+# Test 4: Extract node properties using json_each
+query II
+SELECT 
+    json_extract_string(je.value, '$.name') as function_name,
+    json_extract(je.value, '$.start.line') as start_line
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS je
+WHERE json_extract_string(je.value, '$.type') = 'function_definition'
+ORDER BY json_extract(je.value, '$.start.line')::INTEGER;
+----
+hello	1
+__init__	7
+add	10
+main	13
+
+# Test 5: Group nodes by type using json_each
+query II
+SELECT 
+    json_extract_string(je.value, '$.type') as node_type,
+    COUNT(*) as count
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS je
+GROUP BY node_type
+HAVING count >= 5
+ORDER BY count DESC, node_type
+LIMIT 5;
+----
+identifier	19
+(	8
+)	8
+expression_statement	7
+:	6
+
+# Test 6: Find nodes with specific properties
+query I
+SELECT COUNT(*) as nodes_with_names
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS je
+WHERE json_extract_string(je.value, '$.name') IS NOT NULL;
+----
+24
+
+# Test 7: Get nodes at different depths
+query II
+SELECT 
+    json_extract(je.value, '$.depth') as depth,
+    COUNT(*) as count
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS je
+GROUP BY depth
+ORDER BY depth
+LIMIT 5;
+----
+0	1
+1	4
+2	18
+3	15
+4	19
+
+# Test 8: Find parent-child relationships
+query II
+SELECT 
+    parent.value as parent_node,
+    COUNT(*) as child_count
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS parent,
+     json_each(ast.nodes) AS child
+WHERE json_extract(child.value, '$.parent_id') = json_extract(parent.value, '$.id')
+  AND json_extract_string(parent.value, '$.type') = 'function_definition'
+GROUP BY parent.value
+HAVING parent.value->>'name' IN ('hello', 'main')
+ORDER BY child_count DESC, parent.value->>'id' ASC
+LIMIT 2;
+----
+{"id":1,"type":"function_definition","name":"hello","start":{"line":1,"column":1},"end":{"line":3,"column":27},"parent_id":0,"depth":1,"sibling_index":0,"children":[2,3,4,5,6]}	5
+{"id":70,"type":"function_definition","name":"main","start":{"line":13,"column":1},"end":{"line":15,"column":12},"parent_id":0,"depth":1,"sibling_index":2,"children":[71,72,73,74,75]}	5
+
+# Test 9: Extract line number ranges
+query III
+SELECT 
+    json_extract_string(je.value, '$.name') as function_name,
+    json_extract(je.value, '$.start.line') as start_line,
+    json_extract(je.value, '$.end.line') as end_line
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS je
+WHERE json_extract_string(je.value, '$.type') = 'function_definition'
+ORDER BY start_line::INT;
+----
+hello	1	3
+__init__	7	8
+add	10	11
+main	13	15
+
+# Test 10: Complex filtering with multiple conditions
+query I
+SELECT COUNT(*) as complex_nodes
+FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
+     json_each(ast.nodes) AS je
+WHERE json_extract(je.value, '$.depth')::INTEGER > 2
+  AND json_extract_string(je.value, '$.type') = 'identifier'
+  AND json_extract_string(je.value, '$.name') IS NOT NULL;
+----
+16

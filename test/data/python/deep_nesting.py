@@ -1,0 +1,14 @@
+def level1():
+    def level2():
+        def level3():
+            def level4():
+                def level5():
+                    def level6():
+                        def level7():
+                            return "deep"
+                        return level7()
+                    return level6()
+                return level5()
+            return level4()
+        return level3()
+    return level2()

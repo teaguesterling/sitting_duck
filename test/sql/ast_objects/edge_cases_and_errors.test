@@ -1,0 +1,329 @@
+# name: test/sql/ast_objects/edge_cases_and_errors.test
+# description: Test edge cases, error handling, and boundary conditions
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+require json
+
+# Test 1: Null and Empty Input Handling
+# =====================================
+
+# Null inputs should return empty arrays, not null
+query IIIIII
+SELECT 
+    json_array_length(ast_find_type(NULL, 'function_definition')) as null_nodes,
+    json_array_length(ast_find_type('[]'::JSON, 'function_definition')) as empty_array,
+    json_array_length(ast_function_names(NULL)) as null_func_names,
+    json_array_length(ast_class_names('[]'::JSON)) as empty_class_names,
+    json_array_length(ast_identifiers(NULL)) as null_identifiers,
+    json_array_length(ast_strings('[]'::JSON)) as empty_strings
+----
+0	0	0	0	0	0
+
+# Entrypoint style with null/empty inputs
+query IIII
+SELECT 
+    ast(NULL).count_elements() as null_input,
+    ast('[]').count_elements() as empty_array,
+    ast('{}').count_elements() as single_object,
+    ast('invalid json').count_elements() as invalid_json
+----
+0	0	1	0
+
+# Test 2: Invalid Node Structures
+# ===============================
+
+# Nodes without required fields
+query III
+SELECT 
+    json_array_length(ast_find_type('[{"no_type": "field"}]'::JSON, 'function_definition')) as no_type,
+    json_array_length(ast_function_names('[{"type": "function_definition"}]'::JSON)) as no_name,
+    json_array_length(ast_identifiers('[{"type": "identifier"}]'::JSON)) as id_no_name
+----
+0	0	0
+
+# Malformed JSON structures
+query III
+SELECT 
+    json_array_length(ast_find_type('[{"type": null}]'::JSON, 'function_definition')) as null_type,
+    json_array_length(ast_find_type('[{"type": 123}]'::JSON, 'function_definition')) as numeric_type,
+    json_array_length(ast_find_type('[null]'::JSON, 'function_definition')) as null_node
+----
+0	0	0
+
+# Test 3: Boundary Value Testing
+# ==============================
+
+# Empty string types and names
+query III
+SELECT 
+    json_array_length(ast_find_type(nodes, '')) as empty_type,
+    json_array_length(ast_find_type(nodes, [])) as empty_type_array,
+    json_array_length(ast_at_depth(nodes, [])) as empty_depth_array
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+0	0	0
+
+# Very large depth values
+query II
+SELECT 
+    json_array_length(ast_at_depth(nodes, 999)) as huge_depth,
+    json_array_length(ast_at_depth(nodes, -1)) as negative_depth
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+0	0
+
+# Invalid parent IDs
+query II
+SELECT 
+    json_array_length(ast_children_of(nodes, 99999)) as huge_parent_id,
+    json_array_length(ast_children_of(nodes, -1)) as negative_parent_id
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+0	0
+
+# Test 4: Type System Edge Cases
+# ==============================
+
+# Different array input types for ensure functions
+query IIIIII
+SELECT 
+    array_length(ensure_varchar_array(NULL)) as null_varchar,
+    array_length(ensure_varchar_array([])) as empty_varchar_array,
+    array_length(ensure_varchar_array([NULL])) as null_in_array,
+    array_length(ensure_integer_array(NULL)) as null_integer,
+    array_length(ensure_integer_array([])) as empty_integer_array,
+    array_length(ensure_integer_array([NULL])) as null_int_in_array
+----
+0	0	1	0	0	1
+
+# Mixed types in arrays
+query II
+SELECT 
+    array_length(ensure_varchar_array(['string', NULL, 'another'])) as mixed_varchar,
+    array_length(ensure_integer_array([1, NULL, 3])) as mixed_integer
+----
+3	3
+
+# Test 5: Large Data Edge Cases  
+# =============================
+
+# Create a large JSON array for testing
+statement ok
+CREATE TABLE large_test AS
+SELECT json_group_array(
+    json_object(
+        'type', CASE WHEN i % 3 = 0 THEN 'function_definition' 
+                     WHEN i % 3 = 1 THEN 'class_definition'
+                     ELSE 'identifier' END,
+        'name', 'item_' || i,
+        'id', i,
+        'depth', i % 10,
+        'parent_id', CASE WHEN i = 0 THEN NULL ELSE (i - 1) END
+    )
+) as large_nodes
+FROM generate_series(0, 999) as t(i);
+
+# Test performance with large arrays
+query IIII
+SELECT 
+    json_array_length(large_nodes) as total_nodes,
+    json_array_length(ast_find_type(large_nodes, 'function_definition')) as functions,
+    json_array_length(ast_find_type(large_nodes, ['function_definition', 'class_definition'])) as func_and_class,
+    json_array_length(ast_at_depth(large_nodes, [0, 1, 2])) as shallow_nodes
+FROM large_test;
+----
+1000	334	667	3
+
+# Test entrypoint with large data
+query II
+SELECT 
+    ast(large_nodes).find_type('function_definition').count_elements() as func_count,
+    ast(large_nodes).at_depth([5, 6, 7]).count_elements() as mid_depth
+FROM large_test;
+----
+334	3
+
+# Test 6: Concurrent and Complex Query Edge Cases
+# ===============================================
+
+# Multiple AST operations in single query
+query IIIIII
+SELECT 
+    json_array_length(ast_find_type(nodes, 'function_definition')) as funcs,
+    json_array_length(ast_find_type(nodes, 'class_definition')) as classes,
+    json_array_length(ast_identifiers(nodes)) as identifiers,
+    json_extract(ast_summary(nodes), '$.total_nodes') as total,
+    json_extract(ast_summary(nodes), '$.max_depth') as max_depth,
+    json_array_length(ast_function_details(nodes)) as func_details
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4	1	19	110	8	4
+
+# Nested operations
+query I
+SELECT json_array_length(
+    ast_function_names(
+        ast_find_type(
+            ast_at_depth(nodes, [1, 2]),
+            'function_definition'
+        )
+    )
+)
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+# Test 7: Chain Style Error Handling
+# ==================================
+
+# Chain operations with empty results
+query IIII
+SELECT 
+    ast(nodes).find_type('nonexistent').count_elements() as empty_find,
+    ast(nodes).find_type('nonexistent').extract_names().count_elements() as empty_names,
+    ast(nodes).where_depth(999).count_elements() as empty_depth,
+    ast(NULL).find_type('anything').count_elements() as null_chain
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+0	0	0	0
+
+# Chain operations that should handle nulls gracefully
+query III
+SELECT 
+    ast('[]').first_element() IS NULL as empty_first,
+    ast('[]').last_element() IS NULL as empty_last,
+    ast(NULL).summary() IS NOT NULL as null_summary
+----
+true	true	true
+
+# Test 8: Memory and Resource Edge Cases
+# ======================================
+
+# Very deep nesting simulation
+statement ok
+CREATE TABLE deep_nest AS
+SELECT json_group_array(
+    json_object(
+        'type', 'nested_node',
+        'id', i,
+        'depth', i,
+        'parent_id', CASE WHEN i = 0 THEN NULL ELSE (i - 1) END,
+        'children', json_array(i + 1)
+    )
+) as deep_nodes
+FROM generate_series(0, 99) as t(i);
+
+# Test operations on deeply nested structure
+query III
+SELECT 
+    json_array_length(deep_nodes) as total,
+    json_array_length(ast_at_depth(deep_nodes, 50)) as at_depth_50,
+    json_extract(ast_summary(deep_nodes), '$.max_depth') as calculated_max_depth
+FROM deep_nest;
+----
+100	1	99
+
+# Test 9: String and Content Edge Cases
+# =====================================
+
+# Very long strings and special characters
+statement ok
+CREATE TABLE special_content AS
+SELECT json_array(
+    json_object(
+        'type', 'string',
+        'content', repeat('x', 1000)
+    ),
+    json_object(
+        'type', 'string', 
+        'content', E'line1\nline2\ttab\r\n'
+    ),
+    json_object(
+        'type', 'string',
+        'content', '""""""'
+    )
+) as special_nodes;
+
+# Test string extraction with special content
+query I
+SELECT json_array_length(ast_strings(special_nodes))
+FROM special_content;
+----
+3
+
+# Test 10: Unicode and International Edge Cases
+# =============================================
+
+# Unicode characters in node names and content
+statement ok
+CREATE TABLE unicode_test AS
+SELECT json_array(
+    json_object(
+        'type', 'function_definition',
+        'name', '函数名'
+    ),
+    json_object(
+        'type', 'identifier',
+        'name', 'café'
+    ),
+    json_object(
+        'type', 'string',
+        'content', '🚀 rocket'
+    )
+) as unicode_nodes;
+
+# Test operations with unicode content
+query III
+SELECT 
+    json_array_length(ast_function_names(unicode_nodes)) as unicode_funcs,
+    json_array_length(ast_identifiers(unicode_nodes)) as unicode_ids,
+    json_array_length(ast_strings(unicode_nodes)) as unicode_strings
+FROM unicode_test;
+----
+1	1	1
+
+# Test 11: Schema Evolution Edge Cases
+# ===================================
+
+# Nodes with extra fields (should be ignored gracefully)
+statement ok
+CREATE TABLE extra_fields AS
+SELECT json_array(
+    json_object(
+        'type', 'function_definition',
+        'name', 'test_func',
+        'extra_field', 'should_be_ignored',
+        'version', '1.0',
+        'metadata', json_object('author', 'test')
+    )
+) as extended_nodes;
+
+# Operations should work despite extra fields
+query II
+SELECT 
+    json_array_length(ast_find_type(extended_nodes, 'function_definition')) as found,
+    json_array_length(ast_function_names(extended_nodes)) as names
+FROM extra_fields;
+----
+1	1
+
+# Test 12: Cleanup
+# ================
+
+# Clean up test tables
+statement ok
+DROP TABLE IF EXISTS large_test;
+
+statement ok  
+DROP TABLE IF EXISTS deep_nest;
+
+statement ok
+DROP TABLE IF EXISTS special_content;
+
+statement ok
+DROP TABLE IF EXISTS unicode_test;
+
+statement ok
+DROP TABLE IF EXISTS extra_fields;
