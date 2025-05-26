@@ -52,9 +52,9 @@ CREATE OR REPLACE MACRO ast_filter_name(ast_obj, patterns, case_sensitive := fal
 );
 
 -- Filter by depth(s) - returns AST object
-CREATE OR REPLACE MACRO ast_at_depth(ast_obj, depths) AS (
+CREATE OR REPLACE MACRO ast_filter_depth(ast_obj, depths) AS (
     WITH depth_array AS (
-        SELECT ast_normalize_to_array(depths) as depth_list
+        SELECT ensure_integer_array(depths) as depth_list
     ),
     filtered AS (
         SELECT json_group_array(je.value) as nodes
@@ -76,7 +76,7 @@ CREATE OR REPLACE MACRO ast_at_depth(ast_obj, depths) AS (
 );
 
 -- Filter by depth range - returns AST object
-CREATE OR REPLACE MACRO ast_at_depth_range(ast_obj, min_depth := 0, max_depth := NULL) AS (
+CREATE OR REPLACE MACRO ast_filter_depth_range(ast_obj, min_depth := 0, max_depth := NULL) AS (
     WITH filtered AS (
         SELECT json_group_array(je.value) as nodes
         FROM json_each(ast_obj.nodes) AS je
@@ -98,9 +98,9 @@ CREATE OR REPLACE MACRO ast_at_depth_range(ast_obj, min_depth := 0, max_depth :=
 );
 
 -- Filter by line(s) - returns AST object
-CREATE OR REPLACE MACRO ast_at_line(ast_obj, lines, include_partial := true) AS (
+CREATE OR REPLACE MACRO ast_filter_line(ast_obj, lines, include_partial := true) AS (
     WITH line_array AS (
-        SELECT ast_normalize_to_array(lines) as line_list
+        SELECT ensure_integer_array(lines) as line_list
     ),
     filtered AS (
         SELECT json_group_array(je.value) as nodes
@@ -133,7 +133,7 @@ CREATE OR REPLACE MACRO ast_at_line(ast_obj, lines, include_partial := true) AS 
 );
 
 -- Get descendants of a node - returns AST object
-CREATE OR REPLACE MACRO ast_descendants_of(ast_obj, node_id, max_levels := NULL) AS (
+CREATE OR REPLACE MACRO ast_filter_descendants(ast_obj, node_id, max_levels := NULL) AS (
     WITH RECURSIVE descendants AS (
         -- Start with direct children
         SELECT 

@@ -14,9 +14,11 @@ CREATE OR REPLACE MACRO ensure_varchar_array(val) AS (
 CREATE OR REPLACE MACRO ensure_integer_array(val) AS (
     CASE 
         WHEN val IS NULL THEN []::INTEGER[]
-        WHEN typeof(val) = 'INTEGER[]' THEN val
+        WHEN typeof(val) = 'INTEGER[]' THEN val::INTEGER[]
         WHEN typeof(val) = 'BIGINT[]' THEN val::INTEGER[]
-        ELSE [val::INTEGER]::INTEGER[]
+        WHEN typeof(val) = 'INTEGER' THEN [val::INTEGER]::INTEGER[]
+        WHEN typeof(val) = 'BIGINT' THEN [val::INTEGER]::INTEGER[]
+        ELSE []::INTEGER[]
     END
 );
 

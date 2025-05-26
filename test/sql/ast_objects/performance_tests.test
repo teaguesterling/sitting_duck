@@ -64,29 +64,29 @@ FROM large_ast;
 
 # Time-sensitive operations to compare performance
 # (Results should be identical, we're testing execution time)
-query BBBBB
+query IIIII
 SELECT 
     -- Compare functional vs entrypoint for find operations
-    json_array_length(ast_find_type(nodes, 'function_definition')) = 
-        ast(nodes).find_type('function_definition').count_elements() as find_perf,
+    (json_array_length(ast_find_type(nodes, 'function_definition')) = 
+        ast(nodes).find_type('function_definition').count_elements())::INTEGER as find_perf,
     
     -- Compare functional vs entrypoint for name extraction
-    json_array_length(ast_function_names(nodes)) = 
-        ast(nodes).function_names().count_elements() as names_perf,
+    (json_array_length(ast_function_names(nodes)) = 
+        ast(nodes).function_names().count_elements())::INTEGER as names_perf,
     
     -- Compare functional vs entrypoint for depth operations
-    json_array_length(ast_at_depth(nodes, [1, 2, 3])) = 
-        ast(nodes).at_depth([1, 2, 3]).count_elements() as depth_perf,
+    (json_array_length(ast_at_depth(nodes, [1, 2, 3])) = 
+        ast(nodes).at_depth([1, 2, 3]).count_elements())::INTEGER as depth_perf,
     
     -- Compare complex nested operations
-    json_array_length(ast_function_names(ast_find_type(nodes, 'function_definition'))) = 
-        ast(nodes).find_type('function_definition').extract_names().count_elements() as nested_perf,
+    (json_array_length(ast_function_names(ast_find_type(nodes, 'function_definition'))) = 
+        ast(nodes).find_type('function_definition').extract_names().count_elements())::INTEGER as nested_perf,
     
     -- Compare summary operations
-    ast_summary(nodes) = ast(nodes).summary() as summary_perf
+    (ast_summary(nodes) = ast(nodes).summary())::INTEGER as summary_perf
 FROM large_ast;
 ----
-true	true	true	true	true
+1	1	1	1	1
 
 # Test 3: Memory Efficiency with Repeated Operations
 # ==================================================
@@ -276,7 +276,10 @@ FROM large_ast;
 WITH size_test AS (
     SELECT 
         size_limit,
-        json_extract(nodes, '$[0:' || size_limit || ']') as limited_nodes
+        -- Note: JSON path slicing not supported, use list_slice instead
+        (SELECT json_group_array(je.value) 
+         FROM json_each(nodes) AS je 
+         WHERE je.key::INT < size_limit) as limited_nodes
     FROM large_ast
     CROSS JOIN (VALUES (100), (1000), (5000), (10000)) as sizes(size_limit)
 )

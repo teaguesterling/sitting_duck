@@ -36,43 +36,43 @@ CREATE OR REPLACE MACRO ast(input) AS (
 -- These provide the chainable interface
 
 CREATE OR REPLACE MACRO find_type(nodes, types) AS (
-    ast_find_type(ast(nodes), types)
+    ast_find_type(nodes, types)
 );
 
 CREATE OR REPLACE MACRO function_names(nodes) AS (
-    ast_function_names(ast(nodes))
+    ast_function_names(nodes)
 );
 
 CREATE OR REPLACE MACRO class_names(nodes) AS (
-    ast_class_names(ast(nodes))
+    ast_class_names(nodes)
 );
 
 CREATE OR REPLACE MACRO identifiers(nodes) AS (
-    ast_identifiers(ast(nodes))
+    ast_identifiers(nodes)
 );
 
 CREATE OR REPLACE MACRO at_depth(nodes, depths) AS (
-    ast_at_depth(ast(nodes), depths)
+    ast_at_depth(nodes, depths)
 );
 
 CREATE OR REPLACE MACRO children_of(nodes, parent_id) AS (
-    ast_children_of(ast(nodes), parent_id)
+    ast_children_of(nodes, parent_id)
 );
 
 CREATE OR REPLACE MACRO summary(nodes) AS (
-    ast_summary(ast(nodes))
+    ast_summary(nodes)
 );
 
 CREATE OR REPLACE MACRO function_details(nodes) AS (
-    ast_function_details(ast(nodes))
+    ast_function_details(nodes)
 );
 
 CREATE OR REPLACE MACRO type_counts(nodes) AS (
-    ast_type_counts(ast(nodes))
+    ast_type_counts(nodes)
 );
 
 CREATE OR REPLACE MACRO strings(nodes) AS (
-    ast_strings(ast(nodes))
+    ast_strings(nodes)
 );
 
 -- Utility methods for working with arrays/results

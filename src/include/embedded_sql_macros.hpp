@@ -29,9 +29,11 @@ CREATE OR REPLACE MACRO ensure_varchar_array(val) AS (
 CREATE OR REPLACE MACRO ensure_integer_array(val) AS (
     CASE 
         WHEN val IS NULL THEN []::INTEGER[]
-        WHEN typeof(val) = 'INTEGER[]' THEN val
+        WHEN typeof(val) = 'INTEGER[]' THEN val::INTEGER[]
         WHEN typeof(val) = 'BIGINT[]' THEN val::INTEGER[]
-        ELSE [val::INTEGER]::INTEGER[]
+        WHEN typeof(val) = 'INTEGER' THEN [val::INTEGER]::INTEGER[]
+        WHEN typeof(val) = 'BIGINT' THEN [val::INTEGER]::INTEGER[]
+        ELSE []::INTEGER[]
     END
 );
 
@@ -392,43 +394,43 @@ CREATE OR REPLACE MACRO ast(input) AS (
 -- These provide the chainable interface
 
 CREATE OR REPLACE MACRO find_type(nodes, types) AS (
-    ast_find_type(ast(nodes), types)
+    ast_find_type(nodes, types)
 );
 
 CREATE OR REPLACE MACRO function_names(nodes) AS (
-    ast_function_names(ast(nodes))
+    ast_function_names(nodes)
 );
 
 CREATE OR REPLACE MACRO class_names(nodes) AS (
-    ast_class_names(ast(nodes))
+    ast_class_names(nodes)
 );
 
 CREATE OR REPLACE MACRO identifiers(nodes) AS (
-    ast_identifiers(ast(nodes))
+    ast_identifiers(nodes)
 );
 
 CREATE OR REPLACE MACRO at_depth(nodes, depths) AS (
-    ast_at_depth(ast(nodes), depths)
+    ast_at_depth(nodes, depths)
 );
 
 CREATE OR REPLACE MACRO children_of(nodes, parent_id) AS (
-    ast_children_of(ast(nodes), parent_id)
+    ast_children_of(nodes, parent_id)
 );
 
 CREATE OR REPLACE MACRO summary(nodes) AS (
-    ast_summary(ast(nodes))
+    ast_summary(nodes)
 );
 
 CREATE OR REPLACE MACRO function_details(nodes) AS (
-    ast_function_details(ast(nodes))
+    ast_function_details(nodes)
 );
 
 CREATE OR REPLACE MACRO type_counts(nodes) AS (
-    ast_type_counts(ast(nodes))
+    ast_type_counts(nodes)
 );
 
 CREATE OR REPLACE MACRO strings(nodes) AS (
-    ast_strings(ast(nodes))
+    ast_strings(nodes)
 );
 
 -- Utility methods for working with arrays/results
@@ -530,9 +532,9 @@ CREATE OR REPLACE MACRO ast_filter_name(ast_obj, patterns, case_sensitive := fal
 );
 
 -- Filter by depth(s) - returns AST object
-CREATE OR REPLACE MACRO ast_at_depth(ast_obj, depths) AS (
+CREATE OR REPLACE MACRO ast_filter_depth(ast_obj, depths) AS (
     WITH depth_array AS (
-        SELECT ast_normalize_to_array(depths) as depth_list
+        SELECT ensure_integer_array(depths) as depth_list
     ),
     filtered AS (
         SELECT json_group_array(je.value) as nodes
@@ -554,7 +556,7 @@ CREATE OR REPLACE MACRO ast_at_depth(ast_obj, depths) AS (
 );
 
 -- Filter by depth range - returns AST object
-CREATE OR REPLACE MACRO ast_at_depth_range(ast_obj, min_depth := 0, max_depth := NULL) AS (
+CREATE OR REPLACE MACRO ast_filter_depth_range(ast_obj, min_depth := 0, max_depth := NULL) AS (
     WITH filtered AS (
         SELECT json_group_array(je.value) as nodes
         FROM json_each(ast_obj.nodes) AS je
@@ -576,9 +578,9 @@ CREATE OR REPLACE MACRO ast_at_depth_range(ast_obj, min_depth := 0, max_depth :=
 );
 
 -- Filter by line(s) - returns AST object
-CREATE OR REPLACE MACRO ast_at_line(ast_obj, lines, include_partial := true) AS (
+CREATE OR REPLACE MACRO ast_filter_line(ast_obj, lines, include_partial := true) AS (
     WITH line_array AS (
-        SELECT ast_normalize_to_array(lines) as line_list
+        SELECT ensure_integer_array(lines) as line_list
     ),
     filtered AS (
         SELECT json_group_array(je.value) as nodes
@@ -611,7 +613,7 @@ CREATE OR REPLACE MACRO ast_at_line(ast_obj, lines, include_partial := true) AS 
 );
 
 -- Get descendants of a node - returns AST object
-CREATE OR REPLACE MACRO ast_descendants_of(ast_obj, node_id, max_levels := NULL) AS (
+CREATE OR REPLACE MACRO ast_filter_descendants(ast_obj, node_id, max_levels := NULL) AS (
     WITH RECURSIVE descendants AS (
         -- Start with direct children
         SELECT 
@@ -1316,6 +1318,28 @@ CREATE OR REPLACE MACRO ast_suggest_macro(intent) AS (
     {"utility_macros.sql", R"SQLMACRO(
 -- Utility Macros for Common Operations
 -- These combine multiple operations for convenience
+
+-- Normalize integer value to integer array
+CREATE OR REPLACE MACRO ast_normalize_to_int_array(val) AS (
+    CASE 
+        WHEN val IS NULL THEN []::INTEGER[]
+        WHEN typeof(val) = 'INTEGER[]' THEN val
+        WHEN typeof(val) = 'BIGINT[]' THEN val::INTEGER[]
+        WHEN typeof(val) = 'INTEGER' THEN [val]::INTEGER[]
+        WHEN typeof(val) = 'BIGINT' THEN [val::INTEGER]::INTEGER[]
+        ELSE []::INTEGER[]
+    END
+);
+
+-- Normalize varchar value to varchar array  
+CREATE OR REPLACE MACRO ast_normalize_to_varchar_array(val) AS (
+    CASE 
+        WHEN val IS NULL THEN []::VARCHAR[]
+        WHEN typeof(val) = 'VARCHAR[]' THEN val
+        WHEN typeof(val) = 'VARCHAR' THEN [val]::VARCHAR[]
+        ELSE []::VARCHAR[]
+    END
+);
 
 -- Find functions and methods together
 CREATE OR REPLACE MACRO ast_all_functions(nodes) AS (

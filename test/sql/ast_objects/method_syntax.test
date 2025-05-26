@@ -7,7 +7,7 @@ require duckdb_ast
 require json
 
 # Test 1: Both syntaxes are equivalent
-query B
+query I
 SELECT 
     ast_find_type(nodes, 'function_definition') = 
     (nodes).ast_find_type('function_definition') as syntaxes_equal
@@ -37,7 +37,7 @@ WHERE json_extract_string(func.value, '$.name') LIKE '%a%';
 
 # Test 4: Complex expressions need proper parentheses
 query I
-SELECT json_array_length((json_extract(nodes, '$[0:10]')).ast_find_type('identifier'))
+SELECT json_array_length(((SELECT json_group_array(je.value) FROM json_each(nodes) AS je WHERE je.key::INT < 10)).ast_find_type('identifier'))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 1

@@ -75,7 +75,7 @@ query II
 WITH chained AS (
     SELECT 
         ast_filter_type(
-            ast_at_depth_range(ast_obj, min_depth := 2, max_depth := 4),
+            ast_filter_depth_range(ast_obj, min_depth := 2, max_depth := 4),
             'function_definition'
         ) as result
     FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj

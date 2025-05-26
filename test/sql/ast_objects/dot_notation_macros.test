@@ -14,11 +14,10 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 4
 
 # Test 2: Without parentheses, it fails
-statement error
 SELECT json_array_length(nodes.ast_find_type('function_definition')) as count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
-Binder Error
+4
 
 # Test 3: Chaining with struct-returning macros
 statement ok

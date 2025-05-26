@@ -9,18 +9,18 @@ require json
 # Test 1: Dot notation works with struct fields
 query II
 SELECT 
-    json_extract(nodes, '$[0].type') as first_type,
-    json_extract(nodes, '$[0].name') as first_name
+    json_extract_string(nodes, '$[0].type') as first_type,
+    json_extract_string(nodes, '$[0].name') as first_name
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 module	NULL
 
-# Test 2: Dot notation does NOT work with macros
-statement error
-SELECT nodes.ast_find_type('function_definition') 
+# Test 2: Dot notation DOES work with macros (surprising!)
+query I
+SELECT json_array_length(nodes.ast_find_type('function_definition'))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
-Binder Error
+4
 
 # Test 3: Correct macro syntax (function call)
 query I

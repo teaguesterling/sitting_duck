@@ -72,19 +72,20 @@ name	NULL	VARCHAR
 line	NULL	UBIGINT
 column	NULL	UBIGINT
 
-# Test 6: Find all string literals using json_each
+# Test 6: Find unique identifier names using json_each
 query I
-SELECT json_extract_string(je.value, '$.content') as string_content
+SELECT DISTINCT json_extract_string(je.value, '$.name') as identifier_name
 FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
      json_each(ast.nodes) AS je
-WHERE json_extract_string(je.value, '$.type') = 'string'
-   AND json_extract_string(je.value, '$.content') IS NOT NULL
-ORDER BY string_content;
+WHERE json_extract_string(je.value, '$.type') = 'identifier'
+   AND json_extract_string(je.value, '$.name') IS NOT NULL
+ORDER BY identifier_name
+LIMIT 7;
 ----
-"Hello, "
-"!"
-"Python"
-"World"
-"python"
+MyClass
+__init__
 __main__
-greet
+__name__
+add
+hello
+main

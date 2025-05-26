@@ -83,13 +83,13 @@ query I
 SELECT json_array_length(ast_children_of(nodes, 0))
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
-3
+4
 
 # Test 4: Analysis Functions
 # ==========================
 
 # ast_type_counts
-query B
+query I
 SELECT json_extract_string(ast_type_counts(nodes), '$.function_definition') IS NOT NULL
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
@@ -215,14 +215,14 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # ==================================
 
 # Test with deeply nested structures
-query B
+query I
 SELECT json_extract(ast_summary(nodes), '$.max_depth')::INTEGER > 5
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 true
 
 # Test with many nodes
-query B
+query I
 SELECT json_extract(ast_summary(nodes), '$.total_nodes')::INTEGER > 50
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----

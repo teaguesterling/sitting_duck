@@ -1,6 +1,28 @@
 -- Utility Macros for Common Operations
 -- These combine multiple operations for convenience
 
+-- Normalize integer value to integer array
+CREATE OR REPLACE MACRO ast_normalize_to_int_array(val) AS (
+    CASE 
+        WHEN val IS NULL THEN []::INTEGER[]
+        WHEN typeof(val) = 'INTEGER[]' THEN val
+        WHEN typeof(val) = 'BIGINT[]' THEN val::INTEGER[]
+        WHEN typeof(val) = 'INTEGER' THEN [val]::INTEGER[]
+        WHEN typeof(val) = 'BIGINT' THEN [val::INTEGER]::INTEGER[]
+        ELSE []::INTEGER[]
+    END
+);
+
+-- Normalize varchar value to varchar array  
+CREATE OR REPLACE MACRO ast_normalize_to_varchar_array(val) AS (
+    CASE 
+        WHEN val IS NULL THEN []::VARCHAR[]
+        WHEN typeof(val) = 'VARCHAR[]' THEN val
+        WHEN typeof(val) = 'VARCHAR' THEN [val]::VARCHAR[]
+        ELSE []::VARCHAR[]
+    END
+);
+
 -- Find functions and methods together
 CREATE OR REPLACE MACRO ast_all_functions(nodes) AS (
     ast_find_type(nodes, ['function_definition', 'method_definition'])

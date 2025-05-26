@@ -43,6 +43,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 0
 
 # Test 5: Natural ordering works with line numbers
+query I
 WITH functions AS (
     SELECT func_detail.value as func
     FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,

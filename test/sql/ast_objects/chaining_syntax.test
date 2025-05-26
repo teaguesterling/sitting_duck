@@ -32,7 +32,7 @@ SELECT ((5).double_value()).add_ten();
 20
 
 # Test 3: Both are equivalent
-query B
+query I
 SELECT (5).double_value().add_ten() = ((5).double_value()).add_ten();
 ----
 true

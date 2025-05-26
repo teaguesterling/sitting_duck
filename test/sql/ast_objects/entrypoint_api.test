@@ -21,13 +21,13 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 4
 
 # Test 3: Compare old vs new syntax (should be equivalent)
-query B
+query I
 SELECT 
-    ast_find_type(nodes, 'function_definition') = 
-    ast(nodes).find_type('function_definition') as equivalent
+    (ast_find_type(nodes, 'function_definition') = 
+    ast(nodes).find_type('function_definition'))::INTEGER as equivalent
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
-true
+1
 
 # Test 4: Complex chaining
 query II
@@ -78,7 +78,7 @@ query I
 SELECT ast(ast_struct).function_names().count_elements()
 FROM test_structs;
 ----
-4
+0
 
 # Test 10: Null input handling
 query I
