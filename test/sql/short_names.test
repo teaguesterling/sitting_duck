@@ -1,0 +1,97 @@
+# name: test/sql/short_names.test
+# description: Test the short name registration functionality
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+require json
+
+# Test 1: Short names don't exist by default
+# ==========================================
+
+statement error
+SELECT get_type(nodes, 'function_definition')
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+Catalog Error: Scalar Function with name get_type does not exist!
+
+# Test 2: Register short names
+# ============================
+
+query I
+SELECT duckdb_ast_register_short_names();
+----
+Short names registered successfully!
+
+# Test 3: Short names work after registration
+# ===========================================
+
+query I
+SELECT json_array_length(get_type(nodes, 'function_definition'))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+query I
+SELECT json_array_length(get_names(nodes))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+19
+
+query I
+SELECT json_array_length(filter_has_name(nodes))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+19
+
+# Test 4: Legacy names also work
+# ==============================
+
+query I
+SELECT json_array_length(find_type(nodes, 'function_definition'))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+query I
+SELECT json_array_length(function_names(nodes))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4
+
+# Test 5: List available short names
+# ==================================
+
+query III
+SELECT count(*) as total_aliases,
+       count(DISTINCT short_name) as unique_short,
+       count(DISTINCT full_name) as unique_full
+FROM duckdb_ast_list_short_names();
+----
+21	21	21
+
+# Test 6: Unregister short names
+# ==============================
+
+query I
+SELECT duckdb_ast_unregister_short_names();
+----
+Short names unregistered successfully!
+
+# Test 7: Short names don't work after unregistration
+# ==================================================
+
+statement error
+SELECT get_type(nodes, 'function_definition')
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+Catalog Error: Scalar Function with name get_type does not exist!
+
+# Test 8: Full names still work
+# =============================
+
+query I
+SELECT json_array_length(ast_get_type(nodes, 'function_definition'))
+FROM read_ast_objects('test/data/python/simple.py', 'python');
+----
+4

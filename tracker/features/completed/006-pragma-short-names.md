@@ -1,6 +1,6 @@
 # Feature: Pragma for Short Function Names
 
-**Status:** In Progress
+**Status:** Completed
 **Priority:** High
 **Target:** v0.3.0
 
