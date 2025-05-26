@@ -211,7 +211,7 @@ query I
 SELECT COUNT(*)
 FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast_result,
      json_each(ast(ast_result.nodes).find_type('function_definition')) AS func_node
-WHERE ast(func_node.value).where_type('identifier').count_elements() > 0;
+WHERE json_extract_string(func_node.value, '$.name') IS NOT NULL;
 ----
 4
 

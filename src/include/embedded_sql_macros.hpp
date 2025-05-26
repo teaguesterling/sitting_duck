@@ -383,7 +383,12 @@ CREATE OR REPLACE MACRO ast(input) AS (
             
         -- Input is a VARCHAR, try to parse as JSON
         WHEN typeof(input) = 'VARCHAR' THEN 
-            COALESCE(TRY_CAST(input AS JSON), '[]'::JSON)
+            CASE 
+                WHEN TRY_CAST(input AS JSON) IS NULL THEN '[]'::JSON
+                WHEN json_type(TRY_CAST(input AS JSON)) = 'ARRAY' THEN TRY_CAST(input AS JSON)
+                WHEN json_type(TRY_CAST(input AS JSON)) = 'OBJECT' THEN json_array(TRY_CAST(input AS JSON))
+                ELSE '[]'::JSON
+            END
             
         -- Fallback: empty array
         ELSE '[]'::JSON

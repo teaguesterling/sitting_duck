@@ -47,13 +47,13 @@ function	test
 
 # Test 6: Show that macros are global, not methods
 # Even if we have a struct with a field named like our macro
-query I
+query II
 WITH data AS (
-    SELECT {'ast_find_type': 'not_a_function', 'data': '[1,2,3]'::JSON} as obj
+    SELECT {'ast_find_type': 'not_a_function', 'nodes': '[{"type": "test", "id": 1}]'::JSON} as obj
 )
 SELECT 
     obj.ast_find_type as field_value,
-    json_array_length(ast_find_type(obj.data, 1)) as macro_result
+    json_array_length(ast_find_type(obj.nodes, 'test')) as macro_result
 FROM data;
 ----
 not_a_function	1
