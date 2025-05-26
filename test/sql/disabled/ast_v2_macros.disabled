@@ -45,28 +45,20 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
 
-# List of types - using ensure_array utility
+# List of types
 query I
 SELECT json_array_length(ast_get_type(nodes, ['function_definition', 'class_definition'])) as count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 5
 
-# Test 2: Structure-Preserving Macros
-# ===================================
+# Test 2: Filtering Functions
+# ===========================
 
-# ast_filter_type preserves metadata
-query IIII
-WITH filtered AS (
-    SELECT ast_filter_type(ast_obj, 'function_definition') as result
-    FROM read_ast_objects('test/data/python/simple.py', 'python') as ast_obj
-)
-SELECT 
-    result.file_path = 'test/data/python/simple.py' as path_preserved,
-    result.language = 'python' as lang_preserved,
-    result.node_count = 4 as correct_count,
-    json_array_length(result.nodes) = 4 as nodes_match_count
-FROM filtered;
+# Filter by pattern
+query I
+SELECT json_array_length(ast_filter_pattern(nodes, 'hello%')) as hello_pattern_count
+FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 true	true	true	true
 

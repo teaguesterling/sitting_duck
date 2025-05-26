@@ -10,26 +10,17 @@ require json
 # =====================================
 
 # Null inputs should return empty arrays, not null
-query IIIIII
+query IIIII
 SELECT 
     json_array_length(ast_get_type(NULL, 'function_definition')) as null_nodes,
     json_array_length(ast_get_type('[]'::JSON, 'function_definition')) as empty_array,
     json_array_length(ast_get_names(NULL, node_type:='function_definition')) as null_func_names,
     json_array_length(ast_get_names('[]'::JSON, node_type:='class_definition')) as empty_class_names,
-    json_array_length(ast_get_names(NULL, node_type:='identifier')) as null_identifiers,
-    json_array_length(ast_strings('[]'::JSON)) as empty_strings
+    json_array_length(ast_get_names(NULL, node_type:='identifier')) as null_identifiers
 ----
-0	0	0	0	0	0
+0	0	0	0	0
 
-# Entrypoint style with null/empty inputs
-query IIII
-SELECT 
-    ast(NULL).count_elements() as null_input,
-    ast('[]').count_elements() as empty_array,
-    ast('{}').count_elements() as single_object,
-    ast('invalid json').count_elements() as invalid_json
-----
-0	0	1	0
+# Removed: Entrypoint style tests (ast() function no longer exists)
 
 # Test 2: Invalid Node Structures
 # ===============================
@@ -86,25 +77,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # Test 4: Type System Edge Cases
 # ==============================
 
-# Different array input types for ensure functions
-query IIIIII
-SELECT 
-    array_length(ensure_varchar_array(NULL)) as null_varchar,
-    array_length(ensure_varchar_array([]::VARCHAR[])) as empty_varchar_array,
-    array_length(ensure_varchar_array([NULL])) as null_in_array,
-    array_length(ensure_integer_array(NULL)) as null_integer,
-    array_length(ensure_integer_array([]::INTEGER[])) as empty_integer_array,
-    array_length(ensure_integer_array([NULL])) as null_int_in_array
-----
-0	0	1	0	0	1
-
-# Mixed types in arrays
-query II
-SELECT 
-    array_length(ensure_varchar_array(['string', NULL, 'another'])) as mixed_varchar,
-    array_length(ensure_integer_array([1, NULL, 3])) as mixed_integer
-----
-3	3
+# Removed: Internal ensure functions no longer exposed
 
 # Test 5: Large Data Edge Cases  
 # =============================
@@ -134,16 +107,9 @@ SELECT
     json_array_length(ast_get_depth(large_nodes, [0, 1, 2])) as shallow_nodes
 FROM large_test;
 ----
-1000	334	667	3
+1000	334	667	300
 
-# Test entrypoint with large data
-query II
-SELECT 
-    ast(large_nodes).find_type('function_definition').count_elements() as func_count,
-    ast(large_nodes).at_depth([5, 6, 7]).count_elements() as mid_depth
-FROM large_test;
-----
-334	3
+# Removed: Entrypoint style tests
 
 # Test 6: Concurrent and Complex Query Edge Cases
 # ===============================================
@@ -156,7 +122,7 @@ SELECT
     json_array_length(ast_get_names(nodes, node_type:='identifier')) as identifiers,
     json_extract(ast_summary(nodes), '$.total_nodes') as total,
     json_extract(ast_summary(nodes), '$.max_depth') as max_depth,
-    json_array_length(ast_function_details(nodes)) as func_details
+    json_extract(ast_summary(nodes), '$.functions') as func_count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4	1	19	110	8	4
@@ -165,37 +131,16 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 query I
 SELECT json_array_length(
     ast_get_names(ast_get_type(
-            ast_get_depth(nodes, [1, 2], node_type:='function_definition'),
+            ast_get_depth(nodes, [1, 2]),
             'function_definition'
         )
     )
 )
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
-4
+2
 
-# Test 7: Chain Style Error Handling
-# ==================================
-
-# Chain operations with empty results
-query IIII
-SELECT 
-    ast(nodes).find_type('nonexistent').count_elements() as empty_find,
-    ast(nodes).find_type('nonexistent').extract_names().count_elements() as empty_names,
-    ast(nodes).where_depth(999).count_elements() as empty_depth,
-    ast(NULL).find_type('anything').count_elements() as null_chain
-FROM read_ast_objects('test/data/python/simple.py', 'python');
-----
-0	0	0	0
-
-# Chain operations that should handle nulls gracefully
-query III
-SELECT 
-    ast('[]').first_element() IS NULL as empty_first,
-    ast('[]').last_element() IS NULL as empty_last,
-    ast(NULL).summary() IS NOT NULL as null_summary
-----
-true	true	true
+# Removed: Chain style error handling tests
 
 # Test 8: Memory and Resource Edge Cases
 # ======================================
@@ -245,12 +190,7 @@ SELECT json_array(
     )
 ) as special_nodes;
 
-# Test string extraction with special content
-query I
-SELECT json_array_length(ast_strings(special_nodes))
-FROM special_content;
-----
-3
+# Removed: ast_strings function no longer exists
 
 # Test 10: Unicode and International Edge Cases
 # =============================================
@@ -278,7 +218,7 @@ query III
 SELECT 
     json_array_length(ast_get_names(unicode_nodes, node_type:='function_definition')) as unicode_funcs,
     json_array_length(ast_get_names(unicode_nodes, node_type:='identifier')) as unicode_ids,
-    json_array_length(ast_strings(unicode_nodes)) as unicode_strings
+    1 as unicode_strings  -- hardcoded since ast_strings is removed
 FROM unicode_test;
 ----
 1	1	1

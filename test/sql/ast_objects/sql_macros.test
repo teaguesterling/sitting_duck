@@ -6,34 +6,18 @@ require duckdb_ast
 
 require json
 
-# First, create the SQL macros
-statement ok
-CREATE OR REPLACE MACRO ast_get_names(nodes, node_type:='function_definition') AS (
-    (SELECT json_group_array(json_extract_string(node, '$.name'))
-     FROM (SELECT unnest(json_extract(nodes, '$[*]')::JSON[]) as node)
-     WHERE json_extract_string(node, '$.type') = 'function_definition')
-);
+# Removed: Don't override built-in macros
 
-statement ok
-CREATE OR REPLACE MACRO ast_type_counts(nodes) AS (
-    (SELECT json_group_object(node_type, cnt)
-     FROM (
-         SELECT json_extract_string(node, '$.type') as node_type, COUNT(*) as cnt
-         FROM (SELECT unnest(json_extract(nodes, '$[*]')::JSON[]) as node)
-         GROUP BY node_type
-     ))
-);
-
-# Test 1: Get function names using dot notation
+# Test 1: Get function names
 query I
-SELECT nodes.ast_get_names(nodes, node_type:='function_definition')::VARCHAR as functions
+SELECT ast_get_names(nodes, node_type:='function_definition')::VARCHAR as functions
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 ["hello","__init__","add","main"]
 
-# Test 2: Get node type counts
+# Test 2: Get node type counts from summary
 query I
-SELECT json_extract_string(nodes.ast_type_counts(), '$.identifier') IS NOT NULL as has_identifiers
+SELECT json_extract_string(ast_summary(nodes), '$.types.identifier') IS NOT NULL as has_identifiers
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 true
@@ -41,22 +25,15 @@ true
 # Test 3: Chain multiple operations
 query II
 SELECT 
-    nodes.json_array_length() as total_nodes,
-    json_array_length(nodes.ast_get_names(nodes, node_type:='function_definition')) as function_count
+    json_array_length(nodes) as total_nodes,
+    json_array_length(ast_get_names(nodes, node_type:='function_definition')) as function_count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 110	4
 
-# Test 4: Macro with parameters
-statement ok
-CREATE OR REPLACE MACRO ast_get_type(nodes, node_type) AS (
-    (SELECT json_group_array(node) 
-     FROM (SELECT unnest(json_extract(nodes, '$[*]')::JSON[]) as node)
-     WHERE json_extract_string(node, '$.type') = node_type)
-);
-
+# Test 4: Use built-in macros
 query I
-SELECT json_array_length(nodes.ast_get_type('class_definition')) as class_count
+SELECT json_array_length(ast_get_type(nodes, 'class_definition')) as class_count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 1

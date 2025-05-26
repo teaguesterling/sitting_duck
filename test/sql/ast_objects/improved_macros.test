@@ -15,22 +15,19 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 ["hello","__init__","add","main"]
 
-# Test 2: Function details with proper line number ordering
+# Test 2: Get function by filtering
 query I
-SELECT func_detail.value::VARCHAR as function_info
-FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
-     json_each(ast_function_details(ast.nodes)) AS func_detail
-ORDER BY json_extract(func_detail.value, '$.start_line')::INTEGER
-LIMIT 1;
+SELECT json_array_length(ast_filter_pattern(ast_get_type(nodes, 'function_definition'), 'hello%')) as hello_functions
+FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
-{"name":"hello","start_line":1,"end_line":3,"depth":1,"id":1}
+1
 
 # Test 3: Summary with all type casting handled internally
 query III
 SELECT 
     json_extract(ast_summary(nodes), '$.total_nodes') as total,
     json_extract(ast_summary(nodes), '$.max_depth') as depth,
-    json_extract(ast_summary(nodes), '$.function_count') as func_count
+    json_extract(ast_summary(nodes), '$.functions') as func_count
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 110	8	4
@@ -45,13 +42,13 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # Test 5: Natural ordering works with line numbers
 query I
 WITH functions AS (
-    SELECT func_detail.value as func
+    SELECT je.value as func
     FROM read_ast_objects('test/data/python/simple.py', 'python') AS ast,
-         json_each(ast_function_details(ast.nodes)) AS func_detail
+         json_each(ast_get_type(ast.nodes, 'function_definition')) AS je
 )
 SELECT json_extract_string(func, '$.name') as name
 FROM functions
-ORDER BY json_extract(func, '$.start_line')::INTEGER;
+ORDER BY json_extract(func, '$.start.line')::INTEGER;
 ----
 hello
 __init__
@@ -62,8 +59,8 @@ main
 query I
 SELECT 
     CASE 
-        WHEN json_extract(ast_summary(nodes), '$.function_count')::INTEGER > 3 THEN 'Module'
-        WHEN json_extract(ast_summary(nodes), '$.function_count')::INTEGER > 1 THEN 'Library'
+        WHEN json_extract(ast_summary(nodes), '$.functions')::INTEGER > 3 THEN 'Module'
+        WHEN json_extract(ast_summary(nodes), '$.functions')::INTEGER > 1 THEN 'Library'
         ELSE 'Script'
     END as file_type
 FROM read_ast_objects('test/data/python/simple.py', 'python');

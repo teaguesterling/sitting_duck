@@ -6,13 +6,7 @@ require duckdb_ast
 
 require json
 
-# Create realistic macros for AI agent use cases
-statement ok
-CREATE OR REPLACE MACRO ast_get_names(nodes, node_type:='function_definition') AS (
-    (SELECT json_group_array(json_extract_string(je.value, '$.name'))
-     FROM json_each(nodes) AS je
-     WHERE json_extract_string(je.value, '$.type') = 'function_definition')
-);
+# Removed: Don't override built-in macros
 
 statement ok
 CREATE OR REPLACE MACRO ast_find_calls(nodes, function_name) AS (
@@ -30,21 +24,21 @@ CREATE OR REPLACE MACRO ast_complexity_score(nodes) AS (
 
 # Scenario 1: Find all functions in a codebase
 query I
-SELECT nodes.ast_get_names(nodes, node_type:='function_definition')::VARCHAR as all_functions
+SELECT ast_get_names(nodes, node_type:='function_definition')::VARCHAR as all_functions
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 ["hello","__init__","add","main"]
 
 # Scenario 2: Check if a specific function exists
 query I
-SELECT nodes.ast_get_names(nodes, node_type:='function_definition')::VARCHAR LIKE '%main%' as has_main_function
+SELECT ast_get_names(nodes, node_type:='function_definition')::VARCHAR LIKE '%main%' as has_main_function
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 true
 
 # Scenario 3: Count lines of code (estimate from node count)
 query I
-SELECT ROUND(nodes.ast_complexity_score(), 1) as complexity_score
+SELECT ROUND(ast_complexity_score(nodes), 1) as complexity_score
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 19.0
@@ -53,7 +47,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 query I
 SELECT 
     CASE 
-        WHEN nodes.ast_get_names(nodes, node_type:='function_definition')::VARCHAR LIKE '%main%' THEN 'Has main function'
+        WHEN ast_get_names(nodes, node_type:='function_definition')::VARCHAR LIKE '%main%' THEN 'Has main function'
         ELSE 'No clear entry point'
     END as entry_point_analysis
 FROM read_ast_objects('test/data/python/simple.py', 'python');
@@ -71,7 +65,7 @@ SELECT
     END as file_type
 FROM (
     SELECT 
-        json_array_length(nodes.ast_get_names(nodes, node_type:='function_definition')) as func_count,
+        json_array_length(ast_get_names(nodes, node_type:='function_definition')) as func_count,
         (SELECT COUNT(*) FROM json_each(nodes) AS je WHERE json_extract_string(je.value, '$.type') = 'class_definition') as class_count
     FROM read_ast_objects('test/data/python/simple.py', 'python')
 );
