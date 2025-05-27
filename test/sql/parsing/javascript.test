@@ -63,24 +63,27 @@ WHERE type = 'arrow_function';
 
 # Test 6: Using read_ast_objects with JavaScript  
 # ==============================================
-# TODO: Fix JSON escaping issue in hybrid function for template literals
 
-statement ok
-SELECT 1; -- Placeholder
+query I
+SELECT json_array_length(nodes) > 0 as has_nodes
+FROM read_ast_objects('test/data/javascript/simple.js', 'javascript');
+----
+true
 
 # Test 7: Use SQL macros with JavaScript AST
 # ==========================================
 
-# TODO: Fix JSON escaping for template literals in hybrid function
-statement ok
-SELECT 1; -- Placeholder
+query I
+SELECT json_array_length(ast_get_type(nodes, 'function_declaration'))
+FROM read_ast_objects('test/data/javascript/simple.js', 'javascript');
+----
+2
 
 # Test 8: Extract method names from class
 # =======================================
-# TODO: Fix method name extraction for JavaScript - needs property_identifier support
 
-query I
-SELECT COUNT(*) as method_count
+query II
+SELECT class_node.name as class_name, method_node.name as method_name
 FROM read_ast('test/data/javascript/simple.js', 'javascript') class_node
 JOIN read_ast('test/data/javascript/simple.js', 'javascript') class_body
   ON class_node.node_id = class_body.parent_id
@@ -88,9 +91,12 @@ JOIN read_ast('test/data/javascript/simple.js', 'javascript') method_node
   ON class_body.node_id = method_node.parent_id
 WHERE class_node.type = 'class_declaration'
   AND class_body.type = 'class_body'
-  AND method_node.type = 'method_definition';
+  AND method_node.type = 'method_definition'
+ORDER BY class_name, method_name;
 ----
-3
+Calculator	add
+Calculator	constructor
+Calculator	subtract
 
 # Test 9: JavaScript alias 'js' works
 # ===================================

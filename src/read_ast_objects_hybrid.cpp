@@ -5,8 +5,35 @@
 #include "duckdb/main/extension_util.hpp"
 #include "duckdb/common/string_util.hpp"
 #include <sstream>
+#include <iomanip>
+#include <cctype>
 
 namespace duckdb {
+
+// Helper function to escape a string for JSON
+static string EscapeJSONString(const string &str) {
+    stringstream result;
+    for (char c : str) {
+        switch (c) {
+            case '"': result << "\\\""; break;
+            case '\\': result << "\\\\"; break;
+            case '\b': result << "\\b"; break;
+            case '\f': result << "\\f"; break;
+            case '\n': result << "\\n"; break;
+            case '\r': result << "\\r"; break;
+            case '\t': result << "\\t"; break;
+            default:
+                if (c >= 0x20 && c <= 0x7E) {
+                    result << c;
+                } else {
+                    // Unicode escape for non-ASCII characters
+                    result << "\\u" << std::hex << std::setw(4) << std::setfill('0') << (int)(unsigned char)c;
+                }
+                break;
+        }
+    }
+    return result.str();
+}
 
 TableFunction ReadASTObjectsHybridFunction::GetFunction() {
     TableFunction function("read_ast_objects", {LogicalType::VARCHAR, LogicalType::VARCHAR}, Execute, Bind);
@@ -108,13 +135,13 @@ string ReadASTObjectsHybridFunction::ParseFileToJSON(ClientContext &context, con
         // Create JSON object for this node
         json << "{";
         json << "\"id\":" << node_counter << ",";
-        json << "\"type\":\"" << ts_node_type(entry.node) << "\",";
+        json << "\"type\":\"" << EscapeJSONString(ts_node_type(entry.node)) << "\",";
         
         // Extract name using language handler
         const LanguageHandler* handler = parser.GetLanguageHandler(language);
         string name = handler ? handler->ExtractNodeName(entry.node, content) : "";
         if (!name.empty()) {
-            json << "\"name\":\"" << StringUtil::Replace(name, "\"", "\\\"") << "\",";
+            json << "\"name\":\"" << EscapeJSONString(name) << "\",";
         }
         
         // Position
