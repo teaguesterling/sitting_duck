@@ -1,0 +1,146 @@
+# name: test/sql/parsing/cpp.test
+# description: Test C++ language parsing
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: Basic C++ parsing
+# =========================
+
+query III
+SELECT COUNT(*) as total_nodes,
+       COUNT(DISTINCT type) as unique_types,
+       MAX(depth) as max_depth
+FROM read_ast('test/data/cpp/simple.cpp', 'cpp');
+----
+498	90	11
+
+# Test 2: Extract all C++ function names (including methods)
+# ===========================================================
+
+query II
+SELECT name, type
+FROM read_ast('test/data/cpp/simple.cpp', 'cpp')
+WHERE type = 'function_definition' AND name IS NOT NULL
+ORDER BY name;
+----
+Calculator	function_definition
+Container	function_definition
+add	function_definition
+add	function_definition
+get	function_definition
+main	function_definition
+max	function_definition
+multiply	function_definition
+printMessage	function_definition
+size	function_definition
+
+# Test 2b: Extract only free functions (not methods)
+# ===================================================
+
+query I
+SELECT DISTINCT name
+FROM read_ast('test/data/cpp/simple.cpp', 'cpp') f
+WHERE f.type = 'function_definition' 
+  AND f.name IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM read_ast('test/data/cpp/simple.cpp', 'cpp') c
+    WHERE c.type IN ('class_specifier', 'struct_specifier')
+    AND f.start_line > c.start_line 
+    AND f.end_line < c.end_line
+  )
+ORDER BY name;
+----
+main
+max
+printMessage
+
+# Test 3: Extract C++ class names
+# ================================
+
+query II
+SELECT name, normalized_type
+FROM read_ast('test/data/cpp/simple.cpp', 'cpp')
+WHERE normalized_type = 'class_declaration' AND name IS NOT NULL
+ORDER BY name;
+----
+Calculator	class_declaration
+Container	class_declaration
+
+# Test 4: Count normalized types
+# ===============================
+
+query III
+SELECT normalized_type, COUNT(*) as count, COUNT(DISTINCT name) as unique_names
+FROM read_ast('test/data/cpp/simple.cpp', 'cpp')
+WHERE normalized_type IN ('function_declaration', 'class_declaration', 'variable_declaration')
+GROUP BY normalized_type
+ORDER BY normalized_type;
+----
+class_declaration	2	2
+function_declaration	11	9
+variable_declaration	22	0
+
+# Test 5: Extract method names from Calculator class
+# ==================================================
+
+query I
+SELECT COUNT(*) as method_count
+FROM read_ast('test/data/cpp/simple.cpp', 'cpp') class_node
+JOIN read_ast('test/data/cpp/simple.cpp', 'cpp') method_node
+  ON class_node.node_id < method_node.node_id 
+WHERE class_node.name = 'Calculator'
+  AND class_node.normalized_type = 'class_declaration'
+  AND method_node.type = 'function_definition'
+  AND method_node.start_line > class_node.start_line
+  AND method_node.end_line < class_node.end_line;
+----
+4
+
+# Test 6: Find includes
+# =====================
+
+query I
+SELECT COUNT(*) as include_count
+FROM read_ast('test/data/cpp/simple.cpp', 'cpp')
+WHERE type = 'preproc_include';
+----
+3
+
+# Test 7: C++ alias 'c++' works
+# ==============================
+
+query I
+SELECT COUNT(*) > 0 as has_nodes
+FROM read_ast('test/data/cpp/simple.cpp', 'c++');
+----
+true
+
+# Test 8: Using read_ast_objects with C++
+# ========================================
+
+query I
+SELECT json_array_length(nodes) > 0 as has_nodes
+FROM read_ast_objects('test/data/cpp/simple.cpp', 'cpp');
+----
+true
+
+# Test 9: Template usage
+# ======================
+
+query I
+SELECT COUNT(*) as template_count
+FROM read_ast('test/data/cpp/simple.cpp', 'cpp')
+WHERE type = 'template_declaration';
+----
+2
+
+# Test 10: Lambda expressions
+# ===========================
+
+query I
+SELECT COUNT(*) as lambda_count
+FROM read_ast('test/data/cpp/simple.cpp', 'cpp')
+WHERE type = 'lambda_expression';
+----
+1

@@ -42,7 +42,9 @@ set(EXTENSION_SOURCES
     grammars/tree-sitter-python/src/parser.c
     grammars/tree-sitter-python/src/scanner.c
     grammars/tree-sitter-javascript/src/parser.c
-    grammars/tree-sitter-javascript/src/scanner.c)
+    grammars/tree-sitter-javascript/src/scanner.c
+    grammars/tree-sitter-cpp/src/parser.c
+    grammars/tree-sitter-cpp/src/scanner.c)
     # Temporarily disabled while fixing issues:
     # src/ast_type.cpp
     # src/read_ast_objects_function.cpp

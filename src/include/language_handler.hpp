@@ -59,6 +59,19 @@ private:
     static const std::unordered_map<string, string> type_mappings;
 };
 
+// C++ language handler
+class CPPLanguageHandler : public LanguageHandler {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    TSParser* CreateParser() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    
+private:
+    static const std::unordered_map<string, string> type_mappings;
+};
+
 // Language handler registry
 class LanguageHandlerRegistry {
 public:
