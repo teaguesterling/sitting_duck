@@ -15,3 +15,6 @@
 [submodule "grammars/tree-sitter-cpp"]
 	path = grammars/tree-sitter-cpp
 	url = https://github.com/tree-sitter/tree-sitter-cpp.git
+[submodule "grammars/tree-sitter-rust"]
+	path = grammars/tree-sitter-rust
+	url = https://github.com/tree-sitter/tree-sitter-rust
