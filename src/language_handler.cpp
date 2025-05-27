@@ -1,6 +1,7 @@
 #include "language_handler.hpp"
 #include "grammars.hpp"
 #include "duckdb/common/exception.hpp"
+#include <tree_sitter/api.h>
 #include <cstring>
 #include <memory>
 
@@ -9,6 +10,8 @@ extern "C" {
     const TSLanguage *tree_sitter_python();
     const TSLanguage *tree_sitter_javascript();
     const TSLanguage *tree_sitter_cpp();
+    // Temporarily disabled due to ABI compatibility issues:
+    // const TSLanguage *tree_sitter_rust();
 }
 
 namespace duckdb {
@@ -36,6 +39,33 @@ string LanguageHandler::ExtractNodeText(TSNode node, const string &content) cons
         return content.substr(start, end - start);
     }
     return "";
+}
+
+void LanguageHandler::SetParserLanguageWithValidation(TSParser* parser, const TSLanguage* language, const string &language_name) const {
+    if (!language) {
+        throw InvalidInputException("Tree-sitter language for " + language_name + " is NULL");
+    }
+    
+    // Check ABI compatibility
+    uint32_t language_version = ts_language_version(language);
+    if (language_version > TREE_SITTER_LANGUAGE_VERSION) {
+        throw InvalidInputException(
+            language_name + " grammar ABI version " + std::to_string(language_version) + 
+            " is newer than tree-sitter library version " + std::to_string(TREE_SITTER_LANGUAGE_VERSION) +
+            ". Please update the tree-sitter library.");
+    }
+    
+    if (language_version < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION) {
+        throw InvalidInputException(
+            language_name + " grammar ABI version " + std::to_string(language_version) + 
+            " is too old for tree-sitter library (minimum version: " + 
+            std::to_string(TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION) +
+            "). Please regenerate the grammar with a newer tree-sitter CLI.");
+    }
+    
+    if (!ts_parser_set_language(parser, language)) {
+        throw InvalidInputException("Failed to set " + language_name + " language for parser");
+    }
 }
 
 //==============================================================================
@@ -87,10 +117,7 @@ TSParser* PythonLanguageHandler::CreateParser() const {
     }
     
     const TSLanguage *ts_language = tree_sitter_python();
-    if (!ts_parser_set_language(parser, ts_language)) {
-        ts_parser_delete(parser);
-        throw InvalidInputException("Failed to set Python language for parser");
-    }
+    SetParserLanguageWithValidation(parser, ts_language, "Python");
     
     return parser;
 }
@@ -179,10 +206,7 @@ TSParser* JavaScriptLanguageHandler::CreateParser() const {
     }
     
     const TSLanguage *ts_language = tree_sitter_javascript();
-    if (!ts_parser_set_language(parser, ts_language)) {
-        ts_parser_delete(parser);
-        throw InvalidInputException("Failed to set JavaScript language for parser");
-    }
+    SetParserLanguageWithValidation(parser, ts_language, "JavaScript");
     
     return parser;
 }
@@ -283,10 +307,7 @@ TSParser* CPPLanguageHandler::CreateParser() const {
     }
     
     const TSLanguage *ts_language = tree_sitter_cpp();
-    if (!ts_parser_set_language(parser, ts_language)) {
-        ts_parser_delete(parser);
-        throw InvalidInputException("Failed to set C++ language for parser");
-    }
+    SetParserLanguageWithValidation(parser, ts_language, "C++");
     
     return parser;
 }
@@ -347,6 +368,106 @@ string CPPLanguageHandler::ExtractNodeName(TSNode node, const string &content) c
 }
 
 //==============================================================================
+// RustLanguageHandler implementation
+//==============================================================================
+
+const std::unordered_map<string, string> RustLanguageHandler::type_mappings = {
+    // Declarations
+    {"function_item", NormalizedTypes::FUNCTION_DECLARATION},
+    {"struct_item", NormalizedTypes::CLASS_DECLARATION},
+    {"enum_item", NormalizedTypes::CLASS_DECLARATION},
+    {"trait_item", NormalizedTypes::CLASS_DECLARATION},
+    {"impl_item", NormalizedTypes::CLASS_DECLARATION},
+    {"mod_item", NormalizedTypes::CLASS_DECLARATION},
+    {"let_declaration", NormalizedTypes::VARIABLE_DECLARATION},
+    {"const_item", NormalizedTypes::VARIABLE_DECLARATION},
+    {"static_item", NormalizedTypes::VARIABLE_DECLARATION},
+    
+    // Expressions  
+    {"call_expression", NormalizedTypes::FUNCTION_CALL},
+    {"method_call_expression", NormalizedTypes::FUNCTION_CALL},
+    {"macro_invocation", NormalizedTypes::FUNCTION_CALL},
+    {"identifier", NormalizedTypes::VARIABLE_REFERENCE},
+    {"field_identifier", NormalizedTypes::VARIABLE_REFERENCE},
+    
+    // Literals
+    {"integer_literal", NormalizedTypes::LITERAL},
+    {"float_literal", NormalizedTypes::LITERAL},
+    {"string_literal", NormalizedTypes::LITERAL},
+    {"char_literal", NormalizedTypes::LITERAL},
+    {"boolean_literal", NormalizedTypes::LITERAL},
+    {"raw_string_literal", NormalizedTypes::LITERAL},
+    
+    // Control flow
+    {"binary_expression", NormalizedTypes::BINARY_EXPRESSION},
+    {"if_expression", NormalizedTypes::IF_STATEMENT},
+    {"match_expression", NormalizedTypes::IF_STATEMENT},
+    {"while_expression", NormalizedTypes::LOOP_STATEMENT},
+    {"loop_expression", NormalizedTypes::LOOP_STATEMENT},
+    {"for_expression", NormalizedTypes::LOOP_STATEMENT},
+    {"return_expression", NormalizedTypes::RETURN_STATEMENT},
+    
+    // Other
+    {"line_comment", NormalizedTypes::COMMENT},
+    {"block_comment", NormalizedTypes::COMMENT},
+    {"use_declaration", NormalizedTypes::IMPORT_STATEMENT},
+    {"extern_crate_declaration", NormalizedTypes::IMPORT_STATEMENT},
+};
+
+string RustLanguageHandler::GetLanguageName() const {
+    return "rust";
+}
+
+vector<string> RustLanguageHandler::GetAliases() const {
+    return {"rust", "rs"};
+}
+
+TSParser* RustLanguageHandler::CreateParser() const {
+    TSParser* parser = ts_parser_new();
+    if (!parser) {
+        throw InvalidInputException("Failed to create tree-sitter parser");
+    }
+    
+    //const TSLanguage* ts_language = tree_sitter_rust();
+    //SetParserLanguageWithValidation(parser, ts_language, "Rust");
+    
+    return parser;
+}
+
+string RustLanguageHandler::GetNormalizedType(const string &node_type) const {
+    auto it = type_mappings.find(node_type);
+    if (it != type_mappings.end()) {
+        return it->second;
+    }
+    return node_type;
+}
+
+string RustLanguageHandler::ExtractNodeName(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    string node_type(node_type_str);
+    string normalized = GetNormalizedType(node_type);
+    
+    if (normalized == NormalizedTypes::FUNCTION_DECLARATION) {
+        // For function_item, look for identifier child
+        return FindIdentifierChild(node, content);
+    } else if (normalized == NormalizedTypes::CLASS_DECLARATION) {
+        // For struct_item, enum_item, trait_item, etc., look for type_identifier
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "identifier") == 0) {
+                return ExtractNodeText(child, content);
+            }
+        }
+    } else if (normalized == NormalizedTypes::VARIABLE_REFERENCE) {
+        return ExtractNodeText(node, content);
+    }
+    
+    return "";
+}
+
+//==============================================================================
 // LanguageHandlerRegistry implementation
 //==============================================================================
 
@@ -360,6 +481,9 @@ LanguageHandlerRegistry& LanguageHandlerRegistry::GetInstance() {
 }
 
 void LanguageHandlerRegistry::RegisterHandler(std::unique_ptr<LanguageHandler> handler) {
+    // Validate ABI compatibility before registering
+    ValidateLanguageABI(handler.get());
+    
     string language = handler->GetLanguageName();
     vector<string> aliases = handler->GetAliases();
     
@@ -398,10 +522,25 @@ vector<string> LanguageHandlerRegistry::GetSupportedLanguages() const {
     return languages;
 }
 
+void LanguageHandlerRegistry::ValidateLanguageABI(const LanguageHandler* handler) const {
+    // Create a test parser to validate the language
+    TSParser* parser = handler->CreateParser();
+    if (!parser) {
+        throw InvalidInputException("Language handler for '" + handler->GetLanguageName() + 
+                                   "' failed to create parser");
+    }
+    
+    // CreateParser should have already validated ABI compatibility
+    // If we got here, the language is compatible
+    ts_parser_delete(parser);
+}
+
 void LanguageHandlerRegistry::InitializeDefaultHandlers() {
     RegisterHandler(std::unique_ptr<LanguageHandler>(new PythonLanguageHandler()));
     RegisterHandler(std::unique_ptr<LanguageHandler>(new JavaScriptLanguageHandler()));
     RegisterHandler(std::unique_ptr<LanguageHandler>(new CPPLanguageHandler()));
+    // Temporarily disabled due to ABI compatibility issues:
+    // RegisterHandler(std::unique_ptr<LanguageHandler>(new RustLanguageHandler()));
 }
 
 } // namespace duckdb

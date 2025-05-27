@@ -243,8 +243,8 @@ void ReadASTObjectsHybridFunction::Execute(ClientContext &context, TableFunction
             
             count++;
         } catch (const Exception &e) {
-            // Skip files that can't be parsed and continue
-            // In production, might want to return error info
+            // Propagate parsing errors instead of silently skipping
+            throw IOException("Failed to parse file '" + file_path + "': " + e.what());
         }
         
         data.current_file_idx++;

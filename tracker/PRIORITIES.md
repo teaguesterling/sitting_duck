@@ -1,6 +1,6 @@
 # DuckDB AST Extension - Development Priorities
 
-**Last Updated:** 2025-05-26
+**Last Updated:** 2025-05-27
 
 ## Priority Levels
 
@@ -15,95 +15,162 @@
 - Clean API implementation (13 core macros)
 - Test suite fixes for DuckDB 1.3
 - All tests passing (19 test cases, 387 assertions)
+- `parse_ast()` function implementation
+- Python, JavaScript, C++ language support
+- Rust temporarily disabled (ABI issues)
+
+🚧 **In Design:**
+- Annotation system architecture
+- Columnar native AST implementation
 
 ## Immediate Priorities (Phase 1)
 
-### P1 - Core Functionality
-1. **[FEATURE] Chain Methods Implementation** - C++ function for method chaining
-   - Enable `ast(nodes).get_type().count()` syntax
-   - Already have ast() entrypoint, need chain methods
+### P0 - Critical Fixes
+1. **[BUG] Rust Parser ABI Compatibility** - Fix tree-sitter-rust integration
+   - Currently causes system freeze
+   - Temporarily disabled
    
-2. **[FEATURE] Language Support** - Add JavaScript, C++, SQL
-   - Core value proposition of the extension
-   - Tree-sitter grammars ready
+### P1 - Core Functionality (Peer Review Priority)
+1. **[FEATURE] ast_get_source()** - Extract source code with context (#013)
+   - HIGHEST PRIORITY from peer review
+   - Extract code snippets with surrounding lines
+   - Immediate value for users
    
-3. **[FEATURE] Performance Optimization** - C++ hot-path macros
-   - Critical for 10K+ node files
-   - 10-100x improvement expected
+2. **[FEATURE] Parse-Time Filtering** - Performance at scale (#014)
+   - Add `only_types` parameter to read_ast functions  
+   - Essential for large codebases
+   - 5-50x memory reduction
+   
+3. **[FEATURE] ast_get_parent_chain()** - Navigate scope hierarchy (#015)
+   - Get all ancestors of a node
+   - Critical for scope understanding
+   - Enables qualified name extraction
+   
+4. **[FEATURE] ast_find_references()** - Find symbol usage (#016)
+   - Find all uses of a variable/function
+   - Core navigation feature
+   - Scope-aware search
+   
+5. **[FEATURE] ast_get_calls()** - Extract function calls (#017)
+   - Find dependencies within functions
+   - Essential for call graph analysis
+   - Complexity metrics
 
-### P2 - Quality & UX
-1. **[FEATURE] Error Context Tracking** - Enhanced error messages
-   - Add file path, line numbers to errors
-   - Critical for debugging
+### P1 - Architecture Foundation
+1. **[FEATURE] Annotation System Implementation** - Flexible enrichment framework
+   - Separate pure AST from enrichments
+   - Enable lazy evaluation
+   - Support user-defined annotations
    
-2. **[FEATURE] Source Code Extraction** - ast_source_* functions
+2. **[FEATURE] Core Annotations** - Essential enrichments
+   - `ast_get_locations()` - Extract position info
+   - `ast_get_signatures()` - Function/method signatures  
+   - `ast_get_definitions()` - Combined location + signature
+
+### P2 - Performance & Quality
+1. **[FEATURE] Parse-time Filtering** - Reduce memory usage
+   - Add node_filter parameter to read_ast functions
+   - Support include/exclude patterns
+   - Language-specific presets
+   
+2. **[FEATURE] Source Code Extraction** - ast_get_source with annotations
    - Extract code snippets with context
-   - Highly requested by AI agents
-   
-3. **[FEATURE] Short Names Registration** - Unprefixed aliases
-   - Better ergonomics for interactive use
-   - Optional feature
+   - Leverage position annotations
 
 ## Medium-term Priorities (Phase 2)
 
-### P1 - Performance at Scale
-1. **[FEATURE] Filter Pushdown** - Parse-time filtering
-   - Reduce nodes loaded into memory
-   - Essential for large codebases
+### P1 - Columnar Native Implementation
+1. **[FEATURE] Columnar AST Type** - High-performance native type
+   - Implement ast_flat columnar structure
+   - 10-100x faster type filtering
+   - Memory-efficient for large ASTs
+   - See design: `/workspace/design/columnar_ast_design.md`
    
-2. **[FEATURE] AST Caching** - Session-level cache
-   - Avoid re-parsing same files
-   - Major UX improvement
+2. **[FEATURE] Vectorized Operations** - Leverage DuckDB's columnar engine
+   - SIMD-optimized filtering
+   - Cache-friendly access patterns
+   - Null column optimization
 
-### P2 - AI Agent Experience  
-1. **[FEATURE] Semantic Functions** - High-level helpers
-   - `code_functions()`, `code_classes()`, etc.
-   - 90% of AI agent use cases
+### P2 - Advanced Annotations
+1. **[FEATURE] Semantic Annotations** - Higher-level analysis
+   - Complexity metrics
+   - Dependency tracking
+   - Scope resolution
    
-2. **[FEATURE] Progressive Disclosure** - Layered API
-   - Simple queries for common cases
-   - Full power when needed
+2. **[FEATURE] User-defined Annotations** - Extensibility
+   - Macro-based annotation functions
+   - Composable annotation pipeline
+   - Domain-specific enrichments
 
 ## Long-term Vision (Phase 3)
 
-### P3 - Architecture Evolution
-1. **[FEATURE] Native AST Type** - Custom DuckDB type
-   - Eliminate JSON overhead
-   - Requires significant engineering
+### P2 - Integration Features  
+1. **[FEATURE] Incremental Parsing** - Parse only changes
+   - Track file modifications
+   - Update AST incrementally
+   - Cache invalidation
    
-2. **[FEATURE] Incremental Parsing** - Parse only changes
-   - Essential for IDE integration
-   - Complex implementation
+2. **[FEATURE] Cross-file Analysis** - Repository-wide queries
+   - Module dependency graphs
+   - Call flow analysis
+   - Impact assessment
+
+### P3 - Ecosystem
+1. **[FEATURE] Language Server Protocol** - IDE integration
+   - Real-time AST updates
+   - Code navigation support
+   - Refactoring assistance
    
-3. **[FEATURE] Distributed Processing** - Multi-machine support
-   - Handle entire repositories
-   - Cloud deployment ready
+2. **[FEATURE] Cloud Deployment** - Distributed processing
+   - Handle massive codebases
+   - Parallel parsing
+   - Result aggregation
 
 ## Implementation Roadmap
 
-### Week 1-2: Foundation
-- [ ] Implement chain methods in C++
-- [ ] Add JavaScript language support
-- [ ] Create performance benchmarks
+### Sprint 1 (Current): Annotation Foundation
+- [x] Design annotation system architecture
+- [x] Design columnar AST implementation
+- [ ] Implement base annotation infrastructure
+- [ ] Add ast_get_locations() macro
+- [ ] Test with existing languages
 
-### Week 3-4: Performance
-- [ ] C++ implementation of core macros
-- [ ] Add filter pushdown
-- [ ] Implement basic caching
+### Sprint 2: Core Annotations
+- [ ] Implement signature extraction
+- [ ] Add scope calculation
+- [ ] Create annotation presets
+- [ ] Update documentation
 
-### Week 5-6: AI Agent UX
-- [ ] Create semantic helper functions
-- [ ] Add error context propagation
-- [ ] Write AI agent cookbook
+### Sprint 3: Columnar Prototype
+- [ ] Implement ast_flat type
+- [ ] Create columnar parser output
+- [ ] Add vectorized filtering
+- [ ] Benchmark vs JSON
 
-### Week 7-8: Polish
-- [ ] Performance testing suite
-- [ ] Documentation update
-- [ ] Example notebooks
+### Sprint 4: Integration
+- [ ] Migration utilities
+- [ ] Compatibility layer
+- [ ] Performance testing
+- [ ] User documentation
 
 ## Success Metrics
 
-1. **Performance**: <1s query on 10K+ node files
-2. **Usability**: 90% queries use high-level API
-3. **Reliability**: Zero regression in test suite
-4. **Adoption**: Positive AI agent feedback
+1. **Performance**: 
+   - <100ms query on 100K node files
+   - 10x improvement in type filtering
+   - 50% memory reduction
+
+2. **Usability**: 
+   - 90% queries use chainable API
+   - Annotation system adopted by users
+   - Clear migration path
+
+3. **Reliability**: 
+   - All languages working (including Rust)
+   - Zero regression in test suite
+   - Comprehensive error handling
+
+4. **Extensibility**:
+   - User-created annotations in use
+   - Community language handlers
+   - Integration with other tools

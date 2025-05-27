@@ -8,6 +8,7 @@
 #include "read_ast_objects_hybrid.hpp"
 #include "ast_sql_macros.hpp"
 #include "short_names_function.hpp"
+#include "parse_ast_function.hpp"
 
 namespace duckdb {
 
@@ -26,6 +27,9 @@ static void LoadInternal(DatabaseInstance &instance) {
 	
 	// Register the hybrid read_ast_objects table function
 	RegisterReadASTObjectsHybridFunction(instance);
+	
+	// Register the parse_ast scalar function
+	ParseASTFunction::Register(instance);
 	
 	// Register SQL macros for natural AST querying
 	// Note: These require json_each which is available in DuckDB 1.3+

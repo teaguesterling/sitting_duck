@@ -31,6 +31,9 @@ protected:
     
     // Helper method for extracting node text
     string ExtractNodeText(TSNode node, const string &content) const;
+    
+    // Helper method for setting language with ABI validation
+    void SetParserLanguageWithValidation(TSParser* parser, const TSLanguage* language, const string &language_name) const;
 };
 
 // Python language handler
@@ -72,6 +75,19 @@ private:
     static const std::unordered_map<string, string> type_mappings;
 };
 
+// Rust language handler
+class RustLanguageHandler : public LanguageHandler {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    TSParser* CreateParser() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    
+private:
+    static const std::unordered_map<string, string> type_mappings;
+};
+
 // Language handler registry
 class LanguageHandlerRegistry {
 public:
@@ -92,6 +108,9 @@ private:
     std::unordered_map<string, string> alias_to_language;
     
     void InitializeDefaultHandlers();
+    
+    // Validate language ABI compatibility
+    void ValidateLanguageABI(const LanguageHandler* handler) const;
 };
 
 // Normalized node type constants

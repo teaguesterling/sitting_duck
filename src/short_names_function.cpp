@@ -67,15 +67,11 @@ static void RegisterShortNamesFunction(DataChunk &args, ExpressionState &state, 
         const char* chain_methods_sql = GetEmbeddedSqlMacro("02b_chain_methods.sql");
         
         if (!chain_methods_sql) {
-            // Fall back to loading from embedded macros if available
-            result.SetValue(0, Value("Chain methods SQL file not found in embedded resources"));
-            return;
+            throw InvalidInputException("Chain methods SQL file not found in embedded resources");
         }
         
         // Split and execute the chain methods SQL statements
         auto statements = SplitSQLStatements(chain_methods_sql);
-        int loaded = 0;
-        int failed = 0;
         
         for (const auto &statement : statements) {
             // Skip empty statements
@@ -85,45 +81,14 @@ static void RegisterShortNamesFunction(DataChunk &args, ExpressionState &state, 
             
             auto load_result = conn->Query(statement);
             if (load_result->HasError()) {
-                failed++;
-            } else {
-                loaded++;
+                throw InvalidInputException("Failed to register short names: " + load_result->GetError());
             }
         }
         
-        // Count how many macros were created
-        auto count_result = conn->Query(R"(
-            SELECT COUNT(*) as cnt
-            FROM duckdb_functions() 
-            WHERE function_name IN (
-                'get_type', 'get_names', 'get_depth', 
-                'filter_pattern', 'filter_has_name',
-                'nav_children', 'nav_parent', 'summary',
-                'count_nodes', 'first_node', 'last_node',
-                'find_type', 'find_depth', 'extract_names',
-                'children', 'parent', 'len', 'size'
-            )
-            AND function_type = 'macro'
-        )");
-        
-        if (count_result->HasError()) {
-            result.SetValue(0, Value("Chain methods loaded but could not verify: " + count_result->GetError()));
-            return;
-        }
-        
-        auto count = count_result->GetValue(0, 0).GetValue<int32_t>();
-        
-        string message = "Successfully loaded " + std::to_string(loaded) + " SQL statements, ";
-        message += "created " + std::to_string(count) + " chain methods. ";
-        if (failed > 0) {
-            message += std::to_string(failed) + " statements failed. ";
-        }
-        message += "\nYou can now use ast(nodes).method() syntax for chaining.";
-        
-        result.SetValue(0, Value(message));
+        // Function returns void - no output
         
     } catch (const std::exception &e) {
-        result.SetValue(0, Value("Error: " + string(e.what())));
+        throw InvalidInputException("Error registering short names: " + string(e.what()));
     }
 }
 
@@ -132,7 +97,7 @@ void RegisterDuckDBASTShortNamesFunction(DatabaseInstance &db) {
     ScalarFunction short_names_func(
         "duckdb_ast_register_short_names",
         {}, // No input parameters
-        LogicalType::VARCHAR, // Returns a message
+        LogicalType::SQLNULL, // Returns void/NULL - no output
         RegisterShortNamesFunction
     );
     

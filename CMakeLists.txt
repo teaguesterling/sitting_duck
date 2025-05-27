@@ -38,13 +38,18 @@ set(EXTENSION_SOURCES
     src/read_ast_objects_hybrid.cpp
     src/ast_sql_macros.cpp
     src/short_names_function.cpp
+    src/parse_ast_function.cpp
     src/grammars.cpp
     grammars/tree-sitter-python/src/parser.c
     grammars/tree-sitter-python/src/scanner.c
     grammars/tree-sitter-javascript/src/parser.c
     grammars/tree-sitter-javascript/src/scanner.c
     grammars/tree-sitter-cpp/src/parser.c
-    grammars/tree-sitter-cpp/src/scanner.c)
+    grammars/tree-sitter-cpp/src/scanner.c
+    # Temporarily disabled due to ABI compatibility issues:
+    # grammars/tree-sitter-rust/src/parser.c
+    # grammars/tree-sitter-rust/src/scanner.c
+    )
     # Temporarily disabled while fixing issues:
     # src/ast_type.cpp
     # src/read_ast_objects_function.cpp

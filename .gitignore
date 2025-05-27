@@ -1,3 +1,4 @@
+.*.sw[pqo]
 build
 .idea
 cmake-build-debug
