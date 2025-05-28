@@ -33,17 +33,11 @@ static void LoadInternal(DatabaseInstance &instance) {
 	
 	// Register SQL macros for natural AST querying
 	// Note: These require json_each which is available in DuckDB 1.3+
-	// Try to auto-load the JSON extension
-	try {
-		ExtensionHelper::AutoLoadExtension(instance, "json");
-		RegisterASTSQLMacros(instance);
-		
-		// Register the short names function
-		RegisterDuckDBASTShortNamesFunction(instance);
-	} catch (...) {
-		// If JSON extension can't be loaded, skip macro registration
-		// This allows the extension to work even without JSON support
-	}
+	ExtensionHelper::AutoLoadExtension(instance, "json");
+	RegisterASTSQLMacros(instance);
+	
+	// Register the short names function (doesn't depend on JSON)
+	RegisterDuckDBASTShortNamesFunction(instance);
 	
 	// TODO: Re-enable once we fix the issues
 	// Register AST helper functions  

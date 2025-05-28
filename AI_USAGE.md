@@ -1,7 +1,7 @@
 # DuckDB AST Extension - AI Agent Usage Guide
 
-**Last Updated:** 2025-05-26  
-**Extension Version:** 1.0 (Clean API)
+**Last Updated:** 2025-05-27  
+**Extension Version:** 1.1 (Clean API + Peer Review Features)
 
 ## Overview
 
@@ -81,6 +81,16 @@ ast_nav_parent(nodes, child_id)                      -- Get parent node
 
 -- ANALYSIS FUNCTIONS
 ast_summary(nodes)                                   -- Get statistics and counts
+
+-- SOURCE CODE EXTRACTION (NEW!)
+ast_get_source(source_text, start_line, end_line, context_lines := 0)  -- Extract lines from source
+ast_extract_source(file_path, start_line, end_line, context_lines := 0) -- Extract from file
+parse_ast(code, language)                            -- Parse code string to JSON AST
+
+-- LOCATION & REFERENCE FUNCTIONS (NEW!)
+ast_get_locations(nodes)                             -- Extract location info from nodes
+ast_get_calls(nodes, root_node_id := NULL)          -- Find all function calls
+ast_get_parent_chain(nodes, target_node_id, max_depth := NULL) -- Get ancestors (placeholder)
 ```
 
 ### 4. Chain Methods (After `duckdb_ast_register_short_names()`)
@@ -169,7 +179,59 @@ SELECT
 FROM python_functions, js_functions, cpp_functions;
 ```
 
-### Scenario 5: Bulk Analysis
+### Scenario 5: Source Code Extraction (NEW!)
+```sql
+-- Extract specific lines from a file with context
+SELECT ast_extract_source('complex_algo.py', 45, 52, context_lines := 2) as algorithm_impl;
+
+-- Parse inline code and analyze it
+WITH parsed AS (
+    SELECT parse_ast('def calculate(x): return x * 2', 'python') as ast
+)
+SELECT json_extract_string(ast, '$.children[0].name') as function_name,
+       json_extract_string(ast, '$.children[0].children[1].type') as return_type
+FROM parsed;
+
+-- Get function implementations with source code
+SELECT 
+    node->>'name' as function_name,
+    ast_extract_source(
+        'myfile.py', 
+        (node->'position'->>'start_row')::INTEGER + 1,
+        (node->'position'->>'end_row')::INTEGER + 1,
+        context_lines := 1
+    ) as source_code
+FROM read_ast_objects('myfile.py', 'python'),
+     json_each(ast_get_type(nodes, 'function_definition')) as t(node);
+```
+
+### Scenario 6: Location and Reference Analysis (NEW!)
+```sql
+-- Get location information for all named entities
+SELECT * FROM ast_get_locations(nodes)
+WHERE type = 'function_definition'
+FROM read_ast_objects('module.py', 'python');
+
+-- Find all function calls in a file
+SELECT 
+    called_function,
+    call_type,
+    line
+FROM read_ast_objects('script.py', 'python'),
+     ast_get_calls(nodes);
+
+-- Combine with source extraction for context
+WITH calls AS (
+    SELECT * FROM read_ast_objects('script.py', 'python'),
+                  ast_get_calls(nodes)
+)
+SELECT 
+    called_function,
+    ast_extract_source('script.py', line, line, context_lines := 1) as call_context
+FROM calls;
+```
+
+### Scenario 7: Bulk Analysis
 ```sql
 -- Analyze multiple files at once
 SELECT 
@@ -183,6 +245,56 @@ FROM (
     UNION ALL
     SELECT 'file3.py' as filename, nodes FROM read_ast_objects('file3.py', 'python')
 );
+```
+
+## New Peer Review Features (v1.1)
+
+### Source Code Extraction
+The extension now provides powerful source code extraction capabilities:
+
+```sql
+-- Extract lines from source text (useful when you already have the code)
+ast_get_source(source_text, start_line, end_line, context_lines := 0)
+
+-- Extract lines directly from a file
+ast_extract_source(file_path, start_line, end_line, context_lines := 0)
+
+-- Parse code string into AST JSON
+parse_ast(code, language)
+```
+
+### Location and Analysis Functions
+```sql
+-- Get location info for all named nodes
+ast_get_locations(nodes) 
+-- Returns: name, type, start_line, end_line, start_column, end_column
+
+-- Find all function calls in AST
+ast_get_calls(nodes, root_node_id := NULL)
+-- Returns: called_function, call_type, line
+
+-- Get parent chain (placeholder - requires parent tracking)
+ast_get_parent_chain(nodes, target_node_id, max_depth := NULL)
+```
+
+### Integration Examples
+```sql
+-- Full workflow: Parse file and extract function implementations
+WITH functions AS (
+    SELECT 
+        node->>'name' as name,
+        (node->'position'->>'start_row')::INTEGER + 1 as start_line,
+        (node->'position'->>'end_row')::INTEGER + 1 as end_line
+    FROM read_ast_objects('module.py', 'python'),
+         json_each(ast_get_type(nodes, 'function_definition')) as t(node)
+)
+SELECT 
+    name,
+    ast_extract_source('module.py', start_line, end_line) as implementation
+FROM functions;
+
+-- Use the built-in integration macro
+SELECT * FROM ast_get_functions_with_source('module.py', 'python', context_lines := 2);
 ```
 
 ## Best Practices for AI Agents
@@ -278,9 +390,11 @@ SELECT * FROM read_ast_objects('file.py');               -- ❌ Will fail
 ## Future Features (Coming Soon)
 
 - **SQL Language Support**: Analyze DDL, DML, and DQL statements
+- **Parent Tracking**: Full implementation of `ast_get_parent_chain` for scope analysis
 - **Context-Aware Normalization**: Better method vs function differentiation  
 - **Multi-Part Names**: Handle `schema.table.column` style references
 - **Performance Optimizations**: C++ hot-path for large codebases
+- **Columnar AST Format**: Native DuckDB storage for better performance
 
 ## Quick Reference Card
 

@@ -85,6 +85,19 @@ CREATE OR REPLACE MACRO size(nodes) AS (
     json_array_length(nodes)
 );
 
+-- Peer review features (chain methods)
+CREATE OR REPLACE MACRO get_locations(nodes) AS (
+    ast_get_locations(nodes)
+);
+
+CREATE OR REPLACE MACRO get_calls(nodes, root_node_id := NULL) AS (
+    ast_get_calls(nodes, root_node_id := root_node_id)
+);
+
+CREATE OR REPLACE MACRO get_parent_chain(nodes, target_node_id, max_depth := NULL) AS (
+    ast_get_parent_chain(nodes, target_node_id, max_depth := max_depth)
+);
+
 -- ===================================
 -- SHORT NAME ALIASES (WITHOUT ast_ PREFIX)
 -- ===================================
