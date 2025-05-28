@@ -446,10 +446,10 @@ CREATE OR REPLACE MACRO ast_get_locations(nodes) AS (
         (SELECT json_group_array(json_object(
             'name', json_extract_string(je.value, '$.name'),
             'type', json_extract_string(je.value, '$.type'), 
-            'start_line', json_extract(je.value, '$.position.start_row') + 1,
-            'end_line', json_extract(je.value, '$.position.end_row') + 1,
-            'start_column', json_extract(je.value, '$.position.start_column'),
-            'end_column', json_extract(je.value, '$.position.end_column')
+            'start_line', CAST(json_extract(je.value, '$.start.line') AS INTEGER),
+            'end_line', CAST(json_extract(je.value, '$.end.line') AS INTEGER),
+            'start_column', CAST(json_extract(je.value, '$.start.column') AS INTEGER),
+            'end_column', CAST(json_extract(je.value, '$.end.column') AS INTEGER)
         ))
         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
         WHERE json_extract_string(je.value, '$.name') IS NOT NULL),
@@ -504,12 +504,11 @@ CREATE OR REPLACE MACRO ast_get_calls(nodes, root_node_id := NULL) AS (
         (SELECT json_group_array(json_object(
             'called_function', json_extract_string(je.value, '$.name'),
             'call_type', json_extract_string(je.value, '$.type'),
-            'line', json_extract(je.value, '$.position.start_row') + 1
+            'line', CAST(json_extract(je.value, '$.start.line') AS INTEGER)
         ))
         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
         WHERE (json_extract_string(je.value, '$.normalized_type') = 'function_call'
                OR json_extract_string(je.value, '$.type') LIKE '%call%')
-          AND json_extract_string(je.value, '$.name') IS NOT NULL
           AND (root_node_id IS NULL 
                OR json_extract_string(je.value, '$.id') = root_node_id
                OR json_extract_string(je.value, '$.parent_id') = root_node_id)),
