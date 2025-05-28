@@ -1,0 +1,155 @@
+# Peer Review Features Tests
+# Tests for ast_get_source, ast_extract_source, parse_ast, ast_get_locations, ast_get_calls
+
+require duckdb_ast
+
+statement ok
+LOAD 'duckdb_ast';
+
+# Test ast_get_source - basic extraction
+query I
+SELECT ast_get_source('line1' || chr(10) || 'line2' || chr(10) || 'line3', 2, 2);
+----
+line2
+
+# Test ast_get_source - with context lines (returns multiline string)
+query I
+SELECT replace(ast_get_source('line1' || chr(10) || 'line2' || chr(10) || 'line3' || chr(10) || 'line4', 2, 3, context_lines := 1), chr(10), '\n');
+----
+line1\nline2\nline3\nline4
+
+# Test ast_get_source - edge case: requesting lines beyond text
+query I
+SELECT replace(ast_get_source('line1' || chr(10) || 'line2', 1, 5, context_lines := 0), chr(10), '\n');
+----
+line1\nline2
+
+# Test ast_extract_source - from a real file
+query I
+SELECT length(ast_extract_source('test/data/python/simple.py', 1, 3)) > 0;
+----
+true
+
+# Test ast_extract_source - specific function extraction
+query I
+SELECT ast_extract_source('test/data/python/simple.py', 1, 3) LIKE '%hello%';
+----
+true
+
+# Test parse_ast - basic parsing
+query I
+SELECT json_extract_string(parse_ast('def test(): pass', 'python'), '$.type');
+----
+module
+
+# Test parse_ast - extract function name
+query I
+SELECT json_extract_string(parse_ast('def hello(): pass', 'python'), '$.children[0].name');
+----
+hello
+
+# Test parse_ast - JavaScript
+query I
+SELECT json_extract_string(parse_ast('function test() { return 42; }', 'javascript'), '$.children[0].type');
+----
+function_declaration
+
+# Test parse_ast - C++
+query I
+SELECT json_extract_string(parse_ast('int main() { return 0; }', 'cpp'), '$.type');
+----
+translation_unit
+
+# Test ast_get_locations with real AST data
+query II
+WITH parsed AS (
+    SELECT * FROM read_ast_objects('test/data/python/simple.py', 'python')
+),
+locations AS (
+    SELECT * FROM parsed, (ast_get_locations(nodes))
+)
+SELECT COUNT(*) > 0, COUNT(DISTINCT type) > 1
+FROM locations;
+----
+true	true
+
+# Test specific location extraction
+query IIII
+WITH parsed AS (
+    SELECT * FROM read_ast_objects('test/data/python/simple.py', 'python')
+)
+SELECT name, type, start_line, end_line
+FROM parsed, (ast_get_locations(nodes))
+WHERE name = 'hello';
+----
+hello	function_definition	1	3
+
+# Test ast_get_calls
+query II
+WITH parsed AS (
+    SELECT * FROM read_ast_objects('test/data/python/simple.py', 'python')
+)
+SELECT COUNT(*) AS call_count, COUNT(DISTINCT called_function) AS unique_functions
+FROM parsed, (ast_get_calls(nodes));
+----
+3	3
+
+# Test integration: parse file and extract function with source
+query III
+WITH functions AS (
+    SELECT 
+        node->>'name' as name,
+        (node->'position'->>'start_row')::INTEGER + 1 as start_line,
+        (node->'position'->>'end_row')::INTEGER + 1 as end_line
+    FROM read_ast_objects('test/data/python/simple.py', 'python'),
+         json_each(ast_get_type(nodes, 'function_definition')) as t(node)
+)
+SELECT 
+    name,
+    start_line,
+    length(ast_extract_source('test/data/python/simple.py', start_line, end_line)) > 0 as has_source
+FROM functions
+WHERE name = 'hello';
+----
+hello	1	true
+
+# Test ast_get_functions_with_source macro
+query IIII
+SELECT function_name, start_line, end_line, length(source_code) > 0 as has_source
+FROM ast_get_functions_with_source('test/data/python/simple.py', 'python')
+WHERE function_name = 'main';
+----
+main	13	15	true
+
+# Test with method chaining after enabling short names
+statement ok
+SELECT duckdb_ast_register_short_names();
+
+# Test chained get_locations
+query I
+SELECT COUNT(*)
+FROM read_ast_objects('test/data/python/simple.py', 'python'), 
+     (get_locations(ast(nodes)));
+----
+27
+
+# Test chained get_calls
+query I
+SELECT COUNT(DISTINCT called_function)
+FROM read_ast_objects('test/data/python/simple.py', 'python'),
+     (get_calls(ast(nodes)));
+----
+3
+
+# Test combined chaining - find all function definitions and get their locations
+query II
+WITH parsed AS (
+    SELECT * FROM read_ast_objects('test/data/python/simple.py', 'python')
+)
+SELECT name, start_line
+FROM parsed,
+     get_locations(ast(nodes).get_type('function_definition'))
+ORDER BY start_line;
+----
+hello	1
+main	13

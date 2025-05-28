@@ -22,7 +22,9 @@ def generate_header(sql_dir, output_file):
         '02a_entrypoint.sql',
         '02b_chain_methods.sql',
         '03_legacy.sql',
-        '04_optional.sql'
+        '04_optional.sql',
+        '05_hybrid_json_fix.sql',
+        '06_peer_review_features.sql'
     ]
     
     header_content = """// Auto-generated file - DO NOT EDIT
