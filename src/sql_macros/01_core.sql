@@ -40,14 +40,19 @@ CREATE OR REPLACE MACRO ast_get_type(nodes, types) AS (
     ]
 );
 
--- Extract names from nodes, optionally filtered by type
-CREATE OR REPLACE MACRO ast_get_names(nodes, node_type := NULL) AS (
+-- Transform nodes to names array, optionally filtered by type
+CREATE OR REPLACE MACRO ast_to_names(nodes, node_type := NULL) AS (
     [
         node.name
         for node in COALESCE(nodes, [])
         if node.name IS NOT NULL AND node.name != ''
            AND (node_type IS NULL OR node.type = node_type)
     ]
+);
+
+-- Alias for backward compatibility
+CREATE OR REPLACE MACRO ast_get_names(nodes, node_type := NULL) AS (
+    ast_to_names(nodes, node_type := node_type)
 );
 
 -- Find nodes at specific depth(s) - accepts integer or array

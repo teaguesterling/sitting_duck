@@ -97,6 +97,8 @@ unique_ptr<FunctionData> ReadASTObjectsHybridFunction::Bind(ClientContext &conte
     node_struct_children.push_back(make_pair("parent_id", LogicalType::INTEGER));
     node_struct_children.push_back(make_pair("depth", LogicalType::INTEGER));
     node_struct_children.push_back(make_pair("sibling_index", LogicalType::INTEGER));
+    node_struct_children.push_back(make_pair("children_count", LogicalType::INTEGER));
+    node_struct_children.push_back(make_pair("descendant_count", LogicalType::INTEGER));
     
     auto node_struct_type = LogicalType::STRUCT(node_struct_children);
     auto nodes_array_type = LogicalType::LIST(node_struct_type);
@@ -159,6 +161,8 @@ unique_ptr<FunctionData> ReadASTObjectsHybridFunction::BindOneArg(ClientContext 
     node_struct_children.push_back(make_pair("parent_id", LogicalType::INTEGER));
     node_struct_children.push_back(make_pair("depth", LogicalType::INTEGER));
     node_struct_children.push_back(make_pair("sibling_index", LogicalType::INTEGER));
+    node_struct_children.push_back(make_pair("children_count", LogicalType::INTEGER));
+    node_struct_children.push_back(make_pair("descendant_count", LogicalType::INTEGER));
     
     auto node_struct_type = LogicalType::STRUCT(node_struct_children);
     auto nodes_array_type = LogicalType::LIST(node_struct_type);
@@ -212,6 +216,8 @@ Value ReadASTObjectsHybridFunction::ParseFileToStructs(ClientContext &context, c
         int64_t parent_id;
         int32_t depth;
         int32_t sibling_index;
+        int32_t children_count;
+        int32_t descendant_count;
     };
     
     vector<NodeInfo> nodes;
@@ -224,45 +230,71 @@ Value ReadASTObjectsHybridFunction::ParseFileToStructs(ClientContext &context, c
         int64_t parent_id;
         int32_t depth;
         int32_t sibling_index;
+        bool processed; // Track if node has been processed for descendant counting
+        idx_t node_index; // Index in nodes array for this node
     };
     
     vector<StackEntry> stack;
-    stack.push_back({root, -1, 0, 0});
+    stack.push_back({root, -1, 0, 0, false, 0});
     
     while (!stack.empty()) {
         auto entry = stack.back();
-        stack.pop_back();
         
-        // Extract name using language handler
-        const LanguageHandler* handler = parser.GetLanguageHandler(language);
-        string name = handler ? handler->ExtractNodeName(entry.node, content) : "";
-        
-        // Position
-        TSPoint start = ts_node_start_point(entry.node);
-        TSPoint end = ts_node_end_point(entry.node);
-        
-        // Create node info
-        NodeInfo node_info;
-        node_info.node_id = node_counter;
-        node_info.type = ts_node_type(entry.node);
-        node_info.name = name;
-        node_info.file_path = file_path;
-        node_info.start_line = start.row + 1;
-        node_info.end_line = end.row + 1;
-        node_info.start_column = start.column + 1;
-        node_info.end_column = end.column + 1;
-        node_info.parent_id = entry.parent_id;
-        node_info.depth = entry.depth;
-        node_info.sibling_index = entry.sibling_index;
-        
-        nodes.push_back(node_info);
-        
-        // Add children to stack in reverse order for correct processing
-        int64_t current_id = node_counter++;
-        uint32_t child_count = ts_node_child_count(entry.node);
-        for (int32_t i = child_count - 1; i >= 0; i--) {
-            TSNode child = ts_node_child(entry.node, i);
-            stack.push_back({child, current_id, entry.depth + 1, i});
+        if (!entry.processed) {
+            // First time processing this node - create NodeInfo and add children
+            stack.back().processed = true;
+            stack.back().node_index = nodes.size();
+            
+            // Extract name using language handler
+            const LanguageHandler* handler = parser.GetLanguageHandler(language);
+            string name = handler ? handler->ExtractNodeName(entry.node, content) : "";
+            
+            // Position
+            TSPoint start = ts_node_start_point(entry.node);
+            TSPoint end = ts_node_end_point(entry.node);
+            
+            // Create node info
+            NodeInfo node_info;
+            node_info.node_id = node_counter++;
+            node_info.type = ts_node_type(entry.node);
+            node_info.name = name;
+            node_info.file_path = file_path;
+            node_info.start_line = start.row + 1;
+            node_info.end_line = end.row + 1;
+            node_info.start_column = start.column + 1;
+            node_info.end_column = end.column + 1;
+            node_info.parent_id = entry.parent_id;
+            node_info.depth = entry.depth;
+            node_info.sibling_index = entry.sibling_index;
+            
+            // Set children_count directly
+            uint32_t child_count = ts_node_child_count(entry.node);
+            node_info.children_count = child_count;
+            node_info.descendant_count = 0; // Will be calculated later
+            
+            nodes.push_back(node_info);
+            
+            // Add children to stack in reverse order for correct processing
+            int64_t current_id = node_info.node_id;
+            for (int32_t i = child_count - 1; i >= 0; i--) {
+                TSNode child = ts_node_child(entry.node, i);
+                stack.push_back({child, current_id, entry.depth + 1, i, false, 0});
+            }
+        } else {
+            // Second time - all children have been processed, calculate descendant count
+            stack.pop_back();
+            
+            // Calculate descendant count by summing children + their descendants
+            int32_t descendant_count = 0;
+            int64_t current_node_id = nodes[entry.node_index].node_id;
+            
+            for (const auto &node : nodes) {
+                if (node.parent_id == current_node_id) {
+                    descendant_count += 1 + node.descendant_count;
+                }
+            }
+            
+            nodes[entry.node_index].descendant_count = descendant_count;
         }
     }
     
@@ -290,6 +322,8 @@ Value ReadASTObjectsHybridFunction::ParseFileToStructs(ClientContext &context, c
         struct_children.push_back(make_pair("parent_id", Value::INTEGER(node.parent_id)));
         struct_children.push_back(make_pair("depth", Value::INTEGER(node.depth)));
         struct_children.push_back(make_pair("sibling_index", Value::INTEGER(node.sibling_index)));
+        struct_children.push_back(make_pair("children_count", Value::INTEGER(node.children_count)));
+        struct_children.push_back(make_pair("descendant_count", Value::INTEGER(node.descendant_count)));
         
         struct_values.push_back(Value::STRUCT(struct_children));
     }
@@ -330,7 +364,7 @@ void ReadASTObjectsHybridFunction::Execute(ClientContext &context, TableFunction
             int32_t max_depth = 0;
             for (const auto &struct_val : list_children) {
                 auto &struct_children = StructValue::GetChildren(struct_val);
-                int32_t depth = struct_children[9].GetValue<int32_t>(); // depth field
+                int32_t depth = struct_children[9].GetValue<int32_t>(); // depth field (index 9)
                 max_depth = std::max(max_depth, depth);
             }
             

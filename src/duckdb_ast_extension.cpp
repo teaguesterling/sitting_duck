@@ -39,6 +39,27 @@ static void LoadInternal(DatabaseInstance &instance) {
 	// Register the short names function and pragma (doesn't depend on JSON)
 	RegisterDuckDBASTShortNamesFunction(instance);
 	
+	// Check if user wants short names auto-loaded
+	try {
+		Connection con(instance);
+		auto result = con.Query("SELECT current_setting('duckdb_ast_short_names')");
+		if (result->RowCount() > 0) {
+			auto value = result->GetValue(0, 0);
+			if (!value.IsNull() && value.ToString() == "true") {
+				// Auto-load short names by directly executing the chain methods
+				// This avoids calling the pragma and any output it might produce
+				auto chain_methods_result = con.Query("SELECT duckdb_ast_load_embedded_sql('02b_chain_methods.sql')");
+				if (!chain_methods_result->HasError()) {
+					// Execute the chain methods SQL
+					auto sql_content = chain_methods_result->GetValue(0, 0).ToString();
+					con.Query(sql_content);
+				}
+			}
+		}
+	} catch (...) {
+		// Variable doesn't exist or error - that's fine, skip auto-load
+	}
+	
 	// TODO: Re-enable once we fix the issues
 	// Register AST helper functions  
 	// RegisterASTHelperFunctions(instance);

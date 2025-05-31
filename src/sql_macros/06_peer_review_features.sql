@@ -2,10 +2,10 @@
 -- These macros implement high-priority features from peer review feedback
 
 -- ===================================
--- ast_get_source - Extract source code with context
+-- ast_to_source - Extract source code with context
 -- ===================================
 -- Extracts source code for a node with optional context lines before/after
-CREATE OR REPLACE MACRO ast_get_source(
+CREATE OR REPLACE MACRO ast_to_source(
     source_text,
     start_line, 
     end_line,
@@ -35,12 +35,12 @@ CREATE OR REPLACE MACRO ast_get_source(
 );
 
 -- Simpler version for single nodes (uses position from node)
-CREATE OR REPLACE MACRO ast_node_get_source(
+CREATE OR REPLACE MACRO ast_node_to_source(
     node,
     source_text,
     context_lines := 0
 ) AS (
-    ast_get_source(
+    ast_to_source(
         source_text,
         CAST(node->'start'->>'line' AS INTEGER),
         CAST(node->'end'->>'line' AS INTEGER),
@@ -49,27 +49,37 @@ CREATE OR REPLACE MACRO ast_node_get_source(
 );
 
 -- ===================================
--- ast_get_locations - Extract location information
+-- ast_to_locations - Transform nodes to location information
 -- ===================================
 -- Returns a struct array of location objects for named nodes
-CREATE OR REPLACE MACRO ast_get_locations(nodes) AS (
+CREATE OR REPLACE MACRO ast_to_locations(nodes, include_columns := false) AS (
     [
-        {
-            'name': node.name,
-            'type': node.type,
-            'start_line': node.start_line,
-            'end_line': node.end_line,
-            'start_column': node.start_column,
-            'end_column': node.end_column
-        }
+        CASE 
+            WHEN include_columns THEN {
+                'name': node.name,
+                'type': node.type,
+                'file_path': node.file_path,
+                'start_line': node.start_line,
+                'end_line': node.end_line,
+                'start_column': node.start_column,
+                'end_column': node.end_column
+            }
+            ELSE {
+                'name': node.name,
+                'type': node.type,
+                'file_path': node.file_path,
+                'start_line': node.start_line,
+                'end_line': node.end_line
+            }
+        END
         for node in COALESCE(nodes, [])
         if node.name IS NOT NULL AND node.name != ''
     ]
 );
 
 -- Chain method version
-CREATE OR REPLACE MACRO get_locations(nodes) AS (
-    ast_get_locations(nodes)
+CREATE OR REPLACE MACRO to_locations(nodes, include_columns := false) AS (
+    ast_to_locations(nodes, include_columns:=include_columns)
 );
 
 -- ===================================
@@ -122,18 +132,6 @@ CREATE OR REPLACE MACRO ast_get_calls(nodes, root_node_id := NULL) AS (
                 OR node.node_id = root_node_id
                 OR node.parent_id = root_node_id)
     ]
-);
-
--- Chain method version
-CREATE OR REPLACE MACRO get_calls(nodes) AS (
-    ast_get_calls(nodes)
-);
-
--- ===================================
--- Helper: Check if file content is available
--- ===================================
-CREATE OR REPLACE MACRO ast_has_source(node) AS (
-    node->>'source_file' IS NOT NULL
 );
 
 -- ===================================
@@ -203,7 +201,7 @@ CREATE OR REPLACE MACRO ast_nodes_get_source(nodes, file_content, context_lines 
             'file_path', json_extract_string(je.value, '$.file_path'),
             'start_line', CAST(json_extract(je.value, '$.start.line') AS INTEGER),
             'end_line', CAST(json_extract(je.value, '$.end.line') AS INTEGER),
-            'source', ast_get_source(
+            'source', ast_to_source(
                 file_content,
                 CAST(json_extract(je.value, '$.start.line') AS INTEGER),
                 CAST(json_extract(je.value, '$.end.line') AS INTEGER),
@@ -220,6 +218,49 @@ CREATE OR REPLACE MACRO ast_nodes_get_source(nodes, file_content, context_lines 
 -- Note: This requires the file content to be passed separately
 CREATE OR REPLACE MACRO get_source(nodes, file_content, context_lines := 0) AS (
     ast_nodes_get_source(nodes, file_content, context_lines := context_lines)
+);
+
+-- ===================================
+-- ast_to_summary - Transform nodes to comprehensive summary
+-- ===================================
+-- Returns detailed summary information for each node
+CREATE OR REPLACE MACRO ast_to_summary(nodes, include_columns := false, source_lines := 0) AS (
+    [
+        CASE 
+            WHEN include_columns THEN {
+                'file_path': node.file_path,
+                'location': node.file_path || ':' || node.start_line || '-' || node.end_line,
+                'type': node.type,
+                'name': COALESCE(node.name, ''),
+                'depth': node.depth,
+                -- TODO: Add children_count and descendant_count when available
+                'source_preview': CASE 
+                    WHEN source_lines > 0 THEN 
+                        '(source extraction requires file content)'
+                    ELSE NULL 
+                END
+            }
+            ELSE {
+                'file_path': node.file_path,
+                'location': node.file_path || ':' || node.start_line || '-' || node.end_line,
+                'type': node.type,
+                'name': COALESCE(node.name, ''),
+                'depth': node.depth,
+                -- TODO: Add children_count and descendant_count when available
+                'source_preview': CASE 
+                    WHEN source_lines > 0 THEN 
+                        '(source extraction requires file content)'
+                    ELSE NULL 
+                END
+            }
+        END
+        for node in COALESCE(nodes, [])
+    ]
+);
+
+-- Chain method version
+CREATE OR REPLACE MACRO to_summary(nodes, include_columns := false, source_lines := 0) AS (
+    ast_to_summary(nodes, include_columns := include_columns, source_lines := source_lines)
 );
 
 -- ===================================

@@ -1,0 +1,107 @@
+# name: test/sql/counts_feature.test
+# description: Test children_count and descendant_count fields
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: Verify new fields exist in struct
+# ==========================================
+
+query IIIIIIIIIIIIII
+DESCRIBE SELECT * FROM (
+    SELECT UNNEST(nodes) 
+    FROM read_ast_objects('test/data/javascript/count_test.js', 'javascript')
+);
+----
+node_id	INTEGER	YES	NULL	NULL	NULL
+type	VARCHAR	YES	NULL	NULL	NULL
+name	VARCHAR	YES	NULL	NULL	NULL
+file_path	VARCHAR	YES	NULL	NULL	NULL
+start_line	INTEGER	YES	NULL	NULL	NULL
+end_line	INTEGER	YES	NULL	NULL	NULL
+start_column	INTEGER	YES	NULL	NULL	NULL
+end_column	INTEGER	YES	NULL	NULL	NULL
+parent_id	INTEGER	YES	NULL	NULL	NULL
+depth	INTEGER	YES	NULL	NULL	NULL
+sibling_index	INTEGER	YES	NULL	NULL	NULL
+children_count	INTEGER	YES	NULL	NULL	NULL
+descendant_count	INTEGER	YES	NULL	NULL	NULL
+
+# Test 2: Verify counts for known structure
+# =========================================
+
+# The root program node should have 1 child (the function) and many descendants
+query III
+SELECT type, children_count, descendant_count
+FROM read_ast_objects('test/data/javascript/count_test.js', 'javascript')
+CROSS JOIN UNNEST(nodes) AS n
+WHERE node_id = 0;
+----
+program	1	23
+
+# Test 3: Leaf nodes have zero children
+# =====================================
+
+query I
+SELECT COUNT(*)
+FROM read_ast_objects('test/data/javascript/count_test.js', 'javascript')
+CROSS JOIN UNNEST(nodes) AS n
+WHERE children_count = 0 AND descendant_count != 0;
+----
+0
+
+# Test 4: Verify parent-child count consistency
+# =============================================
+
+# Every parent's children_count should match actual children
+query IIII
+WITH node_data AS (
+    SELECT * FROM read_ast_objects('test/data/javascript/count_test.js', 'javascript')
+    CROSS JOIN UNNEST(nodes) AS n
+)
+SELECT 
+    p.node_id as parent_id,
+    p.type as parent_type,
+    p.children_count as stated_children,
+    COUNT(c.node_id) as actual_children
+FROM node_data p
+LEFT JOIN node_data c ON c.parent_id = p.node_id
+GROUP BY p.node_id, p.type, p.children_count
+HAVING p.children_count != COUNT(c.node_id);
+----
+
+# Test 5: Find nodes by descendant count
+# ======================================
+
+# if_statement should have substantial descendants
+query II
+SELECT type, descendant_count
+FROM read_ast_objects('test/data/javascript/count_test.js', 'javascript')
+CROSS JOIN UNNEST(nodes) AS n
+WHERE type = 'if_statement';
+----
+if_statement	16
+
+# Test 6: Descendant count calculation
+# ====================================
+
+# A node's descendant_count should equal sum of its children's (descendant_count + 1)
+query IIII
+WITH node_data AS (
+    SELECT * FROM read_ast_objects('test/data/javascript/count_test.js', 'javascript')
+    CROSS JOIN UNNEST(nodes) AS n
+),
+parent_child_sum AS (
+    SELECT 
+        p.node_id,
+        p.type,
+        p.descendant_count as stated_descendants,
+        COALESCE(SUM(c.descendant_count + 1), 0) as calculated_descendants
+    FROM node_data p
+    LEFT JOIN node_data c ON c.parent_id = p.node_id
+    WHERE p.children_count > 0
+    GROUP BY p.node_id, p.type, p.descendant_count
+)
+SELECT * FROM parent_child_sum
+WHERE stated_descendants != calculated_descendants;
+----

@@ -19,7 +19,7 @@ Catalog Error: Scalar Function with name get_type does not exist!
 # ============================
 
 statement ok
-SELECT duckdb_ast_register_short_names();
+PRAGMA duckdb_ast_short_names;
 
 # Test 3: Short names work after registration
 # ===========================================
