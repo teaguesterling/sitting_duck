@@ -8,3 +8,7 @@ testext
 test/python/__pycache__/
 .Rhistory
 /workspace/
+
+# Test databases
+*.db
+test.parquet
