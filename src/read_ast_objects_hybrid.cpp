@@ -104,8 +104,8 @@ unique_ptr<FunctionData> ReadASTObjectsHybridFunction::BindOneArg(ClientContext 
         files.push_back(file_pattern);
     }
     
-    // Define output columns - single "ast" column containing AST struct
-    names = {"ast"};
+    // Define output columns to match return_types
+    names = {"file_path", "language", "parse_time", "node_count", "max_depth", "nodes"};
     
     // Define struct type for AST nodes
     child_list_t<LogicalType> node_struct_children;
@@ -167,8 +167,8 @@ unique_ptr<FunctionData> ReadASTObjectsHybridFunction::BindWithFilters(ClientCon
         files.push_back(file_pattern);
     }
     
-    // Define output columns - single "ast" column containing AST struct
-    names = {"ast"};
+    // Define output columns to match return_types
+    names = {"file_path", "language", "parse_time", "node_count", "max_depth", "nodes"};
     
     // Define struct type for AST nodes
     child_list_t<LogicalType> node_struct_children;
