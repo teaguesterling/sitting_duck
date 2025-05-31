@@ -147,6 +147,61 @@ string PythonLanguageHandler::ExtractNodeName(TSNode node, const string &content
     return "";
 }
 
+string PythonLanguageHandler::ExtractNodeValue(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    string node_type = string(node_type_str);
+    
+    // For literals, extract the actual value
+    if (node_type == "string" || node_type == "integer" || node_type == "float" || 
+        node_type == "true" || node_type == "false" || node_type == "none") {
+        return ExtractNodeText(node, content);
+    }
+    
+    return "";
+}
+
+bool PythonLanguageHandler::IsPublicNode(TSNode node, const string &content) const {
+    // For now, always return false - TODO: implement Python visibility rules
+    return false;
+}
+
+const NodeTypeConfig* PythonLanguageHandler::GetNodeTypeConfig(const string &node_type) const {
+    // Simple if-chain approach for KIND mapping
+    if (node_type == "function_definition" || node_type == "async_function_definition") {
+        static NodeTypeConfig config(ASTKind::DEFINITION, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "class_definition") {
+        static NodeTypeConfig config(ASTKind::DEFINITION, 1, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "call") {
+        static NodeTypeConfig config(ASTKind::COMPUTATION, 0, 0, HashMethod::Structural(), 0);
+        return &config;
+    }
+    if (node_type == "identifier") {
+        static NodeTypeConfig config(ASTKind::NAME, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "string" || node_type == "integer" || node_type == "float") {
+        static NodeTypeConfig config(ASTKind::LITERAL, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "if_statement") {
+        static NodeTypeConfig config(ASTKind::FLOW_CONTROL, 0, 0, HashMethod::Structural(), 0);
+        return &config;
+    }
+    
+    // Default fallback
+    static NodeTypeConfig default_config(ASTKind::PARSER_SPECIFIC, 0, 0, HashMethod::Structural(), 0);
+    return &default_config;
+}
+
+const LanguageConfig& PythonLanguageHandler::GetConfig() const {
+    // TODO: implement proper LanguageConfig - for now just throw
+    throw NotImplementedException("LanguageConfig not implemented yet");
+}
+
 //==============================================================================
 // JavaScriptLanguageHandler implementation
 //==============================================================================
@@ -247,6 +302,61 @@ string JavaScriptLanguageHandler::ExtractNodeName(TSNode node, const string &con
     }
     
     return "";
+}
+
+string JavaScriptLanguageHandler::ExtractNodeValue(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    string node_type = string(node_type_str);
+    
+    // For literals, extract the actual value
+    if (node_type == "string" || node_type == "number" || node_type == "template_string" ||
+        node_type == "true" || node_type == "false" || node_type == "null") {
+        return ExtractNodeText(node, content);
+    }
+    
+    return "";
+}
+
+bool JavaScriptLanguageHandler::IsPublicNode(TSNode node, const string &content) const {
+    // For now, always return false - TODO: implement JS export detection
+    return false;
+}
+
+const NodeTypeConfig* JavaScriptLanguageHandler::GetNodeTypeConfig(const string &node_type) const {
+    // Simple if-chain approach for KIND mapping
+    if (node_type == "function_declaration" || node_type == "arrow_function" || node_type == "function_expression") {
+        static NodeTypeConfig config(ASTKind::DEFINITION, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "class_declaration") {
+        static NodeTypeConfig config(ASTKind::DEFINITION, 1, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "call_expression") {
+        static NodeTypeConfig config(ASTKind::COMPUTATION, 0, 0, HashMethod::Structural(), 0);
+        return &config;
+    }
+    if (node_type == "identifier") {
+        static NodeTypeConfig config(ASTKind::NAME, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "string" || node_type == "number" || node_type == "template_string") {
+        static NodeTypeConfig config(ASTKind::LITERAL, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "if_statement") {
+        static NodeTypeConfig config(ASTKind::FLOW_CONTROL, 0, 0, HashMethod::Structural(), 0);
+        return &config;
+    }
+    
+    // Default fallback
+    static NodeTypeConfig default_config(ASTKind::PARSER_SPECIFIC, 0, 0, HashMethod::Structural(), 0);
+    return &default_config;
+}
+
+const LanguageConfig& JavaScriptLanguageHandler::GetConfig() const {
+    // TODO: implement proper LanguageConfig - for now just throw
+    throw NotImplementedException("LanguageConfig not implemented yet");
 }
 
 //==============================================================================
@@ -367,6 +477,61 @@ string CPPLanguageHandler::ExtractNodeName(TSNode node, const string &content) c
     return "";
 }
 
+string CPPLanguageHandler::ExtractNodeValue(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    string node_type = string(node_type_str);
+    
+    // For literals, extract the actual value
+    if (node_type == "string_literal" || node_type == "number_literal" ||
+        node_type == "true" || node_type == "false" || node_type == "null" || node_type == "nullptr") {
+        return ExtractNodeText(node, content);
+    }
+    
+    return "";
+}
+
+bool CPPLanguageHandler::IsPublicNode(TSNode node, const string &content) const {
+    // For now, always return false - TODO: implement C++ public/private detection
+    return false;
+}
+
+const NodeTypeConfig* CPPLanguageHandler::GetNodeTypeConfig(const string &node_type) const {
+    // Simple if-chain approach for KIND mapping
+    if (node_type == "function_definition") {
+        static NodeTypeConfig config(ASTKind::DEFINITION, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "class_specifier" || node_type == "struct_specifier") {
+        static NodeTypeConfig config(ASTKind::DEFINITION, 1, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "call_expression") {
+        static NodeTypeConfig config(ASTKind::COMPUTATION, 0, 0, HashMethod::Structural(), 0);
+        return &config;
+    }
+    if (node_type == "identifier") {
+        static NodeTypeConfig config(ASTKind::NAME, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "string_literal" || node_type == "number_literal") {
+        static NodeTypeConfig config(ASTKind::LITERAL, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "if_statement") {
+        static NodeTypeConfig config(ASTKind::FLOW_CONTROL, 0, 0, HashMethod::Structural(), 0);
+        return &config;
+    }
+    
+    // Default fallback
+    static NodeTypeConfig default_config(ASTKind::PARSER_SPECIFIC, 0, 0, HashMethod::Structural(), 0);
+    return &default_config;
+}
+
+const LanguageConfig& CPPLanguageHandler::GetConfig() const {
+    // TODO: implement proper LanguageConfig - for now just throw
+    throw NotImplementedException("LanguageConfig not implemented yet");
+}
+
 //==============================================================================
 // RustLanguageHandler implementation
 //==============================================================================
@@ -465,6 +630,61 @@ string RustLanguageHandler::ExtractNodeName(TSNode node, const string &content) 
     }
     
     return "";
+}
+
+string RustLanguageHandler::ExtractNodeValue(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    string node_type = string(node_type_str);
+    
+    // For literals, extract the actual value
+    if (node_type == "string_literal" || node_type == "integer_literal" || node_type == "float_literal" ||
+        node_type == "char_literal" || node_type == "boolean_literal" || node_type == "raw_string_literal") {
+        return ExtractNodeText(node, content);
+    }
+    
+    return "";
+}
+
+bool RustLanguageHandler::IsPublicNode(TSNode node, const string &content) const {
+    // For now, always return false - TODO: implement Rust pub detection
+    return false;
+}
+
+const NodeTypeConfig* RustLanguageHandler::GetNodeTypeConfig(const string &node_type) const {
+    // Simple if-chain approach for KIND mapping
+    if (node_type == "function_item") {
+        static NodeTypeConfig config(ASTKind::DEFINITION, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "struct_item" || node_type == "enum_item" || node_type == "trait_item") {
+        static NodeTypeConfig config(ASTKind::DEFINITION, 1, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "call_expression" || node_type == "method_call_expression") {
+        static NodeTypeConfig config(ASTKind::COMPUTATION, 0, 0, HashMethod::Structural(), 0);
+        return &config;
+    }
+    if (node_type == "identifier") {
+        static NodeTypeConfig config(ASTKind::NAME, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "string_literal" || node_type == "integer_literal" || node_type == "float_literal") {
+        static NodeTypeConfig config(ASTKind::LITERAL, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "if_expression") {
+        static NodeTypeConfig config(ASTKind::FLOW_CONTROL, 0, 0, HashMethod::Structural(), 0);
+        return &config;
+    }
+    
+    // Default fallback
+    static NodeTypeConfig default_config(ASTKind::PARSER_SPECIFIC, 0, 0, HashMethod::Structural(), 0);
+    return &default_config;
+}
+
+const LanguageConfig& RustLanguageHandler::GetConfig() const {
+    // TODO: implement proper LanguageConfig - for now just throw
+    throw NotImplementedException("LanguageConfig not implemented yet");
 }
 
 //==============================================================================

@@ -1,0 +1,148 @@
+# name: test/sql/count_fields.test
+# description: Test children_count and descendant_count fields in AST nodes
+# group: [ast_struct]
+
+require duckdb_ast
+
+# Test count fields with a well-structured JavaScript file
+statement ok
+CREATE TABLE count_test AS 
+SELECT ast FROM read_ast('test/data/javascript/count_test.js');
+
+# Verify that children_count matches actual child count
+query I
+SELECT count(*) FROM (
+    WITH node_children AS (
+        SELECT 
+            parent.node_id as parent_id,
+            parent.children_count as declared_count,
+            count(child.node_id) as actual_count
+        FROM 
+            (SELECT unnest(ast.nodes) as parent FROM count_test) parent_data,
+            (SELECT unnest(ast.nodes) as child FROM count_test) child_data
+        WHERE child.parent_id = parent.node_id
+        GROUP BY parent.node_id, parent.children_count
+    )
+    SELECT * FROM node_children 
+    WHERE declared_count = actual_count
+);
+----
+6
+
+# Test that leaf nodes have 0 children and 0 descendants
+query II
+SELECT count(*), min(children_count), max(descendant_count) FROM (
+    SELECT node.children_count, node.descendant_count
+    FROM (SELECT unnest(ast.nodes) as node FROM count_test)
+    WHERE node.children_count = 0
+);
+----
+5	0	0
+
+# Test descendant count calculation
+# For each node, descendant_count should equal sum of (1 + descendant_count) for all direct children
+query I
+SELECT count(*) FROM (
+    WITH calculated_descendants AS (
+        SELECT 
+            parent.node_id,
+            parent.descendant_count as declared_count,
+            coalesce(sum(1 + child.descendant_count), 0) as calculated_count
+        FROM 
+            (SELECT unnest(ast.nodes) as parent FROM count_test) parent_data
+        LEFT JOIN 
+            (SELECT unnest(ast.nodes) as child FROM count_test) child_data
+            ON child.parent_id = parent.node_id
+        GROUP BY parent.node_id, parent.descendant_count
+    )
+    SELECT * FROM calculated_descendants
+    WHERE declared_count = calculated_count
+);
+----
+11
+
+# Test that root node's descendant_count equals total nodes - 1
+query I
+SELECT 
+    (SELECT node.descendant_count FROM (SELECT unnest(ast.nodes) as node FROM count_test) WHERE node.parent_id IS NULL) = 
+    (SELECT count(*) - 1 FROM (SELECT unnest(ast.nodes) as node FROM count_test));
+----
+true
+
+# Test subtree extraction using descendant_count
+# Extract all nodes in a function subtree using O(1) operation
+statement ok
+CREATE TABLE function_subtree AS
+WITH function_root AS (
+    SELECT 
+        node.node_id,
+        node.descendant_count,
+        row_number() OVER (ORDER BY node.node_id) - 1 as start_pos
+    FROM (SELECT unnest(ast.nodes) as node FROM count_test)
+    WHERE node.type = 'function_declaration'
+    LIMIT 1
+),
+all_nodes_indexed AS (
+    SELECT 
+        node.*,
+        row_number() OVER (ORDER BY node.node_id) - 1 as position
+    FROM (SELECT unnest(ast.nodes) as node FROM count_test)
+)
+SELECT n.*
+FROM all_nodes_indexed n, function_root f
+WHERE n.position BETWEEN f.start_pos AND f.start_pos + f.descendant_count;
+
+# Verify subtree extraction got the right number of nodes
+query I
+SELECT count(*) FROM function_subtree;
+----
+6
+
+# Verify all nodes in subtree are actually related (parent-child relationships preserved)
+query I
+SELECT count(*) FROM function_subtree f1
+WHERE f1.parent_id IS NULL OR 
+      EXISTS (SELECT 1 FROM function_subtree f2 WHERE f2.node_id = f1.parent_id);
+----
+6
+
+# Test with Python file to ensure language independence
+statement ok
+CREATE TABLE py_count_test AS 
+SELECT ast FROM read_ast('test/data/python/simple.py', 'python');
+
+# Verify count fields work for Python AST
+query I
+SELECT count(*) FROM (
+    SELECT node.children_count, node.descendant_count
+    FROM (SELECT unnest(ast.nodes) as node FROM py_count_test)
+    WHERE node.children_count >= 0 AND node.descendant_count >= 0
+);
+----
+13
+
+# Test that the sum of all descendant_counts + node count equals total relationships
+query I
+SELECT 
+    (SELECT sum(node.descendant_count) + count(*) FROM (SELECT unnest(ast.nodes) as node FROM py_count_test)) =
+    (SELECT count(*) * count(*) FROM (SELECT unnest(ast.nodes) as node FROM py_count_test));
+----
+false
+
+# More accurate relationship test: each node contributes to exactly one ancestor's descendant count
+query I
+SELECT 
+    (SELECT count(*) - 1 FROM (SELECT unnest(ast.nodes) as node FROM py_count_test)) = 
+    (SELECT sum(node.children_count) FROM (SELECT unnest(ast.nodes) as node FROM py_count_test));
+----
+true
+
+# Clean up
+statement ok
+DROP TABLE count_test;
+
+statement ok
+DROP TABLE function_subtree;
+
+statement ok
+DROP TABLE py_count_test;

@@ -1,10 +1,9 @@
 # SQL Macro files to embed
 set(SQL_MACRO_FILES
-    01_core.sql
-    02a_entrypoint.sql
-    02b_chain_methods.sql
-    03_legacy.sql
-    04_optional.sql
+    01_core_primitives.sql
+    02_ast_get.sql
+    03_ast_find.sql
+    04_ast_to.sql
 )
 
 # Generate header file with embedded SQL

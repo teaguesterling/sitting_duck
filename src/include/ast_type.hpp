@@ -11,21 +11,164 @@
 
 namespace duckdb {
 
+// KIND Taxonomy Constants
+enum class ASTKind : uint8_t {
+    // Data & Structure (00xx)
+    LITERAL = 0,      // 0000: Raw constants and primitive values
+    NAME = 1,         // 0001: Identifiers and name references
+    PATTERN = 2,      // 0010: Structured data patterns and matching
+    TYPE = 3,         // 0011: Type expressions and references
+    
+    // Computation (01xx)
+    OPERATOR = 4,     // 0100: Pure computational operations
+    COMPUTATION = 5,  // 0101: Complex expressions and invocations
+    TRANSFORM = 6,    // 0110: Data transformation and queries
+    DEFINITION = 7,   // 0111: Introduction of named entities
+    
+    // Control & Effects (10xx)
+    EXECUTION = 8,    // 1000: Side-effect causing operations
+    FLOW_CONTROL = 9, // 1001: Program control flow and branching
+    ERROR_HANDLING = 10, // 1010: Exception management
+    ORGANIZATION = 11,   // 1011: Structural containers and scope
+    
+    // Meta & External (11xx)
+    METADATA = 12,       // 1100: Annotations and code metadata
+    EXTERNAL = 13,       // 1101: Dependencies and external interfaces
+    PARSER_SPECIFIC = 14,// 1110: Language-specific constructs
+    RESERVED = 15        // 1111: Reserved for future use
+};
+
+// Universal Flags
+enum class ASTUniversalFlags : uint8_t {
+    IS_KEYWORD = 0x01,     // Bare language keywords
+    IS_PUNCTUATION = 0x02, // Structural delimiters
+    IS_BUILTIN = 0x04,     // Language built-in vs user construct
+    IS_PUBLIC = 0x08       // Externally visible
+};
+
+// Nested type definitions for ASTNode structure
+struct ASTTypeInfo {
+    string raw;        // Raw parser type (e.g., "binary_expression")
+    string normalized; // Normalized type (e.g., "BinaryExpression")
+    string kind;       // KIND name (e.g., "COMPUTATION")
+};
+
+struct ASTNameInfo {
+    string raw;        // Raw identifier text
+    string qualified;  // Fully qualified name (e.g., "MyClass.myMethod")
+};
+
+struct ASTFilePosition {
+    int64_t start_line = 0;
+    int64_t end_line = 0;
+    uint16_t start_column = 0;
+    uint16_t end_column = 0;
+};
+
+struct ASTTreePosition {
+    int64_t node_index = 0;     // Position in depth-first traversal
+    int64_t parent_index = -1;  // Parent's position (-1 for root)
+    uint32_t sibling_index = 0; // Position among siblings
+    uint8_t node_depth = 0;     // Depth from root
+};
+
+struct ASTSubtreeInfo {
+    uint8_t tree_depth = 0;     // Max depth of subtree rooted here
+    uint16_t children_count = 0;
+    uint16_t descendant_count = 0;
+};
+
 struct ASTNode {
-    int64_t node_id;
-    string type;
-    string name;
-    int32_t start_line;
-    int32_t start_column;
-    int32_t end_line;
-    int32_t end_column;
-    int64_t parent_id;
-    int32_t depth;
-    int32_t sibling_index;
-    string source_text;
+    // Core Semantic Identity
+    uint64_t node_id = 0;  // Full 64-bit identity encoding:
+                          // Byte 0: Universal flags (0-3) + KIND (4-7)
+                          // Byte 1: Super type (0-1) + Parser types (2-4) + Arity (5-7)
+                          // Bytes 2-3: Context (depth, complexity, hashes) [FUTURE]
+                          // Bytes 4-5: Primary unique hash
+                          // Bytes 6-7: Parent unique hash
+    
+    // Grouped information
+    ASTTypeInfo type;
+    ASTNameInfo name;
+    ASTFilePosition file_position;
+    ASTTreePosition tree_position;
+    ASTSubtreeInfo subtree;
+    
+    // Content preview
+    string peek;  // First 120 chars of source_text
+    
+    // Decoded taxonomy fields (computed from node_id)
+    uint8_t kind = 0;           // 4-bit KIND (0-15)
+    uint8_t universal_flags = 0; // is_keyword, is_punctuation, is_builtin, is_public
+    uint8_t super_type = 0;     // 2-bit built-in super type within KIND
+    uint8_t arity_bin = 0;      // 3-bit Fibonacci-binned complexity
+    
+    // Default constructor
+    ASTNode() = default;
     
     Value ToValue() const;
     static ASTNode FromValue(const Value &value);
+    
+    // Helper methods for node_id (semantic identity)
+    static constexpr uint8_t GetKIND(uint64_t node_id) { 
+        return (node_id & 0xF0) >> 4; 
+    }
+    static constexpr uint8_t GetUniversalFlags(uint64_t node_id) { 
+        return node_id & 0x0F; 
+    }
+    static constexpr bool IsKeyword(uint64_t node_id) { 
+        return node_id & 0x01; 
+    }
+    static constexpr bool IsPunctuation(uint64_t node_id) { 
+        return node_id & 0x02; 
+    }
+    static constexpr bool IsBuiltin(uint64_t node_id) { 
+        return node_id & 0x04; 
+    }
+    static constexpr bool IsPublic(uint64_t node_id) { 
+        return node_id & 0x08; 
+    }
+    
+    // Taxonomy generation functions
+    static uint64_t GenerateSemanticID(ASTKind kind, uint8_t universal_flags, 
+                                      uint8_t super_type = 0, uint8_t parser_type = 0, 
+                                      uint8_t arity = 0, uint16_t primary_hash = 0, 
+                                      uint16_t parent_hash = 0);
+    
+    static uint8_t BinArityFibonacci(uint32_t count) {
+        // Fibonacci sequence binning: 0, 1, 2, 3, 4-5, 6-8, 9-13, 14+
+        if (count == 0) return 0;      // 000
+        if (count == 1) return 1;      // 001
+        if (count == 2) return 2;      // 010
+        if (count == 3) return 3;      // 011
+        if (count <= 5) return 4;      // 100
+        if (count <= 8) return 5;      // 101
+        if (count <= 13) return 6;     // 110
+        return 7;                      // 111 (14+)
+    }
+    
+    static string GetKindName(ASTKind kind) {
+        switch(kind) {
+            case ASTKind::LITERAL: return "LITERAL";
+            case ASTKind::NAME: return "NAME";
+            case ASTKind::PATTERN: return "PATTERN";
+            case ASTKind::TYPE: return "TYPE";
+            case ASTKind::OPERATOR: return "OPERATOR";
+            case ASTKind::COMPUTATION: return "COMPUTATION";
+            case ASTKind::TRANSFORM: return "TRANSFORM";
+            case ASTKind::DEFINITION: return "DEFINITION";
+            case ASTKind::EXECUTION: return "EXECUTION";
+            case ASTKind::FLOW_CONTROL: return "FLOW_CONTROL";
+            case ASTKind::ERROR_HANDLING: return "ERROR_HANDLING";
+            case ASTKind::ORGANIZATION: return "ORGANIZATION";
+            case ASTKind::METADATA: return "METADATA";
+            case ASTKind::EXTERNAL: return "EXTERNAL";
+            case ASTKind::PARSER_SPECIFIC: return "PARSER_SPECIFIC";
+            case ASTKind::RESERVED: return "RESERVED";
+            default: return "UNKNOWN";
+        }
+    }
+    void UpdateTaxonomyFields();
 };
 
 class ASTType {

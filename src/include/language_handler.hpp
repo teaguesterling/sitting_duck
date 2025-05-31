@@ -1,11 +1,15 @@
 #pragma once
 
 #include "duckdb.hpp"
+#include "node_type_config.hpp"
 #include <tree_sitter/api.h>
 #include <memory>
 #include <unordered_map>
 
 namespace duckdb {
+
+// Forward declaration
+class LanguageConfig;
 
 // Base class for language-specific handlers
 class LanguageHandler {
@@ -25,6 +29,35 @@ public:
     // Name extraction
     virtual string ExtractNodeName(TSNode node, const string &content) const = 0;
     
+    // Value extraction (different from name - could be literal value, text content, etc.)
+    virtual string ExtractNodeValue(TSNode node, const string &content) const = 0;
+    
+    // Determine if a node represents a public/exported construct
+    virtual bool IsPublicNode(TSNode node, const string &content) const = 0;
+    
+    // Get taxonomy configuration for a node type
+    virtual const NodeTypeConfig* GetNodeTypeConfig(const string &node_type) const = 0;
+    
+    // Get language-specific taxonomy configuration
+    virtual const LanguageConfig& GetConfig() const = 0;
+    
+    // Compute semantic ID for a node
+    uint64_t ComputeSemanticId(TSNode node, const string &content, 
+                               uint64_t parent_hash = 0) const;
+    
+    // Compute arity bin from child count
+    static uint8_t ComputeArityBin(uint32_t count) {
+        // Fibonacci binning
+        if (count == 0) return 0;
+        if (count == 1) return 1;
+        if (count == 2) return 2;
+        if (count == 3) return 3;
+        if (count <= 5) return 4;
+        if (count <= 8) return 5;
+        if (count <= 13) return 6;
+        return 7; // 14+
+    }
+    
 protected:
     // Helper method for finding identifier children
     string FindIdentifierChild(TSNode node, const string &content) const;
@@ -34,6 +67,9 @@ protected:
     
     // Helper method for setting language with ABI validation
     void SetParserLanguageWithValidation(TSParser* parser, const TSLanguage* language, const string &language_name) const;
+    
+    // Lazy-loaded configuration
+    mutable unique_ptr<LanguageConfig> config;
 };
 
 // Python language handler
@@ -44,6 +80,10 @@ public:
     TSParser* CreateParser() const override;
     string GetNormalizedType(const string &node_type) const override;
     string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    const NodeTypeConfig* GetNodeTypeConfig(const string &node_type) const override;
+    const LanguageConfig& GetConfig() const override;
     
 private:
     static const std::unordered_map<string, string> type_mappings;
@@ -57,6 +97,10 @@ public:
     TSParser* CreateParser() const override;
     string GetNormalizedType(const string &node_type) const override;
     string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    const NodeTypeConfig* GetNodeTypeConfig(const string &node_type) const override;
+    const LanguageConfig& GetConfig() const override;
     
 private:
     static const std::unordered_map<string, string> type_mappings;
@@ -70,6 +114,10 @@ public:
     TSParser* CreateParser() const override;
     string GetNormalizedType(const string &node_type) const override;
     string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    const NodeTypeConfig* GetNodeTypeConfig(const string &node_type) const override;
+    const LanguageConfig& GetConfig() const override;
     
 private:
     static const std::unordered_map<string, string> type_mappings;
@@ -83,6 +131,10 @@ public:
     TSParser* CreateParser() const override;
     string GetNormalizedType(const string &node_type) const override;
     string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    const NodeTypeConfig* GetNodeTypeConfig(const string &node_type) const override;
+    const LanguageConfig& GetConfig() const override;
     
 private:
     static const std::unordered_map<string, string> type_mappings;

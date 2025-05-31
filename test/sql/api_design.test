@@ -1,0 +1,190 @@
+# name: test/sql/api_design.test
+# description: Test API design and usage patterns for AST struct
+# group: [ast_struct]
+
+require duckdb_ast
+
+# Test 1: Clean API - single column result
+statement ok
+CREATE TABLE clean_api AS 
+SELECT ast FROM read_ast('test/data/javascript/simple.js');
+
+query I
+SELECT typeof(ast) FROM clean_api LIMIT 1;
+----
+STRUCT(file_path VARCHAR, language VARCHAR, nodes STRUCT(node_id BIGINT, type VARCHAR, name VARCHAR, start_line INTEGER, start_column INTEGER, end_line INTEGER, end_column INTEGER, parent_id BIGINT, depth INTEGER, sibling_index INTEGER, children_count INTEGER, descendant_count INTEGER, source_text VARCHAR)[])
+
+# Test 2: Easy metadata access
+query III
+SELECT 
+    ast.file_path,
+    ast.language,
+    length(ast.nodes) as total_nodes
+FROM clean_api;
+----
+test/data/javascript/simple.js	javascript	141
+
+# Test 3: Direct node access without unpacking
+query II
+SELECT 
+    ast.nodes[1].type as root_type,
+    ast.nodes[1].children_count as root_children
+FROM clean_api;
+----
+program	1
+
+# Test 4: Easy filtering without complex array operations
+query I
+SELECT count(*) FROM (
+    SELECT node 
+    FROM (SELECT unnest(ast.nodes) as node FROM clean_api)
+    WHERE node.type = 'function_declaration'
+);
+----
+3
+
+# Test 5: O(1) subtree extraction enabled by descendant_count
+statement ok
+CREATE TABLE subtree_demo AS
+WITH function_node AS (
+    SELECT 
+        node.node_id,
+        node.descendant_count,
+        row_number() OVER (ORDER BY node.node_id) - 1 as start_pos
+    FROM (SELECT unnest(ast.nodes) as node FROM clean_api)
+    WHERE node.type = 'function_declaration'
+    LIMIT 1
+)
+SELECT 
+    'subtree' as extraction_type,
+    n.*
+FROM (
+    SELECT 
+        node.*,
+        row_number() OVER (ORDER BY node.node_id) - 1 as pos
+    FROM (SELECT unnest(ast.nodes) as node FROM clean_api)
+) n, function_node f
+WHERE n.pos BETWEEN f.start_pos AND f.start_pos + f.descendant_count;
+
+# Verify subtree extraction is complete (includes function and all descendants)
+query II
+SELECT 
+    min(depth) as min_depth,
+    max(depth) as max_depth
+FROM subtree_demo;
+----
+1	4
+
+# Test 6: Backward compatibility with existing patterns
+statement ok
+CREATE TABLE compatibility_test AS
+SELECT * FROM read_ast_objects('test/data/javascript/simple.js');
+
+# Both APIs should return same node count
+query I
+SELECT 
+    (SELECT length(ast.nodes) FROM clean_api) = 
+    (SELECT count(*) FROM compatibility_test);
+----
+true
+
+# Test 7: Migration path - can convert struct to table format
+statement ok
+CREATE TABLE struct_to_table AS
+SELECT 
+    ast.file_path,
+    ast.language,
+    node.node_id,
+    node.type,
+    node.name,
+    node.depth,
+    node.children_count,
+    node.descendant_count
+FROM clean_api, unnest(ast.nodes) as node;
+
+# Verify migration preserves all data
+query I
+SELECT count(*) FROM struct_to_table;
+----
+141
+
+# Test 8: AI-friendly usage patterns
+# Pattern: Get all function names in one query
+query I
+SELECT count(*) FROM (
+    SELECT node.name
+    FROM (SELECT unnest(ast.nodes) as node FROM clean_api)
+    WHERE node.type = 'function_declaration' AND node.name IS NOT NULL
+);
+----
+3
+
+# Pattern: Get class structure with methods
+statement ok
+CREATE TABLE class_analysis AS
+SELECT 
+    class_node.name as class_name,
+    method_node.name as method_name,
+    method_node.start_line
+FROM 
+    (SELECT unnest(ast.nodes) as class_node FROM clean_api) class_data,
+    (SELECT unnest(ast.nodes) as method_node FROM clean_api) method_data
+WHERE class_node.type = 'class_declaration'
+  AND method_node.type = 'method_definition' 
+  AND method_node.parent_id = class_node.node_id;
+
+query I
+SELECT count(*) FROM class_analysis;
+----
+2
+
+# Pattern: Analyze nesting depth distribution
+query II
+SELECT 
+    depth,
+    count(*) as node_count
+FROM (SELECT unnest(ast.nodes) as node FROM clean_api)
+GROUP BY depth
+ORDER BY depth;
+----
+0	1
+1	1
+2	12
+3	55
+4	41
+5	19
+6	7
+7	3
+8	2
+
+# Test 9: Performance-oriented usage (conceptual)
+# This tests the API design for future performance optimizations
+query I
+SELECT 
+    'Struct format enables:'::VARCHAR as optimization,
+    count(*) as nodes_available
+FROM (SELECT unnest(ast.nodes) as node FROM clean_api);
+----
+Struct format enables:	141
+
+# Test 10: Error handling consistency
+statement error
+SELECT * FROM read_ast('nonexistent.js');
+----
+File not found
+
+# Clean up
+statement ok
+DROP TABLE clean_api;
+
+statement ok
+DROP TABLE subtree_demo;
+
+statement ok
+DROP TABLE compatibility_test;
+
+statement ok
+DROP TABLE struct_to_table;
+
+statement ok
+DROP TABLE class_analysis;

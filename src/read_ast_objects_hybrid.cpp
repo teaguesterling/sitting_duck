@@ -1,5 +1,6 @@
 #include "read_ast_objects_hybrid.hpp"
 #include "ast_parser.hpp"
+#include "ast_type.hpp"
 #include "language_handler.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/main/client_context.hpp"
@@ -103,15 +104,14 @@ unique_ptr<FunctionData> ReadASTObjectsHybridFunction::BindOneArg(ClientContext 
         files.push_back(file_pattern);
     }
     
-    // Define output columns - structured metadata + struct array nodes
-    names = {"file_path", "language", "parse_time", "node_count", "max_depth", "nodes"};
+    // Define output columns - single "ast" column containing AST struct
+    names = {"ast"};
     
     // Define struct type for AST nodes
     child_list_t<LogicalType> node_struct_children;
     node_struct_children.push_back(make_pair("node_id", LogicalType::INTEGER));
     node_struct_children.push_back(make_pair("type", LogicalType::VARCHAR));
     node_struct_children.push_back(make_pair("name", LogicalType::VARCHAR));
-    node_struct_children.push_back(make_pair("file_path", LogicalType::VARCHAR));
     node_struct_children.push_back(make_pair("start_line", LogicalType::INTEGER));
     node_struct_children.push_back(make_pair("end_line", LogicalType::INTEGER));
     node_struct_children.push_back(make_pair("start_column", LogicalType::INTEGER));
@@ -167,15 +167,14 @@ unique_ptr<FunctionData> ReadASTObjectsHybridFunction::BindWithFilters(ClientCon
         files.push_back(file_pattern);
     }
     
-    // Define output columns - structured metadata + struct array nodes
-    names = {"file_path", "language", "parse_time", "node_count", "max_depth", "nodes"};
+    // Define output columns - single "ast" column containing AST struct
+    names = {"ast"};
     
     // Define struct type for AST nodes
     child_list_t<LogicalType> node_struct_children;
     node_struct_children.push_back(make_pair("node_id", LogicalType::INTEGER));
     node_struct_children.push_back(make_pair("type", LogicalType::VARCHAR));
     node_struct_children.push_back(make_pair("name", LogicalType::VARCHAR));
-    node_struct_children.push_back(make_pair("file_path", LogicalType::VARCHAR));
     node_struct_children.push_back(make_pair("start_line", LogicalType::INTEGER));
     node_struct_children.push_back(make_pair("end_line", LogicalType::INTEGER));
     node_struct_children.push_back(make_pair("start_column", LogicalType::INTEGER));
@@ -230,7 +229,6 @@ Value ReadASTObjectsHybridFunction::ParseFileToStructs(ClientContext &context, c
         int64_t node_id;
         string type;
         string name;
-        string file_path;
         int32_t start_line;
         int32_t end_line;
         int32_t start_column;
@@ -280,7 +278,6 @@ Value ReadASTObjectsHybridFunction::ParseFileToStructs(ClientContext &context, c
             node_info.node_id = node_counter++;
             node_info.type = ts_node_type(entry.node);
             node_info.name = name;
-            node_info.file_path = file_path;
             node_info.start_line = start.row + 1;
             node_info.end_line = end.row + 1;
             node_info.start_column = start.column + 1;
@@ -336,7 +333,6 @@ Value ReadASTObjectsHybridFunction::ParseFileToStructs(ClientContext &context, c
         struct_children.push_back(make_pair("node_id", Value::INTEGER(node.node_id)));
         struct_children.push_back(make_pair("type", Value(node.type)));
         struct_children.push_back(make_pair("name", Value(node.name)));
-        struct_children.push_back(make_pair("file_path", Value(node.file_path)));
         struct_children.push_back(make_pair("start_line", Value::INTEGER(node.start_line)));
         struct_children.push_back(make_pair("end_line", Value::INTEGER(node.end_line)));
         struct_children.push_back(make_pair("start_column", Value::INTEGER(node.start_column)));
@@ -420,5 +416,7 @@ void RegisterReadASTObjectsHybridFunction(DatabaseInstance &instance) {
     
     ExtensionUtil::RegisterFunction(instance, read_ast_objects_set);
 }
+
+
 
 } // namespace duckdb

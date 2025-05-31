@@ -61,4 +61,5 @@ private:
                                    LogicalType &nodes_type, const FilterConfig &filter_config);
 };
 
+
 } // namespace duckdb

@@ -18,3 +18,66 @@
 * Keep bugs, features, and roadmap plans in `tracker`.
 
 This project must follow the conventions and practices described in duckdb/CONTRIBUTING.md
+
+# DuckDB AST Extension API Conventions
+
+## Monadic Structure
+- The AST struct itself IS the monad - no artificial wrapper functions needed
+- Functions work directly with AST structs, maintaining monadic properties naturally
+- All table functions return a single "ast" column containing the AST struct
+
+## Four Semantic Function Categories
+
+### 1. `ast_get_*` → Tree-preserving operations
+- **Purpose**: Returns valid AST with tree structure and counts intact
+- **Guarantees**: Maintains parent-child relationships, descendant counts remain valid
+- **Example**: `ast_get_functions(ast)` returns complete function subtrees
+- **Use case**: When you need to work with structurally valid AST portions
+
+### 2. `ast_to_*` → Format transformations  
+- **Purpose**: Transforms AST data to other formats (breaks out of AST monad)
+- **Output**: Non-AST formats like arrays, tables, strings
+- **Example**: `ast_to_names(ast)`, `ast_to_locations(ast)`
+- **Use case**: When you need data in a different format for analysis
+
+### 3. `ast_find_*` → Node extraction
+- **Purpose**: Extracts individual nodes (breaks tree structure) 
+- **Output**: AST format but with detached/orphaned nodes
+- **Example**: `ast_find_identifiers(ast)` returns nodes without tree context
+- **Use case**: When you only care about node properties, not relationships
+
+### 4. `ast_extract_*` → True subtree extraction
+- **Purpose**: Sophisticated tree rebuilding from node subsets
+- **Implementation**: Requires C++ implementation to maintain tree validity
+- **Guarantees**: Rebuilds valid trees with correct parent-child relationships and counts
+- **Example**: `ast_extract_class(ast, 'MyClass')` rebuilds valid AST containing only that class
+- **Use case**: When you need a valid sub-AST for further processing
+
+## Standardized Parsing Functions
+All parsing functions use the same backend parser with different source locations and output formats:
+
+### 1. `read_ast(file_path, language := NULL)` 
+- **Source**: File path
+- **Output**: Flattened table (table function, one column per AST node field)
+- **Language**: Optional, auto-detected from file extension
+
+### 2. `parse_ast(source_code, language)`
+- **Source**: String containing source code  
+- **Output**: Flattened table (table function, one column per AST node field)
+- **Language**: Required parameter
+
+### 3. `read_ast_objects(file_path, language := NULL)`
+- **Source**: File path
+- **Output**: Single "ast" column containing AST struct (table function)
+- **Language**: Optional, auto-detected from file extension  
+
+### 4. `parse_ast_objects(source_code, language)`
+- **Source**: String containing source code
+- **Output**: AST struct (scalar function)  
+- **Language**: Required parameter
+
+## Implementation Guidelines
+- All functions must maintain semantic guarantees of their category
+- Tree validity is critical for `ast_get_*` and `ast_extract_*` functions
+- Performance optimizations should leverage descendant_count for O(1) operations
+- Functions should work consistently across all supported languages
