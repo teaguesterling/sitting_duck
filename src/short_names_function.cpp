@@ -1,7 +1,6 @@
 #include "duckdb.hpp"
 #include "duckdb/main/extension_util.hpp"
-#include "duckdb/function/scalar_function.hpp"
-#include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/function/pragma_function.hpp"
 #include "ast_sql_macros.hpp"
 #include "embedded_sql_macros.hpp"
 
@@ -56,14 +55,14 @@ static vector<string> SplitSQLStatements(const string &sql) {
     return statements;
 }
 
-static void RegisterShortNamesFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-    auto &context = state.GetContext();
+
+// Pragma handler for registering short names
+static void RegisterShortNamesPragma(ClientContext &context, const FunctionParameters &parameters) {
     auto &db = DatabaseInstance::GetDatabase(context);
     auto conn = make_uniq<Connection>(db);
     
     try {
         // Load the chain methods SQL file
-        // This file contains all the unprefixed aliases for chain methods
         const char* chain_methods_sql = GetEmbeddedSqlMacro("02b_chain_methods.sql");
         
         if (!chain_methods_sql) {
@@ -84,24 +83,15 @@ static void RegisterShortNamesFunction(DataChunk &args, ExpressionState &state, 
                 throw InvalidInputException("Failed to register short names: " + load_result->GetError());
             }
         }
-        
-        // Function returns void - no output
-        
     } catch (const std::exception &e) {
         throw InvalidInputException("Error registering short names: " + string(e.what()));
     }
 }
 
 void RegisterDuckDBASTShortNamesFunction(DatabaseInstance &db) {
-    // Register the function
-    ScalarFunction short_names_func(
-        "duckdb_ast_register_short_names",
-        {}, // No input parameters
-        LogicalType::SQLNULL, // Returns void/NULL - no output
-        RegisterShortNamesFunction
-    );
-    
-    ExtensionUtil::RegisterFunction(db, short_names_func);
+    // Register the pragma - clean, no output
+    auto short_names_pragma = PragmaFunction::PragmaStatement("duckdb_ast_short_names", RegisterShortNamesPragma);
+    ExtensionUtil::RegisterFunction(db, short_names_pragma);
 }
 
 } // namespace duckdb

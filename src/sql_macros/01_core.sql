@@ -33,33 +33,30 @@ CREATE OR REPLACE MACRO _ast_internal_ensure_integer_array(val) AS (
 
 -- Find nodes by type(s) - accepts string or array
 CREATE OR REPLACE MACRO ast_get_type(nodes, types) AS (
-    COALESCE(
-        (SELECT json_group_array(je.value) 
-         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
-         WHERE list_contains(_ast_internal_ensure_varchar_array(types), json_extract_string(je.value, '$.type'))),
-        '[]'::JSON
-    )
+    [
+        node
+        for node in COALESCE(nodes, [])
+        if list_contains(_ast_internal_ensure_varchar_array(types), node.type)
+    ]
 );
 
 -- Extract names from nodes, optionally filtered by type
 CREATE OR REPLACE MACRO ast_get_names(nodes, node_type := NULL) AS (
-    COALESCE(
-        (SELECT json_group_array(json_extract_string(je.value, '$.name'))
-         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
-         WHERE json_extract_string(je.value, '$.name') IS NOT NULL
-           AND (node_type IS NULL OR json_extract_string(je.value, '$.type') = node_type)),
-        '[]'::JSON
-    )
+    [
+        node.name
+        for node in COALESCE(nodes, [])
+        if node.name IS NOT NULL AND node.name != ''
+           AND (node_type IS NULL OR node.type = node_type)
+    ]
 );
 
 -- Find nodes at specific depth(s) - accepts integer or array
 CREATE OR REPLACE MACRO ast_get_depth(nodes, depths) AS (
-    COALESCE(
-        (SELECT json_group_array(je.value)
-         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
-         WHERE list_contains(_ast_internal_ensure_integer_array(depths), json_extract(je.value, '$.depth')::INTEGER)),
-        '[]'::JSON
-    )
+    [
+        node
+        for node in COALESCE(nodes, [])
+        if list_contains(_ast_internal_ensure_integer_array(depths), node.depth)
+    ]
 );
 
 -- ===================================

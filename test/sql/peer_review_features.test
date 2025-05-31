@@ -38,25 +38,25 @@ true
 
 # Test parse_ast - basic parsing
 query I
-SELECT json_extract_string(parse_ast('def test(): pass', 'python'), '$.type');
+SELECT parse_ast('def test(): pass', 'python').type;
 ----
 module
 
 # Test parse_ast - extract function name
 query I
-SELECT json_extract_string(parse_ast('def hello(): pass', 'python'), '$.children[0].name');
+SELECT [node for node in parse_ast('def hello(): pass', 'python').children if node.type = 'function_definition'][1].name;
 ----
 hello
 
 # Test parse_ast - JavaScript
 query I
-SELECT json_extract_string(parse_ast('function test() { return 42; }', 'javascript'), '$.children[0].type');
+SELECT [node for node in parse_ast('function test() { return 42; }', 'javascript').children if node.type = 'function_declaration'][1].type;
 ----
 function_declaration
 
 # Test parse_ast - C++
 query I
-SELECT json_extract_string(parse_ast('int main() { return 0; }', 'cpp'), '$.type');
+SELECT parse_ast('int main() { return 0; }', 'cpp').type;
 ----
 translation_unit
 
@@ -66,15 +66,10 @@ WITH parsed AS (
     SELECT * FROM read_ast_objects('test/data/python/simple.py', 'python')
 ),
 locations AS (
-    SELECT 
-        loc.value->>'name' as name,
-        loc.value->>'type' as type,
-        CAST(loc.value->>'start_line' AS INTEGER) as start_line,
-        CAST(loc.value->>'end_line' AS INTEGER) as end_line
-    FROM parsed, 
-         json_each(ast_get_locations(nodes)::JSON) as loc
+    SELECT UNNEST(ast_get_locations(nodes)) as location
+    FROM parsed
 )
-SELECT COUNT(*) > 0, COUNT(DISTINCT type) > 1
+SELECT COUNT(*) > 0, COUNT(DISTINCT location.type) > 1
 FROM locations;
 ----
 true	true
@@ -85,17 +80,12 @@ WITH parsed AS (
     SELECT * FROM read_ast_objects('test/data/python/simple.py', 'python')
 ),
 locations AS (
-    SELECT 
-        loc.value->>'name' as name,
-        loc.value->>'type' as type,
-        CAST(loc.value->>'start_line' AS INTEGER) as start_line,
-        CAST(loc.value->>'end_line' AS INTEGER) as end_line
-    FROM parsed, 
-         json_each(ast_get_locations(nodes)::JSON) as loc
+    SELECT UNNEST(ast_get_locations(nodes)) as location
+    FROM parsed
 )
-SELECT name, type, start_line, end_line
+SELECT location.name, location.type, location.start_line, location.end_line
 FROM locations
-WHERE name = 'hello' AND type = 'function_definition';
+WHERE location.name = 'hello' AND location.type = 'function_definition';
 ----
 hello	function_definition	1	3
 
@@ -105,14 +95,10 @@ WITH parsed AS (
     SELECT * FROM read_ast_objects('test/data/python/simple.py', 'python')
 ),
 calls AS (
-    SELECT 
-        call.value->>'called_function' as called_function,
-        call.value->>'call_type' as call_type,
-        CAST(call.value->>'line' AS INTEGER) as line
-    FROM parsed,
-         json_each(ast_get_calls(nodes)::JSON) as call
+    SELECT UNNEST(ast_get_calls(nodes)) as call
+    FROM parsed
 )
-SELECT COUNT(*) AS call_count, COUNT(DISTINCT called_function) AS unique_functions
+SELECT COUNT(*) AS call_count, COUNT(DISTINCT call.called_function) AS unique_functions
 FROM calls;
 ----
 4	0
@@ -120,19 +106,15 @@ FROM calls;
 # Test integration: parse file and extract function with source
 query III
 WITH functions AS (
-    SELECT 
-        json_extract_string(node.value, '$.name') as name,
-        CAST(json_extract(node.value, '$.start.line') AS INTEGER) as start_line,
-        CAST(json_extract(node.value, '$.end.line') AS INTEGER) as end_line
-    FROM read_ast_objects('test/data/python/simple.py', 'python'),
-         json_each(ast_get_type(nodes, 'function_definition')::JSON) as node
+    SELECT UNNEST(ast_get_type(nodes, 'function_definition')) as func
+    FROM read_ast_objects('test/data/python/simple.py', 'python')
 )
 SELECT 
-    name,
-    start_line,
-    length(ast_extract_source('test/data/python/simple.py', start_line, end_line)) > 0 as has_source
+    func.name,
+    func.start_line,
+    length(ast_extract_source('test/data/python/simple.py', func.start_line, func.end_line)) > 0 as has_source
 FROM functions
-WHERE name = 'hello';
+WHERE func.name = 'hello';
 ----
 hello	1	true
 

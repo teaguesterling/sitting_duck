@@ -51,21 +51,20 @@ CREATE OR REPLACE MACRO ast_node_get_source(
 -- ===================================
 -- ast_get_locations - Extract location information
 -- ===================================
--- Returns a JSON array of location objects for named nodes
+-- Returns a struct array of location objects for named nodes
 CREATE OR REPLACE MACRO ast_get_locations(nodes) AS (
-    COALESCE(
-        (SELECT json_group_array(json_object(
-            'name', json_extract_string(je.value, '$.name'),
-            'type', json_extract_string(je.value, '$.type'), 
-            'start_line', CAST(json_extract(je.value, '$.start.line') AS INTEGER),
-            'end_line', CAST(json_extract(je.value, '$.end.line') AS INTEGER),
-            'start_column', CAST(json_extract(je.value, '$.start.column') AS INTEGER),
-            'end_column', CAST(json_extract(je.value, '$.end.column') AS INTEGER)
-        ))
-        FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
-        WHERE json_extract_string(je.value, '$.name') IS NOT NULL),
-        '[]'::JSON
-    )
+    [
+        {
+            'name': node.name,
+            'type': node.type,
+            'start_line': node.start_line,
+            'end_line': node.end_line,
+            'start_column': node.start_column,
+            'end_column': node.end_column
+        }
+        for node in COALESCE(nodes, [])
+        if node.name IS NOT NULL AND node.name != ''
+    ]
 );
 
 -- Chain method version
@@ -109,22 +108,20 @@ CREATE OR REPLACE MACRO ast_get_parent_chain(
 -- ===================================
 -- ast_get_calls - Extract function calls from a node
 -- ===================================
--- Returns a JSON array of function call objects
+-- Returns a struct array of function call objects
 CREATE OR REPLACE MACRO ast_get_calls(nodes, root_node_id := NULL) AS (
-    COALESCE(
-        (SELECT json_group_array(json_object(
-            'called_function', json_extract_string(je.value, '$.name'),
-            'call_type', json_extract_string(je.value, '$.type'),
-            'line', CAST(json_extract(je.value, '$.start.line') AS INTEGER)
-        ))
-        FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
-        WHERE (json_extract_string(je.value, '$.normalized_type') = 'function_call'
-               OR json_extract_string(je.value, '$.type') LIKE '%call%')
-          AND (root_node_id IS NULL 
-               OR json_extract_string(je.value, '$.id') = root_node_id
-               OR json_extract_string(je.value, '$.parent_id') = root_node_id)),
-        '[]'::JSON
-    )
+    [
+        {
+            'called_function': node.name,
+            'call_type': node.type,
+            'line': node.start_line
+        }
+        for node in COALESCE(nodes, [])
+        if (node.type LIKE '%call%')
+           AND (root_node_id IS NULL 
+                OR node.node_id = root_node_id
+                OR node.parent_id = root_node_id)
+    ]
 );
 
 -- Chain method version

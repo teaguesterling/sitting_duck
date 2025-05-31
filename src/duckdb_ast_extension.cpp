@@ -36,7 +36,7 @@ static void LoadInternal(DatabaseInstance &instance) {
 	ExtensionHelper::AutoLoadExtension(instance, "json");
 	RegisterASTSQLMacros(instance);
 	
-	// Register the short names function (doesn't depend on JSON)
+	// Register the short names function and pragma (doesn't depend on JSON)
 	RegisterDuckDBASTShortNamesFunction(instance);
 	
 	// TODO: Re-enable once we fix the issues

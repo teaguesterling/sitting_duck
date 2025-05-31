@@ -297,7 +297,7 @@ string CPPLanguageHandler::GetLanguageName() const {
 }
 
 vector<string> CPPLanguageHandler::GetAliases() const {
-    return {"cpp", "c++", "cxx"};
+    return {"cpp", "c++", "cxx", "cc", "hpp"};
 }
 
 TSParser* CPPLanguageHandler::CreateParser() const {

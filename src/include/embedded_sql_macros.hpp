@@ -48,33 +48,30 @@ CREATE OR REPLACE MACRO _ast_internal_ensure_integer_array(val) AS (
 
 -- Find nodes by type(s) - accepts string or array
 CREATE OR REPLACE MACRO ast_get_type(nodes, types) AS (
-    COALESCE(
-        (SELECT json_group_array(je.value) 
-         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
-         WHERE list_contains(_ast_internal_ensure_varchar_array(types), json_extract_string(je.value, '$.type'))),
-        '[]'::JSON
-    )
+    [
+        node
+        for node in COALESCE(nodes, [])
+        if list_contains(_ast_internal_ensure_varchar_array(types), node.type)
+    ]
 );
 
 -- Extract names from nodes, optionally filtered by type
 CREATE OR REPLACE MACRO ast_get_names(nodes, node_type := NULL) AS (
-    COALESCE(
-        (SELECT json_group_array(json_extract_string(je.value, '$.name'))
-         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
-         WHERE json_extract_string(je.value, '$.name') IS NOT NULL
-           AND (node_type IS NULL OR json_extract_string(je.value, '$.type') = node_type)),
-        '[]'::JSON
-    )
+    [
+        node.name
+        for node in COALESCE(nodes, [])
+        if node.name IS NOT NULL AND node.name != ''
+           AND (node_type IS NULL OR node.type = node_type)
+    ]
 );
 
 -- Find nodes at specific depth(s) - accepts integer or array
 CREATE OR REPLACE MACRO ast_get_depth(nodes, depths) AS (
-    COALESCE(
-        (SELECT json_group_array(je.value)
-         FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
-         WHERE list_contains(_ast_internal_ensure_integer_array(depths), json_extract(je.value, '$.depth')::INTEGER)),
-        '[]'::JSON
-    )
+    [
+        node
+        for node in COALESCE(nodes, [])
+        if list_contains(_ast_internal_ensure_integer_array(depths), node.depth)
+    ]
 );
 
 -- ===================================
@@ -156,23 +153,11 @@ CREATE OR REPLACE MACRO ast_summary(nodes) AS (
 -- MAIN ENTRYPOINT
 -- ===================================
 
--- Universal entrypoint that normalizes input to JSON array
+-- Universal entrypoint that normalizes input to struct array
 CREATE OR REPLACE MACRO ast(input) AS (
-    CASE 
-        WHEN input IS NULL THEN '[]'::JSON
-        WHEN typeof(input) = 'JSON' AND json_type(input) = 'ARRAY' THEN input
-        WHEN typeof(input) = 'JSON' AND json_type(input) = 'OBJECT' THEN json_array(input)
-        WHEN typeof(input) = 'STRUCT' THEN 
-            COALESCE(TRY_CAST(json_extract(CAST(input AS JSON), '$.nodes') AS JSON), '[]'::JSON)
-        WHEN typeof(input) = 'VARCHAR' THEN 
-            CASE 
-                WHEN TRY_CAST(input AS JSON) IS NULL THEN '[]'::JSON
-                WHEN json_type(TRY_CAST(input AS JSON)) = 'ARRAY' THEN TRY_CAST(input AS JSON)
-                WHEN json_type(TRY_CAST(input AS JSON)) = 'OBJECT' THEN json_array(TRY_CAST(input AS JSON))
-                ELSE '[]'::JSON
-            END
-        ELSE '[]'::JSON
-    END
+    -- Simply return the input as-is since nodes from read_ast_objects is already a struct array
+    -- This macro now mainly serves as a consistent entry point for chaining
+    input
 );
 
 -- ===================================
@@ -440,21 +425,20 @@ CREATE OR REPLACE MACRO ast_node_get_source(
 -- ===================================
 -- ast_get_locations - Extract location information
 -- ===================================
--- Returns a JSON array of location objects for named nodes
+-- Returns a struct array of location objects for named nodes
 CREATE OR REPLACE MACRO ast_get_locations(nodes) AS (
-    COALESCE(
-        (SELECT json_group_array(json_object(
-            'name', json_extract_string(je.value, '$.name'),
-            'type', json_extract_string(je.value, '$.type'), 
-            'start_line', CAST(json_extract(je.value, '$.start.line') AS INTEGER),
-            'end_line', CAST(json_extract(je.value, '$.end.line') AS INTEGER),
-            'start_column', CAST(json_extract(je.value, '$.start.column') AS INTEGER),
-            'end_column', CAST(json_extract(je.value, '$.end.column') AS INTEGER)
-        ))
-        FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
-        WHERE json_extract_string(je.value, '$.name') IS NOT NULL),
-        '[]'::JSON
-    )
+    [
+        {
+            'name': node.name,
+            'type': node.type,
+            'start_line': node.start_line,
+            'end_line': node.end_line,
+            'start_column': node.start_column,
+            'end_column': node.end_column
+        }
+        for node in COALESCE(nodes, [])
+        if node.name IS NOT NULL AND node.name != ''
+    ]
 );
 
 -- Chain method version
@@ -498,22 +482,20 @@ CREATE OR REPLACE MACRO ast_get_parent_chain(
 -- ===================================
 -- ast_get_calls - Extract function calls from a node
 -- ===================================
--- Returns a JSON array of function call objects
+-- Returns a struct array of function call objects
 CREATE OR REPLACE MACRO ast_get_calls(nodes, root_node_id := NULL) AS (
-    COALESCE(
-        (SELECT json_group_array(json_object(
-            'called_function', json_extract_string(je.value, '$.name'),
-            'call_type', json_extract_string(je.value, '$.type'),
-            'line', CAST(json_extract(je.value, '$.start.line') AS INTEGER)
-        ))
-        FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
-        WHERE (json_extract_string(je.value, '$.normalized_type') = 'function_call'
-               OR json_extract_string(je.value, '$.type') LIKE '%call%')
-          AND (root_node_id IS NULL 
-               OR json_extract_string(je.value, '$.id') = root_node_id
-               OR json_extract_string(je.value, '$.parent_id') = root_node_id)),
-        '[]'::JSON
-    )
+    [
+        {
+            'called_function': node.name,
+            'call_type': node.type,
+            'line': node.start_line
+        }
+        for node in COALESCE(nodes, [])
+        if (node.type LIKE '%call%')
+           AND (root_node_id IS NULL 
+                OR node.node_id = root_node_id
+                OR node.parent_id = root_node_id)
+    ]
 );
 
 -- Chain method version

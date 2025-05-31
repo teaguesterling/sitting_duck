@@ -17,14 +17,17 @@ struct ReadASTObjectsHybridData : public TableFunctionData {
 
 class ReadASTObjectsHybridFunction {
 public:
-    static TableFunction GetFunction();
+    static TableFunction GetFunctionTwoArgs();
+    static TableFunction GetFunctionOneArg();
     
 private:
     static unique_ptr<FunctionData> Bind(ClientContext &context, TableFunctionBindInput &input,
                                        vector<LogicalType> &return_types, vector<string> &names);
+    static unique_ptr<FunctionData> BindOneArg(ClientContext &context, TableFunctionBindInput &input,
+                                             vector<LogicalType> &return_types, vector<string> &names);
     static void Execute(ClientContext &context, TableFunctionInput &data_p, DataChunk &output);
     
-    static string ParseFileToJSON(ClientContext &context, const string &file_path, const string &language);
+    static Value ParseFileToStructs(ClientContext &context, const string &file_path, const string &language, LogicalType &nodes_type);
 };
 
 } // namespace duckdb
