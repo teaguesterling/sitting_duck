@@ -68,9 +68,9 @@ LIMIT 5;
 ----
 id	NULL	UBIGINT
 type	NULL	VARCHAR
+file_path	NULL	VARCHAR
 name	NULL	VARCHAR
 line	NULL	UBIGINT
-column	NULL	UBIGINT
 
 # Test 6: Find unique identifier names using json_each
 query I

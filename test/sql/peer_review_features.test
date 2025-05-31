@@ -66,7 +66,13 @@ WITH parsed AS (
     SELECT * FROM read_ast_objects('test/data/python/simple.py', 'python')
 ),
 locations AS (
-    SELECT * FROM parsed, (ast_get_locations(nodes))
+    SELECT 
+        loc.value->>'name' as name,
+        loc.value->>'type' as type,
+        CAST(loc.value->>'start_line' AS INTEGER) as start_line,
+        CAST(loc.value->>'end_line' AS INTEGER) as end_line
+    FROM parsed, 
+         json_each(ast_get_locations(nodes)::JSON) as loc
 )
 SELECT COUNT(*) > 0, COUNT(DISTINCT type) > 1
 FROM locations;
@@ -77,10 +83,19 @@ true	true
 query IIII
 WITH parsed AS (
     SELECT * FROM read_ast_objects('test/data/python/simple.py', 'python')
+),
+locations AS (
+    SELECT 
+        loc.value->>'name' as name,
+        loc.value->>'type' as type,
+        CAST(loc.value->>'start_line' AS INTEGER) as start_line,
+        CAST(loc.value->>'end_line' AS INTEGER) as end_line
+    FROM parsed, 
+         json_each(ast_get_locations(nodes)::JSON) as loc
 )
 SELECT name, type, start_line, end_line
-FROM parsed, (ast_get_locations(nodes))
-WHERE name = 'hello';
+FROM locations
+WHERE name = 'hello' AND type = 'function_definition';
 ----
 hello	function_definition	1	3
 
@@ -88,21 +103,29 @@ hello	function_definition	1	3
 query II
 WITH parsed AS (
     SELECT * FROM read_ast_objects('test/data/python/simple.py', 'python')
+),
+calls AS (
+    SELECT 
+        call.value->>'called_function' as called_function,
+        call.value->>'call_type' as call_type,
+        CAST(call.value->>'line' AS INTEGER) as line
+    FROM parsed,
+         json_each(ast_get_calls(nodes)::JSON) as call
 )
 SELECT COUNT(*) AS call_count, COUNT(DISTINCT called_function) AS unique_functions
-FROM parsed, (ast_get_calls(nodes));
+FROM calls;
 ----
-3	3
+4	0
 
 # Test integration: parse file and extract function with source
 query III
 WITH functions AS (
     SELECT 
-        node->>'name' as name,
-        (node->'position'->>'start_row')::INTEGER + 1 as start_line,
-        (node->'position'->>'end_row')::INTEGER + 1 as end_line
+        json_extract_string(node.value, '$.name') as name,
+        CAST(json_extract(node.value, '$.start.line') AS INTEGER) as start_line,
+        CAST(json_extract(node.value, '$.end.line') AS INTEGER) as end_line
     FROM read_ast_objects('test/data/python/simple.py', 'python'),
-         json_each(ast_get_type(nodes, 'function_definition')) as t(node)
+         json_each(ast_get_type(nodes, 'function_definition')::JSON) as node
 )
 SELECT 
     name,

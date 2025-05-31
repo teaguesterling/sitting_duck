@@ -136,6 +136,7 @@ string ReadASTObjectsHybridFunction::ParseFileToJSON(ClientContext &context, con
         json << "{";
         json << "\"id\":" << node_counter << ",";
         json << "\"type\":\"" << EscapeJSONString(ts_node_type(entry.node)) << "\",";
+        json << "\"file_path\":\"" << EscapeJSONString(file_path) << "\",";
         
         // Extract name using language handler
         const LanguageHandler* handler = parser.GetLanguageHandler(language);

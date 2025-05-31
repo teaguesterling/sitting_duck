@@ -431,8 +431,8 @@ CREATE OR REPLACE MACRO ast_node_get_source(
 ) AS (
     ast_get_source(
         source_text,
-        (node->'position'->>'start_row')::INTEGER + 1,  -- Convert 0-based to 1-based
-        (node->'position'->>'end_row')::INTEGER + 1,
+        CAST(node->'start'->>'line' AS INTEGER),
+        CAST(node->'end'->>'line' AS INTEGER),
         context_lines := context_lines
     )
 );
@@ -561,7 +561,7 @@ CREATE OR REPLACE MACRO ast_get_functions_with_source(
     WITH parsed AS (
         SELECT 
             nodes,
-            read_text(file_path) as source_text
+            (SELECT content FROM read_text(file_path)) as source_text
         FROM read_ast_objects(file_path, language)
     ),
     functions AS (
@@ -575,10 +575,71 @@ CREATE OR REPLACE MACRO ast_get_functions_with_source(
     )
     SELECT 
         node->>'name' as function_name,
-        (node->'position'->>'start_row')::INTEGER + 1 as start_line,
-        (node->'position'->>'end_row')::INTEGER + 1 as end_line,
+        CAST(node->'start'->>'line' AS INTEGER) as start_line,
+        CAST(node->'end'->>'line' AS INTEGER) as end_line,
         ast_node_get_source(node, source_text, context_lines) as source_code
     FROM functions
+);
+
+-- ===================================
+-- ast_nodes_get_source - Extract source for nodes using embedded file_path
+-- ===================================
+-- This macro extracts source code for AST nodes that have file_path embedded
+-- Note: This version requires passing the file content since DuckDB doesn't support dynamic file paths
+CREATE OR REPLACE MACRO ast_nodes_get_source(nodes, file_content, context_lines := 0) AS (
+    COALESCE(
+        (SELECT json_group_array(json_object(
+            'id', json_extract_string(je.value, '$.id'),
+            'type', json_extract_string(je.value, '$.type'),
+            'name', json_extract_string(je.value, '$.name'),
+            'file_path', json_extract_string(je.value, '$.file_path'),
+            'start_line', CAST(json_extract(je.value, '$.start.line') AS INTEGER),
+            'end_line', CAST(json_extract(je.value, '$.end.line') AS INTEGER),
+            'source', ast_get_source(
+                file_content,
+                CAST(json_extract(je.value, '$.start.line') AS INTEGER),
+                CAST(json_extract(je.value, '$.end.line') AS INTEGER),
+                context_lines := context_lines
+            )
+        ))
+        FROM json_each(COALESCE(nodes, '[]'::JSON)) AS je
+        WHERE json_extract_string(je.value, '$.file_path') IS NOT NULL),
+        '[]'::JSON
+    )
+);
+
+-- Chain method version for extracting source
+-- Note: This requires the file content to be passed separately
+CREATE OR REPLACE MACRO get_source(nodes, file_content, context_lines := 0) AS (
+    ast_nodes_get_source(nodes, file_content, context_lines := context_lines)
+);
+
+-- ===================================
+-- Helper macro for common case: nodes from read_ast_objects
+-- ===================================
+-- This macro works when you have the result from read_ast_objects
+-- It reads the file content once and applies source extraction
+CREATE OR REPLACE MACRO ast_with_source(file_path, language, node_filter := NULL, context_lines := 0) AS (
+    WITH parsed AS (
+        SELECT 
+            nodes,
+            (SELECT content FROM read_text(file_path)) as file_content
+        FROM read_ast_objects(file_path, language)
+    ),
+    filtered_nodes AS (
+        SELECT 
+            CASE 
+                WHEN node_filter IS NOT NULL THEN
+                    (SELECT json_group_array(value)
+                     FROM json_each(nodes::JSON)
+                     WHERE json_extract_string(value, '$.type') = node_filter)
+                ELSE nodes::JSON
+            END as nodes,
+            file_content
+        FROM parsed
+    )
+    SELECT ast_nodes_get_source(nodes, file_content, context_lines) as nodes_with_source
+    FROM filtered_nodes
 );
 )SQLMACRO"},
 };

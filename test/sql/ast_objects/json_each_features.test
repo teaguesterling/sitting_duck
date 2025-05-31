@@ -107,8 +107,8 @@ HAVING parent.value->>'name' IN ('hello', 'main')
 ORDER BY child_count DESC, parent.value->>'id' ASC
 LIMIT 2;
 ----
-{"id":1,"type":"function_definition","name":"hello","start":{"line":1,"column":1},"end":{"line":3,"column":27},"parent_id":0,"depth":1,"sibling_index":0,"children":[2,3,4,5,6]}	5
-{"id":70,"type":"function_definition","name":"main","start":{"line":13,"column":1},"end":{"line":15,"column":12},"parent_id":0,"depth":1,"sibling_index":2,"children":[71,72,73,74,75]}	5
+{"id":1,"type":"function_definition","file_path":"test/data/python/simple.py","name":"hello","start":{"line":1,"column":1},"end":{"line":3,"column":27},"parent_id":0,"depth":1,"sibling_index":0,"children":[2,3,4,5,6]}	5
+{"id":70,"type":"function_definition","file_path":"test/data/python/simple.py","name":"main","start":{"line":13,"column":1},"end":{"line":15,"column":12},"parent_id":0,"depth":1,"sibling_index":2,"children":[71,72,73,74,75]}	5
 
 # Test 9: Extract line number ranges
 query III
