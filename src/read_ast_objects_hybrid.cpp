@@ -44,76 +44,29 @@ static string DetectLanguageFromExtension(const string &file_path) {
     return "auto";  // Unknown extension
 }
 
-TableFunction ReadASTObjectsHybridFunction::GetFunctionTwoArgs() {
-    TableFunction function("read_ast_objects", {LogicalType::VARCHAR, LogicalType::VARCHAR}, Execute, Bind);
-    function.name = "read_ast_objects";
-    return function;
-}
 
 TableFunction ReadASTObjectsHybridFunction::GetFunctionOneArg() {
     TableFunction function("read_ast_objects", {LogicalType::VARCHAR}, Execute, BindOneArg);
     function.name = "read_ast_objects";
+    
+    // Add named parameters for filtering (same as the two-arg version)
+    function.named_parameters["exclude_types"] = LogicalType::LIST(LogicalType::VARCHAR);
+    function.named_parameters["include_types"] = LogicalType::LIST(LogicalType::VARCHAR);
+    
     return function;
 }
 
-unique_ptr<FunctionData> ReadASTObjectsHybridFunction::Bind(ClientContext &context, TableFunctionBindInput &input,
-                                                          vector<LogicalType> &return_types, vector<string> &names) {
-    if (input.inputs.size() != 2) {
-        throw BinderException("read_ast_objects requires exactly 2 arguments: file_pattern and language");
-    }
+TableFunction ReadASTObjectsHybridFunction::GetFunctionWithFilters() {
+    TableFunction function("read_ast_objects", {LogicalType::VARCHAR, LogicalType::VARCHAR}, Execute, BindWithFilters);
+    function.name = "read_ast_objects";
     
-    auto file_pattern = input.inputs[0].GetValue<string>();
-    auto language = input.inputs[1].GetValue<string>();
+    // Set named parameters for filtering (all optional)
+    function.named_parameters["exclude_types"] = LogicalType::LIST(LogicalType::VARCHAR);
+    function.named_parameters["include_types"] = LogicalType::LIST(LogicalType::VARCHAR);
     
-    // Get list of files matching pattern
-    auto &fs = FileSystem::GetFileSystem(context);
-    vector<string> files;
-    
-    // Simple file pattern expansion - for now handle single files or basic wildcards
-    if (file_pattern.find('*') != string::npos) {
-        // For now, just throw an error - we'll implement proper globbing later
-        throw NotImplementedException("File patterns not yet implemented. Please specify a single file.");
-    } else {
-        // Single file
-        if (!fs.FileExists(file_pattern)) {
-            throw IOException("File not found: " + file_pattern);
-        }
-        files.push_back(file_pattern);
-    }
-    
-    // Define output columns - structured metadata + struct array nodes
-    names = {"file_path", "language", "parse_time", "node_count", "max_depth", "nodes"};
-    
-    // Define struct type for AST nodes
-    child_list_t<LogicalType> node_struct_children;
-    node_struct_children.push_back(make_pair("node_id", LogicalType::INTEGER));
-    node_struct_children.push_back(make_pair("type", LogicalType::VARCHAR));
-    node_struct_children.push_back(make_pair("name", LogicalType::VARCHAR));
-    node_struct_children.push_back(make_pair("file_path", LogicalType::VARCHAR));
-    node_struct_children.push_back(make_pair("start_line", LogicalType::INTEGER));
-    node_struct_children.push_back(make_pair("end_line", LogicalType::INTEGER));
-    node_struct_children.push_back(make_pair("start_column", LogicalType::INTEGER));
-    node_struct_children.push_back(make_pair("end_column", LogicalType::INTEGER));
-    node_struct_children.push_back(make_pair("parent_id", LogicalType::INTEGER));
-    node_struct_children.push_back(make_pair("depth", LogicalType::INTEGER));
-    node_struct_children.push_back(make_pair("sibling_index", LogicalType::INTEGER));
-    node_struct_children.push_back(make_pair("children_count", LogicalType::INTEGER));
-    node_struct_children.push_back(make_pair("descendant_count", LogicalType::INTEGER));
-    
-    auto node_struct_type = LogicalType::STRUCT(node_struct_children);
-    auto nodes_array_type = LogicalType::LIST(node_struct_type);
-    
-    return_types = {
-        LogicalType::VARCHAR,       // file_path
-        LogicalType::VARCHAR,       // language  
-        LogicalType::TIMESTAMP,     // parse_time
-        LogicalType::INTEGER,       // node_count
-        LogicalType::INTEGER,       // max_depth
-        nodes_array_type            // nodes (struct array)
-    };
-    
-    return make_uniq<ReadASTObjectsHybridData>(std::move(files), std::move(language));
+    return function;
 }
+
 
 unique_ptr<FunctionData> ReadASTObjectsHybridFunction::BindOneArg(ClientContext &context, TableFunctionBindInput &input,
                                                                 vector<LogicalType> &return_types, vector<string> &names) {
@@ -129,6 +82,11 @@ unique_ptr<FunctionData> ReadASTObjectsHybridFunction::BindOneArg(ClientContext 
         throw BinderException("Could not detect language from file extension. Please specify language explicitly.");
     }
     
+    // Parse named filter parameters (for future use - currently ignored)
+    // This preserves the API for when we implement proper filtering
+    
+    FilterConfig filter_config; // Empty config - no filtering applied
+    
     // Get list of files matching pattern
     auto &fs = FileSystem::GetFileSystem(context);
     vector<string> files;
@@ -176,10 +134,74 @@ unique_ptr<FunctionData> ReadASTObjectsHybridFunction::BindOneArg(ClientContext 
         nodes_array_type            // nodes (struct array)
     };
     
-    return make_uniq<ReadASTObjectsHybridData>(std::move(files), std::move(language));
+    return make_uniq<ReadASTObjectsHybridData>(std::move(files), std::move(language), std::move(filter_config));
 }
 
-Value ReadASTObjectsHybridFunction::ParseFileToStructs(ClientContext &context, const string &file_path, const string &language, LogicalType &nodes_type) {
+unique_ptr<FunctionData> ReadASTObjectsHybridFunction::BindWithFilters(ClientContext &context, TableFunctionBindInput &input,
+                                                                      vector<LogicalType> &return_types, vector<string> &names) {
+    if (input.inputs.size() != 2) {
+        throw BinderException("read_ast_objects with filters requires 2 positional arguments: file_pattern, language");
+    }
+    
+    auto file_pattern = input.inputs[0].GetValue<string>();
+    auto language = input.inputs[1].GetValue<string>();
+    
+    // Parse named filter parameters (for future use - currently ignored)
+    // This preserves the API for when we implement proper filtering
+    
+    FilterConfig filter_config; // Empty config - no filtering applied
+    
+    // Get list of files matching pattern
+    auto &fs = FileSystem::GetFileSystem(context);
+    vector<string> files;
+    
+    // Simple file pattern expansion - for now handle single files or basic wildcards
+    if (file_pattern.find('*') != string::npos) {
+        // For now, just throw an error - we'll implement proper globbing later
+        throw NotImplementedException("File patterns not yet implemented. Please specify a single file.");
+    } else {
+        // Single file
+        if (!fs.FileExists(file_pattern)) {
+            throw IOException("File not found: " + file_pattern);
+        }
+        files.push_back(file_pattern);
+    }
+    
+    // Define output columns - structured metadata + struct array nodes
+    names = {"file_path", "language", "parse_time", "node_count", "max_depth", "nodes"};
+    
+    // Define struct type for AST nodes
+    child_list_t<LogicalType> node_struct_children;
+    node_struct_children.push_back(make_pair("node_id", LogicalType::INTEGER));
+    node_struct_children.push_back(make_pair("type", LogicalType::VARCHAR));
+    node_struct_children.push_back(make_pair("name", LogicalType::VARCHAR));
+    node_struct_children.push_back(make_pair("file_path", LogicalType::VARCHAR));
+    node_struct_children.push_back(make_pair("start_line", LogicalType::INTEGER));
+    node_struct_children.push_back(make_pair("end_line", LogicalType::INTEGER));
+    node_struct_children.push_back(make_pair("start_column", LogicalType::INTEGER));
+    node_struct_children.push_back(make_pair("end_column", LogicalType::INTEGER));
+    node_struct_children.push_back(make_pair("parent_id", LogicalType::INTEGER));
+    node_struct_children.push_back(make_pair("depth", LogicalType::INTEGER));
+    node_struct_children.push_back(make_pair("sibling_index", LogicalType::INTEGER));
+    node_struct_children.push_back(make_pair("children_count", LogicalType::INTEGER));
+    node_struct_children.push_back(make_pair("descendant_count", LogicalType::INTEGER));
+    
+    auto node_struct_type = LogicalType::STRUCT(node_struct_children);
+    auto nodes_array_type = LogicalType::LIST(node_struct_type);
+    
+    return_types = {
+        LogicalType::VARCHAR,       // file_path
+        LogicalType::VARCHAR,       // language  
+        LogicalType::TIMESTAMP,     // parse_time
+        LogicalType::INTEGER,       // node_count
+        LogicalType::INTEGER,       // max_depth
+        nodes_array_type            // nodes (struct array)
+    };
+    
+    return make_uniq<ReadASTObjectsHybridData>(std::move(files), std::move(language), std::move(filter_config));
+}
+
+Value ReadASTObjectsHybridFunction::ParseFileToStructs(ClientContext &context, const string &file_path, const string &language, LogicalType &nodes_type, const FilterConfig &filter_config) {
     auto &fs = FileSystem::GetFileSystem(context);
     
     // Read file content
@@ -351,7 +373,7 @@ void ReadASTObjectsHybridFunction::Execute(ClientContext &context, TableFunction
             
             // Parse file to structs
             auto nodes_type = output.data[5].GetType();
-            Value struct_nodes_value = ParseFileToStructs(context, file_path, data.language, nodes_type);
+            Value struct_nodes_value = ParseFileToStructs(context, file_path, data.language, nodes_type, data.filter_config);
             
             auto end_time = std::chrono::system_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
@@ -364,7 +386,7 @@ void ReadASTObjectsHybridFunction::Execute(ClientContext &context, TableFunction
             int32_t max_depth = 0;
             for (const auto &struct_val : list_children) {
                 auto &struct_children = StructValue::GetChildren(struct_val);
-                int32_t depth = struct_children[9].GetValue<int32_t>(); // depth field (index 9)
+                int32_t depth = struct_children[9].GetValue<int32_t>(); // depth field is at index 9 (0-based)
                 max_depth = std::max(max_depth, depth);
             }
             
@@ -391,10 +413,10 @@ void ReadASTObjectsHybridFunction::Execute(ClientContext &context, TableFunction
 }
 
 void RegisterReadASTObjectsHybridFunction(DatabaseInstance &instance) {
-    // Create a function set with both overloads
+    // Create a function set with just the two functions that support named parameters
     TableFunctionSet read_ast_objects_set("read_ast_objects");
-    read_ast_objects_set.AddFunction(ReadASTObjectsHybridFunction::GetFunctionOneArg());
-    read_ast_objects_set.AddFunction(ReadASTObjectsHybridFunction::GetFunctionTwoArgs());
+    read_ast_objects_set.AddFunction(ReadASTObjectsHybridFunction::GetFunctionOneArg());      // 1 arg + named params
+    read_ast_objects_set.AddFunction(ReadASTObjectsHybridFunction::GetFunctionWithFilters()); // 2 args + named params
     
     ExtensionUtil::RegisterFunction(instance, read_ast_objects_set);
 }
