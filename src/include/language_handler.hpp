@@ -14,14 +14,11 @@ class LanguageConfig;
 // Base class for language-specific handlers
 class LanguageHandler {
 public:
-    virtual ~LanguageHandler() = default;
+    virtual ~LanguageHandler();
     
     // Language identification
     virtual string GetLanguageName() const = 0;
     virtual vector<string> GetAliases() const = 0;
-    
-    // Parser creation
-    virtual TSParser* CreateParser() const = 0;
     
     // Type normalization
     virtual string GetNormalizedType(const string &node_type) const = 0;
@@ -41,6 +38,9 @@ public:
     // Get language-specific taxonomy configuration
     virtual const LanguageConfig& GetConfig() const = 0;
     
+    // High-level parsing interface - uses owned parser
+    virtual void ParseFile(const string &content, vector<ASTNode> &nodes) const = 0;
+    
     // Compute semantic ID for a node
     uint64_t ComputeSemanticId(TSNode node, const string &content, 
                                uint64_t parent_hash = 0) const;
@@ -58,7 +58,21 @@ public:
         return 7; // 14+
     }
     
+    // Get parser (lazy initialization)
+    TSParser* GetParser() const {
+        if (!parser) {
+            InitializeParser();
+        }
+        return parser;
+    }
+    
 protected:
+    // Owned parser instance - created once per handler
+    mutable TSParser* parser = nullptr;
+    
+    // Initialize parser with language-specific settings
+    virtual void InitializeParser() const = 0;
+    
     // Helper method for finding identifier children
     string FindIdentifierChild(TSNode node, const string &content) const;
     
@@ -77,13 +91,16 @@ class PythonLanguageHandler : public LanguageHandler {
 public:
     string GetLanguageName() const override;
     vector<string> GetAliases() const override;
-    TSParser* CreateParser() const override;
     string GetNormalizedType(const string &node_type) const override;
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
     const NodeTypeConfig* GetNodeTypeConfig(const string &node_type) const override;
     const LanguageConfig& GetConfig() const override;
+    void ParseFile(const string &content, vector<ASTNode> &nodes) const override;
+
+protected:
+    void InitializeParser() const override;
     
 private:
     static const std::unordered_map<string, string> type_mappings;
@@ -94,13 +111,16 @@ class JavaScriptLanguageHandler : public LanguageHandler {
 public:
     string GetLanguageName() const override;
     vector<string> GetAliases() const override;
-    TSParser* CreateParser() const override;
     string GetNormalizedType(const string &node_type) const override;
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
     const NodeTypeConfig* GetNodeTypeConfig(const string &node_type) const override;
     const LanguageConfig& GetConfig() const override;
+    void ParseFile(const string &content, vector<ASTNode> &nodes) const override;
+
+protected:
+    void InitializeParser() const override;
     
 private:
     static const std::unordered_map<string, string> type_mappings;
@@ -111,13 +131,16 @@ class CPPLanguageHandler : public LanguageHandler {
 public:
     string GetLanguageName() const override;
     vector<string> GetAliases() const override;
-    TSParser* CreateParser() const override;
     string GetNormalizedType(const string &node_type) const override;
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
     const NodeTypeConfig* GetNodeTypeConfig(const string &node_type) const override;
     const LanguageConfig& GetConfig() const override;
+    void ParseFile(const string &content, vector<ASTNode> &nodes) const override;
+
+protected:
+    void InitializeParser() const override;
     
 private:
     static const std::unordered_map<string, string> type_mappings;
@@ -128,13 +151,16 @@ class RustLanguageHandler : public LanguageHandler {
 public:
     string GetLanguageName() const override;
     vector<string> GetAliases() const override;
-    TSParser* CreateParser() const override;
     string GetNormalizedType(const string &node_type) const override;
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
     const NodeTypeConfig* GetNodeTypeConfig(const string &node_type) const override;
     const LanguageConfig& GetConfig() const override;
+    void ParseFile(const string &content, vector<ASTNode> &nodes) const override;
+
+protected:
+    void InitializeParser() const override;
     
 private:
     static const std::unordered_map<string, string> type_mappings;

@@ -20,6 +20,13 @@ namespace duckdb {
 // Base LanguageHandler implementation
 //==============================================================================
 
+LanguageHandler::~LanguageHandler() {
+    if (parser) {
+        ts_parser_delete(parser);
+        parser = nullptr;
+    }
+}
+
 string LanguageHandler::FindIdentifierChild(TSNode node, const string &content) const {
     uint32_t child_count = ts_node_child_count(node);
     for (uint32_t i = 0; i < child_count; i++) {
@@ -110,16 +117,14 @@ vector<string> PythonLanguageHandler::GetAliases() const {
     return {"python", "py"};
 }
 
-TSParser* PythonLanguageHandler::CreateParser() const {
-    TSParser *parser = ts_parser_new();
+void PythonLanguageHandler::InitializeParser() const {
+    parser = ts_parser_new();
     if (!parser) {
         throw InvalidInputException("Failed to create tree-sitter parser");
     }
     
     const TSLanguage *ts_language = tree_sitter_python();
     SetParserLanguageWithValidation(parser, ts_language, "Python");
-    
-    return parser;
 }
 
 string PythonLanguageHandler::GetNormalizedType(const string &node_type) const {
@@ -202,6 +207,85 @@ const LanguageConfig& PythonLanguageHandler::GetConfig() const {
     throw NotImplementedException("LanguageConfig not implemented yet");
 }
 
+void PythonLanguageHandler::ParseFile(const string &content, vector<ASTNode> &nodes) const {
+    TSParser* my_parser = GetParser();
+    
+    TSTree *tree = ts_parser_parse_string(my_parser, nullptr, content.c_str(), content.length());
+    if (!tree) {
+        throw IOException("Failed to parse Python content");
+    }
+    
+    // Convert tree to nodes using depth-first traversal
+    TSNode root = ts_tree_root_node(tree);
+    int64_t node_counter = 0;
+    
+    struct StackEntry {
+        TSNode node;
+        int64_t parent_id;
+        int32_t depth;
+        int32_t sibling_index;
+    };
+    
+    vector<StackEntry> stack;
+    stack.push_back({root, -1, 0, 0});
+    
+    while (!stack.empty()) {
+        auto entry = stack.back();
+        stack.pop_back();
+        
+        // Create ASTNode
+        ASTNode ast_node;
+        ast_node.tree_position.node_index = node_counter++;
+        ast_node.node_id = ast_node.tree_position.node_index; // Simple ID for now
+        ast_node.type.raw = ts_node_type(entry.node);
+        ast_node.tree_position.parent_index = entry.parent_id;
+        ast_node.tree_position.node_depth = entry.depth;
+        ast_node.tree_position.sibling_index = entry.sibling_index;
+        
+        // Extract position
+        TSPoint start = ts_node_start_point(entry.node);
+        TSPoint end = ts_node_end_point(entry.node);
+        ast_node.file_position.start_line = start.row + 1;
+        ast_node.file_position.start_column = start.column + 1;
+        ast_node.file_position.end_line = end.row + 1;
+        ast_node.file_position.end_column = end.column + 1;
+        
+        // Extract name and value
+        ast_node.name.raw = ExtractNodeName(entry.node, content);
+        
+        // Extract source text (peek)
+        uint32_t start_byte = ts_node_start_byte(entry.node);
+        uint32_t end_byte = ts_node_end_byte(entry.node);
+        if (start_byte < content.size() && end_byte <= content.size()) {
+            string source_text = content.substr(start_byte, end_byte - start_byte);
+            ast_node.peek = source_text.length() > 120 ? source_text.substr(0, 120) : source_text;
+        }
+        
+        // Apply taxonomy
+        const NodeTypeConfig* config = GetNodeTypeConfig(ast_node.type.raw);
+        if (config) {
+            ast_node.kind = static_cast<uint8_t>(config->kind);
+            ast_node.universal_flags = config->universal_flags;
+            ast_node.super_type = config->super_type;
+        }
+        
+        ast_node.arity_bin = ASTNode::BinArityFibonacci(ts_node_child_count(entry.node));
+        ast_node.type.normalized = GetNormalizedType(ast_node.type.raw);
+        ast_node.type.kind = ASTNode::GetKindName(static_cast<ASTKind>(ast_node.kind));
+        
+        nodes.push_back(ast_node);
+        
+        // Add children in reverse order for correct processing
+        uint32_t child_count = ts_node_child_count(entry.node);
+        for (int32_t i = child_count - 1; i >= 0; i--) {
+            TSNode child = ts_node_child(entry.node, i);
+            stack.push_back({child, ast_node.tree_position.node_index, entry.depth + 1, i});
+        }
+    }
+    
+    ts_tree_delete(tree);
+}
+
 //==============================================================================
 // JavaScriptLanguageHandler implementation
 //==============================================================================
@@ -254,16 +338,14 @@ vector<string> JavaScriptLanguageHandler::GetAliases() const {
     return {"javascript", "js"};
 }
 
-TSParser* JavaScriptLanguageHandler::CreateParser() const {
-    TSParser *parser = ts_parser_new();
+void JavaScriptLanguageHandler::InitializeParser() const {
+    parser = ts_parser_new();
     if (!parser) {
         throw InvalidInputException("Failed to create tree-sitter parser");
     }
     
     const TSLanguage *ts_language = tree_sitter_javascript();
     SetParserLanguageWithValidation(parser, ts_language, "JavaScript");
-    
-    return parser;
 }
 
 string JavaScriptLanguageHandler::GetNormalizedType(const string &node_type) const {
@@ -359,6 +441,11 @@ const LanguageConfig& JavaScriptLanguageHandler::GetConfig() const {
     throw NotImplementedException("LanguageConfig not implemented yet");
 }
 
+void JavaScriptLanguageHandler::ParseFile(const string &content, vector<ASTNode> &nodes) const {
+    // TODO: Implement JavaScript-specific parsing - for now, throw
+    throw NotImplementedException("JavaScript ParseFile not implemented yet");
+}
+
 //==============================================================================
 // CPPLanguageHandler implementation
 //==============================================================================
@@ -410,16 +497,14 @@ vector<string> CPPLanguageHandler::GetAliases() const {
     return {"cpp", "c++", "cxx", "cc", "hpp"};
 }
 
-TSParser* CPPLanguageHandler::CreateParser() const {
-    TSParser *parser = ts_parser_new();
+void CPPLanguageHandler::InitializeParser() const {
+    parser = ts_parser_new();
     if (!parser) {
         throw InvalidInputException("Failed to create tree-sitter parser");
     }
     
     const TSLanguage *ts_language = tree_sitter_cpp();
     SetParserLanguageWithValidation(parser, ts_language, "C++");
-    
-    return parser;
 }
 
 string CPPLanguageHandler::GetNormalizedType(const string &node_type) const {
@@ -532,6 +617,11 @@ const LanguageConfig& CPPLanguageHandler::GetConfig() const {
     throw NotImplementedException("LanguageConfig not implemented yet");
 }
 
+void CPPLanguageHandler::ParseFile(const string &content, vector<ASTNode> &nodes) const {
+    // TODO: Implement C++-specific parsing - for now, throw
+    throw NotImplementedException("C++ ParseFile not implemented yet");
+}
+
 //==============================================================================
 // RustLanguageHandler implementation
 //==============================================================================
@@ -587,16 +677,15 @@ vector<string> RustLanguageHandler::GetAliases() const {
     return {"rust", "rs"};
 }
 
-TSParser* RustLanguageHandler::CreateParser() const {
-    TSParser* parser = ts_parser_new();
+void RustLanguageHandler::InitializeParser() const {
+    parser = ts_parser_new();
     if (!parser) {
         throw InvalidInputException("Failed to create tree-sitter parser");
     }
     
+    // TODO: Re-enable when Rust grammar is working
     //const TSLanguage* ts_language = tree_sitter_rust();
     //SetParserLanguageWithValidation(parser, ts_language, "Rust");
-    
-    return parser;
 }
 
 string RustLanguageHandler::GetNormalizedType(const string &node_type) const {
@@ -687,6 +776,11 @@ const LanguageConfig& RustLanguageHandler::GetConfig() const {
     throw NotImplementedException("LanguageConfig not implemented yet");
 }
 
+void RustLanguageHandler::ParseFile(const string &content, vector<ASTNode> &nodes) const {
+    // TODO: Implement Rust-specific parsing - for now, throw
+    throw NotImplementedException("Rust ParseFile not implemented yet");
+}
+
 //==============================================================================
 // LanguageHandlerRegistry implementation
 //==============================================================================
@@ -743,16 +837,20 @@ vector<string> LanguageHandlerRegistry::GetSupportedLanguages() const {
 }
 
 void LanguageHandlerRegistry::ValidateLanguageABI(const LanguageHandler* handler) const {
-    // Create a test parser to validate the language
-    TSParser* parser = handler->CreateParser();
-    if (!parser) {
+    // Test parser initialization to validate ABI compatibility
+    try {
+        // Create a temporary handler to test parser creation
+        auto test_handler = const_cast<LanguageHandler*>(handler);
+        TSParser* parser = test_handler->GetParser();
+        if (!parser) {
+            throw InvalidInputException("Language handler for '" + handler->GetLanguageName() + 
+                                       "' failed to create parser");
+        }
+        // Parser initialization validates ABI compatibility automatically
+    } catch (const std::exception& e) {
         throw InvalidInputException("Language handler for '" + handler->GetLanguageName() + 
-                                   "' failed to create parser");
+                                   "' failed validation: " + e.what());
     }
-    
-    // CreateParser should have already validated ABI compatibility
-    // If we got here, the language is compatible
-    ts_parser_delete(parser);
 }
 
 void LanguageHandlerRegistry::InitializeDefaultHandlers() {

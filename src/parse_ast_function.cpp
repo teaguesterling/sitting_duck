@@ -114,17 +114,16 @@ void ParseASTFunction::ParseASTScalarFunction(DataChunk &args, ExpressionState &
                 throw InvalidInputException("Unsupported language: " + language);
             }
             
-            // Create parser
-            TSParser* parser = handler->CreateParser();
+            // Get parser
+            TSParser* parser = handler->GetParser();
             if (!parser) {
-                throw InternalException("Failed to create parser for language: " + language);
+                throw InternalException("Failed to get parser for language: " + language);
             }
             
             // Parse the code
             string code_str = code.GetString();
             TSTree* tree = ts_parser_parse_string(parser, nullptr, code_str.c_str(), code_str.length());
             if (!tree) {
-                ts_parser_delete(parser);
                 throw InternalException("Failed to parse code");
             }
             
@@ -134,7 +133,6 @@ void ParseASTFunction::ParseASTScalarFunction(DataChunk &args, ExpressionState &
             
             // Cleanup
             ts_tree_delete(tree);
-            ts_parser_delete(parser);
             
             return StringVector::AddString(result, json_result);
         });

@@ -2,38 +2,56 @@
 -- Tree-preserving operations that return valid ASTs with complete subtrees
 
 -- ===================================
--- GENERIC GET FUNCTIONS
+-- BASIC GET OPERATIONS
 -- ===================================
 
--- Get nodes by type(s)
+-- Get nodes by type(s) - reuse primitives
 CREATE OR REPLACE MACRO ast_get_types(ast, types) AS (
-    ast_get_branches(ast, node -> list_contains(types, node.type))
+    ast_get_by_types(ast, types)
 );
 
--- Get nodes by single type
+-- Get nodes by single type - reuse primitives  
 CREATE OR REPLACE MACRO ast_get_type(ast, type) AS (
-    ast_get_branches(ast, node -> node.type = type)
-);
-
--- Get nodes where property matches value(s)
-CREATE OR REPLACE MACRO ast_get_property_in(ast, property, values) AS (
-    ast_get_branches(ast, node -> list_contains(values, node[property]))
-);
-
--- Get nodes where property equals value
-CREATE OR REPLACE MACRO ast_get_property_eq(ast, property, value) AS (
-    ast_get_branches(ast, node -> node[property] = value)
+    ast_get_by_type(ast, type)
 );
 
 -- Get nodes at specific depth
 CREATE OR REPLACE MACRO ast_get_depth(ast, depth) AS (
-    ast_get_branches(ast, node -> node.depth = depth)
+    ast_update(
+        ast,
+        ast_extract_subtrees(
+            ast.nodes,
+            ast_filter_by_depth(ast.nodes, depth)
+        )
+    )
 );
 
--- Get nodes with non-empty names
-CREATE OR REPLACE MACRO ast_get_named(ast) AS (
-    ast_get_branches(ast, node -> node.name IS NOT NULL AND node.name != '')
+-- Get nodes with specific name
+CREATE OR REPLACE MACRO ast_get_name(ast, name) AS (
+    ast_update(
+        ast,
+        ast_extract_subtrees(
+            ast.nodes,
+            ast_filter_by_name(ast.nodes, name)
+        )
+    )
 );
+
+-- ===================================
+-- COMPLEX GET OPERATIONS
+-- For these, users should use list_filter with lambdas
+-- ===================================
+
+-- Example usage patterns for complex queries:
+-- Get nodes with non-empty names:
+-- SELECT ast_update(ast, ast_extract_subtrees(ast.nodes, 
+--     list_filter(ast_with_indices(ast.nodes), x -> x.node.name IS NOT NULL AND x.node.name != '')
+-- )) FROM ...
+
+-- Get nodes where property matches values:
+-- SELECT ast_update(ast, ast_extract_subtrees(ast.nodes,
+--     list_filter(ast_with_indices(ast.nodes), x -> list_contains(values, x.node[property]))
+-- )) FROM ...
 
 -- ===================================
 -- LANGUAGE-AGNOSTIC SEMANTIC FUNCTIONS
@@ -69,33 +87,34 @@ CREATE OR REPLACE MACRO ast_get_imports(ast) AS (
     ])
 );
 
--- Get all comments
-CREATE OR REPLACE MACRO ast_get_comments(ast) AS (
-    ast_get_branches(ast, node -> node.type LIKE '%comment%')
-);
-
--- ===================================
--- COMPLEX QUERIES
--- ===================================
-
--- Get nodes matching a name pattern
-CREATE OR REPLACE MACRO ast_get_pattern(ast, pattern) AS (
-    ast_get_branches(ast, node -> node.name LIKE pattern)
-);
-
--- Get nodes within a line range
-CREATE OR REPLACE MACRO ast_get_lines(ast, start_line, end_line) AS (
-    ast_get_branches(ast, node -> 
-        node.start_line >= start_line AND node.end_line <= end_line
-    )
-);
-
--- Get nodes with specific complexity (using descendant count as proxy)
-CREATE OR REPLACE MACRO ast_get_complex(ast, min_descendants) AS (
-    ast_get_branches(ast, node -> node.descendant_count >= min_descendants)
-);
-
 -- Get top-level nodes (direct children of root)
 CREATE OR REPLACE MACRO ast_get_top_level(ast) AS (
-    ast_get_branches(ast, node -> node.depth = 1)
+    ast_get_depth(ast, 1)
 );
+
+-- ===================================
+-- ADVANCED USAGE PATTERNS
+-- ===================================
+
+-- For complex predicates, users should compose with list_filter:
+
+-- Get all comments:
+-- SELECT ast_update(ast, ast_extract_subtrees(ast.nodes,
+--     list_filter(ast_with_indices(ast.nodes), x -> x.node.type LIKE '%comment%')
+-- )) FROM ...
+
+-- Get nodes matching name pattern:
+-- SELECT ast_update(ast, ast_extract_subtrees(ast.nodes,
+--     list_filter(ast_with_indices(ast.nodes), x -> x.node.name LIKE '%test%')
+-- )) FROM ...
+
+-- Get nodes within line range:
+-- SELECT ast_update(ast, ast_extract_subtrees(ast.nodes,
+--     list_filter(ast_with_indices(ast.nodes), 
+--         x -> x.node.start_line >= 10 AND x.node.end_line <= 20)
+-- )) FROM ...
+
+-- Get complex nodes (many descendants):
+-- SELECT ast_update(ast, ast_extract_subtrees(ast.nodes,
+--     list_filter(ast_with_indices(ast.nodes), x -> x.node.descendant_count >= 50)
+-- )) FROM ...

@@ -220,7 +220,6 @@ Value ReadASTObjectsHybridFunction::ParseFileToStructs(ClientContext &context, c
     
     TSTree *tree = parser.ParseString(content, ts_parser);
     if (!tree) {
-        ts_parser_delete(ts_parser);
         throw IOException("Failed to parse file");
     }
     
@@ -303,22 +302,16 @@ Value ReadASTObjectsHybridFunction::ParseFileToStructs(ClientContext &context, c
             // Second time - all children have been processed, calculate descendant count
             stack.pop_back();
             
-            // Calculate descendant count by summing children + their descendants
-            int32_t descendant_count = 0;
-            int64_t current_node_id = nodes[entry.node_index].node_id;
-            
-            for (const auto &node : nodes) {
-                if (node.parent_id == current_node_id) {
-                    descendant_count += 1 + node.descendant_count;
-                }
-            }
+            // O(1) descendant count calculation!
+            // When we return to a node, all nodes between entry.node_index+1 and nodes.size()
+            // that were added are this node's descendants (due to DFS ordering)
+            int32_t descendant_count = nodes.size() - entry.node_index - 1;
             
             nodes[entry.node_index].descendant_count = descendant_count;
         }
     }
     
     ts_tree_delete(tree);
-    ts_parser_delete(ts_parser);
     
     // Create list of struct values
     vector<Value> struct_values;

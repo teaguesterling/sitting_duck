@@ -2,41 +2,34 @@
 -- Low-level building blocks for AST manipulation
 
 -- ===================================
--- PRIMITIVE UTILITIES
+-- INDEXING PRIMITIVES
 -- ===================================
 
--- Filter nodes with index preservation
--- Returns array of (index, node) pairs
-CREATE OR REPLACE MACRO ast_nodes_filter_with_index(nodes, predicate) AS (
-    [
-        struct_pack(idx := idx, node := node)
-        for (idx, node) in enumerate(nodes)
-        if predicate(node)
-    ]
+-- Add indices to all nodes
+-- Returns array of (idx, node) pairs for use with list_filter
+CREATE OR REPLACE MACRO ast_with_indices(nodes) AS (
+    [struct_pack(idx := i, node := node) for node, i in nodes]
 );
 
--- Get complete subtrees for nodes at given positions
--- Takes original nodes array and array of (idx, node) pairs
+-- Extract complete subtrees for filtered indexed nodes
+-- Takes original nodes array and filtered indexed results
 -- Returns flattened array of all nodes in the subtrees
-CREATE OR REPLACE MACRO ast_nodes_get_branches(nodes, indexed_nodes) AS (
-    [
-        nodes[i]
-        for indexed in indexed_nodes
-        for i in range(indexed.idx, indexed.idx + indexed.node.descendant_count + 1)
-    ]
+CREATE OR REPLACE MACRO ast_extract_subtrees(nodes, filtered_indices) AS (
+    flatten([
+        [nodes[j] for j in range(fi.idx, fi.idx + fi.node.descendant_count + 1)]
+        for fi in filtered_indices
+    ])
 );
 
--- Flatten nested arrays
-CREATE OR REPLACE MACRO ast_flatten(nested_nodes) AS (
-    list_reduce(nested_nodes, (acc, x) -> list_concat(acc, x), [])
-);
+-- ===================================
+-- AST STRUCT OPERATIONS
+-- ===================================
 
--- Update AST struct fields
--- Since DuckDB lacks struct_update, we rebuild the struct
-CREATE OR REPLACE MACRO ast_update(ast, nodes := NULL, source := NULL) AS (
+-- Update AST struct with new nodes
+CREATE OR REPLACE MACRO ast_update(ast, new_nodes) AS (
     struct_pack(
-        source := COALESCE(source, ast.source),
-        nodes := COALESCE(nodes, ast.nodes)
+        source := ast.source,
+        nodes := new_nodes
     )
 );
 
@@ -51,46 +44,52 @@ CREATE OR REPLACE MACRO ast_pack(file_path, language, nodes) AS (
     )
 );
 
--- Create AST struct from source struct and nodes
-CREATE OR REPLACE MACRO ast_pack_with_source(source, nodes) AS (
-    struct_pack(
-        source := source,
-        nodes := nodes
+-- ===================================
+-- SPECIALIZED FILTERS (NO LAMBDAS)
+-- ===================================
+
+-- Get nodes by exact type match
+CREATE OR REPLACE MACRO ast_filter_by_type(nodes, type) AS (
+    [indexed for indexed in ast_with_indices(nodes) if indexed.node.type = type]
+);
+
+-- Get nodes by type list
+CREATE OR REPLACE MACRO ast_filter_by_types(nodes, types) AS (
+    [indexed for indexed in ast_with_indices(nodes) if list_contains(types, indexed.node.type)]
+);
+
+-- Get nodes by name
+CREATE OR REPLACE MACRO ast_filter_by_name(nodes, name) AS (
+    [indexed for indexed in ast_with_indices(nodes) if indexed.node.name = name]
+);
+
+-- Get nodes at specific depth
+CREATE OR REPLACE MACRO ast_filter_by_depth(nodes, depth) AS (
+    [indexed for indexed in ast_with_indices(nodes) if indexed.node.depth = depth]
+);
+
+-- ===================================
+-- COMPLETE OPERATIONS
+-- ===================================
+
+-- Get complete subtrees for nodes of a specific type
+CREATE OR REPLACE MACRO ast_get_by_type(ast, type) AS (
+    ast_update(
+        ast,
+        ast_extract_subtrees(
+            ast.nodes,
+            ast_filter_by_type(ast.nodes, type)
+        )
     )
 );
 
--- Extract ranges from indexed nodes
--- Converts [(idx, node)] to [(start, end)] for subtree ranges
-CREATE OR REPLACE MACRO ast_nodes_to_ranges(indexed_nodes) AS (
-    [
-        struct_pack(
-            start := indexed.idx,
-            end := indexed.idx + indexed.node.descendant_count + 1
-        )
-        for indexed in indexed_nodes
-    ]
-);
-
--- Slice nodes using multiple ranges
-CREATE OR REPLACE MACRO ast_nodes_slice_ranges(nodes, ranges) AS (
-    ast_flatten([
-        [nodes[i] for i in range(r.start, r.end)]
-        for r in ranges
-    ])
-);
-
--- ===================================
--- CORE PATTERN
--- ===================================
-
--- Get complete subtrees for nodes matching a predicate
--- This is the fundamental building block for ast_get_* functions
-CREATE OR REPLACE MACRO ast_get_branches(ast, predicate) AS (
+-- Get complete subtrees for nodes matching type list
+CREATE OR REPLACE MACRO ast_get_by_types(ast, types) AS (
     ast_update(
         ast,
-        nodes := ast_nodes_get_branches(
+        ast_extract_subtrees(
             ast.nodes,
-            ast_nodes_filter_with_index(ast.nodes, predicate)
+            ast_filter_by_types(ast.nodes, types)
         )
     )
 );

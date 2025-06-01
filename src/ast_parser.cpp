@@ -18,7 +18,7 @@ TSParser* ASTParser::CreateParser(const string &language) {
 		throw InvalidInputException("Unsupported language: %s. Supported languages: %s", language, supported_str);
 	}
 	
-	return handler->CreateParser();
+	return handler->GetParser();
 }
 
 TSTree* ASTParser::ParseString(const string &content, TSParser *parser) {

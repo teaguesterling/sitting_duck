@@ -9,11 +9,7 @@
 CREATE OR REPLACE MACRO ast_find_types(ast, types) AS (
     ast_update(
         ast,
-        nodes := [
-            node
-            for node in ast.nodes
-            if list_contains(types, node.type)
-        ]
+        [node for node in ast.nodes if list_contains(types, node.type)]
     )
 );
 
@@ -21,23 +17,7 @@ CREATE OR REPLACE MACRO ast_find_types(ast, types) AS (
 CREATE OR REPLACE MACRO ast_find_type(ast, type) AS (
     ast_update(
         ast,
-        nodes := [
-            node
-            for node in ast.nodes
-            if node.type = type
-        ]
-    )
-);
-
--- Find nodes where property matches value(s)
-CREATE OR REPLACE MACRO ast_find_property_in(ast, property, values) AS (
-    ast_update(
-        ast,
-        nodes := [
-            node
-            for node in ast.nodes
-            if list_contains(values, node[property])
-        ]
+        [node for node in ast.nodes if node.type = type]
     )
 );
 
@@ -45,11 +25,15 @@ CREATE OR REPLACE MACRO ast_find_property_in(ast, property, values) AS (
 CREATE OR REPLACE MACRO ast_find_depth(ast, depth) AS (
     ast_update(
         ast,
-        nodes := [
-            node
-            for node in ast.nodes
-            if node.depth = depth
-        ]
+        [node for node in ast.nodes if node.depth = depth]
+    )
+);
+
+-- Find nodes by name
+CREATE OR REPLACE MACRO ast_find_name(ast, name) AS (
+    ast_update(
+        ast,
+        [node for node in ast.nodes if node.name = name]
     )
 );
 
@@ -62,11 +46,8 @@ CREATE OR REPLACE MACRO ast_find_identifiers(ast) AS (
 CREATE OR REPLACE MACRO ast_find_literals(ast) AS (
     ast_update(
         ast,
-        nodes := [
-            node
-            for node in ast.nodes
-            if node.type LIKE '%literal%' OR node.type LIKE '%number%' OR node.type LIKE '%string%'
-        ]
+        [node for node in ast.nodes 
+         if node.type LIKE '%literal%' OR node.type LIKE '%number%' OR node.type LIKE '%string%']
     )
 );
 
@@ -107,37 +88,43 @@ CREATE OR REPLACE MACRO ast_find_control_flow(ast) AS (
 );
 
 -- ===================================
--- QUERY FUNCTIONS WITH CONDITIONS
+-- SPECIALIZED FIND FUNCTIONS
 -- ===================================
-
--- Find nodes matching multiple conditions
-CREATE OR REPLACE MACRO ast_find_where(ast, predicate) AS (
-    ast_update(
-        ast,
-        nodes := [
-            node
-            for node in ast.nodes
-            if predicate(node)
-        ]
-    )
-);
-
--- Find nodes with specific name
-CREATE OR REPLACE MACRO ast_find_name(ast, name) AS (
-    ast_find_where(ast, node -> node.name = name)
-);
-
--- Find nodes matching name pattern
-CREATE OR REPLACE MACRO ast_find_pattern(ast, pattern) AS (
-    ast_find_where(ast, node -> node.name LIKE pattern)
-);
 
 -- Find leaf nodes (no children)
 CREATE OR REPLACE MACRO ast_find_leaves(ast) AS (
-    ast_find_where(ast, node -> node.children_count = 0)
+    ast_update(
+        ast,
+        [node for node in ast.nodes if node.children_count = 0]
+    )
 );
 
 -- Find parent nodes (have children)
 CREATE OR REPLACE MACRO ast_find_parents(ast) AS (
-    ast_find_where(ast, node -> node.children_count > 0)
+    ast_update(
+        ast,
+        [node for node in ast.nodes if node.children_count > 0]
+    )
 );
+
+-- ===================================
+-- ADVANCED USAGE PATTERNS
+-- ===================================
+
+-- For complex predicates, use list comprehensions directly:
+
+-- Find nodes matching name pattern:
+-- SELECT ast_update(ast, 
+--     [node for node in ast.nodes if node.name LIKE '%test%']
+-- ) FROM ...
+
+-- Find nodes with multiple conditions:
+-- SELECT ast_update(ast,
+--     [node for node in ast.nodes 
+--      if node.type = 'function' AND node.descendant_count > 10]
+-- ) FROM ...
+
+-- Or use list_filter for more complex logic:
+-- SELECT ast_update(ast,
+--     list_filter(ast.nodes, x -> x.name LIKE pattern AND x.depth = 2)
+-- ) FROM ...

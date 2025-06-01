@@ -14,18 +14,55 @@ def escape_raw_string_delimiter(content):
         raise ValueError("SQL content contains raw string delimiter - please use a different delimiter")
     return content
 
+def generate_chain_methods(sql_files, sql_dir):
+    """Generate short name aliases by removing 'ast_' prefix from macro names."""
+    chain_methods = ["-- Auto-generated chain methods (short names)", ""]
+    
+    for sql_file in sql_files:
+        filepath = os.path.join(sql_dir, sql_file)
+        if os.path.exists(filepath):
+            with open(filepath, 'r') as f:
+                content = f.read()
+            
+            # Find all CREATE OR REPLACE MACRO ast_* statements
+            import re
+            macro_pattern = r'CREATE OR REPLACE MACRO (ast_\w+)'
+            
+            for match in re.finditer(macro_pattern, content):
+                macro_name = match.group(1)
+                short_name = macro_name.replace('ast_', '')
+                
+                # Extract the parameter list
+                start = match.end()
+                paren_count = 0
+                param_start = content.find('(', start)
+                i = param_start
+                while i < len(content) and (paren_count > 0 or i == param_start):
+                    if content[i] == '(':
+                        paren_count += 1
+                    elif content[i] == ')':
+                        paren_count -= 1
+                    i += 1
+                param_list = content[param_start:i]
+                
+                # Create alias
+                chain_methods.append(f"CREATE OR REPLACE MACRO {short_name}{param_list} AS {macro_name}{param_list};")
+    
+    return '\n'.join(chain_methods)
+
 def generate_header(sql_dir, output_file):
     """Generate C++ header with embedded SQL macros."""
     
     sql_files = [
-        '01_core.sql',
-        '02a_entrypoint.sql',
-        '02b_chain_methods.sql',
-        '03_legacy.sql',
-        '04_optional.sql',
-        '05_hybrid_json_fix.sql',
-        '06_peer_review_features.sql'
+        '01_core_primitives.sql',
+        '02_ast_get.sql',
+        '03_ast_find.sql',
+        '04_ast_to.sql',
+        '05_taxonomy.sql'
     ]
+    
+    # Generate chain methods (short names) as a virtual file
+    chain_methods_content = generate_chain_methods(sql_files, sql_dir)
     
     header_content = """// Auto-generated file - DO NOT EDIT
 // Generated from SQL macro files in src/sql_macros/
@@ -54,6 +91,13 @@ static const std::vector<std::pair<std::string, std::string>> EMBEDDED_SQL_MACRO
             
             header_content += f'''    {{"{sql_file}", R"SQLMACRO(
 {content}
+)SQLMACRO"}},
+'''
+    
+    # Add the generated chain methods
+    escape_raw_string_delimiter(chain_methods_content)
+    header_content += f'''    {{"02b_chain_methods.sql", R"SQLMACRO(
+{chain_methods_content}
 )SQLMACRO"}},
 '''
     
