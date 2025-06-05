@@ -1,5 +1,5 @@
 #include "ast_type.hpp"
-#include "ast_parser.hpp"
+#include "language_adapter.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/common/vector.hpp"
 #include "duckdb/common/string_util.hpp"
@@ -55,28 +55,6 @@ Value ASTNode::ToValue() const {
     return Value::STRUCT(move(struct_values));
 }
 
-// Helper function to convert KIND enum to string
-static string KindToString(ASTKind kind) {
-    switch(kind) {
-        case ASTKind::LITERAL: return "LITERAL";
-        case ASTKind::NAME: return "NAME";
-        case ASTKind::PATTERN: return "PATTERN";
-        case ASTKind::TYPE: return "TYPE";
-        case ASTKind::OPERATOR: return "OPERATOR";
-        case ASTKind::COMPUTATION: return "COMPUTATION";
-        case ASTKind::TRANSFORM: return "TRANSFORM";
-        case ASTKind::DEFINITION: return "DEFINITION";
-        case ASTKind::EXECUTION: return "EXECUTION";
-        case ASTKind::FLOW_CONTROL: return "FLOW_CONTROL";
-        case ASTKind::ERROR_HANDLING: return "ERROR_HANDLING";
-        case ASTKind::ORGANIZATION: return "ORGANIZATION";
-        case ASTKind::METADATA: return "METADATA";
-        case ASTKind::EXTERNAL: return "EXTERNAL";
-        case ASTKind::PARSER_SPECIFIC: return "PARSER_SPECIFIC";
-        case ASTKind::RESERVED: return "RESERVED";
-        default: return "UNKNOWN";
-    }
-}
 
 ASTNode ASTNode::FromValue(const Value &value) {
     auto &struct_value = StructValue::GetChildren(value);
@@ -165,9 +143,8 @@ void ASTType::ClearTree() {
 }
 
 void ASTType::ParseFile(const string &source_code, TSParser *parser) {
-    // Parse using existing parser
-    ASTParser ast_parser;
-    tree = ast_parser.ParseString(source_code, parser);
+    // Parse using tree-sitter directly
+    tree = ts_parser_parse_string(parser, nullptr, source_code.c_str(), source_code.length());
     if (!tree) {
         throw IOException("Failed to parse file: " + file_path);
     }
@@ -212,8 +189,10 @@ void ASTType::ParseFile(const string &source_code, TSParser *parser) {
             ast_node.file_position.end_line = end.row + 1;
             ast_node.file_position.end_column = end.column + 1;
             
-            // Extract name
-            ast_node.name.raw = ast_parser.ExtractNodeName(entry.node, source_code);
+            // Extract name using language adapter
+            auto& registry = LanguageAdapterRegistry::GetInstance();
+            const LanguageAdapter* adapter = registry.GetAdapter(language);
+            ast_node.name.raw = adapter ? adapter->ExtractNodeName(entry.node, source_code) : "";
             
             // Extract source text
             uint32_t start_byte = ts_node_start_byte(entry.node);
@@ -419,31 +398,14 @@ uint64_t ASTNode::GenerateSemanticID(ASTKind kind, uint8_t universal_flags,
     return semantic_id;
 }
 
-uint8_t ASTNode::BinArityFibonacci(uint32_t count) {
-    // Fibonacci sequence binning: 0, 1, 2, 3, 4-5, 6-8, 9-13, 14+
-    if (count == 0) return 0;      // 000
-    if (count == 1) return 1;      // 001
-    if (count == 2) return 2;      // 010
-    if (count == 3) return 3;      // 011
-    if (count <= 5) return 4;      // 100
-    if (count <= 8) return 5;      // 101
-    if (count <= 13) return 6;     // 110
-    return 7;                      // 111 (14+)
-}
-
-string ASTNode::GetKindName(ASTKind kind) {
-    return KindToString(kind);
-}
 
 void ASTNode::UpdateTaxonomyFields() {
-    // Extract taxonomy fields from node_id
-    kind = GetKIND(node_id);
-    universal_flags = GetUniversalFlags(node_id);
-    super_type = (node_id >> 8) & 0x03;  // Byte 1, bits 0-1
-    arity_bin = (node_id >> 13) & 0x07;  // Byte 1, bits 5-7
-    
-    // Update type.kind with string representation
-    type.kind = GetKindName(static_cast<ASTKind>(kind));
+    // Simplified for now - we're removing the complex KIND taxonomy
+    // Just clear the fields since we're not using them yet
+    kind = 0;
+    universal_flags = 0;
+    super_type = 0;
+    arity_bin = 0;
 }
 
 // Static method implementations moved to header as inline functions

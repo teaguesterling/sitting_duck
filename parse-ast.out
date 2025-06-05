@@ -1,0 +1,67 @@
+DEBUG: ParseToASTResult called with language=py
+DEBUG: Getting language adapter registry...
+DEBUG: InitializeDefaultAdapters called
+DEBUG: Registering PythonAdapter...
+DEBUG: Registering JavaScriptAdapter...
+DEBUG: Registering CPPAdapter...
+DEBUG: InitializeDefaultAdapters completed
+DEBUG: Got registry, getting adapter for py...
+DEBUG: Got adapter, starting parse...
+DEBUG: Calling ParseContent...
+DEBUG: ParseContent called
+DEBUG: Parser not initialized, calling InitializeParser
+DEBUG: PythonAdapter::InitializeParser called
+DEBUG: Creating TSParserWrapper...
+DEBUG: TSParserWrapper constructor called
+DEBUG: TSParserWrapper constructor completed
+DEBUG: Getting tree_sitter_python language...
+DEBUG: Setting language...
+DEBUG: PythonAdapter::InitializeParser completed
+DEBUG: Calling parser_wrapper_->ParseString
+DEBUG: ParseString returned
+DEBUG: ParseContent returned
+DEBUG: Tree is valid, starting traversal...
+DEBUG: Starting tree traversal loop
+DEBUG: Loop iteration 0, stack size: 1
+DEBUG: Processing unprocessed node
+DEBUG: Adding 1 children to stack
+DEBUG: Stack size after adding children: 2
+DEBUG: Loop iteration 1, stack size: 2
+DEBUG: Processing unprocessed node
+DEBUG: Adding 1 children to stack
+DEBUG: Stack size after adding children: 3
+DEBUG: Loop iteration 2, stack size: 3
+DEBUG: Processing unprocessed node
+DEBUG: Adding 3 children to stack
+DEBUG: Stack size after adding children: 6
+DEBUG: Loop iteration 3, stack size: 6
+DEBUG: Processing unprocessed node
+DEBUG: Adding 0 children to stack
+DEBUG: Stack size after adding children: 6
+DEBUG: Loop iteration 4, stack size: 6
+DEBUG: Processing already processed node (second visit)
+DEBUG: Popped stack, new size: 5
+DEBUG: Loop iteration 5, stack size: 5
+DEBUG: Processing unprocessed node
+DEBUG: Adding 0 children to stack
+DEBUG: Stack size after adding children: 5
+DEBUG: Loop iteration 6, stack size: 5
+DEBUG: Processing already processed node (second visit)
+DEBUG: Popped stack, new size: 4
+DEBUG: Loop iteration 7, stack size: 4
+DEBUG: Processing unprocessed node
+DEBUG: Adding 0 children to stack
+DEBUG: Stack size after adding children: 4
+DEBUG: Loop iteration 8, stack size: 4
+DEBUG: Processing already processed node (second visit)
+DEBUG: Popped stack, new size: 3
+DEBUG: Loop iteration 9, stack size: 3
+DEBUG: Processing already processed node (second visit)
+DEBUG: Popped stack, new size: 2
+DEBUG: Loop iteration 10, stack size: 2
+DEBUG: Processing already processed node (second visit)
+DEBUG: Popped stack, new size: 1
+DEBUG: Loop iteration 11, stack size: 1
+DEBUG: Processing already processed node (second visit)
+DEBUG: Popped stack, new size: 0
+DEBUG: Tree traversal completed

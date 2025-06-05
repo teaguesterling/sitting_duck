@@ -1,148 +1,66 @@
 #include "parse_ast_function.hpp"
-#include "language_handler.hpp"
+#include "unified_ast_backend.hpp"
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/vector_operations/vector_operations.hpp"
-#include "duckdb/common/types/value.hpp"
-#include "duckdb/common/string_util.hpp"
+#include "duckdb/function/table_function.hpp"
 #include "duckdb/main/extension_util.hpp"
-#include <tree_sitter/api.h>
-#include <sstream>
 
 namespace duckdb {
 
-static string EscapeJSONString(const string &str) {
-    string result;
-    result.reserve(str.size() + 2);
-    result += '"';
+struct ParseASTData : public TableFunctionData {
+    string code;
+    string language;
+    ASTResult result;
+    idx_t current_row = 0;  // Track which row we're on
+    bool parsed = false;
     
-    for (char c : str) {
-        switch (c) {
-            case '"': result += "\\\""; break;
-            case '\\': result += "\\\\"; break;
-            case '\b': result += "\\b"; break;
-            case '\f': result += "\\f"; break;
-            case '\n': result += "\\n"; break;
-            case '\r': result += "\\r"; break;
-            case '\t': result += "\\t"; break;
-            default:
-                if (c < 0x20) {
-                    result += "\\u";
-                    result += StringUtil::Format("%04x", (unsigned char)c);
-                } else {
-                    result += c;
-                }
-                break;
+    ParseASTData(string code, string language) 
+        : code(std::move(code)), language(std::move(language)) {}
+};
+
+static unique_ptr<FunctionData> ParseASTBind(ClientContext &context, TableFunctionBindInput &input,
+                                           vector<LogicalType> &return_types, vector<string> &names) {
+    if (input.inputs.size() != 2) {
+        throw BinderException("parse_ast requires exactly 2 arguments: code and language");
+    }
+    
+    auto code = input.inputs[0].GetValue<string>();
+    auto language = input.inputs[1].GetValue<string>();
+    
+    // Use unified backend schema
+    return_types = UnifiedASTBackend::GetFlatTableSchema();
+    names = UnifiedASTBackend::GetFlatTableColumnNames();
+    
+    return make_uniq<ParseASTData>(code, language);
+}
+
+static void ParseASTExecute(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
+    printf("DEBUG: ParseASTExecute called\n");
+    auto &data = data_p.bind_data->CastNoConst<ParseASTData>();
+    printf("DEBUG: Got bind data, code='%s', language='%s'\n", data.code.c_str(), data.language.c_str());
+    
+    // Parse the code if not already done
+    if (!data.parsed) {
+        printf("DEBUG: Starting parse...\n");
+        try {
+            // Use unified parsing backend
+            data.result = UnifiedASTBackend::ParseToASTResult(data.code, data.language, "<inline>");
+            data.parsed = true;
+        } catch (const Exception &e) {
+            throw IOException("Failed to parse code: " + string(e.what()));
         }
     }
     
-    result += '"';
-    return result;
-}
-
-static string SerializeNodeToJSON(TSNode node, const string &content, const LanguageHandler *handler) {
-    std::ostringstream json;
-    json << "{";
-    
-    // Add node type
-    const char* node_type = ts_node_type(node);
-    json << "\"type\":" << EscapeJSONString(node_type);
-    
-    // Add normalized type if different
-    string normalized = handler->GetNormalizedType(node_type);
-    if (normalized != node_type) {
-        json << ",\"normalized_type\":" << EscapeJSONString(normalized);
-    }
-    
-    // Add position information
-    json << ",\"position\":{";
-    json << "\"start_byte\":" << ts_node_start_byte(node);
-    json << ",\"end_byte\":" << ts_node_end_byte(node);
-    json << ",\"start_row\":" << ts_node_start_point(node).row;
-    json << ",\"start_column\":" << ts_node_start_point(node).column;
-    json << ",\"end_row\":" << ts_node_end_point(node).row;
-    json << ",\"end_column\":" << ts_node_end_point(node).column;
-    json << "}";
-    
-    // Add text content
-    uint32_t start = ts_node_start_byte(node);
-    uint32_t end = ts_node_end_byte(node);
-    if (start < content.size() && end <= content.size() && end > start) {
-        string text = content.substr(start, end - start);
-        json << ",\"text\":" << EscapeJSONString(text);
-    }
-    
-    // Add name if available
-    string name = handler->ExtractNodeName(node, content);
-    if (!name.empty()) {
-        json << ",\"name\":" << EscapeJSONString(name);
-    }
-    
-    // Add is_error flag
-    if (ts_node_has_error(node)) {
-        json << ",\"is_error\":true";
-    }
-    
-    // Add children
-    uint32_t child_count = ts_node_child_count(node);
-    if (child_count > 0) {
-        json << ",\"children\":[";
-        for (uint32_t i = 0; i < child_count; i++) {
-            if (i > 0) json << ",";
-            TSNode child = ts_node_child(node, i);
-            json << SerializeNodeToJSON(child, content, handler);
-        }
-        json << "]";
-    }
-    
-    json << "}";
-    return json.str();
-}
-
-void ParseASTFunction::ParseASTScalarFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-    auto &code_vector = args.data[0];
-    auto &language_vector = args.data[1];
-    
-    BinaryExecutor::Execute<string_t, string_t, string_t>(
-        code_vector, language_vector, result, args.size(),
-        [&](string_t code, string_t language_str) {
-            string language = language_str.GetString();
-            
-            // Get the language handler
-            auto& registry = LanguageHandlerRegistry::GetInstance();
-            const LanguageHandler* handler = registry.GetHandler(language);
-            if (!handler) {
-                throw InvalidInputException("Unsupported language: " + language);
-            }
-            
-            // Get parser
-            TSParser* parser = handler->GetParser();
-            if (!parser) {
-                throw InternalException("Failed to get parser for language: " + language);
-            }
-            
-            // Parse the code
-            string code_str = code.GetString();
-            TSTree* tree = ts_parser_parse_string(parser, nullptr, code_str.c_str(), code_str.length());
-            if (!tree) {
-                throw InternalException("Failed to parse code");
-            }
-            
-            // Get root node and serialize to JSON
-            TSNode root = ts_tree_root_node(tree);
-            string json_result = SerializeNodeToJSON(root, code_str, handler);
-            
-            // Cleanup
-            ts_tree_delete(tree);
-            
-            return StringVector::AddString(result, json_result);
-        });
+    // Project to table format, starting from where we left off
+    idx_t output_index = 0;
+    UnifiedASTBackend::ProjectToTable(data.result, output, data.current_row, output_index);
+    output.SetCardinality(output_index);
 }
 
 void ParseASTFunction::Register(DatabaseInstance &instance) {
-    // Register parse_ast(code, language) -> VARCHAR (JSON string)
-    vector<LogicalType> arguments = {LogicalType::VARCHAR, LogicalType::VARCHAR};
-    
-    ScalarFunction parse_ast_func("parse_ast", arguments, LogicalType::VARCHAR, ParseASTScalarFunction);
+    // Register parse_ast(code, language) -> TABLE with all taxonomy fields
+    TableFunction parse_ast_func("parse_ast", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
+                                ParseASTExecute, ParseASTBind);
+    parse_ast_func.name = "parse_ast";
     
     ExtensionUtil::RegisterFunction(instance, parse_ast_func);
 }

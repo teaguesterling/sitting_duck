@@ -1,0 +1,94 @@
+# name: test/sql/language_adapters.test
+# description: Test language adapter functionality
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: Python adapter works
+query III
+SELECT type, normalized_type, name
+FROM parse_ast('def hello(): pass', 'python')
+WHERE type = 'function_definition';
+----
+function_definition	function_declaration	hello
+
+# Test 2: JavaScript adapter works  
+query III
+SELECT type, normalized_type, name
+FROM parse_ast('function hello() {}', 'javascript')
+WHERE type = 'function_declaration';
+----
+function_declaration	function_declaration	hello
+
+# Test 3: C++ adapter works
+query III  
+SELECT type, normalized_type, name
+FROM parse_ast('void hello() {}', 'cpp')
+WHERE type = 'function_definition';
+----
+function_definition	function_declaration	hello
+
+# Test 4: Type normalization is consistent across languages
+query II
+SELECT 'python' as lang, normalized_type FROM parse_ast('def foo(): pass', 'python') WHERE type = 'function_definition'
+UNION ALL
+SELECT 'javascript' as lang, normalized_type FROM parse_ast('function foo() {}', 'javascript') WHERE type = 'function_declaration'  
+UNION ALL
+SELECT 'cpp' as lang, normalized_type FROM parse_ast('void foo() {}', 'cpp') WHERE type = 'function_definition';
+----
+python	function_declaration
+javascript	function_declaration
+cpp	function_declaration
+
+# Test 5: Punctuation detection works
+query II
+SELECT type, universal_flags & 1 as is_punctuation
+FROM parse_ast('()', 'python')
+WHERE type IN ('(', ')');
+----
+(	1
+)	1
+
+# Test 6: Keyword detection works  
+query II
+SELECT type, universal_flags & 2 as is_keyword
+FROM parse_ast('def hello(): pass', 'python')
+WHERE type = 'def';
+----
+def	2
+
+# Test 7: Literal detection works
+query II
+SELECT type, universal_flags & 8 as is_literal  
+FROM parse_ast('"hello"', 'python')
+WHERE type = 'string';
+----
+string	8
+
+# Test 8: Language aliases work
+query I
+SELECT COUNT(*) FROM parse_ast('x = 1', 'py');
+----
+6
+
+query I  
+SELECT COUNT(*) FROM parse_ast('var x = 1', 'js');
+----
+7
+
+# Test 9: Error handling for unsupported language
+statement error
+SELECT * FROM parse_ast('code', 'unsupported');
+----
+Invalid Input Error: Unsupported language: unsupported
+
+# Test 10: Complex expressions work across languages
+query I
+SELECT COUNT(*) > 5 FROM parse_ast('x = a + b * c', 'python');
+----
+true
+
+query I
+SELECT COUNT(*) > 5 FROM parse_ast('var x = a + b * c', 'javascript');  
+----
+true
