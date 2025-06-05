@@ -68,10 +68,10 @@ constexpr uint8_t TYPE_REFERENCE = TYPE | 0x08;          // 0011 1000 - pointers
 constexpr uint8_t TYPE_GENERIC = TYPE | 0x0C;            // 0011 1100 - generic/template types
 
 // ===== OPERATOR super types (0100 ttxx) =====
-constexpr uint8_t OPERATOR_ARITHMETIC = OPERATOR | 0x00; // 0100 0000 - +, -, *, /, %, **, //
+constexpr uint8_t OPERATOR_ARITHMETIC = OPERATOR | 0x00; // 0100 0000 - +, -, *, /, %, **, //, &, |, ^, ~, <<, >>
 constexpr uint8_t OPERATOR_LOGICAL = OPERATOR | 0x04;    // 0100 0100 - &&, ||, !, and, or, not, ? :
-constexpr uint8_t OPERATOR_COMPARISON = OPERATOR | 0x08; // 0100 1000 - ==, !=, <, >, <=, >=, ===, is, in
-constexpr uint8_t OPERATOR_ASSIGNMENT = OPERATOR | 0x0C; // 0100 1100 - =, +=, -=, *=, /=, :=
+constexpr uint8_t OPERATOR_COMPARISON = OPERATOR | 0x08; // 0100 1000 - ==, !=, <, >, <=, >=, ===, is, in, not in
+constexpr uint8_t OPERATOR_ASSIGNMENT = OPERATOR | 0x0C; // 0100 1100 - =, +=, -=, *=, /=, :=, etc.
 
 // ===== COMPUTATION_NODE super types (0101 ttxx) =====
 constexpr uint8_t COMPUTATION_CALL = COMPUTATION_NODE | 0x00;      // 0101 0000 - function calls
