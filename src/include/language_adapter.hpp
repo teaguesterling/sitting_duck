@@ -5,6 +5,7 @@
 #include "tree_sitter_wrappers.hpp"
 #include <tree_sitter/api.h>
 #include <unordered_map>
+#include <functional>
 
 namespace duckdb {
 
@@ -39,15 +40,10 @@ public:
     
     // Parse content directly and return owned tree
     TSTreePtr ParseContent(const string& content) const {
-        printf("DEBUG: ParseContent called\n");
         if (!parser_wrapper_) {
-            printf("DEBUG: Parser not initialized, calling InitializeParser\n");
             InitializeParser();
         }
-        printf("DEBUG: Calling parser_wrapper_->ParseString\n");
-        auto result = parser_wrapper_->ParseString(content);
-        printf("DEBUG: ParseString returned\n");
-        return result;
+        return parser_wrapper_->ParseString(content);
     }
     
 protected:
@@ -130,10 +126,16 @@ class LanguageAdapterRegistry {
 public:
     static LanguageAdapterRegistry& GetInstance();
     
-    // Register a language adapter
+    // Factory function type
+    using AdapterFactory = std::function<unique_ptr<LanguageAdapter>()>;
+    
+    // Register a language adapter factory
+    void RegisterLanguageFactory(const string &language, AdapterFactory factory);
+    
+    // Register a language adapter (legacy, for backwards compatibility)
     void RegisterAdapter(unique_ptr<LanguageAdapter> adapter);
     
-    // Get adapter by language name or alias
+    // Get adapter by language name or alias (creates on demand)
     const LanguageAdapter* GetAdapter(const string &language) const;
     
     // Get list of supported languages
@@ -141,7 +143,8 @@ public:
     
 private:
     LanguageAdapterRegistry();
-    unordered_map<string, unique_ptr<LanguageAdapter>> adapters;
+    mutable unordered_map<string, unique_ptr<LanguageAdapter>> adapters;  // mutable for lazy creation
+    mutable unordered_map<string, AdapterFactory> language_factories;      // mutable for lazy creation
     unordered_map<string, string> alias_to_language;
     
     void InitializeDefaultAdapters();

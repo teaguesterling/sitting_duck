@@ -31,11 +31,9 @@ using TSTreePtr = unique_ptr<TSTree, TSTreeDeleter>;
 class TSParserWrapper {
 public:
     TSParserWrapper() : parser_(ts_parser_new()) {
-        printf("DEBUG: TSParserWrapper constructor called\n");
         if (!parser_) {
             throw InternalException("Failed to create tree-sitter parser");
         }
-        printf("DEBUG: TSParserWrapper constructor completed\n");
     }
     
     // Disable copying
