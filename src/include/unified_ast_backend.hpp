@@ -47,8 +47,7 @@ public:
     
 private:
     // Internal helpers
-    static void PopulateBasicFields(ASTNode& node, const LanguageAdapter* adapter, TSNode ts_node);
-    static uint64_t GenerateNodeSemanticID(const ASTNode& node);
+    static void PopulateSemanticFields(ASTNode& node, const LanguageAdapter* adapter, TSNode ts_node);
 };
 
 } // namespace duckdb

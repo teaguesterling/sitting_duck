@@ -1,5 +1,6 @@
 #include "unified_ast_backend.hpp"
 #include "language_adapter.hpp"
+#include "semantic_types.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include <stack>
@@ -65,8 +66,8 @@ ASTResult UnifiedASTBackend::ParseToASTResult(const string& content,
             // Create ASTNode
             ASTNode ast_node;
             
-            // Basic information
-            ast_node.node_id = node_counter++;  // Will be updated with semantic ID later
+            // Basic information - use node_index as node_id
+            ast_node.node_id = entry.node_index;
             ast_node.type.raw = ts_node_type(entry.node);
             
             // Position information
@@ -100,11 +101,8 @@ ASTResult UnifiedASTBackend::ParseToASTResult(const string& content,
                 ast_node.peek = source_text.length() > 120 ? source_text.substr(0, 120) : source_text;
             }
             
-            // Populate basic fields (simplified for now)
-            PopulateBasicFields(ast_node, adapter, entry.node);
-            
-            // Generate semantic ID
-            ast_node.node_id = GenerateNodeSemanticID(ast_node);
+            // Populate semantic type and other fields
+            PopulateSemanticFields(ast_node, adapter, entry.node);
             
             result.nodes.push_back(ast_node);
             
@@ -138,36 +136,31 @@ ASTResult UnifiedASTBackend::ParseToASTResult(const string& content,
     return result;
 }
 
-void UnifiedASTBackend::PopulateBasicFields(ASTNode& node, const LanguageAdapter* adapter, TSNode ts_node) {
-    // Set normalized type using adapter
-    node.type.normalized = adapter->GetNormalizedType(node.type.raw);
+void UnifiedASTBackend::PopulateSemanticFields(ASTNode& node, const LanguageAdapter* adapter, TSNode ts_node) {
+    // Get node configuration from adapter
+    const NodeConfig* config = adapter->GetNodeConfig(node.type.raw);
     
-    // Get basic flags (simplified)
-    uint8_t flags = adapter->GetNodeFlags(node.type.raw);
+    if (config) {
+        // Set semantic type from configuration
+        node.semantic_type = config->semantic_type;
+        // Set universal flags from configuration
+        node.universal_flags = config->flags;
+    } else {
+        // Fallback: use PARSER_CONSTRUCT for unknown types
+        node.semantic_type = SemanticTypes::PARSER_CONSTRUCT;
+        node.universal_flags = 0;
+    }
     
-    // For now, just store flags directly without complex taxonomy
-    node.universal_flags = flags;
+    // Set normalized type for display/compatibility
+    node.type.normalized = SemanticTypes::GetSemanticTypeName(node.semantic_type);
     
-    // Calculate arity binning (still useful)
+    // Calculate arity binning
     node.arity_bin = ASTNode::BinArityFibonacci(ts_node_child_count(ts_node));
     
-    // Clear unused fields for now
-    node.kind = 0;
-    node.super_type = 0;
+    // Update legacy fields from semantic_type
+    node.UpdateLegacyFields();
 }
 
-uint64_t UnifiedASTBackend::GenerateNodeSemanticID(const ASTNode& node) {
-    // Use the taxonomy generation function from ASTNode
-    return ASTNode::GenerateSemanticID(
-        static_cast<ASTKind>(node.kind),
-        node.universal_flags,
-        node.super_type,
-        0,  // parser_type - TODO: implement if needed
-        node.arity_bin,
-        0,  // primary_hash - TODO: implement content-based hashing
-        0   // parent_hash - TODO: implement parent hashing
-    );
-}
 
 vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
     return {

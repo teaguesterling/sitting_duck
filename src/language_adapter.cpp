@@ -1,4 +1,5 @@
 #include "language_adapter.hpp"
+#include "semantic_types.hpp"
 #include "grammars.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
@@ -77,9 +78,14 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 // Python Adapter implementation
 //==============================================================================
 
+#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
+    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+
 const unordered_map<string, NodeConfig> PythonAdapter::node_configs = {
     #include "language_configs/python_types.def"
 };
+
+#undef DEF_TYPE
 
 string PythonAdapter::GetLanguageName() const {
     return "python";
@@ -90,20 +96,15 @@ vector<string> PythonAdapter::GetAliases() const {
 }
 
 void PythonAdapter::InitializeParser() const {
-    printf("DEBUG: PythonAdapter::InitializeParser called\n");
-    printf("DEBUG: Creating TSParserWrapper...\n");
     parser_wrapper_ = make_uniq<TSParserWrapper>();
-    printf("DEBUG: Getting tree_sitter_python language...\n");
     auto ts_language = tree_sitter_python();
-    printf("DEBUG: Setting language...\n");
     parser_wrapper_->SetLanguage(ts_language, "Python");
-    printf("DEBUG: PythonAdapter::InitializeParser completed\n");
 }
 
 string PythonAdapter::GetNormalizedType(const string &node_type) const {
     const NodeConfig* config = GetNodeConfig(node_type);
-    if (config && !config->normalized_type.empty()) {
-        return config->normalized_type;
+    if (config) {
+        return SemanticTypes::GetSemanticTypeName(config->semantic_type);
     }
     return node_type;  // Fallback to raw type
 }
@@ -157,9 +158,14 @@ const NodeConfig* PythonAdapter::GetNodeConfig(const string &node_type) const {
 // JavaScript Adapter implementation
 //==============================================================================
 
+#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
+    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+
 const unordered_map<string, NodeConfig> JavaScriptAdapter::node_configs = {
     #include "language_configs/javascript_types.def"
 };
+
+#undef DEF_TYPE
 
 string JavaScriptAdapter::GetLanguageName() const {
     return "javascript";
@@ -177,10 +183,10 @@ void JavaScriptAdapter::InitializeParser() const {
 
 string JavaScriptAdapter::GetNormalizedType(const string &node_type) const {
     const NodeConfig* config = GetNodeConfig(node_type);
-    if (config && !config->normalized_type.empty()) {
-        return config->normalized_type;
+    if (config) {
+        return SemanticTypes::GetSemanticTypeName(config->semantic_type);
     }
-    return node_type;
+    return node_type;  // Fallback to raw type
 }
 
 string JavaScriptAdapter::ExtractNodeName(TSNode node, const string &content) const {
@@ -231,9 +237,14 @@ const NodeConfig* JavaScriptAdapter::GetNodeConfig(const string &node_type) cons
 // C++ Adapter implementation
 //==============================================================================
 
+#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
+    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+
 const unordered_map<string, NodeConfig> CPPAdapter::node_configs = {
     #include "language_configs/cpp_types.def"
 };
+
+#undef DEF_TYPE
 
 string CPPAdapter::GetLanguageName() const {
     return "cpp";
@@ -251,10 +262,10 @@ void CPPAdapter::InitializeParser() const {
 
 string CPPAdapter::GetNormalizedType(const string &node_type) const {
     const NodeConfig* config = GetNodeConfig(node_type);
-    if (config && !config->normalized_type.empty()) {
-        return config->normalized_type;
+    if (config) {
+        return SemanticTypes::GetSemanticTypeName(config->semantic_type);
     }
-    return node_type;
+    return node_type;  // Fallback to raw type
 }
 
 string CPPAdapter::ExtractNodeName(TSNode node, const string &content) const {
@@ -340,19 +351,38 @@ void LanguageAdapterRegistry::RegisterAdapter(unique_ptr<LanguageAdapter> adapte
 }
 
 const LanguageAdapter* LanguageAdapterRegistry::GetAdapter(const string &language) const {
-    // First try direct lookup
+    // First try direct lookup in already-created adapters
     auto it = adapters.find(language);
     if (it != adapters.end()) {
         return it->second.get();
     }
     
     // Try alias lookup
+    string actual_language = language;
     auto alias_it = alias_to_language.find(language);
     if (alias_it != alias_to_language.end()) {
-        auto adapter_it = adapters.find(alias_it->second);
+        actual_language = alias_it->second;
+        
+        // Check if already created
+        auto adapter_it = adapters.find(actual_language);
         if (adapter_it != adapters.end()) {
             return adapter_it->second.get();
         }
+    }
+    
+    // Check if we have a factory for this language
+    auto factory_it = language_factories.find(actual_language);
+    if (factory_it != language_factories.end()) {
+        // Create the adapter on demand
+        auto adapter = factory_it->second();
+        
+        // Validate ABI compatibility
+        ValidateLanguageABI(adapter.get());
+        
+        // Store the created adapter
+        auto* adapter_ptr = adapter.get();
+        adapters[actual_language] = std::move(adapter);
+        return adapter_ptr;
     }
     
     return nullptr;
@@ -360,9 +390,20 @@ const LanguageAdapter* LanguageAdapterRegistry::GetAdapter(const string &languag
 
 vector<string> LanguageAdapterRegistry::GetSupportedLanguages() const {
     vector<string> languages;
+    
+    // Include already-created adapters
     for (const auto &pair : adapters) {
         languages.push_back(pair.first);
     }
+    
+    // Include factory-registered languages
+    for (const auto &pair : language_factories) {
+        // Only add if not already in the list
+        if (adapters.find(pair.first) == adapters.end()) {
+            languages.push_back(pair.first);
+        }
+    }
+    
     return languages;
 }
 
@@ -382,14 +423,32 @@ void LanguageAdapterRegistry::ValidateLanguageABI(const LanguageAdapter* adapter
 }
 
 void LanguageAdapterRegistry::InitializeDefaultAdapters() {
-    printf("DEBUG: InitializeDefaultAdapters called\n");
-    printf("DEBUG: Registering PythonAdapter...\n");
-    RegisterAdapter(make_uniq<PythonAdapter>());
-    printf("DEBUG: Registering JavaScriptAdapter...\n");
-    RegisterAdapter(make_uniq<JavaScriptAdapter>());
-    printf("DEBUG: Registering CPPAdapter...\n");
-    RegisterAdapter(make_uniq<CPPAdapter>());
-    printf("DEBUG: InitializeDefaultAdapters completed\n");
+    // Register factories instead of creating adapters immediately
+    RegisterLanguageFactory("python", []() { return make_uniq<PythonAdapter>(); });
+    RegisterLanguageFactory("javascript", []() { return make_uniq<JavaScriptAdapter>(); });
+    RegisterLanguageFactory("cpp", []() { return make_uniq<CPPAdapter>(); });
+}
+
+void LanguageAdapterRegistry::RegisterLanguageFactory(const string &language, AdapterFactory factory) {
+    if (!factory) {
+        throw InvalidInputException("Cannot register null factory");
+    }
+    
+    // Create a temporary adapter to get aliases
+    auto temp_adapter = factory();
+    if (!temp_adapter) {
+        throw InvalidInputException("Factory returned null adapter");
+    }
+    
+    vector<string> aliases = temp_adapter->GetAliases();
+    
+    // Register all aliases
+    for (const auto &alias : aliases) {
+        alias_to_language[alias] = language;
+    }
+    
+    // Store the factory
+    language_factories[language] = std::move(factory);
 }
 
 } // namespace duckdb

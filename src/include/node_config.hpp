@@ -1,6 +1,7 @@
 #pragma once
 
 #include "duckdb.hpp"
+#include "semantic_types.hpp"
 #include <unordered_map>
 
 namespace duckdb {
@@ -17,17 +18,17 @@ enum class ExtractionStrategy : uint8_t {
 
 // Simple node configuration
 struct NodeConfig {
-    string normalized_type;         // Cross-language normalized type
+    uint8_t semantic_type;          // 8-bit semantic type encoding
     ExtractionStrategy name_strategy;  // How to extract names
     ExtractionStrategy value_strategy; // How to extract values
     uint8_t flags;                  // Basic flags (is_punctuation, etc.)
     
     // Constructor
-    NodeConfig(const string& norm_type = "", 
+    NodeConfig(uint8_t sem_type = 0, 
                ExtractionStrategy name_strat = ExtractionStrategy::NONE,
                ExtractionStrategy value_strat = ExtractionStrategy::NONE,
                uint8_t node_flags = 0)
-        : normalized_type(norm_type), name_strategy(name_strat), 
+        : semantic_type(sem_type), name_strategy(name_strat), 
           value_strategy(value_strat), flags(node_flags) {}
 };
 

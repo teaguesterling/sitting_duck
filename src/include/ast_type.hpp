@@ -79,13 +79,8 @@ struct ASTSubtreeInfo {
 };
 
 struct ASTNode {
-    // Core Semantic Identity
-    uint64_t node_id = 0;  // Full 64-bit identity encoding:
-                          // Byte 0: Universal flags (0-3) + KIND (4-7)
-                          // Byte 1: Super type (0-1) + Parser types (2-4) + Arity (5-7)
-                          // Bytes 2-3: Context (depth, complexity, hashes) [FUTURE]
-                          // Bytes 4-5: Primary unique hash
-                          // Bytes 6-7: Parent unique hash
+    // Core Semantic Identity - simplified to use node_index from tree traversal
+    uint64_t node_id = 0;  // For now, just use tree_position.node_index
     
     // Grouped information
     ASTTypeInfo type;
@@ -97,14 +92,25 @@ struct ASTNode {
     // Content preview
     string peek;  // First 120 chars of source_text
     
-    // Decoded taxonomy fields (computed from node_id)
-    uint8_t kind = 0;           // 4-bit KIND (0-15)
-    uint8_t universal_flags = 0; // is_keyword, is_punctuation, is_builtin, is_public
-    uint8_t super_type = 0;     // 2-bit built-in super type within KIND
-    uint8_t arity_bin = 0;      // 3-bit Fibonacci-binned complexity
+    // Taxonomy fields using unified semantic type encoding
+    uint8_t semantic_type = 0;    // 8-bit encoding: [ss kk tt ll] where:
+                                  // ss = super_kind (2 bits), kk = kind (2 bits)
+                                  // tt = super_type (2 bits), ll = language_specific (2 bits)
+    uint8_t universal_flags = 0;  // is_keyword, is_punctuation, is_builtin, is_public
+    uint8_t arity_bin = 0;        // 3-bit Fibonacci-binned complexity
+    
+    // Legacy decoded fields for compatibility (computed from semantic_type)
+    uint8_t kind = 0;           // Extracted from semantic_type bits 4-7
+    uint8_t super_type = 0;     // Extracted from semantic_type bits 2-3
     
     // Default constructor
     ASTNode() = default;
+    
+    // Update legacy fields from semantic_type
+    void UpdateLegacyFields() {
+        kind = (semantic_type & 0x30) >> 4;      // Extract bits 4-5
+        super_type = (semantic_type & 0x0C) >> 2; // Extract bits 2-3
+    }
     
     Value ToValue() const;
     static ASTNode FromValue(const Value &value);

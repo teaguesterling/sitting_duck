@@ -42,6 +42,7 @@ set(EXTENSION_SOURCES
     src/grammars.cpp
     src/unified_ast_backend.cpp
     src/ast_type.cpp
+    src/semantic_types.cpp
     grammars/tree-sitter-python/src/parser.c
     grammars/tree-sitter-python/src/scanner.c
     grammars/tree-sitter-javascript/src/parser.c
