@@ -235,13 +235,10 @@ LogicalType UnifiedASTBackend::GetASTStructSchema() {
 }
 
 void UnifiedASTBackend::ProjectToTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index) {
-    printf("DEBUG: ProjectToTable called with %zu nodes\n", result.nodes.size());
-    
     // Verify output chunk has correct number of columns
     if (output.ColumnCount() != 20) {
         throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 20");
     }
-    printf("DEBUG: Output chunk has %zu columns\n", output.ColumnCount());
     
     // Get output vectors
     auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);

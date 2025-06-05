@@ -34,13 +34,10 @@ static unique_ptr<FunctionData> ParseASTBind(ClientContext &context, TableFuncti
 }
 
 static void ParseASTExecute(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
-    printf("DEBUG: ParseASTExecute called\n");
     auto &data = data_p.bind_data->CastNoConst<ParseASTData>();
-    printf("DEBUG: Got bind data, code='%s', language='%s'\n", data.code.c_str(), data.language.c_str());
     
     // Parse the code if not already done
     if (!data.parsed) {
-        printf("DEBUG: Starting parse...\n");
         try {
             // Use unified parsing backend
             data.result = UnifiedASTBackend::ParseToASTResult(data.code, data.language, "<inline>");
