@@ -3,9 +3,6 @@
 
 require duckdb_ast
 
-statement ok
-LOAD 'duckdb_ast';
-
 # Test ast_get_source - basic extraction
 query I
 SELECT ast_get_source('line1' || chr(10) || 'line2' || chr(10) || 'line3', 2, 2);

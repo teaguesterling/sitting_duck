@@ -13,7 +13,7 @@ namespace duckdb {
 
 
 // Helper function to detect language from file extension
-static string DetectLanguageFromExtension(const string &file_path) {
+string DetectLanguageFromExtension(const string &file_path) {
     auto dot_pos = file_path.find_last_of('.');
     if (dot_pos == string::npos) {
         return "auto";  // No extension, can't detect

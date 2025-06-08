@@ -4,13 +4,11 @@
 
 require duckdb_ast
 
-require json
-
 # Test 1: Short names don't exist by default
 # ==========================================
 
 statement error
-SELECT get_type(nodes, 'function_definition')
+SELECT get_type(ast, 'function_definition')
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 Catalog Error: Scalar Function with name get_type does not exist!
@@ -25,7 +23,7 @@ PRAGMA duckdb_ast_short_names;
 # ===========================================
 
 query I
-SELECT json_array_length(get_type(nodes, 'function_definition'))
+SELECT len((get_type(ast, 'function_definition')).nodes)
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
@@ -34,7 +32,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # ================================
 
 query I
-SELECT json_array_length(nodes.get_type('function_definition'))
+SELECT len((ast.get_type('function_definition')).nodes)
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4
@@ -43,7 +41,7 @@ FROM read_ast_objects('test/data/python/simple.py', 'python');
 # =============================
 
 query I
-SELECT json_array_length(ast_get_type(nodes, 'function_definition'))
+SELECT len((ast_get_type(ast, 'function_definition')).nodes)
 FROM read_ast_objects('test/data/python/simple.py', 'python');
 ----
 4

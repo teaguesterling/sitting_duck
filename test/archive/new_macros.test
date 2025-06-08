@@ -4,15 +4,15 @@
 
 require duckdb_ast
 
-# Load the new macro files
+# Load the current macro files
 statement ok
-SELECT duckdb_ast_load_embedded_sql('08_ast_struct_core.sql');
+SELECT duckdb_ast_load_embedded_sql('01_core_primitives.sql');
 
 statement ok
-SELECT duckdb_ast_load_embedded_sql('09_ast_struct_advanced.sql');
+SELECT duckdb_ast_load_embedded_sql('02_ast_get.sql');
 
 statement ok
-SELECT duckdb_ast_load_embedded_sql('10_ast_struct_entrypoint.sql');
+SELECT duckdb_ast_load_embedded_sql('03_ast_find.sql');
 
 # Test basic entrypoint macro
 query II

@@ -5,7 +5,3 @@ duckdb_extension_load(duckdb_ast
     SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}
     LOAD_TESTS
 )
-
-# Any extra extensions that should be built
-# e.g.: duckdb_extension_load(json)
-duckdb_extension_load(json)

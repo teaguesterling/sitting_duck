@@ -4,8 +4,6 @@
 
 require duckdb_ast
 
-require json
-
 # Test 1: Basic functionality - returns one row per file
 query I
 SELECT COUNT(*) FROM read_ast_objects('test/data/python/simple.py', 'python');

@@ -4,6 +4,7 @@
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "unified_ast_backend.hpp"
+#include "read_ast_objects_hybrid.hpp"
 
 namespace duckdb {
 
@@ -18,15 +19,38 @@ struct ReadASTData : public TableFunctionData {
 		: file_path(std::move(file_path)), language(std::move(language)) {}
 };
 
-static unique_ptr<FunctionData> ReadASTBind(ClientContext &context, TableFunctionBindInput &input,
-                                          vector<LogicalType> &return_types, vector<string> &names) {
-	// Check arguments
+// Bind function for two-argument version (explicit language)
+static unique_ptr<FunctionData> ReadASTBindTwoArg(ClientContext &context, TableFunctionBindInput &input,
+                                                 vector<LogicalType> &return_types, vector<string> &names) {
 	if (input.inputs.size() != 2) {
 		throw BinderException("read_ast requires exactly 2 arguments: file_path and language");
 	}
 	
 	auto file_path = input.inputs[0].GetValue<string>();
 	auto language = input.inputs[1].GetValue<string>();
+	
+	// Use unified backend schema (includes taxonomy fields)
+	return_types = UnifiedASTBackend::GetFlatTableSchema();
+	names = UnifiedASTBackend::GetFlatTableColumnNames();
+	
+	auto result = make_uniq<ReadASTData>(file_path, language);
+	return std::move(result);
+}
+
+// Bind function for one-argument version (auto-detect language)
+static unique_ptr<FunctionData> ReadASTBindOneArg(ClientContext &context, TableFunctionBindInput &input,
+                                                 vector<LogicalType> &return_types, vector<string> &names) {
+	if (input.inputs.size() != 1) {
+		throw BinderException("read_ast requires exactly 1 argument: file_path");
+	}
+	
+	auto file_path = input.inputs[0].GetValue<string>();
+	
+	// Auto-detect language from file extension
+	string language = DetectLanguageFromExtension(file_path);
+	if (language == "auto") {
+		throw BinderException("Could not detect language from file extension for '" + file_path + "'. Please specify language explicitly.");
+	}
 	
 	// Use unified backend schema (includes taxonomy fields)
 	return_types = UnifiedASTBackend::GetFlatTableSchema();
@@ -65,15 +89,24 @@ static void ReadASTFunction(ClientContext &context, TableFunctionInput &data_p, 
 	output.SetCardinality(output_index);
 }
 
-static TableFunction GetReadASTFunction() {
+static TableFunction GetReadASTFunctionTwoArg() {
 	TableFunction read_ast("read_ast", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
-	                      ReadASTFunction, ReadASTBind);
+	                      ReadASTFunction, ReadASTBindTwoArg);
+	read_ast.name = "read_ast";
+	return read_ast;
+}
+
+static TableFunction GetReadASTFunctionOneArg() {
+	TableFunction read_ast("read_ast", {LogicalType::VARCHAR}, 
+	                      ReadASTFunction, ReadASTBindOneArg);
 	read_ast.name = "read_ast";
 	return read_ast;
 }
 
 void RegisterReadASTFunction(DatabaseInstance &instance) {
-	ExtensionUtil::RegisterFunction(instance, GetReadASTFunction());
+	// Register both one-argument and two-argument versions
+	ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionOneArg());
+	ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionTwoArg());
 }
 
 } // namespace duckdb

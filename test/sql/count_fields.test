@@ -7,7 +7,7 @@ require duckdb_ast
 # Test count fields with a well-structured JavaScript file
 statement ok
 CREATE TABLE count_test AS 
-SELECT ast FROM read_ast('test/data/javascript/count_test.js');
+SELECT ast FROM read_ast_objects('test/data/javascript/count_test.js');
 
 # Verify that children_count matches actual child count
 query I
@@ -109,7 +109,7 @@ WHERE f1.parent_id IS NULL OR
 # Test with Python file to ensure language independence
 statement ok
 CREATE TABLE py_count_test AS 
-SELECT ast FROM read_ast('test/data/python/simple.py', 'python');
+SELECT ast FROM read_ast_objects('test/data/python/simple.py', 'python');
 
 # Verify count fields work for Python AST
 query I

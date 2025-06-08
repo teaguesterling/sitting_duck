@@ -1,0 +1,153 @@
+# name: test/sql/test_semantic_types.test
+# description: Test new semantic type system
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: Basic semantic_type field exists
+query I
+SELECT COUNT(*) FROM (
+    SELECT semantic_type
+    FROM parse_ast('def hello(): pass', 'python')
+    LIMIT 1
+);
+----
+1
+
+# Test 2: Semantic types are populated correctly for Python
+query III
+SELECT type, semantic_type, 
+       CASE 
+           WHEN semantic_type = 52 THEN 'DEFINITION_FUNCTION'
+           WHEN semantic_type = 0 THEN 'PARSER_CONSTRUCT'
+           WHEN semantic_type = 129 THEN 'LITERAL_STRING'
+           WHEN semantic_type = 192 THEN 'IDENTIFIER_COMMON'
+           ELSE 'UNKNOWN: ' || semantic_type::VARCHAR
+       END as semantic_name
+FROM parse_ast('def hello(): return "world"', 'python')
+WHERE type IN ('function_definition', 'string', 'identifier', 'module');
+----
+function_definition	52	DEFINITION_FUNCTION
+identifier	192	IDENTIFIER_COMMON
+string	129	LITERAL_STRING
+module	0	PARSER_CONSTRUCT
+
+# Test 3: Cross-language semantic normalization
+query III
+WITH py_func AS (
+    SELECT semantic_type, type as py_type
+    FROM parse_ast('def hello(): pass', 'python')
+    WHERE type = 'function_definition'
+),
+js_func AS (
+    SELECT semantic_type, type as js_type
+    FROM parse_ast('function hello() {}', 'javascript')
+    WHERE type = 'function_declaration'
+),
+cpp_func AS (
+    SELECT semantic_type, type as cpp_type
+    FROM parse_ast('void hello() {}', 'cpp')
+    WHERE type = 'function_definition'
+)
+SELECT py.py_type, js.js_type, cpp.cpp_type
+FROM py_func py, js_func js, cpp_func cpp
+WHERE py.semantic_type = js.semantic_type 
+  AND js.semantic_type = cpp.semantic_type;
+----
+function_definition	function_declaration	function_definition
+
+# Test 4: Operator semantic types
+query III
+SELECT type, semantic_type,
+       CASE 
+           WHEN semantic_type = 160 THEN 'OPERATOR_ARITHMETIC'
+           WHEN semantic_type = 164 THEN 'OPERATOR_LOGICAL'
+           WHEN semantic_type = 168 THEN 'OPERATOR_COMPARISON'
+           WHEN semantic_type = 172 THEN 'OPERATOR_ASSIGNMENT'
+           ELSE 'UNKNOWN: ' || semantic_type::VARCHAR
+       END as semantic_name
+FROM parse_ast('x = 1 + 2 < 3 and True', 'python')
+WHERE type IN ('+', '<', '=', 'and');
+----
+=	172	OPERATOR_ASSIGNMENT
++	160	OPERATOR_ARITHMETIC
+<	168	OPERATOR_COMPARISON
+and	164	OPERATOR_LOGICAL
+
+# Test 5: AST struct includes semantic_type
+query I
+SELECT COUNT(*)
+FROM read_ast_objects('test/data/python/simple.py') as t
+WHERE EXISTS (
+    SELECT 1 FROM unnest(t.ast.nodes) as n
+    WHERE n.semantic_type > 0
+);
+----
+1
+
+# Test 6: Verify no normalized_type field exists
+statement error
+SELECT normalized_type FROM parse_ast('x = 1', 'python');
+----
+
+# Test 7: Universal flags work correctly
+query III
+SELECT type, universal_flags,
+       CASE
+           WHEN (universal_flags & 1) != 0 THEN 'IS_KEYWORD'
+           WHEN (universal_flags & 2) != 0 THEN 'IS_PUNCTUATION'
+           WHEN (universal_flags & 4) != 0 THEN 'IS_BUILTIN'
+           WHEN (universal_flags & 8) != 0 THEN 'IS_PUBLIC'
+           WHEN (universal_flags & 16) != 0 THEN 'IS_LITERAL'
+           ELSE 'NONE'
+       END as flag_name
+FROM parse_ast('def hello(): return "world"', 'python')
+WHERE universal_flags > 0
+ORDER BY type;
+----
+def	1	IS_KEYWORD
+return	1	IS_KEYWORD
+string	16	IS_LITERAL
+
+# Test 8: C++ specific semantic types
+query III
+SELECT type, semantic_type,
+       CASE 
+           WHEN semantic_type = 56 THEN 'DEFINITION_CLASS'
+           WHEN semantic_type = 241 THEN 'TYPE_OBJECT'
+           WHEN semantic_type = 240 THEN 'TYPE_PRIMITIVE'
+           ELSE 'UNKNOWN: ' || semantic_type::VARCHAR
+       END as semantic_name
+FROM parse_ast('class MyClass { int x; };', 'cpp')
+WHERE type IN ('class_specifier', 'identifier', 'primitive_type');
+----
+class_specifier	56	DEFINITION_CLASS
+identifier	241	TYPE_OBJECT
+primitive_type	240	TYPE_PRIMITIVE
+
+# Test 9: JavaScript async/await semantic types
+query III
+SELECT type, semantic_type,
+       CASE 
+           WHEN semantic_type = 52 THEN 'DEFINITION_FUNCTION'
+           WHEN semantic_type = 80 THEN 'FLOW_SYNC'
+           ELSE 'UNKNOWN: ' || semantic_type::VARCHAR
+       END as semantic_name
+FROM parse_ast('async function test() { await foo(); }', 'javascript')
+WHERE type IN ('function_declaration', 'await_expression');
+----
+function_declaration	52	DEFINITION_FUNCTION
+await_expression	80	FLOW_SYNC
+
+# Test 10: Structured literals
+query III
+SELECT type, semantic_type,
+       CASE 
+           WHEN semantic_type = 140 THEN 'LITERAL_STRUCTURED'
+           ELSE 'UNKNOWN: ' || semantic_type::VARCHAR
+       END as semantic_name
+FROM parse_ast('[1, 2, {"key": "value"}]', 'python')
+WHERE type IN ('list', 'dictionary');
+----
+list	140	LITERAL_STRUCTURED
+dictionary	140	LITERAL_STRUCTURED

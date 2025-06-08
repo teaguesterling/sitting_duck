@@ -1,0 +1,20 @@
+[0mCMake Deprecation Warning at /mnt/aux-data/teague/Projects/duckdb_ast/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+[0m
+/mnt/aux-data/teague/Projects/duckdb_ast/src/read_ast_objects_hybrid.cpp:16:15: error: ‘std::string duckdb::DetectLanguageFromExtension(const string&)’ was declared ‘extern’ and later ‘static’ [-fpermissive]
+   16 | static string DetectLanguageFromExtension(const string &file_path) {
+      |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /mnt/aux-data/teague/Projects/duckdb_ast/src/read_ast_objects_hybrid.cpp:1:
+/mnt/aux-data/teague/Projects/duckdb_ast/src/include/read_ast_objects_hybrid.hpp:11:8: note: previous declaration of ‘std::string duckdb::DetectLanguageFromExtension(const string&)’
+   11 | string DetectLanguageFromExtension(const string &file_path);
+      |        ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+gmake[3]: *** [extension/duckdb_ast/CMakeFiles/duckdb_ast_extension.dir/build.make:135: extension/duckdb_ast/CMakeFiles/duckdb_ast_extension.dir/src/read_ast_objects_hybrid.cpp.o] Error 1
+gmake[2]: *** [CMakeFiles/Makefile2:9728: extension/duckdb_ast/CMakeFiles/duckdb_ast_extension.dir/all] Error 2
+gmake[1]: *** [Makefile:136: all] Error 2
+make: *** [extension-ci-tools/makefiles/duckdb_extension.Makefile:78: release] Error 2

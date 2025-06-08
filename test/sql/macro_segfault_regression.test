@@ -1,0 +1,98 @@
+# Test for macro segfault regression
+# This test ensures that our analyze_file_metrics macro doesn't cause segfaults
+
+require duckdb_ast
+
+# Test simplified analyze_file_metrics macro
+statement ok
+CREATE OR REPLACE MACRO analyze_file_metrics_simple(file_path) AS TABLE
+    WITH base_data AS (
+        SELECT * FROM read_ast(file_path)
+    ),
+    node_stats AS (
+        SELECT 
+            COUNT(*) as total_nodes,
+            MAX(depth) as max_depth,
+            AVG(depth) as avg_depth,
+            COUNT(DISTINCT type) as unique_node_types
+        FROM base_data
+    )
+    SELECT 
+        file_path,
+        total_nodes,
+        max_depth,
+        ROUND(avg_depth, 2) as avg_depth,
+        unique_node_types
+    FROM node_stats;
+
+# Test that the macro works without segfaulting
+query TIIIR
+FROM analyze_file_metrics_simple('test/data/simple_setup.sql');
+----
+test/data/simple_setup.sql	15	1	0.93	10
+
+# Test semantic type filtering separately
+statement ok
+CREATE OR REPLACE MACRO semantic_filter_test(file_path) AS TABLE
+    SELECT 
+        COUNT(*) FILTER (WHERE (semantic_type & 3840) = 512) as declarations,
+        COUNT(*) FILTER (WHERE (semantic_type & 3840) = 768) as statements
+    FROM read_ast(file_path);
+
+# Test semantic filtering doesn't segfault
+query II
+FROM semantic_filter_test('test/data/simple_setup.sql');
+----
+0	1
+
+# Test full macro (if this segfaults, we have a regression)
+statement ok
+CREATE OR REPLACE MACRO analyze_file_metrics_full(file_path) AS TABLE
+    WITH base_data AS (
+        SELECT * FROM read_ast(file_path)
+    ),
+    node_stats AS (
+        SELECT 
+            COUNT(*) as total_nodes,
+            MAX(depth) as max_depth,
+            AVG(depth) as avg_depth,
+            COUNT(DISTINCT type) as unique_node_types
+        FROM base_data
+    ),
+    type_sample AS (
+        SELECT STRING_AGG(type, ', ' ORDER BY type) as example_types
+        FROM (
+            SELECT DISTINCT type
+            FROM base_data
+            ORDER BY type
+            LIMIT 5
+        ) t
+    ),
+    semantic_stats AS (
+        SELECT 
+            COUNT(*) FILTER (WHERE (semantic_type & 3840) = 512) as declarations,
+            COUNT(*) FILTER (WHERE (semantic_type & 3840) = 768) as statements,
+            COUNT(*) FILTER (WHERE (semantic_type & 3840) = 1024) as expressions,
+            COUNT(*) FILTER (WHERE (semantic_type & 240) = 48) as functions,
+            COUNT(*) FILTER (WHERE (semantic_type & 240) = 16) as classes
+        FROM base_data
+    )
+    SELECT 
+        file_path,
+        total_nodes,
+        max_depth,
+        ROUND(avg_depth, 2) as avg_depth,
+        unique_node_types,
+        example_types,
+        declarations,
+        statements,
+        expressions,
+        functions,
+        classes
+    FROM node_stats, type_sample, semantic_stats;
+
+# Test full macro doesn't segfault
+query TIIRTIIIII
+FROM analyze_file_metrics_full('test/data/simple_setup.sql');
+----
+test/data/simple_setup.sql	15	1	0.93	10	comment, string, terse_table_query, terse_table_show, user_variable	0	1	0	0	0

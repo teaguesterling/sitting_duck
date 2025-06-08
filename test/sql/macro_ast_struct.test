@@ -7,7 +7,7 @@ require duckdb_ast
 # Test basic macro functionality with AST struct
 statement ok
 CREATE TABLE ast_struct_test AS 
-SELECT ast FROM read_ast('test/data/javascript/simple.js');
+SELECT ast FROM read_ast_objects('test/data/javascript/simple.js');
 
 # Test that existing macros can work with the struct format by extracting nodes
 statement ok
@@ -94,7 +94,7 @@ SELECT
     length(struct_ast.ast.nodes) as struct_count,
     count(obj_ast.node_id) as object_count
 FROM 
-    (SELECT ast FROM read_ast('test/data/javascript/simple.js')) struct_ast,
+    (SELECT ast FROM read_ast_objects('test/data/javascript/simple.js')) struct_ast,
     (SELECT * FROM read_ast_objects('test/data/javascript/simple.js')) obj_ast
 GROUP BY struct_ast.ast.file_path, obj_ast.file_path, length(struct_ast.ast.nodes);
 

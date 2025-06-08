@@ -7,6 +7,9 @@
 
 namespace duckdb {
 
+// Helper function to detect language from file extension
+string DetectLanguageFromExtension(const string &file_path);
+
 struct FilterConfig {
     std::unordered_set<string> exclude_types;
     std::unordered_set<string> include_types;

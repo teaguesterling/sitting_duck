@@ -12,13 +12,13 @@ IO Error: Failed to parse file
 
 # Test 2: Cross-language parsing - should succeed but produce ERROR nodes
 query III
-SELECT type, normalized_type, COUNT(*) as count 
+SELECT type, semantic_type, COUNT(*) as count 
 FROM read_ast('test/data/python/simple.py', 'javascript') 
 WHERE type = 'ERROR'
-GROUP BY type, normalized_type
+GROUP BY type, semantic_type
 ORDER BY count DESC;
 ----
-ERROR	ERROR	10
+ERROR	0	10
 
 # Test 3: read_ast_objects - non-existent file
 statement error

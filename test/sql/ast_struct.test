@@ -4,16 +4,16 @@
 
 require duckdb_ast
 
-# Test basic read_ast function - single argument with language detection
+# Test basic read_ast_objects function - single argument with language detection
 statement ok
 CREATE TABLE test_js_struct AS 
-SELECT ast FROM read_ast('test/data/javascript/simple.js');
+SELECT ast FROM read_ast_objects('test/data/javascript/simple.js');
 
 # Verify the structure contains expected metadata fields
 query I
 SELECT 
-    ast.file_path,
-    ast.language,
+    ast.source.file_path,
+    ast.source.language,
     length(ast.nodes) as node_count
 FROM test_js_struct;
 ----
@@ -35,13 +35,13 @@ SELECT ast.nodes[1].descendant_count FROM test_js_struct;
 ----
 10
 
-# Test read_ast with explicit language parameter
+# Test read_ast_objects with explicit language parameter
 statement ok
 CREATE TABLE test_py_struct AS 
-SELECT ast FROM read_ast('test/data/python/simple.py', 'python');
+SELECT ast FROM read_ast_objects('test/data/python/simple.py', 'python');
 
 query I
-SELECT ast.language FROM test_py_struct;
+SELECT ast.source.language FROM test_py_struct;
 ----
 python
 
@@ -117,13 +117,13 @@ SELECT count(*) FROM (
 
 # Test error handling for non-existent file
 statement error
-SELECT * FROM read_ast('nonexistent.js');
+SELECT * FROM read_ast_objects('nonexistent.js');
 ----
 File not found
 
 # Test error handling for undetectable language
 statement error
-SELECT * FROM read_ast('test/data/unknown.xyz');
+SELECT * FROM read_ast_objects('test/data/unknown.xyz');
 ----
 Could not detect language from file extension
 

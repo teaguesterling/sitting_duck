@@ -9,6 +9,7 @@
 #include "ast_sql_macros.hpp"
 #include "short_names_function.hpp"
 #include "parse_ast_function.hpp"
+#include "semantic_type_functions.hpp"
 
 namespace duckdb {
 
@@ -32,12 +33,13 @@ static void LoadInternal(DatabaseInstance &instance) {
 	ParseASTFunction::Register(instance);
 	
 	// Register SQL macros for natural AST querying
-	// Note: These require json_each which is available in DuckDB 1.3+
-	ExtensionHelper::AutoLoadExtension(instance, "json");
 	RegisterASTSQLMacros(instance);
 	
 	// Register the short names function and pragma (doesn't depend on JSON)
 	RegisterDuckDBASTShortNamesFunction(instance);
+	
+	// Register semantic type utility functions
+	RegisterSemanticTypeFunctions(instance);
 	
 	// Check if user wants short names auto-loaded
 	try {

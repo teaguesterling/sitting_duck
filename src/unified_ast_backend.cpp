@@ -166,7 +166,6 @@ vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
     return {
         LogicalType::BIGINT,      // node_id
         LogicalType::VARCHAR,     // type
-        LogicalType::VARCHAR,     // normalized_type
         LogicalType::VARCHAR,     // name
         LogicalType::VARCHAR,     // file_path
         LogicalType::INTEGER,     // start_line
@@ -179,23 +178,21 @@ vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
         LogicalType::INTEGER,     // children_count
         LogicalType::INTEGER,     // descendant_count
         LogicalType::VARCHAR,     // peek (source_text)
-        // NEW: Taxonomy fields
-        LogicalType::TINYINT,     // kind
+        // Semantic type fields
+        LogicalType::TINYINT,     // semantic_type
         LogicalType::TINYINT,     // universal_flags
-        LogicalType::BIGINT,      // semantic_id (full node_id)
-        LogicalType::TINYINT,     // super_type
         LogicalType::TINYINT      // arity_bin
     };
 }
 
 vector<string> UnifiedASTBackend::GetFlatTableColumnNames() {
     return {
-        "node_id", "type", "normalized_type", "name", "file_path",
+        "node_id", "type", "name", "file_path",
         "start_line", "start_column", "end_line", "end_column", 
         "parent_id", "depth", "sibling_index", "children_count", "descendant_count",
         "peek",
-        // NEW: Taxonomy fields  
-        "kind", "universal_flags", "semantic_id", "super_type", "arity_bin"
+        // Semantic type fields  
+        "semantic_type", "universal_flags", "arity_bin"
     };
 }
 
@@ -208,7 +205,6 @@ LogicalType UnifiedASTBackend::GetASTStructSchema() {
     child_list_t<LogicalType> node_children;
     node_children.push_back(make_pair("node_id", LogicalType::BIGINT));
     node_children.push_back(make_pair("type", LogicalType::VARCHAR));
-    node_children.push_back(make_pair("normalized_type", LogicalType::VARCHAR));
     node_children.push_back(make_pair("name", LogicalType::VARCHAR));
     node_children.push_back(make_pair("start_line", LogicalType::INTEGER));
     node_children.push_back(make_pair("end_line", LogicalType::INTEGER));
@@ -220,11 +216,9 @@ LogicalType UnifiedASTBackend::GetASTStructSchema() {
     node_children.push_back(make_pair("children_count", LogicalType::INTEGER));
     node_children.push_back(make_pair("descendant_count", LogicalType::INTEGER));
     node_children.push_back(make_pair("peek", LogicalType::VARCHAR));
-    // NEW: Taxonomy fields
-    node_children.push_back(make_pair("kind", LogicalType::TINYINT));
+    // Semantic type fields
+    node_children.push_back(make_pair("semantic_type", LogicalType::TINYINT));
     node_children.push_back(make_pair("universal_flags", LogicalType::TINYINT));
-    node_children.push_back(make_pair("semantic_id", LogicalType::BIGINT));
-    node_children.push_back(make_pair("super_type", LogicalType::TINYINT));
     node_children.push_back(make_pair("arity_bin", LogicalType::TINYINT));
     
     child_list_t<LogicalType> ast_children;
@@ -236,35 +230,32 @@ LogicalType UnifiedASTBackend::GetASTStructSchema() {
 
 void UnifiedASTBackend::ProjectToTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index) {
     // Verify output chunk has correct number of columns
-    if (output.ColumnCount() != 20) {
-        throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 20");
+    if (output.ColumnCount() != 17) {
+        throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 17");
     }
     
     // Get output vectors
     auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
     auto type_vec = FlatVector::GetData<string_t>(output.data[1]);
-    auto normalized_type_vec = FlatVector::GetData<string_t>(output.data[2]);
-    auto name_vec = FlatVector::GetData<string_t>(output.data[3]);
-    auto file_path_vec = FlatVector::GetData<string_t>(output.data[4]);
-    auto start_line_vec = FlatVector::GetData<int32_t>(output.data[5]);
-    auto start_column_vec = FlatVector::GetData<int32_t>(output.data[6]);
-    auto end_line_vec = FlatVector::GetData<int32_t>(output.data[7]);
-    auto end_column_vec = FlatVector::GetData<int32_t>(output.data[8]);
-    auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[9]);
-    auto depth_vec = FlatVector::GetData<int32_t>(output.data[10]);
-    auto sibling_index_vec = FlatVector::GetData<int32_t>(output.data[11]);
-    auto children_count_vec = FlatVector::GetData<int32_t>(output.data[12]);
-    auto descendant_count_vec = FlatVector::GetData<int32_t>(output.data[13]);
-    auto peek_vec = FlatVector::GetData<string_t>(output.data[14]);
-    // NEW: Taxonomy vectors
-    auto kind_vec = FlatVector::GetData<int8_t>(output.data[15]);
-    auto universal_flags_vec = FlatVector::GetData<int8_t>(output.data[16]);
-    auto semantic_id_vec = FlatVector::GetData<int64_t>(output.data[17]);
-    auto super_type_vec = FlatVector::GetData<int8_t>(output.data[18]);
-    auto arity_bin_vec = FlatVector::GetData<int8_t>(output.data[19]);
+    auto name_vec = FlatVector::GetData<string_t>(output.data[2]);
+    auto file_path_vec = FlatVector::GetData<string_t>(output.data[3]);
+    auto start_line_vec = FlatVector::GetData<int32_t>(output.data[4]);
+    auto start_column_vec = FlatVector::GetData<int32_t>(output.data[5]);
+    auto end_line_vec = FlatVector::GetData<int32_t>(output.data[6]);
+    auto end_column_vec = FlatVector::GetData<int32_t>(output.data[7]);
+    auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[8]);
+    auto depth_vec = FlatVector::GetData<int32_t>(output.data[9]);
+    auto sibling_index_vec = FlatVector::GetData<int32_t>(output.data[10]);
+    auto children_count_vec = FlatVector::GetData<int32_t>(output.data[11]);
+    auto descendant_count_vec = FlatVector::GetData<int32_t>(output.data[12]);
+    auto peek_vec = FlatVector::GetData<string_t>(output.data[13]);
+    // Semantic type fields
+    auto semantic_type_vec = FlatVector::GetData<int8_t>(output.data[14]);
+    auto universal_flags_vec = FlatVector::GetData<int8_t>(output.data[15]);
+    auto arity_bin_vec = FlatVector::GetData<int8_t>(output.data[16]);
     
     // Get validity masks for nullable fields
-    auto &name_validity = FlatVector::Validity(output.data[3]);
+    auto &name_validity = FlatVector::Validity(output.data[2]);
     auto &parent_validity = FlatVector::Validity(output.data[9]);
     
     idx_t count = 0;
@@ -277,15 +268,14 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult& result, DataChunk& outpu
         // Basic fields
         node_id_vec[output_index + count] = node.node_id;
         type_vec[output_index + count] = StringVector::AddString(output.data[1], node.type.raw);
-        normalized_type_vec[output_index + count] = StringVector::AddString(output.data[2], node.type.normalized);
         
         if (node.name.raw.empty()) {
             name_validity.SetInvalid(output_index + count);
         } else {
-            name_vec[output_index + count] = StringVector::AddString(output.data[3], node.name.raw);
+            name_vec[output_index + count] = StringVector::AddString(output.data[2], node.name.raw);
         }
         
-        file_path_vec[output_index + count] = StringVector::AddString(output.data[4], result.source.file_path);
+        file_path_vec[output_index + count] = StringVector::AddString(output.data[3], result.source.file_path);
         start_line_vec[output_index + count] = node.file_position.start_line;
         start_column_vec[output_index + count] = node.file_position.start_column;
         end_line_vec[output_index + count] = node.file_position.end_line;
@@ -301,13 +291,11 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult& result, DataChunk& outpu
         sibling_index_vec[output_index + count] = node.tree_position.sibling_index;
         children_count_vec[output_index + count] = node.subtree.children_count;
         descendant_count_vec[output_index + count] = node.subtree.descendant_count;
-        peek_vec[output_index + count] = StringVector::AddString(output.data[14], node.peek);
+        peek_vec[output_index + count] = StringVector::AddString(output.data[13], node.peek);
         
-        // NEW: Taxonomy fields
-        kind_vec[output_index + count] = node.kind;
+        // Semantic type fields
+        semantic_type_vec[output_index + count] = node.semantic_type;
         universal_flags_vec[output_index + count] = node.universal_flags;
-        semantic_id_vec[output_index + count] = node.node_id;  // Full semantic ID
-        super_type_vec[output_index + count] = node.super_type;
         arity_bin_vec[output_index + count] = node.arity_bin;
         
         count++;
@@ -332,7 +320,6 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult& result) {
         child_list_t<Value> node_children;
         node_children.push_back(make_pair("node_id", Value::BIGINT(node.node_id)));
         node_children.push_back(make_pair("type", Value(node.type.raw)));
-        node_children.push_back(make_pair("normalized_type", Value(node.type.normalized)));
         node_children.push_back(make_pair("name", Value(node.name.raw)));
         node_children.push_back(make_pair("start_line", Value::INTEGER(node.file_position.start_line)));
         node_children.push_back(make_pair("end_line", Value::INTEGER(node.file_position.end_line)));
@@ -345,11 +332,9 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult& result) {
         node_children.push_back(make_pair("children_count", Value::INTEGER(node.subtree.children_count)));
         node_children.push_back(make_pair("descendant_count", Value::INTEGER(node.subtree.descendant_count)));
         node_children.push_back(make_pair("peek", Value(node.peek)));
-        // NEW: Taxonomy fields
-        node_children.push_back(make_pair("kind", Value::TINYINT(node.kind)));
+        // Semantic type fields
+        node_children.push_back(make_pair("semantic_type", Value::TINYINT(node.semantic_type)));
         node_children.push_back(make_pair("universal_flags", Value::TINYINT(node.universal_flags)));
-        node_children.push_back(make_pair("semantic_id", Value::BIGINT(node.node_id)));
-        node_children.push_back(make_pair("super_type", Value::TINYINT(node.super_type)));
         node_children.push_back(make_pair("arity_bin", Value::TINYINT(node.arity_bin)));
         
         node_values.push_back(Value::STRUCT(node_children));
@@ -359,7 +344,6 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult& result) {
     child_list_t<LogicalType> node_schema;
     node_schema.push_back(make_pair("node_id", LogicalType::BIGINT));
     node_schema.push_back(make_pair("type", LogicalType::VARCHAR));
-    node_schema.push_back(make_pair("normalized_type", LogicalType::VARCHAR));
     node_schema.push_back(make_pair("name", LogicalType::VARCHAR));
     node_schema.push_back(make_pair("start_line", LogicalType::INTEGER));
     node_schema.push_back(make_pair("end_line", LogicalType::INTEGER));
@@ -371,10 +355,8 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult& result) {
     node_schema.push_back(make_pair("children_count", LogicalType::INTEGER));
     node_schema.push_back(make_pair("descendant_count", LogicalType::INTEGER));
     node_schema.push_back(make_pair("peek", LogicalType::VARCHAR));
-    node_schema.push_back(make_pair("kind", LogicalType::TINYINT));
+    node_schema.push_back(make_pair("semantic_type", LogicalType::TINYINT));
     node_schema.push_back(make_pair("universal_flags", LogicalType::TINYINT));
-    node_schema.push_back(make_pair("semantic_id", LogicalType::BIGINT));
-    node_schema.push_back(make_pair("super_type", LogicalType::TINYINT));
     node_schema.push_back(make_pair("arity_bin", LogicalType::TINYINT));
     
     child_list_t<Value> ast_children;
