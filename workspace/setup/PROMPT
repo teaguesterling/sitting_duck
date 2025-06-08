@@ -1,0 +1,312 @@
+# DuckDB AST DuckDB Extension - Implementation Prompt
+
+## Project Overview
+
+You are tasked with implementing the initial version of DuckDB AST, a DuckDB extension that enables SQL-based querying of Abstract Syntax Trees (ASTs) from source code. This first implementation should focus on core functionality with Python as the primary supported language, establishing patterns that can be extended to other languages.
+
+## Technical Context
+
+### DuckDB Version Requirements
+- Target DuckDB version: 1.1.0+ (with support for 1.3.0 features where applicable)
+- Use modern C++ (C++11 minimum, C++17 preferred)
+- Leverage DuckDB's extension framework and virtual table system
+
+### Key Dependencies
+- Tree-sitter for AST parsing
+- Tree-sitter-python grammar
+- DuckDB C++ API
+- Standard C++ libraries only (no Boost or other heavy dependencies)
+
+## Core Implementation Requirements
+
+### Phase 1: Basic AST Reading Function
+
+Implement a table-returning function `read_ast()` with the following signature:
+
+```sql
+SELECT * FROM read_ast(
+    file_path VARCHAR,      -- Single file path (glob patterns in Phase 2)
+    language VARCHAR        -- Language identifier ('python' for Phase 1)
+);
+```
+
+#### Expected Output Schema
+
+```sql
+CREATE TYPE ast_node_result AS (
+    node_id BIGINT,         -- Unique identifier for this node
+    type VARCHAR,           -- Node type (e.g., 'function_definition', 'class_definition')
+    name VARCHAR,           -- Node name if applicable (e.g., function name, variable name)
+    file_path VARCHAR,      -- Source file path
+    start_line INTEGER,     -- Starting line number (1-based)
+    start_column INTEGER,   -- Starting column (0-based)
+    end_line INTEGER,       -- Ending line number (1-based)
+    end_column INTEGER,     -- Ending column (0-based)
+    parent_id BIGINT,       -- Parent node ID (NULL for root)
+    depth INTEGER,          -- Depth in tree (0 for root)
+    sibling_index INTEGER,  -- Position among siblings (0-based)
+    source_text VARCHAR     -- Actual source code for this node
+);
+```
+
+#### Implementation Details
+
+1. **Tree-sitter Integration**
+   ```cpp
+   class TreeSitterParser {
+   public:
+       TreeSitterParser(const std::string& language);
+       TSTree* ParseFile(const std::string& file_path);
+       TSTree* ParseString(const std::string& content);
+   private:
+       TSParser* parser;
+       const TSLanguage* language;
+   };
+   ```
+
+2. **Node ID Generation**
+   - Use a deterministic scheme: `hash(file_path + start_byte + end_byte)`
+   - Must be consistent across multiple parses of the same file
+   - Consider using xxHash or similar fast hash function
+
+3. **Memory Management**
+   - Tree-sitter trees must be properly freed
+   - Use RAII patterns for automatic cleanup
+   - Consider memory pooling for large files
+
+### Phase 2: Type-Safe Node Functions
+
+Implement basic node type filtering functions that can be chained:
+
+```sql
+-- These should work on the result of read_ast()
+SELECT * FROM ast_functions('path/to/file.py');  -- All functions
+SELECT * FROM ast_classes('path/to/file.py');    -- All classes
+SELECT * FROM ast_imports('path/to/file.py');    -- All imports
+```
+
+#### Implementation Approach
+
+```cpp
+class ASTTableFunction : public TableFunction {
+protected:
+    // Base implementation for all AST table functions
+    virtual std::string GetNodeTypeFilter() = 0;
+    
+    static unique_ptr<FunctionData> Bind(ClientContext &context, 
+                                        TableFunctionBindInput &input,
+                                        vector<LogicalType> &return_types,
+                                        vector<string> &names);
+};
+
+class ASTFunctionsFunction : public ASTTableFunction {
+    std::string GetNodeTypeFilter() override {
+        return "function_definition";  // Python-specific for now
+    }
+};
+```
+
+### Phase 3: Source Code Retrieval
+
+Implement functions to retrieve source code with context:
+
+```sql
+-- Get source code for a specific node
+SELECT get_node_source(node_id) FROM read_ast('file.py');
+
+-- Get source with context lines
+SELECT get_node_source(node_id, 5) FROM read_ast('file.py');  -- 5 lines before/after
+```
+
+#### Critical Requirements
+
+1. **Line Ending Handling**: Preserve original line endings (CRLF vs LF)
+2. **Encoding Support**: Handle UTF-8 properly, detect and report other encodings
+3. **Performance**: Cache file contents during query execution
+4. **Large Files**: Implement streaming for files > 10MB
+
+### Phase 4: Basic Method Chaining Support
+
+Implement a custom type system that allows method chaining:
+
+```sql
+-- This should work:
+SELECT tree.ast_functions()
+FROM read_ast('file.py') AS tree;
+
+-- This should also work:
+SELECT tree.ast_functions().ast_count()
+FROM read_ast('file.py') AS tree;
+```
+
+#### Type System Design
+
+```cpp
+class ASTNodeCollection : public DuckDBType {
+    // Custom type that supports method calls
+    vector<ASTNode> nodes;
+    shared_ptr<FileContext> context;
+    
+public:
+    // Method implementations
+    ASTNodeCollection ast_functions();
+    ASTNodeCollection ast_filter(ExpressionState& lambda);
+    int64_t ast_count();
+};
+```
+
+## Testing Requirements
+
+### Unit Tests
+
+1. **Parser Tests**
+   ```cpp
+   TEST_CASE("Parse simple Python function") {
+       auto result = read_ast("def foo(): pass", "python");
+       REQUIRE(result.size() == 3);  // module, function_def, pass_statement
+       REQUIRE(result[1].type == "function_definition");
+       REQUIRE(result[1].name == "foo");
+   }
+   ```
+
+2. **Edge Cases**
+   - Empty files
+   - Syntax errors (partial AST should still be returned)
+   - Unicode in identifiers
+   - Very deep nesting (> 100 levels)
+   - Large files (> 10k lines)
+
+### Integration Tests
+
+1. **Real Python Files**
+   - Test against Python standard library files
+   - Include files with complex constructs (decorators, async, type hints)
+   - Multi-encoding test files
+
+2. **Performance Benchmarks**
+   ```sql
+   -- Should complete in < 1 second for a 10k line file
+   SELECT COUNT(*) FROM read_ast('large_file.py', 'python');
+   ```
+
+### SQL Behavior Tests
+
+```sql
+-- Test that normal SQL operations work
+SELECT type, COUNT(*) 
+FROM read_ast('test.py', 'python')
+GROUP BY type
+ORDER BY COUNT(*) DESC;
+
+-- Test joins with AST data
+WITH funcs AS (
+    SELECT * FROM ast_functions('test.py')
+)
+SELECT f1.name, f2.name
+FROM funcs f1, funcs f2
+WHERE f1.start_line < f2.start_line;
+```
+
+## Error Handling Requirements
+
+1. **File Access Errors**
+   - Return clear error messages for missing files
+   - Handle permission denied gracefully
+   - Report file encoding issues
+
+2. **Parsing Errors**
+   - Never crash on malformed code
+   - Return partial AST when possible
+   - Include error nodes in output with clear marking
+
+3. **Resource Limits**
+   - Implement timeout for parsing (default: 30 seconds)
+   - Memory limit per query (default: 1GB)
+   - Maximum tree depth (default: 1000)
+
+## Performance Considerations
+
+1. **Lazy Evaluation**
+   - Don't parse entire file if only need specific node types
+   - Implement push-down filters where possible
+
+2. **Caching Strategy**
+   - Cache parsed trees for duration of query
+   - Consider LRU cache for frequently accessed files
+   - Cache invalidation based on file modification time
+
+3. **Parallel Processing**
+   - Parser itself is not thread-safe
+   - But multiple files can be parsed in parallel
+   - Design with future parallelization in mind
+
+## Code Quality Requirements
+
+1. **Documentation**
+   - Every public function must have comprehensive documentation
+   - Include usage examples in comments
+   - Document any Tree-sitter specific behavior
+
+2. **Error Messages**
+   - User-friendly messages for SQL users
+   - Include suggestions for common mistakes
+   - Never expose internal pointers or technical details
+
+3. **Logging**
+   - Use DuckDB's logging framework
+   - Debug logging for parser decisions
+   - Performance timing logs (when enabled)
+
+## Deliverables
+
+1. **Source Files**
+   - `code_navigator_extension.cpp` - Main extension entry point
+   - `ast_parser.cpp/hpp` - Tree-sitter wrapper
+   - `ast_functions.cpp/hpp` - SQL function implementations
+   - `ast_node_collection.cpp/hpp` - Custom type for method chaining
+
+2. **Build Files**
+   - `CMakeLists.txt` - Build configuration
+   - `Makefile` - Convenience wrapper
+   - Build instructions for Linux, macOS, Windows
+
+3. **Test Files**
+   - `test/unit/` - Unit tests
+   - `test/integration/` - Integration tests  
+   - `test/sql/` - SQL-based tests
+   - `test/fixtures/` - Test Python files
+
+4. **Documentation**
+   - `README.md` - Basic usage and build instructions
+   - `DESIGN.md` - Architectural decisions and rationale
+   - `API.md` - Complete function reference
+
+## Success Criteria
+
+1. All basic functions work correctly with Python files
+2. Performance meets targets (< 100ms for 1k line file)
+3. No memory leaks (validated with Valgrind/AddressSanitizer)
+4. Clean integration with DuckDB's type system
+5. Clear path for adding additional languages
+
+## Questions Requiring Clarification
+
+1. **Node ID Stability**: Should node IDs remain stable across file modifications? This affects caching strategy.
+
+2. **Streaming vs. Batch**: For large files, should we support streaming results or always load complete AST?
+
+3. **Error Nodes**: How should syntax errors be represented? As error nodes in the AST or separate error table?
+
+4. **Source Text Length**: Should we truncate very long source text (e.g., large string literals) or always include complete text?
+
+5. **Custom Node Types**: Should we normalize Tree-sitter node types to a common schema or preserve language-specific types?
+
+## Development Approach
+
+1. Start with `read_ast()` returning a simple table
+2. Add source code retrieval functions  
+3. Implement filtered views (ast_functions, etc.)
+4. Add method chaining support
+5. Optimize performance based on profiling
+
+Focus on correctness and clean architecture over premature optimization. The goal is to establish solid patterns that can be extended for additional languages and more complex traversal operations.
