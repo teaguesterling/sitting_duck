@@ -101,6 +101,13 @@ void PythonAdapter::InitializeParser() const {
     parser_wrapper_->SetLanguage(ts_language, "Python");
 }
 
+unique_ptr<TSParserWrapper> PythonAdapter::CreateFreshParser() const {
+    auto fresh_parser = make_uniq<TSParserWrapper>();
+    auto ts_language = tree_sitter_python();
+    fresh_parser->SetLanguage(ts_language, "Python");
+    return fresh_parser;
+}
+
 string PythonAdapter::GetNormalizedType(const string &node_type) const {
     const NodeConfig* config = GetNodeConfig(node_type);
     if (config) {
@@ -181,6 +188,13 @@ void JavaScriptAdapter::InitializeParser() const {
     parser_wrapper_->SetLanguage(ts_language, "JavaScript");
 }
 
+unique_ptr<TSParserWrapper> JavaScriptAdapter::CreateFreshParser() const {
+    auto fresh_parser = make_uniq<TSParserWrapper>();
+    auto ts_language = tree_sitter_javascript();
+    fresh_parser->SetLanguage(ts_language, "JavaScript");
+    return fresh_parser;
+}
+
 string JavaScriptAdapter::GetNormalizedType(const string &node_type) const {
     const NodeConfig* config = GetNodeConfig(node_type);
     if (config) {
@@ -258,6 +272,13 @@ void CPPAdapter::InitializeParser() const {
     parser_wrapper_ = make_uniq<TSParserWrapper>();
     auto ts_language = tree_sitter_cpp();
     parser_wrapper_->SetLanguage(ts_language, "C++");
+}
+
+unique_ptr<TSParserWrapper> CPPAdapter::CreateFreshParser() const {
+    auto fresh_parser = make_uniq<TSParserWrapper>();
+    auto ts_language = tree_sitter_cpp();
+    fresh_parser->SetLanguage(ts_language, "C++");
+    return fresh_parser;
 }
 
 string CPPAdapter::GetNormalizedType(const string &node_type) const {

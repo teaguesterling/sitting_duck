@@ -39,11 +39,10 @@ public:
     }
     
     // Parse content directly and return owned tree
+    // Creates a fresh parser instance for each call to avoid shared state issues
     TSTreePtr ParseContent(const string& content) const {
-        if (!parser_wrapper_) {
-            InitializeParser();
-        }
-        return parser_wrapper_->ParseString(content);
+        auto fresh_parser = CreateFreshParser();
+        return fresh_parser->ParseString(content);
     }
     
 protected:
@@ -52,6 +51,9 @@ protected:
     
     // Initialize parser with language-specific settings
     virtual void InitializeParser() const = 0;
+    
+    // Create a fresh parser instance (for thread safety)
+    virtual unique_ptr<TSParserWrapper> CreateFreshParser() const = 0;
     
     // Helper methods for content extraction
     string ExtractNodeText(TSNode node, const string &content) const;
@@ -78,6 +80,7 @@ public:
 
 protected:
     void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
     
 private:
     static const unordered_map<string, NodeConfig> node_configs;
@@ -97,6 +100,7 @@ public:
 
 protected:
     void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
     
 private:
     static const unordered_map<string, NodeConfig> node_configs;
@@ -116,6 +120,7 @@ public:
 
 protected:
     void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
     
 private:
     static const unordered_map<string, NodeConfig> node_configs;
