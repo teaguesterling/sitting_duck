@@ -11,7 +11,9 @@ namespace duckdb {
 
 ASTResult UnifiedASTBackend::ParseToASTResult(const string& content, 
                                             const string& language, 
-                                            const string& file_path) {
+                                            const string& file_path,
+                                            int32_t peek_size,
+                                            const string& peek_mode) {
     
     ASTResult result;
     result.source.file_path = file_path;
@@ -95,12 +97,26 @@ ASTResult UnifiedASTBackend::ParseToASTResult(const string& content,
             ast_node.name.raw = adapter->ExtractNodeName(entry.node, content);
             ast_node.name.qualified = ast_node.name.raw; // TODO: Implement qualified name logic
             
-            // Extract source text (peek)
+            // Extract source text (peek) with configurable size and mode
             uint32_t start_byte = ts_node_start_byte(entry.node);
             uint32_t end_byte = ts_node_end_byte(entry.node);
             if (start_byte < content.size() && end_byte <= content.size() && end_byte > start_byte) {
                 string source_text = content.substr(start_byte, end_byte - start_byte);
-                ast_node.peek = source_text.length() > 120 ? source_text.substr(0, 120) : source_text;
+                
+                // Apply peek configuration
+                if (peek_mode == "none" || peek_size == 0) {
+                    ast_node.peek = "";
+                } else if (peek_mode == "full" || peek_size == -1) {
+                    ast_node.peek = source_text;
+                } else if (peek_mode == "line") {
+                    // Extract just the first line
+                    size_t newline_pos = source_text.find('\n');
+                    ast_node.peek = (newline_pos != string::npos) ? source_text.substr(0, newline_pos) : source_text;
+                } else {
+                    // Default/auto mode with configurable size
+                    uint32_t effective_size = (peek_size > 0) ? peek_size : 120;
+                    ast_node.peek = source_text.length() > effective_size ? source_text.substr(0, effective_size) : source_text;
+                }
             }
             
             // Populate semantic type and other fields
@@ -377,7 +393,9 @@ Value UnifiedASTBackend::CreateASTStructValue(const ASTResult& result) {
 ASTResultCollection UnifiedASTBackend::ParseFilesToASTCollection(ClientContext &context,
                                                                const Value &file_path_value,
                                                                const string& language,
-                                                               bool ignore_errors) {
+                                                               bool ignore_errors,
+                                                               int32_t peek_size,
+                                                               const string& peek_mode) {
     // Get all files that match the input pattern(s)
     vector<string> supported_extensions;
     if (language != "auto") {
@@ -424,7 +442,7 @@ ASTResultCollection UnifiedASTBackend::ParseFilesToASTCollection(ClientContext &
             fs.Read(*handle, (void*)content.data(), file_size);
             
             // Parse this file as a separate result
-            auto file_result = ParseToASTResult(content, file_language, file_path);
+            auto file_result = ParseToASTResult(content, file_language, file_path, peek_size, peek_mode);
             
             // Add this individual result to the collection
             collection.results.push_back(std::move(file_result));

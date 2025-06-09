@@ -5,19 +5,19 @@
 -- SEMANTIC TYPE PREDICATES
 -- ===================================
 
--- Check if a node is a declaration (super_type bit 7 = 128)
-CREATE OR REPLACE MACRO ast_is_declaration(semantic_type) AS (
-    (semantic_type & 128) = 128
+-- Check if a node is a definition (COMPUTATION|DEFINITION = bits 7-4 = 0111 = 112)
+CREATE OR REPLACE MACRO ast_is_definition(semantic_type) AS (
+    (semantic_type & 240) = 112
 );
 
--- Check if a node is a statement (super_type bit 6 = 64)
-CREATE OR REPLACE MACRO ast_is_statement(semantic_type) AS (
-    (semantic_type & 64) = 64
+-- Check if a node is an execution statement (CONTROL_EFFECTS|EXECUTION = bits 7-4 = 1000 = 128)
+CREATE OR REPLACE MACRO ast_is_execution(semantic_type) AS (
+    (semantic_type & 240) = 128
 );
 
--- Check if a node is an expression (super_type bit 5 = 32)
-CREATE OR REPLACE MACRO ast_is_expression(semantic_type) AS (
-    (semantic_type & 32) = 32
+-- Check if a node is flow control (CONTROL_EFFECTS|FLOW_CONTROL = bits 7-4 = 1001 = 144)
+CREATE OR REPLACE MACRO ast_is_flow_control(semantic_type) AS (
+    (semantic_type & 240) = 144
 );
 
 -- Check if a node is a literal (super_type bit 4 = 16)

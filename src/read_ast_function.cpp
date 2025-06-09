@@ -18,12 +18,15 @@ struct ReadASTData : public TableFunctionData {
 	Value file_path_value;
 	string language;
 	bool ignore_errors;
+	int32_t peek_size;
+	string peek_mode;
 	vector<ASTRow> all_rows;  // Flattened: all nodes from all files
 	idx_t current_index = 0;
 	bool parsed = false;
 	
-	ReadASTData(Value file_path_value, string language, bool ignore_errors = false) 
-		: file_path_value(std::move(file_path_value)), language(std::move(language)), ignore_errors(ignore_errors) {}
+	ReadASTData(Value file_path_value, string language, bool ignore_errors = false, int32_t peek_size = 120, string peek_mode = "auto") 
+		: file_path_value(std::move(file_path_value)), language(std::move(language)), ignore_errors(ignore_errors), 
+		  peek_size(peek_size), peek_mode(std::move(peek_mode)) {}
 };
 
 // Bind function for two-argument version (explicit language)
@@ -42,11 +45,21 @@ static unique_ptr<FunctionData> ReadASTBindTwoArg(ClientContext &context, TableF
 		ignore_errors = input.named_parameters.at("ignore_errors").GetValue<bool>();
 	}
 	
+	int32_t peek_size = 120;  // Default 120 characters
+	if (input.named_parameters.find("peek_size") != input.named_parameters.end()) {
+		peek_size = input.named_parameters.at("peek_size").GetValue<int32_t>();
+	}
+	
+	string peek_mode = "auto";  // Default auto mode
+	if (input.named_parameters.find("peek_mode") != input.named_parameters.end()) {
+		peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
+	}
+	
 	// Use unified backend schema (includes taxonomy fields)
 	return_types = UnifiedASTBackend::GetFlatTableSchema();
 	names = UnifiedASTBackend::GetFlatTableColumnNames();
 	
-	auto result = make_uniq<ReadASTData>(file_path_value, language, ignore_errors);
+	auto result = make_uniq<ReadASTData>(file_path_value, language, ignore_errors, peek_size, peek_mode);
 	return std::move(result);
 }
 
@@ -65,6 +78,16 @@ static unique_ptr<FunctionData> ReadASTBindOneArg(ClientContext &context, TableF
 		ignore_errors = input.named_parameters.at("ignore_errors").GetValue<bool>();
 	}
 	
+	int32_t peek_size = 120;  // Default 120 characters
+	if (input.named_parameters.find("peek_size") != input.named_parameters.end()) {
+		peek_size = input.named_parameters.at("peek_size").GetValue<int32_t>();
+	}
+	
+	string peek_mode = "auto";  // Default auto mode
+	if (input.named_parameters.find("peek_mode") != input.named_parameters.end()) {
+		peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
+	}
+	
 	// Use auto-detect for language
 	string language = "auto";
 	
@@ -72,7 +95,7 @@ static unique_ptr<FunctionData> ReadASTBindOneArg(ClientContext &context, TableF
 	return_types = UnifiedASTBackend::GetFlatTableSchema();
 	names = UnifiedASTBackend::GetFlatTableColumnNames();
 	
-	auto result = make_uniq<ReadASTData>(file_path_value, language, ignore_errors);
+	auto result = make_uniq<ReadASTData>(file_path_value, language, ignore_errors, peek_size, peek_mode);
 	return std::move(result);
 }
 
@@ -83,7 +106,7 @@ static void ReadASTFunction(ClientContext &context, TableFunctionInput &data_p, 
 	if (!data.parsed) {
 		try {
 			// Parse all files and flatten into simple row structure
-			auto collection = UnifiedASTBackend::ParseFilesToASTCollection(context, data.file_path_value, data.language, data.ignore_errors);
+			auto collection = UnifiedASTBackend::ParseFilesToASTCollection(context, data.file_path_value, data.language, data.ignore_errors, data.peek_size, data.peek_mode);
 			
 			// Flatten all results into independent rows
 			data.all_rows.clear();
@@ -175,6 +198,8 @@ static TableFunction GetReadASTFunctionTwoArg() {
 	                      ReadASTFunction, ReadASTBindTwoArg);
 	read_ast.name = "read_ast";
 	read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
+	read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
+	read_ast.named_parameters["peek_mode"] = LogicalType::VARCHAR;
 	return read_ast;
 }
 
@@ -183,6 +208,8 @@ static TableFunction GetReadASTFunctionOneArg() {
 	                      ReadASTFunction, ReadASTBindOneArg);
 	read_ast.name = "read_ast";
 	read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
+	read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
+	read_ast.named_parameters["peek_mode"] = LogicalType::VARCHAR;
 	return read_ast;
 }
 

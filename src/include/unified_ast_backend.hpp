@@ -48,13 +48,17 @@ public:
     // Core parsing function - used by all AST functions
     static ASTResult ParseToASTResult(const string& content, 
                                      const string& language, 
-                                     const string& file_path = "<inline>");
+                                     const string& file_path = "<inline>",
+                                     int32_t peek_size = 120,
+                                     const string& peek_mode = "auto");
     
     // Multi-file parsing function with glob support
     static ASTResultCollection ParseFilesToASTCollection(ClientContext &context,
                                                          const Value &file_path_value,
                                                          const string& language = "auto",
-                                                         bool ignore_errors = false);
+                                                         bool ignore_errors = false,
+                                                         int32_t peek_size = 120,
+                                                         const string& peek_mode = "auto");
     
     // Helper functions for different output formats
     static vector<LogicalType> GetFlatTableSchema();
