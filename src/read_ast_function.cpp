@@ -148,6 +148,7 @@ static void ReadASTFunction(ClientContext &context, TableFunctionInput &data_p, 
 	// Get validity masks
 	auto &name_validity = FlatVector::Validity(output.data[2]);
 	auto &parent_validity = FlatVector::Validity(output.data[8]);
+	auto &peek_validity = FlatVector::Validity(output.data[13]);
 	
 	// Process rows starting from current_index
 	while (data.current_index < data.all_rows.size() && count < max_count) {
@@ -180,7 +181,13 @@ static void ReadASTFunction(ClientContext &context, TableFunctionInput &data_p, 
 		sibling_index_vec[count] = node.tree_position.sibling_index;
 		children_count_vec[count] = node.subtree.children_count;
 		descendant_count_vec[count] = node.subtree.descendant_count;
-		peek_vec[count] = StringVector::AddString(output.data[13], node.peek);
+		
+		// Handle peek with NULL support
+		if (node.peek.empty()) {
+			peek_validity.SetInvalid(count);
+		} else {
+			peek_vec[count] = StringVector::AddString(output.data[13], node.peek);
+		}
 		
 		semantic_type_vec[count] = node.semantic_type;
 		universal_flags_vec[count] = node.universal_flags;

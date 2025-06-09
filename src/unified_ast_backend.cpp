@@ -105,13 +105,74 @@ ASTResult UnifiedASTBackend::ParseToASTResult(const string& content,
                 
                 // Apply peek configuration
                 if (peek_mode == "none" || peek_size == 0) {
-                    ast_node.peek = "";
+                    ast_node.peek = "";  // Empty string will become NULL in output
                 } else if (peek_mode == "full" || peek_size == -1) {
                     ast_node.peek = source_text;
                 } else if (peek_mode == "line") {
                     // Extract just the first line
                     size_t newline_pos = source_text.find('\n');
                     ast_node.peek = (newline_pos != string::npos) ? source_text.substr(0, newline_pos) : source_text;
+                } else if (peek_mode == "smart") {
+                    // Smart mode: adapt to content size and type
+                    if (source_text.length() <= 50) {
+                        // Small nodes: full content
+                        ast_node.peek = source_text;
+                    } else if (source_text.find('\n') == string::npos) {
+                        // Single-line: truncate at display width
+                        ast_node.peek = source_text.length() > 80 ? source_text.substr(0, 77) + "..." : source_text;
+                    } else {
+                        // Multi-line: first meaningful line with smart truncation
+                        size_t newline_pos = source_text.find('\n');
+                        string first_line = source_text.substr(0, newline_pos);
+                        ast_node.peek = first_line.length() > 80 ? first_line.substr(0, 77) + "..." : first_line;
+                    }
+                } else if (peek_mode == "compact") {
+                    // Compact mode: always truncate for table display
+                    uint32_t compact_size = 60;
+                    if (source_text.length() <= compact_size) {
+                        ast_node.peek = source_text;
+                    } else {
+                        // Smart truncation at word boundary
+                        string truncated = source_text.substr(0, compact_size);
+                        size_t last_space = truncated.find_last_of(" \t");
+                        if (last_space != string::npos && last_space > compact_size / 2) {
+                            ast_node.peek = truncated.substr(0, last_space) + "...";
+                        } else {
+                            ast_node.peek = truncated + "...";
+                        }
+                    }
+                } else if (peek_mode == "signature") {
+                    // Signature mode: extract declaration/signature only
+                    if (source_text.find('\n') == string::npos) {
+                        // Single line - use as-is (likely already a signature)
+                        ast_node.peek = source_text;
+                    } else {
+                        // Multi-line: extract until { or : (function/class signatures)
+                        size_t brace_pos = source_text.find('{');
+                        size_t colon_pos = source_text.find(':');
+                        size_t end_pos = string::npos;
+                        
+                        if (brace_pos != string::npos && colon_pos != string::npos) {
+                            end_pos = std::min(brace_pos, colon_pos);
+                        } else if (brace_pos != string::npos) {
+                            end_pos = brace_pos;
+                        } else if (colon_pos != string::npos) {
+                            end_pos = colon_pos;
+                        }
+                        
+                        if (end_pos != string::npos) {
+                            string signature = source_text.substr(0, end_pos);
+                            // Remove trailing whitespace and newlines
+                            while (!signature.empty() && (signature.back() == ' ' || signature.back() == '\n' || signature.back() == '\t')) {
+                                signature.pop_back();
+                            }
+                            ast_node.peek = signature;
+                        } else {
+                            // Fallback to first line
+                            size_t newline_pos = source_text.find('\n');
+                            ast_node.peek = (newline_pos != string::npos) ? source_text.substr(0, newline_pos) : source_text;
+                        }
+                    }
                 } else {
                     // Default/auto mode with configurable size
                     uint32_t effective_size = (peek_size > 0) ? peek_size : 120;
