@@ -8,13 +8,18 @@
 
 namespace duckdb {
 
+// Simple row structure for flattened output
+struct ASTRow {
+	string file_path;
+	ASTNode node;
+};
+
 struct ReadASTData : public TableFunctionData {
 	Value file_path_value;
 	string language;
 	bool ignore_errors;
-	ASTResultCollection collection;
-	idx_t current_result_index = 0;
-	idx_t current_node_index = 0;
+	vector<ASTRow> all_rows;  // Flattened: all nodes from all files
+	idx_t current_index = 0;
 	bool parsed = false;
 	
 	ReadASTData(Value file_path_value, string language, bool ignore_errors = false) 
@@ -77,37 +82,92 @@ static void ReadASTFunction(ClientContext &context, TableFunctionInput &data_p, 
 	// Parse the file(s) if not already done
 	if (!data.parsed) {
 		try {
-			// Use unified parsing backend with glob support
-			data.collection = UnifiedASTBackend::ParseFilesToASTCollection(context, data.file_path_value, data.language, data.ignore_errors);
+			// Parse all files and flatten into simple row structure
+			auto collection = UnifiedASTBackend::ParseFilesToASTCollection(context, data.file_path_value, data.language, data.ignore_errors);
+			
+			// Flatten all results into independent rows
+			data.all_rows.clear();
+			for (const auto& result : collection.results) {
+				for (const auto& node : result.nodes) {
+					data.all_rows.push_back({result.source.file_path, node});
+				}
+			}
+			
 			data.parsed = true;
 		} catch (const Exception &e) {
 			throw IOException("Failed to parse files: " + string(e.what()));
 		}
 	}
 	
-	// Project to table format by iterating through each result in the collection
-	idx_t output_index = 0;
+	// Simple linear iteration through all rows
+	idx_t count = 0;
+	idx_t max_count = STANDARD_VECTOR_SIZE;
 	
-	while (data.current_result_index < data.collection.results.size() && output_index < STANDARD_VECTOR_SIZE) {
-		auto &current_result = data.collection.results[data.current_result_index];
+	// Get output vectors once
+	auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
+	auto type_vec = FlatVector::GetData<string_t>(output.data[1]);
+	auto name_vec = FlatVector::GetData<string_t>(output.data[2]);
+	auto file_path_vec = FlatVector::GetData<string_t>(output.data[3]);
+	auto start_line_vec = FlatVector::GetData<int32_t>(output.data[4]);
+	auto start_column_vec = FlatVector::GetData<int32_t>(output.data[5]);
+	auto end_line_vec = FlatVector::GetData<int32_t>(output.data[6]);
+	auto end_column_vec = FlatVector::GetData<int32_t>(output.data[7]);
+	auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[8]);
+	auto depth_vec = FlatVector::GetData<int32_t>(output.data[9]);
+	auto sibling_index_vec = FlatVector::GetData<int32_t>(output.data[10]);
+	auto children_count_vec = FlatVector::GetData<int32_t>(output.data[11]);
+	auto descendant_count_vec = FlatVector::GetData<int32_t>(output.data[12]);
+	auto peek_vec = FlatVector::GetData<string_t>(output.data[13]);
+	auto semantic_type_vec = FlatVector::GetData<int8_t>(output.data[14]);
+	auto universal_flags_vec = FlatVector::GetData<int8_t>(output.data[15]);
+	auto arity_bin_vec = FlatVector::GetData<int8_t>(output.data[16]);
+	
+	// Get validity masks
+	auto &name_validity = FlatVector::Validity(output.data[2]);
+	auto &parent_validity = FlatVector::Validity(output.data[8]);
+	
+	// Process rows starting from current_index
+	while (data.current_index < data.all_rows.size() && count < max_count) {
+		const auto& row = data.all_rows[data.current_index];
+		const auto& node = row.node;
 		
-		// Project nodes from the current result
-		UnifiedASTBackend::ProjectToTable(current_result, output, data.current_node_index, output_index);
+		// Fill output vectors directly
+		node_id_vec[count] = node.node_id;
+		type_vec[count] = StringVector::AddString(output.data[1], node.type.raw);
 		
-		// Check if we've finished this result
-		if (data.current_node_index >= current_result.nodes.size()) {
-			// Move to next result
-			data.current_result_index++;
-			data.current_node_index = 0;
+		if (node.name.raw.empty()) {
+			name_validity.SetInvalid(count);
+		} else {
+			name_vec[count] = StringVector::AddString(output.data[2], node.name.raw);
 		}
 		
-		// If ProjectToTable didn't add any rows, we're done
-		if (output_index == 0) {
-			break;
+		file_path_vec[count] = StringVector::AddString(output.data[3], row.file_path);
+		start_line_vec[count] = node.file_position.start_line;
+		start_column_vec[count] = node.file_position.start_column;
+		end_line_vec[count] = node.file_position.end_line;
+		end_column_vec[count] = node.file_position.end_column;
+		
+		if (node.tree_position.parent_index < 0) {
+			parent_validity.SetInvalid(count);
+		} else {
+			parent_id_vec[count] = node.tree_position.parent_index;
 		}
+		
+		depth_vec[count] = node.tree_position.node_depth;
+		sibling_index_vec[count] = node.tree_position.sibling_index;
+		children_count_vec[count] = node.subtree.children_count;
+		descendant_count_vec[count] = node.subtree.descendant_count;
+		peek_vec[count] = StringVector::AddString(output.data[13], node.peek);
+		
+		semantic_type_vec[count] = node.semantic_type;
+		universal_flags_vec[count] = node.universal_flags;
+		arity_bin_vec[count] = node.arity_bin;
+		
+		count++;
+		data.current_index++;
 	}
 	
-	output.SetCardinality(output_index);
+	output.SetCardinality(count);
 }
 
 static TableFunction GetReadASTFunctionTwoArg() {
