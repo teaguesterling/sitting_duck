@@ -4,6 +4,7 @@
 #include "ast_type.hpp"
 #include "language_adapter.hpp"
 #include "tree_sitter/api.h"
+#include "duckdb/main/client_context.hpp"
 #include <chrono>
 #include <vector>
 
@@ -27,6 +28,20 @@ struct ASTResult {
     ASTResult() : parse_time(std::chrono::system_clock::now()), node_count(0), max_depth(0) {}
 };
 
+// Collection of parse results for multi-file parsing
+struct ASTResultCollection {
+    vector<ASTResult> results;
+    
+    // Helper to get total node count across all results
+    idx_t GetTotalNodeCount() const {
+        idx_t total = 0;
+        for (const auto& result : results) {
+            total += result.nodes.size();
+        }
+        return total;
+    }
+};
+
 // Unified parsing backend - single source of truth for all AST parsing
 class UnifiedASTBackend {
 public:
@@ -34,6 +49,12 @@ public:
     static ASTResult ParseToASTResult(const string& content, 
                                      const string& language, 
                                      const string& file_path = "<inline>");
+    
+    // Multi-file parsing function with glob support
+    static ASTResultCollection ParseFilesToASTCollection(ClientContext &context,
+                                                         const Value &file_path_value,
+                                                         const string& language = "auto",
+                                                         bool ignore_errors = false);
     
     // Helper functions for different output formats
     static vector<LogicalType> GetFlatTableSchema();

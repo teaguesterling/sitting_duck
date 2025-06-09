@@ -9,14 +9,16 @@
 namespace duckdb {
 
 struct ReadASTData : public TableFunctionData {
-	string file_path;
+	Value file_path_value;
 	string language;
-	ASTResult result;
-	idx_t current_index = 0;
+	bool ignore_errors;
+	ASTResultCollection collection;
+	idx_t current_result_index = 0;
+	idx_t current_node_index = 0;
 	bool parsed = false;
 	
-	ReadASTData(string file_path, string language) 
-		: file_path(std::move(file_path)), language(std::move(language)) {}
+	ReadASTData(Value file_path_value, string language, bool ignore_errors = false) 
+		: file_path_value(std::move(file_path_value)), language(std::move(language)), ignore_errors(ignore_errors) {}
 };
 
 // Bind function for two-argument version (explicit language)
@@ -26,14 +28,20 @@ static unique_ptr<FunctionData> ReadASTBindTwoArg(ClientContext &context, TableF
 		throw BinderException("read_ast requires exactly 2 arguments: file_path and language");
 	}
 	
-	auto file_path = input.inputs[0].GetValue<string>();
+	auto file_path_value = input.inputs[0];
 	auto language = input.inputs[1].GetValue<string>();
+	
+	// Parse optional named parameters
+	bool ignore_errors = false;
+	if (input.named_parameters.find("ignore_errors") != input.named_parameters.end()) {
+		ignore_errors = input.named_parameters.at("ignore_errors").GetValue<bool>();
+	}
 	
 	// Use unified backend schema (includes taxonomy fields)
 	return_types = UnifiedASTBackend::GetFlatTableSchema();
 	names = UnifiedASTBackend::GetFlatTableColumnNames();
 	
-	auto result = make_uniq<ReadASTData>(file_path, language);
+	auto result = make_uniq<ReadASTData>(file_path_value, language, ignore_errors);
 	return std::move(result);
 }
 
@@ -44,62 +52,77 @@ static unique_ptr<FunctionData> ReadASTBindOneArg(ClientContext &context, TableF
 		throw BinderException("read_ast requires exactly 1 argument: file_path");
 	}
 	
-	auto file_path = input.inputs[0].GetValue<string>();
+	auto file_path_value = input.inputs[0];
 	
-	// Auto-detect language from file extension
-	string language = DetectLanguageFromExtension(file_path);
-	if (language == "auto") {
-		throw BinderException("Could not detect language from file extension for '" + file_path + "'. Please specify language explicitly.");
+	// Parse optional named parameters
+	bool ignore_errors = false;
+	if (input.named_parameters.find("ignore_errors") != input.named_parameters.end()) {
+		ignore_errors = input.named_parameters.at("ignore_errors").GetValue<bool>();
 	}
+	
+	// Use auto-detect for language
+	string language = "auto";
 	
 	// Use unified backend schema (includes taxonomy fields)
 	return_types = UnifiedASTBackend::GetFlatTableSchema();
 	names = UnifiedASTBackend::GetFlatTableColumnNames();
 	
-	auto result = make_uniq<ReadASTData>(file_path, language);
+	auto result = make_uniq<ReadASTData>(file_path_value, language, ignore_errors);
 	return std::move(result);
 }
 
 static void ReadASTFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
 	auto &data = data_p.bind_data->CastNoConst<ReadASTData>();
 	
-	// Parse the file if not already done
+	// Parse the file(s) if not already done
 	if (!data.parsed) {
 		try {
-			// Read file content
-			auto &fs = FileSystem::GetFileSystem(context);
-			auto handle = fs.OpenFile(data.file_path, FileFlags::FILE_FLAGS_READ);
-			auto file_size = fs.GetFileSize(*handle);
-			
-			string content;
-			content.resize(file_size);
-			fs.Read(*handle, (void*)content.data(), file_size);
-			
-			// Use unified parsing backend
-			data.result = UnifiedASTBackend::ParseToASTResult(content, data.language, data.file_path);
+			// Use unified parsing backend with glob support
+			data.collection = UnifiedASTBackend::ParseFilesToASTCollection(context, data.file_path_value, data.language, data.ignore_errors);
 			data.parsed = true;
 		} catch (const Exception &e) {
-			throw IOException("Failed to parse file '" + data.file_path + "': " + string(e.what()));
+			throw IOException("Failed to parse files: " + string(e.what()));
 		}
 	}
 	
-	// Project to table format using unified backend
+	// Project to table format by iterating through each result in the collection
 	idx_t output_index = 0;
-	UnifiedASTBackend::ProjectToTable(data.result, output, data.current_index, output_index);
+	
+	while (data.current_result_index < data.collection.results.size() && output_index < STANDARD_VECTOR_SIZE) {
+		auto &current_result = data.collection.results[data.current_result_index];
+		
+		// Project nodes from the current result
+		UnifiedASTBackend::ProjectToTable(current_result, output, data.current_node_index, output_index);
+		
+		// Check if we've finished this result
+		if (data.current_node_index >= current_result.nodes.size()) {
+			// Move to next result
+			data.current_result_index++;
+			data.current_node_index = 0;
+		}
+		
+		// If ProjectToTable didn't add any rows, we're done
+		if (output_index == 0) {
+			break;
+		}
+	}
+	
 	output.SetCardinality(output_index);
 }
 
 static TableFunction GetReadASTFunctionTwoArg() {
-	TableFunction read_ast("read_ast", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
+	TableFunction read_ast("read_ast", {LogicalType::ANY, LogicalType::VARCHAR}, 
 	                      ReadASTFunction, ReadASTBindTwoArg);
 	read_ast.name = "read_ast";
+	read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	return read_ast;
 }
 
 static TableFunction GetReadASTFunctionOneArg() {
-	TableFunction read_ast("read_ast", {LogicalType::VARCHAR}, 
+	TableFunction read_ast("read_ast", {LogicalType::ANY}, 
 	                      ReadASTFunction, ReadASTBindOneArg);
 	read_ast.name = "read_ast";
+	read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	return read_ast;
 }
 

@@ -3,6 +3,7 @@
 #include "duckdb.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/common/file_system.hpp"
+#include "unified_ast_backend.hpp"
 #include <unordered_set>
 
 namespace duckdb {
@@ -39,13 +40,17 @@ struct FilterConfig {
 };
 
 struct ReadASTObjectsHybridData : public TableFunctionData {
-    vector<string> files;
+    Value file_path_value;
     string language;
     FilterConfig filter_config;
-    idx_t current_file_idx = 0;
+    bool ignore_errors;
+    ASTResultCollection collection;
+    idx_t current_result_index = 0;
+    bool parsed = false;
     
-    ReadASTObjectsHybridData(vector<string> files, string language, FilterConfig filter_config)
-        : files(std::move(files)), language(std::move(language)), filter_config(std::move(filter_config)) {}
+    ReadASTObjectsHybridData(Value file_path_value, string language, FilterConfig filter_config, bool ignore_errors = false)
+        : file_path_value(std::move(file_path_value)), language(std::move(language)), 
+          filter_config(std::move(filter_config)), ignore_errors(ignore_errors) {}
 };
 
 class ReadASTObjectsHybridFunction {

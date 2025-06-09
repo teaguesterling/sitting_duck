@@ -1,8 +1,10 @@
 #include "unified_ast_backend.hpp"
 #include "language_adapter.hpp"
 #include "semantic_types.hpp"
+#include "ast_file_utils.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/file_system.hpp"
 #include <stack>
 
 namespace duckdb {
@@ -222,8 +224,8 @@ LogicalType UnifiedASTBackend::GetASTStructSchema() {
     node_children.push_back(make_pair("arity_bin", LogicalType::TINYINT));
     
     child_list_t<LogicalType> ast_children;
-    ast_children.push_back(make_pair("source", LogicalType::STRUCT(source_children)));
     ast_children.push_back(make_pair("nodes", LogicalType::LIST(LogicalType::STRUCT(node_children))));
+    ast_children.push_back(make_pair("source", LogicalType::STRUCT(source_children)));
     
     return LogicalType::STRUCT(ast_children);
 }
@@ -275,6 +277,7 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult& result, DataChunk& outpu
             name_vec[output_index + count] = StringVector::AddString(output.data[2], node.name.raw);
         }
         
+        // Now that we process each file separately, each result has the correct file_path
         file_path_vec[output_index + count] = StringVector::AddString(output.data[3], result.source.file_path);
         start_line_vec[output_index + count] = node.file_position.start_line;
         start_column_vec[output_index + count] = node.file_position.start_column;
@@ -360,8 +363,8 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult& result) {
     node_schema.push_back(make_pair("arity_bin", LogicalType::TINYINT));
     
     child_list_t<Value> ast_children;
-    ast_children.push_back(make_pair("source", source_value));
     ast_children.push_back(make_pair("nodes", Value::LIST(LogicalType::STRUCT(node_schema), node_values)));
+    ast_children.push_back(make_pair("source", source_value));
     
     return Value::STRUCT(ast_children);
 }
@@ -369,6 +372,72 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult& result) {
 Value UnifiedASTBackend::CreateASTStructValue(const ASTResult& result) {
     // Same as CreateASTStruct for now - both return a single struct value
     return CreateASTStruct(result);
+}
+
+ASTResultCollection UnifiedASTBackend::ParseFilesToASTCollection(ClientContext &context,
+                                                               const Value &file_path_value,
+                                                               const string& language,
+                                                               bool ignore_errors) {
+    // Get all files that match the input pattern(s)
+    vector<string> supported_extensions;
+    if (language != "auto") {
+        supported_extensions = ASTFileUtils::GetSupportedExtensions(language);
+    }
+    
+    auto file_paths = ASTFileUtils::GetFiles(context, file_path_value, ignore_errors, supported_extensions);
+    
+    if (file_paths.empty() && !ignore_errors) {
+        throw IOException("No files found matching the input pattern");
+    }
+    
+    // Parse all files as separate results
+    ASTResultCollection collection;
+    
+    for (const auto& file_path : file_paths) {
+        try {
+            // Auto-detect language if needed
+            string file_language = language;
+            if (language == "auto") {
+                file_language = ASTFileUtils::DetectLanguageFromPath(file_path);
+                if (file_language == "auto") {
+                    if (!ignore_errors) {
+                        throw BinderException("Could not detect language for file: " + file_path);
+                    }
+                    continue; // Skip this file
+                }
+            }
+            
+            // Read file content
+            auto &fs = FileSystem::GetFileSystem(context);
+            if (!fs.FileExists(file_path)) {
+                if (!ignore_errors) {
+                    throw IOException("File does not exist: " + file_path);
+                }
+                continue; // Skip missing files
+            }
+            
+            auto handle = fs.OpenFile(file_path, FileFlags::FILE_FLAGS_READ);
+            auto file_size = fs.GetFileSize(*handle);
+            
+            string content;
+            content.resize(file_size);
+            fs.Read(*handle, (void*)content.data(), file_size);
+            
+            // Parse this file as a separate result
+            auto file_result = ParseToASTResult(content, file_language, file_path);
+            
+            // Add this individual result to the collection
+            collection.results.push_back(std::move(file_result));
+            
+        } catch (const Exception &e) {
+            if (!ignore_errors) {
+                throw IOException("Failed to parse file '" + file_path + "': " + string(e.what()));
+            }
+            // With ignore_errors=true, continue processing other files
+        }
+    }
+    
+    return collection;
 }
 
 } // namespace duckdb

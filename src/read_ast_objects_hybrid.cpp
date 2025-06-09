@@ -46,23 +46,25 @@ string DetectLanguageFromExtension(const string &file_path) {
 
 
 TableFunction ReadASTObjectsHybridFunction::GetFunctionOneArg() {
-    TableFunction function("read_ast_objects", {LogicalType::VARCHAR}, Execute, BindOneArg);
+    TableFunction function("read_ast_objects", {LogicalType::ANY}, Execute, BindOneArg);
     function.name = "read_ast_objects";
     
     // Add named parameters for filtering (same as the two-arg version)
     function.named_parameters["exclude_types"] = LogicalType::LIST(LogicalType::VARCHAR);
     function.named_parameters["include_types"] = LogicalType::LIST(LogicalType::VARCHAR);
+    function.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     
     return function;
 }
 
 TableFunction ReadASTObjectsHybridFunction::GetFunctionWithFilters() {
-    TableFunction function("read_ast_objects", {LogicalType::VARCHAR, LogicalType::VARCHAR}, Execute, BindWithFilters);
+    TableFunction function("read_ast_objects", {LogicalType::ANY, LogicalType::VARCHAR}, Execute, BindWithFilters);
     function.name = "read_ast_objects";
     
     // Set named parameters for filtering (all optional)
     function.named_parameters["exclude_types"] = LogicalType::LIST(LogicalType::VARCHAR);
     function.named_parameters["include_types"] = LogicalType::LIST(LogicalType::VARCHAR);
+    function.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     
     return function;
 }
@@ -74,40 +76,25 @@ unique_ptr<FunctionData> ReadASTObjectsHybridFunction::BindOneArg(ClientContext 
         throw BinderException("read_ast_objects with one argument requires exactly 1 argument: file_pattern");
     }
     
-    auto file_pattern = input.inputs[0].GetValue<string>();
+    auto file_path_value = input.inputs[0];
     
-    // Detect language from file extension
-    string language = DetectLanguageFromExtension(file_pattern);
-    if (language == "auto") {
-        throw BinderException("Could not detect language from file extension. Please specify language explicitly.");
+    // Parse named parameters
+    bool ignore_errors = false;
+    if (input.named_parameters.find("ignore_errors") != input.named_parameters.end()) {
+        ignore_errors = input.named_parameters.at("ignore_errors").GetValue<bool>();
     }
+    
+    // Use auto-detect for language
+    string language = "auto";
     
     // Parse named filter parameters (for future use - currently ignored)
-    // This preserves the API for when we implement proper filtering
-    
     FilterConfig filter_config; // Empty config - no filtering applied
-    
-    // Get list of files matching pattern
-    auto &fs = FileSystem::GetFileSystem(context);
-    vector<string> files;
-    
-    // Simple file pattern expansion - for now handle single files or basic wildcards
-    if (file_pattern.find('*') != string::npos) {
-        // For now, just throw an error - we'll implement proper globbing later
-        throw NotImplementedException("File patterns not yet implemented. Please specify a single file.");
-    } else {
-        // Single file
-        if (!fs.FileExists(file_pattern)) {
-            throw IOException("File not found: " + file_pattern);
-        }
-        files.push_back(file_pattern);
-    }
     
     // Return single AST column using unified schema
     names = {"ast"};
     return_types = {UnifiedASTBackend::GetASTStructSchema()};
     
-    return make_uniq<ReadASTObjectsHybridData>(std::move(files), std::move(language), std::move(filter_config));
+    return make_uniq<ReadASTObjectsHybridData>(file_path_value, std::move(language), std::move(filter_config), ignore_errors);
 }
 
 unique_ptr<FunctionData> ReadASTObjectsHybridFunction::BindWithFilters(ClientContext &context, TableFunctionBindInput &input,
@@ -116,35 +103,23 @@ unique_ptr<FunctionData> ReadASTObjectsHybridFunction::BindWithFilters(ClientCon
         throw BinderException("read_ast_objects with filters requires 2 positional arguments: file_pattern, language");
     }
     
-    auto file_pattern = input.inputs[0].GetValue<string>();
+    auto file_path_value = input.inputs[0];
     auto language = input.inputs[1].GetValue<string>();
     
-    // Parse named filter parameters (for future use - currently ignored)
-    // This preserves the API for when we implement proper filtering
-    
-    FilterConfig filter_config; // Empty config - no filtering applied
-    
-    // Get list of files matching pattern
-    auto &fs = FileSystem::GetFileSystem(context);
-    vector<string> files;
-    
-    // Simple file pattern expansion - for now handle single files or basic wildcards
-    if (file_pattern.find('*') != string::npos) {
-        // For now, just throw an error - we'll implement proper globbing later
-        throw NotImplementedException("File patterns not yet implemented. Please specify a single file.");
-    } else {
-        // Single file
-        if (!fs.FileExists(file_pattern)) {
-            throw IOException("File not found: " + file_pattern);
-        }
-        files.push_back(file_pattern);
+    // Parse named parameters
+    bool ignore_errors = false;
+    if (input.named_parameters.find("ignore_errors") != input.named_parameters.end()) {
+        ignore_errors = input.named_parameters.at("ignore_errors").GetValue<bool>();
     }
+    
+    // Parse named filter parameters (for future use - currently ignored)
+    FilterConfig filter_config; // Empty config - no filtering applied
     
     // Return single AST column using unified schema
     names = {"ast"};
     return_types = {UnifiedASTBackend::GetASTStructSchema()};
     
-    return make_uniq<ReadASTObjectsHybridData>(std::move(files), std::move(language), std::move(filter_config));
+    return make_uniq<ReadASTObjectsHybridData>(file_path_value, std::move(language), std::move(filter_config), ignore_errors);
 }
 
 Value ReadASTObjectsHybridFunction::ParseFileToStructs(ClientContext &context, const string &file_path, const string &language, LogicalType &nodes_type, const FilterConfig &filter_config) {
@@ -168,26 +143,31 @@ Value ReadASTObjectsHybridFunction::ParseFileToStructs(ClientContext &context, c
 void ReadASTObjectsHybridFunction::Execute(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
     auto &data = data_p.bind_data->CastNoConst<ReadASTObjectsHybridData>();
     
+    // Parse the file(s) if not already done
+    if (!data.parsed) {
+        try {
+            // Use unified parsing backend with glob support
+            data.collection = UnifiedASTBackend::ParseFilesToASTCollection(context, data.file_path_value, data.language, data.ignore_errors);
+            data.parsed = true;
+        } catch (const Exception &e) {
+            throw IOException("Failed to parse files: " + string(e.what()));
+        }
+    }
+    
+    // Return each parsed file as a separate AST struct
     idx_t count = 0;
     
-    while (data.current_file_idx < data.files.size() && count < STANDARD_VECTOR_SIZE) {
-        const auto &file_path = data.files[data.current_file_idx];
+    while (data.current_result_index < data.collection.results.size() && count < STANDARD_VECTOR_SIZE) {
+        auto &current_result = data.collection.results[data.current_result_index];
         
-        try {
-            // Parse file to AST struct
-            auto ast_type = output.data[0].GetType();
-            Value ast_struct_value = ParseFileToStructs(context, file_path, data.language, ast_type, data.filter_config);
-            
-            // Set the AST struct value directly
-            output.data[0].SetValue(count, ast_struct_value);
-            
-            count++;
-        } catch (const Exception &e) {
-            // Propagate parsing errors instead of silently skipping
-            throw IOException("Failed to parse file '" + file_path + "': " + e.what());
-        }
+        // Create AST struct value for this individual file
+        Value ast_struct_value = UnifiedASTBackend::CreateASTStruct(current_result);
         
-        data.current_file_idx++;
+        // Set the AST struct value
+        output.data[0].SetValue(count, ast_struct_value);
+        
+        count++;
+        data.current_result_index++;
     }
     
     output.SetCardinality(count);
