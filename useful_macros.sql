@@ -19,8 +19,8 @@ CREATE OR REPLACE MACRO get_functions_from_file(file_path) AS TABLE
         children_count,
         descendant_count
     FROM read_ast(file_path)
-    WHERE (semantic_type & 3840) = 512  -- Kind = DECLARATION (0x0200)
-      AND (semantic_type & 240) IN (48, 64);  -- Super type = FUNCTION (0x0030) or METHOD (0x0040)
+    WHERE (semantic_type & 240) = 112  -- Is DEFINITION (bits 7-4 = 0111)
+      AND type IN ('function_definition', 'function_declarator', 'method_definition');
 
 -- Summarize functions across multiple files - simplified version
 CREATE OR REPLACE MACRO summarize_functions_from_files(file_pattern) AS TABLE
@@ -32,8 +32,8 @@ CREATE OR REPLACE MACRO summarize_functions_from_files(file_pattern) AS TABLE
         SUM(end_line - start_line + 1) as total_lines,
         AVG(descendant_count) as avg_complexity
     FROM read_ast(file_pattern)
-    WHERE (semantic_type & 3840) = 512  -- Kind = DECLARATION
-      AND (semantic_type & 240) IN (48, 64)  -- Function or Method
+    WHERE (semantic_type & 128) = 128  -- Is declaration (bit 7)
+      AND type IN ('function_definition', 'function_declarator', 'method_definition')
     GROUP BY file_path
     ORDER BY function_count DESC;
 
@@ -47,8 +47,8 @@ CREATE OR REPLACE MACRO find_complex_functions(file_pattern, min_lines, min_desc
         descendant_count,
         ROUND(descendant_count::FLOAT / GREATEST(end_line - start_line + 1, 1), 2) as density
     FROM read_ast(file_pattern)
-    WHERE (semantic_type & 3840) = 512  -- Kind = DECLARATION
-      AND (semantic_type & 240) IN (48, 64)  -- Function or Method
+    WHERE (semantic_type & 128) = 128  -- Is declaration (bit 7)
+      AND type IN ('function_definition', 'function_declarator', 'method_definition')
       AND (end_line - start_line + 1 >= min_lines OR descendant_count >= min_descendants)
     ORDER BY descendant_count DESC;
 
@@ -67,8 +67,8 @@ CREATE OR REPLACE MACRO analyze_classes(file_pattern) AS TABLE
             end_line,
             descendant_count
         FROM read_ast(file_pattern)
-        WHERE (semantic_type & 3840) = 512  -- Kind = DECLARATION
-          AND (semantic_type & 240) = 16  -- Super type = CLASS
+        WHERE (semantic_type & 128) = 128  -- Is declaration (bit 7)
+          AND type IN ('class_declaration', 'class_definition')
     )
     SELECT 
         file_path,
@@ -90,8 +90,8 @@ CREATE OR REPLACE MACRO get_imports(file_pattern) AS TABLE
         type,
         start_line
     FROM read_ast(file_pattern)
-    WHERE (semantic_type & 3840) = 768  -- Kind = STATEMENT (0x0300)
-      AND (semantic_type & 240) = 16  -- Super type = IMPORT
+    WHERE (semantic_type & 64) = 64  -- Is statement (bit 6)
+      AND type IN ('include_directive', 'import_statement', 'import_declaration')
     ORDER BY file_path, start_line;
 
 -- ========================================
@@ -122,11 +122,11 @@ CREATE OR REPLACE MACRO analyze_file_metrics(file_path) AS TABLE
     ),
     semantic_stats AS (
         SELECT 
-            COUNT(*) FILTER (WHERE (semantic_type & 3840) = 512) as declarations,
-            COUNT(*) FILTER (WHERE (semantic_type & 3840) = 768) as statements,
-            COUNT(*) FILTER (WHERE (semantic_type & 3840) = 1024) as expressions,
-            COUNT(*) FILTER (WHERE (semantic_type & 240) = 48) as functions,
-            COUNT(*) FILTER (WHERE (semantic_type & 240) = 16) as classes
+            COUNT(*) FILTER (WHERE (semantic_type & 128) = 128) as declarations,
+            COUNT(*) FILTER (WHERE (semantic_type & 64) = 64) as statements,
+            COUNT(*) FILTER (WHERE (semantic_type & 32) = 32) as expressions,
+            COUNT(*) FILTER (WHERE type IN ('function_definition', 'function_declarator', 'method_definition')) as functions,
+            COUNT(*) FILTER (WHERE type IN ('class_declaration', 'class_definition')) as classes
         FROM base_data
     )
     SELECT 
@@ -152,23 +152,24 @@ CREATE OR REPLACE MACRO analyze_semantic_types(file_pattern) AS TABLE
     WITH type_breakdown AS (
         SELECT 
             file_path,
-            CASE ((semantic_type & 3840) >> 8)
-                WHEN 0 THEN 'UNKNOWN'
-                WHEN 1 THEN 'GENERIC'
-                WHEN 2 THEN 'DECLARATION'
-                WHEN 3 THEN 'STATEMENT'
-                WHEN 4 THEN 'EXPRESSION'
-                WHEN 5 THEN 'LITERAL'
-                WHEN 6 THEN 'KEYWORD'
+            CASE 
+                WHEN (semantic_type & 128) = 128 THEN 'DECLARATION'
+                WHEN (semantic_type & 64) = 64 THEN 'STATEMENT'
+                WHEN (semantic_type & 32) = 32 THEN 'EXPRESSION'
+                WHEN (semantic_type & 16) = 16 THEN 'LITERAL'
+                WHEN (semantic_type & 8) = 8 THEN 'TYPE'
+                WHEN (semantic_type & 4) = 4 THEN 'PATTERN'
+                WHEN (semantic_type & 2) = 2 THEN 'MODIFIER'
+                WHEN (semantic_type & 1) = 1 THEN 'COMMENT'
                 ELSE 'OTHER'
-            END as kind,
+            END as semantic_category,
             COUNT(*) as node_count
         FROM read_ast(file_pattern)
-        GROUP BY file_path, kind
+        GROUP BY file_path, semantic_category
     )
     SELECT 
         file_path,
-        kind,
+        semantic_category,
         node_count,
         ROUND(100.0 * node_count / SUM(node_count) OVER (PARTITION BY file_path), 2) as percentage
     FROM type_breakdown
