@@ -253,6 +253,28 @@ static void ReadASTStreamingFunction(ClientContext &context, TableFunctionInput 
     output.SetCardinality(output_count);
 }
 
+// New default read_ast functions using streaming implementation
+static TableFunction GetReadASTFunctionTwoArg() {
+    TableFunction read_ast("read_ast", {LogicalType::ANY, LogicalType::VARCHAR}, 
+                          ReadASTStreamingFunction, ReadASTStreamingBindTwoArg, ReadASTStreamingInit);
+    read_ast.name = "read_ast";
+    read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
+    read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
+    read_ast.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+    return read_ast;
+}
+
+static TableFunction GetReadASTFunctionOneArg() {
+    TableFunction read_ast("read_ast", {LogicalType::ANY}, 
+                          ReadASTStreamingFunction, ReadASTStreamingBindOneArg, ReadASTStreamingInit);
+    read_ast.name = "read_ast";
+    read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
+    read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
+    read_ast.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+    return read_ast;
+}
+
+// Keep streaming functions as well for explicit access
 static TableFunction GetReadASTStreamingFunctionTwoArg() {
     TableFunction read_ast_streaming("read_ast_streaming", {LogicalType::ANY, LogicalType::VARCHAR}, 
                                    ReadASTStreamingFunction, ReadASTStreamingBindTwoArg, ReadASTStreamingInit);
@@ -273,8 +295,14 @@ static TableFunction GetReadASTStreamingFunctionOneArg() {
     return read_ast_streaming;
 }
 
+void RegisterReadASTFunction(DatabaseInstance &instance) {
+    // Register the new streaming-based read_ast as default
+    ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionOneArg());
+    ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionTwoArg());
+}
+
 void RegisterReadASTStreamingFunction(DatabaseInstance &instance) {
-    // Register both one-argument and two-argument versions
+    // Register explicit streaming functions for comparison
     ExtensionUtil::RegisterFunction(instance, GetReadASTStreamingFunctionOneArg());
     ExtensionUtil::RegisterFunction(instance, GetReadASTStreamingFunctionTwoArg());
 }

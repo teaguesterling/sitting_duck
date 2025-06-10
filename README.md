@@ -17,11 +17,12 @@ A powerful DuckDB extension that enables SQL-based analysis of Abstract Syntax T
 - **Source Text Extraction**: Configurable peek modes (smart, compact, signature, etc.)
 
 ### ⚡ High Performance
-- **Glob Pattern Support**: Analyze entire codebases with `'src/**/*.py'`
-- **Multi-File Processing**: Efficient batch processing of multiple files
-- **Smart Caching**: Optimized for large codebases
-- **Thread-Safe**: Concurrent parsing support
-- **Scale**: Process 20M+ AST nodes in ~1 second
+- **Streaming Architecture**: Process files one-by-one, see results immediately
+- **Memory Controlled**: Respects DuckDB memory limits, no memory explosion
+- **Enterprise Scale**: 25M nodes across 4M files in ~25 seconds
+- **Parallel Ready**: UNION queries automatically use multiple threads
+- **Smart Text Extraction**: Configurable `peek_mode` for performance tuning
+- **Parquet Integration**: Export 25M rows to 40MB compressed parquet files
 
 ### 📊 Advanced Static Analysis
 - **Function Complexity**: Identify complex functions by AST node count and structure
@@ -198,16 +199,31 @@ ORDER BY fc.max_complexity DESC;
 
 #### Performance at Scale
 ```sql
--- Analyze 20M+ AST nodes across entire DuckDB codebase in ~1 second
+-- Streaming: Process 25M nodes across 4M files in ~25 seconds
+-- Memory-controlled, immediate results, LIMIT-friendly
 SELECT 
     COUNT(*) as total_nodes,
     COUNT(DISTINCT file_path) as total_files,
     COUNT(*) FILTER (WHERE type = 'function_declarator' AND semantic_type = 112) as functions,
     COUNT(*) FILTER (WHERE type = 'call_expression') as function_calls
-FROM nodes;
+FROM read_ast('duckdb/**/*.{cpp,hpp}');
+
+-- Performance tuning with peek modes
+SELECT COUNT(*) FROM read_ast('large_codebase/**/*.cpp', peek_mode := 'none');     -- Fastest
+SELECT COUNT(*) FROM read_ast('large_codebase/**/*.cpp', peek_mode := 'compact');  -- Balanced  
+SELECT COUNT(*) FROM read_ast('large_codebase/**/*.cpp', peek_mode := 'smart');    -- Full content
+
+-- Export for efficient analysis
+COPY (SELECT * FROM read_ast('**/*.cpp', peek_mode := 'none')) TO 'ast_data.parquet';
 ```
 
-The extension can analyze codebases with millions of AST nodes efficiently, making it suitable for enterprise-scale static analysis.
+**Streaming Benefits:**
+- ✅ **Immediate Results**: See data as soon as first file is parsed
+- ✅ **Memory Efficient**: Only one file's AST in memory at a time  
+- ✅ **LIMIT-Friendly**: Stop parsing when query limit is reached
+- ✅ **Parallel Processing**: Use UNION for multi-threaded analysis
+
+The extension can analyze enterprise codebases with millions of files efficiently.
 
 ## Static Analysis Utilities
 

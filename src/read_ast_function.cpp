@@ -14,7 +14,7 @@ struct ASTRow {
 	ASTNode node;
 };
 
-struct ReadASTData : public TableFunctionData {
+struct ReadASTBatchData : public TableFunctionData {
 	Value file_path_value;
 	string language;
 	bool ignore_errors;
@@ -24,14 +24,14 @@ struct ReadASTData : public TableFunctionData {
 	idx_t current_index = 0;
 	bool parsed = false;
 	
-	ReadASTData(Value file_path_value, string language, bool ignore_errors = false, int32_t peek_size = 120, string peek_mode = "auto") 
+	ReadASTBatchData(Value file_path_value, string language, bool ignore_errors = false, int32_t peek_size = 120, string peek_mode = "auto") 
 		: file_path_value(std::move(file_path_value)), language(std::move(language)), ignore_errors(ignore_errors), 
 		  peek_size(peek_size), peek_mode(std::move(peek_mode)) {}
 };
 
 // Bind function for two-argument version (explicit language)
-static unique_ptr<FunctionData> ReadASTBindTwoArg(ClientContext &context, TableFunctionBindInput &input,
-                                                 vector<LogicalType> &return_types, vector<string> &names) {
+static unique_ptr<FunctionData> ReadASTBatchBindTwoArg(ClientContext &context, TableFunctionBindInput &input,
+                                                      vector<LogicalType> &return_types, vector<string> &names) {
 	if (input.inputs.size() != 2) {
 		throw BinderException("read_ast requires exactly 2 arguments: file_path and language");
 	}
@@ -59,12 +59,12 @@ static unique_ptr<FunctionData> ReadASTBindTwoArg(ClientContext &context, TableF
 	return_types = UnifiedASTBackend::GetFlatTableSchema();
 	names = UnifiedASTBackend::GetFlatTableColumnNames();
 	
-	auto result = make_uniq<ReadASTData>(file_path_value, language, ignore_errors, peek_size, peek_mode);
+	auto result = make_uniq<ReadASTBatchData>(file_path_value, language, ignore_errors, peek_size, peek_mode);
 	return std::move(result);
 }
 
 // Bind function for one-argument version (auto-detect language)
-static unique_ptr<FunctionData> ReadASTBindOneArg(ClientContext &context, TableFunctionBindInput &input,
+static unique_ptr<FunctionData> ReadASTBatchBindOneArg(ClientContext &context, TableFunctionBindInput &input,
                                                  vector<LogicalType> &return_types, vector<string> &names) {
 	if (input.inputs.size() != 1) {
 		throw BinderException("read_ast requires exactly 1 argument: file_path");
@@ -95,12 +95,12 @@ static unique_ptr<FunctionData> ReadASTBindOneArg(ClientContext &context, TableF
 	return_types = UnifiedASTBackend::GetFlatTableSchema();
 	names = UnifiedASTBackend::GetFlatTableColumnNames();
 	
-	auto result = make_uniq<ReadASTData>(file_path_value, language, ignore_errors, peek_size, peek_mode);
+	auto result = make_uniq<ReadASTBatchData>(file_path_value, language, ignore_errors, peek_size, peek_mode);
 	return std::move(result);
 }
 
-static void ReadASTFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
-	auto &data = data_p.bind_data->CastNoConst<ReadASTData>();
+static void ReadASTBatchFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
+	auto &data = data_p.bind_data->CastNoConst<ReadASTBatchData>();
 	
 	// Parse the file(s) if not already done
 	if (!data.parsed) {
@@ -200,30 +200,30 @@ static void ReadASTFunction(ClientContext &context, TableFunctionInput &data_p, 
 	output.SetCardinality(count);
 }
 
-static TableFunction GetReadASTFunctionTwoArg() {
-	TableFunction read_ast("read_ast", {LogicalType::ANY, LogicalType::VARCHAR}, 
-	                      ReadASTFunction, ReadASTBindTwoArg);
-	read_ast.name = "read_ast";
-	read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-	read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
-	read_ast.named_parameters["peek_mode"] = LogicalType::VARCHAR;
-	return read_ast;
+static TableFunction GetReadASTBatchFunctionTwoArg() {
+	TableFunction read_ast_batch("read_ast_batch", {LogicalType::ANY, LogicalType::VARCHAR}, 
+	                            ReadASTBatchFunction, ReadASTBatchBindTwoArg);
+	read_ast_batch.name = "read_ast_batch";
+	read_ast_batch.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
+	read_ast_batch.named_parameters["peek_size"] = LogicalType::INTEGER;
+	read_ast_batch.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+	return read_ast_batch;
 }
 
-static TableFunction GetReadASTFunctionOneArg() {
-	TableFunction read_ast("read_ast", {LogicalType::ANY}, 
-	                      ReadASTFunction, ReadASTBindOneArg);
-	read_ast.name = "read_ast";
-	read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-	read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
-	read_ast.named_parameters["peek_mode"] = LogicalType::VARCHAR;
-	return read_ast;
+static TableFunction GetReadASTBatchFunctionOneArg() {
+	TableFunction read_ast_batch("read_ast_batch", {LogicalType::ANY}, 
+	                            ReadASTBatchFunction, ReadASTBatchBindOneArg);
+	read_ast_batch.name = "read_ast_batch";
+	read_ast_batch.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
+	read_ast_batch.named_parameters["peek_size"] = LogicalType::INTEGER;
+	read_ast_batch.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+	return read_ast_batch;
 }
 
-void RegisterReadASTFunction(DatabaseInstance &instance) {
+void RegisterReadASTBatchFunction(DatabaseInstance &instance) {
 	// Register both one-argument and two-argument versions
-	ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionOneArg());
-	ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionTwoArg());
+	ExtensionUtil::RegisterFunction(instance, GetReadASTBatchFunctionOneArg());
+	ExtensionUtil::RegisterFunction(instance, GetReadASTBatchFunctionTwoArg());
 }
 
 } // namespace duckdb
