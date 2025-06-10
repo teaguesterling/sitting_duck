@@ -38,7 +38,6 @@ set(EXTENSION_SOURCES
     src/ast_sql_macros.cpp
     src/short_names_function.cpp
     src/parse_ast_function.cpp
-    src/grammars.cpp
     src/unified_ast_backend.cpp
     src/ast_type.cpp
     src/semantic_types.cpp

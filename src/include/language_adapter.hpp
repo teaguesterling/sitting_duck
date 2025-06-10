@@ -62,10 +62,6 @@ protected:
     
 };
 
-// Macro for defining node type configurations
-#define DEF_TYPE(raw_type, normalized, name_extraction, value_extraction, flags) \
-    {#raw_type, NodeConfig(NormalizedTypes::normalized, ExtractionStrategy::name_extraction, ExtractionStrategy::value_extraction, flags)},
-
 // Python language adapter
 class PythonAdapter : public LanguageAdapter {
 public:
@@ -182,6 +178,9 @@ public:
     
     // Get adapter by language name or alias (creates on demand)
     const LanguageAdapter* GetAdapter(const string &language) const;
+    
+    // Get TSLanguage directly by language name or alias
+    const TSLanguage* GetTSLanguage(const string &language) const;
     
     // Get list of supported languages
     vector<string> GetSupportedLanguages() const;

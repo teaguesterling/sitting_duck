@@ -1,5 +1,4 @@
 #include "language_handler.hpp"
-#include "grammars.hpp"
 #include "duckdb/common/exception.hpp"
 #include <tree_sitter/api.h>
 #include <cstring>

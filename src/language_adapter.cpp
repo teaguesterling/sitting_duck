@@ -1,6 +1,5 @@
 #include "language_adapter.hpp"
 #include "semantic_types.hpp"
-#include "grammars.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/helper.hpp"
@@ -572,6 +571,21 @@ void LanguageAdapterRegistry::RegisterAdapter(unique_ptr<LanguageAdapter> adapte
     }
     
     adapters[language] = std::move(adapter);
+}
+
+const TSLanguage* LanguageAdapterRegistry::GetTSLanguage(const string &language) const {
+    const LanguageAdapter* adapter = GetAdapter(language);
+    if (!adapter) {
+        return nullptr;
+    }
+    
+    // Get the TSLanguage from the adapter's parser
+    TSParser* parser = adapter->GetParser();
+    if (!parser) {
+        return nullptr;
+    }
+    
+    return ts_parser_language(parser);
 }
 
 const LanguageAdapter* LanguageAdapterRegistry::GetAdapter(const string &language) const {
