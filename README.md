@@ -21,6 +21,15 @@ A powerful DuckDB extension that enables SQL-based analysis of Abstract Syntax T
 - **Multi-File Processing**: Efficient batch processing of multiple files
 - **Smart Caching**: Optimized for large codebases
 - **Thread-Safe**: Concurrent parsing support
+- **Scale**: Process 20M+ AST nodes in ~1 second
+
+### 📊 Advanced Static Analysis
+- **Function Complexity**: Identify complex functions by AST node count and structure
+- **Dependency Analysis**: Track file-level include/import relationships
+- **Code Hotspots**: Find files with high complexity + coupling
+- **Call Graph Analysis**: Build function dependency networks
+- **Fan-in/Fan-out**: Identify highly coupled functions
+- **Dead Code Detection**: Locate potentially unused functions
 
 ## Installation
 
@@ -84,44 +93,155 @@ The `read_ast` function returns a table with the following columns:
 
 ## Examples
 
-### Find all imports
+### Basic AST Analysis
+
+#### Find all imports
 ```sql
-SELECT source_text
+SELECT peek
 FROM read_ast('script.py', 'python')
 WHERE type IN ('import_statement', 'import_from_statement');
 ```
 
-### Analyze function complexity
+#### Find all function definitions
 ```sql
-WITH function_nodes AS (
-    SELECT node_id, name, start_line, end_line
-    FROM read_ast('code.py', 'python')
-    WHERE type = 'function_definition'
-)
-SELECT 
-    f.name,
-    f.end_line - f.start_line + 1 as lines,
-    COUNT(DISTINCT a.node_id) as total_nodes
-FROM function_nodes f
-JOIN read_ast('code.py', 'python') a 
-    ON a.start_line >= f.start_line 
-    AND a.end_line <= f.end_line
-GROUP BY f.name, f.start_line, f.end_line
-ORDER BY total_nodes DESC;
+SELECT name, start_line, end_line, descendant_count
+FROM read_ast('code.py', 'python')
+WHERE type = 'function_definition'
+ORDER BY descendant_count DESC;
 ```
 
-### Find deeply nested code
+### Advanced Static Analysis
+
+#### Function Complexity Analysis
 ```sql
+-- Find most complex functions across entire codebase
+WITH function_info AS (
+    SELECT 
+        d.file_path,
+        d.start_line,
+        d.end_line,
+        d.descendant_count,
+        MAX(CASE WHEN c.type = 'identifier' THEN c.peek END) as function_name
+    FROM nodes d
+    JOIN nodes c ON c.parent_id = d.node_id AND c.file_path = d.file_path
+    WHERE d.type = 'function_declarator' AND d.semantic_type = 112
+    GROUP BY d.file_path, d.node_id, d.start_line, d.end_line, d.descendant_count
+    HAVING function_name IS NOT NULL
+)
 SELECT 
-    type,
-    name,
-    depth,
-    start_line,
-    source_text
-FROM read_ast('complex.py', 'python')
-WHERE depth > 10
-ORDER BY depth DESC, start_line;
+    function_name,
+    file_path,
+    (end_line - start_line + 1) as line_count,
+    descendant_count as complexity
+FROM function_info
+WHERE descendant_count > 100
+ORDER BY descendant_count DESC;
 ```
+
+#### Dependency Analysis
+```sql
+-- Find files with highest include dependencies
+WITH includes AS (
+    SELECT 
+        file_path as source_file,
+        REGEXP_EXTRACT(peek, '#include\s*[<"](.*?)[>"]', 1) as included_file
+    FROM nodes
+    WHERE type = 'preproc_include' AND peek LIKE '#include%'
+)
+SELECT 
+    source_file,
+    COUNT(DISTINCT included_file) as dependency_count
+FROM includes
+WHERE included_file IS NOT NULL
+GROUP BY source_file
+ORDER BY dependency_count DESC
+LIMIT 10;
+```
+
+#### Code Hotspot Detection
+```sql
+-- Identify files with both complex functions AND high dependencies
+WITH function_complexity AS (
+    SELECT 
+        file_path,
+        MAX(descendant_count) as max_complexity,
+        COUNT(*) as function_count
+    FROM nodes
+    WHERE type = 'function_declarator' AND semantic_type = 112
+    GROUP BY file_path
+),
+file_dependencies AS (
+    SELECT 
+        file_path,
+        COUNT(DISTINCT REGEXP_EXTRACT(peek, '#include\s*[<"](.*?)[>"]', 1)) as deps
+    FROM nodes
+    WHERE type = 'preproc_include' AND peek LIKE '#include%'
+    GROUP BY file_path
+)
+SELECT 
+    fc.file_path,
+    fc.max_complexity,
+    fc.function_count,
+    COALESCE(fd.deps, 0) as dependencies,
+    CASE 
+        WHEN fc.max_complexity > 100 AND COALESCE(fd.deps, 0) > 30 THEN 'CRITICAL'
+        WHEN fc.max_complexity > 50 AND COALESCE(fd.deps, 0) > 20 THEN 'HIGH'
+        ELSE 'MODERATE'
+    END as risk_level
+FROM function_complexity fc
+LEFT JOIN file_dependencies fd ON fc.file_path = fd.file_path
+WHERE fc.max_complexity > 50 OR COALESCE(fd.deps, 0) > 15
+ORDER BY fc.max_complexity DESC;
+```
+
+### Large-Scale Analysis
+
+#### Performance at Scale
+```sql
+-- Analyze 20M+ AST nodes across entire DuckDB codebase in ~1 second
+SELECT 
+    COUNT(*) as total_nodes,
+    COUNT(DISTINCT file_path) as total_files,
+    COUNT(*) FILTER (WHERE type = 'function_declarator' AND semantic_type = 112) as functions,
+    COUNT(*) FILTER (WHERE type = 'call_expression') as function_calls
+FROM nodes;
+```
+
+The extension can analyze codebases with millions of AST nodes efficiently, making it suitable for enterprise-scale static analysis.
+
+## Static Analysis Utilities
+
+The project includes comprehensive SQL macros for advanced code analysis in `ast-navigator.sql`:
+
+### Core Analysis Functions
+- **`ast_find_functions(file_pattern)`** - Extract all functions with names, locations, and complexity
+- **`ast_find_classes(file_pattern)`** - Find class/struct definitions
+- **`ast_get_complexity(file_pattern)`** - Calculate file-level complexity metrics
+- **`ast_find_references(symbol_name)`** - Track variable/function usage across codebase
+
+### Advanced Analytics
+- **Fan-in/Fan-out Analysis** - Identify highly coupled functions
+- **Call Graph Construction** - Build function dependency graphs  
+- **Code Hotspot Detection** - Find files with high complexity + dependencies
+- **Dead Code Detection** - Locate potentially unused functions
+- **Dependency Analysis** - Track include/import relationships
+
+### Example: Complete Function Analysis
+```sql
+-- Load the navigation macros
+.read ast-navigator.sql
+
+-- Analyze all functions in a project
+SELECT * FROM ast_find_functions('src/**/*.cpp') 
+WHERE complexity > 100 
+ORDER BY complexity DESC;
+
+-- Find code hotspots
+SELECT * FROM ast_code_hotspots() 
+WHERE hotspot_level IN ('CRITICAL_HOTSPOT', 'HIGH_HOTSPOT');
+```
+
+For complete examples and utilities, see `workspace/static_analysis_utilities.sql`.
 
 ## Adding Language Support
 
