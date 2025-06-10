@@ -1,13 +1,26 @@
 # DuckDB AST Extension
 
-A DuckDB extension that enables SQL-based querying of Abstract Syntax Trees (ASTs) from source code files.
+A powerful DuckDB extension that enables SQL-based analysis of Abstract Syntax Trees (ASTs) from source code files across multiple programming languages.
 
 ## Features
 
-- Parse source code files into queryable AST nodes using Tree-sitter
-- Currently supports Python with easy extensibility for other languages
-- Rich node information including type, name, location, and source text
-- Hierarchical tree structure with parent-child relationships
+### 🌐 Multi-Language Support
+- **5 Languages Supported**: Python, JavaScript, TypeScript, C++, SQL
+- **Tree-sitter Powered**: Robust parsing with error recovery
+- **Auto-Detection**: Automatic language detection from file extensions
+- **Unified API**: Same interface works across all languages
+
+### 🔍 Rich AST Analysis
+- **Complete AST Access**: Full syntax tree with all node details
+- **Semantic Categorization**: 8-bit semantic type system for cross-language analysis
+- **Position Tracking**: Precise line/column locations for all nodes
+- **Source Text Extraction**: Configurable peek modes (smart, compact, signature, etc.)
+
+### ⚡ High Performance
+- **Glob Pattern Support**: Analyze entire codebases with `'src/**/*.py'`
+- **Multi-File Processing**: Efficient batch processing of multiple files
+- **Smart Caching**: Optimized for large codebases
+- **Thread-Safe**: Concurrent parsing support
 
 ## Installation
 
