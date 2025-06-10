@@ -519,4 +519,51 @@ ASTResultCollection UnifiedASTBackend::ParseFilesToASTCollection(ClientContext &
     return collection;
 }
 
+unique_ptr<ASTResult> UnifiedASTBackend::ParseSingleFileToASTResult(ClientContext &context,
+                                                                   const string& file_path,
+                                                                   const string& language,
+                                                                   bool ignore_errors,
+                                                                   int32_t peek_size,
+                                                                   const string& peek_mode) {
+    try {
+        // Auto-detect language if needed
+        string file_language = language;
+        if (language == "auto") {
+            file_language = ASTFileUtils::DetectLanguageFromPath(file_path);
+            if (file_language == "auto") {
+                if (!ignore_errors) {
+                    throw BinderException("Could not detect language for file: " + file_path);
+                }
+                return nullptr; // Skip this file
+            }
+        }
+        
+        // Read file content
+        auto &fs = FileSystem::GetFileSystem(context);
+        if (!fs.FileExists(file_path)) {
+            if (!ignore_errors) {
+                throw IOException("File does not exist: " + file_path);
+            }
+            return nullptr; // Skip missing files
+        }
+        
+        auto handle = fs.OpenFile(file_path, FileFlags::FILE_FLAGS_READ);
+        auto file_size = fs.GetFileSize(*handle);
+        
+        string content;
+        content.resize(file_size);
+        fs.Read(*handle, (void*)content.data(), file_size);
+        
+        // Parse this file
+        auto result = make_uniq<ASTResult>(ParseToASTResult(content, file_language, file_path, peek_size, peek_mode));
+        return result;
+        
+    } catch (const Exception &e) {
+        if (!ignore_errors) {
+            throw IOException("Failed to parse file '" + file_path + "': " + string(e.what()));
+        }
+        return nullptr; // With ignore_errors=true, skip this file
+    }
+}
+
 } // namespace duckdb

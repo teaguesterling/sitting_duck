@@ -34,6 +34,7 @@ set(EXTENSION_SOURCES
     src/duckdb_ast_extension.cpp
     src/language_adapter.cpp
     src/read_ast_function.cpp
+    src/read_ast_streaming_function.cpp
     src/read_ast_objects_hybrid.cpp
     src/ast_sql_macros.cpp
     src/short_names_function.cpp

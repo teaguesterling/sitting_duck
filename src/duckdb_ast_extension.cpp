@@ -15,6 +15,7 @@ namespace duckdb {
 
 // Forward declaration of registration functions
 void RegisterReadASTFunction(DatabaseInstance &instance);
+void RegisterReadASTStreamingFunction(DatabaseInstance &instance);
 void RegisterReadASTObjectsHybridFunction(DatabaseInstance &instance);
 void RegisterASTSQLMacros(DatabaseInstance &instance);
 void RegisterDuckDBASTShortNamesFunction(DatabaseInstance &instance);
@@ -25,6 +26,9 @@ void RegisterDuckDBASTShortNamesFunction(DatabaseInstance &instance);
 static void LoadInternal(DatabaseInstance &instance) {
 	// Register the read_ast table function
 	RegisterReadASTFunction(instance);
+	
+	// Register the streaming read_ast table function
+	RegisterReadASTStreamingFunction(instance);
 	
 	// Register the hybrid read_ast_objects table function
 	RegisterReadASTObjectsHybridFunction(instance);
