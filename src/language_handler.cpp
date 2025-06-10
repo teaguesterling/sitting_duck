@@ -3,13 +3,13 @@
 #include "duckdb/common/exception.hpp"
 #include <tree_sitter/api.h>
 #include <cstring>
-#include <memory>
 
 // Tree-sitter function declarations
 extern "C" {
     const TSLanguage *tree_sitter_python();
     const TSLanguage *tree_sitter_javascript();
     const TSLanguage *tree_sitter_cpp();
+    const TSLanguage *tree_sitter_typescript();
     // Temporarily disabled due to ABI compatibility issues:
     // const TSLanguage *tree_sitter_rust();
 }
@@ -447,6 +447,161 @@ void JavaScriptLanguageHandler::ParseFile(const string &content, vector<ASTNode>
 }
 
 //==============================================================================
+// TypeScriptLanguageHandler implementation
+//==============================================================================
+
+const std::unordered_map<string, string> TypeScriptLanguageHandler::type_mappings = {
+    // Declarations (inherit from JavaScript)
+    {"function_declaration", NormalizedTypes::FUNCTION_DECLARATION},
+    {"arrow_function", NormalizedTypes::FUNCTION_DECLARATION},
+    {"function_expression", NormalizedTypes::FUNCTION_DECLARATION},
+    {"class_declaration", NormalizedTypes::CLASS_DECLARATION},
+    {"interface_declaration", NormalizedTypes::CLASS_DECLARATION},
+    {"type_alias_declaration", NormalizedTypes::CLASS_DECLARATION},
+    {"enum_declaration", NormalizedTypes::CLASS_DECLARATION},
+    {"lexical_declaration", NormalizedTypes::VARIABLE_DECLARATION},
+    {"variable_declaration", NormalizedTypes::VARIABLE_DECLARATION},
+    
+    // Method declarations
+    {"method_definition", NormalizedTypes::METHOD_DECLARATION},
+    {"method_signature", NormalizedTypes::METHOD_DECLARATION},
+    
+    // Expressions
+    {"call_expression", NormalizedTypes::FUNCTION_CALL},
+    {"identifier", NormalizedTypes::VARIABLE_REFERENCE},
+    {"string", NormalizedTypes::LITERAL},
+    {"number", NormalizedTypes::LITERAL},
+    {"true", NormalizedTypes::LITERAL},
+    {"false", NormalizedTypes::LITERAL},
+    {"null", NormalizedTypes::LITERAL},
+    
+    // Control flow
+    {"binary_expression", NormalizedTypes::BINARY_EXPRESSION},
+    {"if_statement", NormalizedTypes::IF_STATEMENT},
+    {"for_statement", NormalizedTypes::LOOP_STATEMENT},
+    {"while_statement", NormalizedTypes::LOOP_STATEMENT},
+    {"return_statement", NormalizedTypes::RETURN_STATEMENT},
+    
+    // Other
+    {"comment", NormalizedTypes::COMMENT},
+    {"import_statement", NormalizedTypes::IMPORT_STATEMENT},
+    {"export_statement", NormalizedTypes::EXPORT_STATEMENT},
+};
+
+string TypeScriptLanguageHandler::GetLanguageName() const {
+    return "typescript";
+}
+
+vector<string> TypeScriptLanguageHandler::GetAliases() const {
+    return {"typescript", "ts"};
+}
+
+void TypeScriptLanguageHandler::InitializeParser() const {
+    parser = ts_parser_new();
+    if (!parser) {
+        throw InvalidInputException("Failed to create tree-sitter parser");
+    }
+    
+    const TSLanguage *ts_language = tree_sitter_typescript();
+    SetParserLanguageWithValidation(parser, ts_language, "TypeScript");
+}
+
+string TypeScriptLanguageHandler::GetNormalizedType(const string &node_type) const {
+    auto it = type_mappings.find(node_type);
+    if (it != type_mappings.end()) {
+        return it->second;
+    }
+    return node_type;
+}
+
+string TypeScriptLanguageHandler::ExtractNodeName(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    string node_type = string(node_type_str);
+    string normalized = GetNormalizedType(node_type);
+    
+    // Extract names for declaration types
+    if (normalized == NormalizedTypes::FUNCTION_DECLARATION || 
+        normalized == NormalizedTypes::CLASS_DECLARATION ||
+        normalized == NormalizedTypes::METHOD_DECLARATION) {
+        // For method_definition, look for property_identifier child
+        if (node_type == "method_definition") {
+            uint32_t child_count = ts_node_child_count(node);
+            for (uint32_t i = 0; i < child_count; i++) {
+                TSNode child = ts_node_child(node, i);
+                const char* child_type = ts_node_type(child);
+                if (strcmp(child_type, "property_identifier") == 0) {
+                    return ExtractNodeText(child, content);
+                }
+            }
+        }
+        return FindIdentifierChild(node, content);
+    }
+    
+    return "";
+}
+
+string TypeScriptLanguageHandler::ExtractNodeValue(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    string node_type = string(node_type_str);
+    
+    // For literals, extract the actual value
+    if (node_type == "string" || node_type == "number" || node_type == "template_string" ||
+        node_type == "true" || node_type == "false" || node_type == "null") {
+        return ExtractNodeText(node, content);
+    }
+    
+    return "";
+}
+
+bool TypeScriptLanguageHandler::IsPublicNode(TSNode node, const string &content) const {
+    // For now, always return false - TODO: implement TypeScript visibility detection
+    return false;
+}
+
+const NodeTypeConfig* TypeScriptLanguageHandler::GetNodeTypeConfig(const string &node_type) const {
+    // Simple if-chain approach for KIND mapping
+    if (node_type == "function_declaration" || node_type == "arrow_function" || node_type == "function_expression") {
+        static NodeTypeConfig config(ASTKind::DEFINITION, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "class_declaration" || node_type == "interface_declaration" || 
+        node_type == "type_alias_declaration" || node_type == "enum_declaration") {
+        static NodeTypeConfig config(ASTKind::DEFINITION, 1, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "call_expression") {
+        static NodeTypeConfig config(ASTKind::COMPUTATION, 0, 0, HashMethod::Structural(), 0);
+        return &config;
+    }
+    if (node_type == "identifier") {
+        static NodeTypeConfig config(ASTKind::NAME, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "string" || node_type == "number" || node_type == "template_string") {
+        static NodeTypeConfig config(ASTKind::LITERAL, 0, 0, HashMethod::Literal(), 0);
+        return &config;
+    }
+    if (node_type == "if_statement") {
+        static NodeTypeConfig config(ASTKind::FLOW_CONTROL, 0, 0, HashMethod::Structural(), 0);
+        return &config;
+    }
+    
+    // Default fallback
+    static NodeTypeConfig default_config(ASTKind::PARSER_SPECIFIC, 0, 0, HashMethod::Structural(), 0);
+    return &default_config;
+}
+
+const LanguageConfig& TypeScriptLanguageHandler::GetConfig() const {
+    // TODO: implement proper LanguageConfig - for now just throw
+    throw NotImplementedException("LanguageConfig not implemented yet");
+}
+
+void TypeScriptLanguageHandler::ParseFile(const string &content, vector<ASTNode> &nodes) const {
+    // TODO: Implement TypeScript-specific parsing - for now, throw
+    throw NotImplementedException("TypeScript ParseFile not implemented yet");
+}
+
+//==============================================================================
 // CPPLanguageHandler implementation
 //==============================================================================
 
@@ -794,7 +949,7 @@ LanguageHandlerRegistry& LanguageHandlerRegistry::GetInstance() {
     return instance;
 }
 
-void LanguageHandlerRegistry::RegisterHandler(std::unique_ptr<LanguageHandler> handler) {
+void LanguageHandlerRegistry::RegisterHandler(unique_ptr<LanguageHandler> handler) {
     // Validate ABI compatibility before registering
     ValidateLanguageABI(handler.get());
     
@@ -854,11 +1009,12 @@ void LanguageHandlerRegistry::ValidateLanguageABI(const LanguageHandler* handler
 }
 
 void LanguageHandlerRegistry::InitializeDefaultHandlers() {
-    RegisterHandler(std::unique_ptr<LanguageHandler>(new PythonLanguageHandler()));
-    RegisterHandler(std::unique_ptr<LanguageHandler>(new JavaScriptLanguageHandler()));
-    RegisterHandler(std::unique_ptr<LanguageHandler>(new CPPLanguageHandler()));
+    RegisterHandler(make_uniq<PythonLanguageHandler>());
+    RegisterHandler(make_uniq<JavaScriptLanguageHandler>());
+    RegisterHandler(make_uniq<CPPLanguageHandler>());
+    RegisterHandler(make_uniq<TypeScriptLanguageHandler>());
     // Temporarily disabled due to ABI compatibility issues:
-    // RegisterHandler(std::unique_ptr<LanguageHandler>(new RustLanguageHandler()));
+    // RegisterHandler(make_uniq<RustLanguageHandler>());
 }
 
 } // namespace duckdb

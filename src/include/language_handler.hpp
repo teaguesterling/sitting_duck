@@ -3,7 +3,6 @@
 #include "duckdb.hpp"
 #include "node_type_config.hpp"
 #include <tree_sitter/api.h>
-#include <memory>
 #include <unordered_map>
 
 namespace duckdb {
@@ -126,6 +125,26 @@ private:
     static const std::unordered_map<string, string> type_mappings;
 };
 
+// TypeScript language handler
+class TypeScriptLanguageHandler : public LanguageHandler {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    const NodeTypeConfig* GetNodeTypeConfig(const string &node_type) const override;
+    const LanguageConfig& GetConfig() const override;
+    void ParseFile(const string &content, vector<ASTNode> &nodes) const override;
+
+protected:
+    void InitializeParser() const override;
+    
+private:
+    static const std::unordered_map<string, string> type_mappings;
+};
+
 // C++ language handler
 class CPPLanguageHandler : public LanguageHandler {
 public:
@@ -172,7 +191,7 @@ public:
     static LanguageHandlerRegistry& GetInstance();
     
     // Register a language handler
-    void RegisterHandler(std::unique_ptr<LanguageHandler> handler);
+    void RegisterHandler(unique_ptr<LanguageHandler> handler);
     
     // Get handler by language name or alias
     const LanguageHandler* GetHandler(const string &language) const;
@@ -182,7 +201,7 @@ public:
     
 private:
     LanguageHandlerRegistry();
-    std::unordered_map<string, std::unique_ptr<LanguageHandler>> handlers;
+    std::unordered_map<string, unique_ptr<LanguageHandler>> handlers;
     std::unordered_map<string, string> alias_to_language;
     
     void InitializeDefaultHandlers();

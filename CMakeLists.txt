@@ -32,7 +32,6 @@ endif()
 
 set(EXTENSION_SOURCES 
     src/duckdb_ast_extension.cpp
-    src/ast_parser.cpp
     src/language_adapter.cpp
     src/read_ast_function.cpp
     src/read_ast_objects_hybrid.cpp
@@ -51,10 +50,17 @@ set(EXTENSION_SOURCES
     grammars/tree-sitter-javascript/src/scanner.c
     grammars/tree-sitter-cpp/src/parser.c
     grammars/tree-sitter-cpp/src/scanner.c
+    grammars/tree-sitter-typescript/typescript/src/parser.c
+    grammars/tree-sitter-typescript/typescript/src/scanner.c
+    grammars/tree-sitter-sql/src/parser.c
+    grammars/tree-sitter-sql/src/scanner.c
     # Temporarily disabled due to ABI compatibility issues:
     # grammars/tree-sitter-rust/src/parser.c
     # grammars/tree-sitter-rust/src/scanner.c
     )
+    # Removed unused files:
+    # src/ast_parser.cpp (replaced by unified_ast_backend.cpp)
+    # src/language_handler.cpp (replaced by language_adapter.cpp) 
     # Temporarily disabled while fixing issues:
     # src/read_ast_objects_function.cpp
     # src/ast_helper_functions.cpp
