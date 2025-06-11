@@ -1,0 +1,1039 @@
+#!/bin/bash
+# AST - Simple wrapper for parquet-based AST operations
+# Usage: ast <command> [args...]
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+DB="$SCRIPT_DIR/build/release/duckdb -noheader -list"
+DB_OUT="$SCRIPT_DIR/build/release/duckdb -column"
+SQL_FILE="$SCRIPT_DIR/ast-nav-parquet.sql"
+EXTENSION="$SCRIPT_DIR/build/release/extension/duckdb_ast/duckdb_ast.duckdb_extension"
+
+# Check for --include-syntax flag and remove it from arguments
+INCLUDE_SYNTAX=false
+SEMANTIC_FILTER="AND (semantic_type IS NULL OR semantic_type <> -20)"
+ARGS=()
+for arg in "$@"; do
+    if [[ "$arg" == "--include-syntax" ]]; then
+        INCLUDE_SYNTAX=true
+        SEMANTIC_FILTER=""
+    else
+        ARGS+=("$arg")
+    fi
+done
+set -- "${ARGS[@]}"
+
+# Helper to run SQL silently
+sql() {
+    $DB -init "$SQL_FILE" -s "LOAD '$EXTENSION'; $1" 2>/dev/null
+}
+
+# Helper to run SQL with output
+sql_out() {
+    $DB_OUT -init "$SQL_FILE" -s "LOAD '$EXTENSION'; $1"
+}
+
+case "$1" in
+    # Create index: ast index cpp "src/**/*.cpp" "include/**/*.cpp" ...
+    index)
+        lang=$2
+        shift 2  # Remove 'index' and language from args
+        patterns=("$@")  # All remaining args are patterns
+        
+        if [[ ${#patterns[@]} -eq 0 ]]; then
+            echo "Usage: ast index <lang> <pattern1> [pattern2] [pattern3] ..."
+            echo "Example: ast index cpp \"src/**/*.cpp\" \"include/**/*.cpp\""
+            exit 1
+        fi
+        
+        echo "Creating index for $lang files with ${#patterns[@]} pattern(s)..."
+        
+        # Build UNION ALL query for multiple patterns
+        if [[ ${#patterns[@]} -eq 1 ]]; then
+            # Single pattern - simple query
+            sql "COPY (SELECT * FROM read_ast('${patterns[0]}', peek_mode := 'none')) TO '.index-$lang.parquet' (FORMAT PARQUET, CODEC 'ZSTD', COMPRESSION_LEVEL 22);"
+        else
+            # Multiple patterns - use UNION ALL
+            union_query="SELECT * FROM read_ast('${patterns[0]}', peek_mode := 'none')"
+            for ((i=1; i<${#patterns[@]}; i++)); do
+                union_query="$union_query UNION ALL SELECT * FROM read_ast('${patterns[i]}', peek_mode := 'none')"
+            done
+            sql "COPY ($union_query) TO '.index-$lang.parquet' (FORMAT PARQUET, CODEC 'ZSTD', COMPRESSION_LEVEL 22);"
+        fi
+        
+        echo "Created .index-$lang.parquet"
+        ;;
+    
+    # List functions in file: ast funcs src/main.cpp
+    funcs)
+        file=$2
+        lang=$(echo "$file" | grep -o '\.[^.]*$' | tr -d '.')
+        sql_out "
+            WITH f AS (
+                SELECT node_id, parent_id, start_line, end_line, descendant_count
+                FROM read_parquet('.index-$lang.parquet')
+                WHERE file_path = '$file' AND type = 'function_declarator' AND semantic_type = 112
+            ),
+            n AS (
+                SELECT f.*, MAX(CASE WHEN c.type IN ('identifier','qualified_identifier') THEN c.name END) as name
+                FROM f
+                JOIN read_parquet('.index-$lang.parquet') c ON c.parent_id = f.node_id AND c.file_path = '$file'
+                GROUP BY f.node_id, f.parent_id, f.start_line, f.end_line, f.descendant_count
+            )
+            SELECT name as function_name, start_line || '-' || end_line as lines, descendant_count as complexity
+            FROM n WHERE name IS NOT NULL ORDER BY start_line"
+        ;;
+    
+    # Find function: ast find ParseToASTResult [lang]
+    find)
+        func=$2
+        lang_filter=""
+        if [[ -n "$3" ]]; then
+            lang_filter=".index-$3.parquet"
+        else
+            lang_filter=".index-*.parquet"
+        fi
+        sql_out "
+            WITH m AS (
+                SELECT DISTINCT i.file_path, i.node_id, i.parent_id, i.start_line, i.end_line, i.descendant_count
+                FROM read_parquet('$lang_filter') i
+                WHERE i.type IN ('function_declarator','function_definition') 
+                  AND (i.semantic_type = 112 OR i.semantic_type IS NULL)
+                  $SEMANTIC_FILTER
+                  AND EXISTS (
+                      SELECT 1 FROM read_parquet('$lang_filter') n
+                      WHERE n.parent_id = i.node_id AND n.file_path = i.file_path
+                        AND n.type IN ('identifier','qualified_identifier') AND n.name LIKE '%$func%'
+                        $SEMANTIC_FILTER
+                  )
+            )
+            SELECT file_path, start_line || '-' || end_line as lines, descendant_count as complexity
+            FROM m ORDER BY file_path"
+        ;;
+    
+    # Get source: ast src ParseToASTResult
+    src)
+        func=$2
+        result=$(sql "
+            WITH m AS (
+                SELECT i.file_path, i.start_line, i.end_line, p.start_line as p_start, p.end_line as p_end
+                FROM read_parquet('.index-*.parquet') i
+                LEFT JOIN read_parquet('.index-*.parquet') p ON p.node_id = i.parent_id AND p.file_path = i.file_path
+                WHERE i.type = 'function_declarator' AND i.semantic_type = 112
+                  AND EXISTS (
+                      SELECT 1 FROM read_parquet('.index-*.parquet') n
+                      WHERE n.parent_id = i.node_id AND n.file_path = i.file_path
+                        AND n.name LIKE '%$func%'
+                  )
+                LIMIT 1
+            )
+            SELECT file_path || '|' || COALESCE(p_start, start_line) || '|' || COALESCE(p_end, end_line) FROM m")
+        
+        if [[ -n "$result" ]]; then
+            IFS='|' read -r file start end <<< "$result"
+            echo "# $func in $file:$start-$end"
+            sed -n "${start},${end}p" "$file"
+        else
+            echo "Function '$func' not found"
+        fi
+        ;;
+    
+    # Search: ast search parse [lang]
+    search)
+        term=$2
+        lang_filter=""
+        if [[ -n "$3" ]]; then
+            lang_filter=".index-$3.parquet"
+        else
+            lang_filter=".index-*.parquet"
+        fi
+        sql_out "
+            SELECT file_path, name, start_line
+            FROM read_parquet('$lang_filter')
+            WHERE name LIKE '%$term%' AND type IN ('function_declarator','function_definition','class_definition','struct_declaration')
+              $SEMANTIC_FILTER
+            ORDER BY file_path, start_line
+            LIMIT 50"
+        ;;
+    
+    # Find classes: ast classes MyClass [lang]
+    classes)
+        term=$2
+        lang_filter=""
+        if [[ -n "$3" ]]; then
+            lang_filter=".index-$3.parquet"
+        else
+            lang_filter=".index-*.parquet"
+        fi
+        sql_out "
+            SELECT file_path, name as class_name, start_line || '-' || end_line as lines, descendant_count as complexity
+            FROM read_parquet('$lang_filter')
+            WHERE type IN ('class_definition', 'class_declaration', 'struct_declaration', 'interface_declaration')
+              AND name LIKE '%$term%'
+              AND (semantic_type IS NULL OR semantic_type <> -20)
+            ORDER BY file_path, start_line
+            LIMIT 50"
+        ;;
+    
+    # File analysis: ast file src/main.cpp
+    file)
+        file_path=$2
+        if [[ -z "$file_path" ]]; then
+            echo "Usage: ast file <file_path>"
+            exit 1
+        fi
+        
+        lang=$(echo "$file_path" | grep -o '\.[^.]*$' | tr -d '.')
+        echo "=== File Analysis: $file_path ==="
+        echo ""
+        
+        # Basic stats
+        sql_out "
+            SELECT 
+                COUNT(*) as total_nodes,
+                COUNT(*) FILTER (WHERE type IN ('function_declarator','function_definition')) as functions,
+                COUNT(*) FILTER (WHERE type IN ('class_definition','struct_declaration')) as classes,
+                MAX(depth) as max_nesting,
+                MAX(descendant_count) as max_complexity
+            FROM read_parquet('.index-$lang.parquet')
+            WHERE file_path = '$file_path'"
+        
+        echo ""
+        echo "=== Functions ==="
+        sql_out "
+            WITH f AS (
+                SELECT node_id, parent_id, start_line, end_line, descendant_count
+                FROM read_parquet('.index-$lang.parquet')
+                WHERE file_path = '$file_path' AND type IN ('function_declarator','function_definition') AND (semantic_type = 112 OR semantic_type IS NULL)
+            ),
+            n AS (
+                SELECT f.*, MAX(CASE WHEN c.type IN ('identifier','qualified_identifier') THEN c.name END) as name
+                FROM f
+                JOIN read_parquet('.index-$lang.parquet') c ON c.parent_id = f.node_id AND c.file_path = '$file_path'
+                GROUP BY f.node_id, f.parent_id, f.start_line, f.end_line, f.descendant_count
+            )
+            SELECT name, start_line || '-' || end_line as lines, descendant_count as complexity
+            FROM n WHERE name IS NOT NULL ORDER BY start_line LIMIT 20"
+        ;;
+    
+    # Dependencies: ast deps src/main.cpp
+    deps)
+        file_path=$2
+        if [[ -z "$file_path" ]]; then
+            echo "Usage: ast deps <file_path>"
+            exit 1
+        fi
+        
+        lang=$(echo "$file_path" | grep -o '\.[^.]*$' | tr -d '.')
+        echo "=== Dependencies for: $file_path ==="
+        
+        # Find includes/imports
+        sql_out "
+            SELECT DISTINCT
+                CASE 
+                    WHEN type = 'preproc_include' THEN REGEXP_EXTRACT(peek, '#include\\s*[<\"]([^>\"]+)[>\"]', 1)
+                    WHEN type = 'import_statement' THEN REGEXP_EXTRACT(peek, 'import\\s+(\\S+)', 1)
+                    WHEN type = 'import_from_statement' THEN REGEXP_EXTRACT(peek, 'from\\s+(\\S+)', 1)
+                    ELSE peek
+                END as dependency,
+                type as import_type,
+                start_line
+            FROM read_parquet('.index-$lang.parquet')
+            WHERE file_path = '$file_path' 
+              AND type IN ('preproc_include', 'import_statement', 'import_from_statement')
+              AND peek IS NOT NULL
+            ORDER BY start_line"
+        ;;
+    
+    # Find callers: ast callers MyFunction [lang]
+    callers)
+        func_name=$2
+        lang_filter=""
+        if [[ -n "$3" ]]; then
+            lang_filter=".index-$3.parquet"
+        else
+            lang_filter=".index-*.parquet"
+        fi
+        
+        if [[ -z "$func_name" ]]; then
+            echo "Usage: ast callers <function_name> [lang]"
+            exit 1
+        fi
+        
+        echo "=== Functions calling: $func_name ==="
+        sql_out "
+            WITH calls AS (
+                SELECT file_path, start_line, end_line, parent_id
+                FROM read_parquet('$lang_filter')
+                WHERE type = 'call_expression' 
+                  AND (name = '$func_name' OR name LIKE '%::$func_name' OR name LIKE '%.$func_name')
+            ),
+            caller_funcs AS (
+                SELECT DISTINCT c.file_path, f.start_line as func_start, f.end_line as func_end,
+                       MAX(CASE WHEN n.type IN ('identifier','qualified_identifier') THEN n.name END) as caller_name,
+                       COUNT(*) as call_count
+                FROM calls c
+                JOIN read_parquet('$lang_filter') f ON c.file_path = f.file_path
+                  AND c.start_line >= f.start_line AND c.end_line <= f.end_line
+                  AND f.type IN ('function_declarator','function_definition')
+                LEFT JOIN read_parquet('$lang_filter') n ON n.parent_id = f.node_id AND n.file_path = f.file_path
+                GROUP BY c.file_path, f.start_line, f.end_line
+            )
+            SELECT file_path, caller_name, func_start || '-' || func_end as lines, call_count
+            FROM caller_funcs 
+            WHERE caller_name IS NOT NULL
+            ORDER BY call_count DESC, file_path"
+        ;;
+    
+    # Find called functions: ast called-by MyFunction [lang]
+    called-by)
+        func_name=$2
+        lang_filter=""
+        if [[ -n "$3" ]]; then
+            lang_filter=".index-$3.parquet"
+        else
+            lang_filter=".index-*.parquet"
+        fi
+        
+        if [[ -z "$func_name" ]]; then
+            echo "Usage: ast called-by <function_name> [lang]"
+            exit 1
+        fi
+        
+        echo "=== Functions called by: $func_name ==="
+        sql_out "
+            WITH target_func AS (
+                SELECT f.file_path, f.start_line, f.end_line
+                FROM read_parquet('$lang_filter') f
+                JOIN read_parquet('$lang_filter') n ON n.parent_id = f.node_id AND n.file_path = f.file_path
+                WHERE f.type IN ('function_declarator','function_definition')
+                  AND n.type IN ('identifier','qualified_identifier')
+                  AND n.name = '$func_name'
+                LIMIT 1
+            ),
+            calls_made AS (
+                SELECT c.name as called_function, c.start_line, COUNT(*) as call_count
+                FROM target_func tf
+                JOIN read_parquet('$lang_filter') c ON c.file_path = tf.file_path
+                  AND c.start_line >= tf.start_line AND c.start_line <= tf.end_line
+                  AND c.type = 'call_expression'
+                  AND c.name IS NOT NULL AND c.name != ''
+                GROUP BY c.name, c.start_line
+            )
+            SELECT called_function, call_count, start_line
+            FROM calls_made
+            ORDER BY call_count DESC, called_function"
+        ;;
+    
+    # Complex functions: ast complex [threshold]
+    complex)
+        threshold=${2:-100}
+        sql_out "
+            WITH f AS (
+                SELECT file_path, node_id, parent_id, descendant_count
+                FROM read_parquet('.index-*.parquet')
+                WHERE type = 'function_declarator' AND semantic_type = 112 AND descendant_count >= $threshold
+            )
+            SELECT f.file_path, 
+                   MAX(CASE WHEN n.type IN ('identifier','qualified_identifier') THEN n.name END) as name,
+                   f.descendant_count as complexity
+            FROM f
+            JOIN read_parquet('.index-*.parquet') n ON n.parent_id = f.node_id AND n.file_path = f.file_path
+            GROUP BY f.file_path, f.descendant_count
+            ORDER BY f.descendant_count DESC"
+        ;;
+    
+    # Find hotspots: ast hotspots [complexity_threshold]
+    hotspots)
+        complexity_threshold=${2:-200}
+        echo "=== Code Hotspots (High Complexity + Coupling) ==="
+        sql_out "
+            WITH file_complexity AS (
+                SELECT 
+                    file_path,
+                    COUNT(*) FILTER (WHERE type IN ('function_declarator','function_definition')) as function_count,
+                    MAX(descendant_count) as max_complexity,
+                    AVG(descendant_count) as avg_complexity
+                FROM read_parquet('.index-*.parquet')
+                WHERE type IN ('function_declarator','function_definition')
+                GROUP BY file_path
+            ),
+            file_coupling AS (
+                SELECT 
+                    file_path,
+                    COUNT(*) FILTER (WHERE type IN ('preproc_include','import_statement')) as dependencies,
+                    COUNT(*) FILTER (WHERE type = 'call_expression') as external_calls
+                FROM read_parquet('.index-*.parquet')
+                GROUP BY file_path
+            ),
+            hotspots AS (
+                SELECT 
+                    fc.file_path,
+                    fc.function_count,
+                    fc.max_complexity,
+                    ROUND(fc.avg_complexity, 1) as avg_complexity,
+                    COALESCE(fcp.dependencies, 0) as dependencies,
+                    COALESCE(fcp.external_calls, 0) as external_calls,
+                    (fc.max_complexity + COALESCE(fcp.dependencies, 0) * 10) as hotspot_score
+                FROM file_complexity fc
+                LEFT JOIN file_coupling fcp ON fc.file_path = fcp.file_path
+                WHERE fc.max_complexity >= $complexity_threshold OR COALESCE(fcp.dependencies, 0) > 20
+            )
+            SELECT 
+                file_path,
+                function_count,
+                max_complexity,
+                avg_complexity,
+                dependencies,
+                hotspot_score,
+                CASE 
+                    WHEN hotspot_score > 500 THEN 'CRITICAL'
+                    WHEN hotspot_score > 300 THEN 'HIGH'
+                    WHEN hotspot_score > 150 THEN 'MEDIUM'
+                    ELSE 'LOW'
+                END as risk_level
+            FROM hotspots
+            ORDER BY hotspot_score DESC
+            LIMIT 20"
+        ;;
+    
+    # Find potentially unused functions: ast unused [lang]
+    unused)
+        lang_filter=""
+        if [[ -n "$2" ]]; then
+            lang_filter=".index-$2.parquet"
+        else
+            lang_filter=".index-*.parquet"
+        fi
+        
+        echo "=== Potentially Unused Functions ==="
+        sql_out "
+            WITH all_functions AS (
+                SELECT DISTINCT f.file_path, 
+                       MAX(CASE WHEN n.type IN ('identifier','qualified_identifier') THEN n.name END) as func_name
+                FROM read_parquet('$lang_filter') f
+                JOIN read_parquet('$lang_filter') n ON n.parent_id = f.node_id AND n.file_path = f.file_path
+                WHERE f.type IN ('function_declarator','function_definition')
+                  AND (f.semantic_type = 112 OR f.semantic_type IS NULL)
+                GROUP BY f.file_path, f.node_id
+            ),
+            called_functions AS (
+                SELECT DISTINCT name as func_name
+                FROM read_parquet('$lang_filter')
+                WHERE type = 'call_expression' AND name IS NOT NULL
+            )
+            SELECT af.file_path, af.func_name
+            FROM all_functions af
+            LEFT JOIN called_functions cf ON af.func_name = cf.func_name
+            WHERE cf.func_name IS NULL
+              AND af.func_name IS NOT NULL
+              AND af.func_name NOT IN ('main', 'init', 'cleanup', 'constructor', 'destructor')
+              AND af.func_name NOT LIKE 'test_%'
+              AND af.func_name NOT LIKE '%_test'
+            ORDER BY af.file_path, af.func_name
+            LIMIT 50"
+        ;;
+    
+    # Find duplicate/similar functions: ast duplicates [similarity_threshold]
+    duplicates)
+        similarity_threshold=${2:-90}
+        echo "=== Potentially Duplicate Functions ==="
+        sql_out "
+            WITH function_signatures AS (
+                SELECT 
+                    f.file_path,
+                    MAX(CASE WHEN n.type IN ('identifier','qualified_identifier') THEN n.name END) as func_name,
+                    f.descendant_count,
+                    f.end_line - f.start_line + 1 as line_count,
+                    COUNT(*) FILTER (WHERE c.type = 'parameter_declaration') as param_count
+                FROM read_parquet('.index-*.parquet') f
+                JOIN read_parquet('.index-*.parquet') n ON n.parent_id = f.node_id AND n.file_path = f.file_path
+                LEFT JOIN read_parquet('.index-*.parquet') c ON c.parent_id = f.node_id AND c.file_path = f.file_path
+                WHERE f.type IN ('function_declarator','function_definition')
+                  AND (f.semantic_type = 112 OR f.semantic_type IS NULL)
+                GROUP BY f.file_path, f.node_id, f.descendant_count, f.start_line, f.end_line
+            )
+            SELECT 
+                f1.file_path as file1,
+                f1.func_name as function1,
+                f2.file_path as file2,
+                f2.func_name as function2,
+                f1.line_count,
+                f1.descendant_count as complexity,
+                ROUND(100.0 * (1.0 - ABS(f1.descendant_count - f2.descendant_count)::DOUBLE / GREATEST(f1.descendant_count, f2.descendant_count)), 1) as similarity
+            FROM function_signatures f1
+            JOIN function_signatures f2 ON f1.func_name != f2.func_name
+                AND f1.param_count = f2.param_count
+                AND ABS(f1.line_count - f2.line_count) <= 3
+                AND ABS(f1.descendant_count - f2.descendant_count) <= 10
+            WHERE f1.func_name IS NOT NULL AND f2.func_name IS NOT NULL
+              AND f1.file_path <= f2.file_path  -- Avoid duplicates
+              AND ROUND(100.0 * (1.0 - ABS(f1.descendant_count - f2.descendant_count)::DOUBLE / GREATEST(f1.descendant_count, f2.descendant_count)), 1) >= $similarity_threshold
+            ORDER BY similarity DESC
+            LIMIT 20"
+        ;;
+    
+    # Show context around a function: ast context MyFunction [lines]
+    context)
+        func_name=$2
+        context_lines=${3:-10}
+        
+        if [[ -z "$func_name" ]]; then
+            echo "Usage: ast context <function_name> [context_lines]"
+            exit 1
+        fi
+        
+        echo "=== Context for: $func_name ==="
+        
+        # Find the function first
+        result=$(sql "
+            WITH m AS (
+                SELECT i.file_path, i.start_line, i.end_line, p.start_line as p_start, p.end_line as p_end
+                FROM read_parquet('.index-*.parquet') i
+                LEFT JOIN read_parquet('.index-*.parquet') p ON p.node_id = i.parent_id AND p.file_path = i.file_path
+                WHERE i.type IN ('function_declarator','function_definition') AND (i.semantic_type = 112 OR i.semantic_type IS NULL)
+                  AND EXISTS (
+                      SELECT 1 FROM read_parquet('.index-*.parquet') n
+                      WHERE n.parent_id = i.node_id AND n.file_path = i.file_path
+                        AND n.name LIKE '%$func_name%'
+                  )
+                LIMIT 1
+            )
+            SELECT file_path || '|' || COALESCE(p_start, start_line) || '|' || COALESCE(p_end, end_line) FROM m")
+        
+        if [[ -n "$result" ]]; then
+            IFS='|' read -r file start end <<< "$result"
+            echo "# Found in $file:$start-$end"
+            echo ""
+            
+            # Show context before, the function, and context after
+            context_start=$((start - context_lines))
+            context_end=$((end + context_lines))
+            
+            if [[ $context_start -lt 1 ]]; then
+                context_start=1
+            fi
+            
+            echo "=== Context (lines $context_start-$context_end) ==="
+            sed -n "${context_start},${context_end}p" "$file" | nl -v$context_start
+        else
+            echo "Function '$func_name' not found"
+        fi
+        ;;
+    
+    # Find references to a symbol: ast references MyClass [lang]
+    references)
+        symbol=$2
+        lang_filter=""
+        if [[ -n "$3" ]]; then
+            lang_filter=".index-$3.parquet"
+        else
+            lang_filter=".index-*.parquet"
+        fi
+        
+        if [[ -z "$symbol" ]]; then
+            echo "Usage: ast references <symbol> [lang]"
+            exit 1
+        fi
+        
+        echo "=== References to: $symbol ===" 
+        sql_out "
+            SELECT DISTINCT file_path, type, start_line, 
+                   SUBSTR(peek, 1, 60) as context
+            FROM read_parquet('$lang_filter')
+            WHERE (name LIKE '%$symbol%' OR peek LIKE '%$symbol%')
+              AND type NOT IN ('comment', 'line_comment', 'block_comment')
+              AND (semantic_type IS NULL OR semantic_type <> -20)
+            ORDER BY file_path, start_line
+            LIMIT 50"
+        ;;
+    
+    # Show definition of a symbol: ast definition MyClass [lang]
+    definition)
+        symbol=$2
+        lang_filter=""
+        if [[ -n "$3" ]]; then
+            lang_filter=".index-$3.parquet"
+        else
+            lang_filter=".index-*.parquet"
+        fi
+        
+        if [[ -z "$symbol" ]]; then
+            echo "Usage: ast definition <symbol> [lang]"
+            exit 1
+        fi
+        
+        echo "=== Definition of: $symbol ==="
+        sql_out "
+            SELECT file_path, type, start_line || '-' || end_line as lines,
+                   SUBSTR(peek, 1, 80) as definition
+            FROM read_parquet('$lang_filter')
+            WHERE name = '$symbol'
+              AND type IN ('function_declarator','function_definition','class_definition','struct_declaration',
+                          'variable_declaration','type_declaration','typedef_declaration')
+            ORDER BY file_path, start_line
+            LIMIT 20"
+        ;;
+    
+    # Export to JSON: ast export-json [output_file]
+    export-json)
+        output_file=${2:-"ast-export.json"}
+        echo "=== Exporting AST data to JSON ==="
+        
+        sql_out "
+            SELECT json_object(
+                'metadata', json_object(
+                    'export_time', current_timestamp,
+                    'total_files', (SELECT COUNT(DISTINCT file_path) FROM read_parquet('.index-*.parquet')),
+                    'total_nodes', (SELECT COUNT(*) FROM read_parquet('.index-*.parquet')),
+                    'languages', json_array_agg(DISTINCT REGEXP_EXTRACT(file_path, '\\.(\\w+)$', 1))
+                ),
+                'functions', json_array_agg(
+                    json_object(
+                        'name', name,
+                        'file', file_path,
+                        'lines', start_line || '-' || end_line,
+                        'complexity', descendant_count,
+                        'type', type
+                    )
+                )
+            ) as json_export
+            FROM read_parquet('.index-*.parquet')
+            WHERE type IN ('function_declarator','function_definition') 
+              AND (semantic_type = 112 OR semantic_type IS NULL)
+              AND name IS NOT NULL
+            GROUP BY ALL" > "$output_file"
+        
+        echo "Exported to: $output_file"
+        ;;
+    
+    # Compare two functions: ast compare func1 func2
+    compare)
+        func1=$2
+        func2=$3
+        
+        if [[ -z "$func1" || -z "$func2" ]]; then
+            echo "Usage: ast compare <function1> <function2>"
+            exit 1
+        fi
+        
+        echo "=== Comparing: $func1 vs $func2 ==="
+        sql_out "
+            WITH f1 AS (
+                SELECT f.file_path, f.descendant_count, f.start_line, f.end_line,
+                       MAX(CASE WHEN n.type IN ('identifier','qualified_identifier') THEN n.name END) as name
+                FROM read_parquet('.index-*.parquet') f
+                JOIN read_parquet('.index-*.parquet') n ON n.parent_id = f.node_id AND n.file_path = f.file_path
+                WHERE f.type IN ('function_declarator','function_definition') AND (f.semantic_type = 112 OR f.semantic_type IS NULL)
+                  AND n.name LIKE '%$func1%'
+                GROUP BY f.file_path, f.descendant_count, f.start_line, f.end_line
+                LIMIT 1
+            ),
+            f2 AS (
+                SELECT f.file_path, f.descendant_count, f.start_line, f.end_line,
+                       MAX(CASE WHEN n.type IN ('identifier','qualified_identifier') THEN n.name END) as name
+                FROM read_parquet('.index-*.parquet') f
+                JOIN read_parquet('.index-*.parquet') n ON n.parent_id = f.node_id AND n.file_path = f.file_path
+                WHERE f.type IN ('function_declarator','function_definition') AND (f.semantic_type = 112 OR f.semantic_type IS NULL)
+                  AND n.name LIKE '%$func2%'
+                GROUP BY f.file_path, f.descendant_count, f.start_line, f.end_line
+                LIMIT 1
+            )
+            SELECT 
+                f1.name as function1,
+                f1.file_path as file1,
+                f1.descendant_count as complexity1,
+                f2.name as function2,
+                f2.file_path as file2,
+                f2.descendant_count as complexity2,
+                ABS(f1.descendant_count - f2.descendant_count) as complexity_diff,
+                CASE 
+                    WHEN f1.descendant_count = f2.descendant_count THEN 'IDENTICAL'
+                    WHEN ABS(f1.descendant_count - f2.descendant_count) <= 10 THEN 'SIMILAR'
+                    WHEN ABS(f1.descendant_count - f2.descendant_count) <= 50 THEN 'DIFFERENT'
+                    ELSE 'VERY_DIFFERENT'
+                END as similarity
+            FROM f1, f2"
+        ;;
+    
+    # Advanced metrics: ast metrics [type]
+    metrics)
+        metric_type=${2:-"overview"}
+        
+        case "$metric_type" in
+            overview)
+                echo "=== AST Metrics Overview ==="
+                sql_out "
+                    SELECT 
+                        'Total Files' as metric,
+                        COUNT(DISTINCT file_path) as value,
+                        '' as details
+                    FROM read_parquet('.index-*.parquet')
+                    UNION ALL
+                    SELECT 
+                        'Total Functions',
+                        COUNT(*),
+                        'across all languages'
+                    FROM read_parquet('.index-*.parquet')
+                    WHERE type IN ('function_declarator','function_definition') AND (semantic_type = 112 OR semantic_type IS NULL)
+                    UNION ALL
+                    SELECT 
+                        'Average Complexity',
+                        ROUND(AVG(descendant_count), 1),
+                        'nodes per function'
+                    FROM read_parquet('.index-*.parquet')
+                    WHERE type IN ('function_declarator','function_definition') AND (semantic_type = 112 OR semantic_type IS NULL)
+                    UNION ALL
+                    SELECT 
+                        'Max Complexity',
+                        MAX(descendant_count),
+                        'most complex function'
+                    FROM read_parquet('.index-*.parquet')
+                    WHERE type IN ('function_declarator','function_definition') AND (semantic_type = 112 OR semantic_type IS NULL)"
+                ;;
+            
+            complexity)
+                echo "=== Complexity Distribution ==="
+                sql_out "
+                    SELECT 
+                        CASE 
+                            WHEN descendant_count <= 50 THEN 'Simple (0-50)'
+                            WHEN descendant_count <= 100 THEN 'Moderate (51-100)'
+                            WHEN descendant_count <= 200 THEN 'Complex (101-200)'
+                            WHEN descendant_count <= 500 THEN 'Very Complex (201-500)'
+                            ELSE 'Extremely Complex (500+)'
+                        END as complexity_category,
+                        COUNT(*) as function_count,
+                        ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER (), 1) as percentage
+                    FROM read_parquet('.index-*.parquet')
+                    WHERE type IN ('function_declarator','function_definition') AND (semantic_type = 112 OR semantic_type IS NULL)
+                    GROUP BY 1
+                    ORDER BY MIN(descendant_count)"
+                ;;
+            
+            languages)
+                echo "=== Language Distribution ==="
+                sql_out "
+                    SELECT 
+                        UPPER(REGEXP_EXTRACT(file_path, '\\.(\\w+)$', 1)) as language,
+                        COUNT(DISTINCT file_path) as files,
+                        COUNT(*) FILTER (WHERE type IN ('function_declarator','function_definition') AND (semantic_type = 112 OR semantic_type IS NULL)) as functions,
+                        ROUND(AVG(descendant_count) FILTER (WHERE type IN ('function_declarator','function_definition') AND (semantic_type = 112 OR semantic_type IS NULL)), 1) as avg_complexity
+                    FROM read_parquet('.index-*.parquet')
+                    GROUP BY 1
+                    ORDER BY files DESC"
+                ;;
+            
+            *)
+                echo "Available metrics: overview, complexity, languages"
+                echo "Usage: ast metrics [overview|complexity|languages]"
+                ;;
+        esac
+        ;;
+    
+    # Quick search with ranking: ast quick <term>
+    quick)
+        term=$2
+        if [[ -z "$term" ]]; then
+            echo "Usage: ast quick <search_term>"
+            exit 1
+        fi
+        
+        echo "=== Quick Search: $term ==="
+        sql_out "
+            WITH ranked_results AS (
+                SELECT 
+                    file_path,
+                    name,
+                    type,
+                    start_line,
+                    descendant_count,
+                    CASE 
+                        WHEN name = '$term' THEN 100
+                        WHEN name LIKE '$term%' THEN 90
+                        WHEN name LIKE '%$term' THEN 80
+                        WHEN name LIKE '%$term%' THEN 70
+                        WHEN peek LIKE '%$term%' THEN 50
+                        ELSE 10
+                    END as relevance_score
+                FROM read_parquet('.index-*.parquet')
+                WHERE (name LIKE '%$term%' OR peek LIKE '%$term%')
+                  AND name IS NOT NULL
+                  AND type IN ('function_declarator','function_definition','class_definition','struct_declaration')
+                  AND (semantic_type IS NULL OR semantic_type <> -20)
+            )
+            SELECT file_path, name, type, start_line, relevance_score
+            FROM ranked_results
+            ORDER BY relevance_score DESC, descendant_count DESC
+            LIMIT 15"
+        ;;
+    
+    # Size analysis: ast size-analysis
+    size-analysis)
+        echo "=== Size Analysis ==="
+        sql_out "
+            WITH file_sizes AS (
+                SELECT 
+                    file_path,
+                    COUNT(*) as total_nodes,
+                    COUNT(*) FILTER (WHERE type IN ('function_declarator','function_definition')) as functions,
+                    MAX(descendant_count) as max_complexity,
+                    AVG(descendant_count) FILTER (WHERE type IN ('function_declarator','function_definition')) as avg_complexity
+                FROM read_parquet('.index-*.parquet')
+                GROUP BY file_path
+            )
+            SELECT 
+                file_path,
+                total_nodes,
+                functions,
+                ROUND(avg_complexity, 1) as avg_complexity,
+                max_complexity,
+                CASE 
+                    WHEN total_nodes > 5000 THEN 'HUGE'
+                    WHEN total_nodes > 2000 THEN 'LARGE'  
+                    WHEN total_nodes > 500 THEN 'MEDIUM'
+                    ELSE 'SMALL'
+                END as size_category
+            FROM file_sizes
+            WHERE functions > 0
+            ORDER BY total_nodes DESC
+            LIMIT 20"
+        ;;
+    
+    # Show tree structure: ast tree <file>
+    tree)
+        file_path=$2
+        
+        if [[ -z "$file_path" ]]; then
+            echo "Usage: ast tree <file_path>"
+            exit 1
+        fi
+        
+        lang=$(echo "$file_path" | grep -o '\.[^.]*$' | tr -d '.')
+        echo "=== Code Structure: $file_path ==="
+        sql_out "
+            WITH function_nodes AS (
+                -- Get function names by extracting from child nodes
+                SELECT 
+                    MAX(CASE WHEN c.type IN ('identifier','qualified_identifier') THEN c.name END) as func_name,
+                    f.type, f.depth, f.start_line, f.descendant_count
+                FROM read_parquet('.index-$lang.parquet') f
+                JOIN read_parquet('.index-$lang.parquet') c ON c.parent_id = f.node_id AND c.file_path = f.file_path
+                WHERE f.file_path = '$file_path'
+                  AND f.type IN ('function_declarator', 'function_definition')
+                  AND (f.semantic_type = 112 OR f.semantic_type IS NULL)
+                GROUP BY f.node_id, f.type, f.depth, f.start_line, f.descendant_count
+            ),
+            namespace_nodes AS (
+                -- Get namespace names by extracting from child nodes  
+                SELECT 
+                    MAX(CASE WHEN c.type = 'namespace_identifier' THEN c.name END) as ns_name,
+                    n.type, n.depth, n.start_line, n.descendant_count
+                FROM read_parquet('.index-$lang.parquet') n
+                JOIN read_parquet('.index-$lang.parquet') c ON c.parent_id = n.node_id AND c.file_path = n.file_path
+                WHERE n.file_path = '$file_path'
+                  AND n.type = 'namespace_definition'
+                GROUP BY n.node_id, n.type, n.depth, n.start_line, n.descendant_count
+            ),
+            all_nodes AS (
+                SELECT func_name as name, type, depth, start_line, descendant_count
+                FROM function_nodes
+                WHERE func_name IS NOT NULL
+                UNION
+                SELECT ns_name as name, type, depth, start_line, descendant_count
+                FROM namespace_nodes
+                WHERE ns_name IS NOT NULL
+                UNION
+                -- Get other structural elements with direct names
+                SELECT name, type, depth, start_line, descendant_count
+                FROM read_parquet('.index-$lang.parquet')
+                WHERE file_path = '$file_path' 
+                  AND name IS NOT NULL 
+                  AND name != ''
+                  AND type IN (
+                      'class_definition', 'class_declaration', 'struct_declaration',
+                      'enum_declaration', 'enum_specifier'
+                  )
+            )
+            SELECT 
+                REPEAT('  ', depth) || COALESCE(name, '<unnamed>') || ' (' || type || ')' as structure, 
+                start_line, 
+                descendant_count as complexity
+            FROM all_nodes
+            ORDER BY start_line"
+        ;;
+    
+    # Find function definitions (not just declarations): ast definition-src <function>
+    definition-src)
+        func_name=$2
+        if [[ -z "$func_name" ]]; then
+            echo "Usage: ast definition-src <function_name>"
+            exit 1
+        fi
+        
+        echo "=== Looking for definition of: $func_name ==="
+        
+        # Try to find the actual definition (usually in .cpp files, with higher complexity)
+        result=$(sql "
+            WITH all_matches AS (
+                SELECT i.file_path, i.start_line, i.end_line, i.descendant_count,
+                       p.start_line as p_start, p.end_line as p_end,
+                       CASE 
+                           WHEN i.file_path LIKE '%.cpp' THEN 100
+                           WHEN i.file_path LIKE '%.c' THEN 90  
+                           WHEN i.descendant_count > 10 THEN 80
+                           ELSE 50
+                       END as definition_score
+                FROM read_parquet('.index-*.parquet') i
+                LEFT JOIN read_parquet('.index-*.parquet') p ON p.node_id = i.parent_id AND p.file_path = i.file_path
+                WHERE i.type IN ('function_declarator','function_definition') AND (i.semantic_type = 112 OR i.semantic_type IS NULL)
+                  AND EXISTS (
+                      SELECT 1 FROM read_parquet('.index-*.parquet') n
+                      WHERE n.parent_id = i.node_id AND n.file_path = i.file_path
+                        AND n.name LIKE '%$func_name%'
+                  )
+            )
+            SELECT file_path || '|' || COALESCE(p_start, start_line) || '|' || COALESCE(p_end, end_line) || '|' || definition_score
+            FROM all_matches
+            ORDER BY definition_score DESC, descendant_count DESC
+            LIMIT 1")
+        
+        if [[ -n "$result" ]]; then
+            IFS='|' read -r file start end score <<< "$result"
+            echo "# Found definition in $file:$start-$end (score: $score)"
+            echo ""
+            sed -n "${start},${end}p" "$file"
+        else
+            echo "Function definition '$func_name' not found"
+        fi
+        ;;
+    
+    # Show both declaration and definition: ast full-src <function>
+    full-src)
+        func_name=$2
+        if [[ -z "$func_name" ]]; then
+            echo "Usage: ast full-src <function_name>"
+            exit 1
+        fi
+        
+        echo "=== Declaration and Definition of: $func_name ==="
+        sql_out "
+            WITH all_matches AS (
+                SELECT 
+                    i.file_path, 
+                    i.start_line, 
+                    i.end_line, 
+                    i.descendant_count,
+                    p.start_line as p_start, 
+                    p.end_line as p_end,
+                    CASE 
+                        WHEN i.file_path LIKE '%.hpp' OR i.file_path LIKE '%.h' THEN 'declaration'
+                        WHEN i.file_path LIKE '%.cpp' OR i.file_path LIKE '%.c' THEN 'definition'
+                        ELSE 'unknown'
+                    END as source_type
+                FROM read_parquet('.index-*.parquet') i
+                LEFT JOIN read_parquet('.index-*.parquet') p ON p.node_id = i.parent_id AND p.file_path = i.file_path
+                WHERE i.type IN ('function_declarator','function_definition') AND (i.semantic_type = 112 OR i.semantic_type IS NULL)
+                  AND EXISTS (
+                      SELECT 1 FROM read_parquet('.index-*.parquet') n
+                      WHERE n.parent_id = i.node_id AND n.file_path = i.file_path
+                        AND n.name LIKE '%$func_name%'
+                  )
+            )
+            SELECT 
+                source_type,
+                file_path, 
+                COALESCE(p_start, start_line) || '-' || COALESCE(p_end, end_line) as lines,
+                descendant_count as complexity
+            FROM all_matches
+            ORDER BY source_type, descendant_count DESC"
+        ;;
+    
+    # Stats: ast stats
+    stats)
+        sql_out "
+            SELECT 
+                REGEXP_EXTRACT(filename, '\\.index-(.*)\.parquet', 1) as language,
+                COUNT(DISTINCT file_path) as files,
+                COUNT(*) as total_nodes,
+                COUNT(*) FILTER (WHERE type IN ('function_declarator','function_definition') AND (semantic_type = 112 OR semantic_type IS NULL)) as functions
+            FROM read_parquet('.index-*.parquet', filename=true)
+            GROUP BY language, filename
+            ORDER BY language"
+        ;;
+    
+    # List indexes: ast list
+    list)
+        ls -lh .index-*.parquet 2>/dev/null || echo "No indexes found. Create one with: ast index <lang> <pattern>"
+        ;;
+    
+    *)
+        cat << 'EOF'
+ast - Simple AST parquet index tool
+
+USAGE:
+  # Indexing
+  ast index <lang> <pattern...>         Create index (supports multiple patterns)
+  ast list                              List all indexes
+  ast stats                             Show index statistics
+  
+  # Filtering
+  --include-syntax                      Include parser syntax nodes (default: filtered out)
+  
+  # Basic Search
+  ast funcs <file>                      List functions in a file
+  ast find <function> [lang]            Find function across all/specific indexes
+  ast src <function>                    Extract function source code
+  ast search <term> [lang]              Search for names containing term
+  ast classes <term> [lang]             Find classes/structs containing term
+  ast complex [threshold]               Find complex functions (default: 100 nodes)
+  
+  # File Analysis
+  ast file <file_path>                  Analyze a specific file
+  ast deps <file_path>                  Show file dependencies
+  ast callers <function> [lang]         Find what calls a function
+  ast called-by <function> [lang]       Find what a function calls
+  
+  # Pattern Analysis
+  ast hotspots [threshold]              Find code hotspots (complexity + coupling)
+  ast unused [lang]                     Find potentially unused functions
+  ast duplicates [similarity]           Find similar/duplicate functions
+  
+  # Code Context & Navigation
+  ast context <function> [lines]        Show context around function
+  ast definition <symbol> [lang]        Show symbol definition
+  ast references <symbol> [lang]        Find references to symbol
+  ast tree <file>                       Show named nodes in file
+  ast definition-src <function>         Get function definition (not declaration)
+  ast full-src <function>               Show both declaration and definition
+  
+  # Analysis & Export
+  ast metrics [overview|complexity|languages]  Advanced metrics
+  ast compare <func1> <func2>           Compare two functions
+  ast export-json [file]                Export data to JSON
+  
+  # Performance & Quick Access
+  ast quick <term>                      Quick search with relevance ranking
+  ast size-analysis                     Analyze file sizes and complexity
+
+EXAMPLES:
+  # Indexing
+  ast index py "**/*.py"                        # Single pattern
+  ast index cpp "src/**/*.cpp" "include/**/*.h" # Multiple patterns
+  
+  # Basic Usage
+  ast funcs src/main.cpp                        # List functions in main.cpp
+  ast find ParseToASTResult                     # Find (all languages)
+  ast find ParseToASTResult cpp                 # Find only in C++ files
+  ast src ParseToASTResult                      # Show function source code
+  
+  # Analysis
+  ast hotspots 200                              # Find hotspots with complexity > 200
+  ast unused cpp                                # Find unused C++ functions
+  ast context MyFunction 5                      # Show 5 lines context around function
+  ast metrics complexity                        # Show complexity distribution
+  ast compare func1 func2                       # Compare two functions
+EOF
+        ;;
+esac
