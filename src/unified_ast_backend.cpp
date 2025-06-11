@@ -5,9 +5,28 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/file_system.hpp"
+#include "utf8proc_wrapper.hpp"
 #include <stack>
 
 namespace duckdb {
+
+// Helper function to ensure UTF-8 validity using DuckDB's UTF8 processor
+static string SanitizeUTF8(const string& input) {
+    if (input.empty()) {
+        return input;
+    }
+    
+    // Check if already valid
+    if (Utf8Proc::IsValid(input.c_str(), input.size())) {
+        return input;
+    }
+    
+    // Create mutable char array for MakeValid (following DuckDB pattern)
+    std::vector<char> char_array(input.begin(), input.end());
+    char_array.push_back('\0'); // Null-terminate
+    Utf8Proc::MakeValid(&char_array[0], char_array.size() - 1, '?');  // Replace invalid bytes with '?'
+    return string(char_array.begin(), char_array.end() - 1);  // Exclude null terminator
+}
 
 ASTResult UnifiedASTBackend::ParseToASTResult(const string& content, 
                                             const string& language, 
@@ -93,8 +112,8 @@ ASTResult UnifiedASTBackend::ParseToASTResult(const string& content,
             ast_node.subtree.children_count = child_count;
             ast_node.subtree.descendant_count = 0; // Will be calculated on second visit
             
-            // Extract name using language adapter
-            ast_node.name.raw = adapter->ExtractNodeName(entry.node, content);
+            // Extract name using language adapter and sanitize UTF-8
+            ast_node.name.raw = SanitizeUTF8(adapter->ExtractNodeName(entry.node, content));
             ast_node.name.qualified = ast_node.name.raw; // TODO: Implement qualified name logic
             
             // Extract source text (peek) with configurable size and mode
@@ -103,49 +122,49 @@ ASTResult UnifiedASTBackend::ParseToASTResult(const string& content,
             if (start_byte < content.size() && end_byte <= content.size() && end_byte > start_byte) {
                 string source_text = content.substr(start_byte, end_byte - start_byte);
                 
-                // Apply peek configuration
+                // Apply peek configuration and sanitize UTF-8
                 if (peek_mode == "none" || peek_size == 0) {
                     ast_node.peek = "";  // Empty string will become NULL in output
                 } else if (peek_mode == "full" || peek_size == -1) {
-                    ast_node.peek = source_text;
+                    ast_node.peek = SanitizeUTF8(source_text);
                 } else if (peek_mode == "line") {
                     // Extract just the first line
                     size_t newline_pos = source_text.find('\n');
-                    ast_node.peek = (newline_pos != string::npos) ? source_text.substr(0, newline_pos) : source_text;
+                    ast_node.peek = SanitizeUTF8((newline_pos != string::npos) ? source_text.substr(0, newline_pos) : source_text);
                 } else if (peek_mode == "smart") {
                     // Smart mode: adapt to content size and type
                     if (source_text.length() <= 50) {
                         // Small nodes: full content
-                        ast_node.peek = source_text;
+                        ast_node.peek = SanitizeUTF8(source_text);
                     } else if (source_text.find('\n') == string::npos) {
                         // Single-line: truncate at display width
-                        ast_node.peek = source_text.length() > 80 ? source_text.substr(0, 77) + "..." : source_text;
+                        ast_node.peek = SanitizeUTF8(source_text.length() > 80 ? source_text.substr(0, 77) + "..." : source_text);
                     } else {
                         // Multi-line: first meaningful line with smart truncation
                         size_t newline_pos = source_text.find('\n');
                         string first_line = source_text.substr(0, newline_pos);
-                        ast_node.peek = first_line.length() > 80 ? first_line.substr(0, 77) + "..." : first_line;
+                        ast_node.peek = SanitizeUTF8(first_line.length() > 80 ? first_line.substr(0, 77) + "..." : first_line);
                     }
                 } else if (peek_mode == "compact") {
                     // Compact mode: always truncate for table display
                     uint32_t compact_size = 60;
                     if (source_text.length() <= compact_size) {
-                        ast_node.peek = source_text;
+                        ast_node.peek = SanitizeUTF8(source_text);
                     } else {
                         // Smart truncation at word boundary
                         string truncated = source_text.substr(0, compact_size);
                         size_t last_space = truncated.find_last_of(" \t");
                         if (last_space != string::npos && last_space > compact_size / 2) {
-                            ast_node.peek = truncated.substr(0, last_space) + "...";
+                            ast_node.peek = SanitizeUTF8(truncated.substr(0, last_space) + "...");
                         } else {
-                            ast_node.peek = truncated + "...";
+                            ast_node.peek = SanitizeUTF8(truncated + "...");
                         }
                     }
                 } else if (peek_mode == "signature") {
                     // Signature mode: extract declaration/signature only
                     if (source_text.find('\n') == string::npos) {
                         // Single line - use as-is (likely already a signature)
-                        ast_node.peek = source_text;
+                        ast_node.peek = SanitizeUTF8(source_text);
                     } else {
                         // Multi-line: extract until { or : (function/class signatures)
                         size_t brace_pos = source_text.find('{');
@@ -166,17 +185,17 @@ ASTResult UnifiedASTBackend::ParseToASTResult(const string& content,
                             while (!signature.empty() && (signature.back() == ' ' || signature.back() == '\n' || signature.back() == '\t')) {
                                 signature.pop_back();
                             }
-                            ast_node.peek = signature;
+                            ast_node.peek = SanitizeUTF8(signature);
                         } else {
                             // Fallback to first line
                             size_t newline_pos = source_text.find('\n');
-                            ast_node.peek = (newline_pos != string::npos) ? source_text.substr(0, newline_pos) : source_text;
+                            ast_node.peek = SanitizeUTF8((newline_pos != string::npos) ? source_text.substr(0, newline_pos) : source_text);
                         }
                     }
                 } else {
                     // Default/auto mode with configurable size
                     uint32_t effective_size = (peek_size > 0) ? peek_size : 120;
-                    ast_node.peek = source_text.length() > effective_size ? source_text.substr(0, effective_size) : source_text;
+                    ast_node.peek = SanitizeUTF8(source_text.length() > effective_size ? source_text.substr(0, effective_size) : source_text);
                 }
             }
             
