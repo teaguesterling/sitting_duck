@@ -20,6 +20,7 @@ void RegisterReadASTStreamingFunction(DatabaseInstance &instance);  // Explicit 
 void RegisterReadASTObjectsHybridFunction(DatabaseInstance &instance);
 void RegisterASTSQLMacros(DatabaseInstance &instance);
 void RegisterDuckDBASTShortNamesFunction(DatabaseInstance &instance);
+void RegisterASTSupportedLanguagesFunction(DatabaseInstance &instance);
 // Temporarily disabled:
 // void RegisterASTObjectsFunction(DatabaseInstance &instance);
 // void RegisterASTHelperFunctions(DatabaseInstance &instance);
@@ -48,6 +49,9 @@ static void LoadInternal(DatabaseInstance &instance) {
 	
 	// Register semantic type utility functions
 	RegisterSemanticTypeFunctions(instance);
+	
+	// Register supported languages function
+	RegisterASTSupportedLanguagesFunction(instance);
 	
 	// Check if user wants short names auto-loaded
 	try {

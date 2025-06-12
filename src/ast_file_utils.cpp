@@ -15,6 +15,7 @@ static const std::unordered_map<string, string> EXTENSION_TO_LANGUAGE = {
     {"py", "python"}, {"pyi", "python"}, {"pyw", "python"},
     {"js", "javascript"}, {"jsx", "javascript"}, {"mjs", "javascript"},
     {"ts", "typescript"}, {"tsx", "typescript"},
+    {"go", "go"},
     {"sql", "sql"},
     {"rs", "rust"}, {"rlib", "rust"}
 };
@@ -25,6 +26,7 @@ static const std::unordered_map<string, vector<string>> LANGUAGE_TO_EXTENSIONS =
     {"python", {"py", "pyi", "pyw"}},
     {"javascript", {"js", "jsx", "mjs"}},
     {"typescript", {"ts", "tsx"}},
+    {"go", {"go"}},
     {"sql", {"sql"}},
     {"rust", {"rs", "rlib"}}
 };

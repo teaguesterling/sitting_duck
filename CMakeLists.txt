@@ -44,6 +44,7 @@ set(EXTENSION_SOURCES
     src/semantic_types.cpp
     src/semantic_type_functions.cpp
     src/ast_file_utils.cpp
+    src/ast_supported_languages_function.cpp
     grammars/tree-sitter-python/src/parser.c
     grammars/tree-sitter-python/src/scanner.c
     grammars/tree-sitter-javascript/src/parser.c
@@ -54,6 +55,7 @@ set(EXTENSION_SOURCES
     grammars/tree-sitter-typescript/typescript/src/scanner.c
     grammars/tree-sitter-sql/src/parser.c
     grammars/tree-sitter-sql/src/scanner.c
+    grammars/tree-sitter-go/src/parser.c
     # Temporarily disabled due to ABI compatibility issues:
     # grammars/tree-sitter-rust/src/parser.c
     # grammars/tree-sitter-rust/src/scanner.c

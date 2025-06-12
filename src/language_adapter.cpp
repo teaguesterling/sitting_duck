@@ -12,6 +12,7 @@ extern "C" {
     const TSLanguage *tree_sitter_cpp();
     const TSLanguage *tree_sitter_typescript();
     const TSLanguage *tree_sitter_sql();
+    const TSLanguage *tree_sitter_go();
 }
 
 namespace duckdb {
@@ -233,9 +234,32 @@ string JavaScriptAdapter::ExtractNodeValue(TSNode node, const string &content) c
 }
 
 bool JavaScriptAdapter::IsPublicNode(TSNode node, const string &content) const {
-    // In JavaScript, check for export statements or public class members
-    // For now, simple heuristic - refine later
-    return true;  // Most things are public by default in JS
+    // In JavaScript, check for export statements or naming conventions
+    const char* node_type_str = ts_node_type(node);
+    string node_type = string(node_type_str);
+    
+    // Check if it's an export declaration
+    if (node_type.find("export") != string::npos) {
+        return true;
+    }
+    
+    // Check parent nodes for export context
+    TSNode parent = ts_node_parent(node);
+    if (!ts_node_is_null(parent)) {
+        const char* parent_type = ts_node_type(parent);
+        if (string(parent_type).find("export") != string::npos) {
+            return true;
+        }
+    }
+    
+    // Check naming conventions - underscore prefix typically indicates private
+    string name = ExtractNodeName(node, content);
+    if (!name.empty() && name[0] == '_') {
+        return false;
+    }
+    
+    // Default to public for JavaScript (no explicit access modifiers)
+    return true;
 }
 
 uint8_t JavaScriptAdapter::GetNodeFlags(const string &node_type) const {
@@ -325,9 +349,62 @@ string CPPAdapter::ExtractNodeValue(TSNode node, const string &content) const {
 }
 
 bool CPPAdapter::IsPublicNode(TSNode node, const string &content) const {
-    // In C++, check for public access specifier
-    // This is a simplified check - would need more sophisticated analysis
-    return true;  // Default to public, refine later
+    // In C++, check for access specifiers and scope
+    const char* node_type_str = ts_node_type(node);
+    string node_type = string(node_type_str);
+    
+    // Functions and classes at namespace/global scope are generally public
+    if (node_type == "function_definition" || 
+        node_type == "function_declarator" ||
+        node_type == "class_definition") {
+        
+        // Check if it's in a namespace (likely public API)
+        TSNode parent = ts_node_parent(node);
+        while (!ts_node_is_null(parent)) {
+            const char* parent_type = ts_node_type(parent);
+            if (string(parent_type) == "namespace_definition") {
+                return true;  // In namespace = public API
+            }
+            if (string(parent_type) == "class_specifier" || 
+                string(parent_type) == "struct_specifier") {
+                break;  // Inside class, need to check access specifier
+            }
+            parent = ts_node_parent(parent);
+        }
+        
+        // If at global scope, consider public
+        if (ts_node_is_null(parent) || 
+            string(ts_node_type(parent)) == "translation_unit") {
+            return true;
+        }
+    }
+    
+    // For class members, check for access specifiers in surrounding context
+    // This is simplified - real implementation would track access specifier state
+    TSNode sibling = ts_node_prev_sibling(node);
+    while (!ts_node_is_null(sibling)) {
+        const char* sibling_type = ts_node_type(sibling);
+        if (string(sibling_type) == "access_specifier") {
+            string specifier_text = ExtractNodeText(sibling, content);
+            if (specifier_text.find("public") != string::npos) {
+                return true;
+            }
+            if (specifier_text.find("private") != string::npos || 
+                specifier_text.find("protected") != string::npos) {
+                return false;
+            }
+        }
+        sibling = ts_node_prev_sibling(sibling);
+    }
+    
+    // Check naming conventions - underscore suffix often indicates private/internal
+    string name = ExtractNodeName(node, content);
+    if (!name.empty() && name.back() == '_') {
+        return false;
+    }
+    
+    // Default to public for C++ (conservative approach)
+    return true;
 }
 
 uint8_t CPPAdapter::GetNodeFlags(const string &node_type) const {
@@ -413,9 +490,50 @@ string TypeScriptAdapter::ExtractNodeValue(TSNode node, const string &content) c
 }
 
 bool TypeScriptAdapter::IsPublicNode(TSNode node, const string &content) const {
-    // In TypeScript, check for export statements or public/private modifiers
-    // For now, simple heuristic - refine later
-    return true;  // Most things are public by default
+    // In TypeScript, check for explicit access modifiers and export statements
+    const char* node_type_str = ts_node_type(node);
+    string node_type = string(node_type_str);
+    
+    // Check if it's an export declaration
+    if (node_type.find("export") != string::npos) {
+        return true;
+    }
+    
+    // Check parent nodes for export context
+    TSNode parent = ts_node_parent(node);
+    if (!ts_node_is_null(parent)) {
+        const char* parent_type = ts_node_type(parent);
+        if (string(parent_type).find("export") != string::npos) {
+            return true;
+        }
+    }
+    
+    // Check for explicit access modifiers in the node text
+    uint32_t start_byte = ts_node_start_byte(node);
+    uint32_t end_byte = ts_node_end_byte(node);
+    if (start_byte < content.size() && end_byte <= content.size()) {
+        string node_text = content.substr(start_byte, end_byte - start_byte);
+        
+        // Look for explicit private/protected keywords
+        if (node_text.find("private ") != string::npos || 
+            node_text.find("protected ") != string::npos) {
+            return false;
+        }
+        
+        // Look for explicit public keyword
+        if (node_text.find("public ") != string::npos) {
+            return true;
+        }
+    }
+    
+    // Check naming conventions - underscore prefix typically indicates private
+    string name = ExtractNodeName(node, content);
+    if (!name.empty() && name[0] == '_') {
+        return false;
+    }
+    
+    // Default to public (TypeScript default visibility)
+    return true;
 }
 
 uint8_t TypeScriptAdapter::GetNodeFlags(const string &node_type) const {
@@ -537,6 +655,102 @@ uint8_t SQLAdapter::GetNodeFlags(const string &node_type) const {
 }
 
 const NodeConfig* SQLAdapter::GetNodeConfig(const string &node_type) const {
+    auto it = node_configs.find(node_type);
+    return it != node_configs.end() ? &it->second : nullptr;
+}
+
+//==============================================================================
+// Go Adapter implementation
+//==============================================================================
+
+#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
+    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+
+const unordered_map<string, NodeConfig> GoAdapter::node_configs = {
+    #include "language_configs/go_types.def"
+};
+
+#undef DEF_TYPE
+
+string GoAdapter::GetLanguageName() const {
+    return "go";
+}
+
+vector<string> GoAdapter::GetAliases() const {
+    return {"go", "golang"};
+}
+
+void GoAdapter::InitializeParser() const {
+    parser_wrapper_ = make_uniq<TSParserWrapper>();
+    parser_wrapper_->SetLanguage(tree_sitter_go(), "Go");
+}
+
+unique_ptr<TSParserWrapper> GoAdapter::CreateFreshParser() const {
+    auto fresh_parser = make_uniq<TSParserWrapper>();
+    fresh_parser->SetLanguage(tree_sitter_go(), "Go");
+    return fresh_parser;
+}
+
+string GoAdapter::GetNormalizedType(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    if (config) {
+        return SemanticTypes::GetSemanticTypeName(config->semantic_type);
+    }
+    return node_type;  // Fallback to raw type
+}
+
+string GoAdapter::GetSemanticTypeName(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    if (config) {
+        return SemanticTypes::GetSemanticTypeName(config->semantic_type);
+    }
+    return node_type;  // Fallback to raw type
+}
+
+string GoAdapter::ExtractNodeName(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        return ExtractByStrategy(node, content, config->name_strategy);
+    }
+    
+    // Go-specific fallbacks
+    string node_type = string(node_type_str);
+    if (node_type.find("declaration") != string::npos) {
+        return FindChildByType(node, content, "identifier");
+    } else if (node_type.find("_spec") != string::npos) {
+        return FindChildByType(node, content, "identifier");
+    } else if (node_type == "package_clause") {
+        return FindChildByType(node, content, "package_identifier");
+    }
+    
+    return "";
+}
+
+string GoAdapter::ExtractNodeValue(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        return ExtractByStrategy(node, content, config->value_strategy);
+    }
+    
+    return "";
+}
+
+bool GoAdapter::IsPublicNode(TSNode node, const string &content) const {
+    // In Go, names starting with uppercase are public (exported)
+    string name = ExtractNodeName(node, content);
+    return !name.empty() && isupper(name[0]);
+}
+
+uint8_t GoAdapter::GetNodeFlags(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    return config ? config->flags : 0;
+}
+
+const NodeConfig* GoAdapter::GetNodeConfig(const string &node_type) const {
     auto it = node_configs.find(node_type);
     return it != node_configs.end() ? &it->second : nullptr;
 }
@@ -667,6 +881,7 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
     RegisterLanguageFactory("cpp", []() { return make_uniq<CPPAdapter>(); });
     RegisterLanguageFactory("typescript", []() { return make_uniq<TypeScriptAdapter>(); });
     RegisterLanguageFactory("sql", []() { return make_uniq<SQLAdapter>(); });
+    RegisterLanguageFactory("go", []() { return make_uniq<GoAdapter>(); });
 }
 
 void LanguageAdapterRegistry::RegisterLanguageFactory(const string &language, AdapterFactory factory) {
