@@ -27,7 +27,12 @@ The crash occurs specifically when:
 2. **AND** filtering by `name IS NOT NULL`
 3. **AND** selecting the `name` column
 
-This suggests a memory management bug in the AST extension when certain filter combinations are applied to the name column.
+**Scale-dependency confirmed**: 
+- Small datasets (100-200 nodes) do NOT trigger the crash
+- Large production dataset (.index-cpp.parquet with 24M+ nodes) consistently crashes
+- Suggests memory pressure or data-specific issues in the large dataset
+
+This suggests a memory management bug in the AST extension when certain filter combinations are applied to the name column at scale.
 
 ## Stack Trace
 ```
