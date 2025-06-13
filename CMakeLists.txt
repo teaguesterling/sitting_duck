@@ -56,6 +56,8 @@ set(EXTENSION_SOURCES
     grammars/tree-sitter-sql/src/parser.c
     grammars/tree-sitter-sql/src/scanner.c
     grammars/tree-sitter-go/src/parser.c
+    grammars/tree-sitter-ruby/src/parser.c
+    grammars/tree-sitter-ruby/src/scanner.c
     # Temporarily disabled due to ABI compatibility issues:
     # grammars/tree-sitter-rust/src/parser.c
     # grammars/tree-sitter-rust/src/scanner.c

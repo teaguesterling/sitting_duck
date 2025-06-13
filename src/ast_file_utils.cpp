@@ -16,6 +16,7 @@ static const std::unordered_map<string, string> EXTENSION_TO_LANGUAGE = {
     {"js", "javascript"}, {"jsx", "javascript"}, {"mjs", "javascript"},
     {"ts", "typescript"}, {"tsx", "typescript"},
     {"go", "go"},
+    {"rb", "ruby"}, {"ruby", "ruby"},
     {"sql", "sql"},
     {"rs", "rust"}, {"rlib", "rust"}
 };
@@ -27,6 +28,7 @@ static const std::unordered_map<string, vector<string>> LANGUAGE_TO_EXTENSIONS =
     {"javascript", {"js", "jsx", "mjs"}},
     {"typescript", {"ts", "tsx"}},
     {"go", {"go"}},
+    {"ruby", {"rb", "ruby"}},
     {"sql", {"sql"}},
     {"rust", {"rs", "rlib"}}
 };
