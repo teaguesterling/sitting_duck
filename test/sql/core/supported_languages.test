@@ -1,0 +1,89 @@
+# name: test/sql/core/supported_languages.test
+# description: Test supported languages functionality
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: C++ language support
+# ============================
+
+query I
+SELECT COUNT(*) > 0 FROM ast_supported_languages() WHERE language = 'cpp';
+----
+true
+
+# Test 2: Python language support
+# ===============================
+
+query I
+SELECT COUNT(*) > 0 FROM ast_supported_languages() WHERE language = 'python';
+----
+true
+
+# Test 3: JavaScript language support
+# ===================================
+
+query I
+SELECT COUNT(*) > 0 FROM ast_supported_languages() WHERE language = 'javascript';
+----
+true
+
+# Test 4: TypeScript language support
+# ===================================
+
+query I
+SELECT COUNT(*) > 0 FROM ast_supported_languages() WHERE language = 'typescript';
+----
+true
+
+# Test 5: Go language support
+# ===========================
+
+query I
+SELECT COUNT(*) > 0 FROM ast_supported_languages() WHERE language = 'go';
+----
+true
+
+# Test 6: Ruby language support
+# =============================
+
+query I
+SELECT COUNT(*) > 0 FROM ast_supported_languages() WHERE language = 'ruby';
+----
+true
+
+# Test 7: SQL language support
+# ============================
+
+query I
+SELECT COUNT(*) > 0 FROM ast_supported_languages() WHERE language = 'sql';
+----
+true
+
+# Test 8: Function returns proper table structure
+# ===============================================
+
+statement ok
+CREATE TABLE lang_test AS SELECT * FROM ast_supported_languages();
+
+query I
+SELECT column_name FROM (DESCRIBE lang_test) WHERE column_name = 'language';
+----
+language
+
+# Test 9: No duplicate languages
+# ==============================
+
+query I
+SELECT COUNT(*) = COUNT(DISTINCT language) FROM ast_supported_languages();
+----
+true
+
+# Test 10: All core languages are present
+# =======================================
+
+query I
+SELECT COUNT(*) FROM ast_supported_languages() 
+WHERE language IN ('cpp', 'python', 'javascript', 'typescript', 'go', 'ruby', 'sql');
+----
+7
