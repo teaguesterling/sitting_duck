@@ -1,0 +1,103 @@
+# name: test/sql/languages/typescript_language_support.test
+# description: Test TypeScript language support functionality
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: TypeScript language is supported
+# ========================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'typescript';
+----
+typescript
+
+# Test 2: TypeScript file extension auto-detection
+# ================================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/javascript/typed_example.ts');
+----
+true
+
+# Test 3: Explicit TypeScript language specification
+# ==================================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/javascript/typed_example.ts', 'typescript') WHERE name IS NOT NULL;
+----
+130
+
+# Test 4: TypeScript function name extraction
+# ===========================================
+
+query II
+SELECT name, type FROM read_ast('test/data/javascript/typed_example.ts')
+WHERE type = 'function_declaration' AND name IS NOT NULL
+ORDER BY start_line;
+----
+calculateTotal	function_declaration
+mapArray	function_declaration
+processValue	function_declaration
+processApiResponse	function_declaration
+fetchUsersPage	function_declaration
+
+# Test 5: TypeScript interface detection
+# ======================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/javascript/typed_example.ts')
+WHERE type = 'interface_declaration';
+----
+3
+
+# Test 6: TypeScript class detection
+# ==================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/javascript/typed_example.ts')
+WHERE type = 'class_declaration';
+----
+1
+
+# Test 7: TypeScript type annotations
+# ===================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/javascript/typed_example.ts')
+WHERE type = 'type_annotation';
+----
+43
+
+# Test 8: TypeScript semantic types
+# =================================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM read_ast('test/data/javascript/typed_example.ts')
+WHERE type IN ('function_declaration', 'class_declaration', 'interface_declaration', 'call_expression')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+call_expression	80	12
+class_declaration	120	1
+function_declaration	112	5
+interface_declaration	120	3
+
+# Test 9: TypeScript tree structure validation
+# ============================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/javascript/typed_example.ts');
+----
+15	1015
+
+# Test 10: TypeScript identifier extraction
+# =========================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/javascript/typed_example.ts')
+WHERE type = 'identifier' AND name IS NOT NULL;
+----
+82

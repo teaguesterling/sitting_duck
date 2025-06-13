@@ -1,0 +1,98 @@
+# name: test/sql/languages/sql_language_support.test
+# description: Test SQL language support functionality
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: SQL language is supported
+# =================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'sql';
+----
+sql
+
+# Test 2: SQL file extension auto-detection
+# =========================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/sql/example.sql');
+----
+true
+
+# Test 3: Explicit SQL language specification
+# ===========================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/sql/example.sql', 'sql') WHERE name IS NOT NULL;
+----
+34
+
+# Test 4: SQL identifier extraction
+# =================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/sql/example.sql')
+WHERE type = 'identifier';
+----
+34
+
+# Test 5: SQL table references
+# ============================
+
+query I
+SELECT COUNT(DISTINCT name) FROM read_ast('test/data/sql/example.sql')
+WHERE type = 'identifier' AND name IN ('users', 'orders', 'customers');
+----
+3
+
+# Test 6: SQL keywords
+# ====================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/sql/example.sql')
+WHERE type = 'keyword';
+----
+16
+
+# Test 7: SQL literals
+# ====================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/sql/example.sql')
+WHERE type = 'literal';
+----
+7
+
+# Test 8: SQL semantic types
+# ==========================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM read_ast('test/data/sql/example.sql')
+WHERE type IN ('identifier', 'keyword', 'literal', 'comment')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+comment	24	2
+identifier	20	34
+keyword	84	16
+literal	36	7
+
+# Test 9: SQL tree structure validation
+# =====================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/sql/example.sql');
+----
+22	177
+
+# Test 10: SQL column references
+# ==============================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/sql/example.sql')
+WHERE type = 'object_reference';
+----
+15

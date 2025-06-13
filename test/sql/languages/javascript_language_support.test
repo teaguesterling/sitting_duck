@@ -1,0 +1,100 @@
+# name: test/sql/languages/javascript_language_support.test
+# description: Test JavaScript language support functionality
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: JavaScript language is supported
+# ========================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'javascript';
+----
+javascript
+
+# Test 2: JavaScript file extension auto-detection
+# ================================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/javascript/simple.js');
+----
+true
+
+# Test 3: Explicit JavaScript language specification
+# ==================================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript') WHERE name IS NOT NULL;
+----
+57
+
+# Test 4: JavaScript function name extraction
+# ===========================================
+
+query II
+SELECT name, type FROM read_ast('test/data/javascript/simple.js')
+WHERE type = 'function_declaration' AND name IS NOT NULL
+ORDER BY start_line;
+----
+hello	function_declaration
+fetchData	function_declaration
+
+# Test 5: JavaScript class detection
+# ==================================
+
+query II
+SELECT name, type FROM read_ast('test/data/javascript/simple.js')
+WHERE type = 'class_declaration' AND name IS NOT NULL;
+----
+Calculator	class_declaration
+
+# Test 6: JavaScript arrow functions
+# ==================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js')
+WHERE type = 'arrow_function';
+----
+2
+
+# Test 7: JavaScript method calls
+# ===============================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js')
+WHERE type = 'call_expression';
+----
+6
+
+# Test 8: JavaScript semantic types
+# =================================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM read_ast('test/data/javascript/simple.js')
+WHERE type IN ('function_declaration', 'class_declaration', 'call_expression', 'variable_declaration')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+call_expression	80	6
+class_declaration	120	1
+function_declaration	112	2
+variable_declaration	116	6
+
+# Test 9: JavaScript tree structure validation
+# ============================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/javascript/simple.js');
+----
+11	309
+
+# Test 10: JavaScript identifier extraction
+# =========================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js')
+WHERE type = 'identifier' AND name IS NOT NULL;
+----
+40

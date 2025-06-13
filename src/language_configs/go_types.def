@@ -36,13 +36,13 @@ DEF_TYPE(identifier, NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE(field_identifier, NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE(type_identifier, TYPE_REFERENCE, NODE_TEXT, NONE, 0)
 
-// Literals
-DEF_TYPE(int_literal, LITERAL_NUMBER, NONE, NODE_TEXT, 0)
-DEF_TYPE(float_literal, LITERAL_NUMBER, NONE, NODE_TEXT, 0)
-DEF_TYPE(imaginary_literal, LITERAL_NUMBER, NONE, NODE_TEXT, 0)
-DEF_TYPE(rune_literal, LITERAL_STRING, NONE, NODE_TEXT, 0)
-DEF_TYPE(raw_string_literal, LITERAL_STRING, NONE, NODE_TEXT, 0)
-DEF_TYPE(interpreted_string_literal, LITERAL_STRING, NONE, NODE_TEXT, 0)
+// Literals - name and value both contain the literal text
+DEF_TYPE(int_literal, LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE(float_literal, LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE(imaginary_literal, LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE(rune_literal, LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE(raw_string_literal, LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE(interpreted_string_literal, LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
 
 // Control flow
 DEF_TYPE(if_statement, FLOW_CONDITIONAL, NONE, NONE, 0)

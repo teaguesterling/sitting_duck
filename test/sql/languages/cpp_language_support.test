@@ -1,0 +1,104 @@
+# name: test/sql/languages/cpp_language_support.test
+# description: Test C++ language support functionality
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: C++ language is supported
+# =================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'cpp';
+----
+cpp
+
+# Test 2: C++ file extension auto-detection
+# =========================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/cpp/simple.cpp');
+----
+true
+
+# Test 3: Explicit C++ language specification
+# ===========================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/cpp/simple.cpp', 'cpp') WHERE name IS NOT NULL;
+----
+132
+
+# Test 4: C++ class detection
+# ===========================
+
+query II
+SELECT name, type FROM read_ast('test/data/cpp/simple.cpp')
+WHERE type = 'type_identifier' AND name IN ('Container', 'Calculator')
+ORDER BY start_line;
+----
+Container	type_identifier
+Calculator	type_identifier
+
+# Test 5: C++ namespace detection
+# ===============================
+
+query II
+SELECT name, type FROM read_ast('test/data/cpp/simple.cpp')
+WHERE type = 'namespace_identifier' AND name IS NOT NULL;
+----
+utils	namespace_identifier
+
+# Test 6: C++ function detection
+# ==============================
+
+query II
+SELECT name, type FROM read_ast('test/data/cpp/simple.cpp')
+WHERE type = 'field_identifier' AND name IN ('add', 'multiply', 'size')
+ORDER BY start_line;
+----
+add	field_identifier
+multiply	field_identifier
+size	field_identifier
+
+# Test 7: C++ template detection
+# ==============================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/cpp/simple.cpp')
+WHERE type = 'template_declaration';
+----
+2
+
+# Test 8: C++ semantic types
+# ==========================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM read_ast('test/data/cpp/simple.cpp')
+WHERE type IN ('class_specifier', 'function_definition', 'namespace_definition', 'template_declaration', 'call_expression')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+call_expression	80	9
+class_specifier	120	2
+function_definition	112	11
+namespace_definition	0	1
+template_declaration	112	2
+
+# Test 9: C++ tree structure validation
+# =====================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/cpp/simple.cpp');
+----
+18	498
+
+# Test 10: C++ identifier extraction
+# ==================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/cpp/simple.cpp')
+WHERE type = 'identifier' AND name IS NOT NULL;
+----
+53

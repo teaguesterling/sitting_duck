@@ -1,0 +1,102 @@
+# name: test/sql/languages/python_language_support.test
+# description: Test Python language support functionality
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: Python language is supported
+# ====================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'python';
+----
+python
+
+# Test 2: Python file extension auto-detection
+# ============================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/python/simple.py');
+----
+true
+
+# Test 3: Explicit Python language specification
+# ==============================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python') WHERE name IS NOT NULL;
+----
+26
+
+# Test 4: Python function name extraction
+# =======================================
+
+query II
+SELECT name, type FROM read_ast('test/data/python/simple.py')
+WHERE type = 'function_definition' AND name IS NOT NULL
+ORDER BY start_line;
+----
+hello	function_definition
+__init__	function_definition
+add	function_definition
+main	function_definition
+
+# Test 5: Python class detection
+# ==============================
+
+query II
+SELECT name, type FROM read_ast('test/data/python/simple.py')
+WHERE type = 'class_definition' AND name IS NOT NULL;
+----
+MyClass	class_definition
+
+# Test 6: Python method calls
+# ===========================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py')
+WHERE type = 'call';
+----
+4
+
+# Test 7: Python semantic types
+# =============================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM read_ast('test/data/python/simple.py')
+WHERE type IN ('function_definition', 'class_definition', 'call', 'assignment')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+assignment	116	2
+call	80	4
+class_definition	120	1
+function_definition	112	4
+
+# Test 8: Python tree structure validation
+# ========================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/python/simple.py');
+----
+8	110
+
+# Test 9: Python identifier extraction
+# ====================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py')
+WHERE type = 'identifier' AND name IS NOT NULL;
+----
+19
+
+# Test 10: Python string literals
+# ===============================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py')
+WHERE type = 'string' AND name IS NOT NULL;
+----
+3

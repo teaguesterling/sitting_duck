@@ -568,15 +568,21 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     DEF_TYPE(update_statement, EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0x01)
     DEF_TYPE(delete_statement, EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0x01)
     
-    // Expressions and references
+    // Identifiers and names
+    DEF_TYPE(identifier, NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
     DEF_TYPE(column_reference, NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
     DEF_TYPE(table_reference, NAME_QUALIFIED, NODE_TEXT, NONE, 0)
     DEF_TYPE(function_call, COMPUTATION_CALL, FIND_IDENTIFIER, NONE, 0)
     
-    // Literals
-    DEF_TYPE(string_literal, LITERAL_STRING, NONE, NODE_TEXT, 0)
-    DEF_TYPE(number_literal, LITERAL_NUMBER, NONE, NODE_TEXT, 0)
-    DEF_TYPE(boolean_literal, LITERAL_ATOMIC, NONE, NODE_TEXT, 0)
+    // Literals - name and value both contain the literal text
+    DEF_TYPE(string_literal, LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+    DEF_TYPE(number_literal, LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
+    DEF_TYPE(boolean_literal, LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
+    DEF_TYPE(literal, LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
+    
+    // Keywords and comments
+    DEF_TYPE(keyword, NAME_KEYWORD, NODE_TEXT, NONE, 0)
+    DEF_TYPE(comment, METADATA_COMMENT, NONE, NODE_TEXT, 0x08)
     
     // Query clauses
     DEF_TYPE(where_clause, FLOW_CONDITIONAL, NONE, NONE, 0)
