@@ -14,6 +14,13 @@ extern "C" {
     const TSLanguage *tree_sitter_sql();
     const TSLanguage *tree_sitter_go();
     const TSLanguage *tree_sitter_ruby();
+    const TSLanguage *tree_sitter_markdown();
+    const TSLanguage *tree_sitter_markdown_inline();
+    const TSLanguage *tree_sitter_java();
+    // const TSLanguage *tree_sitter_php(); // Disabled due to scanner issues
+    const TSLanguage *tree_sitter_html();
+    const TSLanguage *tree_sitter_css();
+    const TSLanguage *tree_sitter_c();
 }
 
 namespace duckdb {
@@ -587,7 +594,7 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     // Query clauses
     DEF_TYPE(where_clause, FLOW_CONDITIONAL, NONE, NONE, 0)
     DEF_TYPE(having_clause, FLOW_CONDITIONAL, NONE, NONE, 0)
-    DEF_TYPE(order_by_clause, ORGANIZATION, NONE, NONE, 0)
+    DEF_TYPE(order_by_clause, ORGANIZATION_LIST, NONE, NONE, 0)
     DEF_TYPE(group_by_clause, TRANSFORM_AGGREGATION, NONE, NONE, 0)
 };
 
@@ -870,6 +877,614 @@ const NodeConfig* RubyAdapter::GetNodeConfig(const string &node_type) const {
 }
 
 //==============================================================================
+// Markdown Adapter implementation
+//==============================================================================
+
+#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
+    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+
+const unordered_map<string, NodeConfig> MarkdownAdapter::node_configs = {
+    #include "language_configs/markdown_types.def"
+};
+
+#undef DEF_TYPE
+
+string MarkdownAdapter::GetLanguageName() const {
+    return "markdown";
+}
+
+vector<string> MarkdownAdapter::GetAliases() const {
+    return {"markdown", "md"};
+}
+
+void MarkdownAdapter::InitializeParser() const {
+    parser_wrapper_ = make_uniq<TSParserWrapper>();
+    parser_wrapper_->SetLanguage(tree_sitter_markdown(), "Markdown");
+}
+
+unique_ptr<TSParserWrapper> MarkdownAdapter::CreateFreshParser() const {
+    auto fresh_parser = make_uniq<TSParserWrapper>();
+    fresh_parser->SetLanguage(tree_sitter_markdown(), "Markdown");
+    return fresh_parser;
+}
+
+string MarkdownAdapter::GetNormalizedType(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    if (config) {
+        return SemanticTypes::GetSemanticTypeName(config->semantic_type);
+    }
+    return node_type;  // Fallback to raw type
+}
+
+string MarkdownAdapter::ExtractNodeName(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        // Handle custom extraction strategies
+        if (config->name_strategy == ExtractionStrategy::CUSTOM) {
+            string node_type = string(node_type_str);
+            if (node_type == "link" || node_type == "image") {
+                return FindChildByType(node, content, "link_text");
+            } else if (node_type == "fenced_code_block") {
+                return FindChildByType(node, content, "info_string");
+            } else if (node_type == "link_reference_definition") {
+                return FindChildByType(node, content, "link_label");
+            }
+        }
+        return ExtractByStrategy(node, content, config->name_strategy);
+    }
+    
+    return "";
+}
+
+string MarkdownAdapter::ExtractNodeValue(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        // Handle custom extraction strategies
+        if (config->value_strategy == ExtractionStrategy::CUSTOM) {
+            string node_type = string(node_type_str);
+            if (node_type == "link" || node_type == "image") {
+                return FindChildByType(node, content, "link_destination");
+            } else if (node_type == "link_reference_definition") {
+                return FindChildByType(node, content, "link_destination");
+            }
+        }
+        return ExtractByStrategy(node, content, config->value_strategy);
+    }
+    
+    return "";
+}
+
+bool MarkdownAdapter::IsPublicNode(TSNode node, const string &content) const {
+    // In Markdown, all content is essentially "public"
+    return true;
+}
+
+uint8_t MarkdownAdapter::GetNodeFlags(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    return config ? config->flags : 0;
+}
+
+const NodeConfig* MarkdownAdapter::GetNodeConfig(const string &node_type) const {
+    auto it = node_configs.find(node_type);
+    return it != node_configs.end() ? &it->second : nullptr;
+}
+
+//==============================================================================
+// Java Adapter implementation
+//==============================================================================
+
+#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
+    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+
+const unordered_map<string, NodeConfig> JavaAdapter::node_configs = {
+    #include "language_configs/java_types.def"
+};
+
+#undef DEF_TYPE
+
+string JavaAdapter::GetLanguageName() const {
+    return "java";
+}
+
+vector<string> JavaAdapter::GetAliases() const {
+    return {"java"};
+}
+
+void JavaAdapter::InitializeParser() const {
+    parser_wrapper_ = make_uniq<TSParserWrapper>();
+    parser_wrapper_->SetLanguage(tree_sitter_java(), "Java");
+}
+
+unique_ptr<TSParserWrapper> JavaAdapter::CreateFreshParser() const {
+    auto fresh_parser = make_uniq<TSParserWrapper>();
+    fresh_parser->SetLanguage(tree_sitter_java(), "Java");
+    return fresh_parser;
+}
+
+string JavaAdapter::GetNormalizedType(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    if (config) {
+        return SemanticTypes::GetSemanticTypeName(config->semantic_type);
+    }
+    return node_type;  // Fallback to raw type
+}
+
+string JavaAdapter::ExtractNodeName(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        return ExtractByStrategy(node, content, config->name_strategy);
+    }
+    
+    // Java-specific fallbacks
+    string node_type = string(node_type_str);
+    if (node_type.find("declaration") != string::npos) {
+        return FindChildByType(node, content, "identifier");
+    }
+    
+    return "";
+}
+
+string JavaAdapter::ExtractNodeValue(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        return ExtractByStrategy(node, content, config->value_strategy);
+    }
+    
+    return "";
+}
+
+bool JavaAdapter::IsPublicNode(TSNode node, const string &content) const {
+    // In Java, check for explicit access modifiers
+    uint32_t start_byte = ts_node_start_byte(node);
+    uint32_t end_byte = ts_node_end_byte(node);
+    if (start_byte < content.size() && end_byte <= content.size()) {
+        string node_text = content.substr(start_byte, end_byte - start_byte);
+        
+        // Look for explicit private/protected keywords
+        if (node_text.find("private ") != string::npos || 
+            node_text.find("protected ") != string::npos) {
+            return false;
+        }
+        
+        // Look for explicit public keyword
+        if (node_text.find("public ") != string::npos) {
+            return true;
+        }
+    }
+    
+    // Default package visibility in Java
+    return false;
+}
+
+uint8_t JavaAdapter::GetNodeFlags(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    return config ? config->flags : 0;
+}
+
+const NodeConfig* JavaAdapter::GetNodeConfig(const string &node_type) const {
+    auto it = node_configs.find(node_type);
+    return it != node_configs.end() ? &it->second : nullptr;
+}
+
+// PHP support disabled due to scanner dependency on tree-sitter internals
+// The PHP tree-sitter scanner requires internal headers not available
+// when using tree-sitter as an external library.
+#if 0
+//==============================================================================
+// PHP Adapter implementation
+//==============================================================================
+
+#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
+    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+
+const unordered_map<string, NodeConfig> PHPAdapter::node_configs = {
+    #include "language_configs/php_types.def"
+};
+
+#undef DEF_TYPE
+
+string PHPAdapter::GetLanguageName() const {
+    return "php";
+}
+
+vector<string> PHPAdapter::GetAliases() const {
+    return {"php"};
+}
+
+void PHPAdapter::InitializeParser() const {
+    parser_wrapper_ = make_uniq<TSParserWrapper>();
+    parser_wrapper_->SetLanguage(tree_sitter_php(), "PHP");
+}
+
+unique_ptr<TSParserWrapper> PHPAdapter::CreateFreshParser() const {
+    auto fresh_parser = make_uniq<TSParserWrapper>();
+    fresh_parser->SetLanguage(tree_sitter_php(), "PHP");
+    return fresh_parser;
+}
+
+string PHPAdapter::GetNormalizedType(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    if (config) {
+        return SemanticTypes::GetSemanticTypeName(config->semantic_type);
+    }
+    return node_type;  // Fallback to raw type
+}
+
+string PHPAdapter::ExtractNodeName(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        return ExtractByStrategy(node, content, config->name_strategy);
+    }
+    
+    // PHP-specific fallbacks
+    string node_type = string(node_type_str);
+    if (node_type.find("declaration") != string::npos || node_type.find("definition") != string::npos) {
+        return FindChildByType(node, content, "name");
+    }
+    
+    return "";
+}
+
+string PHPAdapter::ExtractNodeValue(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        return ExtractByStrategy(node, content, config->value_strategy);
+    }
+    
+    return "";
+}
+
+bool PHPAdapter::IsPublicNode(TSNode node, const string &content) const {
+    // In PHP, check for visibility modifiers
+    TSNode sibling = ts_node_prev_sibling(node);
+    while (!ts_node_is_null(sibling)) {
+        const char* sibling_type = ts_node_type(sibling);
+        if (string(sibling_type) == "visibility_modifier") {
+            string modifier_text = ExtractNodeText(sibling, content);
+            if (modifier_text == "private" || modifier_text == "protected") {
+                return false;
+            }
+            if (modifier_text == "public") {
+                return true;
+            }
+        }
+        sibling = ts_node_prev_sibling(sibling);
+    }
+    
+    // Default to public in PHP
+    return true;
+}
+
+uint8_t PHPAdapter::GetNodeFlags(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    return config ? config->flags : 0;
+}
+
+const NodeConfig* PHPAdapter::GetNodeConfig(const string &node_type) const {
+    auto it = node_configs.find(node_type);
+    return it != node_configs.end() ? &it->second : nullptr;
+}
+#endif
+
+//==============================================================================
+// HTML Adapter implementation
+//==============================================================================
+
+#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
+    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+
+const unordered_map<string, NodeConfig> HTMLAdapter::node_configs = {
+    #include "language_configs/html_types.def"
+};
+
+#undef DEF_TYPE
+
+string HTMLAdapter::GetLanguageName() const {
+    return "html";
+}
+
+vector<string> HTMLAdapter::GetAliases() const {
+    return {"html", "htm"};
+}
+
+void HTMLAdapter::InitializeParser() const {
+    parser_wrapper_ = make_uniq<TSParserWrapper>();
+    parser_wrapper_->SetLanguage(tree_sitter_html(), "HTML");
+}
+
+unique_ptr<TSParserWrapper> HTMLAdapter::CreateFreshParser() const {
+    auto fresh_parser = make_uniq<TSParserWrapper>();
+    fresh_parser->SetLanguage(tree_sitter_html(), "HTML");
+    return fresh_parser;
+}
+
+string HTMLAdapter::GetNormalizedType(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    if (config) {
+        return SemanticTypes::GetSemanticTypeName(config->semantic_type);
+    }
+    return node_type;  // Fallback to raw type
+}
+
+string HTMLAdapter::ExtractNodeName(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        // Handle custom HTML strategies
+        if (config->name_strategy == ExtractionStrategy::CUSTOM) {
+            string node_type = string(node_type_str);
+            if (node_type == "element" || node_type == "start_tag" || node_type == "end_tag") {
+                return FindChildByType(node, content, "tag_name");
+            } else if (node_type == "attribute") {
+                return FindChildByType(node, content, "attribute_name");
+            }
+        }
+        return ExtractByStrategy(node, content, config->name_strategy);
+    }
+    
+    return "";
+}
+
+string HTMLAdapter::ExtractNodeValue(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        // Handle custom HTML strategies
+        if (config->value_strategy == ExtractionStrategy::CUSTOM) {
+            string node_type = string(node_type_str);
+            if (node_type == "attribute") {
+                return FindChildByType(node, content, "attribute_value");
+            }
+        }
+        return ExtractByStrategy(node, content, config->value_strategy);
+    }
+    
+    return "";
+}
+
+bool HTMLAdapter::IsPublicNode(TSNode node, const string &content) const {
+    // In HTML, all elements are "public"
+    return true;
+}
+
+uint8_t HTMLAdapter::GetNodeFlags(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    return config ? config->flags : 0;
+}
+
+const NodeConfig* HTMLAdapter::GetNodeConfig(const string &node_type) const {
+    auto it = node_configs.find(node_type);
+    return it != node_configs.end() ? &it->second : nullptr;
+}
+
+//==============================================================================
+// CSS Adapter implementation
+//==============================================================================
+
+#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
+    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+
+const unordered_map<string, NodeConfig> CSSAdapter::node_configs = {
+    #include "language_configs/css_types.def"
+};
+
+#undef DEF_TYPE
+
+string CSSAdapter::GetLanguageName() const {
+    return "css";
+}
+
+vector<string> CSSAdapter::GetAliases() const {
+    return {"css"};
+}
+
+void CSSAdapter::InitializeParser() const {
+    parser_wrapper_ = make_uniq<TSParserWrapper>();
+    parser_wrapper_->SetLanguage(tree_sitter_css(), "CSS");
+}
+
+unique_ptr<TSParserWrapper> CSSAdapter::CreateFreshParser() const {
+    auto fresh_parser = make_uniq<TSParserWrapper>();
+    fresh_parser->SetLanguage(tree_sitter_css(), "CSS");
+    return fresh_parser;
+}
+
+string CSSAdapter::GetNormalizedType(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    if (config) {
+        return SemanticTypes::GetSemanticTypeName(config->semantic_type);
+    }
+    return node_type;  // Fallback to raw type
+}
+
+string CSSAdapter::ExtractNodeName(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        // Handle custom CSS strategies
+        if (config->name_strategy == ExtractionStrategy::CUSTOM) {
+            string node_type = string(node_type_str);
+            if (node_type == "declaration") {
+                return FindChildByType(node, content, "property_name");
+            } else if (node_type == "call_expression") {
+                return FindChildByType(node, content, "function_name");
+            } else if (node_type == "at_rule") {
+                // Extract the @ keyword (e.g., @media, @import)
+                return FindChildByType(node, content, "at_keyword");
+            } else if (node_type == "import_statement" || node_type == "charset_statement") {
+                // Extract the string value
+                return FindChildByType(node, content, "string_value");
+            } else if (node_type == "keyframe_block") {
+                // Extract percentage or from/to keyword
+                string percentage = FindChildByType(node, content, "integer_value");
+                if (percentage.empty()) {
+                    percentage = FindChildByType(node, content, "from");
+                }
+                if (percentage.empty()) {
+                    percentage = FindChildByType(node, content, "to");
+                }
+                return percentage;
+            }
+        }
+        return ExtractByStrategy(node, content, config->name_strategy);
+    }
+    
+    return "";
+}
+
+string CSSAdapter::ExtractNodeValue(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        // Handle custom CSS strategies
+        if (config->value_strategy == ExtractionStrategy::CUSTOM) {
+            string node_type = string(node_type_str);
+            if (node_type == "declaration") {
+                // Extract all values after the property name
+                // This is simplified - in reality we'd need to collect all value nodes
+                return ExtractNodeText(node, content);  // Fallback to full text for now
+            }
+        }
+        return ExtractByStrategy(node, content, config->value_strategy);
+    }
+    
+    return "";
+}
+
+bool CSSAdapter::IsPublicNode(TSNode node, const string &content) const {
+    // In CSS, all rules are "public"
+    return true;
+}
+
+uint8_t CSSAdapter::GetNodeFlags(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    return config ? config->flags : 0;
+}
+
+const NodeConfig* CSSAdapter::GetNodeConfig(const string &node_type) const {
+    auto it = node_configs.find(node_type);
+    return it != node_configs.end() ? &it->second : nullptr;
+}
+
+//==============================================================================
+// C Adapter implementation
+//==============================================================================
+
+#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
+    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+
+const unordered_map<string, NodeConfig> CAdapter::node_configs = {
+    #include "language_configs/c_types.def"
+};
+
+#undef DEF_TYPE
+
+string CAdapter::GetLanguageName() const {
+    return "c";
+}
+
+vector<string> CAdapter::GetAliases() const {
+    return {"c"};
+}
+
+void CAdapter::InitializeParser() const {
+    parser_wrapper_ = make_uniq<TSParserWrapper>();
+    parser_wrapper_->SetLanguage(tree_sitter_c(), "C");
+}
+
+unique_ptr<TSParserWrapper> CAdapter::CreateFreshParser() const {
+    auto fresh_parser = make_uniq<TSParserWrapper>();
+    fresh_parser->SetLanguage(tree_sitter_c(), "C");
+    return fresh_parser;
+}
+
+string CAdapter::GetNormalizedType(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    if (config) {
+        return SemanticTypes::GetSemanticTypeName(config->semantic_type);
+    }
+    return node_type;  // Fallback to raw type
+}
+
+string CAdapter::ExtractNodeName(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        return ExtractByStrategy(node, content, config->name_strategy);
+    }
+    
+    // C-specific fallbacks
+    string node_type = string(node_type_str);
+    if (node_type.find("declarator") != string::npos || 
+        node_type.find("specifier") != string::npos ||
+        node_type.find("definition") != string::npos) {
+        return FindChildByType(node, content, "identifier");
+    }
+    
+    return "";
+}
+
+string CAdapter::ExtractNodeValue(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        return ExtractByStrategy(node, content, config->value_strategy);
+    }
+    
+    return "";
+}
+
+bool CAdapter::IsPublicNode(TSNode node, const string &content) const {
+    // In C, check for static keyword (which makes things file-local)
+    TSNode parent = ts_node_parent(node);
+    while (!ts_node_is_null(parent)) {
+        uint32_t child_count = ts_node_child_count(parent);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(parent, i);
+            const char* child_type = ts_node_type(child);
+            if (string(child_type) == "storage_class_specifier") {
+                string specifier_text = ExtractNodeText(child, content);
+                if (specifier_text == "static") {
+                    return false;  // Static = file-local
+                }
+            }
+        }
+        parent = ts_node_parent(parent);
+    }
+    
+    // Default to public (external linkage)
+    return true;
+}
+
+uint8_t CAdapter::GetNodeFlags(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    return config ? config->flags : 0;
+}
+
+const NodeConfig* CAdapter::GetNodeConfig(const string &node_type) const {
+    auto it = node_configs.find(node_type);
+    return it != node_configs.end() ? &it->second : nullptr;
+}
+
+//==============================================================================
 // LanguageAdapterRegistry implementation
 //==============================================================================
 
@@ -997,6 +1612,13 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
     RegisterLanguageFactory("sql", []() { return make_uniq<SQLAdapter>(); });
     RegisterLanguageFactory("go", []() { return make_uniq<GoAdapter>(); });
     RegisterLanguageFactory("ruby", []() { return make_uniq<RubyAdapter>(); });
+    RegisterLanguageFactory("markdown", []() { return make_uniq<MarkdownAdapter>(); });
+    RegisterLanguageFactory("java", []() { return make_uniq<JavaAdapter>(); });
+    // PHP disabled due to scanner dependency on tree-sitter internals
+    // RegisterLanguageFactory("php", []() { return make_uniq<PHPAdapter>(); });
+    RegisterLanguageFactory("html", []() { return make_uniq<HTMLAdapter>(); });
+    RegisterLanguageFactory("css", []() { return make_uniq<CSSAdapter>(); });
+    RegisterLanguageFactory("c", []() { return make_uniq<CAdapter>(); });
 }
 
 void LanguageAdapterRegistry::RegisterLanguageFactory(const string &language, AdapterFactory factory) {

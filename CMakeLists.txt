@@ -58,6 +58,17 @@ set(EXTENSION_SOURCES
     grammars/tree-sitter-go/src/parser.c
     grammars/tree-sitter-ruby/src/parser.c
     grammars/tree-sitter-ruby/src/scanner.c
+    grammars/tree-sitter-markdown/src/parser.c
+    grammars/tree-sitter-markdown/src/scanner.cc
+    grammars/tree-sitter-java/src/parser.c
+    # PHP disabled due to scanner dependency on tree-sitter internals
+    # grammars/tree-sitter-php/php/src/parser.c
+    # grammars/tree-sitter-php/php/src/scanner.c
+    grammars/tree-sitter-html/src/parser.c
+    grammars/tree-sitter-html/src/scanner.c
+    grammars/tree-sitter-css/src/parser.c
+    grammars/tree-sitter-css/src/scanner.c
+    grammars/tree-sitter-c/src/parser.c
     # Temporarily disabled due to ABI compatibility issues:
     # grammars/tree-sitter-rust/src/parser.c
     # grammars/tree-sitter-rust/src/scanner.c

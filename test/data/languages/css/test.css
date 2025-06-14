@@ -1,0 +1,178 @@
+/* Test CSS file demonstrating various features */
+
+@charset "UTF-8";
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+@import "components/buttons.css";
+
+:root {
+    --primary-color: #007bff;
+    --secondary-color: #6c757d;
+    --spacing-unit: 8px;
+    --max-width: 1200px;
+}
+
+/* Reset styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Base styles */
+body {
+    font-family: 'Roboto', sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    color: #333;
+    background-color: #f8f9fa;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+    margin-bottom: calc(var(--spacing-unit) * 2);
+    font-weight: 700;
+}
+
+h1 {
+    font-size: 2.5rem;
+}
+
+/* Layout */
+.container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 var(--spacing-unit);
+}
+
+/* Components */
+.button {
+    display: inline-block;
+    padding: 10px 20px;
+    background-color: var(--primary-color);
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: background-color 0.3s ease;
+}
+
+.button:hover {
+    background-color: #0056b3;
+}
+
+.button:active {
+    transform: translateY(1px);
+}
+
+/* Grid system */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: var(--spacing-unit);
+}
+
+/* Card component */
+.card {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: calc(var(--spacing-unit) * 3);
+}
+
+.card > :last-child {
+    margin-bottom: 0;
+}
+
+/* Utilities */
+.text-center {
+    text-align: center;
+}
+
+.mt-4 {
+    margin-top: calc(var(--spacing-unit) * 4);
+}
+
+/* Media queries */
+@media (max-width: 768px) {
+    body {
+        font-size: 14px;
+    }
+    
+    h1 {
+        font-size: 2rem;
+    }
+    
+    .grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media print {
+    body {
+        background-color: white;
+        color: black;
+    }
+    
+    .button {
+        display: none;
+    }
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* Advanced selectors */
+.list > li:nth-child(odd) {
+    background-color: #f0f0f0;
+}
+
+.form input[type="text"]:focus,
+.form input[type="email"]:focus {
+    border-color: var(--primary-color);
+    outline: none;
+}
+
+/* Pseudo-elements */
+.quote::before {
+    content: '"';
+    font-size: 2em;
+    color: var(--secondary-color);
+}
+
+.quote::after {
+    content: '"';
+    font-size: 2em;
+    color: var(--secondary-color);
+}
+
+/* CSS functions */
+.responsive-text {
+    font-size: clamp(1rem, 2vw, 1.5rem);
+}
+
+.gradient-bg {
+    background: linear-gradient(45deg, #007bff, #6610f2);
+}
+
+/* Supports query */
+@supports (display: grid) {
+    .modern-layout {
+        display: grid;
+        grid-template-areas:
+            "header header"
+            "sidebar main"
+            "footer footer";
+    }
+}
