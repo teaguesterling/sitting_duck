@@ -33,6 +33,19 @@ endif()
 set(EXTENSION_SOURCES 
     src/duckdb_ast_extension.cpp
     src/language_adapter.cpp
+    src/language_adapter_registry_init.cpp
+    src/language_adapters/python_adapter.cpp
+    src/language_adapters/javascript_adapter.cpp
+    src/language_adapters/cpp_adapter.cpp
+    src/language_adapters/typescript_adapter.cpp
+    src/language_adapters/sql_adapter.cpp
+    src/language_adapters/go_adapter.cpp
+    src/language_adapters/ruby_adapter.cpp
+    src/language_adapters/markdown_adapter.cpp
+    src/language_adapters/java_adapter.cpp
+    src/language_adapters/html_adapter.cpp
+    src/language_adapters/css_adapter.cpp
+    src/language_adapters/c_adapter.cpp
     src/read_ast_function.cpp
     src/read_ast_streaming_function.cpp
     src/read_ast_objects_hybrid.cpp
