@@ -1,0 +1,201 @@
+# Validate all semantic type constants and conversions
+
+require duckdb_ast
+
+statement ok
+LOAD duckdb_ast;
+
+# Create a table with all semantic type constants and their expected names
+statement ok
+CREATE TEMP TABLE semantic_type_constants AS
+SELECT * FROM (VALUES
+    -- LITERAL types (0x00)
+    (0, 'LITERAL_NUMBER'),
+    (4, 'LITERAL_STRING'),
+    (8, 'LITERAL_ATOMIC'),
+    (12, 'LITERAL_STRUCTURED'),
+    
+    -- NAME types (0x10)
+    (16, 'NAME_KEYWORD'),
+    (20, 'NAME_IDENTIFIER'),
+    (24, 'NAME_QUALIFIED'),
+    (28, 'NAME_SCOPED'),
+    
+    -- PATTERN types (0x20)
+    (32, 'PATTERN_DESTRUCTURE'),
+    (36, 'PATTERN_MATCH'),
+    (40, 'PATTERN_TEMPLATE'),
+    (44, 'PATTERN_GUARD'),
+    
+    -- TYPE types (0x30)
+    (48, 'TYPE_PRIMITIVE'),
+    (52, 'TYPE_COMPOSITE'),
+    (56, 'TYPE_REFERENCE'),
+    (60, 'TYPE_GENERIC'),
+    
+    -- OPERATOR types (0x40)
+    (64, 'OPERATOR_ARITHMETIC'),
+    (68, 'OPERATOR_LOGICAL'),
+    (72, 'OPERATOR_COMPARISON'),
+    (76, 'OPERATOR_ASSIGNMENT'),
+    
+    -- COMPUTATION_NODE types (0x50)
+    (80, 'COMPUTATION_CALL'),
+    (84, 'COMPUTATION_ACCESS'),
+    (88, 'COMPUTATION_EXPRESSION'),
+    (92, 'COMPUTATION_LAMBDA'),
+    
+    -- TRANSFORM types (0x60)
+    (96, 'TRANSFORM_QUERY'),
+    (100, 'TRANSFORM_ITERATION'),
+    (104, 'TRANSFORM_PROJECTION'),
+    (108, 'TRANSFORM_AGGREGATION'),
+    
+    -- DEFINITION types (0x70)
+    (112, 'DEFINITION_FUNCTION'),
+    (116, 'DEFINITION_VARIABLE'),
+    (120, 'DEFINITION_CLASS'),
+    (124, 'DEFINITION_MODULE'),
+    
+    -- EXECUTION types (0x80)
+    (128, 'EXECUTION_STATEMENT'),
+    (132, 'EXECUTION_DECLARATION'),
+    (136, 'EXECUTION_INVOCATION'),
+    (140, 'EXECUTION_MUTATION'),
+    
+    -- FLOW_CONTROL types (0x90)
+    (144, 'FLOW_CONDITIONAL'),
+    (148, 'FLOW_LOOP'),
+    (152, 'FLOW_JUMP'),
+    (156, 'FLOW_SYNC'),
+    
+    -- ERROR_HANDLING types (0xA0)
+    (160, 'ERROR_TRY'),
+    (164, 'ERROR_CATCH'),
+    (168, 'ERROR_THROW'),
+    (172, 'ERROR_FINALLY'),
+    
+    -- ORGANIZATION types (0xB0)
+    (176, 'ORGANIZATION_BLOCK'),
+    (180, 'ORGANIZATION_LIST'),
+    (184, 'ORGANIZATION_SECTION'),
+    (188, 'ORGANIZATION_CONTAINER'),
+    
+    -- METADATA types (0xC0)
+    (192, 'METADATA_COMMENT'),
+    (196, 'METADATA_ANNOTATION'),
+    (200, 'METADATA_DIRECTIVE'),
+    (204, 'METADATA_DEBUG'),
+    
+    -- EXTERNAL types (0xD0)
+    (208, 'EXTERNAL_IMPORT'),
+    (212, 'EXTERNAL_EXPORT'),
+    (216, 'EXTERNAL_FOREIGN'),
+    (220, 'EXTERNAL_EMBED'),
+    
+    -- PARSER_SPECIFIC types (0xE0)
+    (224, 'PARSER_PUNCTUATION'),
+    (228, 'PARSER_DELIMITER'),
+    (232, 'PARSER_SYNTAX'),
+    (236, 'PARSER_CONSTRUCT'),
+    
+    -- RESERVED types (0xF0)
+    (240, 'RESERVED_FUTURE1'),
+    (244, 'RESERVED_FUTURE2'),
+    (248, 'RESERVED_FUTURE3'),
+    (252, 'RESERVED_FUTURE4')
+) AS t(code, expected_name);
+
+# Test that semantic_type_to_string returns the correct name for all codes
+query II
+SELECT code, semantic_type_to_string(code::TINYINT) = expected_name AS correct
+FROM semantic_type_constants
+WHERE NOT correct
+ORDER BY code;
+----
+
+# Test that semantic_type_code returns the correct code for all names
+query II
+SELECT expected_name, semantic_type_code(expected_name) = code AS correct
+FROM semantic_type_constants
+WHERE NOT correct
+ORDER BY code;
+----
+
+# Test round-trip conversion for all types
+query I
+SELECT COUNT(*)
+FROM semantic_type_constants
+WHERE semantic_type_code(semantic_type_to_string(code::TINYINT)) != code;
+----
+0
+
+# Test predicate functions with all applicable types
+query I
+SELECT COUNT(*)
+FROM semantic_type_constants
+WHERE code BETWEEN 112 AND 124  -- DEFINITION range
+  AND NOT is_definition(code::TINYINT);
+----
+0
+
+query I
+SELECT COUNT(*)
+FROM semantic_type_constants
+WHERE code IN (80, 136)  -- COMPUTATION_CALL and EXECUTION_INVOCATION
+  AND NOT is_call(code::TINYINT);
+----
+0
+
+query I
+SELECT COUNT(*)
+FROM semantic_type_constants
+WHERE code BETWEEN 144 AND 156  -- FLOW_CONTROL range
+  AND NOT is_control_flow(code::TINYINT);
+----
+0
+
+query I
+SELECT COUNT(*)
+FROM semantic_type_constants
+WHERE code IN (20, 24, 28)  -- NAME_IDENTIFIER, NAME_QUALIFIED, NAME_SCOPED
+  AND NOT is_identifier(code::TINYINT);
+----
+0
+
+# Test bit manipulation functions
+query III
+SELECT 
+    code,
+    get_super_kind(code::TINYINT),
+    CASE 
+        WHEN code < 64 THEN 'DATA_STRUCTURE'
+        WHEN code < 128 THEN 'COMPUTATION'
+        WHEN code < 192 THEN 'CONTROL_EFFECTS'
+        ELSE 'META_EXTERNAL'
+    END AS expected_super_kind
+FROM semantic_type_constants
+WHERE get_super_kind(code::TINYINT) != expected_super_kind;
+----
+
+# Verify searchable types are all valid
+query I
+WITH searchable AS (
+    SELECT unnest(get_searchable_types()) as type_code
+)
+SELECT COUNT(*)
+FROM searchable
+WHERE semantic_type_to_string(type_code) LIKE 'UNKNOWN%';
+----
+0
+
+# Test edge cases with type codes
+query I
+SELECT semantic_type_to_string(255::TINYINT);  -- Invalid code
+----
+UNKNOWN_SEMANTIC_TYPE
+
+query I
+SELECT semantic_type_to_string(127::TINYINT);  -- Unused code
+----
+UNKNOWN_SEMANTIC_TYPE

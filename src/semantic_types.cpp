@@ -1,4 +1,6 @@
 #include "include/semantic_types.hpp"
+#include <unordered_map>
+#include <vector>
 
 namespace duckdb {
 
@@ -144,6 +146,216 @@ string GetKindName(uint8_t kind) {
         
         default: return "UNKNOWN_KIND";
     }
+}
+
+// Reverse lookup - name to code
+uint8_t GetSemanticTypeCode(const string& name) {
+    // Create a static map for efficient lookup
+    static unordered_map<string, uint8_t> name_to_code = {
+        // LITERAL types
+        {"LITERAL_NUMBER", LITERAL_NUMBER},
+        {"LITERAL_STRING", LITERAL_STRING},
+        {"LITERAL_ATOMIC", LITERAL_ATOMIC},
+        {"LITERAL_STRUCTURED", LITERAL_STRUCTURED},
+        
+        // NAME types
+        {"NAME_KEYWORD", NAME_KEYWORD},
+        {"NAME_IDENTIFIER", NAME_IDENTIFIER},
+        {"NAME_QUALIFIED", NAME_QUALIFIED},
+        {"NAME_SCOPED", NAME_SCOPED},
+        
+        // PATTERN types
+        {"PATTERN_DESTRUCTURE", PATTERN_DESTRUCTURE},
+        {"PATTERN_MATCH", PATTERN_MATCH},
+        {"PATTERN_TEMPLATE", PATTERN_TEMPLATE},
+        {"PATTERN_GUARD", PATTERN_GUARD},
+        
+        // TYPE types
+        {"TYPE_PRIMITIVE", TYPE_PRIMITIVE},
+        {"TYPE_COMPOSITE", TYPE_COMPOSITE},
+        {"TYPE_REFERENCE", TYPE_REFERENCE},
+        {"TYPE_GENERIC", TYPE_GENERIC},
+        
+        // OPERATOR types
+        {"OPERATOR_ARITHMETIC", OPERATOR_ARITHMETIC},
+        {"OPERATOR_LOGICAL", OPERATOR_LOGICAL},
+        {"OPERATOR_COMPARISON", OPERATOR_COMPARISON},
+        {"OPERATOR_ASSIGNMENT", OPERATOR_ASSIGNMENT},
+        
+        // COMPUTATION_NODE types
+        {"COMPUTATION_CALL", COMPUTATION_CALL},
+        {"COMPUTATION_ACCESS", COMPUTATION_ACCESS},
+        {"COMPUTATION_EXPRESSION", COMPUTATION_EXPRESSION},
+        {"COMPUTATION_LAMBDA", COMPUTATION_LAMBDA},
+        
+        // TRANSFORM types
+        {"TRANSFORM_QUERY", TRANSFORM_QUERY},
+        {"TRANSFORM_ITERATION", TRANSFORM_ITERATION},
+        {"TRANSFORM_PROJECTION", TRANSFORM_PROJECTION},
+        {"TRANSFORM_AGGREGATION", TRANSFORM_AGGREGATION},
+        
+        // DEFINITION types
+        {"DEFINITION_FUNCTION", DEFINITION_FUNCTION},
+        {"DEFINITION_VARIABLE", DEFINITION_VARIABLE},
+        {"DEFINITION_CLASS", DEFINITION_CLASS},
+        {"DEFINITION_MODULE", DEFINITION_MODULE},
+        
+        // EXECUTION types
+        {"EXECUTION_STATEMENT", EXECUTION_STATEMENT},
+        {"EXECUTION_DECLARATION", EXECUTION_DECLARATION},
+        {"EXECUTION_INVOCATION", EXECUTION_INVOCATION},
+        {"EXECUTION_MUTATION", EXECUTION_MUTATION},
+        
+        // FLOW_CONTROL types
+        {"FLOW_CONDITIONAL", FLOW_CONDITIONAL},
+        {"FLOW_LOOP", FLOW_LOOP},
+        {"FLOW_JUMP", FLOW_JUMP},
+        {"FLOW_SYNC", FLOW_SYNC},
+        
+        // ERROR_HANDLING types
+        {"ERROR_TRY", ERROR_TRY},
+        {"ERROR_CATCH", ERROR_CATCH},
+        {"ERROR_THROW", ERROR_THROW},
+        {"ERROR_FINALLY", ERROR_FINALLY},
+        
+        // ORGANIZATION types
+        {"ORGANIZATION_BLOCK", ORGANIZATION_BLOCK},
+        {"ORGANIZATION_LIST", ORGANIZATION_LIST},
+        {"ORGANIZATION_SECTION", ORGANIZATION_SECTION},
+        {"ORGANIZATION_CONTAINER", ORGANIZATION_CONTAINER},
+        
+        // METADATA types
+        {"METADATA_COMMENT", METADATA_COMMENT},
+        {"METADATA_ANNOTATION", METADATA_ANNOTATION},
+        {"METADATA_DIRECTIVE", METADATA_DIRECTIVE},
+        {"METADATA_DEBUG", METADATA_DEBUG},
+        
+        // EXTERNAL types
+        {"EXTERNAL_IMPORT", EXTERNAL_IMPORT},
+        {"EXTERNAL_EXPORT", EXTERNAL_EXPORT},
+        {"EXTERNAL_FOREIGN", EXTERNAL_FOREIGN},
+        {"EXTERNAL_EMBED", EXTERNAL_EMBED},
+        
+        // PARSER_SPECIFIC types
+        {"PARSER_PUNCTUATION", PARSER_PUNCTUATION},
+        {"PARSER_DELIMITER", PARSER_DELIMITER},
+        {"PARSER_SYNTAX", PARSER_SYNTAX},
+        {"PARSER_CONSTRUCT", PARSER_CONSTRUCT},
+        
+        // RESERVED types
+        {"RESERVED_FUTURE1", RESERVED_FUTURE1},
+        {"RESERVED_FUTURE2", RESERVED_FUTURE2},
+        {"RESERVED_FUTURE3", RESERVED_FUTURE3},
+        {"RESERVED_FUTURE4", RESERVED_FUTURE4}
+    };
+    
+    auto it = name_to_code.find(name);
+    if (it != name_to_code.end()) {
+        return it->second;
+    }
+    return 255; // Invalid code
+}
+
+uint8_t GetKindCode(const string& name) {
+    static unordered_map<string, uint8_t> kind_to_code = {
+        // DATA_STRUCTURE kinds
+        {"LITERAL", LITERAL},
+        {"NAME", NAME},
+        {"PATTERN", PATTERN},
+        {"TYPE", TYPE},
+        
+        // COMPUTATION kinds
+        {"OPERATOR", OPERATOR},
+        {"COMPUTATION_NODE", COMPUTATION_NODE},
+        {"TRANSFORM", TRANSFORM},
+        {"DEFINITION", DEFINITION},
+        
+        // CONTROL_EFFECTS kinds
+        {"EXECUTION", EXECUTION},
+        {"FLOW_CONTROL", FLOW_CONTROL},
+        {"ERROR_HANDLING", ERROR_HANDLING},
+        {"ORGANIZATION", ORGANIZATION},
+        
+        // META_EXTERNAL kinds
+        {"METADATA", METADATA},
+        {"EXTERNAL", EXTERNAL},
+        {"PARSER_SPECIFIC", PARSER_SPECIFIC},
+        {"RESERVED", RESERVED}
+    };
+    
+    auto it = kind_to_code.find(name);
+    if (it != kind_to_code.end()) {
+        return it->second;
+    }
+    return 255; // Invalid code
+}
+
+// Helper predicates
+bool IsDefinition(uint8_t semantic_type) {
+    return (semantic_type & 0xF0) == DEFINITION;
+}
+
+bool IsCall(uint8_t semantic_type) {
+    return semantic_type == COMPUTATION_CALL || semantic_type == EXECUTION_INVOCATION;
+}
+
+bool IsControlFlow(uint8_t semantic_type) {
+    return (semantic_type & 0xF0) == FLOW_CONTROL;
+}
+
+bool IsIdentifier(uint8_t semantic_type) {
+    return semantic_type == NAME_IDENTIFIER || semantic_type == NAME_QUALIFIED || semantic_type == NAME_SCOPED;
+}
+
+bool IsLiteral(uint8_t semantic_type) {
+    return (semantic_type & 0xF0) == LITERAL;
+}
+
+bool IsOperator(uint8_t semantic_type) {
+    return (semantic_type & 0xF0) == OPERATOR;
+}
+
+bool IsType(uint8_t semantic_type) {
+    return (semantic_type & 0xF0) == TYPE;
+}
+
+bool IsExternal(uint8_t semantic_type) {
+    return (semantic_type & 0xF0) == EXTERNAL;
+}
+
+bool IsError(uint8_t semantic_type) {
+    return (semantic_type & 0xF0) == ERROR_HANDLING;
+}
+
+bool IsMetadata(uint8_t semantic_type) {
+    return (semantic_type & 0xF0) == METADATA;
+}
+
+// Get all types in a category
+vector<uint8_t> GetDefinitionTypes() {
+    return {DEFINITION_FUNCTION, DEFINITION_VARIABLE, DEFINITION_CLASS, DEFINITION_MODULE};
+}
+
+vector<uint8_t> GetControlFlowTypes() {
+    return {FLOW_CONDITIONAL, FLOW_LOOP, FLOW_JUMP, FLOW_SYNC};
+}
+
+vector<uint8_t> GetSearchableTypes() {
+    // Primary search targets - definitions, calls, imports/exports, and control flow
+    return {
+        // All definitions
+        DEFINITION_FUNCTION, DEFINITION_VARIABLE, DEFINITION_CLASS, DEFINITION_MODULE,
+        // Calls and access
+        COMPUTATION_CALL, COMPUTATION_ACCESS,
+        // External dependencies
+        EXTERNAL_IMPORT, EXTERNAL_EXPORT,
+        // Control flow
+        FLOW_CONDITIONAL, FLOW_LOOP, FLOW_JUMP,
+        // Error handling
+        ERROR_TRY, ERROR_CATCH, ERROR_THROW,
+        // Key identifiers
+        NAME_IDENTIFIER, NAME_QUALIFIED
+    };
 }
 
 } // namespace SemanticTypes

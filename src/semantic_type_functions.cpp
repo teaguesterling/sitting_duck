@@ -93,6 +93,112 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
     );
 }
 
+// Function that converts semantic type name to code
+static void SemanticTypeCodeFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 1);
+    
+    auto &name_vector = args.data[0];
+    auto count = args.size();
+    
+    UnaryExecutor::Execute<string_t, int8_t>(
+        name_vector, result, count,
+        [&](string_t name_str) {
+            string name = name_str.GetString();
+            uint8_t code = SemanticTypes::GetSemanticTypeCode(name);
+            return static_cast<int8_t>(code);
+        }
+    );
+}
+
+// Predicate functions for common type categories
+static void IsDefinitionFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 1);
+    
+    auto &semantic_type_vector = args.data[0];
+    auto count = args.size();
+    
+    UnaryExecutor::Execute<int8_t, bool>(
+        semantic_type_vector, result, count,
+        [&](int8_t semantic_type) {
+            return SemanticTypes::IsDefinition(static_cast<uint8_t>(semantic_type));
+        }
+    );
+}
+
+static void IsCallFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 1);
+    
+    auto &semantic_type_vector = args.data[0];
+    auto count = args.size();
+    
+    UnaryExecutor::Execute<int8_t, bool>(
+        semantic_type_vector, result, count,
+        [&](int8_t semantic_type) {
+            return SemanticTypes::IsCall(static_cast<uint8_t>(semantic_type));
+        }
+    );
+}
+
+static void IsControlFlowFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 1);
+    
+    auto &semantic_type_vector = args.data[0];
+    auto count = args.size();
+    
+    UnaryExecutor::Execute<int8_t, bool>(
+        semantic_type_vector, result, count,
+        [&](int8_t semantic_type) {
+            return SemanticTypes::IsControlFlow(static_cast<uint8_t>(semantic_type));
+        }
+    );
+}
+
+static void IsIdentifierFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 1);
+    
+    auto &semantic_type_vector = args.data[0];
+    auto count = args.size();
+    
+    UnaryExecutor::Execute<int8_t, bool>(
+        semantic_type_vector, result, count,
+        [&](int8_t semantic_type) {
+            return SemanticTypes::IsIdentifier(static_cast<uint8_t>(semantic_type));
+        }
+    );
+}
+
+// Function that returns list of searchable semantic types
+static void GetSearchableTypesFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 0);
+    
+    auto searchable_types = SemanticTypes::GetSearchableTypes();
+    auto count = args.size();
+    
+    // Create a list value for each row
+    auto &list_vector = result;
+    auto list_entries = FlatVector::GetData<list_entry_t>(list_vector);
+    
+    // Create child vector to hold the semantic type values
+    auto list_size = searchable_types.size();
+    ListVector::Reserve(list_vector, list_size * count);
+    auto &child_vector = ListVector::GetEntry(list_vector);
+    auto child_data = FlatVector::GetData<int8_t>(child_vector);
+    
+    idx_t offset = 0;
+    for (idx_t i = 0; i < count; i++) {
+        list_entries[i].offset = offset;
+        list_entries[i].length = list_size;
+        
+        // Copy semantic types to child vector
+        for (idx_t j = 0; j < list_size; j++) {
+            child_data[offset + j] = static_cast<int8_t>(searchable_types[j]);
+        }
+        offset += list_size;
+    }
+    
+    ListVector::SetListSize(list_vector, offset);
+}
+
 void RegisterSemanticTypeFunctions(DatabaseInstance &instance) {
     // Register semantic_type_to_string(semantic_type) -> VARCHAR
     ScalarFunction semantic_type_to_string_func("semantic_type_to_string", 
@@ -113,6 +219,33 @@ void RegisterSemanticTypeFunctions(DatabaseInstance &instance) {
     ScalarFunction is_semantic_type_func("is_semantic_type",
         {LogicalType::TINYINT, LogicalType::VARCHAR}, LogicalType::BOOLEAN, IsSemanticTypeFunction);
     ExtensionUtil::RegisterFunction(instance, is_semantic_type_func);
+    
+    // Register semantic_type_code(name) -> TINYINT
+    ScalarFunction semantic_type_code_func("semantic_type_code",
+        {LogicalType::VARCHAR}, LogicalType::TINYINT, SemanticTypeCodeFunction);
+    ExtensionUtil::RegisterFunction(instance, semantic_type_code_func);
+    
+    // Register predicate functions
+    ScalarFunction is_definition_func("is_definition",
+        {LogicalType::TINYINT}, LogicalType::BOOLEAN, IsDefinitionFunction);
+    ExtensionUtil::RegisterFunction(instance, is_definition_func);
+    
+    ScalarFunction is_call_func("is_call",
+        {LogicalType::TINYINT}, LogicalType::BOOLEAN, IsCallFunction);
+    ExtensionUtil::RegisterFunction(instance, is_call_func);
+    
+    ScalarFunction is_control_flow_func("is_control_flow",
+        {LogicalType::TINYINT}, LogicalType::BOOLEAN, IsControlFlowFunction);
+    ExtensionUtil::RegisterFunction(instance, is_control_flow_func);
+    
+    ScalarFunction is_identifier_func("is_identifier",
+        {LogicalType::TINYINT}, LogicalType::BOOLEAN, IsIdentifierFunction);
+    ExtensionUtil::RegisterFunction(instance, is_identifier_func);
+    
+    // Register get_searchable_types() -> LIST<TINYINT>
+    ScalarFunction get_searchable_types_func("get_searchable_types",
+        {}, LogicalType::LIST(LogicalType::TINYINT), GetSearchableTypesFunction);
+    ExtensionUtil::RegisterFunction(instance, get_searchable_types_func);
 }
 
 } // namespace duckdb

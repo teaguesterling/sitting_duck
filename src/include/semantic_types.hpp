@@ -161,6 +161,34 @@ string GetSemanticTypeName(uint8_t semantic_type);
 string GetSuperKindName(uint8_t super_kind);
 string GetKindName(uint8_t kind);
 
+// Shorter convenience functions
+inline string TypeName(uint8_t code) { return GetSemanticTypeName(code); }
+inline string KindName(uint8_t kind) { return GetKindName(kind); }
+
+// Reverse lookups - name to code
+uint8_t GetSemanticTypeCode(const string& name);
+uint8_t GetKindCode(const string& name);
+
+// Shorter convenience functions
+inline uint8_t TypeCode(const string& name) { return GetSemanticTypeCode(name); }
+
+// Helper predicates for common queries
+bool IsDefinition(uint8_t semantic_type);
+bool IsCall(uint8_t semantic_type);
+bool IsControlFlow(uint8_t semantic_type);
+bool IsIdentifier(uint8_t semantic_type);
+bool IsLiteral(uint8_t semantic_type);
+bool IsOperator(uint8_t semantic_type);
+bool IsType(uint8_t semantic_type);
+bool IsExternal(uint8_t semantic_type);
+bool IsError(uint8_t semantic_type);
+bool IsMetadata(uint8_t semantic_type);
+
+// Get all types in a category
+vector<uint8_t> GetDefinitionTypes();
+vector<uint8_t> GetControlFlowTypes();
+vector<uint8_t> GetSearchableTypes();  // Types typically used in searches
+
 } // namespace SemanticTypes
 
 } // namespace duckdb

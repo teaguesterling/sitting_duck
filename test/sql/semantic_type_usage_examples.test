@@ -1,0 +1,175 @@
+# Practical examples of using semantic type helpers
+
+require duckdb_ast
+
+statement ok
+LOAD duckdb_ast;
+
+# Create test data with various code patterns
+statement ok
+CREATE TEMP TABLE code_ast AS 
+SELECT * FROM parse_ast('
+# Python example with various constructs
+import os
+from typing import List, Dict
+
+def calculate_sum(numbers: List[int]) -> int:
+    """Calculate the sum of numbers"""
+    total = 0
+    for num in numbers:
+        total += num
+    return total
+
+class DataProcessor:
+    def __init__(self):
+        self.data = []
+    
+    def process(self, items):
+        try:
+            result = [item * 2 for item in items]
+            return result
+        except Exception as e:
+            print(f"Error: {e}")
+            raise
+
+processor = DataProcessor()
+result = processor.process([1, 2, 3])
+', 'python');
+
+# Example 1: Find all function and class definitions
+query II
+SELECT name, semantic_type_to_string(semantic_type) as type
+FROM code_ast
+WHERE is_definition(semantic_type) 
+  AND name IS NOT NULL
+ORDER BY start_line;
+----
+calculate_sum	DEFINITION_FUNCTION
+DataProcessor	DEFINITION_CLASS
+__init__	DEFINITION_FUNCTION
+process	DEFINITION_FUNCTION
+
+# Example 2: Find all function calls
+query II
+SELECT name, semantic_type_to_string(semantic_type) as type
+FROM code_ast
+WHERE is_call(semantic_type)
+ORDER BY start_line;
+----
+print	COMPUTATION_CALL
+
+# Example 3: Find all control flow constructs
+query II
+SELECT type, semantic_type_to_string(semantic_type) as semantic_type
+FROM code_ast
+WHERE is_control_flow(semantic_type)
+ORDER BY start_line;
+----
+for_statement	FLOW_LOOP
+
+# Example 4: Build a summary of code structure
+query II
+SELECT 
+    get_super_kind(semantic_type) as category,
+    COUNT(*) as node_count
+FROM code_ast
+GROUP BY category
+ORDER BY node_count DESC;
+----
+DATA_STRUCTURE	69
+PARSER_SPECIFIC	55
+ORGANIZATION	31
+COMPUTATION	15
+CONTROL_EFFECTS	10
+METADATA	2
+META_EXTERNAL	2
+
+# Example 5: Find specific types by name
+query I
+SELECT COUNT(*)
+FROM code_ast
+WHERE semantic_type = semantic_type_code('DEFINITION_FUNCTION');
+----
+3
+
+# Example 6: Filter to only searchable types for building an index
+query I
+CREATE TEMP TABLE code_index AS
+SELECT node_id, name, type, semantic_type, start_line, end_line
+FROM code_ast
+WHERE semantic_type = ANY(get_searchable_types())
+  AND name IS NOT NULL;
+
+SELECT COUNT(*) FROM code_index;
+----
+16
+
+# Example 7: Analyze code patterns
+query II
+WITH function_calls AS (
+    SELECT name, COUNT(*) as call_count
+    FROM code_ast
+    WHERE is_call(semantic_type)
+    GROUP BY name
+)
+SELECT * FROM function_calls
+ORDER BY call_count DESC, name;
+----
+print	1
+
+# Example 8: Find error handling patterns
+query I
+SELECT COUNT(DISTINCT parent_id) as try_blocks
+FROM code_ast
+WHERE semantic_type IN (
+    semantic_type_code('ERROR_TRY'),
+    semantic_type_code('ERROR_CATCH'),
+    semantic_type_code('ERROR_THROW'),
+    semantic_type_code('ERROR_FINALLY')
+);
+----
+1
+
+# Example 9: Create a code navigation index
+query IIII
+SELECT 
+    name,
+    semantic_type_to_string(semantic_type) as type,
+    start_line,
+    end_line
+FROM code_ast
+WHERE semantic_type IN (
+    semantic_type_code('DEFINITION_FUNCTION'),
+    semantic_type_code('DEFINITION_CLASS'),
+    semantic_type_code('EXTERNAL_IMPORT')
+)
+AND name IS NOT NULL
+ORDER BY start_line;
+----
+calculate_sum	DEFINITION_FUNCTION	5	10
+DataProcessor	DEFINITION_CLASS	12	22
+__init__	DEFINITION_FUNCTION	13	14
+process	DEFINITION_FUNCTION	16	22
+
+# Example 10: Language-agnostic search
+statement ok
+CREATE TEMP TABLE multi_lang_ast AS
+SELECT *, 'python' as language FROM parse_ast('def hello(): pass', 'python')
+UNION ALL
+SELECT *, 'javascript' as language FROM parse_ast('function hello() {}', 'javascript')
+UNION ALL
+SELECT *, 'java' as language FROM parse_ast('public void hello() {}', 'java');
+
+query III
+SELECT 
+    language,
+    name,
+    semantic_type_to_string(semantic_type) as type
+FROM multi_lang_ast
+WHERE is_definition(semantic_type)
+  AND name = 'hello'
+ORDER BY language;
+----
+java	hello	DEFINITION_FUNCTION
+javascript	hello	DEFINITION_FUNCTION
+python	hello	DEFINITION_FUNCTION
