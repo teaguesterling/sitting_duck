@@ -168,9 +168,11 @@ inline string KindName(uint8_t kind) { return GetKindName(kind); }
 // Reverse lookups - name to code
 uint8_t GetSemanticTypeCode(const string& name);
 uint8_t GetKindCode(const string& name);
+uint8_t GetSuperKindCode(const string& name);
 
 // Shorter convenience functions
 inline uint8_t TypeCode(const string& name) { return GetSemanticTypeCode(name); }
+inline uint8_t KindCode(const string& name) { return GetKindCode(name); }
 
 // Helper predicates for common queries
 bool IsDefinition(uint8_t semantic_type);

@@ -110,6 +110,45 @@ static void SemanticTypeCodeFunction(DataChunk &args, ExpressionState &state, Ve
     );
 }
 
+// Function that converts kind name to code
+static void KindCodeFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 1);
+    
+    auto &name_vector = args.data[0];
+    auto count = args.size();
+    
+    UnaryExecutor::Execute<string_t, int8_t>(
+        name_vector, result, count,
+        [&](string_t name_str) {
+            string name = name_str.GetString();
+            uint8_t code = SemanticTypes::GetKindCode(name);
+            return static_cast<int8_t>(code);
+        }
+    );
+}
+
+// Function that checks if semantic type belongs to a specific kind
+static void IsKindFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 2);
+    
+    auto &semantic_type_vector = args.data[0];
+    auto &kind_name_vector = args.data[1];
+    auto count = args.size();
+    
+    BinaryExecutor::Execute<int8_t, string_t, bool>(
+        semantic_type_vector, kind_name_vector, result, count,
+        [&](int8_t semantic_type, string_t kind_str) {
+            string kind_name = kind_str.GetString();
+            uint8_t kind_code = SemanticTypes::GetKindCode(kind_name);
+            if (kind_code == 255) {
+                return false; // Invalid kind name
+            }
+            // Check if the semantic type's kind matches
+            return (static_cast<uint8_t>(semantic_type) & 0xF0) == kind_code;
+        }
+    );
+}
+
 // Predicate functions for common type categories
 static void IsDefinitionFunction(DataChunk &args, ExpressionState &state, Vector &result) {
     D_ASSERT(args.ColumnCount() == 1);
@@ -246,6 +285,16 @@ void RegisterSemanticTypeFunctions(DatabaseInstance &instance) {
     ScalarFunction get_searchable_types_func("get_searchable_types",
         {}, LogicalType::LIST(LogicalType::TINYINT), GetSearchableTypesFunction);
     ExtensionUtil::RegisterFunction(instance, get_searchable_types_func);
+    
+    // Register kind_code(name) -> TINYINT
+    ScalarFunction kind_code_func("kind_code",
+        {LogicalType::VARCHAR}, LogicalType::TINYINT, KindCodeFunction);
+    ExtensionUtil::RegisterFunction(instance, kind_code_func);
+    
+    // Register is_kind(semantic_type, kind_name) -> BOOLEAN
+    ScalarFunction is_kind_func("is_kind",
+        {LogicalType::TINYINT, LogicalType::VARCHAR}, LogicalType::BOOLEAN, IsKindFunction);
+    ExtensionUtil::RegisterFunction(instance, is_kind_func);
 }
 
 } // namespace duckdb

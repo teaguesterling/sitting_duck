@@ -290,6 +290,21 @@ uint8_t GetKindCode(const string& name) {
     return 255; // Invalid code
 }
 
+uint8_t GetSuperKindCode(const string& name) {
+    static unordered_map<string, uint8_t> super_kind_to_code = {
+        {"DATA_STRUCTURE", DATA_STRUCTURE},
+        {"COMPUTATION", COMPUTATION},
+        {"CONTROL_EFFECTS", CONTROL_EFFECTS},
+        {"META_EXTERNAL", META_EXTERNAL}
+    };
+    
+    auto it = super_kind_to_code.find(name);
+    if (it != super_kind_to_code.end()) {
+        return it->second;
+    }
+    return 255; // Invalid code
+}
+
 // Helper predicates
 bool IsDefinition(uint8_t semantic_type) {
     return (semantic_type & 0xF0) == DEFINITION;
