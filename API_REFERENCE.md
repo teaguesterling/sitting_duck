@@ -127,7 +127,7 @@ Converts a semantic type name to its numeric code.
 **Parameters:**
 - `type_name` (VARCHAR): Semantic type name
 
-**Returns:** TINYINT - Type code (-1 if invalid)
+**Returns:** UTINYINT - Type code (NULL if invalid name)
 
 **Example:**
 ```sql
@@ -166,7 +166,7 @@ Converts a kind name to its numeric code.
 **Parameters:**
 - `kind_name` (VARCHAR): Kind name
 
-**Returns:** TINYINT - Kind code (-1 if invalid)
+**Returns:** UTINYINT - Kind code (NULL if invalid name)
 
 **Example:**
 ```sql

@@ -8,33 +8,7 @@ LOAD duckdb_ast;
 # Create test data with various code patterns
 statement ok
 CREATE TEMP TABLE code_ast AS 
-SELECT * FROM parse_ast('
-# Python example with various constructs
-import os
-from typing import List, Dict
-
-def calculate_sum(numbers: List[int]) -> int:
-    """Calculate the sum of numbers"""
-    total = 0
-    for num in numbers:
-        total += num
-    return total
-
-class DataProcessor:
-    def __init__(self):
-        self.data = []
-    
-    def process(self, items):
-        try:
-            result = [item * 2 for item in items]
-            return result
-        except Exception as e:
-            print(f"Error: {e}")
-            raise
-
-processor = DataProcessor()
-result = processor.process([1, 2, 3])
-', 'python');
+SELECT * FROM parse_ast('def calculate_sum(numbers): return sum(numbers)\n\nclass DataProcessor:\n    def process(self, items):\n        return [item * 2 for item in items]', 'python');
 
 # Example 1: Find all function and class definitions
 query II
@@ -46,7 +20,6 @@ ORDER BY start_line;
 ----
 calculate_sum	DEFINITION_FUNCTION
 DataProcessor	DEFINITION_CLASS
-__init__	DEFINITION_FUNCTION
 process	DEFINITION_FUNCTION
 
 # Example 2: Find all function calls

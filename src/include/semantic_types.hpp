@@ -145,7 +145,7 @@ constexpr uint8_t GetSuperKind(uint8_t semantic_type) {
 }
 
 constexpr uint8_t GetKind(uint8_t semantic_type) {
-    return semantic_type & 0x30; // Extract bits 4-5
+    return semantic_type & 0xF0; // Extract bits 4-7 (full kind value)
 }
 
 constexpr uint8_t GetSuperType(uint8_t semantic_type) {

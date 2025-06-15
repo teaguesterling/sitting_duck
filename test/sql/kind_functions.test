@@ -24,26 +24,26 @@ SELECT kind_code('FLOW_CONTROL');
 query I
 SELECT kind_code('INVALID_KIND');
 ----
--1
+NULL
 
 # Test is_kind function
 query I
-SELECT is_kind(112::TINYINT, 'DEFINITION');  -- DEFINITION_FUNCTION
+SELECT is_kind(112::UTINYINT, 'DEFINITION');  -- DEFINITION_FUNCTION
 ----
 true
 
 query I
-SELECT is_kind(116::TINYINT, 'DEFINITION');  -- DEFINITION_VARIABLE
+SELECT is_kind(116::UTINYINT, 'DEFINITION');  -- DEFINITION_VARIABLE
 ----
 true
 
 query I
-SELECT is_kind(80::TINYINT, 'DEFINITION');   -- COMPUTATION_CALL
+SELECT is_kind(80::UTINYINT, 'DEFINITION');   -- COMPUTATION_CALL
 ----
 false
 
 query I
-SELECT is_kind(80::TINYINT, 'COMPUTATION_NODE');  -- COMPUTATION_CALL is in COMPUTATION_NODE
+SELECT is_kind(80::UTINYINT, 'COMPUTATION_NODE');  -- COMPUTATION_CALL is in COMPUTATION_NODE
 ----
 true
 
@@ -60,39 +60,39 @@ def foo():
 # Count nodes by kind
 query II
 SELECT 
-    get_kind(semantic_type) as kind,
+    get_kind(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT) as kind,
     COUNT(*) as count
 FROM test_ast
-WHERE get_kind(semantic_type) != 'PARSER_SPECIFIC'
+WHERE get_kind(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT) != 'PARSER_SPECIFIC'
 GROUP BY kind
-ORDER BY count DESC;
+ORDER BY count DESC, kind;
 ----
-ORGANIZATION	11
-NAME	11
-LITERAL	3
-OPERATOR	2
+NAME	7
+DEFINITION	3
+LITERAL	2
+ORGANIZATION	2
 COMPUTATION_NODE	1
-DEFINITION	1
 FLOW_CONTROL	1
+OPERATOR	1
 
 # Test filtering by kind
 query I
 SELECT COUNT(*)
 FROM test_ast
-WHERE is_kind(semantic_type, 'DEFINITION');
+WHERE is_kind(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT, 'DEFINITION');
+----
+3
+
+query I
+SELECT COUNT(*)
+FROM test_ast
+WHERE is_kind(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT, 'NAME');
+----
+7
+
+query I
+SELECT COUNT(*)
+FROM test_ast
+WHERE is_kind(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT, 'OPERATOR');
 ----
 1
-
-query I
-SELECT COUNT(*)
-FROM test_ast
-WHERE is_kind(semantic_type, 'NAME');
-----
-11
-
-query I
-SELECT COUNT(*)
-FROM test_ast
-WHERE is_kind(semantic_type, 'OPERATOR');
-----
-2

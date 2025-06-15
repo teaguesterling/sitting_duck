@@ -108,7 +108,7 @@ SELECT * FROM (VALUES
 
 # Test that semantic_type_to_string returns the correct name for all codes
 query II
-SELECT code, semantic_type_to_string(code::TINYINT) = expected_name AS correct
+SELECT code, semantic_type_to_string(code::UTINYINT) = expected_name AS correct
 FROM semantic_type_constants
 WHERE NOT correct
 ORDER BY code;
@@ -126,7 +126,7 @@ ORDER BY code;
 query I
 SELECT COUNT(*)
 FROM semantic_type_constants
-WHERE semantic_type_code(semantic_type_to_string(code::TINYINT)) != code;
+WHERE semantic_type_code(semantic_type_to_string(code::UTINYINT)) != code;
 ----
 0
 
@@ -135,7 +135,7 @@ query I
 SELECT COUNT(*)
 FROM semantic_type_constants
 WHERE code BETWEEN 112 AND 124  -- DEFINITION range
-  AND NOT is_definition(code::TINYINT);
+  AND NOT is_definition(code::UTINYINT);
 ----
 0
 
@@ -143,7 +143,7 @@ query I
 SELECT COUNT(*)
 FROM semantic_type_constants
 WHERE code IN (80, 136)  -- COMPUTATION_CALL and EXECUTION_INVOCATION
-  AND NOT is_call(code::TINYINT);
+  AND NOT is_call(code::UTINYINT);
 ----
 0
 
@@ -151,7 +151,7 @@ query I
 SELECT COUNT(*)
 FROM semantic_type_constants
 WHERE code BETWEEN 144 AND 156  -- FLOW_CONTROL range
-  AND NOT is_control_flow(code::TINYINT);
+  AND NOT is_control_flow(code::UTINYINT);
 ----
 0
 
@@ -159,7 +159,7 @@ query I
 SELECT COUNT(*)
 FROM semantic_type_constants
 WHERE code IN (20, 24, 28)  -- NAME_IDENTIFIER, NAME_QUALIFIED, NAME_SCOPED
-  AND NOT is_identifier(code::TINYINT);
+  AND NOT is_identifier(code::UTINYINT);
 ----
 0
 
@@ -167,7 +167,7 @@ WHERE code IN (20, 24, 28)  -- NAME_IDENTIFIER, NAME_QUALIFIED, NAME_SCOPED
 query III
 SELECT 
     code,
-    get_super_kind(code::TINYINT),
+    get_super_kind(code::UTINYINT),
     CASE 
         WHEN code < 64 THEN 'DATA_STRUCTURE'
         WHEN code < 128 THEN 'COMPUTATION'
@@ -175,7 +175,7 @@ SELECT
         ELSE 'META_EXTERNAL'
     END AS expected_super_kind
 FROM semantic_type_constants
-WHERE get_super_kind(code::TINYINT) != expected_super_kind;
+WHERE get_super_kind(code::UTINYINT) != expected_super_kind;
 ----
 
 # Verify searchable types are all valid
@@ -191,11 +191,11 @@ WHERE semantic_type_to_string(type_code) LIKE 'UNKNOWN%';
 
 # Test edge cases with type codes
 query I
-SELECT semantic_type_to_string(255::TINYINT);  -- Invalid code
+SELECT semantic_type_to_string(255::UTINYINT);  -- Invalid code
 ----
 UNKNOWN_SEMANTIC_TYPE
 
 query I
-SELECT semantic_type_to_string(127::TINYINT);  -- Unused code
+SELECT semantic_type_to_string(127::UTINYINT);  -- Unused code
 ----
 UNKNOWN_SEMANTIC_TYPE
