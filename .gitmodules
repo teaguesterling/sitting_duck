@@ -18,3 +18,30 @@
 [submodule "grammars/tree-sitter-rust"]
 	path = grammars/tree-sitter-rust
 	url = https://github.com/tree-sitter/tree-sitter-rust
+[submodule "grammars/tree-sitter-typescript"]
+	path = grammars/tree-sitter-typescript
+	url = https://github.com/tree-sitter/tree-sitter-typescript.git
+[submodule "grammars/tree-sitter-markdown"]
+	path = grammars/tree-sitter-markdown
+	url = https://github.com/MDeiml/tree-sitter-markdown.git
+[submodule "grammars/tree-sitter-java"]
+	path = grammars/tree-sitter-java
+	url = https://github.com/tree-sitter/tree-sitter-java.git
+[submodule "grammars/tree-sitter-html"]
+	path = grammars/tree-sitter-html
+	url = https://github.com/tree-sitter/tree-sitter-html.git
+[submodule "grammars/tree-sitter-css"]
+	path = grammars/tree-sitter-css
+	url = https://github.com/tree-sitter/tree-sitter-css.git
+[submodule "grammars/tree-sitter-c"]
+	path = grammars/tree-sitter-c
+	url = https://github.com/tree-sitter/tree-sitter-c.git
+[submodule "grammars/tree-sitter-sql"]
+	path = grammars/tree-sitter-sql
+	url = https://github.com/derekstride/tree-sitter-sql.git
+[submodule "grammars/tree-sitter-go"]
+	path = grammars/tree-sitter-go
+	url = https://github.com/tree-sitter/tree-sitter-go.git
+[submodule "grammars/tree-sitter-ruby"]
+	path = grammars/tree-sitter-ruby
+	url = https://github.com/tree-sitter/tree-sitter-ruby.git

@@ -11,6 +11,7 @@ This directory contains git submodules for tree-sitter language grammars used by
 To add support for a new language, add its tree-sitter grammar as a submodule:
 
 ```bash
+cd <project root>
 git submodule add https://github.com/tree-sitter/tree-sitter-<language>.git grammars/tree-sitter-<language>
 ```
 
