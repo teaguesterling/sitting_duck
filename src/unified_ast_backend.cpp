@@ -65,6 +65,7 @@ vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
         LogicalType::VARCHAR,     // type
         LogicalType::VARCHAR,     // name
         LogicalType::VARCHAR,     // file_path
+        LogicalType::VARCHAR,     // language
         LogicalType::INTEGER,     // start_line
         LogicalType::INTEGER,     // start_column
         LogicalType::INTEGER,     // end_line
@@ -77,14 +78,14 @@ vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
         LogicalType::VARCHAR,     // peek (source_text)
         // Semantic type fields
         LogicalType::UTINYINT,    // semantic_type
-        LogicalType::TINYINT,     // universal_flags
-        LogicalType::TINYINT      // arity_bin
+        LogicalType::UTINYINT,    // universal_flags
+        LogicalType::UTINYINT     // arity_bin
     };
 }
 
 vector<string> UnifiedASTBackend::GetFlatTableColumnNames() {
     return {
-        "node_id", "type", "name", "file_path",
+        "node_id", "type", "name", "file_path", "language",
         "start_line", "start_column", "end_line", "end_column", 
         "parent_id", "depth", "sibling_index", "children_count", "descendant_count",
         "peek",
@@ -115,8 +116,8 @@ LogicalType UnifiedASTBackend::GetASTStructSchema() {
     node_children.push_back(make_pair("peek", LogicalType::VARCHAR));
     // Semantic type fields
     node_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
-    node_children.push_back(make_pair("universal_flags", LogicalType::TINYINT));
-    node_children.push_back(make_pair("arity_bin", LogicalType::TINYINT));
+    node_children.push_back(make_pair("universal_flags", LogicalType::UTINYINT));
+    node_children.push_back(make_pair("arity_bin", LogicalType::UTINYINT));
     
     child_list_t<LogicalType> ast_children;
     ast_children.push_back(make_pair("nodes", LogicalType::LIST(LogicalType::STRUCT(node_children))));

@@ -11,6 +11,7 @@ namespace duckdb {
 // Simple row structure for flattened output
 struct ASTRow {
 	string file_path;
+	string language;
 	ASTNode node;
 };
 
@@ -55,7 +56,7 @@ static unique_ptr<FunctionData> ReadASTBatchBindTwoArg(ClientContext &context, T
 		peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
 	}
 	
-	// Use unified backend schema (includes taxonomy fields)
+	// Use the unified backend schema
 	return_types = UnifiedASTBackend::GetFlatTableSchema();
 	names = UnifiedASTBackend::GetFlatTableColumnNames();
 	
@@ -88,10 +89,9 @@ static unique_ptr<FunctionData> ReadASTBatchBindOneArg(ClientContext &context, T
 		peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
 	}
 	
-	// Use auto-detect for language
-	string language = "auto";
+	string language = "";  // Empty means auto-detect
 	
-	// Use unified backend schema (includes taxonomy fields)
+	// Use the unified backend schema
 	return_types = UnifiedASTBackend::GetFlatTableSchema();
 	names = UnifiedASTBackend::GetFlatTableColumnNames();
 	
@@ -112,7 +112,7 @@ static void ReadASTBatchFunction(ClientContext &context, TableFunctionInput &dat
 			data.all_rows.clear();
 			for (const auto& result : collection.results) {
 				for (const auto& node : result.nodes) {
-					data.all_rows.push_back({result.source.file_path, node});
+					data.all_rows.push_back({result.source.file_path, result.source.language, node});
 				}
 			}
 			
@@ -131,24 +131,25 @@ static void ReadASTBatchFunction(ClientContext &context, TableFunctionInput &dat
 	auto type_vec = FlatVector::GetData<string_t>(output.data[1]);
 	auto name_vec = FlatVector::GetData<string_t>(output.data[2]);
 	auto file_path_vec = FlatVector::GetData<string_t>(output.data[3]);
-	auto start_line_vec = FlatVector::GetData<int32_t>(output.data[4]);
-	auto start_column_vec = FlatVector::GetData<int32_t>(output.data[5]);
-	auto end_line_vec = FlatVector::GetData<int32_t>(output.data[6]);
-	auto end_column_vec = FlatVector::GetData<int32_t>(output.data[7]);
-	auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[8]);
-	auto depth_vec = FlatVector::GetData<int32_t>(output.data[9]);
-	auto sibling_index_vec = FlatVector::GetData<int32_t>(output.data[10]);
-	auto children_count_vec = FlatVector::GetData<int32_t>(output.data[11]);
-	auto descendant_count_vec = FlatVector::GetData<int32_t>(output.data[12]);
-	auto peek_vec = FlatVector::GetData<string_t>(output.data[13]);
-	auto semantic_type_vec = FlatVector::GetData<int8_t>(output.data[14]);
-	auto universal_flags_vec = FlatVector::GetData<int8_t>(output.data[15]);
-	auto arity_bin_vec = FlatVector::GetData<int8_t>(output.data[16]);
+	auto language_vec = FlatVector::GetData<string_t>(output.data[4]);
+	auto start_line_vec = FlatVector::GetData<int32_t>(output.data[5]);
+	auto start_column_vec = FlatVector::GetData<int32_t>(output.data[6]);
+	auto end_line_vec = FlatVector::GetData<int32_t>(output.data[7]);
+	auto end_column_vec = FlatVector::GetData<int32_t>(output.data[8]);
+	auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[9]);
+	auto depth_vec = FlatVector::GetData<int32_t>(output.data[10]);
+	auto sibling_index_vec = FlatVector::GetData<int32_t>(output.data[11]);
+	auto children_count_vec = FlatVector::GetData<int32_t>(output.data[12]);
+	auto descendant_count_vec = FlatVector::GetData<int32_t>(output.data[13]);
+	auto peek_vec = FlatVector::GetData<string_t>(output.data[14]);
+	auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[15]);
+	auto universal_flags_vec = FlatVector::GetData<uint8_t>(output.data[16]);
+	auto arity_bin_vec = FlatVector::GetData<uint8_t>(output.data[17]);
 	
 	// Get validity masks
 	auto &name_validity = FlatVector::Validity(output.data[2]);
-	auto &parent_validity = FlatVector::Validity(output.data[8]);
-	auto &peek_validity = FlatVector::Validity(output.data[13]);
+	auto &parent_validity = FlatVector::Validity(output.data[9]);
+	auto &peek_validity = FlatVector::Validity(output.data[14]);
 	
 	// Process rows starting from current_index
 	while (data.current_index < data.all_rows.size() && count < max_count) {
@@ -166,6 +167,7 @@ static void ReadASTBatchFunction(ClientContext &context, TableFunctionInput &dat
 		}
 		
 		file_path_vec[count] = StringVector::AddString(output.data[3], row.file_path);
+		language_vec[count] = StringVector::AddString(output.data[4], row.language);
 		start_line_vec[count] = node.file_position.start_line;
 		start_column_vec[count] = node.file_position.start_column;
 		end_line_vec[count] = node.file_position.end_line;
@@ -182,16 +184,17 @@ static void ReadASTBatchFunction(ClientContext &context, TableFunctionInput &dat
 		children_count_vec[count] = node.subtree.children_count;
 		descendant_count_vec[count] = node.subtree.descendant_count;
 		
-		// Handle peek with NULL support
-		if (node.peek.empty()) {
-			peek_validity.SetInvalid(count);
-		} else {
-			peek_vec[count] = StringVector::AddString(output.data[13], node.peek);
-		}
-		
+		// Semantic type fields
 		semantic_type_vec[count] = node.semantic_type;
 		universal_flags_vec[count] = node.universal_flags;
 		arity_bin_vec[count] = node.arity_bin;
+		
+		// Source text handling - set NULL if empty
+		if (node.peek.empty()) {
+			peek_validity.SetInvalid(count);
+		} else {
+			peek_vec[count] = StringVector::AddString(output.data[14], node.peek);
+		}
 		
 		count++;
 		data.current_index++;
@@ -200,30 +203,22 @@ static void ReadASTBatchFunction(ClientContext &context, TableFunctionInput &dat
 	output.SetCardinality(count);
 }
 
-static TableFunction GetReadASTBatchFunctionTwoArg() {
-	TableFunction read_ast_batch("read_ast_batch", {LogicalType::ANY, LogicalType::VARCHAR}, 
-	                            ReadASTBatchFunction, ReadASTBatchBindTwoArg);
-	read_ast_batch.name = "read_ast_batch";
-	read_ast_batch.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-	read_ast_batch.named_parameters["peek_size"] = LogicalType::INTEGER;
-	read_ast_batch.named_parameters["peek_mode"] = LogicalType::VARCHAR;
-	return read_ast_batch;
-}
-
-static TableFunction GetReadASTBatchFunctionOneArg() {
-	TableFunction read_ast_batch("read_ast_batch", {LogicalType::ANY}, 
-	                            ReadASTBatchFunction, ReadASTBatchBindOneArg);
-	read_ast_batch.name = "read_ast_batch";
-	read_ast_batch.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-	read_ast_batch.named_parameters["peek_size"] = LogicalType::INTEGER;
-	read_ast_batch.named_parameters["peek_mode"] = LogicalType::VARCHAR;
-	return read_ast_batch;
-}
-
 void RegisterReadASTBatchFunction(DatabaseInstance &instance) {
-	// Register both one-argument and two-argument versions
-	ExtensionUtil::RegisterFunction(instance, GetReadASTBatchFunctionOneArg());
-	ExtensionUtil::RegisterFunction(instance, GetReadASTBatchFunctionTwoArg());
+	// Register two-argument version
+	TableFunction read_ast_func_two("read_ast", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
+	                           ReadASTBatchFunction, ReadASTBatchBindTwoArg);
+	read_ast_func_two.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
+	read_ast_func_two.named_parameters["peek_size"] = LogicalType::INTEGER;
+	read_ast_func_two.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+	ExtensionUtil::RegisterFunction(instance, read_ast_func_two);
+	
+	// Register one-argument version with auto-detect
+	TableFunction read_ast_func_one("read_ast", {LogicalType::VARCHAR}, 
+	                          ReadASTBatchFunction, ReadASTBatchBindOneArg);
+	read_ast_func_one.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
+	read_ast_func_one.named_parameters["peek_size"] = LogicalType::INTEGER;
+	read_ast_func_one.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+	ExtensionUtil::RegisterFunction(instance, read_ast_func_one);
 }
 
 } // namespace duckdb
