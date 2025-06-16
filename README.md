@@ -2,6 +2,8 @@
 
 A powerful DuckDB extension that enables SQL-based analysis of Abstract Syntax Trees (ASTs) from source code files across multiple programming languages.
 
+**WARNING**: This is very **very** much a work-in-progress. Anything in this document may be true, false, aspriational, incorrect, or otherwise deprecated at any given point in time.
+
 ## Features
 
 ### 🌐 Multi-Language Support
