@@ -60,10 +60,10 @@ def foo():
 # Count nodes by kind
 query II
 SELECT 
-    get_kind(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT) as kind,
+    get_kind(semantic_type) as kind,
     COUNT(*) as count
 FROM test_ast
-WHERE get_kind(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT) != 'PARSER_SPECIFIC'
+WHERE get_kind(semantic_type) != 'PARSER_SPECIFIC'
 GROUP BY kind
 ORDER BY count DESC, kind;
 ----
@@ -79,20 +79,20 @@ OPERATOR	1
 query I
 SELECT COUNT(*)
 FROM test_ast
-WHERE is_kind(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT, 'DEFINITION');
+WHERE is_kind(semantic_type, 'DEFINITION');
 ----
 3
 
 query I
 SELECT COUNT(*)
 FROM test_ast
-WHERE is_kind(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT, 'NAME');
+WHERE is_kind(semantic_type, 'NAME');
 ----
 7
 
 query I
 SELECT COUNT(*)
 FROM test_ast
-WHERE is_kind(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT, 'OPERATOR');
+WHERE is_kind(semantic_type, 'OPERATOR');
 ----
 1

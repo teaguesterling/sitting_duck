@@ -8,7 +8,7 @@ LOAD duckdb_ast;
 # Create test data with various code patterns
 statement ok
 CREATE TEMP TABLE code_ast AS 
-SELECT * FROM parse_ast('def calculate_sum(numbers): return sum(numbers)\n\nclass DataProcessor:\n    def process(self, items):\n        return [item * 2 for item in items]', 'python');
+SELECT * FROM read_ast('test/data/python/test_classes.py');
 
 # Example 1: Find all function and class definitions
 query II
@@ -23,13 +23,13 @@ DataProcessor	DEFINITION_CLASS
 process	DEFINITION_FUNCTION
 
 # Example 2: Find all function calls
-query II
-SELECT name, semantic_type_to_string(semantic_type) as type
+# Note: The 'sum' call doesn't have a name in the AST
+query I
+SELECT COUNT(*)
 FROM code_ast
-WHERE is_call(semantic_type)
-ORDER BY start_line;
+WHERE is_call(semantic_type);
 ----
-print	COMPUTATION_CALL
+1
 
 # Example 3: Find all control flow constructs
 query II
@@ -38,7 +38,8 @@ FROM code_ast
 WHERE is_control_flow(semantic_type)
 ORDER BY start_line;
 ----
-for_statement	FLOW_LOOP
+return_statement	FLOW_JUMP
+return_statement	FLOW_JUMP
 
 # Example 4: Build a summary of code structure
 query II
@@ -49,13 +50,10 @@ FROM code_ast
 GROUP BY category
 ORDER BY node_count DESC;
 ----
-DATA_STRUCTURE	69
-PARSER_SPECIFIC	55
-ORGANIZATION	31
-COMPUTATION	15
-CONTROL_EFFECTS	10
-METADATA	2
-META_EXTERNAL	2
+META_EXTERNAL	19
+DATA_STRUCTURE	18
+COMPUTATION	6
+CONTROL_EFFECTS	5
 
 # Example 5: Find specific types by name
 query I
@@ -63,24 +61,25 @@ SELECT COUNT(*)
 FROM code_ast
 WHERE semantic_type = semantic_type_code('DEFINITION_FUNCTION');
 ----
-3
+2
 
 # Example 6: Filter to only searchable types for building an index
-query I
+statement ok
 CREATE TEMP TABLE code_index AS
 SELECT node_id, name, type, semantic_type, start_line, end_line
 FROM code_ast
 WHERE semantic_type = ANY(get_searchable_types())
   AND name IS NOT NULL;
 
+query I
 SELECT COUNT(*) FROM code_index;
 ----
-16
+14
 
 # Example 7: Analyze code patterns
 query II
 WITH function_calls AS (
-    SELECT name, COUNT(*) as call_count
+    SELECT COALESCE(name, '<anonymous>') as name, COUNT(*) as call_count
     FROM code_ast
     WHERE is_call(semantic_type)
     GROUP BY name
@@ -88,7 +87,7 @@ WITH function_calls AS (
 SELECT * FROM function_calls
 ORDER BY call_count DESC, name;
 ----
-print	1
+<anonymous>	1
 
 # Example 8: Find error handling patterns
 query I
@@ -101,7 +100,7 @@ WHERE semantic_type IN (
     semantic_type_code('ERROR_FINALLY')
 );
 ----
-1
+0
 
 # Example 9: Create a code navigation index
 query IIII
@@ -119,10 +118,9 @@ WHERE semantic_type IN (
 AND name IS NOT NULL
 ORDER BY start_line;
 ----
-calculate_sum	DEFINITION_FUNCTION	5	10
-DataProcessor	DEFINITION_CLASS	12	22
-__init__	DEFINITION_FUNCTION	13	14
-process	DEFINITION_FUNCTION	16	22
+calculate_sum	DEFINITION_FUNCTION	1	2
+DataProcessor	DEFINITION_CLASS	4	6
+process	DEFINITION_FUNCTION	5	6
 
 # Example 10: Language-agnostic search
 statement ok

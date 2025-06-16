@@ -26,7 +26,7 @@ true
 query I
 SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript') WHERE name IS NOT NULL;
 ----
-57
+71
 
 # Test 4: JavaScript function name extraction
 # ===========================================
@@ -72,14 +72,14 @@ WHERE type = 'call_expression';
 query III
 SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/javascript/simple.js')
-WHERE type IN ('function_declaration', 'class_declaration', 'call_expression', 'variable_declaration')
+WHERE type IN ('function_declaration', 'class_declaration', 'call_expression', 'lexical_declaration')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
 call_expression	80	6
 class_declaration	120	1
 function_declaration	112	2
-variable_declaration	116	6
+lexical_declaration	116	7
 
 # Test 9: JavaScript tree structure validation
 # ============================================

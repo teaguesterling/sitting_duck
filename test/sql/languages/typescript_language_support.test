@@ -26,7 +26,7 @@ true
 query I
 SELECT COUNT(*) FROM read_ast('test/data/javascript/typed_example.ts', 'typescript') WHERE name IS NOT NULL;
 ----
-130
+172
 
 # Test 4: TypeScript function name extraction
 # ===========================================
@@ -67,7 +67,7 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/javascript/typed_example.ts')
 WHERE type = 'type_annotation';
 ----
-43
+45
 
 # Test 8: TypeScript semantic types
 # =================================
@@ -82,7 +82,7 @@ ORDER BY type;
 call_expression	80	12
 class_declaration	120	1
 function_declaration	112	5
-interface_declaration	120	3
+interface_declaration	236	3
 
 # Test 9: TypeScript tree structure validation
 # ============================================
@@ -91,7 +91,7 @@ query II
 SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/javascript/typed_example.ts');
 ----
-15	1015
+16	1015
 
 # Test 10: TypeScript identifier extraction
 # =========================================

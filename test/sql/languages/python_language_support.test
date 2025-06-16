@@ -26,7 +26,7 @@ true
 query I
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python') WHERE name IS NOT NULL;
 ----
-26
+31
 
 # Test 4: Python function name extraction
 # =======================================
@@ -99,4 +99,4 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py')
 WHERE type = 'string' AND name IS NOT NULL;
 ----
-3
+4

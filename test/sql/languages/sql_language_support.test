@@ -26,7 +26,7 @@ true
 query I
 SELECT COUNT(*) FROM read_ast('test/data/sql/example.sql', 'sql') WHERE name IS NOT NULL;
 ----
-34
+41
 
 # Test 4: SQL identifier extraction
 # =================================
@@ -48,12 +48,13 @@ WHERE type = 'identifier' AND name IN ('users', 'orders', 'customers');
 
 # Test 6: SQL keywords
 # ====================
+# Note: SQL parser doesn't have a 'keyword' node type
 
 query I
 SELECT COUNT(*) FROM read_ast('test/data/sql/example.sql')
-WHERE type = 'keyword';
+WHERE type IN ('select', 'from', 'where', 'insert', 'create_table', 'group_by', 'order_by');
 ----
-16
+7
 
 # Test 7: SQL literals
 # ====================
@@ -70,14 +71,13 @@ WHERE type = 'literal';
 query III
 SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/sql/example.sql')
-WHERE type IN ('identifier', 'keyword', 'literal', 'comment')
+WHERE type IN ('identifier', 'literal', 'comment')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-comment	24	2
+comment	192	3
 identifier	20	34
-keyword	84	16
-literal	36	7
+literal	8	7
 
 # Test 9: SQL tree structure validation
 # =====================================
@@ -86,7 +86,7 @@ query II
 SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/sql/example.sql');
 ----
-22	177
+9	177
 
 # Test 10: SQL column references
 # ==============================

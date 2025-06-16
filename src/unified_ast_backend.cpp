@@ -76,7 +76,7 @@ vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
         LogicalType::INTEGER,     // descendant_count
         LogicalType::VARCHAR,     // peek (source_text)
         // Semantic type fields
-        LogicalType::TINYINT,     // semantic_type
+        LogicalType::UTINYINT,    // semantic_type
         LogicalType::TINYINT,     // universal_flags
         LogicalType::TINYINT      // arity_bin
     };
@@ -114,7 +114,7 @@ LogicalType UnifiedASTBackend::GetASTStructSchema() {
     node_children.push_back(make_pair("descendant_count", LogicalType::INTEGER));
     node_children.push_back(make_pair("peek", LogicalType::VARCHAR));
     // Semantic type fields
-    node_children.push_back(make_pair("semantic_type", LogicalType::TINYINT));
+    node_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
     node_children.push_back(make_pair("universal_flags", LogicalType::TINYINT));
     node_children.push_back(make_pair("arity_bin", LogicalType::TINYINT));
     
@@ -147,7 +147,7 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult& result, DataChunk& outpu
     auto descendant_count_vec = FlatVector::GetData<int32_t>(output.data[12]);
     auto peek_vec = FlatVector::GetData<string_t>(output.data[13]);
     // Semantic type fields
-    auto semantic_type_vec = FlatVector::GetData<int8_t>(output.data[14]);
+    auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[14]);
     auto universal_flags_vec = FlatVector::GetData<int8_t>(output.data[15]);
     auto arity_bin_vec = FlatVector::GetData<int8_t>(output.data[16]);
     
@@ -231,7 +231,7 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult& result) {
         node_children.push_back(make_pair("descendant_count", Value::INTEGER(node.subtree.descendant_count)));
         node_children.push_back(make_pair("peek", Value(node.peek)));
         // Semantic type fields
-        node_children.push_back(make_pair("semantic_type", Value::TINYINT(node.semantic_type)));
+        node_children.push_back(make_pair("semantic_type", Value::UTINYINT(node.semantic_type)));
         node_children.push_back(make_pair("universal_flags", Value::TINYINT(node.universal_flags)));
         node_children.push_back(make_pair("arity_bin", Value::TINYINT(node.arity_bin)));
         
@@ -253,7 +253,7 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult& result) {
     node_schema.push_back(make_pair("children_count", LogicalType::INTEGER));
     node_schema.push_back(make_pair("descendant_count", LogicalType::INTEGER));
     node_schema.push_back(make_pair("peek", LogicalType::VARCHAR));
-    node_schema.push_back(make_pair("semantic_type", LogicalType::TINYINT));
+    node_schema.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
     node_schema.push_back(make_pair("universal_flags", LogicalType::TINYINT));
     node_schema.push_back(make_pair("arity_bin", LogicalType::TINYINT));
     
