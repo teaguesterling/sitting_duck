@@ -1,0 +1,98 @@
+# Test kind-related helper functions
+
+require duckdb_ast
+
+statement ok
+LOAD duckdb_ast;
+
+# Test kind_code function
+query I
+SELECT kind_code('DEFINITION');
+----
+112
+
+query I
+SELECT kind_code('LITERAL');
+----
+0
+
+query I
+SELECT kind_code('FLOW_CONTROL');
+----
+144
+
+query I
+SELECT kind_code('INVALID_KIND');
+----
+NULL
+
+# Test is_kind function
+query I
+SELECT is_kind(112::UTINYINT, 'DEFINITION');  -- DEFINITION_FUNCTION
+----
+true
+
+query I
+SELECT is_kind(116::UTINYINT, 'DEFINITION');  -- DEFINITION_VARIABLE
+----
+true
+
+query I
+SELECT is_kind(80::UTINYINT, 'DEFINITION');   -- COMPUTATION_CALL
+----
+false
+
+query I
+SELECT is_kind(80::UTINYINT, 'COMPUTATION_NODE');  -- COMPUTATION_CALL is in COMPUTATION_NODE
+----
+true
+
+# Test with actual AST data
+statement ok
+CREATE TEMP TABLE test_ast AS 
+SELECT * FROM parse_ast('
+def foo():
+    x = 1
+    if x > 0:
+        print(x)
+', 'python');
+
+# Count nodes by kind
+query II
+SELECT 
+    get_kind(semantic_type) as kind,
+    COUNT(*) as count
+FROM test_ast
+WHERE get_kind(semantic_type) != 'PARSER_SPECIFIC'
+GROUP BY kind
+ORDER BY count DESC, kind;
+----
+NAME	7
+DEFINITION	3
+LITERAL	2
+ORGANIZATION	2
+COMPUTATION_NODE	1
+FLOW_CONTROL	1
+OPERATOR	1
+
+# Test filtering by kind
+query I
+SELECT COUNT(*)
+FROM test_ast
+WHERE is_kind(semantic_type, 'DEFINITION');
+----
+3
+
+query I
+SELECT COUNT(*)
+FROM test_ast
+WHERE is_kind(semantic_type, 'NAME');
+----
+7
+
+query I
+SELECT COUNT(*)
+FROM test_ast
+WHERE is_kind(semantic_type, 'OPERATOR');
+----
+1

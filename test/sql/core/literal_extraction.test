@@ -1,0 +1,137 @@
+# name: test/sql/core/literal_extraction.test
+# description: Test that literals have their values in the name field
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: JavaScript number literals have names
+# =============================================
+
+query II
+SELECT name, type FROM parse_ast('const x = 42; const y = 3.14;', 'javascript')
+WHERE type = 'number' AND name IS NOT NULL
+ORDER BY name;
+----
+3.14	number
+42	number
+
+# Test 2: JavaScript string literals have names
+# =============================================
+
+query II
+SELECT name, type FROM parse_ast('const msg = "hello"; const name = "world";', 'javascript')
+WHERE type = 'string' AND name IS NOT NULL
+ORDER BY name;
+----
+"hello"	string
+"world"	string
+
+# Test 3: Python literals have names
+# ==================================
+
+query II
+SELECT name, type FROM parse_ast('x = 42
+y = "hello"
+z = True
+w = None', 'python')
+WHERE type IN ('integer', 'string', 'true', 'none') AND name IS NOT NULL
+ORDER BY type, name;
+----
+42	integer
+None	none
+"hello"	string
+True	true
+
+# Test 4: Go literals have names
+# ==============================
+
+query II
+SELECT name, type FROM parse_ast('var x = 42
+var y = "hello"
+var z = 3.14', 'go')
+WHERE type IN ('int_literal', 'interpreted_string_literal', 'float_literal') AND name IS NOT NULL
+ORDER BY name;
+----
+"hello"	interpreted_string_literal
+3.14	float_literal
+42	int_literal
+
+# Test 5: Ruby literals have names
+# ================================
+
+query II
+SELECT name, type FROM parse_ast('x = 42
+y = "hello"
+z = :symbol
+w = true
+v = nil', 'ruby')
+WHERE type IN ('integer', 'string', 'simple_symbol', 'true', 'nil') AND name IS NOT NULL
+ORDER BY type, name;
+----
+42	integer
+nil	nil
+nil	nil
+:symbol	simple_symbol
+"hello"	string
+true	true
+
+# Test 6: SQL literals have names
+# ===============================
+
+query II
+SELECT name, type FROM parse_ast('SELECT * FROM users WHERE id = 42 AND name = ''John'';', 'sql')
+WHERE type IN ('literal', 'number_literal', 'string_literal') AND name IS NOT NULL
+ORDER BY name;
+----
+'John'	literal
+42	literal
+
+# Test 7: C++ literals have names
+# ===============================
+
+query II
+SELECT name, type FROM parse_ast('int x = 42; 
+string msg = "hello";
+bool flag = true;
+void* ptr = nullptr;', 'cpp')
+WHERE type IN ('number_literal', 'string_literal', 'true', 'false', 'nullptr') AND name IS NOT NULL
+ORDER BY name;
+----
+"hello"	string_literal
+42	number_literal
+nullptr	nullptr
+true	true
+
+# Test 8: TypeScript literals with types
+# ======================================
+
+query II
+SELECT name, type FROM parse_ast('const timeout: number = 5000;
+const message: string = "Error";
+const isValid: boolean = false;', 'typescript')
+WHERE type IN ('number', 'string', 'true', 'false') 
+  AND name IS NOT NULL
+  AND name NOT IN ('number', 'string', 'boolean') -- Exclude type names
+ORDER BY name;
+----
+"Error"	string
+5000	number
+false	false
+
+# Test 9: Verify literals can be queried by name
+# ==============================================
+
+query I
+SELECT COUNT(*) FROM parse_ast('const timeout = 5000; const retries = 3;', 'javascript')
+WHERE name = '5000';
+----
+1
+
+# Test 10: Template strings in JavaScript
+# =======================================
+
+query I
+SELECT COUNT(*) FROM parse_ast('const msg = `Hello ${name}!`;', 'javascript')
+WHERE type = 'template_string' AND name = '`Hello ${name}!`';
+----
+1

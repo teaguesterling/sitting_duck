@@ -78,9 +78,19 @@ public:
     static Value CreateASTStruct(const ASTResult& result);
     static Value CreateASTStructValue(const ASTResult& result); // For scalar functions
     
+    // Templated parsing implementation - avoids virtual calls in hot path
+    // Made public so language adapters can call it from their GetParsingFunction() lambdas
+    template<typename AdapterType>
+    static ASTResult ParseToASTResultTemplated(const AdapterType* adapter,
+                                               const string& content, 
+                                               const string& language, 
+                                               const string& file_path,
+                                               int32_t peek_size,
+                                               const string& peek_mode);
+    
 private:
     // Internal helpers
-    static void PopulateSemanticFields(ASTNode& node, const LanguageAdapter* adapter, TSNode ts_node);
+    static void PopulateSemanticFields(ASTNode& node, const LanguageAdapter* adapter, TSNode ts_node, const string& content);
 };
 
 } // namespace duckdb

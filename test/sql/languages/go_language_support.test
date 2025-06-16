@@ -1,0 +1,83 @@
+# name: test/sql/go_language_support.test
+# description: Test Go language support functionality
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: Go language is supported
+# ================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'go';
+----
+go
+
+# Test 2: Go file extension auto-detection
+# ========================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/go/simple.go');
+----
+true
+
+# Test 3: Explicit Go language specification
+# ==========================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/go/simple.go', 'go') WHERE name IS NOT NULL;
+----
+13
+
+# Test 4: Go function name extraction
+# ===================================
+
+query II
+SELECT name, type FROM read_ast('test/data/go/simple.go') 
+WHERE type = 'function_declaration' AND name IS NOT NULL 
+ORDER BY start_line;
+----
+Hello	function_declaration
+main	function_declaration
+
+# Test 5: Go package and import detection
+# =======================================
+
+query II
+SELECT name, type FROM read_ast('test/data/go/simple.go')
+WHERE type IN ('package_identifier', 'import_spec') AND name IS NOT NULL
+ORDER BY start_line;
+----
+main	package_identifier
+"fmt"	import_spec
+
+# Test 6: Go semantic types
+# =========================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM read_ast('test/data/go/simple.go')
+WHERE type IN ('function_declaration', 'package_identifier', 'import_spec')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+function_declaration	112	2
+import_spec	208	1
+package_identifier	20	1
+
+# Test 7: Go tree structure validation
+# ====================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/go/simple.go');
+----
+8	51
+
+# Test 8: Go identifier extraction
+# ================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/go/simple.go')
+WHERE type = 'identifier' AND name IS NOT NULL;
+----
+4

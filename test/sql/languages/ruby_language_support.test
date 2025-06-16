@@ -1,0 +1,97 @@
+# name: test/sql/ruby_language_support.test
+# description: Test Ruby language support functionality
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: Ruby language is supported
+# ==================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'ruby';
+----
+ruby
+
+# Test 2: Ruby file extension auto-detection
+# ==========================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/ruby/simple.rb');
+----
+true
+
+# Test 3: Explicit Ruby language specification
+# ============================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/ruby/simple.rb', 'ruby') WHERE name IS NOT NULL;
+----
+32
+
+# Test 4: Ruby method name extraction
+# ===================================
+
+query II
+SELECT name, type FROM read_ast('test/data/ruby/simple.rb') 
+WHERE type IN ('method', 'singleton_method') AND name IS NOT NULL 
+ORDER BY start_line;
+----
+initialize	method
+greet	method
+species	singleton_method
+say_hello	method
+
+# Test 5: Ruby class detection
+# ============================
+
+query II
+SELECT name, type FROM read_ast('test/data/ruby/simple.rb')
+WHERE type = 'constant' AND name IS NOT NULL
+ORDER BY start_line;
+----
+Person	constant
+Person	constant
+
+# Test 6: Ruby semantic types
+# ===========================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM read_ast('test/data/ruby/simple.rb')
+WHERE type IN ('method', 'singleton_method', 'class', 'call', 'assignment')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+assignment	116	2
+call	80	4
+class	120	2
+method	112	3
+singleton_method	112	1
+
+# Test 7: Ruby tree structure validation
+# ======================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/ruby/simple.rb');
+----
+9	80
+
+# Test 8: Ruby identifier extraction
+# ==================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/ruby/simple.rb')
+WHERE type = 'identifier' AND name IS NOT NULL;
+----
+14
+
+# Test 9: Ruby instance variables
+# ===============================
+
+query II
+SELECT name, type FROM read_ast('test/data/ruby/simple.rb')
+WHERE type = 'instance_variable' AND name IS NOT NULL;
+----
+@name	instance_variable
+@name	instance_variable

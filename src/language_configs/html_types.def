@@ -1,0 +1,37 @@
+// HTML language node type definitions
+// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+
+// Document structure
+DEF_TYPE(document, DEFINITION_MODULE, NONE, NONE, 0x01)
+DEF_TYPE(fragment, DEFINITION_MODULE, NONE, NONE, 0x01)
+DEF_TYPE(doctype, METADATA_DIRECTIVE, NODE_TEXT, NONE, 0x01)
+
+// Elements
+DEF_TYPE(element, ORGANIZATION_BLOCK, CUSTOM, NONE, 0x01)
+DEF_TYPE(script_element, EXTERNAL_EMBED, CUSTOM, NODE_TEXT, 0x01)
+DEF_TYPE(style_element, EXTERNAL_EMBED, CUSTOM, NODE_TEXT, 0x01)
+DEF_TYPE(start_tag, PARSER_DELIMITER, CUSTOM, NONE, 0)
+DEF_TYPE(end_tag, PARSER_DELIMITER, CUSTOM, NONE, 0)
+DEF_TYPE(self_closing_tag, PARSER_DELIMITER, CUSTOM, NONE, 0)
+DEF_TYPE(tag_name, NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+// Attributes
+DEF_TYPE(attribute, DEFINITION_VARIABLE, CUSTOM, CUSTOM, 0)
+DEF_TYPE(attribute_name, NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE(attribute_value, LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE(quoted_attribute_value, LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+
+// Text and content
+DEF_TYPE(text, LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE(raw_text, LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE(comment, METADATA_COMMENT, NODE_TEXT, NODE_TEXT, 0x08)
+
+// Special HTML5 elements
+DEF_TYPE(erroneous_end_tag, PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+// DOCTYPE components
+DEF_TYPE(doctype_name, NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+// Custom extraction strategies for HTML
+// Note: FIND_TAG_NAME, FIND_ATTRIBUTE_NAME, and FIND_ATTRIBUTE_VALUE 
+// would need to be implemented as custom strategies in the HTML adapter

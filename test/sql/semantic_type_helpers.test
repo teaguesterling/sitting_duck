@@ -1,0 +1,229 @@
+# Test semantic type helper functions
+
+require duckdb_ast
+
+statement ok
+LOAD duckdb_ast;
+
+# Test basic semantic_type_to_string function
+query I
+SELECT semantic_type_to_string(112::UTINYINT);
+----
+DEFINITION_FUNCTION
+
+query I
+SELECT semantic_type_to_string(120::UTINYINT);
+----
+DEFINITION_CLASS
+
+query I
+SELECT semantic_type_to_string(80::UTINYINT);
+----
+COMPUTATION_CALL
+
+# Test semantic_type_code reverse lookup
+query I
+SELECT semantic_type_code('DEFINITION_FUNCTION');
+----
+112
+
+query I
+SELECT semantic_type_code('DEFINITION_CLASS');
+----
+120
+
+query I
+SELECT semantic_type_code('COMPUTATION_CALL');
+----
+80
+
+query I
+SELECT semantic_type_code('NAME_IDENTIFIER');
+----
+20
+
+# Test invalid type name
+query I
+SELECT semantic_type_code('INVALID_TYPE_NAME');
+----
+NULL
+
+# Test predicate functions
+query I
+SELECT is_definition(112::UTINYINT);  -- DEFINITION_FUNCTION
+----
+true
+
+query I
+SELECT is_definition(80::UTINYINT);   -- COMPUTATION_CALL
+----
+false
+
+query I
+SELECT is_call(80::UTINYINT);         -- COMPUTATION_CALL
+----
+true
+
+query I
+SELECT is_call(112::UTINYINT);        -- DEFINITION_FUNCTION
+----
+false
+
+query I
+SELECT is_control_flow(144::UTINYINT); -- FLOW_CONDITIONAL
+----
+true
+
+query I
+SELECT is_control_flow(148::UTINYINT); -- FLOW_LOOP
+----
+true
+
+query I
+SELECT is_control_flow(112::UTINYINT); -- DEFINITION_FUNCTION
+----
+false
+
+query I
+SELECT is_identifier(20::UTINYINT);   -- NAME_IDENTIFIER
+----
+true
+
+query I
+SELECT is_identifier(24::UTINYINT);   -- NAME_QUALIFIED
+----
+true
+
+query I
+SELECT is_identifier(112::UTINYINT);  -- DEFINITION_FUNCTION
+----
+false
+
+# Test get_searchable_types returns a list
+query I
+SELECT length(get_searchable_types()) > 10;
+----
+true
+
+# Test that searchable types include key semantic types
+query I
+SELECT list_contains(get_searchable_types(), 112::UTINYINT);  -- DEFINITION_FUNCTION
+----
+true
+
+query I
+SELECT list_contains(get_searchable_types(), 120::UTINYINT);  -- DEFINITION_CLASS
+----
+true
+
+query I
+SELECT list_contains(get_searchable_types(), 80::UTINYINT);   -- COMPUTATION_CALL
+----
+true
+
+# Test get_super_kind function
+query I
+SELECT get_super_kind(112::UTINYINT);  -- DEFINITION_FUNCTION
+----
+COMPUTATION
+
+query I
+SELECT get_super_kind(20::UTINYINT);   -- NAME_IDENTIFIER
+----
+DATA_STRUCTURE
+
+# Test get_kind function
+query I
+SELECT get_kind(112::UTINYINT);  -- DEFINITION_FUNCTION
+----
+DEFINITION
+
+query I
+SELECT get_kind(80::UTINYINT);   -- COMPUTATION_CALL
+----
+COMPUTATION_NODE
+
+# Test round-trip conversion
+query I
+SELECT semantic_type_code(semantic_type_to_string(112::UTINYINT)) = 112;
+----
+true
+
+query I
+SELECT semantic_type_code(semantic_type_to_string(80::UTINYINT)) = 80;
+----
+true
+
+# Test with actual AST data
+statement ok
+CREATE TEMP TABLE test_ast AS 
+SELECT * FROM parse_ast('
+def hello():
+    return "world"
+    
+class MyClass:
+    def method(self):
+        print("test")
+', 'python');
+
+# Test filtering with predicate functions
+query II
+SELECT name, semantic_type_to_string(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT)
+FROM test_ast
+WHERE is_definition(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT) AND name IS NOT NULL
+ORDER BY node_id;
+----
+hello	DEFINITION_FUNCTION
+MyClass	DEFINITION_CLASS
+method	DEFINITION_FUNCTION
+
+query II
+SELECT name, semantic_type_to_string(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT)
+FROM test_ast
+WHERE is_call(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT)
+ORDER BY node_id;
+----
+NULL	COMPUTATION_CALL
+
+# Test all searchable types are valid
+query I
+WITH types AS (
+    SELECT unnest(get_searchable_types()) as type_code
+)
+SELECT COUNT(*) = COUNT(DISTINCT semantic_type_to_string(type_code))
+FROM types
+WHERE semantic_type_to_string(type_code) NOT LIKE 'UNKNOWN%';
+----
+true
+
+# Test is_semantic_type backward compatibility
+query I
+SELECT is_semantic_type(112::UTINYINT, 'FUNCTION');
+----
+true
+
+query I
+SELECT is_semantic_type(120::UTINYINT, 'CLASS');
+----
+true
+
+query I
+SELECT is_semantic_type(112::UTINYINT, 'DEFINITION');
+----
+true
+
+# Test with NULL values
+query I
+SELECT is_definition(NULL::UTINYINT) IS NULL;
+----
+true
+
+query I
+SELECT semantic_type_to_string(NULL::UTINYINT) IS NULL;
+----
+true
+
+query I
+SELECT semantic_type_code(NULL) IS NULL;
+----
+true

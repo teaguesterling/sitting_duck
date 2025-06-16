@@ -11,22 +11,38 @@ namespace duckdb {
 static const std::unordered_map<string, string> EXTENSION_TO_LANGUAGE = {
     {"cpp", "cpp"}, {"cc", "cpp"}, {"cxx", "cpp"}, {"c++", "cpp"},
     {"hpp", "cpp"}, {"hh", "cpp"}, {"hxx", "cpp"}, {"h++", "cpp"},
-    {"c", "cpp"}, {"h", "cpp"},
+    {"c", "c"}, {"h", "c"},
     {"py", "python"}, {"pyi", "python"}, {"pyw", "python"},
     {"js", "javascript"}, {"jsx", "javascript"}, {"mjs", "javascript"},
     {"ts", "typescript"}, {"tsx", "typescript"},
+    {"go", "go"},
+    {"rb", "ruby"}, {"ruby", "ruby"},
     {"sql", "sql"},
-    {"rs", "rust"}, {"rlib", "rust"}
+    {"rs", "rust"}, {"rlib", "rust"},
+    {"md", "markdown"}, {"markdown", "markdown"},
+    {"java", "java"},
+    // PHP disabled due to scanner dependency issues
+    // {"php", "php"}, {"php3", "php"}, {"php4", "php"}, {"php5", "php"}, {"phtml", "php"},
+    {"html", "html"}, {"htm", "html"},
+    {"css", "css"}
 };
 
 // Static mapping of languages to their supported extensions
 static const std::unordered_map<string, vector<string>> LANGUAGE_TO_EXTENSIONS = {
-    {"cpp", {"cpp", "cc", "cxx", "c++", "hpp", "hh", "hxx", "h++", "c", "h"}},
+    {"cpp", {"cpp", "cc", "cxx", "c++", "hpp", "hh", "hxx", "h++"}},
+    {"c", {"c", "h"}},
     {"python", {"py", "pyi", "pyw"}},
     {"javascript", {"js", "jsx", "mjs"}},
     {"typescript", {"ts", "tsx"}},
+    {"go", {"go"}},
+    {"ruby", {"rb", "ruby"}},
     {"sql", {"sql"}},
-    {"rust", {"rs", "rlib"}}
+    {"rust", {"rs", "rlib"}},
+    {"markdown", {"md", "markdown"}},
+    {"java", {"java"}},
+    // {"php", {"php", "php3", "php4", "php5", "phtml"}}, // Disabled
+    {"html", {"html", "htm"}},
+    {"css", {"css"}}
 };
 
 vector<string> ASTFileUtils::GetFiles(ClientContext &context, const Value &path_value, 

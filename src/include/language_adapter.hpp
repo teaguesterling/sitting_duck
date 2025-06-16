@@ -9,6 +9,13 @@
 
 namespace duckdb {
 
+// Forward declarations
+struct ASTResult;
+class UnifiedASTBackend;
+
+// Type for the parsing function - takes adapter and parsing parameters, returns ASTResult
+using ParsingFunction = std::function<ASTResult(const void*, const string&, const string&, const string&, int32_t, const string&)>;
+
 // Base class for language-specific adapters
 class LanguageAdapter {
 public:
@@ -17,6 +24,9 @@ public:
     // Language identification
     virtual string GetLanguageName() const = 0;
     virtual vector<string> GetAliases() const = 0;
+    
+    // Get the optimized parsing function for this language (single virtual call)
+    virtual ParsingFunction GetParsingFunction() const = 0;
     
     // Core functionality - type normalization and content extraction
     virtual string GetNormalizedType(const string &node_type) const = 0;
@@ -73,7 +83,7 @@ public:
     bool IsPublicNode(TSNode node, const string &content) const override;
     uint8_t GetNodeFlags(const string &node_type) const override;
     const NodeConfig* GetNodeConfig(const string &node_type) const override;
-
+    ParsingFunction GetParsingFunction() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -93,7 +103,7 @@ public:
     bool IsPublicNode(TSNode node, const string &content) const override;
     uint8_t GetNodeFlags(const string &node_type) const override;
     const NodeConfig* GetNodeConfig(const string &node_type) const override;
-
+    ParsingFunction GetParsingFunction() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -113,7 +123,7 @@ public:
     bool IsPublicNode(TSNode node, const string &content) const override;
     uint8_t GetNodeFlags(const string &node_type) const override;
     const NodeConfig* GetNodeConfig(const string &node_type) const override;
-
+    ParsingFunction GetParsingFunction() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -133,7 +143,7 @@ public:
     bool IsPublicNode(TSNode node, const string &content) const override;
     uint8_t GetNodeFlags(const string &node_type) const override;
     const NodeConfig* GetNodeConfig(const string &node_type) const override;
-
+    ParsingFunction GetParsingFunction() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -153,7 +163,163 @@ public:
     bool IsPublicNode(TSNode node, const string &content) const override;
     uint8_t GetNodeFlags(const string &node_type) const override;
     const NodeConfig* GetNodeConfig(const string &node_type) const override;
+    ParsingFunction GetParsingFunction() const override;
+protected:
+    void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+    
+private:
+    static const unordered_map<string, NodeConfig> node_configs;
+};
 
+class GoAdapter : public LanguageAdapter {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string GetSemanticTypeName(const string &node_type) const;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    uint8_t GetNodeFlags(const string &node_type) const override;
+    const NodeConfig* GetNodeConfig(const string &node_type) const override;
+    ParsingFunction GetParsingFunction() const override;
+protected:
+    void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+    
+private:
+    static const unordered_map<string, NodeConfig> node_configs;
+};
+
+class RubyAdapter : public LanguageAdapter {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    uint8_t GetNodeFlags(const string &node_type) const override;
+    const NodeConfig* GetNodeConfig(const string &node_type) const override;
+    ParsingFunction GetParsingFunction() const override;
+protected:
+    void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+    
+private:
+    static const unordered_map<string, NodeConfig> node_configs;
+};
+
+class MarkdownAdapter : public LanguageAdapter {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    uint8_t GetNodeFlags(const string &node_type) const override;
+    const NodeConfig* GetNodeConfig(const string &node_type) const override;
+    ParsingFunction GetParsingFunction() const override;
+protected:
+    void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+    
+private:
+    static const unordered_map<string, NodeConfig> node_configs;
+};
+
+class JavaAdapter : public LanguageAdapter {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    uint8_t GetNodeFlags(const string &node_type) const override;
+    const NodeConfig* GetNodeConfig(const string &node_type) const override;
+    ParsingFunction GetParsingFunction() const override;
+protected:
+    void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+    
+private:
+    static const unordered_map<string, NodeConfig> node_configs;
+};
+
+// PHP support disabled due to scanner dependency on tree-sitter internals
+#if 0
+class PHPAdapter : public LanguageAdapter {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    uint8_t GetNodeFlags(const string &node_type) const override;
+    const NodeConfig* GetNodeConfig(const string &node_type) const override;
+
+protected:
+    void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+    
+private:
+    static const unordered_map<string, NodeConfig> node_configs;
+};
+#endif
+
+class HTMLAdapter : public LanguageAdapter {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    uint8_t GetNodeFlags(const string &node_type) const override;
+    const NodeConfig* GetNodeConfig(const string &node_type) const override;
+    ParsingFunction GetParsingFunction() const override;
+protected:
+    void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+    
+private:
+    static const unordered_map<string, NodeConfig> node_configs;
+};
+
+class CSSAdapter : public LanguageAdapter {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    uint8_t GetNodeFlags(const string &node_type) const override;
+    const NodeConfig* GetNodeConfig(const string &node_type) const override;
+    ParsingFunction GetParsingFunction() const override;
+protected:
+    void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+    
+private:
+    static const unordered_map<string, NodeConfig> node_configs;
+};
+
+class CAdapter : public LanguageAdapter {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    uint8_t GetNodeFlags(const string &node_type) const override;
+    const NodeConfig* GetNodeConfig(const string &node_type) const override;
+    ParsingFunction GetParsingFunction() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;

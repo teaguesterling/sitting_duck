@@ -1,0 +1,241 @@
+# name: test/sql/semantic_type_validation.test
+# description: Validate semantic type mappings are correct and consistent
+# group: [duckdb_ast]
+
+require duckdb_ast
+
+# Test 1: Validate all DEFINITION types
+query III
+WITH definitions AS (
+    SELECT 'python' as lang, type, semantic_type 
+    FROM parse_ast('
+        def func(): pass
+        class MyClass: pass
+        x = 1
+        import os
+    ', 'python')
+    WHERE semantic_type BETWEEN 48 AND 63
+    UNION ALL
+    SELECT 'javascript' as lang, type, semantic_type
+    FROM parse_ast('
+        function func() {}
+        class MyClass {}
+        const x = 1;
+        import { foo } from "bar";
+    ', 'javascript') 
+    WHERE semantic_type BETWEEN 48 AND 63
+    UNION ALL
+    SELECT 'cpp' as lang, type, semantic_type
+    FROM parse_ast('
+        void func() {}
+        class MyClass {};
+        int x = 1;
+        namespace ns {}
+    ', 'cpp')
+    WHERE semantic_type BETWEEN 48 AND 63
+)
+SELECT DISTINCT lang, type, 
+    CASE semantic_type
+        WHEN 48 THEN 'DEFINITION_MODULE'
+        WHEN 52 THEN 'DEFINITION_FUNCTION'
+        WHEN 56 THEN 'DEFINITION_CLASS'
+        WHEN 60 THEN 'DEFINITION_VARIABLE'
+    END as semantic_name
+FROM definitions
+ORDER BY lang, semantic_name;
+----
+# Each language should show appropriate definition types
+
+# Test 2: Validate OPERATOR mappings
+query IIII
+WITH operators AS (
+    SELECT type, semantic_type,
+        CASE semantic_type
+            WHEN 160 THEN 'ARITHMETIC'
+            WHEN 164 THEN 'LOGICAL'
+            WHEN 168 THEN 'COMPARISON'
+            WHEN 172 THEN 'ASSIGNMENT'
+        END as op_type,
+        'python' as lang
+    FROM parse_ast('a = b + c * d // e & f | g and h or i < j <= k == m != n', 'python')
+    WHERE semantic_type BETWEEN 160 AND 175
+    UNION ALL
+    SELECT type, semantic_type,
+        CASE semantic_type
+            WHEN 160 THEN 'ARITHMETIC'
+            WHEN 164 THEN 'LOGICAL' 
+            WHEN 168 THEN 'COMPARISON'
+            WHEN 172 THEN 'ASSIGNMENT'
+        END as op_type,
+        'javascript' as lang
+    FROM parse_ast('a = b + c * d / e & f | g && h || i < j <= k === m !== n', 'javascript')
+    WHERE semantic_type BETWEEN 160 AND 175
+)
+SELECT lang, op_type, COUNT(*) as count, GROUP_CONCAT(DISTINCT type) as operators
+FROM operators
+GROUP BY lang, op_type
+ORDER BY lang, op_type;
+----
+# Should show correct categorization of operators by type
+
+# Test 3: Validate LITERAL types
+query III
+WITH literals AS (
+    SELECT type, semantic_type,
+        CASE semantic_type
+            WHEN 128 THEN 'NUMBER'
+            WHEN 129 THEN 'STRING'
+            WHEN 136 THEN 'ATOMIC'
+            WHEN 140 THEN 'STRUCTURED'
+        END as literal_type
+    FROM parse_ast('
+        x = 42
+        y = 3.14
+        z = "hello"
+        b = True
+        n = None
+        lst = [1, 2, 3]
+        dct = {"key": "value"}
+    ', 'python')
+    WHERE semantic_type BETWEEN 128 AND 143
+)
+SELECT literal_type, COUNT(*) as count, GROUP_CONCAT(DISTINCT type) as node_types
+FROM literals
+GROUP BY literal_type
+ORDER BY literal_type;
+----
+ATOMIC	2	false,none
+NUMBER	3	integer,integer,integer
+STRING	2	string,string
+STRUCTURED	2	dictionary,list
+
+# Test 4: Validate FLOW_CONTROL types
+query III
+WITH flow_control AS (
+    SELECT type, semantic_type,
+        CASE semantic_type
+            WHEN 64 THEN 'CONDITIONAL'
+            WHEN 68 THEN 'LOOP'
+            WHEN 72 THEN 'JUMP'
+            WHEN 76 THEN 'EXCEPTION'
+            WHEN 80 THEN 'SYNC'
+        END as flow_type
+    FROM parse_ast('
+        if x:
+            pass
+        elif y:
+            pass
+        else:
+            pass
+        
+        for i in range(10):
+            continue
+            break
+        
+        while True:
+            return
+        
+        try:
+            raise Exception()
+        except:
+            pass
+        finally:
+            pass
+            
+        async def f():
+            await g()
+    ', 'python')
+    WHERE semantic_type BETWEEN 64 AND 95
+)
+SELECT flow_type, COUNT(*) as count, GROUP_CONCAT(DISTINCT type) as node_types
+FROM flow_control
+GROUP BY flow_type
+ORDER BY flow_type;
+----
+# Should show all flow control types properly categorized
+
+# Test 5: Validate cross-language consistency
+query IIII
+WITH function_nodes AS (
+    SELECT 'python' as lang, COUNT(*) as count, 
+           COUNT(DISTINCT semantic_type) as unique_types,
+           GROUP_CONCAT(DISTINCT type) as node_types
+    FROM parse_ast('def add(a, b): return a + b', 'python')
+    WHERE semantic_type = 52
+    UNION ALL
+    SELECT 'javascript' as lang, COUNT(*) as count,
+           COUNT(DISTINCT semantic_type) as unique_types,
+           GROUP_CONCAT(DISTINCT type) as node_types
+    FROM parse_ast('function add(a, b) { return a + b; }', 'javascript')
+    WHERE semantic_type = 52
+    UNION ALL
+    SELECT 'cpp' as lang, COUNT(*) as count,
+           COUNT(DISTINCT semantic_type) as unique_types,
+           GROUP_CONCAT(DISTINCT type) as node_types
+    FROM parse_ast('int add(int a, int b) { return a + b; }', 'cpp')
+    WHERE semantic_type = 52
+)
+SELECT lang, count, unique_types, node_types
+FROM function_nodes
+ORDER BY lang;
+----
+cpp	1	1	function_definition
+javascript	1	1	function_declaration
+python	1	1	function_definition
+
+# Test 6: Validate no overlapping semantic types
+query I
+WITH all_mappings AS (
+    SELECT DISTINCT semantic_type, type, 'python' as lang
+    FROM parse_ast('
+        def f(): 
+            x = [1, "hello", True, {"a": 1}]
+            if x and y or not z:
+                return x + y * z
+    ', 'python')
+    WHERE semantic_type > 0
+),
+duplicates AS (
+    SELECT semantic_type, COUNT(DISTINCT type) as type_count
+    FROM all_mappings
+    GROUP BY semantic_type
+    HAVING COUNT(DISTINCT type) > 3  -- Allow some variation but not too much
+)
+SELECT COUNT(*) = 0 as no_excessive_duplicates
+FROM duplicates;
+----
+true
+
+# Test 7: Validate parser constructs get semantic_type = 0
+query II
+SELECT COUNT(*) as parser_nodes,
+       COUNT(CASE WHEN semantic_type = 0 THEN 1 END) as zero_semantic_type
+FROM parse_ast('x = 1', 'python')
+WHERE type IN ('module', 'block', 'argument_list', 'parameters');
+----
+# All parser construct nodes should have semantic_type = 0
+
+# Test 8: Validate flags are set correctly
+query IIIII
+WITH flagged_nodes AS (
+    SELECT type, semantic_type, universal_flags,
+           (universal_flags & 1) != 0 as is_keyword,
+           (universal_flags & 2) != 0 as is_punctuation,
+           (universal_flags & 4) != 0 as is_builtin,
+           (universal_flags & 16) != 0 as is_literal
+    FROM parse_ast('def print_hello(): print("Hello")', 'python')
+    WHERE universal_flags > 0
+)
+SELECT type, 
+       CASE WHEN is_keyword THEN 'KEYWORD' 
+            WHEN is_punctuation THEN 'PUNCTUATION'
+            WHEN is_builtin THEN 'BUILTIN'
+            WHEN is_literal THEN 'LITERAL'
+       END as flag_type,
+       semantic_type
+FROM flagged_nodes
+ORDER BY type;
+----
+def	KEYWORD	0
+print	BUILTIN	96
+string	LITERAL	129

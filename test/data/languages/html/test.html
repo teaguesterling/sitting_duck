@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test HTML Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .highlight {
+            background-color: yellow;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 id="main-title">Test HTML Document</h1>
+        <nav>
+            <ul>
+                <li><a href="#section1">Section 1</a></li>
+                <li><a href="#section2">Section 2</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section id="section1">
+            <h2>Section 1: Forms</h2>
+            <form action="/submit" method="post">
+                <label for="name">Name:</label>
+                <input type="text" id="name" name="name" required>
+                
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" required>
+                
+                <label for="message">Message:</label>
+                <textarea id="message" name="message" rows="4" cols="50"></textarea>
+                
+                <button type="submit">Submit</button>
+            </form>
+        </section>
+
+        <section id="section2">
+            <h2>Section 2: Content</h2>
+            <p class="highlight">This is a <strong>highlighted</strong> paragraph with <em>emphasis</em>.</p>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Header 1</th>
+                        <th>Header 2</th>
+                        <th>Header 3</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Cell 1</td>
+                        <td>Cell 2</td>
+                        <td>Cell 3</td>
+                    </tr>
+                    <tr>
+                        <td>Cell 4</td>
+                        <td>Cell 5</td>
+                        <td>Cell 6</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <img src="image.jpg" alt="Test image" width="300" height="200">
+        </section>
+
+        <article>
+            <h3>Article Title</h3>
+            <p>This is an article with some content.</p>
+            <blockquote cite="https://example.com">
+                "This is a quoted text from another source."
+            </blockquote>
+        </article>
+    </main>
+
+    <footer id="contact">
+        <p>&copy; 2024 Test Company. All rights reserved.</p>
+        <address>
+            Contact us at <a href="mailto:info@example.com">info@example.com</a>
+        </address>
+    </footer>
+
+    <script>
+        document.getElementById('main-title').addEventListener('click', function() {
+            alert('Title clicked!');
+        });
+    </script>
+</body>
+</html>

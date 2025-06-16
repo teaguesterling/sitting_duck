@@ -33,6 +33,19 @@ endif()
 set(EXTENSION_SOURCES 
     src/duckdb_ast_extension.cpp
     src/language_adapter.cpp
+    src/language_adapter_registry_init.cpp
+    src/language_adapters/python_adapter.cpp
+    src/language_adapters/javascript_adapter.cpp
+    src/language_adapters/cpp_adapter.cpp
+    src/language_adapters/typescript_adapter.cpp
+    src/language_adapters/sql_adapter.cpp
+    src/language_adapters/go_adapter.cpp
+    src/language_adapters/ruby_adapter.cpp
+    src/language_adapters/markdown_adapter.cpp
+    src/language_adapters/java_adapter.cpp
+    src/language_adapters/html_adapter.cpp
+    src/language_adapters/css_adapter.cpp
+    src/language_adapters/c_adapter.cpp
     src/read_ast_function.cpp
     src/read_ast_streaming_function.cpp
     src/read_ast_objects_hybrid.cpp
@@ -44,6 +57,7 @@ set(EXTENSION_SOURCES
     src/semantic_types.cpp
     src/semantic_type_functions.cpp
     src/ast_file_utils.cpp
+    src/ast_supported_languages_function.cpp
     grammars/tree-sitter-python/src/parser.c
     grammars/tree-sitter-python/src/scanner.c
     grammars/tree-sitter-javascript/src/parser.c
@@ -54,6 +68,20 @@ set(EXTENSION_SOURCES
     grammars/tree-sitter-typescript/typescript/src/scanner.c
     grammars/tree-sitter-sql/src/parser.c
     grammars/tree-sitter-sql/src/scanner.c
+    grammars/tree-sitter-go/src/parser.c
+    grammars/tree-sitter-ruby/src/parser.c
+    grammars/tree-sitter-ruby/src/scanner.c
+    grammars/tree-sitter-markdown/src/parser.c
+    grammars/tree-sitter-markdown/src/scanner.cc
+    grammars/tree-sitter-java/src/parser.c
+    # PHP disabled due to scanner dependency on tree-sitter internals
+    # grammars/tree-sitter-php/php/src/parser.c
+    # grammars/tree-sitter-php/php/src/scanner.c
+    grammars/tree-sitter-html/src/parser.c
+    grammars/tree-sitter-html/src/scanner.c
+    grammars/tree-sitter-css/src/parser.c
+    grammars/tree-sitter-css/src/scanner.c
+    grammars/tree-sitter-c/src/parser.c
     # Temporarily disabled due to ABI compatibility issues:
     # grammars/tree-sitter-rust/src/parser.c
     # grammars/tree-sitter-rust/src/scanner.c
