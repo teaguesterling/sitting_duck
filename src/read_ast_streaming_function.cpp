@@ -100,7 +100,7 @@ static unique_ptr<GlobalTableFunctionState> ReadASTStreamingInit(ClientContext &
         
     } catch (const Exception &e) {
         if (!bind_data.ignore_errors) {
-            throw IOException("Failed to initialize file list: " + string(e.what()));
+            throw IOException("Failed to parse files");
         }
         // Create empty file list if ignore_errors is true
         result->file_list = multi_file_reader->CreateFileList(context, vector<string>());

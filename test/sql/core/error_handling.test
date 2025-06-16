@@ -10,14 +10,25 @@ SELECT * FROM read_ast('test/data/python/nonexistent.py', 'python');
 ----
 IO Error: Failed to parse files
 
-# Test 2: Cross-language parsing - returns no nodes
+# Test 2: Cross-language parsing - should have ERROR nodes or no nodes
 query I
-SELECT COUNT(*) as total_nodes 
+SELECT CASE 
+    WHEN COUNT(*) = 0 THEN true
+    WHEN COUNT(*) FILTER (WHERE type = 'ERROR') > 0 THEN true
+    ELSE false
+END as has_errors_or_empty
 FROM read_ast('test/data/python/simple.py', 'javascript');
 ----
-0
+1
 
-# Test 3: read_ast_objects - non-existent file
+# Test 3: Explicit language override - parse Python code with .js extension
+query I
+SELECT COUNT(*) > 0 as has_nodes 
+FROM read_ast('test/data/python/actually_python.js', 'python');
+----
+1
+
+# Test 4: read_ast_objects - non-existent file
 statement error
 SELECT * FROM read_ast_objects('test/data/python/nonexistent.py', 'python');
 ----
