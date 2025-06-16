@@ -46,7 +46,6 @@ set(EXTENSION_SOURCES
     src/language_adapters/html_adapter.cpp
     src/language_adapters/css_adapter.cpp
     src/language_adapters/c_adapter.cpp
-    src/read_ast_function.cpp
     src/read_ast_streaming_function.cpp
     src/read_ast_objects_hybrid.cpp
     src/ast_sql_macros.cpp

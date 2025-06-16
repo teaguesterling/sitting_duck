@@ -228,7 +228,7 @@ static void ReadASTStreamingFunction(ClientContext &context, TableFunctionInput 
             if (node.peek.empty()) {
                 peek_validity.SetInvalid(output_idx);
             } else {
-                peek_vec[output_idx] = StringVector::AddString(output.data[13], node.peek);
+                peek_vec[output_idx] = StringVector::AddString(output.data[14], node.peek);
             }
             
             semantic_type_vec[output_idx] = node.semantic_type;
