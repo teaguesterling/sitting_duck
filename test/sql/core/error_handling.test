@@ -8,7 +8,7 @@ require duckdb_ast
 statement error
 SELECT * FROM read_ast('test/data/python/nonexistent.py', 'python');
 ----
-IO Error: Failed to initialize file list
+IO Error: Failed to parse files
 
 # Test 2: Cross-language parsing - returns no nodes
 query I

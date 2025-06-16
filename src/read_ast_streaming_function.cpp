@@ -126,24 +126,25 @@ static void ReadASTStreamingFunction(ClientContext &context, TableFunctionInput 
     auto type_vec = FlatVector::GetData<string_t>(output.data[1]);
     auto name_vec = FlatVector::GetData<string_t>(output.data[2]);
     auto file_path_vec = FlatVector::GetData<string_t>(output.data[3]);
-    auto start_line_vec = FlatVector::GetData<int32_t>(output.data[4]);
-    auto start_column_vec = FlatVector::GetData<int32_t>(output.data[5]);
-    auto end_line_vec = FlatVector::GetData<int32_t>(output.data[6]);
-    auto end_column_vec = FlatVector::GetData<int32_t>(output.data[7]);
-    auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[8]);
-    auto depth_vec = FlatVector::GetData<int32_t>(output.data[9]);
-    auto sibling_index_vec = FlatVector::GetData<int32_t>(output.data[10]);
-    auto children_count_vec = FlatVector::GetData<int32_t>(output.data[11]);
-    auto descendant_count_vec = FlatVector::GetData<int32_t>(output.data[12]);
-    auto peek_vec = FlatVector::GetData<string_t>(output.data[13]);
-    auto semantic_type_vec = FlatVector::GetData<int8_t>(output.data[14]);
-    auto universal_flags_vec = FlatVector::GetData<int8_t>(output.data[15]);
-    auto arity_bin_vec = FlatVector::GetData<int8_t>(output.data[16]);
+    auto language_vec = FlatVector::GetData<string_t>(output.data[4]);
+    auto start_line_vec = FlatVector::GetData<uint32_t>(output.data[5]);
+    auto start_column_vec = FlatVector::GetData<uint32_t>(output.data[6]);
+    auto end_line_vec = FlatVector::GetData<uint32_t>(output.data[7]);
+    auto end_column_vec = FlatVector::GetData<uint32_t>(output.data[8]);
+    auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[9]);
+    auto depth_vec = FlatVector::GetData<uint32_t>(output.data[10]);
+    auto sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[11]);
+    auto children_count_vec = FlatVector::GetData<uint32_t>(output.data[12]);
+    auto descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[13]);
+    auto peek_vec = FlatVector::GetData<string_t>(output.data[14]);
+    auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[15]);
+    auto universal_flags_vec = FlatVector::GetData<uint8_t>(output.data[16]);
+    auto arity_bin_vec = FlatVector::GetData<uint8_t>(output.data[17]);
     
     // Get validity masks
     auto &name_validity = FlatVector::Validity(output.data[2]);
-    auto &parent_validity = FlatVector::Validity(output.data[8]);
-    auto &peek_validity = FlatVector::Validity(output.data[13]);
+    auto &parent_validity = FlatVector::Validity(output.data[9]);
+    auto &peek_validity = FlatVector::Validity(output.data[14]);
     
     while (output_count < STANDARD_VECTOR_SIZE) {
         // Check if we need to parse a new file
@@ -161,21 +162,9 @@ static void ReadASTStreamingFunction(ClientContext &context, TableFunctionInput 
                     break;
                 }
                 
-                // Check if file has supported extension for the language
-                if (global_state.language != "auto") {
-                    auto supported_extensions = ASTFileUtils::GetSupportedExtensions(global_state.language);
-                    bool is_supported = false;
-                    for (const auto& ext : supported_extensions) {
-                        if (file.path.length() >= ext.length() && 
-                            file.path.substr(file.path.length() - ext.length()) == ext) {
-                            is_supported = true;
-                            break;
-                        }
-                    }
-                    if (!is_supported) {
-                        continue; // Skip this file
-                    }
-                }
+                // Only check file extensions when using auto-detection
+                // If a language is explicitly provided, allow parsing any file
+                // (even if it might result in 0 nodes due to parse failure)
                 
                 found_valid_file = true;
             }
@@ -218,6 +207,7 @@ static void ReadASTStreamingFunction(ClientContext &context, TableFunctionInput 
             }
             
             file_path_vec[output_idx] = StringVector::AddString(output.data[3], global_state.current_file_result->source.file_path);
+            language_vec[output_idx] = StringVector::AddString(output.data[4], global_state.current_file_result->source.language);
             start_line_vec[output_idx] = node.file_position.start_line;
             start_column_vec[output_idx] = node.file_position.start_column;
             end_line_vec[output_idx] = node.file_position.end_line;

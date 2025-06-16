@@ -89,7 +89,7 @@ static unique_ptr<FunctionData> ReadASTBatchBindOneArg(ClientContext &context, T
 		peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
 	}
 	
-	string language = "";  // Empty means auto-detect
+	string language = "auto";  // Auto-detect language from file extension
 	
 	// Use the unified backend schema
 	return_types = UnifiedASTBackend::GetFlatTableSchema();
@@ -132,15 +132,15 @@ static void ReadASTBatchFunction(ClientContext &context, TableFunctionInput &dat
 	auto name_vec = FlatVector::GetData<string_t>(output.data[2]);
 	auto file_path_vec = FlatVector::GetData<string_t>(output.data[3]);
 	auto language_vec = FlatVector::GetData<string_t>(output.data[4]);
-	auto start_line_vec = FlatVector::GetData<int32_t>(output.data[5]);
-	auto start_column_vec = FlatVector::GetData<int32_t>(output.data[6]);
-	auto end_line_vec = FlatVector::GetData<int32_t>(output.data[7]);
-	auto end_column_vec = FlatVector::GetData<int32_t>(output.data[8]);
+	auto start_line_vec = FlatVector::GetData<uint32_t>(output.data[5]);
+	auto start_column_vec = FlatVector::GetData<uint32_t>(output.data[6]);
+	auto end_line_vec = FlatVector::GetData<uint32_t>(output.data[7]);
+	auto end_column_vec = FlatVector::GetData<uint32_t>(output.data[8]);
 	auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[9]);
-	auto depth_vec = FlatVector::GetData<int32_t>(output.data[10]);
-	auto sibling_index_vec = FlatVector::GetData<int32_t>(output.data[11]);
-	auto children_count_vec = FlatVector::GetData<int32_t>(output.data[12]);
-	auto descendant_count_vec = FlatVector::GetData<int32_t>(output.data[13]);
+	auto depth_vec = FlatVector::GetData<uint32_t>(output.data[10]);
+	auto sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[11]);
+	auto children_count_vec = FlatVector::GetData<uint32_t>(output.data[12]);
+	auto descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[13]);
 	auto peek_vec = FlatVector::GetData<string_t>(output.data[14]);
 	auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[15]);
 	auto universal_flags_vec = FlatVector::GetData<uint8_t>(output.data[16]);
