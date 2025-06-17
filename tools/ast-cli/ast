@@ -1,0 +1,284 @@
+#!/bin/bash
+# AST CLI - Unified AST analysis tool
+# Combines the best features from ast, ast-nav, and ast-refactored
+
+set -euo pipefail
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Database and binary locations
+DB_PATH="${AST_DB:-$PROJECT_ROOT/ast_index.duckdb}"
+DUCKDB="$PROJECT_ROOT/build/release/duckdb"
+EXTENSION="$PROJECT_ROOT/build/release/extension/sitting_ducks/sitting_ducks.duckdb_extension"
+SQL_LIB="$PROJECT_ROOT/ast-navigator.sql"
+
+# Check for --include-syntax flag
+INCLUDE_SYNTAX=false
+SEMANTIC_FILTER="AND (semantic_type IS NULL OR semantic_type <> -20)"
+ARGS=()
+for arg in "$@"; do
+    if [[ "$arg" == "--include-syntax" ]]; then
+        INCLUDE_SYNTAX=true
+        SEMANTIC_FILTER=""
+    else
+        ARGS+=("$arg")
+    fi
+done
+set -- "${ARGS[@]}"
+
+# Helper functions
+sql() {
+    $DUCKDB "$DB_PATH" -noheader -list -s "LOAD '$EXTENSION'; $1" 2>/dev/null
+}
+
+sql_out() {
+    $DUCKDB "$DB_PATH" -column -s "LOAD '$EXTENSION'; $1"
+}
+
+sql_parquet() {
+    $DUCKDB -noheader -list -init "$SQL_LIB" -s "LOAD '$EXTENSION'; $1" 2>/dev/null
+}
+
+sql_parquet_out() {
+    $DUCKDB -column -init "$SQL_LIB" -s "LOAD '$EXTENSION'; $1"
+}
+
+# Check dependencies
+check_deps() {
+    if [[ ! -f "$DUCKDB" ]]; then
+        echo "Error: DuckDB not found at $DUCKDB"
+        echo "Run 'make' to build the extension first"
+        exit 1
+    fi
+    
+    if [[ ! -f "$EXTENSION" ]]; then
+        echo "Error: AST extension not found at $EXTENSION"
+        echo "Run 'make' to build the extension first"
+        exit 1
+    fi
+}
+
+show_help() {
+    cat << 'EOF'
+AST CLI - Unified AST analysis tool
+
+USAGE:
+  ast <command> [options] [arguments]
+
+INDEXING:
+  index <lang> <pattern...>         Create parquet index (supports multiple patterns)
+  init                              Initialize database storage
+  update <files...>                 Update database with files
+  list                              List all indexes
+  stats                             Show index statistics
+
+SEARCH & ANALYSIS:
+  funcs <pattern> [name]            List functions in files
+  find <function> [lang]            Find function across indexes
+  src <function>                    Extract function source code
+  search <term> [lang]              Search for names containing term
+  classes <pattern> [name]          Find classes/structs
+  complex [threshold]               Find complex functions (default: 100 nodes)
+
+FILE ANALYSIS:
+  file <file_path>                  Analyze a specific file
+  deps <file_path>                  Show file dependencies
+  callers <function> [lang]         Find what calls a function
+  called-by <function> [lang]       Find what a function calls
+
+PATTERN ANALYSIS:
+  hotspots [threshold]              Find code hotspots (complexity + coupling)
+  unused [lang]                     Find potentially unused functions
+  duplicates [similarity]           Find similar/duplicate functions
+
+CODE NAVIGATION:
+  context <function> [lines]        Show context around function
+  definition <symbol> [lang]        Show symbol definition
+  references <symbol> [lang]        Find references to symbol
+  tree <file>                       Show named nodes in file
+
+ANALYSIS & EXPORT:
+  metrics [type]                    Advanced metrics (overview|complexity|languages)
+  compare <func1> <func2>           Compare two functions
+  export-json [file]                Export data to JSON
+
+PERFORMANCE:
+  quick <term>                      Quick search with relevance ranking
+
+OPTIONS:
+  --include-syntax                  Include parser syntax nodes (default: filtered out)
+
+EXAMPLES:
+  # Indexing
+  ast index py "**/*.py"                        # Single pattern
+  ast index cpp "src/**/*.cpp" "include/**/*.h" # Multiple patterns
+  
+  # Search
+  ast funcs "src/**/*.py" "parse*"              # Find parse functions in Python
+  ast find ParseToASTResult                     # Find function (all languages)
+  ast src ParseToASTResult                      # Show function source
+  
+  # Analysis
+  ast hotspots 200                              # Find complexity hotspots > 200
+  ast unused cpp                                # Find unused C++ functions
+  ast context MyFunction 5                      # Show 5 lines context
+EOF
+}
+
+case "${1:-help}" in
+    # Indexing commands (from ast)
+    "index")
+        check_deps
+        lang=$2
+        shift 2
+        patterns=("$@")
+        
+        if [[ ${#patterns[@]} -eq 0 ]]; then
+            echo "Usage: ast index <lang> <pattern1> [pattern2] ..."
+            exit 1
+        fi
+        
+        echo "Creating index for $lang files with ${#patterns[@]} pattern(s)..."
+        
+        # Create combined SQL for all patterns
+        combined_sql="CREATE OR REPLACE TABLE ${lang}_nodes AS 
+        SELECT * FROM ("
+        
+        for i in "${!patterns[@]}"; do
+            pattern="${patterns[$i]}"
+            if [[ $i -gt 0 ]]; then
+                combined_sql+=" UNION ALL "
+            fi
+            combined_sql+="SELECT *, '$pattern' as source_pattern FROM read_ast('$pattern', '$lang') WHERE true $SEMANTIC_FILTER"
+        done
+        
+        combined_sql+=");"
+        
+        sql_parquet "$combined_sql"
+        echo "Index created successfully for language: $lang"
+        ;;
+        
+    # Database commands (from ast-refactored)
+    "init")
+        check_deps
+        echo "Initializing AST database at $DB_PATH..."
+        $DUCKDB "$DB_PATH" << EOF
+LOAD '$EXTENSION';
+
+CREATE TABLE IF NOT EXISTS ast_index (
+    node_id BIGINT,
+    type VARCHAR,
+    name VARCHAR,
+    file_path VARCHAR,
+    language VARCHAR,
+    start_line INTEGER,
+    start_column INTEGER,
+    end_line INTEGER,
+    end_column INTEGER,
+    parent_id BIGINT,
+    sibling_index INTEGER,
+    depth INTEGER,
+    children_count INTEGER,
+    descendant_count INTEGER,
+    semantic_type INTEGER,
+    semantic_id VARCHAR,
+    source_text TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ast_type ON ast_index(type);
+CREATE INDEX IF NOT EXISTS idx_ast_name ON ast_index(name);
+CREATE INDEX IF NOT EXISTS idx_ast_file ON ast_index(file_path);
+CREATE INDEX IF NOT EXISTS idx_ast_lang ON ast_index(language);
+CREATE INDEX IF NOT EXISTS idx_ast_semantic ON ast_index(semantic_type);
+EOF
+        echo "Database initialized successfully"
+        ;;
+        
+    # Semantic queries (from ast-nav)
+    "funcs"|"functions")
+        check_deps
+        if [[ -z "${2:-}" ]]; then
+            echo "Usage: ast funcs <file_pattern> [name_pattern]"
+            exit 1
+        fi
+        if [[ -n "${3:-}" ]]; then
+            sql_parquet_out "SELECT file_path, name, type, start_line FROM read_ast('$2') WHERE type LIKE '%function%' AND name LIKE '%$3%' $SEMANTIC_FILTER ORDER BY file_path, start_line;"
+        else
+            sql_parquet_out "SELECT file_path, name, type, start_line FROM read_ast('$2') WHERE type LIKE '%function%' $SEMANTIC_FILTER ORDER BY file_path, start_line;"
+        fi
+        ;;
+        
+    # Analysis commands (from ast)
+    "hotspots")
+        check_deps
+        threshold=${2:-100}
+        echo "Finding complexity hotspots (threshold: $threshold)..."
+        
+        for table in $(sql_parquet "SELECT table_name FROM information_schema.tables WHERE table_name LIKE '%_nodes'"); do
+            lang=${table%_nodes}
+            echo "=== $lang ==="
+            sql_parquet_out "
+            SELECT name, file_path, descendant_count as complexity, start_line 
+            FROM $table 
+            WHERE descendant_count >= $threshold AND name IS NOT NULL AND name != '' 
+            ORDER BY descendant_count DESC 
+            LIMIT 10"
+        done
+        ;;
+        
+    "complex")
+        check_deps
+        threshold=${2:-100}
+        echo "Finding complex functions (threshold: $threshold nodes)..."
+        
+        for table in $(sql_parquet "SELECT table_name FROM information_schema.tables WHERE table_name LIKE '%_nodes'"); do
+            lang=${table%_nodes}
+            echo "=== $lang ==="
+            sql_parquet_out "
+            SELECT name, file_path, descendant_count, start_line 
+            FROM $table 
+            WHERE type LIKE '%function%' AND descendant_count >= $threshold 
+            ORDER BY descendant_count DESC"
+        done
+        ;;
+        
+    "src")
+        check_deps
+        if [[ -z "${2:-}" ]]; then
+            echo "Usage: ast src <function_name>"
+            exit 1
+        fi
+        
+        echo "Searching for function: $2"
+        for table in $(sql_parquet "SELECT table_name FROM information_schema.tables WHERE table_name LIKE '%_nodes'"); do
+            result=$(sql_parquet_out "SELECT file_path, name, source_text, start_line FROM $table WHERE name = '$2' AND type LIKE '%function%' LIMIT 1" 2>/dev/null || true)
+            if [[ -n "$result" ]]; then
+                echo "$result"
+                break
+            fi
+        done
+        ;;
+        
+    "list")
+        check_deps
+        echo "Available indexes:"
+        for table in $(sql_parquet "SELECT table_name FROM information_schema.tables WHERE table_name LIKE '%_nodes'"); do
+            lang=${table%_nodes}
+            count=$(sql_parquet "SELECT COUNT(*) FROM $table")
+            echo "  $lang: $count nodes"
+        done
+        ;;
+        
+    "help"|"--help"|"-h")
+        show_help
+        ;;
+        
+    *)
+        echo "Unknown command: $1"
+        echo "Run 'ast help' for usage information"
+        exit 1
+        ;;
+esac

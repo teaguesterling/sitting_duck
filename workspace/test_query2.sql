@@ -1,2 +1,0 @@
-LOAD 'build/release/extension/duckdb_ast/duckdb_ast.duckdb_extension';
-SELECT COUNT(*) FROM json_tree(json_extract((SELECT nodes FROM read_ast_objects('test/data/python/simple.py', 'python')), '$[1]'));

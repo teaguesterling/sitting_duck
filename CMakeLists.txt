@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 # Set extension name here
-set(TARGET_NAME duckdb_ast)
+set(TARGET_NAME sitting_ducks)
 
 # Tree-sitter is our main dependency for AST parsing
 # Build tree-sitter from submodule (lib subdirectory contains CMakeLists.txt)

@@ -1,4 +1,4 @@
-# DuckDB AST Extension
+# Sitting Ducks
 
 A powerful DuckDB extension that enables SQL-based analysis of Abstract Syntax Trees (ASTs) from source code files across multiple programming languages.
 
