@@ -4,13 +4,100 @@ cmake_minimum_required(VERSION 3.5)
 set(TARGET_NAME duckdb_ast)
 
 # Tree-sitter is our main dependency for AST parsing
-find_package(unofficial-tree-sitter CONFIG REQUIRED)
+# Build tree-sitter from submodule (lib subdirectory contains CMakeLists.txt)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build tree-sitter as static library" FORCE)
+add_subdirectory(third_party/tree-sitter/lib)
+
+# Build tree-sitter CLI if Cargo is available
+find_program(CARGO_EXECUTABLE cargo)
+if(CARGO_EXECUTABLE)
+    set(TREE_SITTER_CLI "${CMAKE_CURRENT_SOURCE_DIR}/third_party/tree-sitter/target/release/tree-sitter")
+    add_custom_command(
+        OUTPUT ${TREE_SITTER_CLI}
+        COMMAND ${CARGO_EXECUTABLE} build --release --bin tree-sitter
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/third_party/tree-sitter"
+        COMMENT "Building tree-sitter CLI with Cargo"
+        VERBATIM
+    )
+    add_custom_target(tree-sitter-cli ALL DEPENDS ${TREE_SITTER_CLI})
+    # Install the CLI binary
+    install(PROGRAMS ${TREE_SITTER_CLI} DESTINATION bin)
+    message(STATUS "Tree-sitter CLI will be built at: ${TREE_SITTER_CLI}")
+    
+    # Function to generate parser for a grammar submodule
+    function(generate_parser GRAMMAR_DIR PARSER_PATH SCANNER_PATH)
+        get_filename_component(GRAMMAR_NAME ${GRAMMAR_DIR} NAME)
+        set(GRAMMAR_JS "${CMAKE_CURRENT_SOURCE_DIR}/grammars/${GRAMMAR_DIR}/grammar.js")
+        set(PARSER_C "${CMAKE_CURRENT_SOURCE_DIR}/grammars/${PARSER_PATH}")
+        
+        # Only generate if grammar.js exists
+        if(EXISTS ${GRAMMAR_JS})
+            # Create a list of output files for this grammar
+            set(GENERATED_FILES ${PARSER_C})
+            
+            # Add scanner.c if specified
+            if(NOT "${SCANNER_PATH}" STREQUAL "")
+                set(SCANNER_C "${CMAKE_CURRENT_SOURCE_DIR}/grammars/${SCANNER_PATH}")
+                list(APPEND GENERATED_FILES ${SCANNER_C})
+            endif()
+            
+            # Single command generates both parser.c and scanner.c
+            add_custom_command(
+                OUTPUT ${GENERATED_FILES}
+                COMMAND ${TREE_SITTER_CLI} generate
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/grammars/${GRAMMAR_DIR}"
+                DEPENDS ${TREE_SITTER_CLI} ${GRAMMAR_JS}
+                COMMENT "Generating parser for ${GRAMMAR_NAME}"
+                VERBATIM
+            )
+            
+            # Add files to global list for target dependency
+            set(ALL_GENERATED_PARSERS ${ALL_GENERATED_PARSERS} ${GENERATED_FILES} PARENT_SCOPE)
+            
+            message(STATUS "Parser generation configured for ${GRAMMAR_NAME}")
+        endif()
+    endfunction()
+    
+    # Generate parsers for all grammar submodules
+    generate_parser("tree-sitter-python" "tree-sitter-python/src/parser.c" "tree-sitter-python/src/scanner.c")
+    generate_parser("tree-sitter-javascript" "tree-sitter-javascript/src/parser.c" "tree-sitter-javascript/src/scanner.c")
+    generate_parser("tree-sitter-cpp" "tree-sitter-cpp/src/parser.c" "tree-sitter-cpp/src/scanner.c")
+    generate_parser("tree-sitter-typescript/typescript" "tree-sitter-typescript/typescript/src/parser.c" "tree-sitter-typescript/typescript/src/scanner.c")
+    generate_parser("tree-sitter-sql" "tree-sitter-sql/src/parser.c" "tree-sitter-sql/src/scanner.c")
+    generate_parser("tree-sitter-go" "tree-sitter-go/src/parser.c" "")
+    generate_parser("tree-sitter-ruby" "tree-sitter-ruby/src/parser.c" "tree-sitter-ruby/src/scanner.c")
+    generate_parser("tree-sitter-markdown/tree-sitter-markdown" "tree-sitter-markdown/tree-sitter-markdown/src/parser.c" "tree-sitter-markdown/tree-sitter-markdown/src/scanner.c")
+    generate_parser("tree-sitter-java" "tree-sitter-java/src/parser.c" "")
+    generate_parser("tree-sitter-php/php" "tree-sitter-php/php/src/parser.c" "tree-sitter-php/php/src/scanner.c")
+    generate_parser("tree-sitter-html" "tree-sitter-html/src/parser.c" "tree-sitter-html/src/scanner.c")
+    generate_parser("tree-sitter-css" "tree-sitter-css/src/parser.c" "tree-sitter-css/src/scanner.c")
+    generate_parser("tree-sitter-c" "tree-sitter-c/src/parser.c" "")
+    generate_parser("tree-sitter-rust" "tree-sitter-rust/src/parser.c" "tree-sitter-rust/src/scanner.c")
+    
+    # Create a target for all generated parsers
+    if(ALL_GENERATED_PARSERS)
+        add_custom_target(generate-parsers DEPENDS ${ALL_GENERATED_PARSERS})
+        list(LENGTH ALL_GENERATED_PARSERS PARSER_COUNT)
+        message(STATUS "Generated parser target created with ${PARSER_COUNT} files")
+    endif()
+    
+else()
+    message(WARNING "Cargo not found - tree-sitter CLI will not be built and parsers will not be auto-generated")
+endif()
+
+# Add tree-sitter to the DuckDB export set
+install(TARGETS tree-sitter
+        EXPORT "${DUCKDB_EXPORT_SET}"
+        LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
+        ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
 include_directories(src/include)
+# Include tree-sitter internal headers for grammars that need them (like PHP)
+include_directories(third_party/tree-sitter/lib/src)
 
 # Find Python for script execution
 find_package(Python3 COMPONENTS Interpreter)
@@ -70,20 +157,18 @@ set(EXTENSION_SOURCES
     grammars/tree-sitter-go/src/parser.c
     grammars/tree-sitter-ruby/src/parser.c
     grammars/tree-sitter-ruby/src/scanner.c
-    grammars/tree-sitter-markdown/src/parser.c
-    grammars/tree-sitter-markdown/src/scanner.cc
+    grammars/tree-sitter-markdown/tree-sitter-markdown/src/parser.c
+    grammars/tree-sitter-markdown/tree-sitter-markdown/src/scanner.c
     grammars/tree-sitter-java/src/parser.c
-    # PHP disabled due to scanner dependency on tree-sitter internals
-    # grammars/tree-sitter-php/php/src/parser.c
-    # grammars/tree-sitter-php/php/src/scanner.c
+    grammars/tree-sitter-php/php/src/parser.c
+    grammars/tree-sitter-php/php/src/scanner.c
     grammars/tree-sitter-html/src/parser.c
     grammars/tree-sitter-html/src/scanner.c
     grammars/tree-sitter-css/src/parser.c
     grammars/tree-sitter-css/src/scanner.c
     grammars/tree-sitter-c/src/parser.c
-    # Temporarily disabled due to ABI compatibility issues:
-    # grammars/tree-sitter-rust/src/parser.c
-    # grammars/tree-sitter-rust/src/scanner.c
+    grammars/tree-sitter-rust/src/parser.c
+    grammars/tree-sitter-rust/src/scanner.c
     )
     # Removed unused files:
     # src/ast_parser.cpp (replaced by unified_ast_backend.cpp)
@@ -95,9 +180,16 @@ set(EXTENSION_SOURCES
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 
+# Make extension targets depend on generated parsers
+if(TARGET generate-parsers)
+    add_dependencies(${EXTENSION_NAME} generate-parsers)
+    add_dependencies(${LOADABLE_EXTENSION_NAME} generate-parsers)
+    message(STATUS "Extension targets will depend on generated parsers")
+endif()
+
 # Link tree-sitter library
-target_link_libraries(${EXTENSION_NAME} unofficial::tree-sitter::tree-sitter)
-target_link_libraries(${LOADABLE_EXTENSION_NAME} unofficial::tree-sitter::tree-sitter)
+target_link_libraries(${EXTENSION_NAME} tree-sitter)
+target_link_libraries(${LOADABLE_EXTENSION_NAME} tree-sitter)
 
 install(
   TARGETS ${EXTENSION_NAME}
