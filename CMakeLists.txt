@@ -24,7 +24,7 @@ if(CARGO_EXECUTABLE)
     install(PROGRAMS ${TREE_SITTER_CLI} DESTINATION bin)
     message(STATUS "Tree-sitter CLI will be built at: ${TREE_SITTER_CLI}")
     
-    # Function to generate parser for a grammar submodule
+    # Function to generate parser for a grammar submodule with optional dependencies and patches
     function(generate_parser GRAMMAR_DIR PARSER_PATH SCANNER_PATH)
         get_filename_component(GRAMMAR_NAME ${GRAMMAR_DIR} NAME)
         set(GRAMMAR_JS "${CMAKE_CURRENT_SOURCE_DIR}/grammars/${GRAMMAR_DIR}/grammar.js")
@@ -41,13 +41,41 @@ if(CARGO_EXECUTABLE)
                 list(APPEND GENERATED_FILES ${SCANNER_C})
             endif()
             
-            # Single command generates both parser.c and scanner.c
+            # Build dependency list (CLI + grammar.js + any previously generated parsers)
+            set(GENERATION_DEPS ${TREE_SITTER_CLI} ${GRAMMAR_JS})
+            
+            # Add dependency on C grammar for C++ (since C++ requires C)
+            if("${GRAMMAR_NAME}" STREQUAL "tree-sitter-cpp")
+                list(APPEND GENERATION_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/grammars/tree-sitter-c/src/parser.c")
+                list(APPEND GENERATION_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/grammars/tree-sitter-c/grammar.js")
+            endif()
+            
+            # Add dependency on JavaScript grammar for TypeScript
+            if("${GRAMMAR_NAME}" STREQUAL "typescript")
+                list(APPEND GENERATION_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/grammars/tree-sitter-javascript/src/parser.c")
+                list(APPEND GENERATION_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/grammars/tree-sitter-javascript/grammar.js")
+            endif()
+            
+            # Apply patches before generation using dedicated script
+            set(PATCH_STATUS_DIR "${CMAKE_CURRENT_BINARY_DIR}/patch_status")
+            set(PATCH_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/scripts/apply_grammar_patches.sh")
+            
+            # Apply patches if script exists
+            if(EXISTS ${PATCH_SCRIPT})
+                set(PATCH_COMMANDS 
+                    COMMAND ${PATCH_SCRIPT} "${GRAMMAR_NAME}" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/patches" "${PATCH_STATUS_DIR}")
+            else()
+                set(PATCH_COMMANDS "")
+            endif()
+            
+            # Generate parser with patches
             add_custom_command(
                 OUTPUT ${GENERATED_FILES}
+                ${PATCH_COMMANDS}
                 COMMAND ${TREE_SITTER_CLI} generate
                 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/grammars/${GRAMMAR_DIR}"
-                DEPENDS ${TREE_SITTER_CLI} ${GRAMMAR_JS}
-                COMMENT "Generating parser for ${GRAMMAR_NAME}"
+                DEPENDS ${GENERATION_DEPS}
+                COMMENT "Applying patches and generating parser for ${GRAMMAR_NAME}"
                 VERBATIM
             )
             
@@ -58,11 +86,15 @@ if(CARGO_EXECUTABLE)
         endif()
     endfunction()
     
-    # Generate parsers for all grammar submodules
-    generate_parser("tree-sitter-python" "tree-sitter-python/src/parser.c" "tree-sitter-python/src/scanner.c")
-    generate_parser("tree-sitter-javascript" "tree-sitter-javascript/src/parser.c" "tree-sitter-javascript/src/scanner.c")
+    # Generate parsers for all grammar submodules (order matters for dependencies)
+    # C must be generated before C++ since C++ depends on C grammar
+    generate_parser("tree-sitter-c" "tree-sitter-c/src/parser.c" "")
     generate_parser("tree-sitter-cpp" "tree-sitter-cpp/src/parser.c" "tree-sitter-cpp/src/scanner.c")
+    # TypeScript builds on JavaScript
+    generate_parser("tree-sitter-javascript" "tree-sitter-javascript/src/parser.c" "tree-sitter-javascript/src/scanner.c")
     generate_parser("tree-sitter-typescript/typescript" "tree-sitter-typescript/typescript/src/parser.c" "tree-sitter-typescript/typescript/src/scanner.c")
+    # Independent grammars
+    generate_parser("tree-sitter-python" "tree-sitter-python/src/parser.c" "tree-sitter-python/src/scanner.c")
     generate_parser("tree-sitter-sql" "tree-sitter-sql/src/parser.c" "tree-sitter-sql/src/scanner.c")
     generate_parser("tree-sitter-go" "tree-sitter-go/src/parser.c" "")
     generate_parser("tree-sitter-ruby" "tree-sitter-ruby/src/parser.c" "tree-sitter-ruby/src/scanner.c")
@@ -71,7 +103,6 @@ if(CARGO_EXECUTABLE)
     generate_parser("tree-sitter-php/php" "tree-sitter-php/php/src/parser.c" "tree-sitter-php/php/src/scanner.c")
     generate_parser("tree-sitter-html" "tree-sitter-html/src/parser.c" "tree-sitter-html/src/scanner.c")
     generate_parser("tree-sitter-css" "tree-sitter-css/src/parser.c" "tree-sitter-css/src/scanner.c")
-    generate_parser("tree-sitter-c" "tree-sitter-c/src/parser.c" "")
     generate_parser("tree-sitter-rust" "tree-sitter-rust/src/parser.c" "tree-sitter-rust/src/scanner.c")
     
     # Create a target for all generated parsers

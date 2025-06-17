@@ -1,0 +1,8 @@
+--- a/grammars/tree-sitter-typescript/common/define-grammar.js
++++ b/grammars/tree-sitter-typescript/common/define-grammar.js
+@@ -1,4 +1,4 @@
+-const JavaScript = require('tree-sitter-javascript/grammar');
++const JavaScript = require('../../tree-sitter-javascript/grammar');
+ 
+ module.exports = function defineGrammar(dialect) {
+   return grammar(JavaScript, {
