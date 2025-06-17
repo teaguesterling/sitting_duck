@@ -40,9 +40,9 @@ WHERE type = 'atx_heading'
 ORDER BY start_line
 LIMIT 3;
 ----
-# Test Markdown Document
-## Code Examples
-## Lists
+Test Markdown Document
+Code Examples
+Lists
 
 # Test 4: Parse Java file
 query III
@@ -151,7 +151,7 @@ FROM parse_ast('# Hello World', 'markdown')
 WHERE type = 'atx_heading'
 LIMIT 1;
 ----
-atx_heading	# Hello World
+atx_heading	Hello World
 
 query II
 SELECT type, name

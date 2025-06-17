@@ -61,7 +61,10 @@ string MarkdownAdapter::ExtractNodeName(TSNode node, const string &content) cons
         // Handle custom extraction strategies
         if (config->name_strategy == ExtractionStrategy::CUSTOM) {
             string node_type = string(node_type_str);
-            if (node_type == "link" || node_type == "image") {
+            if (node_type == "atx_heading" || node_type == "setext_heading" || node_type == "section") {
+                // For headings and sections, find the inline child that contains the heading text
+                return FindChildByType(node, content, "inline");
+            } else if (node_type == "link" || node_type == "image") {
                 return FindChildByType(node, content, "link_text");
             } else if (node_type == "fenced_code_block") {
                 return FindChildByType(node, content, "info_string");
