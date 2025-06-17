@@ -46,7 +46,6 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
     
     // Process tree into ASTNodes using DFS ordering with O(1) descendant counting
     TSNode root = ts_tree_root_node(tree.get());
-    int64_t node_counter = 0;
     uint32_t max_depth = 0;
     
     struct StackEntry {
