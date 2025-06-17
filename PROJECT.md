@@ -1,17 +1,17 @@
-# Sitting Ducks 🦆
+# Sitting Duck 🦆
 
-**Sitting Ducks** is a DuckDB extension that makes Abstract Syntax Trees (ASTs) from source code files quack like data - enabling powerful SQL-based analysis across multiple programming languages.
+**Sitting Duck** is a DuckDB extension that makes Abstract Syntax Trees (ASTs) from source code files quack like data - enabling powerful SQL-based analysis across multiple programming languages.
 
-## Why "Sitting Ducks"?
+## Why "Sitting Duck"?
 
-The name reflects the project's philosophy:
-- **Sitting**: ASTs are stationary, structured data waiting to be analyzed
-- **Ducks**: Everything quacks like data in DuckDB - including your source code!
-- **Target-rich environment**: Code analysis becomes as easy as shooting fish in a barrel
+The name reflects the project's philosophy and technology stack:
+- **Sitting**: A nod to Tree-sitter, our parsing engine - your code sits in trees waiting for analysis
+- **Duck**: Everything quacks like data in DuckDB - including your source code!
+- **Target**: Your codebase becomes a sitting duck for powerful SQL-based analysis
 
 ## What Makes It Special
 
-Traditional code analysis tools force you to learn their APIs and query languages. Sitting Ducks lets you use the most powerful data analysis language ever created - **SQL** - to explore your codebase.
+Traditional code analysis tools force you to learn their APIs and query languages. Sitting Duck lets you use the most powerful data analysis language ever created - **SQL** - to explore your codebase.
 
 ```sql
 -- Find all complex functions across your entire codebase
@@ -32,7 +32,7 @@ ORDER BY usage_count DESC;
 
 ## Architecture
 
-Sitting Ducks transforms your source code into queriable data structures:
+Sitting Duck transforms your source code into queriable data structures:
 
 1. **Tree-sitter parsing** - Robust, error-recovering parsers for 13+ languages
 2. **Semantic classification** - Universal type system for cross-language analysis  
@@ -66,7 +66,7 @@ make && make install
 ./tools/ast-cli/ast funcs "**/*.py" 
 
 # Or use SQL directly
-duckdb -c "LOAD sitting_ducks; SELECT * FROM read_ast('main.py') LIMIT 10;"
+duckdb -c "LOAD sitting_duck; SELECT * FROM read_ast('main.py') LIMIT 10;"
 ```
 
 ## Philosophy
@@ -78,4 +78,4 @@ Therefore: Analyzing code should be joyful. 🦆
 ---
 
 *Previous name: DuckDB AST Extension*
-*Renamed to Sitting Ducks for better branding and memorability*
+*Renamed to Sitting Duck for better branding and memorability*

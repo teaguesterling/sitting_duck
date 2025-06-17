@@ -1,283 +1,229 @@
-# Sitting Ducks
+# Sitting Duck 🦆
 
-A powerful DuckDB extension that enables SQL-based analysis of Abstract Syntax Trees (ASTs) from source code files across multiple programming languages.
+A DuckDB extension that parses source code into Abstract Syntax Trees (ASTs) and makes them queryable with SQL.
 
-**WARNING**: This is very **very** much a work-in-progress. Anything in this document may be true, false, aspriational, incorrect, or otherwise deprecated at any given point in time.
+## What It Does
 
-## Features
+Sitting Duck lets you analyze source code using SQL queries. Parse your codebase once, then query it like any other database:
 
-### 🌐 Multi-Language Support
-- **5 Languages Supported**: Python, JavaScript, TypeScript, C++, SQL
-- **Tree-sitter Powered**: Robust parsing with error recovery
-- **Auto-Detection**: Automatic language detection from file extensions
-- **Unified API**: Same interface works across all languages
+```sql
+-- Load the extension
+LOAD sitting_duck;
 
-### 🔍 Rich AST Analysis
-- **Complete AST Access**: Full syntax tree with all node details
-- **Semantic Categorization**: 8-bit semantic type system for cross-language analysis
-- **Position Tracking**: Precise line/column locations for all nodes
-- **Source Text Extraction**: Configurable peek modes (smart, compact, signature, etc.)
+-- Find all functions in a Python file
+SELECT name, start_line, end_line 
+FROM read_ast('my_script.py') 
+WHERE type = 'function_definition';
 
-### ⚡ High Performance
-- **Streaming Architecture**: Process files one-by-one, see results immediately
-- **Memory Controlled**: Respects DuckDB memory limits, no memory explosion
-- **Enterprise Scale**: 25M nodes across 4M files in ~25 seconds
-- **Parallel Ready**: UNION queries automatically use multiple threads
-- **Smart Text Extraction**: Configurable `peek_mode` for performance tuning
-- **Parquet Integration**: Export 25M rows to 40MB compressed parquet files
+-- Count different node types
+SELECT type, COUNT(*) 
+FROM read_ast('my_script.py') 
+GROUP BY type 
+ORDER BY COUNT(*) DESC;
+```
 
-### 📊 Advanced Static Analysis
-- **Function Complexity**: Identify complex functions by AST node count and structure
-- **Dependency Analysis**: Track file-level include/import relationships
-- **Code Hotspots**: Find files with high complexity + coupling
-- **Call Graph Analysis**: Build function dependency networks
-- **Fan-in/Fan-out**: Identify highly coupled functions
-- **Dead Code Detection**: Locate potentially unused functions
+## Supported Languages
+
+Currently supports **13 languages** via Tree-sitter parsers:
+
+- **Web**: JavaScript, TypeScript, HTML, CSS
+- **Systems**: C, C++, Rust, Go  
+- **Scripting**: Python, Ruby, PHP
+- **Enterprise**: Java
+- **Documentation**: Markdown
 
 ## Installation
 
 ```bash
-# Clone the repository with submodules
-git clone --recursive https://github.com/yourusername/duckdb_ast.git
-cd duckdb_ast
+# Clone with submodules (required for Tree-sitter grammars)
+git clone --recursive https://github.com/your-repo/sitting-duck.git
+cd sitting-duck
 
 # Build the extension
 make
+
+# Test it works
+./build/release/duckdb -c "LOAD './build/release/extension/sitting_duck/sitting_duck.duckdb_extension'; SELECT COUNT(*) FROM read_ast('README.md');"
 ```
 
-## Usage
+## Basic Usage
+
+### Parse a Single File
 
 ```sql
--- Load the extension
-LOAD duckdb_ast;
+-- See all nodes in a file
+SELECT * FROM read_ast('example.py') LIMIT 10;
 
--- Parse a Python file and query its AST
-SELECT * FROM read_ast('path/to/file.py', 'python');
-
--- Find all function definitions
-SELECT name, start_line, end_line 
-FROM read_ast('file.py', 'python')
+-- Find function definitions
+SELECT name, start_line, end_line
+FROM read_ast('example.py')
 WHERE type = 'function_definition';
-
--- Count nodes by type
-SELECT type, COUNT(*) as count
-FROM read_ast('file.py', 'python')
-GROUP BY type
-ORDER BY count DESC;
 
 -- Show tree structure
 SELECT 
-    REPEAT('  ', depth) || type AS tree,
+    repeat('  ', depth) || type as indented_type,
     name,
     start_line
-FROM read_ast('file.py', 'python')
-WHERE depth <= 3
-ORDER BY node_id;
+FROM read_ast('example.py')
+ORDER BY node_id
+LIMIT 20;
 ```
 
-## Schema
+### Parse Multiple Files
 
-The `read_ast` function returns a table with the following columns:
-
-| Column | Type | Description |
-|--------|------|-------------|
-| node_id | BIGINT | Unique identifier for the node |
-| type | VARCHAR | Node type (e.g., 'function_definition', 'class_definition') |
-| name | VARCHAR | Node name if applicable (e.g., function or class name) |
-| file_path | VARCHAR | Path to the source file |
-| start_line | INTEGER | Starting line number (1-based) |
-| start_column | INTEGER | Starting column (0-based) |
-| end_line | INTEGER | Ending line number (1-based) |
-| end_column | INTEGER | Ending column (0-based) |
-| parent_id | BIGINT | Parent node ID (NULL for root) |
-| depth | INTEGER | Depth in the tree (0 for root) |
-| sibling_index | INTEGER | Position among siblings (0-based) |
-| source_text | VARCHAR | Actual source code for this node |
-
-## Examples
-
-### Basic AST Analysis
-
-#### Find all imports
 ```sql
-SELECT peek
-FROM read_ast('script.py', 'python')
+-- Analyze all Python files in a directory
+SELECT file_path, COUNT(*) as node_count
+FROM read_ast('src/**/*.py')  
+GROUP BY file_path
+ORDER BY node_count DESC;
+
+-- Find all imports across your project  
+SELECT file_path, peek as import_statement
+FROM read_ast('**/*.py')
 WHERE type IN ('import_statement', 'import_from_statement');
 ```
 
-#### Find all function definitions
-```sql
-SELECT name, start_line, end_line, descendant_count
-FROM read_ast('code.py', 'python')
-WHERE type = 'function_definition'
-ORDER BY descendant_count DESC;
+## Table Schema
+
+The `read_ast()` function returns this schema:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `node_id` | BIGINT | Unique node identifier |
+| `type` | VARCHAR | AST node type (e.g., 'function_definition') |
+| `name` | VARCHAR | Node name if applicable |
+| `file_path` | VARCHAR | Source file path |
+| `start_line` | INT | Starting line number (1-based) |
+| `start_column` | INT | Starting column (1-based) |  
+| `end_line` | INT | Ending line number (1-based) |
+| `end_column` | INT | Ending column (1-based) |
+| `parent_id` | BIGINT | Parent node ID (NULL for root) |
+| `sibling_index` | INT | Position among siblings (0-based) |
+| `depth` | INT | Tree depth (0 for root) |
+| `children_count` | INT | Number of direct children |
+| `descendant_count` | INT | Total descendants (useful for complexity) |
+| `peek` | VARCHAR | Source code snippet for this node |
+
+## CLI Tool
+
+The project includes a unified CLI tool at `./ast` (symlink to `tools/ast-cli/ast`):
+
+```bash
+# Index files for fast analysis
+./ast index py "**/*.py"
+./ast index cpp "src/**/*.cpp" "include/**/*.h"
+
+# Query the indexes
+./ast funcs "**/*.py" "parse*"    # Find functions matching "parse*"
+./ast complex 50                  # Find functions with >50 nodes
+./ast hotspots 100               # Find complexity hotspots
+./ast src function_name          # Show source code for a function
+
+# See all commands
+./ast help
 ```
 
-### Advanced Static Analysis
+## Real Examples
 
-#### Function Complexity Analysis
+### Find Complex Functions
 ```sql
--- Find most complex functions across entire codebase
-WITH function_info AS (
-    SELECT 
-        d.file_path,
-        d.start_line,
-        d.end_line,
-        d.descendant_count,
-        MAX(CASE WHEN c.type = 'identifier' THEN c.peek END) as function_name
-    FROM nodes d
-    JOIN nodes c ON c.parent_id = d.node_id AND c.file_path = d.file_path
-    WHERE d.type = 'function_declarator' AND d.semantic_type = 112
-    GROUP BY d.file_path, d.node_id, d.start_line, d.end_line, d.descendant_count
-    HAVING function_name IS NOT NULL
-)
+-- Functions with >100 AST nodes (complexity indicator)
+SELECT name, file_path, descendant_count as complexity
+FROM read_ast('**/*.py')
+WHERE type = 'function_definition' 
+  AND descendant_count > 100
+ORDER BY complexity DESC;
+```
+
+### Analyze Import Patterns
+```sql
+-- Most imported modules
 SELECT 
-    function_name,
-    file_path,
-    (end_line - start_line + 1) as line_count,
-    descendant_count as complexity
-FROM function_info
-WHERE descendant_count > 100
-ORDER BY descendant_count DESC;
+    regexp_extract(peek, 'from (\w+)', 1) as module,
+    count(*) as usage_count
+FROM read_ast('**/*.py')
+WHERE type = 'import_from_statement'
+GROUP BY module
+ORDER BY usage_count DESC;
 ```
 
-#### Dependency Analysis
+### Class Hierarchy
 ```sql
--- Find files with highest include dependencies
-WITH includes AS (
-    SELECT 
-        file_path as source_file,
-        REGEXP_EXTRACT(peek, '#include\s*[<"](.*?)[>"]', 1) as included_file
-    FROM nodes
-    WHERE type = 'preproc_include' AND peek LIKE '#include%'
-)
+-- Find all classes and their methods
 SELECT 
-    source_file,
-    COUNT(DISTINCT included_file) as dependency_count
-FROM includes
-WHERE included_file IS NOT NULL
-GROUP BY source_file
-ORDER BY dependency_count DESC
-LIMIT 10;
+    c.name as class_name,
+    c.file_path,
+    m.name as method_name,
+    m.start_line
+FROM read_ast('**/*.py') c
+JOIN read_ast('**/*.py') m ON m.parent_id = c.node_id
+WHERE c.type = 'class_definition' 
+  AND m.type = 'function_definition'
+ORDER BY c.name, m.start_line;
 ```
 
-#### Code Hotspot Detection
+## Performance Notes
+
+- **Streaming**: Parses files one-by-one, so you see results immediately
+- **Memory efficient**: Only one file's AST in memory at a time
+- **Glob patterns**: Use `**/*.ext` for recursive directory searches
+- **Peek modes**: Control how much source text to extract (affects performance)
+
 ```sql
--- Identify files with both complex functions AND high dependencies
-WITH function_complexity AS (
-    SELECT 
-        file_path,
-        MAX(descendant_count) as max_complexity,
-        COUNT(*) as function_count
-    FROM nodes
-    WHERE type = 'function_declarator' AND semantic_type = 112
-    GROUP BY file_path
-),
-file_dependencies AS (
-    SELECT 
-        file_path,
-        COUNT(DISTINCT REGEXP_EXTRACT(peek, '#include\s*[<"](.*?)[>"]', 1)) as deps
-    FROM nodes
-    WHERE type = 'preproc_include' AND peek LIKE '#include%'
-    GROUP BY file_path
-)
-SELECT 
-    fc.file_path,
-    fc.max_complexity,
-    fc.function_count,
-    COALESCE(fd.deps, 0) as dependencies,
-    CASE 
-        WHEN fc.max_complexity > 100 AND COALESCE(fd.deps, 0) > 30 THEN 'CRITICAL'
-        WHEN fc.max_complexity > 50 AND COALESCE(fd.deps, 0) > 20 THEN 'HIGH'
-        ELSE 'MODERATE'
-    END as risk_level
-FROM function_complexity fc
-LEFT JOIN file_dependencies fd ON fc.file_path = fd.file_path
-WHERE fc.max_complexity > 50 OR COALESCE(fd.deps, 0) > 15
-ORDER BY fc.max_complexity DESC;
+-- Fastest: no source text
+SELECT COUNT(*) FROM read_ast('**/*.py', peek_mode := 'none');
+
+-- Balanced: compact source snippets  
+SELECT COUNT(*) FROM read_ast('**/*.py', peek_mode := 'compact');
+
+-- Complete: full source text (slower)
+SELECT COUNT(*) FROM read_ast('**/*.py', peek_mode := 'smart');
 ```
 
-### Large-Scale Analysis
+## Advanced Features
 
-#### Performance at Scale
+The extension includes SQL macros for common analysis patterns. Load them with:
+
 ```sql
--- Streaming: Process 25M nodes across 4M files in ~25 seconds
--- Memory-controlled, immediate results, LIMIT-friendly
-SELECT 
-    COUNT(*) as total_nodes,
-    COUNT(DISTINCT file_path) as total_files,
-    COUNT(*) FILTER (WHERE type = 'function_declarator' AND semantic_type = 112) as functions,
-    COUNT(*) FILTER (WHERE type = 'call_expression') as function_calls
-FROM read_ast('duckdb/**/*.{cpp,hpp}');
-
--- Performance tuning with peek modes
-SELECT COUNT(*) FROM read_ast('large_codebase/**/*.cpp', peek_mode := 'none');     -- Fastest
-SELECT COUNT(*) FROM read_ast('large_codebase/**/*.cpp', peek_mode := 'compact');  -- Balanced  
-SELECT COUNT(*) FROM read_ast('large_codebase/**/*.cpp', peek_mode := 'smart');    -- Full content
-
--- Export for efficient analysis
-COPY (SELECT * FROM read_ast('**/*.cpp', peek_mode := 'none')) TO 'ast_data.parquet';
-```
-
-**Streaming Benefits:**
-- ✅ **Immediate Results**: See data as soon as first file is parsed
-- ✅ **Memory Efficient**: Only one file's AST in memory at a time  
-- ✅ **LIMIT-Friendly**: Stop parsing when query limit is reached
-- ✅ **Parallel Processing**: Use UNION for multi-threaded analysis
-
-The extension can analyze enterprise codebases with millions of files efficiently.
-
-## Static Analysis Utilities
-
-The project includes comprehensive SQL macros for advanced code analysis in `ast-navigator.sql`:
-
-### Core Analysis Functions
-- **`ast_find_functions(file_pattern)`** - Extract all functions with names, locations, and complexity
-- **`ast_find_classes(file_pattern)`** - Find class/struct definitions
-- **`ast_get_complexity(file_pattern)`** - Calculate file-level complexity metrics
-- **`ast_find_references(symbol_name)`** - Track variable/function usage across codebase
-
-### Advanced Analytics
-- **Fan-in/Fan-out Analysis** - Identify highly coupled functions
-- **Call Graph Construction** - Build function dependency graphs  
-- **Code Hotspot Detection** - Find files with high complexity + dependencies
-- **Dead Code Detection** - Locate potentially unused functions
-- **Dependency Analysis** - Track include/import relationships
-
-### Example: Complete Function Analysis
-```sql
--- Load the navigation macros
 .read ast-navigator.sql
 
--- Analyze all functions in a project
-SELECT * FROM ast_find_functions('src/**/*.cpp') 
-WHERE complexity > 100 
-ORDER BY complexity DESC;
-
--- Find code hotspots
-SELECT * FROM ast_code_hotspots() 
-WHERE hotspot_level IN ('CRITICAL_HOTSPOT', 'HIGH_HOTSPOT');
+-- Use pre-built analysis functions
+SELECT * FROM ast_find_functions('**/*.py');
+SELECT * FROM ast_complexity_stats('**/*.py');
 ```
 
-For complete examples and utilities, see `workspace/static_analysis_utilities.sql`.
+## Limitations
 
-## Adding Language Support
+- **Parse-only**: This analyzes syntax, not semantics (no type checking, symbol resolution, etc.)
+- **Tree-sitter dependent**: Parsing quality depends on Tree-sitter grammar completeness
+- **Single-threaded parsing**: Files are parsed sequentially (though DuckDB can parallelize queries)
+- **In-memory ASTs**: Large files may use significant memory during parsing
 
-To add support for a new language:
+## Common Use Cases
 
-1. Add the tree-sitter grammar as a git submodule:
-   ```bash
-   git submodule add https://github.com/tree-sitter/tree-sitter-<language>.git grammars/tree-sitter-<language>
-   ```
+- **Code quality analysis**: Find overly complex functions
+- **Refactoring assistance**: Understand code structure before changes
+- **Documentation**: Extract function signatures and comments
+- **Pattern detection**: Find common coding patterns or antipatterns
+- **Dependency analysis**: Track imports and includes
+- **Learning codebases**: Quickly understand unfamiliar code structure
 
-2. Update `CMakeLists.txt` to include the grammar files
+## Contributing
 
-3. Register the language in `src/grammars.cpp`
+This project uses Tree-sitter grammars as git submodules. To add a new language:
 
-## Development
+1. Add the grammar: `git submodule add <grammar-repo> grammars/tree-sitter-<lang>`
+2. Update `CMakeLists.txt` to build the grammar
+3. Add language adapter in `src/language_adapters/`
+4. Add type definitions in `src/language_configs/`
 
-See [workspace/design/architecture.md](workspace/design/architecture.md) for architectural details.
+See `docs/ADDING_NEW_LANGUAGES.md` for details.
 
 ## License
 
 MIT License - see LICENSE file for details.
+
+---
+
+*Sitting Duck transforms your source code into a sitting duck for SQL-based analysis. 🦆*

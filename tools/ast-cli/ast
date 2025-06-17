@@ -11,7 +11,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Database and binary locations
 DB_PATH="${AST_DB:-$PROJECT_ROOT/ast_index.duckdb}"
 DUCKDB="$PROJECT_ROOT/build/release/duckdb"
-EXTENSION="$PROJECT_ROOT/build/release/extension/sitting_ducks/sitting_ducks.duckdb_extension"
+EXTENSION="$PROJECT_ROOT/build/release/extension/sitting_duck/sitting_duck.duckdb_extension"
 SQL_LIB="$PROJECT_ROOT/ast-navigator.sql"
 
 # Check for --include-syntax flag
