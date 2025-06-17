@@ -166,7 +166,7 @@ file(COPY "${TREE_SITTER_SRC_DIR}/alloc.h" DESTINATION "${BUILD_TREE_SITTER_HEAD
 include_directories("${BUILD_TREE_SITTER_INCLUDE}")
 
 set(EXTENSION_SOURCES 
-    src/duckdb_ast_extension.cpp
+    src/sitting_duck_extension.cpp
     src/language_adapter.cpp
     src/language_adapter_registry_init.cpp
     src/language_adapters/python_adapter.cpp

@@ -1,6 +1,6 @@
 #define DUCKDB_EXTENSION_MAIN
 
-#include "duckdb_ast_extension.hpp"
+#include "sitting_duck_extension.hpp"
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/main/extension_util.hpp"
@@ -75,15 +75,15 @@ static void LoadInternal(DatabaseInstance &instance) {
 	// RegisterASTHelperFunctions(instance);
 }
 
-void DuckdbAstExtension::Load(DuckDB &db) {
+void SittingDuckExtension::Load(DuckDB &db) {
 	LoadInternal(*db.instance);
 }
 
-string DuckdbAstExtension::Name() {
-	return "duckdb_ast";
+string SittingDuckExtension::Name() {
+	return "sitting_duck";
 }
 
-string DuckdbAstExtension::Version() const {
+string SittingDuckExtension::Version() const {
 #ifdef EXT_VERSION_DUCKDB_AST
 	return EXT_VERSION_DUCKDB_AST;
 #else
@@ -97,7 +97,7 @@ extern "C" {
 
 DUCKDB_EXTENSION_API void duckdb_ast_init(duckdb::DatabaseInstance &db) {
 	duckdb::DuckDB db_wrapper(db);
-	db_wrapper.LoadExtension<duckdb::DuckdbAstExtension>();
+	db_wrapper.LoadExtension<duckdb::SittingDuckExtension>();
 }
 
 DUCKDB_EXTENSION_API const char *duckdb_ast_version() {
