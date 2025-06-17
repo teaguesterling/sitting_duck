@@ -127,7 +127,8 @@ set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
 include_directories(src/include)
-# Include tree-sitter internal headers for grammars that need them (like PHP)
+# Include tree-sitter headers - both public API and internal headers
+include_directories(third_party/tree-sitter/lib/include)
 include_directories(third_party/tree-sitter/lib/src)
 
 # Find Python for script execution
