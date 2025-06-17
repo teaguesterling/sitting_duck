@@ -1,6 +1,5 @@
 {
         "dependencies": [
-                "tree-sitter"
         ],
         "vcpkg-configuration": {
                 "overlay-ports": [
