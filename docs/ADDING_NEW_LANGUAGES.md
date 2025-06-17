@@ -31,36 +31,61 @@ git submodule update --init --recursive
 
 ### 1.2 Configure Build System
 
-Add grammar generation to `CMakeLists.txt` in the appropriate dependency order:
+Add grammar generation to `CMakeLists.txt` using the existing `generate_parser` function. The system respects dependencies automatically:
+
+**Location in CMakeLists.txt**: Lines 89-106 (after existing parsers)
 
 ```cmake
-# In the grammar generation section, respect dependencies
-# Example: TypeScript depends on JavaScript, C++ depends on C
+# Add your language to the parser generation section
+# Format: generate_parser("grammar_dir" "parser_path" "scanner_path")
 
-# Generate parsers with dependency tracking
-generate_tree_sitter_parser(<language> ${CMAKE_CURRENT_SOURCE_DIR}/grammars/tree-sitter-<language>)
+# For simple grammars without scanners:
+generate_parser("tree-sitter-<language>" "tree-sitter-<language>/src/parser.c" "")
 
-# Add generated sources to extension
-list(APPEND EXTENSION_SOURCES
-    ${CMAKE_CURRENT_BINARY_DIR}/grammars/tree-sitter-<language>/src/parser.c
+# For grammars with scanners:  
+generate_parser("tree-sitter-<language>" "tree-sitter-<language>/src/parser.c" "tree-sitter-<language>/src/scanner.c")
+
+# For nested grammar structures (like TypeScript):
+generate_parser("tree-sitter-<language>/<language>" "tree-sitter-<language>/<language>/src/parser.c" "tree-sitter-<language>/<language>/src/scanner.c")
+```
+
+**Add to EXTENSION_SOURCES** (lines 168-220):
+
+```cmake
+set(EXTENSION_SOURCES 
+    # ... existing sources ...
+    # Add adapter source file:
+    src/language_adapters/<language>_adapter.cpp
+    # Add generated parser files:
+    grammars/tree-sitter-<language>/src/parser.c
+    # Add scanner if it exists:
+    grammars/tree-sitter-<language>/src/scanner.c
 )
-
-# Add scanner if it exists (check the grammar repository)
-if(EXISTS ${CMAKE_CURRENT_BINARY_DIR}/grammars/tree-sitter-<language>/src/scanner.c)
-    list(APPEND EXTENSION_SOURCES
-        ${CMAKE_CURRENT_BINARY_DIR}/grammars/tree-sitter-<language>/src/scanner.c
-    )
-endif()
 ```
 
 ### 1.3 Handle Grammar Dependencies
 
-Some grammars depend on others (e.g., TypeScript → JavaScript, C++ → C):
+The `generate_parser` function automatically handles dependencies:
 
+**C++ dependency on C** (built-in):
 ```cmake
-# Ensure dependency is generated first
-add_dependencies(generate_<language>_parser generate_<dependency>_parser)
+# Add dependency on C grammar for C++ (since C++ requires C)
+if("${GRAMMAR_NAME}" STREQUAL "tree-sitter-cpp")
+    list(APPEND GENERATION_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/grammars/tree-sitter-c/src/parser.c")
+    list(APPEND GENERATION_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/grammars/tree-sitter-c/grammar.js")
+endif()
 ```
+
+**TypeScript dependency on JavaScript** (built-in):
+```cmake
+# Add dependency on JavaScript grammar for TypeScript
+if("${GRAMMAR_NAME}" STREQUAL "typescript")
+    list(APPEND GENERATION_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/grammars/tree-sitter-javascript/src/parser.c")
+    list(APPEND GENERATION_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/grammars/tree-sitter-javascript/grammar.js")
+endif()
+```
+
+**For new dependencies**, add similar logic to the `generate_parser` function around line 47-57.
 
 ### 1.4 Create Patches if Needed
 
@@ -653,5 +678,300 @@ METADATA_COMMENT   = 0xC4,  // comments
 PARSER_SYNTAX      = 0xE0,  // punctuation
 PARSER_ERROR       = 0xE1,  // parse errors
 ```
+
+## Complete Real Example: Adding Kotlin Support
+
+Here's a complete walkthrough of adding Kotlin support to demonstrate the full process:
+
+### Step 1: Add Submodule and CMake Configuration
+
+```bash
+# Add the grammar submodule
+git submodule add https://github.com/fwcd/tree-sitter-kotlin grammars/tree-sitter-kotlin
+git submodule update --init --recursive
+```
+
+**CMakeLists.txt changes**:
+```cmake
+# Add to parser generation section (line ~107):
+generate_parser("tree-sitter-kotlin" "tree-sitter-kotlin/src/parser.c" "tree-sitter-kotlin/src/scanner.c")
+
+# Add to EXTENSION_SOURCES (line ~220):
+set(EXTENSION_SOURCES 
+    # ... existing sources ...
+    src/language_adapters/kotlin_adapter.cpp
+    grammars/tree-sitter-kotlin/src/parser.c
+    grammars/tree-sitter-kotlin/src/scanner.c
+)
+```
+
+### Step 2: Create Language Configuration
+
+**src/language_configs/kotlin_types.def**:
+```cpp
+// Kotlin language node type definitions
+DEF_TYPE(class_declaration, DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE(function_declaration, DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE(property_declaration, DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE(parameter, DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+
+DEF_TYPE(simple_identifier, NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE(type_identifier, TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
+DEF_TYPE(string_literal, LITERAL_STRING, NONE, NODE_TEXT, NodeFlags::IS_LITERAL)
+DEF_TYPE(integer_literal, LITERAL_NUMBER, NONE, NODE_TEXT, NodeFlags::IS_LITERAL)
+DEF_TYPE(boolean_literal, LITERAL_ATOMIC, NONE, NODE_TEXT, NodeFlags::IS_LITERAL)
+
+DEF_TYPE(call_expression, COMPUTATION_CALL, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE(navigation_expression, COMPUTATION_ACCESS, NONE, NONE, 0)
+
+DEF_TYPE(if_expression, FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE(for_statement, FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE(while_statement, FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE(return_at, FLOW_JUMP, NONE, NONE, 0)
+
+DEF_TYPE(import_header, EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE(package_header, EXTERNAL_EXPORT, NONE, NONE, 0)
+
+DEF_TYPE(line_comment, METADATA_COMMENT, NONE, NODE_TEXT, 0)
+DEF_TYPE(multiline_comment, METADATA_COMMENT, NONE, NODE_TEXT, 0)
+```
+
+### Step 3: Add Adapter Declaration
+
+**src/include/language_adapter.hpp** (add around line ~250):
+```cpp
+//==============================================================================
+// Kotlin Adapter
+//==============================================================================
+class KotlinAdapter : public LanguageAdapter {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    uint8_t GetNodeFlags(const string &node_type) const override;
+    const NodeConfig* GetNodeConfig(const string &node_type) const override;
+
+protected:
+    void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+    
+private:
+    static const unordered_map<string, NodeConfig> node_configs;
+};
+```
+
+### Step 4: Implement Full Adapter
+
+**src/language_adapters/kotlin_adapter.cpp** (complete file):
+```cpp
+#include "include/language_adapter.hpp"
+#include "include/semantic_types.hpp"
+
+namespace duckdb {
+
+extern "C" {
+    const TSLanguage *tree_sitter_kotlin();
+}
+
+//==============================================================================
+// Kotlin Adapter Implementation
+//==============================================================================
+
+#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
+    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+
+const unordered_map<string, NodeConfig> KotlinAdapter::node_configs = {
+    #include "language_configs/kotlin_types.def"
+};
+
+#undef DEF_TYPE
+
+string KotlinAdapter::GetLanguageName() const {
+    return "kotlin";
+}
+
+vector<string> KotlinAdapter::GetAliases() const {
+    return {"kotlin", "kt", "kts"};
+}
+
+void KotlinAdapter::InitializeParser() const {
+    parser_wrapper_ = make_uniq<TSParserWrapper>();
+    parser_wrapper_->SetLanguage(tree_sitter_kotlin(), "Kotlin");
+}
+
+unique_ptr<TSParserWrapper> KotlinAdapter::CreateFreshParser() const {
+    auto fresh_parser = make_uniq<TSParserWrapper>();
+    fresh_parser->SetLanguage(tree_sitter_kotlin(), "Kotlin");
+    return fresh_parser;
+}
+
+string KotlinAdapter::GetNormalizedType(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    if (config) {
+        return SemanticTypes::GetSemanticTypeName(config->semantic_type);
+    }
+    return node_type;
+}
+
+string KotlinAdapter::ExtractNodeName(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        return ExtractByStrategy(node, content, config->name_strategy);
+    }
+    
+    // Kotlin-specific fallbacks
+    string node_type = string(node_type_str);
+    if (node_type.find("declaration") != string::npos) {
+        return FindChildByType(node, content, "simple_identifier");
+    }
+    
+    return "";
+}
+
+string KotlinAdapter::ExtractNodeValue(TSNode node, const string &content) const {
+    const char* node_type_str = ts_node_type(node);
+    const NodeConfig* config = GetNodeConfig(node_type_str);
+    
+    if (config) {
+        return ExtractByStrategy(node, content, config->value_strategy);
+    }
+    
+    return "";
+}
+
+bool KotlinAdapter::IsPublicNode(TSNode node, const string &content) const {
+    // Kotlin: check for 'private' modifier, default is public
+    TSNode parent = ts_node_parent(node);
+    if (!ts_node_is_null(parent)) {
+        uint32_t child_count = ts_node_child_count(parent);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode sibling = ts_node_child(parent, i);
+            string sibling_type = ts_node_type(sibling);
+            
+            if (sibling_type == "visibility_modifier") {
+                string visibility = GetNodeText(sibling, content);
+                return visibility != "private" && visibility != "internal";
+            }
+        }
+    }
+    
+    // Default to public if no explicit visibility modifier
+    string name = ExtractNodeName(node, content);
+    return !name.empty();
+}
+
+uint8_t KotlinAdapter::GetNodeFlags(const string &node_type) const {
+    const NodeConfig* config = GetNodeConfig(node_type);
+    return config ? config->flags : 0;
+}
+
+const NodeConfig* KotlinAdapter::GetNodeConfig(const string &node_type) const {
+    auto it = node_configs.find(node_type);
+    return it != node_configs.end() ? &it->second : nullptr;
+}
+
+} // namespace duckdb
+```
+
+### Step 5: Register and Map Extensions
+
+**src/language_adapter_registry_init.cpp**:
+```cpp
+void LanguageAdapterRegistry::InitializeDefaultAdapters() {
+    // ... existing registrations ...
+    RegisterLanguageFactory("kotlin", []() { return make_uniq<KotlinAdapter>(); });
+}
+```
+
+**src/ast_file_utils.cpp**:
+```cpp
+static const std::unordered_map<string, string> EXTENSION_TO_LANGUAGE = {
+    // ... existing mappings ...
+    {"kt", "kotlin"},
+    {"kts", "kotlin"},
+};
+
+static const std::unordered_map<string, vector<string>> LANGUAGE_TO_EXTENSIONS = {
+    // ... existing mappings ...
+    {"kotlin", {"kt", "kts"}},
+};
+```
+
+### Step 6: Create Tests
+
+**test/data/kotlin/simple.kt**:
+```kotlin
+package com.example
+
+import kotlin.collections.List
+
+class Person(val name: String, private val age: Int) {
+    fun greet(): String {
+        return "Hello, I'm $name"
+    }
+    
+    private fun getAge() = age
+}
+
+fun main() {
+    val person = Person("Alice", 25)
+    println(person.greet())
+}
+```
+
+**test/sql/kotlin_language_support.test**:
+```sql
+# name: test/sql/kotlin_language_support.test
+# description: Test Kotlin language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: Language is supported
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'kotlin';
+----
+kotlin
+
+# Test 2: File extension auto-detection
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/kotlin/simple.kt');
+----
+true
+
+# Test 3: Function detection
+query I
+SELECT COUNT(*) FROM read_ast('test/data/kotlin/simple.kt') 
+WHERE type LIKE '%function%' AND name IS NOT NULL;
+----
+2
+
+# Test 4: Class detection
+query I
+SELECT COUNT(*) FROM read_ast('test/data/kotlin/simple.kt') 
+WHERE type LIKE '%class%' AND name IS NOT NULL;
+----
+1
+
+# Test 5: Public vs private detection
+query II
+SELECT 
+    SUM(CASE WHEN is_public THEN 1 ELSE 0 END) as public_count,
+    SUM(CASE WHEN NOT is_public THEN 1 ELSE 0 END) as private_count
+FROM read_ast('test/data/kotlin/simple.kt') 
+WHERE name IS NOT NULL AND type LIKE '%function%';
+----
+1	1
+```
+
+This example demonstrates the complete complexity and sophistication of the current system, including proper visibility detection for Kotlin's modifier system.
+
+---
 
 This comprehensive guide reflects the current sophisticated architecture of Sitting Duck and provides everything needed to add new language support efficiently and correctly.
