@@ -1,6 +1,6 @@
-# name: test/sql/duckdb_ast.test
-# description: Test duckdb_ast extension
-# group: [duckdb_ast]
+# name: test/sql/sitting_duck.test
+# description: Test sitting_duck extension
+# group: [sitting_duck]
 
 # Before we load the extension, this will fail
 statement error
@@ -9,7 +9,7 @@ SELECT * FROM read_ast('test.py', 'python');
 Catalog Error: Table Function with name read_ast does not exist!
 
 # Require statement will ensure this test is run with this extension loaded
-require duckdb_ast
+require sitting_duck
 
 # Test 1: Verify basic functionality returns results
 query I

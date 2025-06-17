@@ -1,8 +1,8 @@
 # name: test/sql/core/supported_languages.test
 # description: Test supported languages functionality
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 # Test 1: C++ language support
 # ============================

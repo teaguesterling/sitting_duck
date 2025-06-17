@@ -1,10 +1,10 @@
 # Test new language support (Markdown, Java, HTML, CSS, C)
 # Note: PHP support disabled due to scanner dependency on tree-sitter internals
 
-require duckdb_ast
+require sitting_duck
 
 statement ok
-LOAD duckdb_ast;
+LOAD sitting_duck;
 
 # Test 1: Verify all new languages are supported
 query III

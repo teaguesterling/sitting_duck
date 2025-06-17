@@ -1,9 +1,9 @@
 # Practical examples of using semantic type helpers
 
-require duckdb_ast
+require sitting_duck
 
 statement ok
-LOAD duckdb_ast;
+LOAD sitting_duck;
 
 # Create test data with various code patterns
 statement ok

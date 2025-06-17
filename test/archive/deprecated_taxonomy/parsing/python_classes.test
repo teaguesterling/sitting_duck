@@ -1,8 +1,8 @@
 # name: test/sql/parsing/python_classes.test
 # description: Test Python class extraction and analysis
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 # Test 1: Find class definition
 query III

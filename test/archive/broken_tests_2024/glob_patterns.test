@@ -2,7 +2,7 @@
 
 # Load the extension
 statement ok
-LOAD 'build/release/extension/duckdb_ast/duckdb_ast.duckdb_extension';
+LOAD 'build/release/extension/sitting_duck/duckdb_ast.duckdb_extension';
 
 # Test 1: Single file should work
 query I

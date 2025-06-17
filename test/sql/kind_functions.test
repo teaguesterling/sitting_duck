@@ -1,9 +1,9 @@
 # Test kind-related helper functions
 
-require duckdb_ast
+require sitting_duck
 
 statement ok
-LOAD duckdb_ast;
+LOAD sitting_duck;
 
 # Test kind_code function
 query I

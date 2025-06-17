@@ -1,8 +1,8 @@
 # name: test/sql/short_names.test
 # description: Test the short name registration functionality
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 # Test 1: Short names don't exist by default
 # ==========================================
@@ -17,7 +17,7 @@ Catalog Error: Scalar Function with name get_type does not exist!
 # ============================
 
 statement ok
-PRAGMA duckdb_ast_short_names;
+PRAGMA sitting_duck_short_names;
 
 # Test 3: Short names work after registration
 # ===========================================

@@ -1,8 +1,8 @@
 # name: test/sql/test_semantic_types.test
 # description: Test new semantic type system
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 # Test 1: Basic semantic_type field exists
 query I

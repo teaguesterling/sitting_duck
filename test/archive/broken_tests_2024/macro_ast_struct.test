@@ -2,7 +2,7 @@
 # description: Test SQL macro compatibility with new AST struct format
 # group: [ast_struct]
 
-require duckdb_ast
+require sitting_duck
 
 # Test basic macro functionality with AST struct
 statement ok

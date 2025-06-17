@@ -1,6 +1,6 @@
 # name: test/sql/basic/json_explicit_load.test
 # description: Test explicit JSON extension loading with INSTALL/LOAD
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
 # This test demonstrates the INSTALL/LOAD approach for JSON
 # which is different from the require approach
@@ -19,7 +19,7 @@ SELECT json_valid('{"test": true}');
 true
 
 # Now load our extension
-require duckdb_ast
+require sitting_duck
 
 # Verify we can still use JSON functions
 query I

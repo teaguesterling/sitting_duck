@@ -2,17 +2,17 @@
 # description: Test new AST struct macros
 # group: [ast_struct]
 
-require duckdb_ast
+require sitting_duck
 
 # Load the current macro files
 statement ok
-SELECT duckdb_ast_load_embedded_sql('01_core_primitives.sql');
+SELECT sitting_duck_load_embedded_sql('01_core_primitives.sql');
 
 statement ok
-SELECT duckdb_ast_load_embedded_sql('02_ast_get.sql');
+SELECT sitting_duck_load_embedded_sql('02_ast_get.sql');
 
 statement ok
-SELECT duckdb_ast_load_embedded_sql('03_ast_find.sql');
+SELECT sitting_duck_load_embedded_sql('03_ast_find.sql');
 
 # Test basic entrypoint macro
 query II

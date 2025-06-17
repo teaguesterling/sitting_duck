@@ -1,7 +1,7 @@
 # Test for macro segfault regression
 # This test ensures that our analyze_file_metrics macro doesn't cause segfaults
 
-require duckdb_ast
+require sitting_duck
 
 # Test simplified analyze_file_metrics macro
 statement ok

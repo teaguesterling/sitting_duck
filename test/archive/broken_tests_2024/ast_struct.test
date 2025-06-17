@@ -2,7 +2,7 @@
 # description: Test AST struct functionality and new read_ast function
 # group: [ast_struct]
 
-require duckdb_ast
+require sitting_duck
 
 # Test basic read_ast_objects function - single argument with language detection
 statement ok

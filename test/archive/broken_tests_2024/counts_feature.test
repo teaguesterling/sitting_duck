@@ -1,8 +1,8 @@
 # name: test/sql/counts_feature.test
 # description: Test children_count and descendant_count fields
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 # Test 1: Verify new fields exist in struct
 # ==========================================

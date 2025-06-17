@@ -1,8 +1,8 @@
 # name: test/sql/languages/python_language_support.test
 # description: Test Python language support functionality
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 # Test 1: Python language is supported
 # ====================================

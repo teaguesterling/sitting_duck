@@ -1,7 +1,7 @@
 # Peer Review Features Tests
 # Tests for ast_get_source, ast_extract_source, parse_ast, ast_get_locations, ast_get_calls
 
-require duckdb_ast
+require sitting_duck
 
 # Test ast_get_source - basic extraction
 query I
@@ -125,7 +125,7 @@ main	13	15	true
 
 # Test with method chaining after enabling short names
 statement ok
-SELECT duckdb_ast_register_short_names();
+SELECT sitting_duck_register_short_names();
 
 # Test chained get_locations
 query I

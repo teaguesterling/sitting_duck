@@ -1,8 +1,8 @@
 # name: test/sql/core/literal_extraction.test
 # description: Test that literals have their values in the name field
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 # Test 1: JavaScript number literals have names
 # =============================================

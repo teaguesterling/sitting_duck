@@ -1,9 +1,9 @@
 # Validate all semantic type constants and conversions
 
-require duckdb_ast
+require sitting_duck
 
 statement ok
-LOAD duckdb_ast;
+LOAD sitting_duck;
 
 # Create a table with all semantic type constants and their expected names
 statement ok

@@ -1,8 +1,8 @@
 # name: test/sql/language_adapters.test
 # description: Test language adapter functionality
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 # Test 1: Python adapter works
 query III

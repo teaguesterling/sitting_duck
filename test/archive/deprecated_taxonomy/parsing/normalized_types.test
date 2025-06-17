@@ -1,8 +1,8 @@
 # name: test/sql/parsing/normalized_types.test
 # description: Test normalized type functionality across languages
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 # Test 1: Python normalized types
 # ================================

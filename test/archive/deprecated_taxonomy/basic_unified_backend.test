@@ -1,8 +1,8 @@
 # name: test/sql/basic_unified_backend.test
 # description: Test basic unified backend functionality
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 require json
 

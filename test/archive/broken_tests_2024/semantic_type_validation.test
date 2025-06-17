@@ -1,8 +1,8 @@
 # name: test/sql/semantic_type_validation.test
 # description: Validate semantic type mappings are correct and consistent
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 # Test 1: Validate all DEFINITION types
 query III

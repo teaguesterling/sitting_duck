@@ -1,8 +1,8 @@
 # name: test/sql/go_language_support.test
 # description: Test Go language support functionality
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 # Test 1: Go language is supported
 # ================================

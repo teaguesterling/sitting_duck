@@ -1,8 +1,8 @@
 # name: test/sql/macro_loading_test.test
 # description: Test if macros are properly loaded
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 # Test basic macro loading
 query I

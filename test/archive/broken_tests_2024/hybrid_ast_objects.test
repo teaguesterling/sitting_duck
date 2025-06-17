@@ -1,8 +1,8 @@
 # name: test/sql/hybrid_ast_objects.test
 # description: Test hybrid read_ast_objects function
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 # Test 1: Basic functionality - returns one row per file
 query I

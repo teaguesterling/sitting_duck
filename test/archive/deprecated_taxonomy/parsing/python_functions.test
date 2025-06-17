@@ -1,8 +1,8 @@
 # name: test/sql/parsing/python_functions.test
 # description: Test Python function extraction and naming
-# group: [duckdb_ast]
+# group: [sitting_duck]
 
-require duckdb_ast
+require sitting_duck
 
 # Test 1: Find all function definitions with names
 query III

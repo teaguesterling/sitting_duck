@@ -2,7 +2,7 @@
 # description: Test children_count and descendant_count fields in AST nodes
 # group: [ast_struct]
 
-require duckdb_ast
+require sitting_duck
 
 # Test count fields with a well-structured JavaScript file
 statement ok

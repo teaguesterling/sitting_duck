@@ -1,9 +1,9 @@
 # Test semantic type helper functions
 
-require duckdb_ast
+require sitting_duck
 
 statement ok
-LOAD duckdb_ast;
+LOAD sitting_duck;
 
 # Test basic semantic_type_to_string function
 query I
