@@ -19,6 +19,12 @@
 
 This project must follow the conventions and practices described in duckdb/CONTRIBUTING.md
 
+## Build System Notes
+
+* **Tree-sitter grammar submodules will always appear "dirty" after building.** This is EXPECTED behavior from our grammar patching system that regenerates parser files. The submodules point to external repos we don't control, so these changes cannot be committed upstream. Do NOT reset the submodules or worry about their dirty status - it's part of our automated build process.
+* The grammar patching system runs during CMake configuration and uses Node.js/tree-sitter-cli to regenerate parsers with our patches applied.
+* Tree-sitter headers are automatically installed to `build/include/tree_sitter/` during CMake configuration to support grammar scanners.
+
 # DuckDB AST Extension API Conventions
 
 ## Monadic Structure
