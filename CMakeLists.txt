@@ -149,6 +149,22 @@ else()
     message(WARNING "Python not found - using existing embedded SQL macros header")
 endif()
 
+# Install tree-sitter headers to build directory for grammar scanners
+set(TREE_SITTER_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/tree-sitter/lib/src")
+set(BUILD_TREE_SITTER_INCLUDE "${CMAKE_BINARY_DIR}/include")
+set(BUILD_TREE_SITTER_HEADER_DIR "${BUILD_TREE_SITTER_INCLUDE}/tree_sitter")
+
+# Create tree_sitter directory in build and copy all needed headers
+file(MAKE_DIRECTORY "${BUILD_TREE_SITTER_HEADER_DIR}")
+
+# Copy the headers that grammars commonly need
+file(COPY "${TREE_SITTER_SRC_DIR}/parser.h" DESTINATION "${BUILD_TREE_SITTER_HEADER_DIR}")
+file(COPY "${TREE_SITTER_SRC_DIR}/array.h" DESTINATION "${BUILD_TREE_SITTER_HEADER_DIR}")
+file(COPY "${TREE_SITTER_SRC_DIR}/alloc.h" DESTINATION "${BUILD_TREE_SITTER_HEADER_DIR}")
+
+# Add build include directory to include path
+include_directories("${BUILD_TREE_SITTER_INCLUDE}")
+
 set(EXTENSION_SOURCES 
     src/duckdb_ast_extension.cpp
     src/language_adapter.cpp
