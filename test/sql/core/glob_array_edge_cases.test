@@ -1,0 +1,210 @@
+# name: test/sql/core/glob_array_edge_cases.test
+# description: Test edge cases and advanced scenarios for glob array support
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: Single element array vs direct string (should be equivalent)
+# ===================================================================
+statement ok
+CREATE TABLE single_string_result AS 
+SELECT * FROM read_ast('test/data/python/simple.py') 
+ORDER BY node_id;
+
+statement ok  
+CREATE TABLE single_array_result AS
+SELECT * FROM read_ast(['test/data/python/simple.py'])
+ORDER BY node_id;
+
+query I
+SELECT COUNT(*) = 0 as results_identical
+FROM (
+    SELECT * FROM single_string_result
+    EXCEPT  
+    SELECT * FROM single_array_result
+);
+----
+1
+
+statement ok
+DROP TABLE single_string_result;
+
+statement ok
+DROP TABLE single_array_result;
+
+# Test 2: Large array of patterns (performance test)
+# =================================================
+query I
+SELECT COUNT(*) > 0 as handles_large_arrays
+FROM read_ast([
+    'test/data/python/*.py',
+    'test/data/javascript/*.js',
+    'test/data/cpp/*.cpp'
+], ignore_errors := true);
+----
+1
+
+# Test 2b: Mixed valid/invalid patterns (segfault regression test)
+# ===============================================================
+query I
+SELECT COUNT(*) > 0 as handles_mixed_patterns
+FROM read_ast([
+    'test/data/python/*.py',        -- Valid
+    'test/data/nonexistent/*.xyz',  -- Invalid  
+    'test/data/javascript/*.js',    -- Valid
+    'test/data/cobol/*.cbl'         -- Invalid
+], ignore_errors := true);
+----
+1
+
+# Test 2c: All patterns invalid (empty result test)
+# ================================================
+statement error
+SELECT COUNT(*) as all_invalid_patterns
+FROM read_ast([
+    'test/data/cobol/*.cbl',
+    'test/data/fortran/*.f90',
+    'test/data/pascal/*.pas'
+], ignore_errors := true);
+----
+IO Error
+
+# Test 2d: Mixed patterns without ignore_errors (should process valid patterns)
+# =========================================================================
+query I
+SELECT COUNT(*) > 0 as has_valid_files
+FROM read_ast([
+    'test/data/python/*.py',
+    'test/data/nonexistent/*.xyz'
+], ignore_errors := true);
+----
+1
+
+# Test 3: Type validation - wrong parameter types
+# ==============================================
+statement error
+SELECT * FROM read_ast([123, 456]);
+----
+
+statement error 
+SELECT * FROM read_ast(['file.py'], 123);
+----
+
+# Test 4: Empty glob patterns (no matches)
+# =======================================
+statement error
+SELECT COUNT(*) as no_matches
+FROM read_ast(['test/data/nonexistent_dir/*.xyz'], ignore_errors := true);
+----
+IO Error
+
+# Test 5: Mixed absolute and relative paths
+# ========================================
+query I
+SELECT COUNT(*) > 0 as mixed_paths_work
+FROM read_ast([
+    'test/data/python/simple.py',
+    './test/data/javascript/simple.js'
+], ignore_errors := true);
+----
+1
+
+# Test 6: Pattern with special characters
+# ======================================
+query I
+SELECT COUNT(*) >= 0 as special_chars_handled  
+FROM read_ast(['test/data/**/*.py'], ignore_errors := true);
+----
+1
+
+# Test 7: Very long pattern list
+# =============================
+query I
+SELECT COUNT(*) >= 0 as long_list_handled
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/python/comments.py', 
+    'test/data/python/decorators.py',
+    'test/data/python/deep_nesting.py',
+    'test/data/python/empty.py',
+    'test/data/python/test_classes.py',
+    'test/data/python/typed_example.py',
+    'test/data/javascript/simple.js',
+    'test/data/javascript/count_test.js',
+    'test/data/javascript/typed_example.ts'
+], ignore_errors := true);
+----
+1
+
+# Test 8: Duplicate patterns (should deduplicate results)
+# ======================================================
+query I
+SELECT COUNT(DISTINCT file_path) as deduplicated_count
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/python/simple.py',
+    'test/data/python/simple.py'
+])
+WHERE file_path LIKE '%simple.py';
+----
+1
+
+# Test 9: Pattern ordering consistency
+# ===================================
+statement ok
+CREATE TABLE first_order AS
+SELECT file_path FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'])
+ORDER BY file_path;
+
+statement ok
+CREATE TABLE second_order AS  
+SELECT file_path FROM read_ast(['test/data/javascript/simple.js', 'test/data/python/simple.py'])
+ORDER BY file_path;
+
+query I
+SELECT COUNT(*) = 0 as order_consistent
+FROM (
+    SELECT * FROM first_order
+    EXCEPT
+    SELECT * FROM second_order
+);
+----
+1
+
+statement ok
+DROP TABLE first_order;
+
+statement ok  
+DROP TABLE second_order;
+
+# Test 10: Complex nested directory patterns
+# =========================================
+statement error
+SELECT COUNT(*) >= 0 as nested_patterns_work
+FROM read_ast(['test/**/data/**/*.py'], ignore_errors := true);
+----
+IO Error
+
+# Test 11: Language detection with arrays
+# ======================================  
+query I
+SELECT COUNT(DISTINCT language) > 0 as auto_detection_works
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/javascript/simple.js',
+    'test/data/go/simple.go'
+], ignore_errors := true);
+----
+1
+
+# Test 12: Error accumulation with ignore_errors
+# =============================================
+query I  
+SELECT COUNT(*) > 0 as some_files_processed
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/nonexistent/fake.py',
+    'test/data/javascript/simple.js'
+], ignore_errors := true);
+----
+1

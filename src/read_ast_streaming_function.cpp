@@ -7,6 +7,7 @@
 #include "unified_ast_backend.hpp"
 #include "ast_file_utils.hpp"
 #include "read_ast_streaming_state.hpp"
+#include <unordered_set>
 
 namespace duckdb {
 
@@ -20,19 +21,47 @@ static unique_ptr<FunctionData> ReadASTStreamingBindTwoArg(ClientContext &contex
     auto file_path_value = input.inputs[0];
     auto language = input.inputs[1].GetValue<string>();
     
+    // Handle both VARCHAR and LIST(VARCHAR) inputs (DuckDB-consistent pattern)
+    vector<string> file_patterns;
+    if (file_path_value.type().id() == LogicalTypeId::VARCHAR) {
+        file_patterns.push_back(file_path_value.ToString());
+    } else if (file_path_value.type().id() == LogicalTypeId::LIST) {
+        auto &pattern_list = ListValue::GetChildren(file_path_value);
+        if (pattern_list.empty()) {
+            throw BinderException("File pattern list cannot be empty");
+        }
+        for (auto &pattern : pattern_list) {
+            if (pattern.IsNull()) {
+                throw BinderException("File pattern list cannot contain NULL values");
+            }
+            file_patterns.push_back(pattern.ToString());
+        }
+    } else {
+        throw BinderException("File patterns must be VARCHAR or LIST(VARCHAR)");
+    }
+    
+    // Check for duplicate parameters (following DuckDB YAML extension pattern)
+    std::unordered_set<std::string> seen_parameters;
+    for (auto &param : input.named_parameters) {
+        if (seen_parameters.find(param.first) != seen_parameters.end()) {
+            throw BinderException("Duplicate parameter name: " + param.first);
+        }
+        seen_parameters.insert(param.first);
+    }
+    
     // Parse optional named parameters
     bool ignore_errors = false;
-    if (input.named_parameters.find("ignore_errors") != input.named_parameters.end()) {
+    if (seen_parameters.find("ignore_errors") != seen_parameters.end()) {
         ignore_errors = input.named_parameters.at("ignore_errors").GetValue<bool>();
     }
     
     int32_t peek_size = 120;  // Default 120 characters
-    if (input.named_parameters.find("peek_size") != input.named_parameters.end()) {
+    if (seen_parameters.find("peek_size") != seen_parameters.end()) {
         peek_size = input.named_parameters.at("peek_size").GetValue<int32_t>();
     }
     
     string peek_mode = "auto";  // Default auto mode
-    if (input.named_parameters.find("peek_mode") != input.named_parameters.end()) {
+    if (seen_parameters.find("peek_mode") != seen_parameters.end()) {
         peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
     }
     
@@ -40,7 +69,8 @@ static unique_ptr<FunctionData> ReadASTStreamingBindTwoArg(ClientContext &contex
     return_types = UnifiedASTBackend::GetFlatTableSchema();
     names = UnifiedASTBackend::GetFlatTableColumnNames();
     
-    return make_uniq<ReadASTStreamingBindData>(file_path_value, language, ignore_errors, peek_size, peek_mode);
+    // Use the new vector<string> constructor for consistent handling
+    return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode);
 }
 
 // Bind function for streaming one-argument version (auto-detect language)
@@ -52,19 +82,47 @@ static unique_ptr<FunctionData> ReadASTStreamingBindOneArg(ClientContext &contex
     
     auto file_path_value = input.inputs[0];
     
+    // Handle both VARCHAR and LIST(VARCHAR) inputs (DuckDB-consistent pattern)
+    vector<string> file_patterns;
+    if (file_path_value.type().id() == LogicalTypeId::VARCHAR) {
+        file_patterns.push_back(file_path_value.ToString());
+    } else if (file_path_value.type().id() == LogicalTypeId::LIST) {
+        auto &pattern_list = ListValue::GetChildren(file_path_value);
+        if (pattern_list.empty()) {
+            throw BinderException("File pattern list cannot be empty");
+        }
+        for (auto &pattern : pattern_list) {
+            if (pattern.IsNull()) {
+                throw BinderException("File pattern list cannot contain NULL values");
+            }
+            file_patterns.push_back(pattern.ToString());
+        }
+    } else {
+        throw BinderException("File patterns must be VARCHAR or LIST(VARCHAR)");
+    }
+    
+    // Check for duplicate parameters (following DuckDB YAML extension pattern)
+    std::unordered_set<std::string> seen_parameters;
+    for (auto &param : input.named_parameters) {
+        if (seen_parameters.find(param.first) != seen_parameters.end()) {
+            throw BinderException("Duplicate parameter name: " + param.first);
+        }
+        seen_parameters.insert(param.first);
+    }
+    
     // Parse optional named parameters
     bool ignore_errors = false;
-    if (input.named_parameters.find("ignore_errors") != input.named_parameters.end()) {
+    if (seen_parameters.find("ignore_errors") != seen_parameters.end()) {
         ignore_errors = input.named_parameters.at("ignore_errors").GetValue<bool>();
     }
     
     int32_t peek_size = 120;  // Default 120 characters
-    if (input.named_parameters.find("peek_size") != input.named_parameters.end()) {
+    if (seen_parameters.find("peek_size") != seen_parameters.end()) {
         peek_size = input.named_parameters.at("peek_size").GetValue<int32_t>();
     }
     
     string peek_mode = "auto";  // Default auto mode
-    if (input.named_parameters.find("peek_mode") != input.named_parameters.end()) {
+    if (seen_parameters.find("peek_mode") != seen_parameters.end()) {
         peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
     }
     
@@ -75,7 +133,8 @@ static unique_ptr<FunctionData> ReadASTStreamingBindOneArg(ClientContext &contex
     return_types = UnifiedASTBackend::GetFlatTableSchema();
     names = UnifiedASTBackend::GetFlatTableColumnNames();
     
-    return make_uniq<ReadASTStreamingBindData>(file_path_value, language, ignore_errors, peek_size, peek_mode);
+    // Use the new vector<string> constructor for consistent handling
+    return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode);
 }
 
 // Initialize global state for streaming
@@ -93,17 +152,53 @@ static unique_ptr<GlobalTableFunctionState> ReadASTStreamingInit(ClientContext &
     auto multi_file_reader = MultiFileReader::CreateDefault("read_ast");
     
     try {
-        // Use DuckDB's native glob expansion for true streaming
-        // This expands files lazily during scanning, not all at once
-        result->file_list = multi_file_reader->CreateFileList(context, bind_data.file_path_value);
-        result->file_list->InitializeScan(result->file_scan_state);
+        // Use our reliable ASTFileUtils for pattern expansion and deduplication
+        // Both bind functions now populate file_patterns, so always use that
+        vector<string> supported_extensions;
+        if (bind_data.language != "auto") {
+            supported_extensions = ASTFileUtils::GetSupportedExtensions(bind_data.language);
+        }
+        
+        auto expanded_files = ASTFileUtils::GetFiles(context, bind_data.file_patterns, 
+                                                    bind_data.ignore_errors, supported_extensions);
+        
+        // Convert expanded file list to Values for MultiFileReader
+        vector<Value> file_values;
+        for (const auto &file_path : expanded_files) {
+            file_values.push_back(Value(file_path));
+        }
+        
+        if (file_values.empty()) {
+            if (!bind_data.ignore_errors) {
+                throw IOException("read_ast needs at least one file to read");
+            }
+            // For ignore_errors=true, create an empty file list instead of NULL
+            auto empty_list_value = Value::LIST(LogicalType::VARCHAR, {});
+            result->file_list = multi_file_reader->CreateFileList(context, empty_list_value);
+            if (result->file_list) {
+                result->file_list->InitializeScan(result->file_scan_state);
+            }
+            result->files_exhausted = true;
+        } else {
+            auto files_list_value = Value::LIST(LogicalType::VARCHAR, file_values);
+            result->file_list = multi_file_reader->CreateFileList(context, files_list_value);
+            if (result->file_list) {
+                result->file_list->InitializeScan(result->file_scan_state);
+            } else {
+                throw InternalException("Failed to create file list");
+            }
+        }
         
     } catch (const Exception &e) {
         if (!bind_data.ignore_errors) {
             throw IOException("Failed to parse files");
         }
-        // Create empty file list if ignore_errors is true
-        result->file_list = multi_file_reader->CreateFileList(context, vector<string>());
+        // For ignore_errors=true, create an empty file list instead of NULL
+        auto empty_list_value = Value::LIST(LogicalType::VARCHAR, {});
+        result->file_list = multi_file_reader->CreateFileList(context, empty_list_value);
+        if (result->file_list) {
+            result->file_list->InitializeScan(result->file_scan_state);
+        }
         result->files_exhausted = true;
     }
     
@@ -149,6 +244,7 @@ static void ReadASTStreamingFunction(ClientContext &context, TableFunctionInput 
     while (output_count < STANDARD_VECTOR_SIZE) {
         // Check if we need to parse a new file
         if (!global_state.current_file_parsed || 
+            !global_state.current_file_result ||
             global_state.current_file_row_index >= global_state.current_file_result->nodes.size()) {
             
             // Try to get next file that matches our language criteria
@@ -188,6 +284,11 @@ static void ReadASTStreamingFunction(ClientContext &context, TableFunctionInput 
         }
         
         // Emit rows from current file
+        if (!global_state.current_file_result) {
+            // This shouldn't happen, but add safety check
+            break;
+        }
+        
         idx_t rows_available = global_state.current_file_result->nodes.size() - global_state.current_file_row_index;
         idx_t rows_to_emit = std::min(STANDARD_VECTOR_SIZE - output_count, rows_available);
         
@@ -286,9 +387,9 @@ static TableFunction GetReadASTStreamingFunctionOneArg() {
 }
 
 void RegisterReadASTFunction(DatabaseInstance &instance) {
-    // Register the new streaming-based read_ast as default
-    ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionOneArg());
-    ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionTwoArg());
+    // Register simplified functions - bind functions handle both VARCHAR and LIST(VARCHAR)
+    ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionOneArg());    // ANY (auto-detect)
+    ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionTwoArg());    // ANY, VARCHAR (explicit language)
 }
 
 void RegisterReadASTStreamingFunction(DatabaseInstance &instance) {

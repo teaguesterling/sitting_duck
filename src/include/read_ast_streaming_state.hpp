@@ -30,16 +30,27 @@ struct ReadASTStreamingGlobalState : public GlobalTableFunctionState {
 
 //! Bind data for streaming AST table function
 struct ReadASTStreamingBindData : public TableFunctionData {
-    Value file_path_value;
+    Value file_path_value;          // For single pattern or legacy compatibility  
+    vector<string> file_patterns;   // For array patterns (DuckDB-consistent)
+    bool use_patterns_vector;       // Flag to indicate which field to use
     string language;
     bool ignore_errors;
     int32_t peek_size;
     string peek_mode;
     
+    // Constructor for Value-based input (legacy)
     ReadASTStreamingBindData(Value file_path_value, string language, bool ignore_errors = false, 
                            int32_t peek_size = 120, string peek_mode = "auto") 
-        : file_path_value(std::move(file_path_value)), language(std::move(language)), 
-          ignore_errors(ignore_errors), peek_size(peek_size), peek_mode(std::move(peek_mode)) {}
+        : file_path_value(std::move(file_path_value)), use_patterns_vector(false),
+          language(std::move(language)), ignore_errors(ignore_errors), 
+          peek_size(peek_size), peek_mode(std::move(peek_mode)) {}
+    
+    // Constructor for vector<string> patterns (new DuckDB-consistent approach)
+    ReadASTStreamingBindData(vector<string> file_patterns, string language, bool ignore_errors = false,
+                           int32_t peek_size = 120, string peek_mode = "auto")
+        : file_patterns(std::move(file_patterns)), use_patterns_vector(true),
+          language(std::move(language)), ignore_errors(ignore_errors),
+          peek_size(peek_size), peek_mode(std::move(peek_mode)) {}
 };
 
 } // namespace duckdb

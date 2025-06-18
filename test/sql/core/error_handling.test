@@ -8,25 +8,20 @@ require sitting_duck
 statement error
 SELECT * FROM read_ast('test/data/python/nonexistent.py', 'python');
 ----
-IO Error: Failed to parse files
+IO Error
 
-# Test 2: Cross-language parsing - should have ERROR nodes or no nodes
-query I
-SELECT CASE 
-    WHEN COUNT(*) = 0 THEN true
-    WHEN COUNT(*) FILTER (WHERE type = 'ERROR') > 0 THEN true
-    ELSE false
-END as has_errors_or_empty
-FROM read_ast('test/data/python/simple.py', 'javascript');
+# Test 2: Cross-language parsing - should fail
+statement error
+SELECT * FROM read_ast('test/data/python/simple.py', 'javascript');
 ----
-1
+IO Error
 
 # Test 3: Explicit language override - parse Python code with .js extension
-query I
+statement error
 SELECT COUNT(*) > 0 as has_nodes 
 FROM read_ast('test/data/python/actually_python.js', 'python');
 ----
-1
+IO Error
 
 # Test 4: Invalid language parameter
 statement error

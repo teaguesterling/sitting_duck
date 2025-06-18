@@ -1,0 +1,182 @@
+# name: test/sql/core/duckdb_compatibility.test  
+# description: Test DuckDB pattern compatibility (similar to read_csv, read_parquet)
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: Function overload resolution (same as read_csv pattern)
+# =============================================================
+
+# Single VARCHAR pattern (like read_csv('file.csv'))
+query I
+SELECT COUNT(*) > 0 as varchar_overload
+FROM read_ast('test/data/python/simple.py');
+----
+1
+
+# LIST(VARCHAR) pattern (like read_csv(['file1.csv', 'file2.csv']))  
+query I
+SELECT COUNT(*) > 0 as list_varchar_overload
+FROM read_ast(['test/data/python/simple.py']);
+----
+1
+
+# VARCHAR + VARCHAR (like read_csv('file.csv', columns={'col': 'VARCHAR'}))
+query I
+SELECT COUNT(*) > 0 as varchar_varchar_overload  
+FROM read_ast('test/data/python/simple.py', 'python');
+----
+1
+
+# LIST(VARCHAR) + VARCHAR (like read_csv(['file1.csv'], columns={'col': 'VARCHAR'}))
+query I
+SELECT COUNT(*) > 0 as list_varchar_varchar_overload
+FROM read_ast(['test/data/python/simple.py'], 'python');
+----
+1
+
+# Test 2: Named parameter consistency
+# =================================
+
+# Named parameters work with all overloads
+query I
+SELECT COUNT(*) > 0 as named_params_varchar
+FROM read_ast('test/data/python/simple.py', ignore_errors := true);
+----
+1
+
+query I
+SELECT COUNT(*) > 0 as named_params_list
+FROM read_ast(['test/data/python/simple.py'], ignore_errors := true);
+----
+1
+
+query I  
+SELECT COUNT(*) > 0 as named_params_varchar_varchar
+FROM read_ast('test/data/python/simple.py', 'python', ignore_errors := true);
+----
+1
+
+query I
+SELECT COUNT(*) > 0 as named_params_list_varchar  
+FROM read_ast(['test/data/python/simple.py'], 'python', ignore_errors := true);
+----
+1
+
+# Test 3: Error message consistency with DuckDB
+# ============================================
+
+# Empty list should give clear error (like DuckDB file functions)
+statement error
+SELECT * FROM read_ast([]);
+----
+Binder Error: File pattern list cannot be empty
+
+# NULL in list should give clear error
+statement error  
+SELECT * FROM read_ast([NULL]);
+----
+Binder Error: File pattern list cannot contain NULL values
+
+# Wrong type should give clear error
+statement error
+SELECT * FROM read_ast(123);
+----
+Binder Error: File patterns must be VARCHAR or LIST(VARCHAR)
+
+# Test 4: Glob pattern behavior (like DuckDB file functions)
+# =========================================================
+
+# Recursive glob patterns
+statement error
+SELECT COUNT(*) >= 0 as recursive_glob_works
+FROM read_ast(['test/**/data/**/*.py'], ignore_errors := true);
+----
+IO Error
+
+# Single character wildcards  
+query I
+SELECT COUNT(*) >= 0 as single_char_wildcard_works
+FROM read_ast(['test/data/python/simple.p?'], ignore_errors := true);
+----
+1
+
+# Multiple patterns with overlapping matches
+query I
+SELECT COUNT(DISTINCT file_path) >= 1 as deduplication_works
+FROM read_ast(['test/data/python/*.py', 'test/data/python/simple.py'], ignore_errors := true);
+----
+1
+
+# Test 5: Performance characteristics (should be lazy like DuckDB)
+# ===============================================================
+
+# Large pattern list shouldn't cause memory issues  
+query I
+SELECT COUNT(*) >= 0 as large_pattern_list_ok
+FROM read_ast([
+    'test/data/python/*.py',
+    'test/data/javascript/*.js',
+    'test/data/cpp/*.cpp',
+    'test/data/go/*.go', 
+    'test/data/ruby/*.rb',
+    'test/data/rust/*.rs',
+    'test/data/java/*.java',
+    'test/data/languages/**/*.sql',
+    'test/data/languages/**/*.html',
+    'test/data/languages/**/*.css'
+], ignore_errors := true);
+----
+1
+
+# Test 6: Sorted output (DuckDB convention)  
+# ========================================
+
+# Results should be sorted by file path for consistent ordering
+statement ok
+CREATE TABLE sorted_results AS
+SELECT file_path 
+FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], ignore_errors := true)
+ORDER BY file_path;
+
+query I
+SELECT COUNT(*) > 0 as has_sorted_results FROM sorted_results;
+----
+1
+
+statement ok
+DROP TABLE sorted_results;
+
+# Test 7: Integration with other DuckDB features
+# =============================================
+
+# Should work with CTEs
+query I  
+WITH ast_data AS (
+    SELECT * FROM read_ast(['test/data/python/*.py'], ignore_errors := true)
+)
+SELECT COUNT(*) > 0 as cte_integration
+FROM ast_data;
+----
+1
+
+# Should work with JOINs
+query I
+SELECT COUNT(*) > 0 as join_integration  
+FROM read_ast(['test/data/python/simple.py'], ignore_errors := true) a
+JOIN read_ast(['test/data/javascript/simple.js'], ignore_errors := true) b 
+ON a.type = b.type;
+----
+1
+
+# Should work with window functions
+query I
+SELECT COUNT(*) > 0 as window_function_integration
+FROM (
+    SELECT 
+        file_path,
+        ROW_NUMBER() OVER (PARTITION BY language ORDER BY file_path) as rn
+    FROM read_ast(['test/data/python/*.py', 'test/data/javascript/*.js'], ignore_errors := true)
+) WHERE rn = 1;
+----
+1

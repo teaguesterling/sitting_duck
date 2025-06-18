@@ -28,6 +28,19 @@ public:
                                   const vector<string> &supported_extensions = {});
 
     /**
+     * @brief Get files from multiple patterns
+     *
+     * @param context Client context for file operations
+     * @param patterns Vector of file patterns/paths to process
+     * @param ignore_errors Whether to ignore missing files
+     * @param supported_extensions List of supported file extensions (e.g., {"cpp", "hpp", "py"})
+     * @return vector<string> List of resolved file paths (sorted and deduplicated)
+     */
+    static vector<string> GetFiles(ClientContext &context, const vector<string> &patterns,
+                                  bool ignore_errors = false,
+                                  const vector<string> &supported_extensions = {});
+
+    /**
      * @brief Get files from a glob pattern
      *
      * @param context Client context for file operations

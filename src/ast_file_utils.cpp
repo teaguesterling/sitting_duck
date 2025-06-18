@@ -206,4 +206,32 @@ bool ASTFileUtils::IsFileExtensionSupported(const string &file_path, const vecto
     return std::find(supported_extensions.begin(), supported_extensions.end(), extension) != supported_extensions.end();
 }
 
+// New overload for multiple patterns (DuckDB-consistent glob array support)
+vector<string> ASTFileUtils::GetFiles(ClientContext &context, const vector<string> &patterns,
+                                     bool ignore_errors,
+                                     const vector<string> &supported_extensions) {
+    vector<string> all_files;
+    
+    // Process each pattern and collect files
+    for (const auto &pattern : patterns) {
+        try {
+            auto pattern_files = ProcessSinglePath(context, pattern, supported_extensions, ignore_errors);
+            all_files.insert(all_files.end(), pattern_files.begin(), pattern_files.end());
+        } catch (const Exception &e) {
+            if (!ignore_errors) {
+                throw IOException("Failed to process pattern '" + pattern + "': " + string(e.what()));
+            }
+            // With ignore_errors=true, continue processing other patterns
+        }
+    }
+    
+    // Sort for consistent ordering (following DuckDB conventions)
+    std::sort(all_files.begin(), all_files.end());
+    
+    // Remove duplicates (files may match multiple patterns)
+    all_files.erase(std::unique(all_files.begin(), all_files.end()), all_files.end());
+    
+    return all_files;
+}
+
 } // namespace duckdb
