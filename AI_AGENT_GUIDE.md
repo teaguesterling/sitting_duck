@@ -1,8 +1,16 @@
 # AI Agent Guide to DuckDB AST Extension
 
+**Last Updated:** December 2024  
+**Extension Version:** Current (Semantic Taxonomy + Streaming API)
+
 ## Overview
 
-The DuckDB AST Extension provides a **universal semantic taxonomy** for understanding code across programming languages. Instead of learning language-specific node types, AI agents can work with standardized semantic categories that remain consistent whether analyzing Python, JavaScript, C++, or any supported language.
+The DuckDB AST Extension provides a **universal semantic taxonomy** for understanding code across programming languages. Instead of learning language-specific node types, AI agents can work with standardized semantic categories that remain consistent whether analyzing Python, JavaScript, C++, or any of the 12 supported languages.
+
+The extension combines:
+- **Universal semantic types** for cross-language understanding
+- **Streaming table functions** for efficient large codebase analysis
+- **Multi-file processing** with automatic language detection
 
 ## Why This Matters for AI Agents
 
@@ -68,98 +76,271 @@ Each AST node has an 8-bit `semantic_type` field with the structure: `[ss kk tt 
 
 ## Usage Examples for AI Agents
 
-### Cross-Language Function Finding
-```sql
--- Find all functions regardless of language
-SELECT * FROM parse_ast('code.py') 
-WHERE semantic_type = 115; -- DEFINITION_FUNCTION
+## Quick Start
 
--- Same query works for JavaScript, C++, etc.
-SELECT * FROM parse_ast('code.js')
-WHERE semantic_type = 115;
+### 1. Load the Extension
+```sql
+-- In DuckDB CLI or any SQL interface
+LOAD 'sitting_duck';
 ```
 
-### Semantic Pattern Matching
+### 2. Basic Usage - Analyze Single Files
 ```sql
--- Find all arithmetic operations
-SELECT * FROM parse_ast('code.py')
+-- Analyze a Python file with automatic language detection
+SELECT COUNT(*) as total_nodes FROM read_ast('script.py');
+
+-- Analyze with explicit language specification
+SELECT COUNT(*) as total_nodes FROM read_ast('script.js', 'javascript');
+
+-- Find all functions regardless of language using semantic types
+SELECT name, type, file_path FROM read_ast('code.py') 
+WHERE semantic_type = 115; -- DEFINITION_FUNCTION
+```
+
+### 3. Multi-File Analysis
+```sql
+-- Analyze entire directories with glob patterns
+SELECT file_path, COUNT(*) as nodes_per_file 
+FROM read_ast('src/**/*.py', ignore_errors := true)
+GROUP BY file_path;
+
+-- Cross-language analysis
+SELECT language, COUNT(*) as total_functions
+FROM read_ast('**/*.{py,js,cpp}', ignore_errors := true)
+WHERE semantic_type = 115 -- DEFINITION_FUNCTION
+GROUP BY language;
+```
+
+## Supported Languages
+
+The extension supports **12 programming languages** with automatic detection:
+
+| Language | Extensions | Semantic Support |
+|----------|------------|------------------|
+| **Python** | `.py` | ✅ Full |
+| **JavaScript** | `.js`, `.jsx` | ✅ Full |
+| **TypeScript** | `.ts`, `.tsx` | ✅ Full |
+| **C++** | `.cpp`, `.hpp`, `.cc`, `.h` | ✅ Full |
+| **C** | `.c`, `.h` | ✅ Full |
+| **Java** | `.java` | ✅ Full |
+| **Go** | `.go` | ✅ Full |
+| **Ruby** | `.rb` | ✅ Full |
+| **SQL** | `.sql` | ✅ Full |
+| **CSS** | `.css` | ✅ Basic |
+| **HTML** | `.html`, `.htm` | ✅ Basic |
+| **Markdown** | `.md` | ✅ Basic |
+
+### Cross-Language Function Finding
+```sql
+-- Find all functions regardless of language using semantic types
+SELECT name, type, language, file_path FROM read_ast('**/*.*', ignore_errors := true) 
+WHERE semantic_type = 115; -- DEFINITION_FUNCTION
+
+-- Same query works across Python, JavaScript, C++, etc.
+SELECT COUNT(*) as function_count, language
+FROM read_ast('src/**/*.*', ignore_errors := true)
+WHERE semantic_type = 115
+GROUP BY language;
+```
+
+## Advanced Usage with Semantic Types
+
+### Pattern Matching with Bit Operations
+```sql
+-- Find all arithmetic operations across languages
+SELECT file_path, type, name, language
+FROM read_ast('**/*.{py,js,cpp}', ignore_errors := true)
 WHERE (semantic_type & 0xF0) = 64 -- OPERATOR kind
   AND (semantic_type & 0x0C) = 0;  -- ARITHMETIC super type
 
 -- Find all conditionals across languages  
-SELECT * FROM parse_ast('code.cpp')
-WHERE semantic_type = 136; -- FLOW_CONDITIONAL
+SELECT COUNT(*) as conditional_count, language
+FROM read_ast('src/**/*.*', ignore_errors := true)
+WHERE semantic_type = 136 -- FLOW_CONDITIONAL
+GROUP BY language;
 ```
 
-### Cross-Language Refactoring
+### Cross-Language Refactoring Analysis
 ```sql
 -- Find assignment patterns to refactor
-SELECT file_path, type, name, semantic_type 
-FROM parse_ast('*.py') 
-WHERE semantic_type = 140; -- EXECUTION_MUTATION
+SELECT file_path, type, name, semantic_type, start_line
+FROM read_ast('**/*.{py,js,cpp}', ignore_errors := true) 
+WHERE semantic_type = 140 -- EXECUTION_MUTATION
+ORDER BY file_path, start_line;
+
+-- Find complex functions (high depth) for refactoring candidates
+SELECT file_path, name, depth, descendant_count
+FROM read_ast('**/*.py', ignore_errors := true)
+WHERE semantic_type = 115 AND depth > 3 -- Deep function definitions
+ORDER BY descendant_count DESC;
 ```
 
-## Advanced Features (Future)
+## API Reference
 
-### Semantic Descriptions (Planned)
-Instead of working with numeric codes, AI agents will be able to use normalized semantic names:
+### Core Table Function
+
+#### `read_ast(file_pattern, language?, options...)`
+The main table function for parsing and analyzing code:
 
 ```sql
--- Future syntax (not yet implemented)
-SELECT * FROM parse_ast('code.py')
-WHERE semantic_description = '+';
+-- Single file
+read_ast('script.py')
+read_ast('script.js', 'javascript')
 
--- Both Python '+' and any other language's addition operator
+-- Multiple files with glob patterns  
+read_ast('src/**/*.py')
+read_ast('**/*.{js,ts,py}')
+
+-- With options
+read_ast('src/**/*.*', ignore_errors := true)
+read_ast('script.py', peek_size := 200)
+read_ast('script.py', peek_mode := 'lines')
 ```
 
-**Planned semantic normalization approach:**
-- **Operators**: Use familiar symbols: `"+"`, `"&&"`, `"=="`, `"="`
-- **Language constructs**: Use simple normalized terms: `"function_definition"`, `"if_statement"`
-- **Cross-language mapping**: Python `"and"` → semantic `"&&"`, JS `"function_declaration"` → semantic `"function_definition"`
+**Returns columns:**
+- `node_id`: Unique identifier for each AST node
+- `type`: Language-specific node type (e.g., 'function_definition')
+- `name`: Node name/identifier (if applicable)
+- `file_path`: Source file path
+- `language`: Detected or specified language
+- `start_line`, `start_column`, `end_line`, `end_column`: Position info
+- `parent_id`: Parent node ID (for tree structure)
+- `depth`: Nesting depth in the AST
+- `sibling_index`: Position among siblings
+- `children_count`, `descendant_count`: Tree size metrics
+- `peek`: Sample of source code for this node
+- `semantic_type`: 8-bit universal semantic category
+- `universal_flags`: Additional semantic flags
+- `arity_bin`: Binned arity for analysis
 
-**Example mappings:**
-```
-Python "+"     → semantic "+"
-C++ "+"        → semantic "+"
-Python "and"   → semantic "&&"  
-JS "&&"        → semantic "&&"
-Python "True"  → semantic "true"
-JS "true"      → semantic "true"
-```
-
-**Note**: The choice of canonical representation (e.g., `"&&"` vs `"and"` for logical AND) should be evaluated empirically with different AI models to determine what's most naturally interpretable. This may require A/B testing to optimize for AI understanding.
-
-### Synonym System (Planned)
-AI agents will be able to use natural language synonyms:
+### Language Support Functions
 
 ```sql
--- Future syntax (not yet implemented)
-SELECT * FROM parse_ast('code.py')
-WHERE semantic_synonym IN ('function', 'func', 'defn', 'definition', 'method');
+-- Get list of supported languages
+SELECT * FROM ast_supported_languages();
 
--- All resolve to DEFINITION_FUNCTION
+-- Parse code string directly (scalar function)
+SELECT parse_ast_objects('def hello(): pass', 'python');
 ```
 
-**Planned synonym groups:**
-- Functions: `function`, `func`, `defn`, `def`, `method`, `procedure`
-- Variables: `variable`, `var`, `identifier`, `name`, `binding`
-- Conditionals: `if`, `conditional`, `branch`, `case`, `when`
-- Loops: `loop`, `iteration`, `repeat`, `while`, `for`
+### Options and Parameters
+
+- **`ignore_errors`**: Continue processing when files have syntax errors
+- **`peek_size`**: Number of characters to include in peek field (default: 120)
+- **`peek_mode`**: How to extract peek text ('auto', 'chars', 'lines')
+
+## AI Agent Scenarios
+
+### Scenario 1: Code Discovery and Inventory
+```sql
+-- "What's in this codebase?"
+SELECT 
+    language,
+    COUNT(*) as total_nodes,
+    COUNT(CASE WHEN semantic_type = 115 THEN 1 END) as functions,
+    COUNT(CASE WHEN semantic_type = 119 THEN 1 END) as classes,
+    COUNT(DISTINCT file_path) as files
+FROM read_ast('**/*.*', ignore_errors := true)
+GROUP BY language
+ORDER BY total_nodes DESC;
+```
+
+### Scenario 2: Cross-Language Complexity Analysis
+```sql
+-- "Which files are most complex?"
+SELECT 
+    file_path,
+    language,
+    MAX(depth) as max_depth,
+    COUNT(*) as total_nodes,
+    COUNT(CASE WHEN semantic_type = 115 THEN 1 END) as function_count
+FROM read_ast('**/*.*', ignore_errors := true)
+GROUP BY file_path, language
+HAVING function_count > 5
+ORDER BY max_depth DESC, total_nodes DESC;
+```
+
+### Scenario 3: Finding Specific Patterns
+```sql
+-- "Find all test functions across languages"
+SELECT file_path, name, type, language, start_line
+FROM read_ast('**/*.*', ignore_errors := true)
+WHERE semantic_type = 115 -- DEFINITION_FUNCTION
+  AND (name ILIKE '%test%' OR name ILIKE '%spec%')
+ORDER BY file_path, start_line;
+
+-- "Find all error handling constructs"
+SELECT file_path, type, language, COUNT(*) as error_handling_count
+FROM read_ast('**/*.*', ignore_errors := true) 
+WHERE (semantic_type & 0xF0) = 128 -- ERROR_HANDLING kind
+GROUP BY file_path, type, language
+ORDER BY error_handling_count DESC;
+```
+
+### Scenario 4: Code Quality and Technical Debt
+```sql
+-- "Find deeply nested code that might need refactoring"
+SELECT 
+    file_path, 
+    name,
+    type,
+    depth,
+    descendant_count,
+    start_line
+FROM read_ast('**/*.{py,js,cpp}', ignore_errors := true)
+WHERE depth > 6 
+  AND semantic_type IN (115, 119) -- Functions or classes
+ORDER BY depth DESC, descendant_count DESC;
+
+-- "Find files with high cyclomatic complexity indicators"
+SELECT 
+    file_path,
+    COUNT(CASE WHEN semantic_type = 136 THEN 1 END) as conditionals,
+    COUNT(CASE WHEN semantic_type = 132 THEN 1 END) as loops,
+    COUNT(*) as total_nodes
+FROM read_ast('**/*.py', ignore_errors := true)
+GROUP BY file_path
+HAVING (conditionals + loops) > 10
+ORDER BY (conditionals + loops) DESC;
+```
+
+### Scenario 5: Documentation and Code Understanding
+```sql
+-- "Generate a function inventory with context"
+SELECT 
+    file_path,
+    name as function_name,
+    type,
+    start_line,
+    children_count as parameter_indicators,
+    descendant_count as complexity_score,
+    SUBSTR(peek, 1, 50) || '...' as preview
+FROM read_ast('src/**/*.py', ignore_errors := true)
+WHERE semantic_type = 115 AND name IS NOT NULL
+ORDER BY file_path, start_line;
+```
 
 ## Best Practices for AI Agents
 
 ### 1. Use Semantic Types for Cross-Language Analysis
-Instead of hardcoding language-specific node types, use semantic categories:
+```sql
+-- ✅ GOOD: Works across all languages
+SELECT * FROM read_ast('**/*.*') WHERE semantic_type = 115; -- DEFINITION_FUNCTION
 
-```python
-# Bad - language specific
-if node_type == "function_definition":  # Only works for Python
-
-# Good - semantic
-if semantic_type == DEFINITION_FUNCTION:  # Works across all languages
+-- ❌ AVOID: Language-specific types
+SELECT * FROM read_ast('**/*.*') WHERE type = 'function_definition'; -- Only works for some languages
 ```
 
-### 2. Leverage Bit Patterns for Efficient Filtering
+### 2. Always Use ignore_errors for Large Codebases
+```sql
+-- ✅ GOOD: Robust against syntax errors
+SELECT * FROM read_ast('**/*.*', ignore_errors := true);
+
+-- ❌ RISKY: Will fail on first syntax error
+SELECT * FROM read_ast('**/*.*');
+```
+
+### 3. Leverage Bit Patterns for Efficient Filtering
 ```sql
 -- Find all LITERAL types (any super type)
 WHERE (semantic_type & 0xF0) = 0;
@@ -167,46 +348,145 @@ WHERE (semantic_type & 0xF0) = 0;
 -- Find all OPERATOR types  
 WHERE (semantic_type & 0xF0) = 64;
 
--- Find all ARITHMETIC operators specifically
-WHERE semantic_type & 0xFC = 64;  -- OPERATOR + ARITHMETIC
+-- Find all CONTROL_FLOW constructs
+WHERE (semantic_type & 0xC0) = 128;
 ```
 
-### 3. Use Taxonomy for Code Understanding
-The taxonomy enables semantic code analysis:
-- **Code similarity**: Compare semantic patterns across languages
-- **Refactoring**: Find equivalent constructs to transform
-- **Documentation**: Generate language-agnostic explanations
-- **Translation**: Map concepts between programming languages
+### 4. Use File Patterns Effectively
+```sql
+-- Specific languages
+read_ast('**/*.py')           -- Python only
+read_ast('**/*.{js,ts}')      -- JavaScript/TypeScript
+read_ast('**/*.{cpp,hpp,h}')  -- C/C++
+
+-- All supported languages
+read_ast('**/*.*', ignore_errors := true)
+```
 
 ## Integration with AI Workflows
 
-### Code Analysis Pipeline
-1. **Parse**: Use `parse_ast()` to get semantic types
-2. **Filter**: Query by semantic categories, not raw types  
-3. **Analyze**: Work with universal semantic vocabulary
-4. **Generate**: Output language-agnostic insights
+### Recommended Analysis Pipeline
+1. **Load**: `LOAD 'sitting_duck';`
+2. **Inventory**: Get overview with `read_ast('**/*.*', ignore_errors := true)`
+3. **Filter**: Use semantic types to find constructs of interest
+4. **Analyze**: Combine with SQL analytics for insights
+5. **Act**: Generate reports, refactoring plans, or documentation
 
-### Cross-Language Understanding
-The taxonomy enables AI agents to:
-- Explain code concepts universally ("This is a function definition")
-- Find equivalent patterns across codebases
-- Perform semantic diff analysis
-- Build language-agnostic refactoring tools
+### Example Complete Workflow
+```sql
+-- 1. Load extension
+LOAD 'sitting_duck';
+
+-- 2. Get codebase overview
+WITH overview AS (
+    SELECT language, COUNT(*) as files, 
+           COUNT(CASE WHEN semantic_type = 115 THEN 1 END) as functions
+    FROM read_ast('**/*.*', ignore_errors := true)
+    GROUP BY language
+),
+
+-- 3. Find complex functions needing attention
+complex_functions AS (
+    SELECT file_path, name, depth, descendant_count
+    FROM read_ast('**/*.*', ignore_errors := true)
+    WHERE semantic_type = 115 AND depth > 5
+),
+
+-- 4. Identify potential issues
+issues AS (
+    SELECT file_path, 'Deep nesting' as issue_type, COUNT(*) as count
+    FROM complex_functions
+    GROUP BY file_path
+)
+
+-- 5. Generate actionable report
+SELECT 
+    o.language,
+    o.files,
+    o.functions,
+    COALESCE(i.count, 0) as complexity_issues
+FROM overview o
+LEFT JOIN issues i ON TRUE
+ORDER BY complexity_issues DESC;
+```
+
+## Performance and Scalability
+
+### Efficient Large Codebase Analysis
+```sql
+-- Use ignore_errors for robustness
+read_ast('**/*.*', ignore_errors := true)
+
+-- Stream processing - no memory limits
+-- Results are processed in chunks, suitable for massive codebases
+
+-- Filter early for performance
+SELECT file_path, COUNT(*) as function_count
+FROM read_ast('**/*.py', ignore_errors := true)
+WHERE semantic_type = 115  -- Filter at source
+GROUP BY file_path;
+```
+
+### Memory Considerations
+- The extension uses **streaming processing** - no memory limits
+- File-by-file parsing with lazy evaluation
+- Suitable for analyzing repositories with thousands of files
+- Results can be materialized into tables for repeated analysis
+
+## Troubleshooting and Common Issues
+
+### File Pattern Issues
+```sql
+-- ✅ CORRECT: Recursive patterns
+read_ast('**/*.py')           -- All Python files recursively
+read_ast('src/**/*.*')        -- All files in src/ recursively
+
+-- ❌ INCORRECT: Missing recursiveness
+read_ast('*.py')              -- Only current directory
+read_ast('src/*.*')           -- Only immediate src/ children
+```
+
+### Language Detection
+```sql
+-- Auto-detection (recommended)
+read_ast('script.py')         -- Detects Python from .py extension
+
+-- Explicit language (when needed)
+read_ast('script', 'python')  -- Force Python for extensionless files
+```
+
+### Error Handling
+```sql
+-- Robust parsing (recommended for large codebases)
+read_ast('**/*.*', ignore_errors := true)
+
+-- Strict parsing (fails on first syntax error)
+read_ast('**/*.*')  -- Will stop on syntax errors
+```
+
+## Future Enhancements
+
+🔄 **Planned Features:**
+- **Multi-threading**: Parallel file parsing for massive codebases
+- **Semantic descriptions**: Human-readable names for semantic types
+- **Advanced graph analysis**: Call graphs, dependency analysis
+- **Incremental parsing**: Parse only changed files
+- **Language extensions**: PHP, Rust, Kotlin support
 
 ## Current Status
 
-✅ **Implemented:**
-- 8-bit semantic type encoding
-- 64 semantic constants (16 kinds × 4 super types)
-- Cross-language mappings for Python, JavaScript, C++
-- Universal SQL queries using semantic types
+✅ **Fully Implemented:**
+- 12 programming languages with full semantic support
+- 8-bit semantic type taxonomy (64 semantic categories)
+- Streaming multi-file analysis with glob patterns
+- Automatic language detection
+- Comprehensive error handling
+- Production-ready performance
 
-🚧 **Planned:**
-- Human-readable semantic descriptions
-- Synonym system for natural language queries
-- Additional language support
-- Semantic-aware AST manipulation functions
+✅ **Languages Supported:**
+- **Full semantic support**: Python, JavaScript, TypeScript, C++, C, Java, Go, Ruby, SQL
+- **Basic support**: CSS, HTML, Markdown
 
 ---
 
-*This taxonomy transforms language-specific AST analysis into universal semantic code understanding, enabling AI agents to work with code at a conceptual level rather than syntax level.*
+*This extension transforms traditional AST analysis from complex language-specific parsing into universal semantic understanding, enabling AI agents to analyze code at the conceptual level across all programming languages.*
