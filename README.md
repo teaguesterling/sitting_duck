@@ -59,8 +59,8 @@ Currently supports **12 languages** via Tree-sitter parsers with full semantic a
 ## Installation
 
 ```bash
-# Clone with submodules (required for Tree-sitter grammars)
-git clone --recursive https://github.com/your-repo/sitting-duck.git
+# Clone with submodules (required for Tree-Sitter and Tree-Sitter grammars)
+git clone --recursive https://github.com/your-repo/sitting_duck.git
 cd sitting-duck
 
 # Build the extension
