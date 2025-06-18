@@ -74,6 +74,42 @@ Each AST node has an 8-bit `semantic_type` field with the structure: `[ss kk tt 
 - `DEFINITION_CLASS`: Classes, structs, interfaces, records
 - `DEFINITION_MODULE`: Modules, namespaces, packages
 
+## Semantic Type Convenience Functions
+
+The extension provides several utility functions to work with semantic types more easily:
+
+### Type Conversion Functions
+- `semantic_type_to_string(code)` - Convert semantic type code to readable name
+- `get_super_kind(code)` - Get the super kind (DATA_STRUCTURE, COMPUTATION, etc.)
+- `get_kind(code)` - Get the full kind name
+
+### Predicate Functions  
+- `is_definition(code)` - Check if it's any definition type
+- `is_call(code)` - Check if it's a function/method call
+- `is_control_flow(code)` - Check if it's control flow (if, loops, etc.)
+- `is_identifier(code)` - Check if it's an identifier/name
+
+### Example Usage
+```sql
+-- Human-readable semantic type analysis
+SELECT 
+    semantic_type_to_string(semantic_type) as type_name,
+    get_super_kind(semantic_type) as category,
+    COUNT(*) as count
+FROM read_ast('main.py')
+GROUP BY semantic_type
+ORDER BY count DESC;
+
+-- Find complex functions using predicates
+SELECT name, file_path, descendant_count
+FROM read_ast('**/*.py', ignore_errors := true)
+WHERE is_definition(semantic_type) 
+  AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION'
+  AND descendant_count > 50;
+```
+
+> **💡 Pro Tip**: Use convenience functions for readability during development, then switch to raw semantic type codes for performance in production queries. See the complete semantic type reference in [API_REFERENCE.md](API_REFERENCE.md).
+
 ## Usage Examples for AI Agents
 
 ## Quick Start
@@ -92,9 +128,13 @@ SELECT COUNT(*) as total_nodes FROM read_ast('script.py');
 -- Analyze with explicit language specification
 SELECT COUNT(*) as total_nodes FROM read_ast('script.js', 'javascript');
 
--- Find all functions regardless of language using semantic types
+-- Find all functions using semantic types (readable approach)
 SELECT name, type, file_path FROM read_ast('code.py') 
-WHERE semantic_type = 115; -- DEFINITION_FUNCTION
+WHERE is_definition(semantic_type) AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+
+-- Or use raw semantic type codes for performance
+SELECT name, type, file_path FROM read_ast('code.py') 
+WHERE semantic_type = 112; -- DEFINITION_FUNCTION
 ```
 
 ### 3. Multi-File Analysis
@@ -104,10 +144,19 @@ SELECT file_path, COUNT(*) as nodes_per_file
 FROM read_ast('src/**/*.py', ignore_errors := true)
 GROUP BY file_path;
 
--- Cross-language analysis
+-- Cross-language analysis using convenience functions
+SELECT 
+    language, 
+    COUNT(*) as total_functions,
+    get_super_kind(semantic_type) as category
+FROM read_ast('**/*.{py,js,cpp}', ignore_errors := true)
+WHERE is_definition(semantic_type) AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION'
+GROUP BY language, get_super_kind(semantic_type);
+
+-- Performance-optimized version with raw codes
 SELECT language, COUNT(*) as total_functions
 FROM read_ast('**/*.{py,js,cpp}', ignore_errors := true)
-WHERE semantic_type = 115 -- DEFINITION_FUNCTION
+WHERE semantic_type = 112 -- DEFINITION_FUNCTION
 GROUP BY language;
 ```
 

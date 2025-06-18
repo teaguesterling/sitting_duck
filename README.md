@@ -208,30 +208,68 @@ SELECT COUNT(*) FROM read_ast('**/*.py', peek_mode := 'smart');
 
 ### Semantic Types for Cross-Language Analysis
 
-The extension includes a universal semantic taxonomy that works across all languages:
+The extension includes a universal semantic taxonomy that works across all languages. Use convenience functions for readable queries:
 
 ```sql
--- Find all functions regardless of language
+-- Find all functions regardless of language (readable approach)
+SELECT file_path, name, language, semantic_type_to_string(semantic_type) as type_name
+FROM read_ast('**/*.*', ignore_errors := true)
+WHERE is_definition(semantic_type) AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+
+-- Analyze semantic categories across languages
+SELECT 
+    language,
+    get_super_kind(semantic_type) as category,
+    COUNT(*) as node_count
+FROM read_ast('**/*.*', ignore_errors := true)
+GROUP BY language, get_super_kind(semantic_type)
+ORDER BY node_count DESC;
+
+-- Find control flow complexity by file
+SELECT 
+    file_path, 
+    language,
+    COUNT(*) as control_flow_nodes
+FROM read_ast('**/*.*', ignore_errors := true)
+WHERE is_control_flow(semantic_type)
+GROUP BY file_path, language
+ORDER BY control_flow_nodes DESC;
+
+-- Performance-optimized version using raw codes
 SELECT file_path, name, language 
 FROM read_ast('**/*.*', ignore_errors := true)
-WHERE semantic_type = 115; -- DEFINITION_FUNCTION
-
--- Find all arithmetic operations across languages
-SELECT COUNT(*) as arithmetic_ops, language
-FROM read_ast('**/*.*', ignore_errors := true)
-WHERE (semantic_type & 0xF0) = 64 -- OPERATOR kind
-  AND (semantic_type & 0x0C) = 0   -- ARITHMETIC super type
-GROUP BY language;
+WHERE semantic_type = 112; -- DEFINITION_FUNCTION (faster)
 ```
+
+**Available convenience functions:**
+- `semantic_type_to_string()` - Convert codes to readable names
+- `is_definition()`, `is_call()`, `is_control_flow()`, `is_identifier()` - Semantic predicates
+- `get_super_kind()`, `get_kind()` - Category extraction
+
+> See [API_REFERENCE.md](API_REFERENCE.md) for the complete semantic type hierarchy with cross-language examples.
 
 ### Multi-File Processing
 
 ```sql
 -- Analyze entire codebases with glob patterns
-SELECT language, COUNT(*) as files, 
-       COUNT(CASE WHEN semantic_type = 115 THEN 1 END) as functions
+SELECT 
+    language, 
+    COUNT(DISTINCT file_path) as files, 
+    COUNT(CASE WHEN is_definition(semantic_type) AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION' THEN 1 END) as functions,
+    COUNT(CASE WHEN is_definition(semantic_type) AND semantic_type_to_string(semantic_type) = 'DEFINITION_CLASS' THEN 1 END) as classes
 FROM read_ast('**/*.*', ignore_errors := true)
-GROUP BY language;
+GROUP BY language
+ORDER BY files DESC;
+
+-- Find architectural patterns across languages
+SELECT 
+    get_super_kind(semantic_type) as semantic_category,
+    language,
+    COUNT(*) as usage_count
+FROM read_ast('**/*.*', ignore_errors := true)
+WHERE get_super_kind(semantic_type) IN ('COMPUTATION', 'CONTROL_EFFECTS')
+GROUP BY get_super_kind(semantic_type), language
+ORDER BY usage_count DESC;
 ```
 
 ## Limitations

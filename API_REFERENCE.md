@@ -176,30 +176,129 @@ FROM read_ast('main.py')
 WHERE is_identifier(semantic_type) AND name IS NOT NULL;
 ```
 
-### Semantic Type Categories
+### Complete Semantic Type Hierarchy
 
 The 8-bit encoding follows this pattern: `[ss kk tt ll]`
 - **ss (bits 6-7)**: Super Kind (4 major categories)
-- **kk (bits 4-5)**: Kind (16 subcategories)
+- **kk (bits 4-5)**: Kind (16 subcategories)  
 - **tt (bits 2-3)**: Super Type (4 variants per kind)
-- **ll (bits 0-1)**: Language-specific (reserved)
+- **ll (bits 0-1)**: Language-specific (reserved for future use)
 
-#### Major Categories:
-- **DATA_STRUCTURE** (0x00-0x3F): Literals, names, patterns, types
-- **COMPUTATION** (0x40-0x7F): Operators, definitions, transformations
-- **CONTROL_EFFECTS** (0x80-0xBF): Flow control, error handling, organization
-- **META_EXTERNAL** (0xC0-0xFF): Metadata, imports, parser-specific
+#### Super Kinds and Kinds
 
-#### Common Semantic Types:
+| Super Kind | Code | Kinds | Description |
+|------------|------|-------|-------------|
+| **DATA_STRUCTURE** | 0x00-0x3F | LITERAL, NAME, PATTERN, TYPE | Data representation and identification |
+| **COMPUTATION** | 0x40-0x7F | OPERATOR, COMPUTATION_NODE, TRANSFORM, DEFINITION | Operations and definitions |
+| **CONTROL_EFFECTS** | 0x80-0xBF | EXECUTION, FLOW_CONTROL, ERROR_HANDLING, ORGANIZATION | Program flow and effects |
+| **META_EXTERNAL** | 0xC0-0xFF | METADATA, EXTERNAL, PARSER_SPECIFIC, RESERVED | Meta-information and language specifics |
+
+#### Detailed Type Reference
+
+**DATA_STRUCTURE (0x00-0x3F)**
+
+| Kind | Super Type | Code | Examples | Python | JavaScript | Java | C++ |
+|------|------------|------|----------|--------|------------|------|-----|
+| **LITERAL** | NUMBER | 0 | Numeric values | `42`, `3.14` | `42`, `3.14` | `42`, `3.14f` | `42`, `3.14` |
+| | STRING | 4 | String/text values | `"hello"`, `'world'` | `"hello"`, `'world'` | `"hello"` | `"hello"` |
+| | ATOMIC | 8 | Boolean/null values | `True`, `False`, `None` | `true`, `false`, `null` | `true`, `false`, `null` | `true`, `false`, `nullptr` |
+| | STRUCTURED | 12 | Collection literals | `[1,2,3]`, `{'a':1}` | `[1,2,3]`, `{a:1}` | `{1,2,3}` | `{1,2,3}` |
+| **NAME** | KEYWORD | 16 | Language keywords | `def`, `class`, `if` | `function`, `class`, `if` | `public`, `class`, `if` | `class`, `struct`, `if` |
+| | IDENTIFIER | 20 | Simple names | `variable`, `func` | `variable`, `func` | `variable`, `method` | `variable`, `function` |
+| | QUALIFIED | 24 | Dotted names | `obj.method` | `obj.method` | `obj.method` | `obj.method` |
+| | SCOPED | 28 | Scope references | `self`, `super` | `this`, `super` | `this`, `super` | `this`, `::global` |
+
+**COMPUTATION (0x40-0x7F)**
+
+| Kind | Super Type | Code | Examples | Python | JavaScript | Java | C++ |
+|------|------------|------|----------|--------|------------|------|-----|
+| **OPERATOR** | ARITHMETIC | 64 | Math operators | `+`, `-`, `*`, `**` | `+`, `-`, `*`, `**` | `+`, `-`, `*` | `+`, `-`, `*` |
+| | LOGICAL | 68 | Logic operators | `and`, `or`, `not` | `&&`, `\|\|`, `!` | `&&`, `\|\|`, `!` | `&&`, `\|\|`, `!` |
+| | COMPARISON | 72 | Comparison ops | `==`, `!=`, `in` | `===`, `!==`, `in` | `==`, `!=` | `==`, `!=` |
+| | ASSIGNMENT | 76 | Assignment ops | `=`, `+=`, `:=` | `=`, `+=` | `=`, `+=` | `=`, `+=` |
+| **COMPUTATION_NODE** | CALL | 80 | Function calls | `func()`, `obj.method()` | `func()`, `obj.method()` | `func()`, `obj.method()` | `func()`, `obj->method()` |
+| | ACCESS | 84 | Member access | `obj.attr`, `arr[0]` | `obj.attr`, `arr[0]` | `obj.field`, `arr[0]` | `obj.member`, `arr[0]` |
+| | EXPRESSION | 88 | Complex expressions | `a + b * c` | `a + b * c` | `a + b * c` | `a + b * c` |
+| | LAMBDA | 92 | Anonymous functions | `lambda x: x+1` | `x => x+1` | `x -> x+1` | `[](int x){return x+1;}` |
+| **DEFINITION** | FUNCTION | 112 | Function definitions | `def func():` | `function func(){}` | `void func(){}` | `void func(){}` |
+| | VARIABLE | 116 | Variable definitions | `x = 5` | `let x = 5` | `int x = 5` | `int x = 5` |
+| | CLASS | 120 | Class definitions | `class MyClass:` | `class MyClass{}` | `class MyClass{}` | `class MyClass{}` |
+| | MODULE | 124 | Module definitions | `import sys` | `import fs from 'fs'` | `package com.example` | `namespace example` |
+
+**CONTROL_EFFECTS (0x80-0xBF)**
+
+| Kind | Super Type | Code | Examples | Python | JavaScript | Java | C++ |
+|------|------------|------|----------|--------|------------|------|-----|
+| **EXECUTION** | STATEMENT | 128 | Expression statements | Expression as statement | Expression as statement | Expression as statement | Expression as statement |
+| | INVOCATION | 136 | Function calls (effects) | `print()`, `obj.mutate()` | `console.log()`, `obj.mutate()` | `System.out.println()` | `std::cout << x` |
+| **FLOW_CONTROL** | CONDITIONAL | 144 | Conditional flow | `if`, `elif`, `else` | `if`, `else if`, `else` | `if`, `else if`, `switch` | `if`, `else if`, `switch` |
+| | LOOP | 148 | Iteration | `for`, `while` | `for`, `while` | `for`, `while` | `for`, `while` |
+| | JUMP | 152 | Control jumps | `break`, `continue`, `return` | `break`, `continue`, `return` | `break`, `continue`, `return` | `break`, `continue`, `return`, `goto` |
+| | SYNC | 156 | Concurrency control | `async`, `await` | `async`, `await` | `synchronized` | `std::async` |
+| **ERROR_HANDLING** | TRY | 160 | Try blocks | `try:` | `try {` | `try {` | `try {` |
+| | CATCH | 164 | Exception handling | `except Exception:` | `catch (e) {` | `catch (Exception e) {` | `catch (std::exception& e) {` |
+| | THROW | 168 | Exception throwing | `raise Exception()` | `throw new Error()` | `throw new Exception()` | `throw std::runtime_error()` |
+| **ORGANIZATION** | BLOCK | 176 | Code blocks | `if: block` | `{ block }` | `{ block }` | `{ block }` |
+| | LIST | 180 | Parameter/argument lists | `(a, b, c)` | `(a, b, c)` | `(int a, int b)` | `(int a, int b)` |
+
+**META_EXTERNAL (0xC0-0xFF)**
+
+| Kind | Super Type | Code | Examples | Python | JavaScript | Java | C++ |
+|------|------------|------|----------|--------|------------|------|-----|
+| **METADATA** | COMMENT | 192 | Documentation | `# comment`, `"""docstring"""` | `// comment`, `/* comment */` | `// comment`, `/** javadoc */` | `// comment`, `/* comment */` |
+| | ANNOTATION | 196 | Decorators/attributes | `@decorator` | `@decorator` | `@Annotation` | `[[attribute]]` |
+| | DIRECTIVE | 200 | Preprocessor | `# type: ignore` | `// @ts-ignore` | N/A | `#include`, `#define` |
+| **EXTERNAL** | IMPORT | 208 | Import statements | `import os`, `from x import y` | `import fs from 'fs'` | `import java.util.*` | `#include <iostream>` |
+| | EXPORT | 212 | Export statements | N/A (implicit) | `export default`, `export {x}` | `public class` | `extern` |
+| **PARSER_SPECIFIC** | PUNCTUATION | 224 | Language punctuation | `:`, `,`, `;` | `:`, `,`, `;` | `:`, `,`, `;` | `:`, `,`, `;` |
+| | CONSTRUCT | 236 | Unique constructs | `yield`, `with` | `yield*`, destructuring | annotations | templates, RAII |
+
+#### Quick Reference - Most Common Types
+
+| Code | Type | Description | Use Case |
+|------|------|-------------|----------|
+| 112 | DEFINITION_FUNCTION | Function definitions across all languages | API extraction, complexity analysis |
+| 120 | DEFINITION_CLASS | Class/struct/interface definitions | Architecture analysis, OOP patterns |
+| 136 | EXECUTION_INVOCATION | Function/method calls | Dependency analysis, call graphs |
+| 144 | FLOW_CONDITIONAL | If/switch/match statements | Complexity metrics, control flow |
+| 148 | FLOW_LOOP | For/while/do-while loops | Complexity metrics, performance analysis |
+| 192 | METADATA_COMMENT | Comments and documentation | Documentation coverage, code quality |
+| 208 | EXTERNAL_IMPORT | Import/include statements | Dependency mapping, module analysis |
+
+#### Using Semantic Type Convenience Functions
+
 ```sql
--- Key semantic type constants
-115  -- DEFINITION_FUNCTION (functions across all languages)
-119  -- DEFINITION_CLASS (classes/structs/interfaces)
-123  -- DEFINITION_VARIABLE (variable declarations)
-127  -- DEFINITION_MODULE (modules/namespaces)
-80   -- EXECUTION_INVOCATION (function calls)
-136  -- FLOW_CONDITIONAL (if/switch statements)
-132  -- FLOW_LOOP (for/while loops)
+-- Convert semantic type codes to readable names
+SELECT 
+    semantic_type,
+    semantic_type_to_string(semantic_type) as type_name,
+    get_super_kind(semantic_type) as super_kind,
+    get_kind(semantic_type) as kind
+FROM read_ast('main.py') 
+LIMIT 5;
+
+-- Find all function definitions using semantic predicates
+SELECT file_path, name, start_line
+FROM read_ast('**/*.py')
+WHERE is_definition(semantic_type) AND is_call(semantic_type) = false;
+
+-- Group by semantic categories
+SELECT 
+    get_super_kind(semantic_type) as category,
+    semantic_type_to_string(semantic_type) as type_name,
+    COUNT(*) as count
+FROM read_ast('**/*.*', ignore_errors := true)
+GROUP BY semantic_type
+ORDER BY count DESC;
+
+-- Find control flow complexity
+SELECT 
+    file_path,
+    COUNT(*) as control_flow_nodes
+FROM read_ast('**/*.py')
+WHERE is_control_flow(semantic_type)
+GROUP BY file_path
+ORDER BY control_flow_nodes DESC;
 ```
 
 ---
