@@ -221,9 +221,9 @@ set(EXTENSION_SOURCES
     # Removed unused files:
     # src/ast_parser.cpp (replaced by unified_ast_backend.cpp)
     # src/language_handler.cpp (replaced by language_adapter.cpp) 
-    # Temporarily disabled while fixing issues:
-    # src/read_ast_objects_function.cpp
-    # src/ast_helper_functions.cpp
+    # src/read_ast_objects_function.cpp (legacy, removed)
+    # src/ast_helper_functions.cpp (deprecated, removed)
+    # src/ast_sql_macros_loader.cpp (unused, removed)
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
