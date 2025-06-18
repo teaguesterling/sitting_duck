@@ -679,65 +679,6 @@ CREATE OR REPLACE MACRO ast_find_control_flow_by_kind(ast) AS (
     )
 );
 )SQLMACRO"},
-    {"02b_chain_methods.sql", R"SQLMACRO(
--- Auto-generated chain methods (short names)
-
-CREATE OR REPLACE MACRO with_indices(nodes) AS ast_with_indices(nodes);
-CREATE OR REPLACE MACRO extract_subtrees(nodes, filtered_indices) AS ast_extract_subtrees(nodes, filtered_indices);
-CREATE OR REPLACE MACRO update(ast, new_nodes) AS ast_update(ast, new_nodes);
-CREATE OR REPLACE MACRO pack(file_path, language, nodes) AS ast_pack(file_path, language, nodes);
-CREATE OR REPLACE MACRO filter_by_type(nodes, type) AS ast_filter_by_type(nodes, type);
-CREATE OR REPLACE MACRO filter_by_types(nodes, types) AS ast_filter_by_types(nodes, types);
-CREATE OR REPLACE MACRO filter_by_name(nodes, name) AS ast_filter_by_name(nodes, name);
-CREATE OR REPLACE MACRO filter_by_depth(nodes, depth) AS ast_filter_by_depth(nodes, depth);
-CREATE OR REPLACE MACRO get_by_type(ast, type) AS ast_get_by_type(ast, type);
-CREATE OR REPLACE MACRO get_by_types(ast, types) AS ast_get_by_types(ast, types);
-CREATE OR REPLACE MACRO get_types(ast, types) AS ast_get_types(ast, types);
-CREATE OR REPLACE MACRO get_type(ast, type) AS ast_get_type(ast, type);
-CREATE OR REPLACE MACRO get_depth(ast, depth) AS ast_get_depth(ast, depth);
-CREATE OR REPLACE MACRO get_name(ast, name) AS ast_get_name(ast, name);
-CREATE OR REPLACE MACRO get_functions(ast) AS ast_get_functions(ast);
-CREATE OR REPLACE MACRO get_classes(ast) AS ast_get_classes(ast);
-CREATE OR REPLACE MACRO get_imports(ast) AS ast_get_imports(ast);
-CREATE OR REPLACE MACRO get_top_level(ast) AS ast_get_top_level(ast);
-CREATE OR REPLACE MACRO find_types(ast, types) AS ast_find_types(ast, types);
-CREATE OR REPLACE MACRO find_type(ast, type) AS ast_find_type(ast, type);
-CREATE OR REPLACE MACRO find_depth(ast, depth) AS ast_find_depth(ast, depth);
-CREATE OR REPLACE MACRO find_name(ast, name) AS ast_find_name(ast, name);
-CREATE OR REPLACE MACRO find_identifiers(ast) AS ast_find_identifiers(ast);
-CREATE OR REPLACE MACRO find_literals(ast) AS ast_find_literals(ast);
-CREATE OR REPLACE MACRO find_calls(ast) AS ast_find_calls(ast);
-CREATE OR REPLACE MACRO find_declarations(ast) AS ast_find_declarations(ast);
-CREATE OR REPLACE MACRO find_control_flow(ast) AS ast_find_control_flow(ast);
-CREATE OR REPLACE MACRO find_leaves(ast) AS ast_find_leaves(ast);
-CREATE OR REPLACE MACRO find_parents(ast) AS ast_find_parents(ast);
-CREATE OR REPLACE MACRO to_names(ast, type := NULL) AS ast_to_names(ast, type := NULL);
-CREATE OR REPLACE MACRO to_types(ast) AS ast_to_types(ast);
-CREATE OR REPLACE MACRO to_source(ast, type := NULL) AS ast_to_source(ast, type := NULL);
-CREATE OR REPLACE MACRO to_locations(ast) AS ast_to_locations(ast);
-CREATE OR REPLACE MACRO to_type_stats(ast) AS ast_to_type_stats(ast);
-CREATE OR REPLACE MACRO to_depth_stats(ast) AS ast_to_depth_stats(ast);
-CREATE OR REPLACE MACRO to_complexity_metrics(ast) AS ast_to_complexity_metrics(ast);
-CREATE OR REPLACE MACRO to_signatures(ast) AS ast_to_signatures(ast);
-CREATE OR REPLACE MACRO to_dependencies(ast) AS ast_to_dependencies(ast);
-CREATE OR REPLACE MACRO to_call_edges(ast) AS ast_to_call_edges(ast);
-CREATE OR REPLACE MACRO to_summary(ast) AS ast_to_summary(ast);
-CREATE OR REPLACE MACRO filter_by_kind(nodes, kind_value) AS ast_filter_by_kind(nodes, kind_value);
-CREATE OR REPLACE MACRO filter_by_kinds(nodes, kind_values) AS ast_filter_by_kinds(nodes, kind_values);
-CREATE OR REPLACE MACRO filter_functions_by_kind(nodes) AS ast_filter_functions_by_kind(nodes);
-CREATE OR REPLACE MACRO filter_literals_by_kind(nodes) AS ast_filter_literals_by_kind(nodes);
-CREATE OR REPLACE MACRO filter_names_by_kind(nodes) AS ast_filter_names_by_kind(nodes);
-CREATE OR REPLACE MACRO filter_public(nodes) AS ast_filter_public(nodes);
-CREATE OR REPLACE MACRO filter_builtin(nodes) AS ast_filter_builtin(nodes);
-CREATE OR REPLACE MACRO filter_keywords(nodes) AS ast_filter_keywords(nodes);
-CREATE OR REPLACE MACRO group_by_semantic_id(nodes) AS ast_group_by_semantic_id(nodes);
-CREATE OR REPLACE MACRO find_semantic_pattern(nodes, pattern_id) AS ast_find_semantic_pattern(nodes, pattern_id);
-CREATE OR REPLACE MACRO get_functions_by_kind(ast) AS ast_get_functions_by_kind(ast);
-CREATE OR REPLACE MACRO get_public_interface(ast) AS ast_get_public_interface(ast);
-CREATE OR REPLACE MACRO get_literals_by_kind(ast) AS ast_get_literals_by_kind(ast);
-CREATE OR REPLACE MACRO find_semantic_functions(ast) AS ast_find_semantic_functions(ast);
-CREATE OR REPLACE MACRO find_control_flow_by_kind(ast) AS ast_find_control_flow_by_kind(ast);
-)SQLMACRO"},
 };
 
 } // namespace duckdb

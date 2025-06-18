@@ -184,7 +184,7 @@ set(EXTENSION_SOURCES
     src/read_ast_streaming_function.cpp
     src/read_ast_objects_hybrid.cpp
     src/ast_sql_macros.cpp
-    src/short_names_function.cpp
+    # src/short_names_function.cpp (removed - short names system removed)
     src/parse_ast_function.cpp
     src/unified_ast_backend.cpp
     src/ast_type.cpp

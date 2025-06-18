@@ -61,8 +61,8 @@ def generate_header(sql_dir, output_file):
         '05_taxonomy.sql'
     ]
     
-    # Generate chain methods (short names) as a virtual file
-    chain_methods_content = generate_chain_methods(sql_files, sql_dir)
+    # Chain methods (short names) removed for simplicity
+    # chain_methods_content = generate_chain_methods(sql_files, sql_dir)
     
     header_content = """// Auto-generated file - DO NOT EDIT
 // Generated from SQL macro files in src/sql_macros/
@@ -94,12 +94,12 @@ static const std::vector<std::pair<std::string, std::string>> EMBEDDED_SQL_MACRO
 )SQLMACRO"}},
 '''
     
-    # Add the generated chain methods
-    escape_raw_string_delimiter(chain_methods_content)
-    header_content += f'''    {{"02b_chain_methods.sql", R"SQLMACRO(
-{chain_methods_content}
-)SQLMACRO"}},
-'''
+    # Chain methods removed for simplicity
+    # escape_raw_string_delimiter(chain_methods_content)
+    # header_content += f'''    {{"02b_chain_methods.sql", R"SQLMACRO(
+    # {chain_methods_content}
+    # )SQLMACRO"}},
+    # '''
     
     header_content += """};
 
