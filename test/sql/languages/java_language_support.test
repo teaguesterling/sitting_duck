@@ -1,0 +1,65 @@
+# name: test/sql/languages/java_language_support.test
+# description: Test Java language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: Java language is supported
+# ==================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'java';
+----
+java
+
+# Test 2: Java file extension auto-detection
+# ==========================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/languages/java/Test.java');
+----
+true
+
+# Test 3: Explicit Java language specification
+# ============================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/languages/java/Test.java', 'java');
+----
+true
+
+# Test 4: Java class declaration
+# ==============================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/java/Test.java')
+WHERE type = 'class_declaration';
+----
+1
+
+# Test 5: Java method declarations
+# ================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/java/Test.java')
+WHERE type = 'method_declaration';
+----
+2
+
+# Test 6: Java identifiers
+# ========================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/java/Test.java')
+WHERE type = 'identifier' AND name IS NOT NULL;
+----
+9
+
+# Test 7: Java tree structure validation
+# ======================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/languages/java/Test.java');
+----
+8	32

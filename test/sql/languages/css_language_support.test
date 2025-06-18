@@ -1,0 +1,56 @@
+# name: test/sql/languages/css_language_support.test
+# description: Test CSS language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: CSS language is supported
+# =================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'css';
+----
+css
+
+# Test 2: CSS file extension auto-detection
+# =========================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/languages/css/test.css');
+----
+true
+
+# Test 3: Explicit CSS language specification
+# ===========================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/languages/css/test.css', 'css');
+----
+true
+
+# Test 4: CSS rule sets
+# =====================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/css/test.css')
+WHERE type = 'rule_set';
+----
+2
+
+# Test 5: CSS selectors
+# =====================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/css/test.css')
+WHERE type LIKE '%selector%';
+----
+3
+
+# Test 6: CSS tree structure validation
+# =====================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/languages/css/test.css');
+----
+5	23

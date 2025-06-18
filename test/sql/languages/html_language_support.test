@@ -1,0 +1,56 @@
+# name: test/sql/languages/html_language_support.test
+# description: Test HTML language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: HTML language is supported
+# ==================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'html';
+----
+html
+
+# Test 2: HTML file extension auto-detection
+# ==========================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/languages/html/test.html');
+----
+true
+
+# Test 3: Explicit HTML language specification
+# ============================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/languages/html/test.html', 'html');
+----
+true
+
+# Test 4: HTML elements
+# =====================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/html/test.html')
+WHERE type = 'element';
+----
+5
+
+# Test 5: HTML tag names
+# ======================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/html/test.html')
+WHERE type = 'tag_name';
+----
+10
+
+# Test 6: HTML tree structure validation
+# ======================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/languages/html/test.html');
+----
+5	25

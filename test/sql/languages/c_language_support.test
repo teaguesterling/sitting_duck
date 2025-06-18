@@ -1,0 +1,56 @@
+# name: test/sql/languages/c_language_support.test
+# description: Test C language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: C language is supported
+# ===============================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'c';
+----
+c
+
+# Test 2: C file extension auto-detection
+# =======================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/languages/c/test.c');
+----
+true
+
+# Test 3: Explicit C language specification
+# =========================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/languages/c/test.c', 'c');
+----
+true
+
+# Test 4: C function declarations
+# ===============================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/c/test.c')
+WHERE type = 'function_definition' OR type = 'declaration';
+----
+2
+
+# Test 5: C identifiers
+# =====================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/c/test.c')
+WHERE type = 'identifier' AND name IS NOT NULL;
+----
+7
+
+# Test 6: C tree structure validation
+# ===================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/languages/c/test.c');
+----
+4	18

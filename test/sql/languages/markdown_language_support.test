@@ -1,0 +1,56 @@
+# name: test/sql/languages/markdown_language_support.test
+# description: Test Markdown language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: Markdown language is supported
+# ======================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'markdown';
+----
+markdown
+
+# Test 2: Markdown file extension auto-detection
+# ==============================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/languages/markdown/test.md');
+----
+true
+
+# Test 3: Explicit Markdown language specification
+# ================================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/languages/markdown/test.md', 'markdown');
+----
+true
+
+# Test 4: Markdown headings
+# =========================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/markdown/test.md')
+WHERE type LIKE '%heading%';
+----
+2
+
+# Test 5: Markdown paragraphs
+# ===========================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/markdown/test.md')
+WHERE type = 'paragraph';
+----
+1
+
+# Test 6: Markdown tree structure validation
+# ==========================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/languages/markdown/test.md');
+----
+2	8
