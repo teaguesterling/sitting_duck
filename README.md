@@ -1,6 +1,19 @@
 # Sitting Duck 🦆
 
-A DuckDB extension that parses source code into Abstract Syntax Trees (ASTs) and makes them queryable with SQL.
+**Sitting Duck** is a DuckDB extension that makes Abstract Syntax Trees (ASTs) from source code files quack like data - enabling powerful SQL-based analysis across multiple programming languages.
+
+## Why "Sitting Duck"?
+
+The name reflects the project's philosophy and technology stack:
+- **Sitting**: A nod to Tree-sitter, our parsing engine - your code sits in trees waiting for analysis
+- **Duck**: Everything quacks like data in DuckDB - including your source code!
+- **Target**: Your codebase becomes a sitting duck for powerful SQL-based analysis
+
+## What Makes It Special
+
+Traditional code analysis tools force you to learn their APIs and query languages. Sitting Duck lets you use the most powerful data analysis language ever created - **SQL** - to explore your codebase.
+
+Code is data. Data wants to be queried. DuckDB makes querying a joy. Therefore: Analyzing code should be joyful. 🦆
 
 ## What It Does
 
@@ -22,15 +35,26 @@ GROUP BY type
 ORDER BY COUNT(*) DESC;
 ```
 
+## Architecture
+
+Sitting Duck transforms your source code into queriable data structures:
+
+1. **Tree-sitter parsing** - Robust, error-recovering parsers for 12+ languages
+2. **Semantic classification** - Universal type system for cross-language analysis  
+3. **SQL interface** - Rich table functions and streaming analysis
+4. **Streaming design** - Efficient processing of large codebases
+
 ## Supported Languages
 
-Currently supports **13 languages** via Tree-sitter parsers:
+Currently supports **12 languages** via Tree-sitter parsers with full semantic analysis:
 
 - **Web**: JavaScript, TypeScript, HTML, CSS
-- **Systems**: C, C++, Rust, Go  
-- **Scripting**: Python, Ruby, PHP
+- **Systems**: C, C++, Go, Rust (via grammar)
+- **Scripting**: Python, Ruby  
 - **Enterprise**: Java
-- **Documentation**: Markdown
+- **Other**: SQL, Markdown
+
+*Note: Language support is actively expanding. See our language test coverage for the latest status.*
 
 ## Installation
 
@@ -94,34 +118,32 @@ The `read_ast()` function returns this schema:
 | `type` | VARCHAR | AST node type (e.g., 'function_definition') |
 | `name` | VARCHAR | Node name if applicable |
 | `file_path` | VARCHAR | Source file path |
-| `start_line` | INT | Starting line number (1-based) |
-| `start_column` | INT | Starting column (1-based) |  
-| `end_line` | INT | Ending line number (1-based) |
-| `end_column` | INT | Ending column (1-based) |
+| `language` | VARCHAR | Detected programming language |
+| `start_line` | UINTEGER | Starting line number (1-based) |
+| `start_column` | UINTEGER | Starting column (1-based) |  
+| `end_line` | UINTEGER | Ending line number (1-based) |
+| `end_column` | UINTEGER | Ending column (1-based) |
 | `parent_id` | BIGINT | Parent node ID (NULL for root) |
-| `sibling_index` | INT | Position among siblings (0-based) |
-| `depth` | INT | Tree depth (0 for root) |
-| `children_count` | INT | Number of direct children |
-| `descendant_count` | INT | Total descendants (useful for complexity) |
+| `depth` | UINTEGER | Tree depth (0 for root) |
+| `sibling_index` | UINTEGER | Position among siblings (0-based) |
+| `children_count` | UINTEGER | Number of direct children |
+| `descendant_count` | UINTEGER | Total descendants (useful for complexity) |
 | `peek` | VARCHAR | Source code snippet for this node |
+| `semantic_type` | UTINYINT | Universal semantic category (0-255) |
+| `universal_flags` | UTINYINT | Additional semantic flags |
+| `arity_bin` | UTINYINT | Binned arity for analysis |
 
-## CLI Tool
-
-The project includes a unified CLI tool at `./ast` (symlink to `tools/ast-cli/ast`):
+## Quick Start
 
 ```bash
-# Index files for fast analysis
-./ast index py "**/*.py"
-./ast index cpp "src/**/*.cpp" "include/**/*.h"
+# Install the extension
+make && make install
 
-# Query the indexes
-./ast funcs "**/*.py" "parse*"    # Find functions matching "parse*"
-./ast complex 50                  # Find functions with >50 nodes
-./ast hotspots 100               # Find complexity hotspots
-./ast src function_name          # Show source code for a function
+# Use SQL directly
+duckdb -c "LOAD sitting_duck; SELECT * FROM read_ast('main.py') LIMIT 10;"
 
-# See all commands
-./ast help
+# Or use the CLI tool (if available)
+./tools/ast-cli/ast funcs "**/*.py" "test*"    # Find test functions
 ```
 
 ## Real Examples
@@ -183,31 +205,50 @@ SELECT COUNT(*) FROM read_ast('**/*.py', peek_mode := 'smart');
 
 ## Advanced Features
 
-The extension includes SQL macros for common analysis patterns. Load them with:
+### Semantic Types for Cross-Language Analysis
+
+The extension includes a universal semantic taxonomy that works across all languages:
 
 ```sql
-.read ast-navigator.sql
+-- Find all functions regardless of language
+SELECT file_path, name, language 
+FROM read_ast('**/*.*', ignore_errors := true)
+WHERE semantic_type = 115; -- DEFINITION_FUNCTION
 
--- Use pre-built analysis functions
-SELECT * FROM ast_find_functions('**/*.py');
-SELECT * FROM ast_complexity_stats('**/*.py');
+-- Find all arithmetic operations across languages
+SELECT COUNT(*) as arithmetic_ops, language
+FROM read_ast('**/*.*', ignore_errors := true)
+WHERE (semantic_type & 0xF0) = 64 -- OPERATOR kind
+  AND (semantic_type & 0x0C) = 0   -- ARITHMETIC super type
+GROUP BY language;
+```
+
+### Multi-File Processing
+
+```sql
+-- Analyze entire codebases with glob patterns
+SELECT language, COUNT(*) as files, 
+       COUNT(CASE WHEN semantic_type = 115 THEN 1 END) as functions
+FROM read_ast('**/*.*', ignore_errors := true)
+GROUP BY language;
 ```
 
 ## Limitations
 
 - **Parse-only**: This analyzes syntax, not semantics (no type checking, symbol resolution, etc.)
 - **Tree-sitter dependent**: Parsing quality depends on Tree-sitter grammar completeness
-- **Single-threaded parsing**: Files are parsed sequentially (though DuckDB can parallelize queries)
-- **In-memory ASTs**: Large files may use significant memory during parsing
+- **Single-threaded parsing**: Files are parsed sequentially (though results stream efficiently)
+- **File-by-file processing**: Each file is parsed independently (no cross-file analysis)
 
-## Common Use Cases
+## Use Cases
 
-- **Code quality analysis**: Find overly complex functions
-- **Refactoring assistance**: Understand code structure before changes
-- **Documentation**: Extract function signatures and comments
-- **Pattern detection**: Find common coding patterns or antipatterns
-- **Dependency analysis**: Track imports and includes
-- **Learning codebases**: Quickly understand unfamiliar code structure
+- **Code quality analysis** - Find complexity hotspots and code smells
+- **Dependency analysis** - Understand import/include relationships
+- **Refactoring assistance** - Identify patterns and duplicated code
+- **Documentation generation** - Extract API signatures and comments
+- **Security auditing** - Find dangerous patterns across languages
+- **Learning and exploration** - Understand unfamiliar codebases quickly
+- **Cross-language analysis** - Compare patterns across different programming languages
 
 ## Contributing
 
@@ -224,6 +265,15 @@ See `docs/ADDING_NEW_LANGUAGES.md` for details.
 
 MIT License - see LICENSE file for details.
 
+## Documentation
+
+For AI agents and advanced usage:
+- **[AI Agent Guide](AI_AGENT_GUIDE.md)** - Comprehensive guide for AI agents using semantic types
+- **[API Reference](API_REFERENCE.md)** - Complete function reference
+- **[Adding Languages](docs/ADDING_NEW_LANGUAGES.md)** - How to add new language support
+
 ---
 
 *Sitting Duck transforms your source code into a sitting duck for SQL-based analysis. 🦆*
+
+*Previous name: DuckDB AST Extension*
