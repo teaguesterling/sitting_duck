@@ -182,7 +182,7 @@ set(EXTENSION_SOURCES
     src/language_adapters/css_adapter.cpp
     src/language_adapters/c_adapter.cpp
     src/read_ast_streaming_function.cpp
-    src/read_ast_objects_hybrid.cpp
+    # src/read_ast_objects_hybrid.cpp (removed - objects API not used)
     src/ast_sql_macros.cpp
     # src/short_names_function.cpp (removed - short names system removed)
     src/parse_ast_function.cpp
