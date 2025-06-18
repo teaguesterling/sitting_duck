@@ -3,9 +3,12 @@
 #include "language_adapter.hpp"
 #include "semantic_types.hpp"
 #include "ast_file_utils.hpp"
+#include "ast_parsing_task.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/file_system.hpp"
+#include "duckdb/parallel/task_executor.hpp"
+#include "duckdb/parallel/task_scheduler.hpp"
 #include "utf8proc_wrapper.hpp"
 #include <stack>
 
@@ -390,6 +393,83 @@ unique_ptr<ASTResult> UnifiedASTBackend::ParseSingleFileToASTResult(ClientContex
         }
         return nullptr; // With ignore_errors=true, skip this file
     }
+}
+
+ASTResultCollection UnifiedASTBackend::ParseFilesToASTCollectionParallel(ClientContext &context,
+                                                                        const Value &file_path_value,
+                                                                        const string& language,
+                                                                        bool ignore_errors,
+                                                                        int32_t peek_size,
+                                                                        const string& peek_mode) {
+    // Get all files that match the input pattern(s)
+    vector<string> supported_extensions;
+    if (language != "auto") {
+        supported_extensions = ASTFileUtils::GetSupportedExtensions(language);
+    }
+    
+    auto file_paths = ASTFileUtils::GetFiles(context, file_path_value, ignore_errors, supported_extensions);
+    
+    if (file_paths.empty() && !ignore_errors) {
+        throw IOException("No files found matching the input pattern");
+    }
+    
+    // For small file counts, use sequential processing to avoid task overhead
+    if (file_paths.size() <= 1) {
+        return ParseFilesToASTCollection(context, file_path_value, language, ignore_errors, peek_size, peek_mode);
+    }
+    
+    // Determine thread count and task distribution
+    const auto num_threads = NumericCast<idx_t>(TaskScheduler::GetScheduler(context).NumberOfThreads());
+    const auto files_per_task = MaxValue<idx_t>((file_paths.size() + num_threads - 1) / num_threads, 1);
+    const auto num_tasks = (file_paths.size() + files_per_task - 1) / files_per_task;
+    
+    // Auto-detect language for each file if needed
+    vector<string> resolved_languages;
+    resolved_languages.reserve(file_paths.size());
+    
+    for (const auto& file_path : file_paths) {
+        string file_language = language;
+        if (language == "auto" || language.empty()) {
+            file_language = ASTFileUtils::DetectLanguageFromPath(file_path);
+            if (file_language == "auto") {
+                if (!ignore_errors) {
+                    throw BinderException("Could not detect language for file: " + file_path);
+                }
+                file_language = "unknown"; // Will be skipped during processing
+            }
+        }
+        resolved_languages.push_back(file_language);
+    }
+    
+    // Create shared parsing state
+    ASTParsingState parsing_state(context, file_paths, resolved_languages, ignore_errors, peek_size, peek_mode);
+    
+    // Create and schedule tasks
+    TaskExecutor executor(context);
+    vector<unique_ptr<ASTParsingTask>> tasks;
+    tasks.reserve(num_tasks);
+    
+    for (idx_t task_idx = 0; task_idx < num_tasks; task_idx++) {
+        const auto file_idx_start = task_idx * files_per_task;
+        const auto file_idx_end = MinValue<idx_t>(file_idx_start + files_per_task, file_paths.size());
+        
+        auto task = make_uniq<ASTParsingTask>(executor, parsing_state, file_idx_start, file_idx_end);
+        executor.ScheduleTask(std::move(task));
+    }
+    
+    // Execute all tasks and wait for completion
+    executor.WorkOnTasks();
+    
+    // Report errors if any occurred (when ignore_errors=true)
+    if (parsing_state.errors_encountered.load() > 0 && ignore_errors) {
+        // Could log warnings about skipped files here
+        // For now, silently continue as per ignore_errors=true behavior
+    }
+    
+    // Collect results
+    ASTResultCollection collection;
+    collection.results = std::move(parsing_state.results);
+    return collection;
 }
 
 } // namespace duckdb

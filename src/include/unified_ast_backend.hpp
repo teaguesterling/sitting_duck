@@ -60,6 +60,14 @@ public:
                                                          int32_t peek_size = 120,
                                                          const string& peek_mode = "auto");
     
+    // Parallel multi-file parsing function
+    static ASTResultCollection ParseFilesToASTCollectionParallel(ClientContext &context,
+                                                                const Value &file_path_value,
+                                                                const string& language = "auto",
+                                                                bool ignore_errors = false,
+                                                                int32_t peek_size = 120,
+                                                                const string& peek_mode = "auto");
+    
     // Single file parsing for streaming implementation
     static unique_ptr<ASTResult> ParseSingleFileToASTResult(ClientContext &context,
                                                            const string& file_path,

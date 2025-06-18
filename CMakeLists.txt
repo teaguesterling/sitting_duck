@@ -187,6 +187,7 @@ set(EXTENSION_SOURCES
     # src/short_names_function.cpp (removed - short names system removed)
     src/parse_ast_function.cpp
     src/unified_ast_backend.cpp
+    src/ast_parsing_task.cpp
     src/ast_type.cpp
     src/semantic_types.cpp
     src/semantic_type_functions.cpp
