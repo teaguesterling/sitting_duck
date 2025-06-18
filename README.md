@@ -137,10 +137,11 @@ The `read_ast()` function returns this schema:
 
 ```bash
 # Install the extension
-make && make install
+make
 
 # Use SQL directly
-duckdb -c "LOAD sitting_duck; SELECT * FROM read_ast('main.py') LIMIT 10;"
+./build/release/duckdb -c "LOAD sitting_duck; SELECT * FROM read_ast('main.py') LIMIT 10;"
+# Technically THIS build doesn't need to LOAD sitting_duck.
 
 # Or use the CLI tool (if available)
 ./tools/ast-cli/ast funcs "**/*.py" "test*"    # Find test functions
