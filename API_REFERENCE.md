@@ -1,355 +1,388 @@
 # Sitting Duck API Reference
 
-**Complete reference for the Sitting Duck DuckDB extension - 71 functions for comprehensive AST analysis.**
+**Complete reference for the Sitting Duck DuckDB extension - accurate documentation for the current implementation.**
 
 ## Table of Contents
 
-1. [Core Functions (16)](#core-functions-16)
-2. [SQL Macros (55)](#sql-macros-55)
-3. [Semantic Type System](#semantic-type-system)
-4. [Language Support](#language-support)
-5. [Common Patterns](#common-patterns)
+1. [Core Table Functions](#core-table-functions)
+2. [Scalar Functions](#scalar-functions)
+3. [Utility Functions](#utility-functions)
+4. [Semantic Type System](#semantic-type-system)
+5. [Language Support](#language-support)
+6. [Common Usage Patterns](#common-usage-patterns)
 
 ---
 
-## Core Functions (16)
+## Core Table Functions
 
-### Table Functions (3)
+### `read_ast(file_pattern, [language], [options...])`
 
-#### `read_ast(file_path, [language])`
-**Main parsing function** - Reads files and returns flattened AST table.
+**Main parsing function** - Reads source code files and returns a flattened AST table.
 
 **Parameters:**
-- `file_path` (VARCHAR): File path or glob pattern (`'src/*.py'`, `'**/*.js'`)
-- `language` (VARCHAR, optional): Language override (auto-detected if omitted)
+- `file_pattern` (VARCHAR): File path or glob pattern
+  - Single file: `'script.py'`
+  - Multiple files: `'src/**/*.py'`
+  - Cross-language: `'**/*.{py,js,cpp}'`
+- `language` (VARCHAR, optional): Language override (auto-detected from extension if omitted)
+- `ignore_errors` (BOOLEAN, optional): Continue processing when encountering syntax errors (default: false)
+- `peek_size` (INTEGER, optional): Number of characters to include in peek field (default: 120)
+- `peek_mode` (VARCHAR, optional): How to extract peek text - 'auto', 'chars', 'lines' (default: 'auto')
 
 **Returns:** Table with complete AST node data
-- `node_id`, `parent_id` (BIGINT): Node relationships
-- `type`, `name` (VARCHAR): Node type and extracted name
-- `file_path` (VARCHAR): Source file
-- `start_line`, `end_line`, `start_column`, `end_column` (INTEGER): Location
-- `depth`, `sibling_index` (INTEGER): Tree position
-- `children_count`, `descendant_count` (INTEGER): Tree metrics
-- `semantic_type` (UTINYINT): Cross-language semantic classification
-- `peek` (VARCHAR): Source code preview
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `node_id` | BIGINT | Unique node identifier |
+| `type` | VARCHAR | Language-specific AST node type |
+| `name` | VARCHAR | Node name/identifier (NULL if not applicable) |
+| `file_path` | VARCHAR | Source file path |
+| `language` | VARCHAR | Detected programming language |
+| `start_line` | UINTEGER | Starting line number (1-based) |
+| `start_column` | UINTEGER | Starting column (1-based) |
+| `end_line` | UINTEGER | Ending line number (1-based) |
+| `end_column` | UINTEGER | Ending column (1-based) |
+| `parent_id` | BIGINT | Parent node ID (NULL for root) |
+| `depth` | UINTEGER | Tree depth (0 for root) |
+| `sibling_index` | UINTEGER | Position among siblings (0-based) |
+| `children_count` | UINTEGER | Number of direct children |
+| `descendant_count` | UINTEGER | Total descendants (complexity metric) |
+| `peek` | VARCHAR | Source code snippet for this node |
+| `semantic_type` | UTINYINT | Universal semantic category (0-255) |
+| `universal_flags` | UTINYINT | Additional semantic flags |
+| `arity_bin` | UTINYINT | Binned arity for analysis |
 
 **Examples:**
 ```sql
--- Parse all Python files
-SELECT * FROM read_ast('**/*.py');
+-- Parse single file with auto-detection
+SELECT * FROM read_ast('main.py');
 
--- Find all functions
-SELECT name, start_line FROM read_ast('main.py') 
-WHERE type LIKE '%function%';
+-- Parse multiple files with error handling
+SELECT file_path, COUNT(*) as nodes
+FROM read_ast('src/**/*.py', ignore_errors := true)
+GROUP BY file_path;
+
+-- Find all function definitions across languages
+SELECT file_path, name, start_line, language
+FROM read_ast('**/*.{py,js,cpp}', ignore_errors := true)
+WHERE semantic_type = 115; -- DEFINITION_FUNCTION
+
+-- Explicit language specification
+SELECT * FROM read_ast('script', 'python');
 ```
 
-#### `parse_ast(source_code, language)`
-**String parsing** - Parses source code string.
+### `parse_ast(source_code, language)`
+
+**String parsing function** - Parses source code string directly.
+
+**Parameters:**
+- `source_code` (VARCHAR): Source code to parse
+- `language` (VARCHAR): Programming language (required)
+
+**Returns:** Same schema as `read_ast()` but with synthetic file_path
+
+**Example:**
+```sql
+SELECT node_id, type, name, semantic_type
+FROM parse_ast('def hello(): return "world"', 'python')
+WHERE semantic_type = 115; -- Functions only
+```
+
+---
+
+## Scalar Functions
+
+### `parse_ast_objects(source_code, language)`
+
+**Object-based parsing** - Returns AST as a single struct value.
 
 **Parameters:**
 - `source_code` (VARCHAR): Source code to parse
 - `language` (VARCHAR): Programming language
 
-**Returns:** Same schema as `read_ast`
+**Returns:** Single AST struct with nodes array and source metadata
 
 **Example:**
 ```sql
-SELECT * FROM parse_ast('def hello(): return "world"', 'python');
+SELECT parse_ast_objects('class Test: pass', 'python') as ast;
 ```
-
-### Utility Functions (1)
-
-#### `ast_supported_languages()`
-**Language metadata** - Returns supported languages and their properties.
-
-**Returns:** Table with:
-- `language` (VARCHAR): Language identifier
-- `aliases` (LIST): Alternative names
-- `extensions` (LIST): File extensions
-
-**Example:**
-```sql
-SELECT * FROM ast_supported_languages();
-```
-
-### Semantic Type Functions (12)
-
-#### `semantic_type_to_string(type_code)`
-Converts semantic type code to human-readable name.
-
-**Example:**
-```sql
-SELECT semantic_type_to_string(112);  -- 'DEFINITION_FUNCTION'
-```
-
-#### `semantic_type_code(type_name)`
-Converts semantic type name to numeric code.
-
-**Example:**
-```sql
-SELECT semantic_type_code('DEFINITION_FUNCTION');  -- 112
-```
-
-#### `get_super_kind(type_code)` / `get_kind(type_code)`
-Get hierarchical classification for semantic types.
-
-#### `kind_code(kind_name)` / `is_kind(type_code, kind_name)`
-Work with kind-level classification.
-
-#### Predicate Functions
-- `is_definition(type_code)` - Check if node is a definition
-- `is_call(type_code)` - Check if node is a function call  
-- `is_control_flow(type_code)` - Check if node is control flow
-- `is_identifier(type_code)` - Check if node is an identifier
-- `is_semantic_type(type_code, pattern)` - Pattern matching
-
-#### `get_searchable_types()`
-Returns list of semantic types useful for indexing.
 
 ---
 
-## SQL Macros (55)
+## Utility Functions
 
-**Comprehensive AST analysis library loaded automatically at extension startup.**
+### `ast_supported_languages()`
 
-### Core Primitives (10 macros)
+**Language metadata** - Returns information about supported languages.
 
-#### Indexing & Structure
-- `ast_with_indices(nodes)` - Add indices for filtering operations
-- `ast_extract_subtrees(nodes, filtered)` - Extract complete subtrees
-- `ast_update(ast, new_nodes)` - Update AST with new node array
-- `ast_pack(file_path, language, nodes)` - Create AST struct
+**Returns:** Table with:
+- `language` (VARCHAR): Language identifier
+- `display_name` (VARCHAR): Human-readable name
+- `extensions` (VARCHAR[]): Supported file extensions
 
-#### Filtering Operations
-- `ast_filter_by_type(nodes, type)` - Filter by exact type
-- `ast_filter_by_types(nodes, types)` - Filter by type list
-- `ast_filter_by_name(nodes, name)` - Filter by node name
-- `ast_filter_by_depth(nodes, depth)` - Filter by tree depth
-- `ast_get_by_type(ast, type)` - Get complete subtrees by type
-- `ast_get_by_types(ast, types)` - Get complete subtrees by type list
-
-### AST Get Functions (8 macros)
-
-**Tree-preserving operations** that return valid ASTs with complete subtrees.
-
-#### Basic Operations
-- `ast_get_types(ast, types)` - Get nodes by type list
-- `ast_get_type(ast, type)` - Get nodes by single type
-- `ast_get_depth(ast, depth)` - Get nodes at specific depth
-- `ast_get_name(ast, name)` - Get nodes with specific name
-
-#### Language-Agnostic Semantic Functions
-- `ast_get_functions(ast)` - Get all function definitions
-- `ast_get_classes(ast)` - Get all class definitions  
-- `ast_get_imports(ast)` - Get all import/include statements
-- `ast_get_top_level(ast)` - Get top-level nodes (depth 1)
-
-### AST Find Functions (11 macros)
-
-**Node extraction operations** that return detached nodes (breaks tree structure).
-
-#### Basic Find Operations
-- `ast_find_types(ast, types)` - Find nodes by type list
-- `ast_find_type(ast, type)` - Find nodes by single type
-- `ast_find_depth(ast, depth)` - Find nodes at specific depth
-- `ast_find_name(ast, name)` - Find nodes by name
-- `ast_find_identifiers(ast)` - Find all identifiers
-- `ast_find_literals(ast)` - Find all literal values
-
-#### Semantic Find Operations
-- `ast_find_calls(ast)` - Find function/method calls
-- `ast_find_declarations(ast)` - Find variable declarations
-- `ast_find_control_flow(ast)` - Find control flow statements
-- `ast_find_leaves(ast)` - Find leaf nodes (no children)
-- `ast_find_parents(ast)` - Find parent nodes (have children)
-
-### AST Transform Functions (11 macros)
-
-**Format transformations** that break out of AST monad.
-
-#### Basic Transformations
-- `ast_to_names(ast, [type])` - Extract names as array
-- `ast_to_types(ast)` - Extract unique types as array  
-- `ast_to_source(ast, [type])` - Extract source snippets
-- `ast_to_locations(ast)` - Convert to location table
-
-#### Statistical Transformations
-- `ast_to_type_stats(ast)` - Type frequency analysis
-- `ast_to_depth_stats(ast)` - Depth distribution analysis
-- `ast_to_complexity_metrics(ast)` - Complexity analysis
-
-#### Code Analysis Transformations
-- `ast_to_signatures(ast)` - Extract function signatures
-- `ast_to_dependencies(ast)` - Extract import/dependency list
-- `ast_to_call_edges(ast)` - Build call graph relationships
-- `ast_to_summary(ast)` - Overall AST summary statistics
-
-### Taxonomy Functions (15 macros)
-
-**Semantic classification** using the KIND system.
-
-#### Kind-Based Filters
-- `ast_filter_by_kind(nodes, kind_value)` - Filter by semantic kind
-- `ast_filter_by_kinds(nodes, kind_values)` - Filter by multiple kinds
-- `ast_filter_functions_by_kind(nodes)` - Get function-like nodes
-- `ast_filter_literals_by_kind(nodes)` - Get literal nodes
-- `ast_filter_names_by_kind(nodes)` - Get name/identifier nodes
-
-#### Flag-Based Filters
-- `ast_filter_public(nodes)` - Get public nodes
-- `ast_filter_builtin(nodes)` - Get builtin nodes
-- `ast_filter_keywords(nodes)` - Get keyword nodes
-
-#### Semantic Operations
-- `ast_group_by_semantic_id(nodes)` - Group by semantic similarity
-- `ast_find_semantic_pattern(nodes, pattern_id)` - Find semantic patterns
-
-#### Complete Operations with Taxonomy
-- `ast_get_functions_by_kind(ast)` - Get functions using KIND system
-- `ast_get_public_interface(ast)` - Get public interface nodes
-- `ast_get_literals_by_kind(ast)` - Get literals using KIND system
-- `ast_find_semantic_functions(ast)` - Cross-language function finding
-- `ast_find_control_flow_by_kind(ast)` - Find control flow by KIND
+**Example:**
+```sql
+SELECT language, display_name, extensions
+FROM ast_supported_languages()
+ORDER BY language;
+```
 
 ---
 
 ## Semantic Type System
 
-**8-bit hierarchical classification system** for cross-language analysis.
+### Overview
 
-### Hierarchy (4 levels)
+The extension uses an **8-bit semantic taxonomy** for cross-language analysis. Each node has a `semantic_type` field (0-255) that provides universal semantic meaning regardless of the source language.
 
-1. **Super Kinds** (top level):
-   - `DATA_STRUCTURE` (0x00-0x3F): Literals, names, types
-   - `COMPUTATION` (0x40-0x7F): Operations, definitions  
-   - `CONTROL_EFFECTS` (0x80-0xBF): Flow control, organization
-   - `META_EXTERNAL` (0xC0-0xFF): Metadata, imports, syntax
+### Semantic Type Functions
 
-2. **Examples by Category**:
-   - **Data**: `LITERAL_STRING=0x00`, `NAME_IDENTIFIER=0x04`, `TYPE_PRIMITIVE=0x08`
-   - **Computation**: `COMPUTATION_CALL=0x40`, `DEFINITION_FUNCTION=0x44`
-   - **Control**: `FLOW_CONDITIONAL=0x80`, `FLOW_LOOP=0x81`
-   - **Meta**: `EXTERNAL_IMPORT=0xC0`, `METADATA_COMMENT=0xC4`
-
-### Usage Patterns
+#### `semantic_type_to_string(type_code)`
+Converts semantic type code to human-readable name.
 
 ```sql
--- Find all definitions across languages
-SELECT * FROM read_ast('**/*.*') 
-WHERE (semantic_type & 240) = 112;
+SELECT semantic_type_to_string(115);  -- Returns: 'DEFINITION_FUNCTION'
+```
 
--- Find public functions using taxonomy
-SELECT ast_to_names(ast_get_functions_by_kind(
-    ast_filter_public(ast.nodes)
-)) FROM read_ast_objects('*.py');
+#### `get_super_kind(type_code)`
+Returns the super kind (top-level category) for a semantic type.
+
+```sql
+SELECT get_super_kind(115);  -- Returns super kind for functions
+```
+
+#### `get_kind(type_code)`
+Returns the kind (subcategory) for a semantic type.
+
+```sql
+SELECT get_kind(115);  -- Returns kind for functions
+```
+
+#### `is_definition(type_code)`
+Checks if a semantic type represents a definition.
+
+```sql
+SELECT name FROM read_ast('main.py')
+WHERE is_definition(semantic_type) AND name IS NOT NULL;
+```
+
+#### `is_call(type_code)`
+Checks if a semantic type represents a function/method call.
+
+```sql
+SELECT COUNT(*) as call_count
+FROM read_ast('script.js')
+WHERE is_call(semantic_type);
+```
+
+#### `is_control_flow(type_code)`
+Checks if a semantic type represents control flow.
+
+```sql
+SELECT type, COUNT(*) as control_flow_count
+FROM read_ast('**/*.py', ignore_errors := true)
+WHERE is_control_flow(semantic_type)
+GROUP BY type;
+```
+
+#### `is_identifier(type_code)`
+Checks if a semantic type represents an identifier.
+
+```sql
+SELECT DISTINCT name
+FROM read_ast('main.py')
+WHERE is_identifier(semantic_type) AND name IS NOT NULL;
+```
+
+### Semantic Type Categories
+
+The 8-bit encoding follows this pattern: `[ss kk tt ll]`
+- **ss (bits 6-7)**: Super Kind (4 major categories)
+- **kk (bits 4-5)**: Kind (16 subcategories)
+- **tt (bits 2-3)**: Super Type (4 variants per kind)
+- **ll (bits 0-1)**: Language-specific (reserved)
+
+#### Major Categories:
+- **DATA_STRUCTURE** (0x00-0x3F): Literals, names, patterns, types
+- **COMPUTATION** (0x40-0x7F): Operators, definitions, transformations
+- **CONTROL_EFFECTS** (0x80-0xBF): Flow control, error handling, organization
+- **META_EXTERNAL** (0xC0-0xFF): Metadata, imports, parser-specific
+
+#### Common Semantic Types:
+```sql
+-- Key semantic type constants
+115  -- DEFINITION_FUNCTION (functions across all languages)
+119  -- DEFINITION_CLASS (classes/structs/interfaces)
+123  -- DEFINITION_VARIABLE (variable declarations)
+127  -- DEFINITION_MODULE (modules/namespaces)
+80   -- EXECUTION_INVOCATION (function calls)
+136  -- FLOW_CONDITIONAL (if/switch statements)
+132  -- FLOW_LOOP (for/while loops)
 ```
 
 ---
 
 ## Language Support
 
-**13 languages** with automatic file extension detection:
+Currently supports **12 programming languages** with full semantic analysis:
 
-| Language | Extensions | Grammar Source |
-|----------|------------|----------------|
+| Language | Extensions | Tree-sitter Grammar |
+|----------|------------|-------------------|
 | **Python** | `.py` | tree-sitter-python |
-| **JavaScript** | `.js`, `.mjs`, `.cjs` | tree-sitter-javascript |
+| **JavaScript** | `.js`, `.jsx` | tree-sitter-javascript |
 | **TypeScript** | `.ts`, `.tsx` | tree-sitter-typescript |
-| **C++** | `.cpp`, `.cc`, `.cxx`, `.hpp`, `.h` | tree-sitter-cpp |
 | **C** | `.c`, `.h` | tree-sitter-c |
+| **C++** | `.cpp`, `.hpp`, `.cc`, `.cxx`, `.h` | tree-sitter-cpp |
 | **Java** | `.java` | tree-sitter-java |
 | **Go** | `.go` | tree-sitter-go |
 | **Ruby** | `.rb` | tree-sitter-ruby |
-| **PHP** | `.php` | tree-sitter-php |
-| **HTML** | `.html`, `.htm` | tree-sitter-html |
+| **SQL** | `.sql` | tree-sitter-sql |
 | **CSS** | `.css` | tree-sitter-css |
-| **Rust** | `.rs` | tree-sitter-rust |
+| **HTML** | `.html`, `.htm` | tree-sitter-html |
 | **Markdown** | `.md`, `.markdown` | tree-sitter-markdown |
 
----
+### Language Detection
 
-## Common Patterns
+The extension automatically detects languages based on file extensions. For files without extensions or non-standard extensions, you can specify the language explicitly:
 
-### Project Analysis
 ```sql
--- Find all function definitions in a project
-SELECT file_path, name, start_line
-FROM read_ast('**/*.py')
-WHERE semantic_type = semantic_type_code('DEFINITION_FUNCTION');
+-- Auto-detection
+SELECT * FROM read_ast('script.py');  -- Detects Python
 
--- Complexity analysis
-SELECT name, descendant_count as complexity
-FROM read_ast('**/*.js') 
-WHERE type LIKE '%function%' AND descendant_count > 50
-ORDER BY complexity DESC;
+-- Explicit language
+SELECT * FROM read_ast('Makefile', 'bash');  -- Force specific language
 ```
 
-### Cross-Language Search
-```sql
--- Find all imports across languages
-SELECT file_path, peek as import_statement
-FROM read_ast('**/*.*')
-WHERE semantic_type = semantic_type_code('EXTERNAL_IMPORT');
+---
 
--- Public interface extraction
-WITH ast_data AS (
-    SELECT ast_pack(file_path, 'python', 
-        list(struct_pack(node_id, type, name, semantic_type, start_line, 
-                        end_line, parent_id, depth, children_count, 
-                        descendant_count, peek))) as ast
-    FROM read_ast('**/*.py')
+## Common Usage Patterns
+
+### Basic Code Analysis
+
+```sql
+-- Get overview of a codebase
+SELECT 
+    language,
+    COUNT(DISTINCT file_path) as files,
+    COUNT(*) as total_nodes,
+    COUNT(CASE WHEN semantic_type = 115 THEN 1 END) as functions,
+    COUNT(CASE WHEN semantic_type = 119 THEN 1 END) as classes
+FROM read_ast('**/*.*', ignore_errors := true)
+GROUP BY language
+ORDER BY total_nodes DESC;
+```
+
+### Finding Specific Constructs
+
+```sql
+-- Find all function definitions with their complexity
+SELECT 
+    file_path,
+    name,
+    start_line,
+    descendant_count as complexity_score
+FROM read_ast('src/**/*.py', ignore_errors := true)
+WHERE semantic_type = 115 AND name IS NOT NULL
+ORDER BY complexity_score DESC;
+
+-- Find all imports/includes across languages
+SELECT 
+    file_path,
+    type,
+    peek as import_statement,
+    language
+FROM read_ast('**/*.*', ignore_errors := true)
+WHERE type ILIKE '%import%' OR type ILIKE '%include%'
+ORDER BY file_path;
+```
+
+### Cross-Language Analysis
+
+```sql
+-- Compare function complexity across languages
+SELECT 
+    language,
+    COUNT(*) as function_count,
+    AVG(descendant_count) as avg_complexity,
+    MAX(descendant_count) as max_complexity
+FROM read_ast('**/*.*', ignore_errors := true)
+WHERE semantic_type = 115
+GROUP BY language
+ORDER BY avg_complexity DESC;
+
+-- Find similar patterns across languages using semantic types
+SELECT 
+    semantic_type,
+    semantic_type_to_string(semantic_type) as semantic_name,
+    COUNT(*) as occurrence_count,
+    COUNT(DISTINCT language) as languages_used
+FROM read_ast('**/*.*', ignore_errors := true)
+GROUP BY semantic_type
+HAVING COUNT(DISTINCT language) > 1
+ORDER BY occurrence_count DESC;
+```
+
+### Performance and Filtering
+
+```sql
+-- Efficient filtering using semantic types
+SELECT file_path, name, type
+FROM read_ast('**/*.{py,js}', ignore_errors := true)
+WHERE (semantic_type & 0xF0) = 112  -- All DEFINITION types
+  AND name IS NOT NULL;
+
+-- Find code complexity hotspots
+SELECT 
+    file_path,
+    name,
+    depth,
+    descendant_count,
+    start_line
+FROM read_ast('**/*.*', ignore_errors := true)
+WHERE semantic_type = 115  -- Functions only
+  AND depth > 5  -- Deeply nested
+  AND descendant_count > 100  -- Complex
+ORDER BY descendant_count DESC;
+```
+
+### Error Handling and Robustness
+
+```sql
+-- Robust analysis of potentially problematic codebases
+SELECT 
+    language,
+    COUNT(DISTINCT file_path) as processed_files,
+    SUM(CASE WHEN name IS NOT NULL THEN 1 ELSE 0 END) as named_constructs
+FROM read_ast('**/*.*', ignore_errors := true)
+WHERE semantic_type IN (115, 119, 123)  -- Functions, classes, variables
+GROUP BY language;
+
+-- Check for files that might have parsing issues
+WITH file_stats AS (
+    SELECT 
+        file_path,
+        language,
+        COUNT(*) as node_count,
+        COUNT(CASE WHEN semantic_type = 115 THEN 1 END) as function_count
+    FROM read_ast('**/*.*', ignore_errors := true)
+    GROUP BY file_path, language
 )
-SELECT ast_to_names(ast_get_public_interface(ast))
-FROM ast_data;
-```
-
-### Using SQL Macros with Flat Tables
-```sql
--- Convert flat table to AST struct for macro usage
-WITH ast_struct AS (
-    SELECT ast_pack(
-        file_path, 
-        'python',
-        list(struct_pack(
-            node_id, type, name, start_line, end_line, 
-            parent_id, depth, children_count, descendant_count, 
-            semantic_type, peek
-        ) ORDER BY node_id)
-    ) as ast
-    FROM read_ast('main.py')
-    GROUP BY file_path
-)
-SELECT ast_to_signatures(ast)
-FROM ast_struct;
-```
-
-### Performance Optimization
-```sql
--- Index frequently searched nodes
-CREATE TABLE code_index AS
-SELECT * FROM read_ast('**/*.*')
-WHERE semantic_type = ANY(get_searchable_types());
-
--- Efficient pattern searches
-SELECT * FROM code_index 
-WHERE is_definition(semantic_type) 
-  AND name LIKE '%test%';
+SELECT file_path, language, node_count, function_count
+FROM file_stats
+WHERE node_count < 5  -- Suspiciously few nodes (might indicate parsing issues)
+ORDER BY node_count;
 ```
 
 ---
 
-## API Design Philosophy
+## Performance Notes
 
-**Monadic Structure:** The AST struct IS the monad - functions work directly with AST structs maintaining tree relationships.
-
-**Four Function Categories:**
-1. **`ast_get_*`** → Tree-preserving (maintains valid AST structure)
-2. **`ast_find_*`** → Node extraction (breaks tree, returns detached nodes)  
-3. **`ast_to_*`** → Format transformations (exits AST monad)
-4. **`ast_filter_*`** → Low-level filtering primitives
-
-**SQL-First:** Comprehensive functionality available through SQL macros, with optional Python CLI for orchestration.
+- **Streaming**: Files are processed one-by-one, so results appear incrementally
+- **Memory efficient**: Only one file's AST is in memory at a time
+- **Glob patterns**: Use `**/*.ext` for recursive directory searches
+- **Error handling**: Use `ignore_errors := true` for robust large-codebase analysis
+- **Semantic filtering**: Use semantic types for efficient cross-language queries
 
 ---
 
-*Total: **71 functions** (16 core C++ + 55 SQL macros) for complete AST analysis capabilities.*
+*This API reference reflects the current implementation of the Sitting Duck extension. For conceptual information and AI agent usage patterns, see [AI_AGENT_GUIDE.md](AI_AGENT_GUIDE.md).*

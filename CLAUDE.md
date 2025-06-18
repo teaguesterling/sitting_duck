@@ -59,25 +59,21 @@ This project must follow the conventions and practices described in duckdb/CONTR
 - **Example**: `ast_extract_class(ast, 'MyClass')` rebuilds valid AST containing only that class
 - **Use case**: When you need a valid sub-AST for further processing
 
-## Standardized Parsing Functions
-All parsing functions use the same backend parser with different source locations and output formats:
+## Current Parsing Functions
+The extension provides these main parsing functions:
 
-### 1. `read_ast(file_path, language := NULL)` 
-- **Source**: File path
+### 1. `read_ast(file_path, language := NULL, options...)` 
+- **Source**: File path or glob pattern
 - **Output**: Flattened table (table function, one column per AST node field)
 - **Language**: Optional, auto-detected from file extension
+- **Options**: `ignore_errors`, `peek_size`, `peek_mode`
 
 ### 2. `parse_ast(source_code, language)`
 - **Source**: String containing source code  
 - **Output**: Flattened table (table function, one column per AST node field)
 - **Language**: Required parameter
 
-### 3. `read_ast_objects(file_path, language := NULL)`
-- **Source**: File path
-- **Output**: Single "ast" column containing AST struct (table function)
-- **Language**: Optional, auto-detected from file extension  
-
-### 4. `parse_ast_objects(source_code, language)`
+### 3. `parse_ast_objects(source_code, language)`
 - **Source**: String containing source code
 - **Output**: AST struct (scalar function)  
 - **Language**: Required parameter
