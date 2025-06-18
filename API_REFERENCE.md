@@ -15,15 +15,16 @@
 
 ## Core Table Functions
 
-### `read_ast(file_pattern, [language], [options...])`
+### `read_ast(file_patterns, [language], [options...])`
 
 **Main parsing function** - Reads source code files and returns a flattened AST table.
 
 **Parameters:**
-- `file_pattern` (VARCHAR): File path or glob pattern
+- `file_patterns` (VARCHAR | LIST(VARCHAR)): File path(s) or glob pattern(s)
   - Single file: `'script.py'`
-  - Multiple files: `'src/**/*.py'`
-  - Cross-language: `'**/*.{py,js,cpp}'`
+  - Single pattern: `'src/**/*.py'`
+  - **Array of patterns (NEW!)**: `['src/**/*.py', 'lib/**/*.js', 'main.cpp']`
+  - Cross-language: `'**/*.{py,js,cpp}'` or `['**/*.py', '**/*.js', '**/*.cpp']`
 - `language` (VARCHAR, optional): Language override (auto-detected from extension if omitted)
 - `ignore_errors` (BOOLEAN, optional): Continue processing when encountering syntax errors (default: false)
 - `peek_size` (INTEGER, optional): Number of characters to include in peek field (default: 120)
@@ -57,18 +58,35 @@
 -- Parse single file with auto-detection
 SELECT * FROM read_ast('main.py');
 
--- Parse multiple files with error handling
+-- Parse multiple files with glob pattern
 SELECT file_path, COUNT(*) as nodes
 FROM read_ast('src/**/*.py', ignore_errors := true)
 GROUP BY file_path;
 
--- Find all function definitions across languages
-SELECT file_path, name, start_line, language
-FROM read_ast('**/*.{py,js,cpp}', ignore_errors := true)
+-- Parse multiple patterns using DuckDB-style arrays (NEW!)
+SELECT file_path, language, COUNT(*) as nodes
+FROM read_ast([
+    'src/**/*.py',    -- All Python files in src/
+    'lib/**/*.js',    -- All JavaScript files in lib/
+    'main.cpp',       -- Specific C++ file
+    'tests/**/*.ts'   -- All TypeScript test files
+], ignore_errors := true)
+GROUP BY file_path, language
+ORDER BY nodes DESC;
+
+-- Mixed files and patterns with language override
+SELECT file_path, name, start_line
+FROM read_ast(['**/*.py', '**/*.js'], 'auto', ignore_errors := true)
 WHERE semantic_type = 115; -- DEFINITION_FUNCTION
 
--- Explicit language specification
-SELECT * FROM read_ast('script', 'python');
+-- Array with explicit language (applies to all files)
+SELECT * FROM read_ast(['script1.py', 'script2.py'], 'python');
+
+-- Find cross-language patterns using arrays
+SELECT language, COUNT(*) as import_count
+FROM read_ast(['**/*.py', '**/*.js', '**/*.java'], ignore_errors := true)
+WHERE semantic_type = 208; -- EXTERNAL_IMPORT
+GROUP BY language;
 ```
 
 ### `parse_ast(source_code, language)`
@@ -86,6 +104,49 @@ SELECT * FROM read_ast('script', 'python');
 SELECT node_id, type, name, semantic_type
 FROM parse_ast('def hello(): return "world"', 'python')
 WHERE semantic_type = 115; -- Functions only
+```
+
+### DuckDB-Consistent Array Interface
+
+**Pattern arrays follow DuckDB conventions** (like `read_csv`, `read_parquet`) for maximum consistency.
+
+#### Function Overloads
+```sql
+-- Single pattern (VARCHAR)
+SELECT * FROM read_ast('main.py');
+SELECT * FROM read_ast('main.py', 'python');
+
+-- Pattern array (LIST(VARCHAR)) - NEW!
+SELECT * FROM read_ast(['src/**/*.py', 'lib/**/*.js']);
+SELECT * FROM read_ast(['**/*.py'], 'python');
+```
+
+#### Array Features
+- **File deduplication**: Multiple patterns matching the same file return it only once
+- **Sorted output**: Results are consistently ordered by file path (DuckDB convention)
+- **Error handling**: Use `ignore_errors := true` for robust multi-pattern processing
+- **Parameter validation**: Clear error messages for invalid inputs
+
+#### Array Error Handling
+```sql
+-- Empty array error
+SELECT * FROM read_ast([]);
+-- Error: File pattern list cannot be empty
+
+-- NULL values error  
+SELECT * FROM read_ast(['file.py', NULL]);
+-- Error: File pattern list cannot contain NULL values
+
+-- Wrong type error
+SELECT * FROM read_ast(123);
+-- Error: File patterns must be VARCHAR or LIST(VARCHAR)
+
+-- Handle mixed valid/invalid patterns gracefully
+SELECT COUNT(*) FROM read_ast([
+    'valid_file.py',
+    'nonexistent_file.py'
+], ignore_errors := true);
+-- Processes valid files, skips invalid ones
 ```
 
 ---
@@ -341,7 +402,7 @@ SELECT * FROM read_ast('Makefile', 'bash');  -- Force specific language
 ### Basic Code Analysis
 
 ```sql
--- Get overview of a codebase
+-- Get overview of a codebase using glob patterns
 SELECT 
     language,
     COUNT(DISTINCT file_path) as files,
@@ -349,6 +410,23 @@ SELECT
     COUNT(CASE WHEN semantic_type = 115 THEN 1 END) as functions,
     COUNT(CASE WHEN semantic_type = 119 THEN 1 END) as classes
 FROM read_ast('**/*.*', ignore_errors := true)
+GROUP BY language
+ORDER BY total_nodes DESC;
+
+-- Same analysis using DuckDB-style pattern arrays (NEW!)
+SELECT 
+    language,
+    COUNT(DISTINCT file_path) as files,
+    COUNT(*) as total_nodes,
+    COUNT(CASE WHEN semantic_type = 115 THEN 1 END) as functions,
+    COUNT(CASE WHEN semantic_type = 120 THEN 1 END) as classes
+FROM read_ast([
+    'src/**/*.py',     -- Python source
+    'src/**/*.js',     -- JavaScript source  
+    'src/**/*.ts',     -- TypeScript source
+    'lib/**/*.cpp',    -- C++ libraries
+    'include/**/*.hpp' -- C++ headers
+], ignore_errors := true)
 GROUP BY language
 ORDER BY total_nodes DESC;
 ```
@@ -366,14 +444,21 @@ FROM read_ast('src/**/*.py', ignore_errors := true)
 WHERE semantic_type = 115 AND name IS NOT NULL
 ORDER BY complexity_score DESC;
 
--- Find all imports/includes across languages
+-- Find all imports/includes across languages (pattern array approach)
 SELECT 
     file_path,
     type,
     peek as import_statement,
     language
-FROM read_ast('**/*.*', ignore_errors := true)
-WHERE type ILIKE '%import%' OR type ILIKE '%include%'
+FROM read_ast([
+    '**/*.py',    -- Python imports
+    '**/*.js',    -- JavaScript imports  
+    '**/*.ts',    -- TypeScript imports
+    '**/*.java',  -- Java imports
+    '**/*.cpp',   -- C++ includes
+    '**/*.hpp'    -- C++ header includes
+], ignore_errors := true)
+WHERE semantic_type = 208  -- EXTERNAL_IMPORT (more precise than text matching)
 ORDER BY file_path;
 ```
 
@@ -460,9 +545,22 @@ ORDER BY node_count;
 
 - **Streaming**: Files are processed one-by-one, so results appear incrementally
 - **Memory efficient**: Only one file's AST is in memory at a time
-- **Glob patterns**: Use `**/*.ext` for recursive directory searches
+- **Pattern arrays**: File deduplication and sorting are handled efficiently at the C++ level
+- **Glob patterns**: Use `**/*.ext` for recursive searches, arrays for precise control
 - **Error handling**: Use `ignore_errors := true` for robust large-codebase analysis
 - **Semantic filtering**: Use semantic types for efficient cross-language queries
+
+### Array Performance Tips
+```sql
+-- Efficient: Specific patterns reduce file system traversal
+SELECT * FROM read_ast(['src/**/*.py', 'lib/**/*.js']);
+
+-- Less efficient: Broad patterns require more file system work
+SELECT * FROM read_ast('**/*.*', ignore_errors := true);
+
+-- Most efficient: Direct file lists when you know exactly what to parse
+SELECT * FROM read_ast(['main.py', 'utils.js', 'config.cpp']);
+```
 
 ---
 

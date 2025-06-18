@@ -110,6 +110,87 @@ WHERE is_definition(semantic_type)
 
 > **💡 Pro Tip**: Use convenience functions for readability during development, then switch to raw semantic type codes for performance in production queries. See the complete semantic type reference in [API_REFERENCE.md](API_REFERENCE.md).
 
+## DuckDB-Consistent Pattern Arrays (NEW!)
+
+The extension now supports **DuckDB-style pattern arrays** following the same conventions as `read_csv`, `read_parquet`, and other DuckDB file functions.
+
+### Array Syntax
+```sql
+-- Single pattern (traditional)
+SELECT * FROM read_ast('src/**/*.py');
+
+-- Pattern array (NEW! - DuckDB-consistent)
+SELECT * FROM read_ast(['src/**/*.py', 'lib/**/*.js', 'tests/**/*.ts']);
+
+-- Mixed files and patterns
+SELECT * FROM read_ast(['main.py', 'src/**/*.js', 'specific_file.cpp']);
+```
+
+### Key Benefits for AI Agents
+- **Precise control**: Specify exactly which file sets to analyze
+- **File deduplication**: Same file matched by multiple patterns returns only once  
+- **Consistent ordering**: Results sorted by file path (DuckDB convention)
+- **Error resilience**: Use `ignore_errors := true` for robust multi-pattern processing
+- **Performance**: Reduces file system traversal compared to broad glob patterns
+
+### Error Handling Patterns
+```sql
+-- Empty array validation
+SELECT * FROM read_ast([]);
+-- Error: File pattern list cannot be empty
+
+-- NULL value validation  
+SELECT * FROM read_ast(['file.py', NULL]);
+-- Error: File pattern list cannot contain NULL values
+
+-- Robust multi-language analysis
+SELECT language, COUNT(*) as files_processed
+FROM read_ast([
+    'src/**/*.py',           -- Python source
+    'frontend/**/*.js',      -- JavaScript frontend
+    'backend/**/*.ts',       -- TypeScript backend  
+    'native/**/*.cpp',       -- C++ native code
+    'docs/**/*.md'           -- Documentation
+], ignore_errors := true)
+GROUP BY language;
+```
+
+### AI Agent Workflow with Arrays
+```sql
+-- 1. Define language-specific file sets
+WITH language_patterns AS (
+    SELECT unnest([
+        'src/**/*.py',
+        'lib/**/*.js', 
+        'api/**/*.ts',
+        'core/**/*.cpp'
+    ]) as pattern
+),
+
+-- 2. Analyze each language set
+analysis AS (
+    SELECT 
+        language,
+        COUNT(DISTINCT file_path) as files,
+        COUNT(*) as total_nodes,
+        COUNT(CASE WHEN semantic_type = 112 THEN 1 END) as functions,
+        COUNT(CASE WHEN semantic_type = 120 THEN 1 END) as classes
+    FROM read_ast([
+        'src/**/*.py', 'lib/**/*.js', 'api/**/*.ts', 'core/**/*.cpp'
+    ], ignore_errors := true)
+    GROUP BY language
+)
+
+-- 3. Generate insights
+SELECT 
+    language,
+    files,
+    ROUND(functions::FLOAT / files, 2) as avg_functions_per_file,
+    ROUND(total_nodes::FLOAT / files, 2) as avg_complexity_per_file
+FROM analysis
+ORDER BY avg_complexity_per_file DESC;
+```
+
 ## Usage Examples for AI Agents
 
 ## Quick Start
@@ -138,24 +219,36 @@ WHERE semantic_type = 112; -- DEFINITION_FUNCTION
 ```
 
 ### 3. Multi-File Analysis
+
 ```sql
 -- Analyze entire directories with glob patterns
 SELECT file_path, COUNT(*) as nodes_per_file 
 FROM read_ast('src/**/*.py', ignore_errors := true)
 GROUP BY file_path;
 
+-- DuckDB-style pattern arrays for precise control (NEW!)
+SELECT file_path, language, COUNT(*) as nodes_per_file 
+FROM read_ast([
+    'src/**/*.py',     -- Python source files
+    'lib/**/*.js',     -- JavaScript libraries  
+    'tests/**/*.ts',   -- TypeScript tests
+    'include/**/*.hpp' -- C++ headers
+], ignore_errors := true)
+GROUP BY file_path, language
+ORDER BY nodes_per_file DESC;
+
 -- Cross-language analysis using convenience functions
 SELECT 
     language, 
     COUNT(*) as total_functions,
     get_super_kind(semantic_type) as category
-FROM read_ast('**/*.{py,js,cpp}', ignore_errors := true)
+FROM read_ast(['**/*.py', '**/*.js', '**/*.cpp'], ignore_errors := true)
 WHERE is_definition(semantic_type) AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION'
 GROUP BY language, get_super_kind(semantic_type);
 
--- Performance-optimized version with raw codes
+-- Performance-optimized version with raw codes and arrays
 SELECT language, COUNT(*) as total_functions
-FROM read_ast('**/*.{py,js,cpp}', ignore_errors := true)
+FROM read_ast(['**/*.py', '**/*.js', '**/*.cpp'], ignore_errors := true)
 WHERE semantic_type = 112 -- DEFINITION_FUNCTION
 GROUP BY language;
 ```
@@ -228,7 +321,7 @@ ORDER BY descendant_count DESC;
 
 ### Core Table Function
 
-#### `read_ast(file_pattern, language?, options...)`
+#### `read_ast(file_patterns, language?, options...)`
 The main table function for parsing and analyzing code:
 
 ```sql
@@ -240,10 +333,14 @@ read_ast('script.js', 'javascript')
 read_ast('src/**/*.py')
 read_ast('**/*.{js,ts,py}')
 
--- With options
+-- DuckDB-style pattern arrays (NEW!)
+read_ast(['src/**/*.py', 'lib/**/*.js', 'tests/**/*.ts'])
+read_ast(['main.py', 'utils.js'], 'auto')  -- Mixed files with auto-detection
+
+-- With options (works with both single patterns and arrays)
 read_ast('src/**/*.*', ignore_errors := true)
-read_ast('script.py', peek_size := 200)
-read_ast('script.py', peek_mode := 'lines')
+read_ast(['**/*.py', '**/*.js'], ignore_errors := true, peek_size := 200)
+read_ast(['script.py'], peek_mode := 'lines')
 ```
 
 **Returns columns:**
@@ -403,13 +500,25 @@ WHERE (semantic_type & 0xC0) = 128;
 
 ### 4. Use File Patterns Effectively
 ```sql
--- Specific languages
+-- Traditional glob patterns
 read_ast('**/*.py')           -- Python only
 read_ast('**/*.{js,ts}')      -- JavaScript/TypeScript
 read_ast('**/*.{cpp,hpp,h}')  -- C/C++
 
--- All supported languages
-read_ast('**/*.*', ignore_errors := true)
+-- DuckDB-style pattern arrays (NEW! - More precise control)
+read_ast(['src/**/*.py', 'lib/**/*.py'])           -- Python from specific dirs
+read_ast(['frontend/**/*.js', 'backend/**/*.ts'])  -- JS/TS by role
+read_ast(['core/**/*.cpp', 'include/**/*.hpp'])    -- C++ source + headers
+
+-- Mixed approaches
+read_ast(['main.py', 'src/**/*.js', 'config.cpp']) -- Specific files + patterns
+
+-- All supported languages (choose based on your needs)
+read_ast('**/*.*', ignore_errors := true)           -- Broad pattern
+read_ast([                                          -- Explicit control
+    '**/*.py', '**/*.js', '**/*.ts', '**/*.cpp', 
+    '**/*.java', '**/*.go', '**/*.rb'
+], ignore_errors := true)
 ```
 
 ## Integration with AI Workflows
@@ -466,15 +575,28 @@ ORDER BY complexity_issues DESC;
 -- Use ignore_errors for robustness
 read_ast('**/*.*', ignore_errors := true)
 
+-- Pattern arrays for precise control (NEW! - Often more efficient)
+read_ast([
+    'src/**/*.py',     -- Only source Python files
+    'lib/**/*.js',     -- Only library JavaScript files  
+    'api/**/*.ts'      -- Only API TypeScript files
+], ignore_errors := true)
+
 -- Stream processing - no memory limits
 -- Results are processed in chunks, suitable for massive codebases
 
 -- Filter early for performance
 SELECT file_path, COUNT(*) as function_count
-FROM read_ast('**/*.py', ignore_errors := true)
+FROM read_ast(['**/*.py', '**/*.js'], ignore_errors := true)
 WHERE semantic_type = 115  -- Filter at source
 GROUP BY file_path;
 ```
+
+### Array Performance Benefits
+- **Reduced file system traversal**: Specific patterns avoid scanning irrelevant directories
+- **File deduplication**: Built-in at C++ level, more efficient than SQL DISTINCT
+- **Predictable ordering**: Results sorted by file path, enabling efficient downstream processing
+- **Better error isolation**: Failed patterns don't affect successful ones with `ignore_errors := true`
 
 ### Memory Considerations
 - The extension uses **streaming processing** - no memory limits
@@ -490,9 +612,19 @@ GROUP BY file_path;
 read_ast('**/*.py')           -- All Python files recursively
 read_ast('src/**/*.*')        -- All files in src/ recursively
 
+-- ✅ CORRECT: Pattern arrays (DuckDB-consistent)
+read_ast(['**/*.py', '**/*.js'])              -- Multiple languages
+read_ast(['src/**/*.py', 'lib/**/*.js'])      -- Specific directories
+read_ast(['main.py', 'src/**/*.js'])          -- Mixed files and patterns
+
 -- ❌ INCORRECT: Missing recursiveness
 read_ast('*.py')              -- Only current directory
 read_ast('src/*.*')           -- Only immediate src/ children
+
+-- ❌ INCORRECT: Array syntax errors
+read_ast([])                  -- Empty array
+read_ast(['file.py', NULL])   -- NULL values in array
+read_ast('file1.py', 'file2.py')  -- Multiple parameters instead of array
 ```
 
 ### Language Detection

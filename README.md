@@ -96,17 +96,72 @@ LIMIT 20;
 ### Parse Multiple Files
 
 ```sql
--- Analyze all Python files in a directory
+-- Single glob pattern
 SELECT file_path, COUNT(*) as node_count
 FROM read_ast('src/**/*.py')  
 GROUP BY file_path
 ORDER BY node_count DESC;
 
--- Find all imports across your project  
-SELECT file_path, peek as import_statement
-FROM read_ast('**/*.py')
-WHERE type IN ('import_statement', 'import_from_statement');
+-- DuckDB-style pattern arrays (NEW!)
+SELECT file_path, language, COUNT(*) as nodes
+FROM read_ast([
+    'src/**/*.py',
+    'src/**/*.js', 
+    'tests/**/*.ts'
+])
+GROUP BY file_path, language
+ORDER BY nodes DESC;
+
+-- Mixed files and patterns
+SELECT file_path, type, COUNT(*) as occurrences
+FROM read_ast([
+    'main.py',              -- specific file
+    'src/**/*.py',          -- glob pattern
+    'lib/utils.js'          -- another specific file
+])
+WHERE type = 'function_definition'
+GROUP BY file_path, type;
+
+-- Find all imports across multiple languages
+SELECT file_path, language, peek as import_statement
+FROM read_ast(['**/*.py', '**/*.js', '**/*.ts'])
+WHERE type IN ('import_statement', 'import_from_statement', 'import_declaration');
 ```
+
+## DuckDB-Consistent Interface
+
+Sitting Duck follows DuckDB conventions, making it feel native to DuckDB users:
+
+### Function Overloads (like `read_csv`, `read_parquet`)
+
+```sql
+-- Single file (VARCHAR)
+SELECT * FROM read_ast('main.py');
+
+-- Multiple patterns (LIST(VARCHAR)) - NEW!
+SELECT * FROM read_ast(['src/**/*.py', 'tests/**/*.js']);
+
+-- With explicit language
+SELECT * FROM read_ast('script.py', 'python');
+SELECT * FROM read_ast(['**/*.py'], 'python');
+```
+
+### Named Parameters
+
+```sql
+-- Error handling (like other DuckDB file functions)
+SELECT * FROM read_ast(['**/*.py'], ignore_errors := true);
+
+-- Performance tuning
+SELECT * FROM read_ast('main.py', peek_size := 200, peek_mode := 'context');
+```
+
+### Consistent Behavior
+
+- **File deduplication**: Multiple patterns matching the same file return it only once
+- **Sorted output**: Results are consistently ordered by file path
+- **Error handling**: Graceful handling with `ignore_errors` parameter
+- **Parameter validation**: Clear error messages for invalid inputs
 
 ## Table Schema
 
