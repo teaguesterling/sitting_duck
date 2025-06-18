@@ -90,24 +90,6 @@ WHERE semantic_type = 115; -- Functions only
 
 ---
 
-## Scalar Functions
-
-### `parse_ast_objects(source_code, language)`
-
-**Object-based parsing** - Returns AST as a single struct value.
-
-**Parameters:**
-- `source_code` (VARCHAR): Source code to parse
-- `language` (VARCHAR): Programming language
-
-**Returns:** Single AST struct with nodes array and source metadata
-
-**Example:**
-```sql
-SELECT parse_ast_objects('class Test: pass', 'python') as ast;
-```
-
----
 
 ## Utility Functions
 

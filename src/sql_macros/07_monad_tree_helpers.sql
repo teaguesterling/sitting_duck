@@ -1,5 +1,5 @@
 -- Tree navigation helper functions for AST monad objects
--- These work with the AST struct returned by read_ast_objects and parse_ast_objects
+-- These work with the AST struct returned by read_ast_objects (when it existed)
 
 -- Get immediate children of a node from AST monad
 -- Returns AST nodes that are children of the specified node_id

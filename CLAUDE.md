@@ -73,11 +73,6 @@ The extension provides these main parsing functions:
 - **Output**: Flattened table (table function, one column per AST node field)
 - **Language**: Required parameter
 
-### 3. `parse_ast_objects(source_code, language)`
-- **Source**: String containing source code
-- **Output**: AST struct (scalar function)  
-- **Language**: Required parameter
-
 ## Implementation Guidelines
 - All functions must maintain semantic guarantees of their category
 - Tree validity is critical for `ast_get_*` and `ast_extract_*` functions

@@ -219,8 +219,8 @@ read_ast('script.py', peek_mode := 'lines')
 -- Get list of supported languages
 SELECT * FROM ast_supported_languages();
 
--- Parse code string directly (scalar function)
-SELECT parse_ast_objects('def hello(): pass', 'python');
+-- Parse code string directly (table function)
+SELECT * FROM parse_ast('def hello(): pass', 'python');
 ```
 
 ### Options and Parameters
