@@ -28,8 +28,8 @@ FROM read_ast('test/data/python/actually_python.js', 'python');
 ----
 1
 
-# Test 4: read_ast_objects - non-existent file
+# Test 4: Invalid language parameter
 statement error
-SELECT * FROM read_ast_objects('test/data/python/nonexistent.py', 'python');
+SELECT * FROM read_ast('test/data/python/simple.py', 'invalid_language');
 ----
-IO Error: Failed to parse files
+IO Error: Language 'invalid_language' is not supported
