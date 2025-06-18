@@ -19,6 +19,6 @@ true
 
 # Test 2: parse_ast function is available  
 query I
-SELECT parse_ast('def hello(): pass', 'python') IS NOT NULL;
+SELECT COUNT(*) > 0 FROM parse_ast('def hello(): pass', 'python');
 ----
 true

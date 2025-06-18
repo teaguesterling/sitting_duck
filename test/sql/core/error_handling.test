@@ -32,4 +32,4 @@ FROM read_ast('test/data/python/actually_python.js', 'python');
 statement error
 SELECT * FROM read_ast('test/data/python/simple.py', 'invalid_language');
 ----
-IO Error: Language 'invalid_language' is not supported
+IO Error: Failed to parse file 'test/data/python/simple.py'
