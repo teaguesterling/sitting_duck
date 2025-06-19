@@ -21,9 +21,8 @@ namespace duckdb {
     {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
 
 const unordered_map<string, NodeConfig> TypeScriptAdapter::node_configs = {
-    // For now, we'll reuse JavaScript types.def since TypeScript is a superset
-    // TODO: Create typescript_types.def with TypeScript-specific additions
-    #include "../language_configs/javascript_types.def"
+    // TypeScript-specific type definitions (includes JavaScript as base)
+    #include "../language_configs/typescript_types.def"
 };
 
 #undef DEF_TYPE

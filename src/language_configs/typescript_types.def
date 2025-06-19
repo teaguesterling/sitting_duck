@@ -1,0 +1,190 @@
+// TypeScript node type mappings
+// Format: DEF_TYPE(raw_type, semantic_type, name_extraction, value_extraction, flags)
+
+// Include all JavaScript definitions first
+#include "javascript_types.def"
+
+// ====================================
+// TYPESCRIPT-SPECIFIC CONSTRUCTS - Based on ~1000 file analysis
+// ====================================
+
+// Type system constructs
+DEF_TYPE("type_alias_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("interface_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("property_signature", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("method_signature", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("construct_signature", DEFINITION_FUNCTION, NONE, NONE, 0)
+DEF_TYPE("call_signature", DEFINITION_FUNCTION, NONE, NONE, 0)
+DEF_TYPE("index_signature", DEFINITION_VARIABLE, NONE, NONE, 0)
+
+// Type annotations and references
+DEF_TYPE("type_annotation", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+DEF_TYPE("predefined_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+DEF_TYPE("union_type", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("intersection_type", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("array_type", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("tuple_type", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("object_type", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("function_type", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("constructor_type", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("literal_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+DEF_TYPE("string_literal_type", TYPE_PRIMITIVE, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("number_literal_type", TYPE_PRIMITIVE, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("boolean_literal_type", TYPE_PRIMITIVE, NODE_TEXT, NODE_TEXT, 0)
+
+// Generic/template types
+DEF_TYPE("type_parameters", TYPE_GENERIC, NONE, NONE, 0)
+DEF_TYPE("type_parameter", TYPE_GENERIC, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("type_arguments", TYPE_GENERIC, NONE, NONE, 0)
+DEF_TYPE("generic_type", TYPE_GENERIC, NONE, NONE, 0)
+DEF_TYPE("constraint", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("default_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+// Advanced type constructs
+DEF_TYPE("conditional_type", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("infer_type", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("mapped_type_clause", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("template_literal_type", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("template_type", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("indexed_access_type", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("parenthesized_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+// Type operators and utilities
+DEF_TYPE("typeof_type", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("keyof_type", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("readonly_type", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("asserts", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Access modifiers and visibility
+DEF_TYPE("accessibility_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("public", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD | ASTNodeFlags::IS_PUBLIC)
+DEF_TYPE("private", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("protected", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("readonly", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("static", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("abstract", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Declaration constructs
+DEF_TYPE("ambient_declaration", DEFINITION_MODULE, NONE, NONE, 0)
+DEF_TYPE("declaration_list", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("enum_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("enum_assignment", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("module_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("namespace_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
+
+// Import/export with types
+DEF_TYPE("import_type_clause", EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE("export_type_clause", EXTERNAL_EXPORT, NONE, NONE, 0)
+DEF_TYPE("import_specifier", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("export_specifier", EXTERNAL_EXPORT, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("import_require_clause", EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE("external_module_reference", EXTERNAL_IMPORT, NONE, NONE, 0)
+
+// Type assertions and guards
+DEF_TYPE("type_assertion", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("as_expression", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("non_null_expression", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("satisfies_expression", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("type_predicate", TYPE_REFERENCE, NONE, NONE, 0)
+
+// Class-specific TypeScript constructs
+DEF_TYPE("abstract_class_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("abstract_method_signature", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("override_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("parameter_property", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+
+// Function/method constructs
+DEF_TYPE("required_parameter", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("optional_parameter", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("rest_parameter", PATTERN_COLLECT, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("decorator", NAME_ATTRIBUTE, FIND_IDENTIFIER, NONE, 0)
+
+// Control flow and conditionals  
+DEF_TYPE("labeled_statement", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+// Keywords - TypeScript-specific
+DEF_TYPE("type", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("interface", DEFINITION_CLASS, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("enum", DEFINITION_CLASS, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("namespace", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("module", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("declare", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("keyof", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("typeof", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("infer", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("extends", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("implements", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("as", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("is", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("satisfies", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("override", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// TypeScript literals and primitives
+DEF_TYPE("boolean", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("string", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("number", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("bigint", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("symbol", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("object", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("any", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("unknown", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("never", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("void", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Special references and identifiers
+DEF_TYPE("this", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("super", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("new", COMPUTATION_CALL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("get", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("set", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Template and string constructs
+DEF_TYPE("template_literal_type_span", LITERAL_STRING, NONE, NODE_TEXT, 0)
+DEF_TYPE("template_substitution", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("`", PARSER_DELIMITER, NONE, NONE, 0)
+
+// Operators specific to TypeScript
+DEF_TYPE("=>", OPERATOR_ASSIGNMENT, NONE, NODE_TEXT, 0)
+DEF_TYPE("?", OPERATOR_LOGICAL, NONE, NODE_TEXT, 0)
+DEF_TYPE("??", OPERATOR_LOGICAL, NONE, NODE_TEXT, 0)
+DEF_TYPE("?.", COMPUTATION_ACCESS, NONE, NODE_TEXT, 0)
+DEF_TYPE("!", OPERATOR_LOGICAL, NONE, NODE_TEXT, 0)
+
+// Additional punctuation
+DEF_TYPE("...", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
+DEF_TYPE("<", PARSER_DELIMITER, NONE, NONE, 0)
+DEF_TYPE(">", PARSER_DELIMITER, NONE, NONE, 0)
+
+// Error handling - TypeScript parse errors
+DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+// Missing JavaScript constructs that appear in TypeScript
+DEF_TYPE("switch_default", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("default_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("switch_case", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("case_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("variable_declarator", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("assignment_pattern", PATTERN_DESTRUCTURE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("object_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+DEF_TYPE("array_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+DEF_TYPE("rest_pattern", PATTERN_COLLECT, NONE, NONE, 0)
+DEF_TYPE("spread_element", PATTERN_COLLECT, NONE, NONE, 0)
+DEF_TYPE("property_assignment", LITERAL_STRUCTURED, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("shorthand_property_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("computed_property_name", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+// Final TypeScript edge cases - remaining high-count unclassified types
+DEF_TYPE("ternary_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("from", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("augmented_assignment_expression", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NODE_TEXT, 0)
+DEF_TYPE("break", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("named_imports", EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE("public_field_definition", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_PUBLIC)
+DEF_TYPE("switch", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("switch_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("continue", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("sequence_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)

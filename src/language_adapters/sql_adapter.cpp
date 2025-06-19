@@ -138,6 +138,34 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     DEF_TYPE("keyword_as", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("comment", METADATA_COMMENT, NONE, NODE_TEXT, 0)
     
+    // Core SQL constructs 
+    DEF_TYPE("select_expression", TRANSFORM_QUERY, NONE, NONE, 0)
+    DEF_TYPE("select", TRANSFORM_QUERY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE("from", TRANSFORM_QUERY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE(";", PARSER_PUNCTUATION, NONE, NONE, 0)
+    DEF_TYPE("statement", EXECUTION_STATEMENT, NONE, NONE, 0)
+    DEF_TYPE("column_definition", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+    DEF_TYPE("*", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+    DEF_TYPE("where", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE("order_target", ORGANIZATION_LIST, NONE, NONE, 0)
+    DEF_TYPE("all_fields", TRANSFORM_PROJECTION, NONE, NONE, 0)
+    DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+    DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, 0)
+    DEF_TYPE("+", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+    DEF_TYPE("list", ORGANIZATION_LIST, NONE, NONE, 0)
+    DEF_TYPE("subquery", TRANSFORM_QUERY, NONE, NONE, 0)
+    DEF_TYPE("order_by", ORGANIZATION_LIST, NONE, NONE, 0)
+    DEF_TYPE("group_by", TRANSFORM_AGGREGATION, NONE, NONE, 0)
+    
+    // Additional SQL keywords
+    DEF_TYPE("keyword_or", OPERATOR_LOGICAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE("keyword_int", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE("int", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+    DEF_TYPE("keyword_replace", EXECUTION_MUTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE("keyword_like", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE("keyword_when", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE("keyword_then", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+    
     // Query clauses
     DEF_TYPE("where_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
     DEF_TYPE("having_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
