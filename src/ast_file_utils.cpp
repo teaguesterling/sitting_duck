@@ -26,7 +26,8 @@ static const std::unordered_map<string, string> EXTENSION_TO_LANGUAGE = {
     {"html", "html"}, {"htm", "html"},
     {"css", "css"},
     {"json", "json"},
-    {"yaml", "yaml"}, {"yml", "yaml"},
+    // YAML grammar has complex self-modifying structure incompatible with tree-sitter CLI
+    // {"yaml", "yaml"}, {"yml", "yaml"},
     {"sh", "bash"}, {"bash", "bash"}, {"zsh", "bash"},
     {"swift", "swift"}
 };
@@ -48,7 +49,8 @@ static const std::unordered_map<string, vector<string>> LANGUAGE_TO_EXTENSIONS =
     {"html", {"html", "htm"}},
     {"css", {"css"}},
     {"json", {"json"}},
-    {"yaml", {"yaml", "yml"}},
+    // YAML grammar has complex self-modifying structure incompatible with tree-sitter CLI
+    // {"yaml", {"yaml", "yml"}},
     {"bash", {"sh", "bash", "zsh"}},
     {"swift", {"swift"}}
 };

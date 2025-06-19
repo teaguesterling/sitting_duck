@@ -56,6 +56,12 @@ if(CARGO_EXECUTABLE)
                 list(APPEND GENERATION_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/grammars/tree-sitter-javascript/grammar.js")
             endif()
             
+            # Add dependency on JSON grammar for YAML (YAML may need JSON processing)
+            if("${GRAMMAR_NAME}" STREQUAL "tree-sitter-yaml")
+                list(APPEND GENERATION_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/grammars/tree-sitter-json/src/parser.c")
+                list(APPEND GENERATION_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/grammars/tree-sitter-json/grammar.js")
+            endif()
+            
             # Apply patches before generation using dedicated script
             set(PATCH_STATUS_DIR "${CMAKE_CURRENT_BINARY_DIR}/patch_status")
             set(PATCH_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/scripts/apply_grammar_patches.sh")
@@ -105,7 +111,8 @@ if(CARGO_EXECUTABLE)
     generate_parser("tree-sitter-css" "tree-sitter-css/src/parser.c" "tree-sitter-css/src/scanner.c")
     generate_parser("tree-sitter-rust" "tree-sitter-rust/src/parser.c" "tree-sitter-rust/src/scanner.c")
     generate_parser("tree-sitter-json" "tree-sitter-json/src/parser.c" "")
-    generate_parser("tree-sitter-yaml" "tree-sitter-yaml/src/parser.c" "tree-sitter-yaml/src/scanner.c")
+    # YAML grammar has complex self-modifying structure incompatible with tree-sitter CLI
+    # generate_parser("tree-sitter-yaml" "tree-sitter-yaml/src/parser.c" "tree-sitter-yaml/src/scanner.c")
     generate_parser("tree-sitter-bash" "tree-sitter-bash/src/parser.c" "tree-sitter-bash/src/scanner.c")
     generate_parser("tree-sitter-swift" "tree-sitter-swift/src/parser.c" "tree-sitter-swift/src/scanner.c")
     
@@ -188,7 +195,8 @@ set(EXTENSION_SOURCES
     src/language_adapters/css_adapter.cpp
     src/language_adapters/c_adapter.cpp
     src/language_adapters/json_adapter.cpp
-    src/language_adapters/yaml_adapter.cpp
+    # YAML grammar has complex self-modifying structure incompatible with tree-sitter CLI
+    # src/language_adapters/yaml_adapter.cpp
     src/language_adapters/bash_adapter.cpp
     src/language_adapters/swift_adapter.cpp
     src/read_ast_streaming_function.cpp
@@ -229,8 +237,9 @@ set(EXTENSION_SOURCES
     grammars/tree-sitter-rust/src/parser.c
     grammars/tree-sitter-rust/src/scanner.c
     grammars/tree-sitter-json/src/parser.c
-    grammars/tree-sitter-yaml/src/parser.c
-    grammars/tree-sitter-yaml/src/scanner.c
+    # YAML grammar has complex self-modifying structure incompatible with tree-sitter CLI
+    # grammars/tree-sitter-yaml/src/parser.c
+    # grammars/tree-sitter-yaml/src/scanner.c
     grammars/tree-sitter-bash/src/parser.c
     grammars/tree-sitter-bash/src/scanner.c
     grammars/tree-sitter-swift/src/parser.c
