@@ -18,7 +18,7 @@ namespace duckdb {
 //==============================================================================
 
 #define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
-    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+    {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
 
 const unordered_map<string, NodeConfig> CAdapter::node_configs = {
     #include "../language_configs/c_types.def"
