@@ -69,10 +69,10 @@ WHERE type IN ('function_definition', 'class_definition', 'call', 'assignment')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-assignment	116	2
-call	80	4
-class_definition	120	1
-function_definition	112	4
+assignment	244	2
+call	208	4
+class_definition	248	1
+function_definition	240	4
 
 # Test 8: Python tree structure validation
 # ========================================

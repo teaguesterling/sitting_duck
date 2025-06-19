@@ -8,6 +8,30 @@ namespace SemanticTypes {
 
 string GetSemanticTypeName(uint8_t semantic_type) {
     switch (semantic_type) {
+        // PARSER_SPECIFIC types
+        case PARSER_CONSTRUCT: return "PARSER_CONSTRUCT";
+        case PARSER_DELIMITER: return "PARSER_DELIMITER";
+        case PARSER_PUNCTUATION: return "PARSER_PUNCTUATION";
+        case PARSER_SYNTAX: return "PARSER_SYNTAX";
+        
+        // RESERVED types
+        case RESERVED_FUTURE1: return "RESERVED_FUTURE1";
+        case RESERVED_FUTURE2: return "RESERVED_FUTURE2";
+        case RESERVED_FUTURE3: return "RESERVED_FUTURE3";
+        case RESERVED_FUTURE4: return "RESERVED_FUTURE4";
+        
+        // METADATA types
+        case METADATA_COMMENT: return "METADATA_COMMENT";
+        case METADATA_ANNOTATION: return "METADATA_ANNOTATION";
+        case METADATA_DIRECTIVE: return "METADATA_DIRECTIVE";
+        case METADATA_DEBUG: return "METADATA_DEBUG";
+        
+        // EXTERNAL types
+        case EXTERNAL_IMPORT: return "EXTERNAL_IMPORT";
+        case EXTERNAL_EXPORT: return "EXTERNAL_EXPORT";
+        case EXTERNAL_FOREIGN: return "EXTERNAL_FOREIGN";
+        case EXTERNAL_EMBED: return "EXTERNAL_EMBED";
+        
         // LITERAL types
         case LITERAL_NUMBER: return "LITERAL_NUMBER";
         case LITERAL_STRING: return "LITERAL_STRING";
@@ -80,57 +104,33 @@ string GetSemanticTypeName(uint8_t semantic_type) {
         case ORGANIZATION_SECTION: return "ORGANIZATION_SECTION";
         case ORGANIZATION_CONTAINER: return "ORGANIZATION_CONTAINER";
         
-        // METADATA types
-        case METADATA_COMMENT: return "METADATA_COMMENT";
-        case METADATA_ANNOTATION: return "METADATA_ANNOTATION";
-        case METADATA_DIRECTIVE: return "METADATA_DIRECTIVE";
-        case METADATA_DEBUG: return "METADATA_DEBUG";
-        
-        // EXTERNAL types
-        case EXTERNAL_IMPORT: return "EXTERNAL_IMPORT";
-        case EXTERNAL_EXPORT: return "EXTERNAL_EXPORT";
-        case EXTERNAL_FOREIGN: return "EXTERNAL_FOREIGN";
-        case EXTERNAL_EMBED: return "EXTERNAL_EMBED";
-        
-        // PARSER_SPECIFIC types
-        case PARSER_PUNCTUATION: return "PARSER_PUNCTUATION";
-        case PARSER_DELIMITER: return "PARSER_DELIMITER";
-        case PARSER_SYNTAX: return "PARSER_SYNTAX";
-        case PARSER_CONSTRUCT: return "PARSER_CONSTRUCT";
-        
-        // RESERVED types
-        case RESERVED_FUTURE1: return "RESERVED_FUTURE1";
-        case RESERVED_FUTURE2: return "RESERVED_FUTURE2";
-        case RESERVED_FUTURE3: return "RESERVED_FUTURE3";
-        case RESERVED_FUTURE4: return "RESERVED_FUTURE4";
-        
         default: return "UNKNOWN_SEMANTIC_TYPE";
     }
 }
 
 string GetSuperKindName(uint8_t super_kind) {
     switch (super_kind) {
-        case DATA_STRUCTURE: return "DATA_STRUCTURE";
-        case COMPUTATION: return "COMPUTATION";
-        case CONTROL_EFFECTS: return "CONTROL_EFFECTS";
         case META_EXTERNAL: return "META_EXTERNAL";
+        case DATA_STRUCTURE: return "DATA_STRUCTURE";
+        case CONTROL_EFFECTS: return "CONTROL_EFFECTS";
+        case COMPUTATION: return "COMPUTATION";
         default: return "UNKNOWN_SUPER_KIND";
     }
 }
 
 string GetKindName(uint8_t kind) {
     switch (kind) {
+        // META_EXTERNAL kinds
+        case PARSER_SPECIFIC: return "PARSER_SPECIFIC";
+        case RESERVED: return "RESERVED";
+        case METADATA: return "METADATA";
+        case EXTERNAL: return "EXTERNAL";
+        
         // DATA_STRUCTURE kinds
         case LITERAL: return "LITERAL";
         case NAME: return "NAME";
         case PATTERN: return "PATTERN";
         case TYPE: return "TYPE";
-        
-        // COMPUTATION kinds
-        case OPERATOR: return "OPERATOR";
-        case COMPUTATION_NODE: return "COMPUTATION_NODE";
-        case TRANSFORM: return "TRANSFORM";
-        case DEFINITION: return "DEFINITION";
         
         // CONTROL_EFFECTS kinds
         case EXECUTION: return "EXECUTION";
@@ -138,11 +138,11 @@ string GetKindName(uint8_t kind) {
         case ERROR_HANDLING: return "ERROR_HANDLING";
         case ORGANIZATION: return "ORGANIZATION";
         
-        // META_EXTERNAL kinds
-        case METADATA: return "METADATA";
-        case EXTERNAL: return "EXTERNAL";
-        case PARSER_SPECIFIC: return "PARSER_SPECIFIC";
-        case RESERVED: return "RESERVED";
+        // COMPUTATION kinds
+        case OPERATOR: return "OPERATOR";
+        case COMPUTATION_NODE: return "COMPUTATION_NODE";
+        case TRANSFORM: return "TRANSFORM";
+        case DEFINITION: return "DEFINITION";
         
         default: return "UNKNOWN_KIND";
     }
@@ -152,6 +152,30 @@ string GetKindName(uint8_t kind) {
 uint8_t GetSemanticTypeCode(const string& name) {
     // Create a static map for efficient lookup
     static unordered_map<string, uint8_t> name_to_code = {
+        // PARSER_SPECIFIC types
+        {"PARSER_CONSTRUCT", PARSER_CONSTRUCT},
+        {"PARSER_DELIMITER", PARSER_DELIMITER},
+        {"PARSER_PUNCTUATION", PARSER_PUNCTUATION},
+        {"PARSER_SYNTAX", PARSER_SYNTAX},
+        
+        // RESERVED types
+        {"RESERVED_FUTURE1", RESERVED_FUTURE1},
+        {"RESERVED_FUTURE2", RESERVED_FUTURE2},
+        {"RESERVED_FUTURE3", RESERVED_FUTURE3},
+        {"RESERVED_FUTURE4", RESERVED_FUTURE4},
+        
+        // METADATA types
+        {"METADATA_COMMENT", METADATA_COMMENT},
+        {"METADATA_ANNOTATION", METADATA_ANNOTATION},
+        {"METADATA_DIRECTIVE", METADATA_DIRECTIVE},
+        {"METADATA_DEBUG", METADATA_DEBUG},
+        
+        // EXTERNAL types
+        {"EXTERNAL_IMPORT", EXTERNAL_IMPORT},
+        {"EXTERNAL_EXPORT", EXTERNAL_EXPORT},
+        {"EXTERNAL_FOREIGN", EXTERNAL_FOREIGN},
+        {"EXTERNAL_EMBED", EXTERNAL_EMBED},
+        
         // LITERAL types
         {"LITERAL_NUMBER", LITERAL_NUMBER},
         {"LITERAL_STRING", LITERAL_STRING},
@@ -224,29 +248,6 @@ uint8_t GetSemanticTypeCode(const string& name) {
         {"ORGANIZATION_SECTION", ORGANIZATION_SECTION},
         {"ORGANIZATION_CONTAINER", ORGANIZATION_CONTAINER},
         
-        // METADATA types
-        {"METADATA_COMMENT", METADATA_COMMENT},
-        {"METADATA_ANNOTATION", METADATA_ANNOTATION},
-        {"METADATA_DIRECTIVE", METADATA_DIRECTIVE},
-        {"METADATA_DEBUG", METADATA_DEBUG},
-        
-        // EXTERNAL types
-        {"EXTERNAL_IMPORT", EXTERNAL_IMPORT},
-        {"EXTERNAL_EXPORT", EXTERNAL_EXPORT},
-        {"EXTERNAL_FOREIGN", EXTERNAL_FOREIGN},
-        {"EXTERNAL_EMBED", EXTERNAL_EMBED},
-        
-        // PARSER_SPECIFIC types
-        {"PARSER_PUNCTUATION", PARSER_PUNCTUATION},
-        {"PARSER_DELIMITER", PARSER_DELIMITER},
-        {"PARSER_SYNTAX", PARSER_SYNTAX},
-        {"PARSER_CONSTRUCT", PARSER_CONSTRUCT},
-        
-        // RESERVED types
-        {"RESERVED_FUTURE1", RESERVED_FUTURE1},
-        {"RESERVED_FUTURE2", RESERVED_FUTURE2},
-        {"RESERVED_FUTURE3", RESERVED_FUTURE3},
-        {"RESERVED_FUTURE4", RESERVED_FUTURE4}
     };
     
     auto it = name_to_code.find(name);
@@ -258,17 +259,17 @@ uint8_t GetSemanticTypeCode(const string& name) {
 
 uint8_t GetKindCode(const string& name) {
     static unordered_map<string, uint8_t> kind_to_code = {
+        // META_EXTERNAL kinds
+        {"PARSER_SPECIFIC", PARSER_SPECIFIC},
+        {"RESERVED", RESERVED},
+        {"METADATA", METADATA},
+        {"EXTERNAL", EXTERNAL},
+        
         // DATA_STRUCTURE kinds
         {"LITERAL", LITERAL},
         {"NAME", NAME},
         {"PATTERN", PATTERN},
         {"TYPE", TYPE},
-        
-        // COMPUTATION kinds
-        {"OPERATOR", OPERATOR},
-        {"COMPUTATION_NODE", COMPUTATION_NODE},
-        {"TRANSFORM", TRANSFORM},
-        {"DEFINITION", DEFINITION},
         
         // CONTROL_EFFECTS kinds
         {"EXECUTION", EXECUTION},
@@ -276,11 +277,11 @@ uint8_t GetKindCode(const string& name) {
         {"ERROR_HANDLING", ERROR_HANDLING},
         {"ORGANIZATION", ORGANIZATION},
         
-        // META_EXTERNAL kinds
-        {"METADATA", METADATA},
-        {"EXTERNAL", EXTERNAL},
-        {"PARSER_SPECIFIC", PARSER_SPECIFIC},
-        {"RESERVED", RESERVED}
+        // COMPUTATION kinds
+        {"OPERATOR", OPERATOR},
+        {"COMPUTATION_NODE", COMPUTATION_NODE},
+        {"TRANSFORM", TRANSFORM},
+        {"DEFINITION", DEFINITION}
     };
     
     auto it = kind_to_code.find(name);
@@ -292,10 +293,10 @@ uint8_t GetKindCode(const string& name) {
 
 uint8_t GetSuperKindCode(const string& name) {
     static unordered_map<string, uint8_t> super_kind_to_code = {
+        {"META_EXTERNAL", META_EXTERNAL},
         {"DATA_STRUCTURE", DATA_STRUCTURE},
-        {"COMPUTATION", COMPUTATION},
         {"CONTROL_EFFECTS", CONTROL_EFFECTS},
-        {"META_EXTERNAL", META_EXTERNAL}
+        {"COMPUTATION", COMPUTATION}
     };
     
     auto it = super_kind_to_code.find(name);

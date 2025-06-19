@@ -7,17 +7,17 @@ LOAD sitting_duck;
 
 # Test basic semantic_type_to_string function
 query I
-SELECT semantic_type_to_string(112::UTINYINT);
+SELECT semantic_type_to_string(240::UTINYINT);
 ----
 DEFINITION_FUNCTION
 
 query I
-SELECT semantic_type_to_string(120::UTINYINT);
+SELECT semantic_type_to_string(248::UTINYINT);
 ----
 DEFINITION_CLASS
 
 query I
-SELECT semantic_type_to_string(80::UTINYINT);
+SELECT semantic_type_to_string(208::UTINYINT);
 ----
 COMPUTATION_CALL
 
@@ -25,22 +25,22 @@ COMPUTATION_CALL
 query I
 SELECT semantic_type_code('DEFINITION_FUNCTION');
 ----
-112
+240
 
 query I
 SELECT semantic_type_code('DEFINITION_CLASS');
 ----
-120
+248
 
 query I
 SELECT semantic_type_code('COMPUTATION_CALL');
 ----
-80
+208
 
 query I
 SELECT semantic_type_code('NAME_IDENTIFIER');
 ----
-20
+84
 
 # Test invalid type name
 query I
@@ -50,22 +50,22 @@ NULL
 
 # Test predicate functions
 query I
-SELECT is_definition(112::UTINYINT);  -- DEFINITION_FUNCTION
+SELECT is_definition(240::UTINYINT);  -- DEFINITION_FUNCTION
 ----
 true
 
 query I
-SELECT is_definition(80::UTINYINT);   -- COMPUTATION_CALL
+SELECT is_definition(208::UTINYINT);   -- COMPUTATION_CALL
 ----
 false
 
 query I
-SELECT is_call(80::UTINYINT);         -- COMPUTATION_CALL
+SELECT is_call(208::UTINYINT);         -- COMPUTATION_CALL
 ----
 true
 
 query I
-SELECT is_call(112::UTINYINT);        -- DEFINITION_FUNCTION
+SELECT is_call(240::UTINYINT);        -- DEFINITION_FUNCTION
 ----
 false
 
@@ -80,22 +80,22 @@ SELECT is_control_flow(148::UTINYINT); -- FLOW_LOOP
 true
 
 query I
-SELECT is_control_flow(112::UTINYINT); -- DEFINITION_FUNCTION
+SELECT is_control_flow(240::UTINYINT); -- DEFINITION_FUNCTION
 ----
 false
 
 query I
-SELECT is_identifier(20::UTINYINT);   -- NAME_IDENTIFIER
+SELECT is_identifier(84::UTINYINT);   -- NAME_IDENTIFIER
 ----
 true
 
 query I
-SELECT is_identifier(24::UTINYINT);   -- NAME_QUALIFIED
+SELECT is_identifier(88::UTINYINT);   -- NAME_QUALIFIED
 ----
 true
 
 query I
-SELECT is_identifier(112::UTINYINT);  -- DEFINITION_FUNCTION
+SELECT is_identifier(240::UTINYINT);  -- DEFINITION_FUNCTION
 ----
 false
 
@@ -107,50 +107,50 @@ true
 
 # Test that searchable types include key semantic types
 query I
-SELECT list_contains(get_searchable_types(), 112::UTINYINT);  -- DEFINITION_FUNCTION
+SELECT list_contains(get_searchable_types(), 240::UTINYINT);  -- DEFINITION_FUNCTION
 ----
 true
 
 query I
-SELECT list_contains(get_searchable_types(), 120::UTINYINT);  -- DEFINITION_CLASS
+SELECT list_contains(get_searchable_types(), 248::UTINYINT);  -- DEFINITION_CLASS
 ----
 true
 
 query I
-SELECT list_contains(get_searchable_types(), 80::UTINYINT);   -- COMPUTATION_CALL
+SELECT list_contains(get_searchable_types(), 208::UTINYINT);   -- COMPUTATION_CALL
 ----
 true
 
 # Test get_super_kind function
 query I
-SELECT get_super_kind(112::UTINYINT);  -- DEFINITION_FUNCTION
+SELECT get_super_kind(240::UTINYINT);  -- DEFINITION_FUNCTION
 ----
 COMPUTATION
 
 query I
-SELECT get_super_kind(20::UTINYINT);   -- NAME_IDENTIFIER
+SELECT get_super_kind(84::UTINYINT);   -- NAME_IDENTIFIER
 ----
 DATA_STRUCTURE
 
 # Test get_kind function
 query I
-SELECT get_kind(112::UTINYINT);  -- DEFINITION_FUNCTION
+SELECT get_kind(240::UTINYINT);  -- DEFINITION_FUNCTION
 ----
 DEFINITION
 
 query I
-SELECT get_kind(80::UTINYINT);   -- COMPUTATION_CALL
+SELECT get_kind(208::UTINYINT);   -- COMPUTATION_CALL
 ----
 COMPUTATION_NODE
 
 # Test round-trip conversion
 query I
-SELECT semantic_type_code(semantic_type_to_string(112::UTINYINT)) = 112;
+SELECT semantic_type_code(semantic_type_to_string(240::UTINYINT)) = 240;
 ----
 true
 
 query I
-SELECT semantic_type_code(semantic_type_to_string(80::UTINYINT)) = 80;
+SELECT semantic_type_code(semantic_type_to_string(208::UTINYINT)) = 208;
 ----
 true
 
@@ -198,17 +198,17 @@ true
 
 # Test is_semantic_type backward compatibility
 query I
-SELECT is_semantic_type(112::UTINYINT, 'FUNCTION');
+SELECT is_semantic_type(240::UTINYINT, 'FUNCTION');
 ----
 true
 
 query I
-SELECT is_semantic_type(120::UTINYINT, 'CLASS');
+SELECT is_semantic_type(248::UTINYINT, 'CLASS');
 ----
 true
 
 query I
-SELECT is_semantic_type(112::UTINYINT, 'DEFINITION');
+SELECT is_semantic_type(240::UTINYINT, 'DEFINITION');
 ----
 true
 

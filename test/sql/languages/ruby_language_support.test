@@ -62,11 +62,11 @@ WHERE type IN ('method', 'singleton_method', 'class', 'call', 'assignment')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-assignment	116	2
-call	80	4
-class	120	2
-method	112	3
-singleton_method	112	1
+assignment	244	2
+call	208	4
+class	248	2
+method	240	3
+singleton_method	240	1
 
 # Test 7: Ruby tree structure validation
 # ======================================

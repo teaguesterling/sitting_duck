@@ -9,53 +9,53 @@ LOAD sitting_duck;
 statement ok
 CREATE TEMP TABLE semantic_type_constants AS
 SELECT * FROM (VALUES
-    -- LITERAL types (0x00)
-    (0, 'LITERAL_NUMBER'),
-    (4, 'LITERAL_STRING'),
-    (8, 'LITERAL_ATOMIC'),
-    (12, 'LITERAL_STRUCTURED'),
+    -- PARSER_SPECIFIC types (0x00)
+    (0, 'PARSER_CONSTRUCT'),
+    (4, 'PARSER_DELIMITER'),
+    (8, 'PARSER_PUNCTUATION'),
+    (12, 'PARSER_SYNTAX'),
     
-    -- NAME types (0x10)
-    (16, 'NAME_KEYWORD'),
-    (20, 'NAME_IDENTIFIER'),
-    (24, 'NAME_QUALIFIED'),
-    (28, 'NAME_SCOPED'),
+    -- RESERVED types (0x10)
+    (16, 'RESERVED_FUTURE1'),
+    (20, 'RESERVED_FUTURE2'),
+    (24, 'RESERVED_FUTURE3'),
+    (28, 'RESERVED_FUTURE4'),
     
-    -- PATTERN types (0x20)
-    (32, 'PATTERN_DESTRUCTURE'),
-    (36, 'PATTERN_MATCH'),
-    (40, 'PATTERN_TEMPLATE'),
-    (44, 'PATTERN_GUARD'),
+    -- METADATA types (0x20)
+    (32, 'METADATA_COMMENT'),
+    (36, 'METADATA_ANNOTATION'),
+    (40, 'METADATA_DIRECTIVE'),
+    (44, 'METADATA_DEBUG'),
     
-    -- TYPE types (0x30)
-    (48, 'TYPE_PRIMITIVE'),
-    (52, 'TYPE_COMPOSITE'),
-    (56, 'TYPE_REFERENCE'),
-    (60, 'TYPE_GENERIC'),
+    -- EXTERNAL types (0x30)
+    (48, 'EXTERNAL_IMPORT'),
+    (52, 'EXTERNAL_EXPORT'),
+    (56, 'EXTERNAL_FOREIGN'),
+    (60, 'EXTERNAL_EMBED'),
     
-    -- OPERATOR types (0x40)
-    (64, 'OPERATOR_ARITHMETIC'),
-    (68, 'OPERATOR_LOGICAL'),
-    (72, 'OPERATOR_COMPARISON'),
-    (76, 'OPERATOR_ASSIGNMENT'),
+    -- LITERAL types (0x40)
+    (64, 'LITERAL_NUMBER'),
+    (68, 'LITERAL_STRING'),
+    (72, 'LITERAL_ATOMIC'),
+    (76, 'LITERAL_STRUCTURED'),
     
-    -- COMPUTATION_NODE types (0x50)
-    (80, 'COMPUTATION_CALL'),
-    (84, 'COMPUTATION_ACCESS'),
-    (88, 'COMPUTATION_EXPRESSION'),
-    (92, 'COMPUTATION_LAMBDA'),
+    -- NAME types (0x50)
+    (80, 'NAME_KEYWORD'),
+    (84, 'NAME_IDENTIFIER'),
+    (88, 'NAME_QUALIFIED'),
+    (92, 'NAME_SCOPED'),
     
-    -- TRANSFORM types (0x60)
-    (96, 'TRANSFORM_QUERY'),
-    (100, 'TRANSFORM_ITERATION'),
-    (104, 'TRANSFORM_PROJECTION'),
-    (108, 'TRANSFORM_AGGREGATION'),
+    -- PATTERN types (0x60)
+    (96, 'PATTERN_DESTRUCTURE'),
+    (100, 'PATTERN_MATCH'),
+    (104, 'PATTERN_TEMPLATE'),
+    (108, 'PATTERN_GUARD'),
     
-    -- DEFINITION types (0x70)
-    (112, 'DEFINITION_FUNCTION'),
-    (116, 'DEFINITION_VARIABLE'),
-    (120, 'DEFINITION_CLASS'),
-    (124, 'DEFINITION_MODULE'),
+    -- TYPE types (0x70)
+    (112, 'TYPE_PRIMITIVE'),
+    (116, 'TYPE_COMPOSITE'),
+    (120, 'TYPE_REFERENCE'),
+    (124, 'TYPE_GENERIC'),
     
     -- EXECUTION types (0x80)
     (128, 'EXECUTION_STATEMENT'),
@@ -81,29 +81,29 @@ SELECT * FROM (VALUES
     (184, 'ORGANIZATION_SECTION'),
     (188, 'ORGANIZATION_CONTAINER'),
     
-    -- METADATA types (0xC0)
-    (192, 'METADATA_COMMENT'),
-    (196, 'METADATA_ANNOTATION'),
-    (200, 'METADATA_DIRECTIVE'),
-    (204, 'METADATA_DEBUG'),
+    -- OPERATOR types (0xC0)
+    (192, 'OPERATOR_ARITHMETIC'),
+    (196, 'OPERATOR_LOGICAL'),
+    (200, 'OPERATOR_COMPARISON'),
+    (204, 'OPERATOR_ASSIGNMENT'),
     
-    -- EXTERNAL types (0xD0)
-    (208, 'EXTERNAL_IMPORT'),
-    (212, 'EXTERNAL_EXPORT'),
-    (216, 'EXTERNAL_FOREIGN'),
-    (220, 'EXTERNAL_EMBED'),
+    -- COMPUTATION_NODE types (0xD0)
+    (208, 'COMPUTATION_CALL'),
+    (212, 'COMPUTATION_ACCESS'),
+    (216, 'COMPUTATION_EXPRESSION'),
+    (220, 'COMPUTATION_LAMBDA'),
     
-    -- PARSER_SPECIFIC types (0xE0)
-    (224, 'PARSER_PUNCTUATION'),
-    (228, 'PARSER_DELIMITER'),
-    (232, 'PARSER_SYNTAX'),
-    (236, 'PARSER_CONSTRUCT'),
+    -- TRANSFORM types (0xE0)
+    (224, 'TRANSFORM_QUERY'),
+    (228, 'TRANSFORM_ITERATION'),
+    (232, 'TRANSFORM_PROJECTION'),
+    (236, 'TRANSFORM_AGGREGATION'),
     
-    -- RESERVED types (0xF0)
-    (240, 'RESERVED_FUTURE1'),
-    (244, 'RESERVED_FUTURE2'),
-    (248, 'RESERVED_FUTURE3'),
-    (252, 'RESERVED_FUTURE4')
+    -- DEFINITION types (0xF0)
+    (240, 'DEFINITION_FUNCTION'),
+    (244, 'DEFINITION_VARIABLE'),
+    (248, 'DEFINITION_CLASS'),
+    (252, 'DEFINITION_MODULE')
 ) AS t(code, expected_name);
 
 # Test that semantic_type_to_string returns the correct name for all codes
@@ -134,7 +134,7 @@ WHERE semantic_type_code(semantic_type_to_string(code::UTINYINT)) != code;
 query I
 SELECT COUNT(*)
 FROM semantic_type_constants
-WHERE code BETWEEN 112 AND 124  -- DEFINITION range
+WHERE code BETWEEN 240 AND 252  -- DEFINITION range (new values)
   AND NOT is_definition(code::UTINYINT);
 ----
 0
@@ -142,7 +142,7 @@ WHERE code BETWEEN 112 AND 124  -- DEFINITION range
 query I
 SELECT COUNT(*)
 FROM semantic_type_constants
-WHERE code IN (80, 136)  -- COMPUTATION_CALL and EXECUTION_INVOCATION
+WHERE code IN (208, 136)  -- COMPUTATION_CALL and EXECUTION_INVOCATION (new values)
   AND NOT is_call(code::UTINYINT);
 ----
 0
@@ -150,7 +150,7 @@ WHERE code IN (80, 136)  -- COMPUTATION_CALL and EXECUTION_INVOCATION
 query I
 SELECT COUNT(*)
 FROM semantic_type_constants
-WHERE code BETWEEN 144 AND 156  -- FLOW_CONTROL range
+WHERE code BETWEEN 144 AND 156  -- FLOW_CONTROL range (unchanged)
   AND NOT is_control_flow(code::UTINYINT);
 ----
 0
@@ -158,21 +158,21 @@ WHERE code BETWEEN 144 AND 156  -- FLOW_CONTROL range
 query I
 SELECT COUNT(*)
 FROM semantic_type_constants
-WHERE code IN (20, 24, 28)  -- NAME_IDENTIFIER, NAME_QUALIFIED, NAME_SCOPED
+WHERE code IN (84, 88, 92)  -- NAME_IDENTIFIER, NAME_QUALIFIED, NAME_SCOPED (new values)
   AND NOT is_identifier(code::UTINYINT);
 ----
 0
 
-# Test bit manipulation functions
+# Test bit manipulation functions - updated for new super_kind organization
 query III
 SELECT 
     code,
     get_super_kind(code::UTINYINT),
     CASE 
-        WHEN code < 64 THEN 'DATA_STRUCTURE'
-        WHEN code < 128 THEN 'COMPUTATION'
+        WHEN code < 64 THEN 'META_EXTERNAL'
+        WHEN code < 128 THEN 'DATA_STRUCTURE'
         WHEN code < 192 THEN 'CONTROL_EFFECTS'
-        ELSE 'META_EXTERNAL'
+        ELSE 'COMPUTATION'
     END AS expected_super_kind
 FROM semantic_type_constants
 WHERE get_super_kind(code::UTINYINT) != expected_super_kind;
@@ -199,3 +199,15 @@ query I
 SELECT semantic_type_to_string(127::UTINYINT);  -- Unused code
 ----
 UNKNOWN_SEMANTIC_TYPE
+
+# Test that PARSER_CONSTRUCT is now 0 (the default for uncategorized)
+query I
+SELECT semantic_type_code('PARSER_CONSTRUCT');
+----
+0
+
+# Test that former LITERAL_NUMBER is now 64
+query I
+SELECT semantic_type_code('LITERAL_NUMBER');
+----
+64

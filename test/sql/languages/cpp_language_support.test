@@ -81,11 +81,11 @@ WHERE type IN ('class_specifier', 'function_definition', 'namespace_definition',
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-call_expression	80	7
-class_specifier	120	2
-function_definition	112	11
-namespace_definition	124	1
-template_declaration	236	2
+call_expression	208	7
+class_specifier	248	2
+function_definition	240	11
+namespace_definition	252	1
+template_declaration	0	2
 
 # Test 9: C++ tree structure validation
 # =====================================

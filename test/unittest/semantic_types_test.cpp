@@ -7,10 +7,11 @@ using namespace duckdb::SemanticTypes;
 
 TEST_CASE("Semantic type name conversions", "[semantic_types]") {
     SECTION("TypeName returns correct names for valid codes") {
-        REQUIRE(TypeName(112) == "DEFINITION_FUNCTION");
-        REQUIRE(TypeName(120) == "DEFINITION_CLASS");
-        REQUIRE(TypeName(80) == "COMPUTATION_CALL");
-        REQUIRE(TypeName(20) == "NAME_IDENTIFIER");
+        REQUIRE(TypeName(240) == "DEFINITION_FUNCTION");
+        REQUIRE(TypeName(248) == "DEFINITION_CLASS");
+        REQUIRE(TypeName(208) == "COMPUTATION_CALL");
+        REQUIRE(TypeName(84) == "NAME_IDENTIFIER");
+        REQUIRE(TypeName(0) == "PARSER_CONSTRUCT");  // New: 0 is now PARSER_CONSTRUCT
     }
     
     SECTION("TypeName returns UNKNOWN for invalid codes") {
@@ -19,10 +20,11 @@ TEST_CASE("Semantic type name conversions", "[semantic_types]") {
     }
     
     SECTION("TypeCode returns correct codes for valid names") {
-        REQUIRE(TypeCode("DEFINITION_FUNCTION") == 112);
-        REQUIRE(TypeCode("DEFINITION_CLASS") == 120);
-        REQUIRE(TypeCode("COMPUTATION_CALL") == 80);
-        REQUIRE(TypeCode("NAME_IDENTIFIER") == 20);
+        REQUIRE(TypeCode("DEFINITION_FUNCTION") == 240);
+        REQUIRE(TypeCode("DEFINITION_CLASS") == 248);
+        REQUIRE(TypeCode("COMPUTATION_CALL") == 208);
+        REQUIRE(TypeCode("NAME_IDENTIFIER") == 84);
+        REQUIRE(TypeCode("PARSER_CONSTRUCT") == 0);  // New: PARSER_CONSTRUCT is now 0
     }
     
     SECTION("TypeCode returns 255 for invalid names") {
@@ -34,21 +36,21 @@ TEST_CASE("Semantic type name conversions", "[semantic_types]") {
 TEST_CASE("Semantic type round-trip conversions", "[semantic_types]") {
     // Test all valid semantic types
     std::vector<uint8_t> all_types = {
-        // LITERAL types
+        // PARSER_SPECIFIC types
         0, 4, 8, 12,
-        // NAME types
+        // RESERVED types  
         16, 20, 24, 28,
-        // PATTERN types
+        // METADATA types
         32, 36, 40, 44,
-        // TYPE types
+        // EXTERNAL types
         48, 52, 56, 60,
-        // OPERATOR types
+        // LITERAL types
         64, 68, 72, 76,
-        // COMPUTATION_NODE types
+        // NAME types
         80, 84, 88, 92,
-        // TRANSFORM types
+        // PATTERN types
         96, 100, 104, 108,
-        // DEFINITION types
+        // TYPE types
         112, 116, 120, 124,
         // EXECUTION types
         128, 132, 136, 140,
@@ -58,13 +60,13 @@ TEST_CASE("Semantic type round-trip conversions", "[semantic_types]") {
         160, 164, 168, 172,
         // ORGANIZATION types
         176, 180, 184, 188,
-        // METADATA types
+        // OPERATOR types
         192, 196, 200, 204,
-        // EXTERNAL types
+        // COMPUTATION_NODE types
         208, 212, 216, 220,
-        // PARSER_SPECIFIC types
+        // TRANSFORM types
         224, 228, 232, 236,
-        // RESERVED types
+        // DEFINITION types
         240, 244, 248, 252
     };
     
@@ -79,21 +81,21 @@ TEST_CASE("Semantic type round-trip conversions", "[semantic_types]") {
 
 TEST_CASE("Semantic type predicates", "[semantic_types]") {
     SECTION("IsDefinition predicate") {
-        REQUIRE(IsDefinition(112)); // DEFINITION_FUNCTION
-        REQUIRE(IsDefinition(116)); // DEFINITION_VARIABLE
-        REQUIRE(IsDefinition(120)); // DEFINITION_CLASS
-        REQUIRE(IsDefinition(124)); // DEFINITION_MODULE
+        REQUIRE(IsDefinition(240)); // DEFINITION_FUNCTION
+        REQUIRE(IsDefinition(244)); // DEFINITION_VARIABLE
+        REQUIRE(IsDefinition(248)); // DEFINITION_CLASS
+        REQUIRE(IsDefinition(252)); // DEFINITION_MODULE
         
-        REQUIRE(!IsDefinition(80));  // COMPUTATION_CALL
-        REQUIRE(!IsDefinition(20));  // NAME_IDENTIFIER
+        REQUIRE(!IsDefinition(208));  // COMPUTATION_CALL
+        REQUIRE(!IsDefinition(84));  // NAME_IDENTIFIER
     }
     
     SECTION("IsCall predicate") {
-        REQUIRE(IsCall(80));  // COMPUTATION_CALL
+        REQUIRE(IsCall(208));  // COMPUTATION_CALL
         REQUIRE(IsCall(136)); // EXECUTION_INVOCATION
         
-        REQUIRE(!IsCall(112)); // DEFINITION_FUNCTION
-        REQUIRE(!IsCall(20));  // NAME_IDENTIFIER
+        REQUIRE(!IsCall(240)); // DEFINITION_FUNCTION
+        REQUIRE(!IsCall(84));  // NAME_IDENTIFIER
     }
     
     SECTION("IsControlFlow predicate") {

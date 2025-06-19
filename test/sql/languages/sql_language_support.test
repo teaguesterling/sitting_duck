@@ -75,9 +75,9 @@ WHERE type IN ('identifier', 'literal', 'comment')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-comment	192	3
-identifier	20	34
-literal	8	7
+comment	32	3
+identifier	84	34
+literal	72	7
 
 # Test 9: SQL tree structure validation
 # =====================================

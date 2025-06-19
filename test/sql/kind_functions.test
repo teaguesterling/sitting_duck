@@ -9,12 +9,12 @@ LOAD sitting_duck;
 query I
 SELECT kind_code('DEFINITION');
 ----
-112
+240
 
 query I
 SELECT kind_code('LITERAL');
 ----
-0
+64
 
 query I
 SELECT kind_code('FLOW_CONTROL');
@@ -28,22 +28,22 @@ NULL
 
 # Test is_kind function
 query I
-SELECT is_kind(112::UTINYINT, 'DEFINITION');  -- DEFINITION_FUNCTION
+SELECT is_kind(240::UTINYINT, 'DEFINITION');  -- DEFINITION_FUNCTION
 ----
 true
 
 query I
-SELECT is_kind(116::UTINYINT, 'DEFINITION');  -- DEFINITION_VARIABLE
+SELECT is_kind(244::UTINYINT, 'DEFINITION');  -- DEFINITION_VARIABLE
 ----
 true
 
 query I
-SELECT is_kind(80::UTINYINT, 'DEFINITION');   -- COMPUTATION_CALL
+SELECT is_kind(208::UTINYINT, 'DEFINITION');   -- COMPUTATION_CALL
 ----
 false
 
 query I
-SELECT is_kind(80::UTINYINT, 'COMPUTATION_NODE');  -- COMPUTATION_CALL is in COMPUTATION_NODE
+SELECT is_kind(208::UTINYINT, 'COMPUTATION_NODE');  -- COMPUTATION_CALL is in COMPUTATION_NODE
 ----
 true
 
