@@ -39,16 +39,16 @@ string GetSemanticTypeName(uint8_t semantic_type) {
         case LITERAL_STRUCTURED: return "LITERAL_STRUCTURED";
         
         // NAME types
-        case NAME_KEYWORD: return "NAME_KEYWORD";
         case NAME_IDENTIFIER: return "NAME_IDENTIFIER";
         case NAME_QUALIFIED: return "NAME_QUALIFIED";
         case NAME_SCOPED: return "NAME_SCOPED";
+        case NAME_ATTRIBUTE: return "NAME_ATTRIBUTE";
         
         // PATTERN types
         case PATTERN_DESTRUCTURE: return "PATTERN_DESTRUCTURE";
-        case PATTERN_MATCH: return "PATTERN_MATCH";
+        case PATTERN_COLLECT: return "PATTERN_COLLECT";
         case PATTERN_TEMPLATE: return "PATTERN_TEMPLATE";
-        case PATTERN_GUARD: return "PATTERN_GUARD";
+        case PATTERN_MATCH: return "PATTERN_MATCH";
         
         // TYPE types
         case TYPE_PRIMITIVE: return "TYPE_PRIMITIVE";
@@ -183,16 +183,16 @@ uint8_t GetSemanticTypeCode(const string& name) {
         {"LITERAL_STRUCTURED", LITERAL_STRUCTURED},
         
         // NAME types
-        {"NAME_KEYWORD", NAME_KEYWORD},
         {"NAME_IDENTIFIER", NAME_IDENTIFIER},
         {"NAME_QUALIFIED", NAME_QUALIFIED},
         {"NAME_SCOPED", NAME_SCOPED},
+        {"NAME_ATTRIBUTE", NAME_ATTRIBUTE},
         
         // PATTERN types
         {"PATTERN_DESTRUCTURE", PATTERN_DESTRUCTURE},
-        {"PATTERN_MATCH", PATTERN_MATCH},
+        {"PATTERN_COLLECT", PATTERN_COLLECT},
         {"PATTERN_TEMPLATE", PATTERN_TEMPLATE},
-        {"PATTERN_GUARD", PATTERN_GUARD},
+        {"PATTERN_MATCH", PATTERN_MATCH},
         
         // TYPE types
         {"TYPE_PRIMITIVE", TYPE_PRIMITIVE},

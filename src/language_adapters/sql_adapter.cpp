@@ -18,43 +18,43 @@ namespace duckdb {
 //==============================================================================
 
 #define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
-    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+    {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
 
 const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     // SQL-specific node types - DDL statements
-    DEF_TYPE(create_table, DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0x01)
-    DEF_TYPE(create_view, DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0x01)
-    DEF_TYPE(create_index, DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0x01)
-    DEF_TYPE(drop_statement, EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0x01)
-    DEF_TYPE(alter_table, EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0x01)
+    DEF_TYPE("create_table", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+    DEF_TYPE("create_view", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+    DEF_TYPE("create_index", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+    DEF_TYPE("drop_statement", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
+    DEF_TYPE("alter_table", EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0)
     
     // DML statements - queries and transforms
-    DEF_TYPE(select_statement, TRANSFORM_QUERY, NONE, NONE, 0x01)
-    DEF_TYPE(insert_statement, EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0x01)
-    DEF_TYPE(update_statement, EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0x01)
-    DEF_TYPE(delete_statement, EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0x01)
+    DEF_TYPE("select_statement", TRANSFORM_QUERY, NONE, NONE, 0)
+    DEF_TYPE("insert_statement", EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0)
+    DEF_TYPE("update_statement", EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0)
+    DEF_TYPE("delete_statement", EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0)
     
     // Identifiers and names
-    DEF_TYPE(identifier, NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-    DEF_TYPE(column_reference, NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-    DEF_TYPE(table_reference, NAME_QUALIFIED, NODE_TEXT, NONE, 0)
-    DEF_TYPE(function_call, COMPUTATION_CALL, FIND_IDENTIFIER, NONE, 0)
+    DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+    DEF_TYPE("column_reference", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+    DEF_TYPE("table_reference", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
+    DEF_TYPE("function_call", COMPUTATION_CALL, FIND_IDENTIFIER, NONE, 0)
     
     // Literals - name and value both contain the literal text
-    DEF_TYPE(string_literal, LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-    DEF_TYPE(number_literal, LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
-    DEF_TYPE(boolean_literal, LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
-    DEF_TYPE(literal, LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
+    DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+    DEF_TYPE("number_literal", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
+    DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
+    DEF_TYPE("literal", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
     
     // Keywords and comments
-    DEF_TYPE(keyword, NAME_KEYWORD, NODE_TEXT, NONE, 0)
-    DEF_TYPE(comment, METADATA_COMMENT, NONE, NODE_TEXT, 0x08)
+    DEF_TYPE("keyword", PARSER_CONSTRUCT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE("comment", METADATA_COMMENT, NONE, NODE_TEXT, 0)
     
     // Query clauses
-    DEF_TYPE(where_clause, FLOW_CONDITIONAL, NONE, NONE, 0)
-    DEF_TYPE(having_clause, FLOW_CONDITIONAL, NONE, NONE, 0)
-    DEF_TYPE(order_by_clause, ORGANIZATION_LIST, NONE, NONE, 0)
-    DEF_TYPE(group_by_clause, TRANSFORM_AGGREGATION, NONE, NONE, 0)
+    DEF_TYPE("where_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+    DEF_TYPE("having_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+    DEF_TYPE("order_by_clause", ORGANIZATION_LIST, NONE, NONE, 0)
+    DEF_TYPE("group_by_clause", TRANSFORM_AGGREGATION, NONE, NONE, 0)
 };
 
 #undef DEF_TYPE

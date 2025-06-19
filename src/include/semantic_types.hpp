@@ -75,16 +75,16 @@ constexpr uint8_t LITERAL_ATOMIC = LITERAL | 0x08;       // 0100 1000 - true, fa
 constexpr uint8_t LITERAL_STRUCTURED = LITERAL | 0x0C;   // 0100 1100 - arrays, objects, composite
 
 // ===== NAME super types (0101 ttxx) =====
-constexpr uint8_t NAME_KEYWORD = NAME | 0x00;            // 0101 0000 - language keywords
-constexpr uint8_t NAME_IDENTIFIER = NAME | 0x04;         // 0101 0100 - simple identifiers
-constexpr uint8_t NAME_QUALIFIED = NAME | 0x08;          // 0101 1000 - qualified names (obj.prop)
-constexpr uint8_t NAME_SCOPED = NAME | 0x0C;             // 0101 1100 - scoped references (::, this, super)
+constexpr uint8_t NAME_IDENTIFIER = NAME | 0x00;         // 0101 0000 - simple identifiers
+constexpr uint8_t NAME_QUALIFIED = NAME | 0x04;          // 0101 0100 - qualified names (obj.prop)
+constexpr uint8_t NAME_SCOPED = NAME | 0x08;             // 0101 1000 - scoped references (::, this, super, @instance_var)
+constexpr uint8_t NAME_ATTRIBUTE = NAME | 0x0C;          // 0101 1100 - decorative metadata (@decorator, @media, attributes)
 
 // ===== PATTERN super types (0110 ttxx) =====
-constexpr uint8_t PATTERN_DESTRUCTURE = PATTERN | 0x00;  // 0110 0000 - destructuring patterns
-constexpr uint8_t PATTERN_MATCH = PATTERN | 0x04;        // 0110 0100 - pattern matching constructs
-constexpr uint8_t PATTERN_TEMPLATE = PATTERN | 0x08;     // 0110 1000 - template patterns
-constexpr uint8_t PATTERN_GUARD = PATTERN | 0x0C;        // 0110 1100 - guards and conditions
+constexpr uint8_t PATTERN_DESTRUCTURE = PATTERN | 0x00;  // 0110 0000 - breaking apart into multiple terms
+constexpr uint8_t PATTERN_COLLECT = PATTERN | 0x04;      // 0110 0100 - gathering together into single term
+constexpr uint8_t PATTERN_TEMPLATE = PATTERN | 0x08;     // 0110 1000 - parameterized patterns
+constexpr uint8_t PATTERN_MATCH = PATTERN | 0x0C;        // 0110 1100 - structured entities for comparison
 
 // ===== TYPE super types (0111 ttxx) =====
 constexpr uint8_t TYPE_PRIMITIVE = TYPE | 0x00;          // 0111 0000 - basic types (int, string, etc)

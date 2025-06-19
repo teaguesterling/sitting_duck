@@ -8,6 +8,7 @@ set(SQL_MACRO_FILES
     06_tree_helpers.sql
     07_monad_tree_helpers.sql
     08_semantic_types.sql
+    09_semantic_type_codes.sql
 )
 
 # Generate header file with embedded SQL

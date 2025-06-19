@@ -32,12 +32,12 @@ struct NodeConfig {
           value_strategy(value_strat), flags(node_flags) {}
 };
 
-// Flags for basic node properties
-namespace NodeFlags {
-    constexpr uint8_t IS_PUNCTUATION = 0x01;
-    constexpr uint8_t IS_KEYWORD = 0x02;
-    constexpr uint8_t IS_BUILTIN = 0x04;
-    constexpr uint8_t IS_LITERAL = 0x08;
+// Universal flags for orthogonal node properties
+namespace ASTNodeFlags {
+    constexpr uint8_t IS_KEYWORD = 0x01;   // Reserved language keywords
+    constexpr uint8_t IS_PUBLIC = 0x02;    // Externally visible/accessible
+    constexpr uint8_t IS_UNSAFE = 0x04;    // Unsafe operations
+    constexpr uint8_t RESERVED = 0x08;     // Reserved for future use
 }
 
 // Normalized type constants for cross-language consistency

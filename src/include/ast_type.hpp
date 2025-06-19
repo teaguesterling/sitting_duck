@@ -38,12 +38,12 @@ enum class ASTKind : uint8_t {
     RESERVED = 15        // 1111: Reserved for future use
 };
 
-// Universal Flags
-enum class ASTUniversalFlags : uint8_t {
-    IS_KEYWORD = 0x01,     // Bare language keywords
-    IS_PUNCTUATION = 0x02, // Structural delimiters
-    IS_BUILTIN = 0x04,     // Language built-in vs user construct
-    IS_PUBLIC = 0x08       // Externally visible
+// Universal Flags - orthogonal properties that apply across semantic types
+enum class ASTFlagValues : uint8_t {
+    IS_KEYWORD = 0x01,     // Reserved language keywords (def, class, if, for, etc.)
+    IS_PUBLIC = 0x02,      // Externally visible/accessible (public, export, etc.)
+    IS_UNSAFE = 0x04,      // Unsafe operations (Rust unsafe, C pointers, inline asm)
+    RESERVED = 0x08        // Reserved for future orthogonal properties
 };
 
 // Nested type definitions for ASTNode structure
