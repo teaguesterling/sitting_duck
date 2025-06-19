@@ -24,6 +24,10 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
     // JSON and YAML enabled - configuration and data format support
     RegisterLanguageFactory("json", []() { return make_uniq<JSONAdapter>(); });
     RegisterLanguageFactory("yaml", []() { return make_uniq<YAMLAdapter>(); });
+    // Bash enabled - shell scripting support
+    RegisterLanguageFactory("bash", []() { return make_uniq<BashAdapter>(); });
+    // Swift enabled - iOS/macOS development support
+    RegisterLanguageFactory("swift", []() { return make_uniq<SwiftAdapter>(); });
 }
 
 } // namespace duckdb

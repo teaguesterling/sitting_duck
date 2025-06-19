@@ -104,6 +104,10 @@ if(CARGO_EXECUTABLE)
     generate_parser("tree-sitter-html" "tree-sitter-html/src/parser.c" "tree-sitter-html/src/scanner.c")
     generate_parser("tree-sitter-css" "tree-sitter-css/src/parser.c" "tree-sitter-css/src/scanner.c")
     generate_parser("tree-sitter-rust" "tree-sitter-rust/src/parser.c" "tree-sitter-rust/src/scanner.c")
+    generate_parser("tree-sitter-json" "tree-sitter-json/src/parser.c" "")
+    generate_parser("tree-sitter-yaml" "tree-sitter-yaml/src/parser.c" "tree-sitter-yaml/src/scanner.c")
+    generate_parser("tree-sitter-bash" "tree-sitter-bash/src/parser.c" "tree-sitter-bash/src/scanner.c")
+    generate_parser("tree-sitter-swift" "tree-sitter-swift/src/parser.c" "tree-sitter-swift/src/scanner.c")
     
     # Create a target for all generated parsers
     if(ALL_GENERATED_PARSERS)
@@ -183,6 +187,10 @@ set(EXTENSION_SOURCES
     src/language_adapters/html_adapter.cpp
     src/language_adapters/css_adapter.cpp
     src/language_adapters/c_adapter.cpp
+    src/language_adapters/json_adapter.cpp
+    src/language_adapters/yaml_adapter.cpp
+    src/language_adapters/bash_adapter.cpp
+    src/language_adapters/swift_adapter.cpp
     src/read_ast_streaming_function.cpp
     # src/read_ast_objects_hybrid.cpp (removed - objects API not used)
     src/ast_sql_macros.cpp
@@ -220,6 +228,13 @@ set(EXTENSION_SOURCES
     grammars/tree-sitter-c/src/parser.c
     grammars/tree-sitter-rust/src/parser.c
     grammars/tree-sitter-rust/src/scanner.c
+    grammars/tree-sitter-json/src/parser.c
+    grammars/tree-sitter-yaml/src/parser.c
+    grammars/tree-sitter-yaml/src/scanner.c
+    grammars/tree-sitter-bash/src/parser.c
+    grammars/tree-sitter-bash/src/scanner.c
+    grammars/tree-sitter-swift/src/parser.c
+    grammars/tree-sitter-swift/src/scanner.c
     )
     # Removed unused files:
     # src/ast_parser.cpp (replaced by unified_ast_backend.cpp)
