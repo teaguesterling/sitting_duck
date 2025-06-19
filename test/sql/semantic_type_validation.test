@@ -40,16 +40,16 @@ SELECT * FROM (VALUES
     (76, 'LITERAL_STRUCTURED'),
     
     -- NAME types (0x50)
-    (80, 'NAME_KEYWORD'),
-    (84, 'NAME_IDENTIFIER'),
-    (88, 'NAME_QUALIFIED'),
-    (92, 'NAME_SCOPED'),
+    (80, 'NAME_IDENTIFIER'),
+    (84, 'NAME_QUALIFIED'),
+    (88, 'NAME_SCOPED'),
+    (92, 'NAME_ATTRIBUTE'),
     
     -- PATTERN types (0x60)
     (96, 'PATTERN_DESTRUCTURE'),
-    (100, 'PATTERN_MATCH'),
+    (100, 'PATTERN_COLLECT'),
     (104, 'PATTERN_TEMPLATE'),
-    (108, 'PATTERN_GUARD'),
+    (108, 'PATTERN_MATCH'),
     
     -- TYPE types (0x70)
     (112, 'TYPE_PRIMITIVE'),
@@ -158,7 +158,7 @@ WHERE code BETWEEN 144 AND 156  -- FLOW_CONTROL range (unchanged)
 query I
 SELECT COUNT(*)
 FROM semantic_type_constants
-WHERE code IN (84, 88, 92)  -- NAME_IDENTIFIER, NAME_QUALIFIED, NAME_SCOPED (new values)
+WHERE code IN (80, 84, 88)  -- NAME_IDENTIFIER, NAME_QUALIFIED, NAME_SCOPED (updated values)
   AND NOT is_identifier(code::UTINYINT);
 ----
 0

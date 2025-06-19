@@ -76,7 +76,7 @@ GROUP BY type, semantic_type
 ORDER BY type;
 ----
 comment	32	3
-identifier	84	34
+identifier	80	34
 literal	72	7
 
 # Test 9: SQL tree structure validation

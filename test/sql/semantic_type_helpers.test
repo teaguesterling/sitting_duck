@@ -40,7 +40,7 @@ SELECT semantic_type_code('COMPUTATION_CALL');
 query I
 SELECT semantic_type_code('NAME_IDENTIFIER');
 ----
-84
+80
 
 # Test invalid type name
 query I
@@ -85,12 +85,12 @@ SELECT is_control_flow(240::UTINYINT); -- DEFINITION_FUNCTION
 false
 
 query I
-SELECT is_identifier(84::UTINYINT);   -- NAME_IDENTIFIER
+SELECT is_identifier(80::UTINYINT);   -- NAME_IDENTIFIER
 ----
 true
 
 query I
-SELECT is_identifier(88::UTINYINT);   -- NAME_QUALIFIED
+SELECT is_identifier(84::UTINYINT);   -- NAME_QUALIFIED
 ----
 true
 
@@ -128,7 +128,7 @@ SELECT get_super_kind(240::UTINYINT);  -- DEFINITION_FUNCTION
 COMPUTATION
 
 query I
-SELECT get_super_kind(84::UTINYINT);   -- NAME_IDENTIFIER
+SELECT get_super_kind(80::UTINYINT);   -- NAME_IDENTIFIER
 ----
 DATA_STRUCTURE
 

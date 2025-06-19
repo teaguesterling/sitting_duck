@@ -39,7 +39,10 @@ WHERE is_control_flow(semantic_type)
 ORDER BY start_line;
 ----
 return_statement	FLOW_JUMP
+return	FLOW_JUMP
 return_statement	FLOW_JUMP
+return	FLOW_JUMP
+for	FLOW_LOOP
 
 # Example 4: Build a summary of code structure
 query II
@@ -50,10 +53,10 @@ FROM code_ast
 GROUP BY category
 ORDER BY node_count DESC;
 ----
-META_EXTERNAL	19
-DATA_STRUCTURE	18
-COMPUTATION	6
-CONTROL_EFFECTS	5
+META_EXTERNAL	17
+DATA_STRUCTURE	12
+COMPUTATION	11
+CONTROL_EFFECTS	8
 
 # Example 5: Find specific types by name
 query I
@@ -61,7 +64,7 @@ SELECT COUNT(*)
 FROM code_ast
 WHERE semantic_type = semantic_type_code('DEFINITION_FUNCTION');
 ----
-2
+4
 
 # Example 6: Filter to only searchable types for building an index
 statement ok
