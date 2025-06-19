@@ -232,5 +232,17 @@ DEF_TYPE("auto", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("...", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
 DEF_TYPE("abstract_function_declarator", TYPE_COMPOSITE, NONE, NONE, 0)
 
+// Final C edge cases for 100% classification - 771 remaining nodes
+DEF_TYPE("compound_literal_expression", LITERAL_STRUCTURED, NONE, NONE, 0)
+DEF_TYPE("bitfield_clause", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("linkage_specification", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+DEF_TYPE("declaration_list", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("offsetof_expression", COMPUTATION_CALL, NONE, NONE, 0)
+DEF_TYPE("offsetof", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("abstract_parenthesized_declarator", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("restrict", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD | ASTNodeFlags::IS_UNSAFE)
+DEF_TYPE("short", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("signed", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
 // Error handling
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
