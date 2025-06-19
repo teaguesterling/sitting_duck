@@ -441,8 +441,11 @@ ASTResultCollection UnifiedASTBackend::ParseFilesToASTCollectionParallel(ClientC
         resolved_languages.push_back(file_language);
     }
     
-    // Create shared parsing state
-    ASTParsingState parsing_state(context, file_paths, resolved_languages, ignore_errors, peek_size, peek_mode);
+    // Create shared parsing state with pre-created adapters
+    // For the unified backend, we'll use the traditional singleton approach for now
+    // since this code path is less performance-critical than the streaming function
+    unordered_map<string, unique_ptr<LanguageAdapter>> empty_adapters_map;
+    ASTParsingState parsing_state(context, file_paths, resolved_languages, ignore_errors, peek_size, peek_mode, empty_adapters_map);
     
     // Create and schedule tasks
     TaskExecutor executor(context);
@@ -453,7 +456,7 @@ ASTResultCollection UnifiedASTBackend::ParseFilesToASTCollectionParallel(ClientC
         const auto file_idx_start = task_idx * files_per_task;
         const auto file_idx_end = MinValue<idx_t>(file_idx_start + files_per_task, file_paths.size());
         
-        auto task = make_uniq<ASTParsingTask>(executor, parsing_state, file_idx_start, file_idx_end);
+        auto task = make_uniq<ASTParsingTask>(executor, parsing_state, file_idx_start, file_idx_end, task_idx);
         executor.ScheduleTask(std::move(task));
     }
     

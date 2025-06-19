@@ -345,6 +345,9 @@ public:
     // Get adapter by language name or alias (creates on demand)
     const LanguageAdapter* GetAdapter(const string &language) const;
     
+    // Create a fresh adapter instance (for thread-safe pre-creation)
+    unique_ptr<LanguageAdapter> CreateAdapter(const string &language) const;
+    
     // Get TSLanguage directly by language name or alias
     const TSLanguage* GetTSLanguage(const string &language) const;
     

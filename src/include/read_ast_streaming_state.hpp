@@ -4,26 +4,44 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "unified_ast_backend.hpp"
+#include <unordered_map>
 
 namespace duckdb {
 
-//! Global state for streaming AST table function
+// Forward declaration
+class LanguageAdapter;
+
+//! Global state for streaming AST table function with parallel batch processing
 struct ReadASTStreamingGlobalState : public GlobalTableFunctionState {
-    // File management using DuckDB's MultiFileReader pattern
+    // Traditional single-threaded streaming (for small file sets)
     shared_ptr<MultiFileList> file_list;
     MultiFileListScanData file_scan_state;
     
-    // Current file processing state
+    // Current file processing state (used by both modes)
     unique_ptr<ASTResult> current_file_result;
     idx_t current_file_row_index = 0;
     bool current_file_parsed = false;
     bool files_exhausted = false;
+    
+    // PARALLEL PROCESSING (no batching - let DuckDB handle it!)
+    bool use_parallel_batching = false;      // Reuse flag name for compatibility
+    vector<string> all_file_paths;           // All files to process
+    vector<string> resolved_languages;       // Pre-resolved languages for all files
+    bool parallel_processing_complete = false; // True when all parsing is done
+    
+    // Result management (all results from parallel processing)
+    vector<ASTResult> current_batch_results; // All results from parallel processing
+    idx_t current_batch_result_index = 0;    // Index within results
+    idx_t current_batch_row_index = 0;       // Row index within current result
     
     // Configuration
     string language;
     bool ignore_errors;
     int32_t peek_size;
     string peek_mode;
+    
+    // Pre-created language adapters (eliminates singleton contention)
+    unordered_map<string, unique_ptr<LanguageAdapter>> pre_created_adapters;
     
     ReadASTStreamingGlobalState() = default;
 };

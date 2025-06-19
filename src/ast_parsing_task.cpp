@@ -9,9 +9,10 @@ namespace duckdb {
 ASTParsingTask::ASTParsingTask(TaskExecutor &executor, 
                                ASTParsingState &parsing_state,
                                const idx_t file_idx_start,
-                               const idx_t file_idx_end)
+                               const idx_t file_idx_end,
+                               const idx_t thread_id)
     : BaseExecutorTask(executor), parsing_state(parsing_state),
-      file_idx_start(file_idx_start), file_idx_end(file_idx_end) {
+      file_idx_start(file_idx_start), file_idx_end(file_idx_end), thread_id(thread_id) {
 }
 
 void ASTParsingTask::ExecuteTask() {
@@ -47,9 +48,17 @@ void ASTParsingTask::ProcessSingleFile(idx_t file_idx) {
             }
         }
         
-        // Get language adapter (thread-safe singleton access)
-        auto& registry = LanguageAdapterRegistry::GetInstance();
-        const LanguageAdapter* adapter = registry.GetAdapter(file_language);
+        // Get language adapter from pre-created adapters (no singleton lookup)
+        const LanguageAdapter* adapter = nullptr;
+        auto adapter_it = parsing_state.pre_created_adapters.find(file_language);
+        if (adapter_it != parsing_state.pre_created_adapters.end()) {
+            adapter = adapter_it->second.get();
+        } else {
+            // Fallback to singleton for compatibility (when not using pre-created adapters)
+            auto& registry = LanguageAdapterRegistry::GetInstance();
+            adapter = registry.GetAdapter(file_language);
+        }
+        
         if (!adapter) {
             throw InvalidInputException("Unsupported language: " + file_language);
         }
@@ -67,11 +76,8 @@ void ASTParsingTask::ProcessSingleFile(idx_t file_idx) {
         parsing_state.files_processed.fetch_add(1);
         parsing_state.total_nodes.fetch_add(node_count);
         
-        // Thread-safe result storage
-        {
-            std::lock_guard<std::mutex> lock(parsing_state.results_mutex);
-            parsing_state.results.push_back(std::move(result));
-        }
+        // Store result in per-thread buffer (no mutex needed!)
+        parsing_state.per_thread_results[thread_id].push_back(std::move(result));
         
     } catch (const Exception &e) {
         // Handle errors based on ignore_errors flag

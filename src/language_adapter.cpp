@@ -149,6 +149,29 @@ const LanguageAdapter* LanguageAdapterRegistry::GetAdapter(const string &languag
     return nullptr;
 }
 
+unique_ptr<LanguageAdapter> LanguageAdapterRegistry::CreateAdapter(const string &language) const {
+    // Resolve alias to actual language name
+    string actual_language = language;
+    auto alias_it = alias_to_language.find(language);
+    if (alias_it != alias_to_language.end()) {
+        actual_language = alias_it->second;
+    }
+    
+    // Check if we have a factory for this language
+    auto factory_it = language_factories.find(actual_language);
+    if (factory_it != language_factories.end()) {
+        // Create a fresh adapter instance
+        auto adapter = factory_it->second();
+        
+        // Validate ABI compatibility
+        ValidateLanguageABI(adapter.get());
+        
+        return adapter;
+    }
+    
+    return nullptr;
+}
+
 vector<string> LanguageAdapterRegistry::GetSupportedLanguages() const {
     vector<string> languages;
     
