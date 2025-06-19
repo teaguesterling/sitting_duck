@@ -293,7 +293,7 @@ ORDER BY control_flow_nodes DESC;
 -- Performance-optimized version using raw codes
 SELECT file_path, name, language 
 FROM read_ast('**/*.*', ignore_errors := true)
-WHERE semantic_type = 112; -- DEFINITION_FUNCTION (faster)
+WHERE semantic_type = 240; -- DEFINITION_FUNCTION (faster)
 ```
 
 **Available convenience functions:**

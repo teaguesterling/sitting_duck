@@ -77,7 +77,7 @@ ORDER BY nodes DESC;
 -- Mixed files and patterns with language override
 SELECT file_path, name, start_line
 FROM read_ast(['**/*.py', '**/*.js'], 'auto', ignore_errors := true)
-WHERE semantic_type = 115; -- DEFINITION_FUNCTION
+WHERE semantic_type = 240; -- DEFINITION_FUNCTION
 
 -- Array with explicit language (applies to all files)
 SELECT * FROM read_ast(['script1.py', 'script2.py'], 'python');
@@ -85,7 +85,7 @@ SELECT * FROM read_ast(['script1.py', 'script2.py'], 'python');
 -- Find cross-language patterns using arrays
 SELECT language, COUNT(*) as import_count
 FROM read_ast(['**/*.py', '**/*.js', '**/*.java'], ignore_errors := true)
-WHERE semantic_type = 208; -- EXTERNAL_IMPORT
+WHERE semantic_type = 48; -- EXTERNAL_IMPORT
 GROUP BY language;
 ```
 
@@ -103,7 +103,7 @@ GROUP BY language;
 ```sql
 SELECT node_id, type, name, semantic_type
 FROM parse_ast('def hello(): return "world"', 'python')
-WHERE semantic_type = 115; -- Functions only
+WHERE semantic_type = 240; -- Functions only
 ```
 
 ### DuckDB-Consistent Array Interface
@@ -249,49 +249,63 @@ The 8-bit encoding follows this pattern: `[ss kk tt ll]`
 
 | Super Kind | Code | Kinds | Description |
 |------------|------|-------|-------------|
-| **DATA_STRUCTURE** | 0x00-0x3F | LITERAL, NAME, PATTERN, TYPE | Data representation and identification |
-| **COMPUTATION** | 0x40-0x7F | OPERATOR, COMPUTATION_NODE, TRANSFORM, DEFINITION | Operations and definitions |
+| **META_EXTERNAL** | 0x00-0x3F | PARSER_SPECIFIC, RESERVED, METADATA, EXTERNAL | Meta-information and language specifics |
+| **DATA_STRUCTURE** | 0x40-0x7F | LITERAL, NAME, PATTERN, TYPE | Data representation and identification |
 | **CONTROL_EFFECTS** | 0x80-0xBF | EXECUTION, FLOW_CONTROL, ERROR_HANDLING, ORGANIZATION | Program flow and effects |
-| **META_EXTERNAL** | 0xC0-0xFF | METADATA, EXTERNAL, PARSER_SPECIFIC, RESERVED | Meta-information and language specifics |
+| **COMPUTATION** | 0xC0-0xFF | OPERATOR, COMPUTATION_NODE, TRANSFORM, DEFINITION | Operations and definitions |
 
 #### Detailed Type Reference
 
-**DATA_STRUCTURE (0x00-0x3F)**
+**META_EXTERNAL (0x00-0x3F)**
 
 | Kind | Super Type | Code | Examples | Python | JavaScript | Java | C++ |
 |------|------------|------|----------|--------|------------|------|-----|
-| **LITERAL** | NUMBER | 0 | Numeric values | `42`, `3.14` | `42`, `3.14` | `42`, `3.14f` | `42`, `3.14` |
-| | STRING | 4 | String/text values | `"hello"`, `'world'` | `"hello"`, `'world'` | `"hello"` | `"hello"` |
-| | ATOMIC | 8 | Boolean/null values | `True`, `False`, `None` | `true`, `false`, `null` | `true`, `false`, `null` | `true`, `false`, `nullptr` |
-| | STRUCTURED | 12 | Collection literals | `[1,2,3]`, `{'a':1}` | `[1,2,3]`, `{a:1}` | `{1,2,3}` | `{1,2,3}` |
-| **NAME** | KEYWORD | 16 | Language keywords | `def`, `class`, `if` | `function`, `class`, `if` | `public`, `class`, `if` | `class`, `struct`, `if` |
-| | IDENTIFIER | 20 | Simple names | `variable`, `func` | `variable`, `func` | `variable`, `method` | `variable`, `function` |
-| | QUALIFIED | 24 | Dotted names | `obj.method` | `obj.method` | `obj.method` | `obj.method` |
-| | SCOPED | 28 | Scope references | `self`, `super` | `this`, `super` | `this`, `super` | `this`, `::global` |
+| **PARSER_SPECIFIC** | CONSTRUCT | 0 | Unique constructs | `yield`, `with` | `yield*`, destructuring | annotations | templates, RAII |
+| | DELIMITER | 4 | Language delimiters | `(`, `)`, `[`, `]` | `(`, `)`, `[`, `]` | `(`, `)`, `[`, `]` | `(`, `)`, `[`, `]` |
+| | PUNCTUATION | 8 | Language punctuation | `:`, `,`, `;` | `:`, `,`, `;` | `:`, `,`, `;` | `:`, `,`, `;` |
+| | SYNTAX | 12 | Syntax elements | indentation, newlines | braces, semicolons | braces, semicolons | braces, semicolons |
+| **RESERVED** | FUTURE1 | 16 | Reserved for future | - | - | - | - |
+| | FUTURE2 | 20 | Reserved for future | - | - | - | - |
+| | FUTURE3 | 24 | Reserved for future | - | - | - | - |
+| | FUTURE4 | 28 | Reserved for future | - | - | - | - |
+| **METADATA** | COMMENT | 32 | Documentation | `# comment`, `"""docstring"""` | `// comment`, `/* comment */` | `// comment`, `/** javadoc */` | `// comment`, `/* comment */` |
+| | ANNOTATION | 36 | Decorators/attributes | `@decorator` | `@decorator` | `@Annotation` | `[[attribute]]` |
+| | DIRECTIVE | 40 | Preprocessor | `# type: ignore` | `// @ts-ignore` | N/A | `#include`, `#define` |
+| | DEBUG | 44 | Debug information | breakpoints, traces | debugger statements | debug annotations | debug macros |
+| **EXTERNAL** | IMPORT | 48 | Import statements | `import os`, `from x import y` | `import fs from 'fs'` | `import java.util.*` | `#include <iostream>` |
+| | EXPORT | 52 | Export statements | N/A (implicit) | `export default`, `export {x}` | `public class` | `extern` |
+| | FOREIGN | 56 | Foreign interfaces | `ctypes`, `cffi` | `WebAssembly` | `native` methods | `extern "C"` |
+| | EMBED | 60 | Embedded code | SQL in strings | template literals | annotations | inline assembly |
 
-**COMPUTATION (0x40-0x7F)**
+**DATA_STRUCTURE (0x40-0x7F)**
 
 | Kind | Super Type | Code | Examples | Python | JavaScript | Java | C++ |
 |------|------------|------|----------|--------|------------|------|-----|
-| **OPERATOR** | ARITHMETIC | 64 | Math operators | `+`, `-`, `*`, `**` | `+`, `-`, `*`, `**` | `+`, `-`, `*` | `+`, `-`, `*` |
-| | LOGICAL | 68 | Logic operators | `and`, `or`, `not` | `&&`, `\|\|`, `!` | `&&`, `\|\|`, `!` | `&&`, `\|\|`, `!` |
-| | COMPARISON | 72 | Comparison ops | `==`, `!=`, `in` | `===`, `!==`, `in` | `==`, `!=` | `==`, `!=` |
-| | ASSIGNMENT | 76 | Assignment ops | `=`, `+=`, `:=` | `=`, `+=` | `=`, `+=` | `=`, `+=` |
-| **COMPUTATION_NODE** | CALL | 80 | Function calls | `func()`, `obj.method()` | `func()`, `obj.method()` | `func()`, `obj.method()` | `func()`, `obj->method()` |
-| | ACCESS | 84 | Member access | `obj.attr`, `arr[0]` | `obj.attr`, `arr[0]` | `obj.field`, `arr[0]` | `obj.member`, `arr[0]` |
-| | EXPRESSION | 88 | Complex expressions | `a + b * c` | `a + b * c` | `a + b * c` | `a + b * c` |
-| | LAMBDA | 92 | Anonymous functions | `lambda x: x+1` | `x => x+1` | `x -> x+1` | `[](int x){return x+1;}` |
-| **DEFINITION** | FUNCTION | 112 | Function definitions | `def func():` | `function func(){}` | `void func(){}` | `void func(){}` |
-| | VARIABLE | 116 | Variable definitions | `x = 5` | `let x = 5` | `int x = 5` | `int x = 5` |
-| | CLASS | 120 | Class definitions | `class MyClass:` | `class MyClass{}` | `class MyClass{}` | `class MyClass{}` |
-| | MODULE | 124 | Module definitions | `import sys` | `import fs from 'fs'` | `package com.example` | `namespace example` |
+| **LITERAL** | NUMBER | 64 | Numeric values | `42`, `3.14` | `42`, `3.14` | `42`, `3.14f` | `42`, `3.14` |
+| | STRING | 68 | String/text values | `"hello"`, `'world'` | `"hello"`, `'world'` | `"hello"` | `"hello"` |
+| | ATOMIC | 72 | Boolean/null values | `True`, `False`, `None` | `true`, `false`, `null` | `true`, `false`, `null` | `true`, `false`, `nullptr` |
+| | STRUCTURED | 76 | Collection literals | `[1,2,3]`, `{'a':1}` | `[1,2,3]`, `{a:1}` | `{1,2,3}` | `{1,2,3}` |
+| **NAME** | IDENTIFIER | 80 | Simple names | `variable`, `func` | `variable`, `func` | `variable`, `method` | `variable`, `function` |
+| | QUALIFIED | 84 | Dotted names | `obj.method` | `obj.method` | `obj.method` | `obj.method` |
+| | SCOPED | 88 | Scope references | `self`, `@instance_var` | `this`, `super` | `this`, `super` | `this`, `::global` |
+| | ATTRIBUTE | 92 | Decorative metadata | `@decorator` | `@decorator` | `@Override` | `[[attribute]]` |
+| **PATTERN** | DESTRUCTURE | 96 | Breaking apart | `[a, b] = tuple`, `{x, y} = obj` | `{a, b} = obj`, `[x, ...rest]` | structured bindings | `auto [x, y] = pair` |
+| | COLLECT | 100 | Gathering together | `*args`, `first, *rest = list` | `...args`, `[...array]` | varargs `Type...` | variadic templates |
+| | TEMPLATE | 104 | Parameterized patterns | f-strings `f"{name}"` | template literals | generics `List<T>` | template parameters |
+| | MATCH | 108 | Structured entities | regex `r'\d+'`, match patterns | regex `/\d+/`, destructure patterns | selector patterns | template specialization |
+| **TYPE** | PRIMITIVE | 112 | Basic types | `int`, `str`, `bool` | `number`, `string` | `int`, `String` | `int`, `char` |
+| | COMPOSITE | 116 | Complex types | `List[int]`, tuples | arrays, objects | `List<T>`, arrays | `std::vector<T>` |
+| | REFERENCE | 120 | Type references | type hints | type annotations | class references | pointer types |
+| | GENERIC | 124 | Generic types | `TypeVar`, `Generic` | generic interfaces | `<T>` parameters | template types |
 
 **CONTROL_EFFECTS (0x80-0xBF)**
 
 | Kind | Super Type | Code | Examples | Python | JavaScript | Java | C++ |
 |------|------------|------|----------|--------|------------|------|-----|
 | **EXECUTION** | STATEMENT | 128 | Expression statements | Expression as statement | Expression as statement | Expression as statement | Expression as statement |
+| | DECLARATION | 132 | Declarations | `global`, `nonlocal` | `var`, `let`, `const` | field declarations | variable declarations |
 | | INVOCATION | 136 | Function calls (effects) | `print()`, `obj.mutate()` | `console.log()`, `obj.mutate()` | `System.out.println()` | `std::cout << x` |
+| | MUTATION | 140 | State changes | assignments, mutations | assignments, mutations | field updates | pointer operations |
 | **FLOW_CONTROL** | CONDITIONAL | 144 | Conditional flow | `if`, `elif`, `else` | `if`, `else if`, `else` | `if`, `else if`, `switch` | `if`, `else if`, `switch` |
 | | LOOP | 148 | Iteration | `for`, `while` | `for`, `while` | `for`, `while` | `for`, `while` |
 | | JUMP | 152 | Control jumps | `break`, `continue`, `return` | `break`, `continue`, `return` | `break`, `continue`, `return` | `break`, `continue`, `return`, `goto` |
@@ -299,32 +313,102 @@ The 8-bit encoding follows this pattern: `[ss kk tt ll]`
 | **ERROR_HANDLING** | TRY | 160 | Try blocks | `try:` | `try {` | `try {` | `try {` |
 | | CATCH | 164 | Exception handling | `except Exception:` | `catch (e) {` | `catch (Exception e) {` | `catch (std::exception& e) {` |
 | | THROW | 168 | Exception throwing | `raise Exception()` | `throw new Error()` | `throw new Exception()` | `throw std::runtime_error()` |
+| | FINALLY | 172 | Cleanup blocks | `finally:` | `finally {` | `finally {` | RAII destructors |
 | **ORGANIZATION** | BLOCK | 176 | Code blocks | `if: block` | `{ block }` | `{ block }` | `{ block }` |
 | | LIST | 180 | Parameter/argument lists | `(a, b, c)` | `(a, b, c)` | `(int a, int b)` | `(int a, int b)` |
+| | SECTION | 184 | Code sections | modules, classes | modules, namespaces | packages, classes | namespaces, classes |
+| | CONTAINER | 188 | Containers | comprehensions | array literals | collections | containers |
 
-**META_EXTERNAL (0xC0-0xFF)**
+**COMPUTATION (0xC0-0xFF)**
 
 | Kind | Super Type | Code | Examples | Python | JavaScript | Java | C++ |
 |------|------------|------|----------|--------|------------|------|-----|
-| **METADATA** | COMMENT | 192 | Documentation | `# comment`, `"""docstring"""` | `// comment`, `/* comment */` | `// comment`, `/** javadoc */` | `// comment`, `/* comment */` |
-| | ANNOTATION | 196 | Decorators/attributes | `@decorator` | `@decorator` | `@Annotation` | `[[attribute]]` |
-| | DIRECTIVE | 200 | Preprocessor | `# type: ignore` | `// @ts-ignore` | N/A | `#include`, `#define` |
-| **EXTERNAL** | IMPORT | 208 | Import statements | `import os`, `from x import y` | `import fs from 'fs'` | `import java.util.*` | `#include <iostream>` |
-| | EXPORT | 212 | Export statements | N/A (implicit) | `export default`, `export {x}` | `public class` | `extern` |
-| **PARSER_SPECIFIC** | PUNCTUATION | 224 | Language punctuation | `:`, `,`, `;` | `:`, `,`, `;` | `:`, `,`, `;` | `:`, `,`, `;` |
-| | CONSTRUCT | 236 | Unique constructs | `yield`, `with` | `yield*`, destructuring | annotations | templates, RAII |
+| **OPERATOR** | ARITHMETIC | 192 | Math operators | `+`, `-`, `*`, `**` | `+`, `-`, `*`, `**` | `+`, `-`, `*` | `+`, `-`, `*` |
+| | LOGICAL | 196 | Logic operators | `and`, `or`, `not` | `&&`, `\|\|`, `!` | `&&`, `\|\|`, `!` | `&&`, `\|\|`, `!` |
+| | COMPARISON | 200 | Comparison ops | `==`, `!=`, `in` | `===`, `!==`, `in` | `==`, `!=` | `==`, `!=` |
+| | ASSIGNMENT | 204 | Assignment ops | `=`, `+=`, `:=` | `=`, `+=` | `=`, `+=` | `=`, `+=` |
+| **COMPUTATION_NODE** | CALL | 208 | Function calls | `func()`, `obj.method()` | `func()`, `obj.method()` | `func()`, `obj.method()` | `func()`, `obj->method()` |
+| | ACCESS | 212 | Member access | `obj.attr`, `arr[0]` | `obj.attr`, `arr[0]` | `obj.field`, `arr[0]` | `obj.member`, `arr[0]` |
+| | EXPRESSION | 216 | Complex expressions | `a + b * c` | `a + b * c` | `a + b * c` | `a + b * c` |
+| | LAMBDA | 220 | Anonymous functions | `lambda x: x+1` | `x => x+1` | `x -> x+1` | `[](int x){return x+1;}` |
+| **TRANSFORM** | QUERY | 224 | Data queries | comprehensions | filter/map chains | stream operations | ranges/algorithms |
+| | ITERATION | 228 | Iteration transforms | `map`, `filter` | `map`, `filter` | stream methods | STL algorithms |
+| | PROJECTION | 232 | Data projection | dict comprehensions | object destructuring | field selection | member access |
+| | AGGREGATION | 236 | Data aggregation | `sum`, `reduce` | `reduce`, `aggregate` | collectors | accumulate |
+| **DEFINITION** | FUNCTION | 240 | Function definitions | `def func():` | `function func(){}` | `void func(){}` | `void func(){}` |
+| | VARIABLE | 244 | Variable definitions | `x = 5` | `let x = 5` | `int x = 5` | `int x = 5` |
+| | CLASS | 248 | Class definitions | `class MyClass:` | `class MyClass{}` | `class MyClass{}` | `class MyClass{}` |
+| | MODULE | 252 | Module definitions | `import sys` | `import fs from 'fs'` | `package com.example` | `namespace example` |
 
 #### Quick Reference - Most Common Types
 
 | Code | Type | Description | Use Case |
 |------|------|-------------|----------|
-| 112 | DEFINITION_FUNCTION | Function definitions across all languages | API extraction, complexity analysis |
-| 120 | DEFINITION_CLASS | Class/struct/interface definitions | Architecture analysis, OOP patterns |
-| 136 | EXECUTION_INVOCATION | Function/method calls | Dependency analysis, call graphs |
+| 240 | DEFINITION_FUNCTION | Function definitions across all languages | API extraction, complexity analysis |
+| 248 | DEFINITION_CLASS | Class/struct/interface definitions | Architecture analysis, OOP patterns |
+| 208 | COMPUTATION_CALL | Function/method calls | Dependency analysis, call graphs |
 | 144 | FLOW_CONDITIONAL | If/switch/match statements | Complexity metrics, control flow |
 | 148 | FLOW_LOOP | For/while/do-while loops | Complexity metrics, performance analysis |
-| 192 | METADATA_COMMENT | Comments and documentation | Documentation coverage, code quality |
-| 208 | EXTERNAL_IMPORT | Import/include statements | Dependency mapping, module analysis |
+| 80 | NAME_IDENTIFIER | Simple identifiers and names | Variable/function name analysis, symbol extraction |
+| 32 | METADATA_COMMENT | Comments and documentation | Documentation coverage, code quality |
+| 48 | EXTERNAL_IMPORT | Import/include statements | Dependency mapping, module analysis |
+
+### Universal Flags
+
+In addition to semantic types, each node has `universal_flags` that capture **orthogonal properties** - characteristics that can apply across multiple semantic types and languages.
+
+#### Flag Values
+
+| Flag | Bit | Value | Description | Examples |
+|------|-----|-------|-------------|----------|
+| **IS_KEYWORD** | 0 | 0x01 | Reserved language keywords | `def`, `class`, `if`, `for`, `public`, `const` |
+| **IS_PUBLIC** | 1 | 0x02 | Externally visible/accessible | `public` methods, `export` declarations |
+| **IS_UNSAFE** | 2 | 0x04 | Unsafe operations | Rust `unsafe` blocks, C pointer operations |
+| **RESERVED** | 3 | 0x08 | Reserved for future use | (Available for new orthogonal properties) |
+
+#### Flag Usage Examples
+
+```sql
+-- Find all language keywords across files
+SELECT DISTINCT type, peek, language
+FROM read_ast('**/*.*', ignore_errors := true)
+WHERE universal_flags & 1 = 1  -- IS_KEYWORD flag
+ORDER BY language, type;
+
+-- Find public definitions across languages
+SELECT file_path, name, semantic_type_to_string(semantic_type)
+FROM read_ast('**/*.*', ignore_errors := true)
+WHERE (universal_flags & 2) = 2  -- IS_PUBLIC flag
+  AND is_definition(semantic_type)
+ORDER BY file_path;
+
+-- Find potentially unsafe operations
+SELECT file_path, type, peek
+FROM read_ast('**/*.{c,cpp,rs}', ignore_errors := true)
+WHERE (universal_flags & 4) = 4  -- IS_UNSAFE flag
+ORDER BY file_path, start_line;
+```
+
+#### Combining Semantic Types and Flags
+
+```sql
+-- Find public functions vs private functions
+SELECT 
+    CASE WHEN (universal_flags & 2) = 2 THEN 'public' ELSE 'private' END as visibility,
+    COUNT(*) as count
+FROM read_ast('**/*.java', ignore_errors := true)
+WHERE semantic_type = 240  -- DEFINITION_FUNCTION
+GROUP BY visibility;
+
+-- Find control flow keywords vs user-defined control constructs
+SELECT 
+    CASE WHEN (universal_flags & 1) = 1 THEN 'keyword' ELSE 'user-defined' END as type,
+    semantic_type_to_string(semantic_type) as semantic_name,
+    COUNT(*) as count
+FROM read_ast('**/*.*', ignore_errors := true)
+WHERE is_control_flow(semantic_type)
+GROUP BY type, semantic_type;
+```
 
 #### Using Semantic Type Convenience Functions
 
@@ -407,8 +491,8 @@ SELECT
     language,
     COUNT(DISTINCT file_path) as files,
     COUNT(*) as total_nodes,
-    COUNT(CASE WHEN semantic_type = 115 THEN 1 END) as functions,
-    COUNT(CASE WHEN semantic_type = 119 THEN 1 END) as classes
+    COUNT(CASE WHEN semantic_type = 240 THEN 1 END) as functions,
+    COUNT(CASE WHEN semantic_type = 248 THEN 1 END) as classes
 FROM read_ast('**/*.*', ignore_errors := true)
 GROUP BY language
 ORDER BY total_nodes DESC;
@@ -418,8 +502,8 @@ SELECT
     language,
     COUNT(DISTINCT file_path) as files,
     COUNT(*) as total_nodes,
-    COUNT(CASE WHEN semantic_type = 115 THEN 1 END) as functions,
-    COUNT(CASE WHEN semantic_type = 120 THEN 1 END) as classes
+    COUNT(CASE WHEN semantic_type = 240 THEN 1 END) as functions,
+    COUNT(CASE WHEN semantic_type = 248 THEN 1 END) as classes
 FROM read_ast([
     'src/**/*.py',     -- Python source
     'src/**/*.js',     -- JavaScript source  
@@ -441,7 +525,7 @@ SELECT
     start_line,
     descendant_count as complexity_score
 FROM read_ast('src/**/*.py', ignore_errors := true)
-WHERE semantic_type = 115 AND name IS NOT NULL
+WHERE semantic_type = 240 AND name IS NOT NULL
 ORDER BY complexity_score DESC;
 
 -- Find all imports/includes across languages (pattern array approach)
@@ -458,7 +542,7 @@ FROM read_ast([
     '**/*.cpp',   -- C++ includes
     '**/*.hpp'    -- C++ header includes
 ], ignore_errors := true)
-WHERE semantic_type = 208  -- EXTERNAL_IMPORT (more precise than text matching)
+WHERE semantic_type = 48  -- EXTERNAL_IMPORT (more precise than text matching)
 ORDER BY file_path;
 ```
 
@@ -472,7 +556,7 @@ SELECT
     AVG(descendant_count) as avg_complexity,
     MAX(descendant_count) as max_complexity
 FROM read_ast('**/*.*', ignore_errors := true)
-WHERE semantic_type = 115
+WHERE semantic_type = 240
 GROUP BY language
 ORDER BY avg_complexity DESC;
 
@@ -505,7 +589,7 @@ SELECT
     descendant_count,
     start_line
 FROM read_ast('**/*.*', ignore_errors := true)
-WHERE semantic_type = 115  -- Functions only
+WHERE semantic_type = 240  -- Functions only
   AND depth > 5  -- Deeply nested
   AND descendant_count > 100  -- Complex
 ORDER BY descendant_count DESC;
@@ -529,7 +613,7 @@ WITH file_stats AS (
         file_path,
         language,
         COUNT(*) as node_count,
-        COUNT(CASE WHEN semantic_type = 115 THEN 1 END) as function_count
+        COUNT(CASE WHEN semantic_type = 240 THEN 1 END) as function_count
     FROM read_ast('**/*.*', ignore_errors := true)
     GROUP BY file_path, language
 )
