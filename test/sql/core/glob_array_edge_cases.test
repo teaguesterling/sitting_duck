@@ -59,7 +59,7 @@ FROM read_ast([
 
 # Test 2c: All patterns invalid (empty result test)
 # ================================================
-statement error
+query I
 SELECT COUNT(*) as all_invalid_patterns
 FROM read_ast([
     'test/data/cobol/*.cbl',
@@ -67,7 +67,7 @@ FROM read_ast([
     'test/data/pascal/*.pas'
 ], ignore_errors := true);
 ----
-IO Error
+0
 
 # Test 2d: Mixed patterns without ignore_errors (should process valid patterns)
 # =========================================================================
@@ -92,11 +92,11 @@ SELECT * FROM read_ast(['file.py'], 123);
 
 # Test 4: Empty glob patterns (no matches)
 # =======================================
-statement error
+query I
 SELECT COUNT(*) as no_matches
 FROM read_ast(['test/data/nonexistent_dir/*.xyz'], ignore_errors := true);
 ----
-IO Error
+0
 
 # Test 5: Mixed absolute and relative paths
 # ========================================
@@ -179,11 +179,11 @@ DROP TABLE second_order;
 
 # Test 10: Complex nested directory patterns
 # =========================================
-statement error
+query I
 SELECT COUNT(*) >= 0 as nested_patterns_work
 FROM read_ast(['test/**/data/**/*.py'], ignore_errors := true);
 ----
-IO Error
+1
 
 # Test 11: Language detection with arrays
 # ======================================  

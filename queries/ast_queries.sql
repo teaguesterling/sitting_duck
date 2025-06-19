@@ -15,7 +15,7 @@ SELECT * FROM (VALUES
     ('extension', 'sitting_duck'),
     ('description', 'Comprehensive AST analysis query library'),
     ('categories', 'search, analysis, navigation, utilities'),
-    ('last_updated', '2025-01-17')
+    ('last_updated', '2025-06-18')
 ) as info(property, value);
 
 -- =============================================================================

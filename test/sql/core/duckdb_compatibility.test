@@ -88,11 +88,11 @@ Binder Error: File patterns must be VARCHAR or LIST(VARCHAR)
 # =========================================================
 
 # Recursive glob patterns
-statement error
+query I
 SELECT COUNT(*) >= 0 as recursive_glob_works
 FROM read_ast(['test/**/data/**/*.py'], ignore_errors := true);
 ----
-IO Error
+1
 
 # Single character wildcards  
 query I
