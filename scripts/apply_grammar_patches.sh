@@ -63,6 +63,9 @@ case "$GRAMMAR_NAME" in
     "tree-sitter-rust")
         apply_patch "fix-rust-grammar-regex"
         ;;
+    "php")
+        apply_patch "fix-php-scanner-assert"
+        ;;
     *)
         # No output for grammars without patches - just skip silently
         ;;
