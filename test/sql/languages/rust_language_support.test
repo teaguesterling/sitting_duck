@@ -1,0 +1,120 @@
+# name: test/sql/rust_language_support.test
+# description: Test Rust language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: Rust language is supported
+# ==================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'rust';
+----
+rust
+
+# Test 2: Rust file extension auto-detection
+# ==========================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/rust/simple.rs');
+----
+true
+
+# Test 3: Explicit Rust language specification
+# ============================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/rust/simple.rs', 'rust') WHERE name IS NOT NULL;
+----
+21
+
+# Test 4: Rust struct and function name extraction
+# ================================================
+
+query II
+SELECT name, type FROM read_ast('test/data/rust/simple.rs') 
+WHERE type IN ('struct_item', 'function_item') AND name IS NOT NULL 
+ORDER BY start_line;
+----
+User	struct_item
+new	function_item
+get_name	function_item
+validate_email	function_item
+is_valid	function_item
+create_user	function_item
+format_name	function_item
+test_user_creation	function_item
+
+# Test 5: Rust use declarations
+# =============================
+
+query II
+SELECT name, type FROM read_ast('test/data/rust/simple.rs')
+WHERE type = 'use_declaration' AND name IS NOT NULL
+ORDER BY start_line;
+----
+std::collections::HashMap	use_declaration
+
+# Test 6: Rust semantic types
+# ===========================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM read_ast('test/data/rust/simple.rs')
+WHERE type IN ('struct_item', 'function_item', 'enum_item', 'trait_item', 'impl_item')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+enum_item	32	1
+function_item	240	8
+impl_item	32	2
+struct_item	32	1
+trait_item	32	1
+
+# Test 7: Rust enum and trait detection
+# =====================================
+
+query II
+SELECT name, type FROM read_ast('test/data/rust/simple.rs')
+WHERE type IN ('enum_item', 'trait_item') AND name IS NOT NULL
+ORDER BY start_line;
+----
+Status	enum_item
+Validate	trait_item
+
+# Test 8: Rust module detection
+# =============================
+
+query II
+SELECT name, type FROM read_ast('test/data/rust/simple.rs')
+WHERE type = 'mod_item' AND name IS NOT NULL;
+----
+utils	mod_item
+tests	mod_item
+
+# Test 9: Rust tree structure validation
+# ======================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/rust/simple.rs');
+----
+12	440
+
+# Test 10: Rust identifier extraction
+# ===================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/rust/simple.rs')
+WHERE type = 'identifier' AND name IS NOT NULL;
+----
+81
+
+# Test 11: Rust visibility modifiers
+# ==================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/rust/simple.rs')
+WHERE type = 'pub' AND name IS NOT NULL;
+----
+9

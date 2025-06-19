@@ -1,0 +1,99 @@
+# name: test/sql/php_language_support.test
+# description: Test PHP language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: PHP language is supported
+# =================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'php';
+----
+php
+
+# Test 2: PHP file extension auto-detection
+# =========================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/php/test.php');
+----
+true
+
+# Test 3: Explicit PHP language specification
+# ===========================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/php/test.php', 'php') WHERE name IS NOT NULL;
+----
+22
+
+# Test 4: PHP class and function name extraction
+# ==============================================
+
+query II
+SELECT name, type FROM read_ast('test/data/php/test.php') 
+WHERE type IN ('class_declaration', 'function_definition') AND name IS NOT NULL 
+ORDER BY start_line;
+----
+User	class_declaration
+__construct	function_definition
+getName	function_definition
+getEmail	function_definition
+validateEmail	function_definition
+isValid	function_definition
+EmailValidator	class_declaration
+validate	function_definition
+createUser	function_definition
+formatName	function_definition
+
+# Test 5: PHP namespace and use declarations
+# ==========================================
+
+query II
+SELECT name, type FROM read_ast('test/data/php/test.php')
+WHERE type IN ('namespace_definition', 'namespace_use_declaration') AND name IS NOT NULL
+ORDER BY start_line;
+----
+App\Models	namespace_definition
+
+# Test 6: PHP semantic types
+# ==========================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM read_ast('test/data/php/test.php')
+WHERE type IN ('class_declaration', 'function_definition', 'namespace_definition')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+class_declaration	32	2
+function_definition	240	8
+namespace_definition	16	1
+
+# Test 7: PHP interface detection
+# ===============================
+
+query II
+SELECT name, type FROM read_ast('test/data/php/test.php')
+WHERE type = 'interface_declaration' AND name IS NOT NULL;
+----
+Validator	interface_declaration
+
+# Test 8: PHP tree structure validation
+# =====================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/php/test.php');
+----
+10	355
+
+# Test 9: PHP identifier extraction
+# =================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/php/test.php')
+WHERE type = 'name' AND name IS NOT NULL;
+----
+97

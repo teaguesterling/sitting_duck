@@ -14,11 +14,13 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
     RegisterLanguageFactory("ruby", []() { return make_uniq<RubyAdapter>(); });
     RegisterLanguageFactory("markdown", []() { return make_uniq<MarkdownAdapter>(); });
     RegisterLanguageFactory("java", []() { return make_uniq<JavaAdapter>(); });
-    // PHP disabled due to scanner dependency on tree-sitter internals
-    // RegisterLanguageFactory("php", []() { return make_uniq<PHPAdapter>(); });
+    // PHP enabled - scanner dependency resolved with basic implementation
+    RegisterLanguageFactory("php", []() { return make_uniq<PHPAdapter>(); });
     RegisterLanguageFactory("html", []() { return make_uniq<HTMLAdapter>(); });
     RegisterLanguageFactory("css", []() { return make_uniq<CSSAdapter>(); });
     RegisterLanguageFactory("c", []() { return make_uniq<CAdapter>(); });
+    // Rust enabled - complete implementation with semantic types
+    RegisterLanguageFactory("rust", []() { return make_uniq<RustAdapter>(); });
 }
 
 } // namespace duckdb

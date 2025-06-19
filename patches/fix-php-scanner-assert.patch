@@ -1,0 +1,9 @@
+--- a/grammars/tree-sitter-php/php/src/../../common/scanner.h
++++ b/grammars/tree-sitter-php/php/src/../../common/scanner.h
+@@ -4,6 +4,7 @@
+ #include <stdbool.h>
+ #include <string.h>
+ #include <wctype.h>
++#include <assert.h>
+ 
+ #include "tree_sitter/parser.h"

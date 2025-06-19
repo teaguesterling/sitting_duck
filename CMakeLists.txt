@@ -178,6 +178,8 @@ set(EXTENSION_SOURCES
     src/language_adapters/ruby_adapter.cpp
     src/language_adapters/markdown_adapter.cpp
     src/language_adapters/java_adapter.cpp
+    src/language_adapters/php_adapter.cpp
+    src/language_adapters/rust_adapter.cpp
     src/language_adapters/html_adapter.cpp
     src/language_adapters/css_adapter.cpp
     src/language_adapters/c_adapter.cpp

@@ -21,8 +21,8 @@ static const std::unordered_map<string, string> EXTENSION_TO_LANGUAGE = {
     {"rs", "rust"}, {"rlib", "rust"},
     {"md", "markdown"}, {"markdown", "markdown"},
     {"java", "java"},
-    // PHP disabled due to scanner dependency issues
-    // {"php", "php"}, {"php3", "php"}, {"php4", "php"}, {"php5", "php"}, {"phtml", "php"},
+    // PHP enabled - scanner dependency resolved
+    {"php", "php"}, {"php3", "php"}, {"php4", "php"}, {"php5", "php"}, {"phtml", "php"},
     {"html", "html"}, {"htm", "html"},
     {"css", "css"}
 };
@@ -40,7 +40,7 @@ static const std::unordered_map<string, vector<string>> LANGUAGE_TO_EXTENSIONS =
     {"rust", {"rs", "rlib"}},
     {"markdown", {"md", "markdown"}},
     {"java", {"java"}},
-    // {"php", {"php", "php3", "php4", "php5", "phtml"}}, // Disabled
+    {"php", {"php", "php3", "php4", "php5", "phtml"}}, // Enabled
     {"html", {"html", "htm"}},
     {"css", {"css"}}
 };
