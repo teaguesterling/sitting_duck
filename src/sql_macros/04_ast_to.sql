@@ -6,7 +6,7 @@
 -- ===================================
 
 -- Extract all names as array
-CREATE OR REPLACE MACRO ast_to_names(ast, type := NULL) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_names(ast, type := NULL) AS (
     [
         node.name
         for node in ast.nodes
@@ -17,12 +17,12 @@ CREATE OR REPLACE MACRO ast_to_names(ast, type := NULL) AS (
 );
 
 -- Extract all types as array
-CREATE OR REPLACE MACRO ast_to_types(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_types(ast) AS (
     list_distinct([node.type for node in ast.nodes])
 );
 
 -- Extract source text snippets
-CREATE OR REPLACE MACRO ast_to_source(ast, type := NULL) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_source(ast, type := NULL) AS (
     [
         node.source_text
         for node in ast.nodes
@@ -33,7 +33,7 @@ CREATE OR REPLACE MACRO ast_to_source(ast, type := NULL) AS (
 );
 
 -- Convert to location table
-CREATE OR REPLACE MACRO ast_to_locations(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_locations(ast) AS (
     [
         struct_pack(
             node_id := node.node_id,
@@ -54,7 +54,7 @@ CREATE OR REPLACE MACRO ast_to_locations(ast) AS (
 -- ===================================
 
 -- Type frequency table
-CREATE OR REPLACE MACRO ast_to_type_stats(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_type_stats(ast) AS (
     WITH type_counts AS (
         SELECT 
             node.type,
@@ -71,7 +71,7 @@ CREATE OR REPLACE MACRO ast_to_type_stats(ast) AS (
 );
 
 -- Depth distribution
-CREATE OR REPLACE MACRO ast_to_depth_stats(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_depth_stats(ast) AS (
     WITH depth_counts AS (
         SELECT 
             node.depth,
@@ -88,7 +88,7 @@ CREATE OR REPLACE MACRO ast_to_depth_stats(ast) AS (
 );
 
 -- Complexity metrics
-CREATE OR REPLACE MACRO ast_to_complexity_metrics(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_complexity_metrics(ast) AS (
     [
         struct_pack(
             name := node.name,
@@ -109,7 +109,7 @@ CREATE OR REPLACE MACRO ast_to_complexity_metrics(ast) AS (
 -- ===================================
 
 -- Function signatures
-CREATE OR REPLACE MACRO ast_to_signatures(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_signatures(ast) AS (
     [
         struct_pack(
             name := node.name,
@@ -124,7 +124,7 @@ CREATE OR REPLACE MACRO ast_to_signatures(ast) AS (
 );
 
 -- Import/dependency list
-CREATE OR REPLACE MACRO ast_to_dependencies(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_dependencies(ast) AS (
     [
         struct_pack(
             line := node.start_line,
@@ -137,7 +137,7 @@ CREATE OR REPLACE MACRO ast_to_dependencies(ast) AS (
 );
 
 -- Call graph edges (caller -> callee relationships)
-CREATE OR REPLACE MACRO ast_to_call_edges(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_call_edges(ast) AS (
     WITH function_scopes AS (
         SELECT 
             node.node_id,
@@ -169,7 +169,7 @@ CREATE OR REPLACE MACRO ast_to_call_edges(ast) AS (
 -- ===================================
 
 -- Overall AST summary
-CREATE OR REPLACE MACRO ast_to_summary(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_summary(ast) AS (
     SELECT 
         ast.file_path,
         ast.language,

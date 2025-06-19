@@ -6,17 +6,17 @@
 -- ===================================
 
 -- Get nodes by type(s) - reuse primitives
-CREATE OR REPLACE MACRO ast_get_types(ast, types) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_types(ast, types) AS (
     ast_get_by_types(ast, types)
 );
 
 -- Get nodes by single type - reuse primitives  
-CREATE OR REPLACE MACRO ast_get_type(ast, type) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_type(ast, type) AS (
     ast_get_by_type(ast, type)
 );
 
 -- Get nodes at specific depth
-CREATE OR REPLACE MACRO ast_get_depth(ast, depth) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_depth(ast, depth) AS (
     ast_update(
         ast,
         ast_extract_subtrees(
@@ -27,7 +27,7 @@ CREATE OR REPLACE MACRO ast_get_depth(ast, depth) AS (
 );
 
 -- Get nodes with specific name
-CREATE OR REPLACE MACRO ast_get_name(ast, name) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_name(ast, name) AS (
     ast_update(
         ast,
         ast_extract_subtrees(
@@ -58,7 +58,7 @@ CREATE OR REPLACE MACRO ast_get_name(ast, name) AS (
 -- ===================================
 
 -- Get all functions (works across languages)
-CREATE OR REPLACE MACRO ast_get_functions(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_functions(ast) AS (
     ast_get_types(ast, [
         'function_declaration', 
         'function_definition', 
@@ -69,7 +69,7 @@ CREATE OR REPLACE MACRO ast_get_functions(ast) AS (
 );
 
 -- Get all classes (works across languages)
-CREATE OR REPLACE MACRO ast_get_classes(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_classes(ast) AS (
     ast_get_types(ast, [
         'class_declaration',
         'class_definition',
@@ -78,7 +78,7 @@ CREATE OR REPLACE MACRO ast_get_classes(ast) AS (
 );
 
 -- Get all imports/includes (works across languages)
-CREATE OR REPLACE MACRO ast_get_imports(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_imports(ast) AS (
     ast_get_types(ast, [
         'import_statement',
         'import_from_statement',
@@ -88,7 +88,7 @@ CREATE OR REPLACE MACRO ast_get_imports(ast) AS (
 );
 
 -- Get top-level nodes (direct children of root)
-CREATE OR REPLACE MACRO ast_get_top_level(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_top_level(ast) AS (
     ast_get_depth(ast, 1)
 );
 

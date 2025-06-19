@@ -3,7 +3,7 @@
 
 -- Get immediate children of a node from AST monad
 -- Returns AST nodes that are children of the specified node_id
-CREATE OR REPLACE MACRO monad_get_children(ast, target_node_id) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_get_children(ast, target_node_id) AS (
     [
         node 
         for node in ast.nodes 
@@ -13,7 +13,7 @@ CREATE OR REPLACE MACRO monad_get_children(ast, target_node_id) AS (
 
 -- Get all descendants of a node (including the node itself) from AST monad
 -- Uses descendant_count for efficient extraction
-CREATE OR REPLACE MACRO monad_get_descendants(ast, target_node_id) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_get_descendants(ast, target_node_id) AS (
     WITH target AS (
         SELECT 
             node_id as tid,
@@ -32,7 +32,7 @@ CREATE OR REPLACE MACRO monad_get_descendants(ast, target_node_id) AS (
 );
 
 -- Get n descendants starting from a node
-CREATE OR REPLACE MACRO monad_get_n_descendants(ast, target_node_id, n) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_get_n_descendants(ast, target_node_id, n) AS (
     WITH target AS (
         SELECT 
             node_id as tid,
@@ -51,7 +51,7 @@ CREATE OR REPLACE MACRO monad_get_n_descendants(ast, target_node_id, n) AS (
 );
 
 -- Get the subtree rooted at a node (excluding the root node itself)
-CREATE OR REPLACE MACRO monad_get_subtree(ast, target_node_id) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_get_subtree(ast, target_node_id) AS (
     WITH target AS (
         SELECT 
             node_id as tid,
@@ -70,7 +70,7 @@ CREATE OR REPLACE MACRO monad_get_subtree(ast, target_node_id) AS (
 );
 
 -- Get siblings of a node (nodes with same parent)
-CREATE OR REPLACE MACRO monad_get_siblings(ast, target_node_id) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_get_siblings(ast, target_node_id) AS (
     WITH target AS (
         SELECT parent_id as pid
         FROM (SELECT unnest(ast.nodes) as node)
@@ -86,7 +86,7 @@ CREATE OR REPLACE MACRO monad_get_siblings(ast, target_node_id) AS (
 );
 
 -- Get the parent node
-CREATE OR REPLACE MACRO monad_get_parent(ast, target_node_id) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_get_parent(ast, target_node_id) AS (
     WITH target AS (
         SELECT parent_id as pid
         FROM (SELECT unnest(ast.nodes) as node)
@@ -103,7 +103,7 @@ CREATE OR REPLACE MACRO monad_get_parent(ast, target_node_id) AS (
 );
 
 -- Find the nearest ancestor of a specific type
-CREATE OR REPLACE MACRO monad_find_ancestor_of_type(ast, target_node_id, target_type) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_find_ancestor_of_type(ast, target_node_id, target_type) AS (
     WITH RECURSIVE ancestors AS (
         -- Start with parent
         SELECT 
@@ -131,7 +131,7 @@ CREATE OR REPLACE MACRO monad_find_ancestor_of_type(ast, target_node_id, target_
 );
 
 -- Extract a specific node by ID from the monad
-CREATE OR REPLACE MACRO monad_get_node(ast, target_node_id) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_get_node(ast, target_node_id) AS (
     (
         SELECT node
         FROM (SELECT unnest(ast.nodes) as node)
@@ -141,7 +141,7 @@ CREATE OR REPLACE MACRO monad_get_node(ast, target_node_id) AS (
 );
 
 -- Get nodes of a specific type
-CREATE OR REPLACE MACRO monad_get_nodes_of_type(ast, target_type) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_get_nodes_of_type(ast, target_type) AS (
     [
         node 
         for node in ast.nodes 
@@ -150,7 +150,7 @@ CREATE OR REPLACE MACRO monad_get_nodes_of_type(ast, target_type) AS (
 );
 
 -- Get nodes with a specific semantic type
-CREATE OR REPLACE MACRO monad_get_nodes_by_semantic_type(ast, sem_type) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_get_nodes_by_semantic_type(ast, sem_type) AS (
     [
         node 
         for node in ast.nodes 
@@ -164,7 +164,7 @@ CREATE OR REPLACE MACRO monad_get_nodes_by_semantic_type(ast, sem_type) AS (
 -- These return results that work well with both styles
 
 -- Count children of a node
-CREATE OR REPLACE MACRO monad_count_children(ast, target_node_id) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_count_children(ast, target_node_id) AS (
     (
         SELECT node.children_count
         FROM (SELECT unnest(ast.nodes) as node)
@@ -174,7 +174,7 @@ CREATE OR REPLACE MACRO monad_count_children(ast, target_node_id) AS (
 );
 
 -- Count descendants of a node  
-CREATE OR REPLACE MACRO monad_count_descendants(ast, target_node_id) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_count_descendants(ast, target_node_id) AS (
     (
         SELECT node.descendant_count
         FROM (SELECT unnest(ast.nodes) as node)
@@ -184,7 +184,7 @@ CREATE OR REPLACE MACRO monad_count_descendants(ast, target_node_id) AS (
 );
 
 -- Get depth of a node
-CREATE OR REPLACE MACRO monad_get_depth(ast, target_node_id) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_get_depth(ast, target_node_id) AS (
     (
         SELECT node.depth
         FROM (SELECT unnest(ast.nodes) as node)
@@ -194,7 +194,7 @@ CREATE OR REPLACE MACRO monad_get_depth(ast, target_node_id) AS (
 );
 
 -- Check if node is ancestor of another
-CREATE OR REPLACE MACRO monad_is_ancestor(ast, potential_ancestor_id, node_id) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_is_ancestor(ast, potential_ancestor_id, node_id) AS (
     WITH node_info AS (
         SELECT 
             node_id,
@@ -216,7 +216,7 @@ CREATE OR REPLACE MACRO monad_is_ancestor(ast, potential_ancestor_id, node_id) A
 -- ===================================
 
 -- Example: Extract all function names from an AST monad
-CREATE OR REPLACE MACRO monad_extract_function_names(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_extract_function_names(ast) AS (
     [
         struct_pack(
             name := child.name,
@@ -230,7 +230,7 @@ CREATE OR REPLACE MACRO monad_extract_function_names(ast) AS (
 );
 
 -- Example: Get function complexity using monad style
-CREATE OR REPLACE MACRO monad_function_complexity(ast, func_node_id) AS (
+CREATE OR REPLACE TEMPORARY MACRO monad_function_complexity(ast, func_node_id) AS (
     WITH descendants AS (
         SELECT unnest(monad_get_descendants(ast, func_node_id)) as node
     )

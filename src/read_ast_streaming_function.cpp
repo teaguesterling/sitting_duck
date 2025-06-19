@@ -18,6 +18,7 @@ namespace duckdb {
 // Forward declarations for streaming functions
 static void ReadASTStreamingFunctionSequential(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output);
 static void ReadASTStreamingFunctionParallel(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output);
+static void ProcessBatchOfFiles(ClientContext &context, ReadASTStreamingGlobalState &global_state, const vector<string> &batch_files);
 
 // Bind function for streaming two-argument version (explicit language)
 static unique_ptr<FunctionData> ReadASTStreamingBindTwoArg(ClientContext &context, TableFunctionBindInput &input,
@@ -73,12 +74,20 @@ static unique_ptr<FunctionData> ReadASTStreamingBindTwoArg(ClientContext &contex
         peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
     }
     
+    int32_t batch_size = 1;  // Default = current streaming behavior
+    if (seen_parameters.find("batch_size") != seen_parameters.end()) {
+        batch_size = input.named_parameters.at("batch_size").GetValue<int32_t>();
+        if (batch_size < 1) {
+            throw BinderException("batch_size must be positive");
+        }
+    }
+    
     // Use unified backend schema
     return_types = UnifiedASTBackend::GetFlatTableSchema();
     names = UnifiedASTBackend::GetFlatTableColumnNames();
     
     // Use the new vector<string> constructor for consistent handling
-    return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode);
+    return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode, batch_size);
 }
 
 // Bind function for streaming one-argument version (auto-detect language)
@@ -134,6 +143,14 @@ static unique_ptr<FunctionData> ReadASTStreamingBindOneArg(ClientContext &contex
         peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
     }
     
+    int32_t batch_size = 1;  // Default = current streaming behavior
+    if (seen_parameters.find("batch_size") != seen_parameters.end()) {
+        batch_size = input.named_parameters.at("batch_size").GetValue<int32_t>();
+        if (batch_size < 1) {
+            throw BinderException("batch_size must be positive");
+        }
+    }
+    
     // Use auto-detect for language
     string language = "auto";
     
@@ -142,7 +159,7 @@ static unique_ptr<FunctionData> ReadASTStreamingBindOneArg(ClientContext &contex
     names = UnifiedASTBackend::GetFlatTableColumnNames();
     
     // Use the new vector<string> constructor for consistent handling
-    return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode);
+    return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode, batch_size);
 }
 
 // Initialize global state for streaming with parallel processing
@@ -155,6 +172,7 @@ static unique_ptr<GlobalTableFunctionState> ReadASTStreamingInit(ClientContext &
     result->ignore_errors = bind_data.ignore_errors;
     result->peek_size = bind_data.peek_size;
     result->peek_mode = bind_data.peek_mode;
+    result->batch_size = bind_data.batch_size;
     
     try {
         // Use our reliable ASTFileUtils for pattern expansion and deduplication
@@ -262,6 +280,71 @@ static void ReadASTStreamingFunction(ClientContext &context, TableFunctionInput 
     }
 }
 
+// Process a batch of files with shared parser context for memory efficiency
+static void ProcessBatchOfFiles(ClientContext &context, ReadASTStreamingGlobalState &global_state, const vector<string> &batch_files) {
+    if (batch_files.empty()) {
+        return;
+    }
+    
+    // Clear any existing batch results
+    global_state.current_batch_results.clear();
+    global_state.current_batch_result_index = 0;
+    global_state.current_batch_row_index = 0;
+    
+    auto& registry = LanguageAdapterRegistry::GetInstance();
+    
+    // Process each file in the batch (auto-detect language per file if needed)
+    for (const auto& file_path : batch_files) {
+        try {
+            // Determine language for this specific file
+            string file_language = global_state.language;
+            if (file_language == "auto") {
+                file_language = ASTFileUtils::DetectLanguageFromPath(file_path);
+                if (file_language == "auto") {
+                    if (!global_state.ignore_errors) {
+                        throw BinderException("Could not detect language for file: " + file_path);
+                    }
+                    continue; // Skip this file
+                }
+            }
+            
+            // Read file content using DuckDB conventions
+            auto& fs = FileSystem::GetFileSystem(context);
+            if (!fs.FileExists(file_path)) {
+                if (!global_state.ignore_errors) {
+                    throw IOException("File does not exist: " + file_path);
+                }
+                continue; // Skip missing files
+            }
+            
+            auto handle = fs.OpenFile(file_path, FileFlags::FILE_FLAGS_READ);
+            auto file_size = fs.GetFileSize(*handle);
+            
+            string content;
+            content.resize(file_size);
+            handle->Read((void*)content.data(), file_size);
+            
+            // Parse file using unified backend
+            auto result = UnifiedASTBackend::ParseToASTResult(
+                content,
+                file_language,
+                file_path,
+                global_state.peek_size,
+                global_state.peek_mode
+            );
+            
+            // ASTResult doesn't have success/error fields - exceptions handle errors
+            global_state.current_batch_results.emplace_back(std::move(result));
+            
+        } catch (const std::exception& e) {
+            if (!global_state.ignore_errors) {
+                throw InvalidInputException("Failed to process " + file_path + ": " + e.what());
+            }
+            // Continue with next file on error when ignore_errors is true
+        }
+    }
+}
+
 // Sequential processing for small file sets (backward compatibility)
 static void ReadASTStreamingFunctionSequential(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output) {
     idx_t output_count = 0;
@@ -292,6 +375,94 @@ static void ReadASTStreamingFunctionSequential(ClientContext &context, ReadASTSt
     auto &peek_validity = FlatVector::Validity(output.data[14]);
     
     while (output_count < STANDARD_VECTOR_SIZE) {
+        // Handle batch processing if enabled
+        if (global_state.batch_size > 1) {
+            // Check if we need to process a new batch
+            if (global_state.current_batch_results.empty() || 
+                global_state.current_batch_result_index >= global_state.current_batch_results.size()) {
+                
+                // Collect next batch of files
+                vector<string> batch_files;
+                batch_files.reserve(global_state.batch_size);
+                
+                OpenFileInfo file;
+                for (int32_t i = 0; i < global_state.batch_size; i++) {
+                    if (!global_state.file_list->Scan(global_state.file_scan_state, file)) {
+                        global_state.files_exhausted = true;
+                        break;
+                    }
+                    batch_files.push_back(file.path);
+                }
+                
+                if (batch_files.empty()) {
+                    break; // No more files to process
+                }
+                
+                // Process the batch
+                ProcessBatchOfFiles(context, global_state, batch_files);
+            }
+            
+            // Output nodes from current batch results
+            while (output_count < STANDARD_VECTOR_SIZE && 
+                   global_state.current_batch_result_index < global_state.current_batch_results.size()) {
+                
+                auto& result = global_state.current_batch_results[global_state.current_batch_result_index];
+                
+                if (global_state.current_batch_row_index < result.nodes.size()) {
+                    auto& node = result.nodes[global_state.current_batch_row_index];
+                    
+                    // Populate output vectors (existing logic)
+                    node_id_vec[output_count] = node.node_id;
+                    type_vec[output_count] = StringVector::AddString(output.data[1], node.type.raw);
+                    
+                    if (!node.name.raw.empty()) {
+                        name_vec[output_count] = StringVector::AddString(output.data[2], node.name.raw);
+                    } else {
+                        name_validity.SetInvalid(output_count);
+                    }
+                    
+                    file_path_vec[output_count] = StringVector::AddString(output.data[3], result.source.file_path);
+                    language_vec[output_count] = StringVector::AddString(output.data[4], result.source.language);
+                    start_line_vec[output_count] = node.file_position.start_line;
+                    start_column_vec[output_count] = node.file_position.start_column;
+                    end_line_vec[output_count] = node.file_position.end_line;
+                    end_column_vec[output_count] = node.file_position.end_column;
+                    
+                    if (node.tree_position.parent_index != -1) {
+                        parent_id_vec[output_count] = node.tree_position.parent_index;
+                    } else {
+                        parent_validity.SetInvalid(output_count);
+                    }
+                    
+                    depth_vec[output_count] = node.tree_position.node_depth;
+                    sibling_index_vec[output_count] = node.tree_position.sibling_index;
+                    children_count_vec[output_count] = node.subtree.children_count;
+                    descendant_count_vec[output_count] = node.subtree.descendant_count;
+                    
+                    if (!node.peek.empty()) {
+                        peek_vec[output_count] = StringVector::AddString(output.data[14], node.peek);
+                    } else {
+                        peek_validity.SetInvalid(output_count);
+                    }
+                    
+                    semantic_type_vec[output_count] = node.semantic_type;
+                    universal_flags_vec[output_count] = node.universal_flags;
+                    arity_bin_vec[output_count] = node.arity_bin;
+                    
+                    output_count++;
+                    global_state.current_batch_row_index++;
+                } else {
+                    // Move to next result in batch
+                    global_state.current_batch_result_index++;
+                    global_state.current_batch_row_index = 0;
+                }
+            }
+            
+            // If we're in batch mode, continue to next iteration
+            continue;
+        }
+        
+        // Original single-file processing logic (when batch_size == 1)
         // Check if we need to parse a new file
         if (!global_state.current_file_parsed || 
             !global_state.current_file_result ||
@@ -540,6 +711,7 @@ static TableFunction GetReadASTFunctionTwoArg() {
     read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
     read_ast.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+    read_ast.named_parameters["batch_size"] = LogicalType::INTEGER;
     return read_ast;
 }
 
@@ -550,6 +722,7 @@ static TableFunction GetReadASTFunctionOneArg() {
     read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
     read_ast.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+    read_ast.named_parameters["batch_size"] = LogicalType::INTEGER;
     return read_ast;
 }
 
@@ -561,6 +734,7 @@ static TableFunction GetReadASTStreamingFunctionTwoArg() {
     read_ast_streaming.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     read_ast_streaming.named_parameters["peek_size"] = LogicalType::INTEGER;
     read_ast_streaming.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+    read_ast_streaming.named_parameters["batch_size"] = LogicalType::INTEGER;
     return read_ast_streaming;
 }
 
@@ -571,6 +745,7 @@ static TableFunction GetReadASTStreamingFunctionOneArg() {
     read_ast_streaming.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     read_ast_streaming.named_parameters["peek_size"] = LogicalType::INTEGER;
     read_ast_streaming.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+    read_ast_streaming.named_parameters["batch_size"] = LogicalType::INTEGER;
     return read_ast_streaming;
 }
 

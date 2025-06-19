@@ -39,6 +39,11 @@ struct ReadASTStreamingGlobalState : public GlobalTableFunctionState {
     bool ignore_errors;
     int32_t peek_size;
     string peek_mode;
+    int32_t batch_size = 1;
+    
+    // Batch processing state
+    vector<string> current_batch_files;
+    bool batch_exhausted = false;
     
     // Pre-created language adapters (eliminates singleton contention)
     unordered_map<string, unique_ptr<LanguageAdapter>> pre_created_adapters;
@@ -55,20 +60,21 @@ struct ReadASTStreamingBindData : public TableFunctionData {
     bool ignore_errors;
     int32_t peek_size;
     string peek_mode;
+    int32_t batch_size;
     
     // Constructor for Value-based input (legacy)
     ReadASTStreamingBindData(Value file_path_value, string language, bool ignore_errors = false, 
-                           int32_t peek_size = 120, string peek_mode = "auto") 
+                           int32_t peek_size = 120, string peek_mode = "auto", int32_t batch_size = 1) 
         : file_path_value(std::move(file_path_value)), use_patterns_vector(false),
           language(std::move(language)), ignore_errors(ignore_errors), 
-          peek_size(peek_size), peek_mode(std::move(peek_mode)) {}
+          peek_size(peek_size), peek_mode(std::move(peek_mode)), batch_size(batch_size) {}
     
     // Constructor for vector<string> patterns (new DuckDB-consistent approach)
     ReadASTStreamingBindData(vector<string> file_patterns, string language, bool ignore_errors = false,
-                           int32_t peek_size = 120, string peek_mode = "auto")
+                           int32_t peek_size = 120, string peek_mode = "auto", int32_t batch_size = 1)
         : file_patterns(std::move(file_patterns)), use_patterns_vector(true),
           language(std::move(language)), ignore_errors(ignore_errors),
-          peek_size(peek_size), peek_mode(std::move(peek_mode)) {}
+          peek_size(peek_size), peek_mode(std::move(peek_mode)), batch_size(batch_size) {}
 };
 
 } // namespace duckdb

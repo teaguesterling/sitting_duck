@@ -1,0 +1,119 @@
+# name: test/sql/batch_processing.test
+# description: Test batch processing functionality for read_ast streaming function
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: Basic batch processing with batch_size parameter
+# ======================================================
+
+# Test batch_size = 1 (default, single file processing)
+query I
+SELECT COUNT(*) > 0 as has_nodes 
+FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := 1)
+----
+1
+
+# Test batch_size = 2 (batch processing)
+query I
+SELECT COUNT(*) > 0 as has_nodes 
+FROM read_ast(['test/data/javascript/simple.js', 'test/data/javascript/count_test.js'], 'javascript', batch_size := 2)
+----
+1
+
+# Test 2: Batch vs Individual Processing Equivalence
+# =================================================
+
+# Test that batch processing produces same total node count as individual processing
+query I
+WITH batch_result AS (
+    SELECT COUNT(*) as batch_count
+    FROM read_ast(['test/data/javascript/simple.js', 'test/data/javascript/count_test.js'], 'javascript', batch_size := 2)
+),
+individual_result AS (
+    SELECT COUNT(*) as individual_count
+    FROM (
+        SELECT * FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := 1)
+        UNION ALL
+        SELECT * FROM read_ast(['test/data/javascript/count_test.js'], 'javascript', batch_size := 1)
+    )
+)
+SELECT batch_count = individual_count as counts_match
+FROM batch_result, individual_result
+----
+1
+
+# Test 3: Parameter Validation
+# =============================
+
+# Test batch_size validation (should fail with negative value)
+statement error
+SELECT * FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := -1)
+----
+batch_size must be positive
+
+# Test batch_size validation (should fail with zero)
+statement error
+SELECT * FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := 0)
+----
+batch_size must be positive
+
+# Test 4: File Path and Language Preservation
+# ==========================================
+
+# Test that file_path and language are correctly preserved in batch mode
+query II
+SELECT DISTINCT file_path, language 
+FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := 1)
+ORDER BY file_path
+----
+test/data/javascript/simple.js	javascript
+
+# Test 5: Multiple Files in Batch
+# ===============================
+
+# Test batch processing with multiple files
+query I
+SELECT COUNT(DISTINCT file_path) as unique_files
+FROM read_ast(['test/data/javascript/simple.js', 'test/data/javascript/count_test.js'], 'javascript', batch_size := 2)
+----
+2
+
+# Test 6: Large Batch Size Handling
+# =================================
+
+# Test large batch size (should handle gracefully)
+query I
+SELECT COUNT(*) > 0 as has_nodes
+FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := 100)
+----
+1
+
+# Test 7: Data Integrity in Batch Mode
+# ====================================
+
+# Test that parent-child relationships are preserved in batch mode
+query I
+SELECT COUNT(*) > 0 as has_children
+FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := 2)
+WHERE parent_id IS NOT NULL
+----
+1
+
+# Test that semantic types are correctly assigned in batch mode
+query I
+SELECT COUNT(DISTINCT semantic_type) > 1 as has_multiple_types
+FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := 2)
+----
+1
+
+# Test 8: Auto-detect Language with Batching
+# ==========================================
+
+# Test batch processing with auto-detect language
+query I
+SELECT COUNT(DISTINCT language) as language_count
+FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto', batch_size := 2)
+WHERE language IN ('python', 'javascript')
+----
+2

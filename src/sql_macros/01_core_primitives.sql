@@ -7,14 +7,14 @@
 
 -- Add indices to all nodes
 -- Returns array of (idx, node) pairs for use with list_filter
-CREATE OR REPLACE MACRO ast_with_indices(nodes) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_with_indices(nodes) AS (
     [struct_pack(idx := i, node := node) for node, i in nodes]
 );
 
 -- Extract complete subtrees for filtered indexed nodes
 -- Takes original nodes array and filtered indexed results
 -- Returns flattened array of all nodes in the subtrees
-CREATE OR REPLACE MACRO ast_extract_subtrees(nodes, filtered_indices) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_extract_subtrees(nodes, filtered_indices) AS (
     flatten([
         [nodes[j] for j in range(fi.idx, fi.idx + fi.node.descendant_count + 1)]
         for fi in filtered_indices
@@ -26,7 +26,7 @@ CREATE OR REPLACE MACRO ast_extract_subtrees(nodes, filtered_indices) AS (
 -- ===================================
 
 -- Update AST struct with new nodes
-CREATE OR REPLACE MACRO ast_update(ast, new_nodes) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_update(ast, new_nodes) AS (
     struct_pack(
         source := ast.source,
         nodes := new_nodes
@@ -34,7 +34,7 @@ CREATE OR REPLACE MACRO ast_update(ast, new_nodes) AS (
 );
 
 -- Create AST struct from components
-CREATE OR REPLACE MACRO ast_pack(file_path, language, nodes) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_pack(file_path, language, nodes) AS (
     struct_pack(
         source := struct_pack(
             file_path := file_path,
@@ -49,22 +49,22 @@ CREATE OR REPLACE MACRO ast_pack(file_path, language, nodes) AS (
 -- ===================================
 
 -- Get nodes by exact type match
-CREATE OR REPLACE MACRO ast_filter_by_type(nodes, type) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_by_type(nodes, type) AS (
     [indexed for indexed in ast_with_indices(nodes) if indexed.node.type = type]
 );
 
 -- Get nodes by type list
-CREATE OR REPLACE MACRO ast_filter_by_types(nodes, types) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_by_types(nodes, types) AS (
     [indexed for indexed in ast_with_indices(nodes) if list_contains(types, indexed.node.type)]
 );
 
 -- Get nodes by name
-CREATE OR REPLACE MACRO ast_filter_by_name(nodes, name) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_by_name(nodes, name) AS (
     [indexed for indexed in ast_with_indices(nodes) if indexed.node.name = name]
 );
 
 -- Get nodes at specific depth
-CREATE OR REPLACE MACRO ast_filter_by_depth(nodes, depth) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_by_depth(nodes, depth) AS (
     [indexed for indexed in ast_with_indices(nodes) if indexed.node.depth = depth]
 );
 
@@ -73,7 +73,7 @@ CREATE OR REPLACE MACRO ast_filter_by_depth(nodes, depth) AS (
 -- ===================================
 
 -- Get complete subtrees for nodes of a specific type
-CREATE OR REPLACE MACRO ast_get_by_type(ast, type) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_by_type(ast, type) AS (
     ast_update(
         ast,
         ast_extract_subtrees(
@@ -84,7 +84,7 @@ CREATE OR REPLACE MACRO ast_get_by_type(ast, type) AS (
 );
 
 -- Get complete subtrees for nodes matching type list
-CREATE OR REPLACE MACRO ast_get_by_types(ast, types) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_by_types(ast, types) AS (
     ast_update(
         ast,
         ast_extract_subtrees(

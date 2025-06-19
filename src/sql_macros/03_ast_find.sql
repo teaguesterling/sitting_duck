@@ -6,7 +6,7 @@
 -- ===================================
 
 -- Find nodes by type(s) - returns detached nodes
-CREATE OR REPLACE MACRO ast_find_types(ast, types) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_types(ast, types) AS (
     ast_update(
         ast,
         [node for node in ast.nodes if list_contains(types, node.type)]
@@ -14,7 +14,7 @@ CREATE OR REPLACE MACRO ast_find_types(ast, types) AS (
 );
 
 -- Find nodes by single type
-CREATE OR REPLACE MACRO ast_find_type(ast, type) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_type(ast, type) AS (
     ast_update(
         ast,
         [node for node in ast.nodes if node.type = type]
@@ -22,7 +22,7 @@ CREATE OR REPLACE MACRO ast_find_type(ast, type) AS (
 );
 
 -- Find nodes at specific depth
-CREATE OR REPLACE MACRO ast_find_depth(ast, depth) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_depth(ast, depth) AS (
     ast_update(
         ast,
         [node for node in ast.nodes if node.depth = depth]
@@ -30,7 +30,7 @@ CREATE OR REPLACE MACRO ast_find_depth(ast, depth) AS (
 );
 
 -- Find nodes by name
-CREATE OR REPLACE MACRO ast_find_name(ast, name) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_name(ast, name) AS (
     ast_update(
         ast,
         [node for node in ast.nodes if node.name = name]
@@ -38,12 +38,12 @@ CREATE OR REPLACE MACRO ast_find_name(ast, name) AS (
 );
 
 -- Find all identifiers
-CREATE OR REPLACE MACRO ast_find_identifiers(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_identifiers(ast) AS (
     ast_find_type(ast, 'identifier')
 );
 
 -- Find all literals
-CREATE OR REPLACE MACRO ast_find_literals(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_literals(ast) AS (
     ast_update(
         ast,
         [node for node in ast.nodes 
@@ -56,7 +56,7 @@ CREATE OR REPLACE MACRO ast_find_literals(ast) AS (
 -- ===================================
 
 -- Find function/method calls
-CREATE OR REPLACE MACRO ast_find_calls(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_calls(ast) AS (
     ast_find_types(ast, [
         'call_expression',
         'function_call',
@@ -66,7 +66,7 @@ CREATE OR REPLACE MACRO ast_find_calls(ast) AS (
 );
 
 -- Find variable declarations
-CREATE OR REPLACE MACRO ast_find_declarations(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_declarations(ast) AS (
     ast_find_types(ast, [
         'variable_declaration',
         'variable_declarator',
@@ -76,7 +76,7 @@ CREATE OR REPLACE MACRO ast_find_declarations(ast) AS (
 );
 
 -- Find control flow statements
-CREATE OR REPLACE MACRO ast_find_control_flow(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_control_flow(ast) AS (
     ast_find_types(ast, [
         'if_statement',
         'while_statement',
@@ -92,7 +92,7 @@ CREATE OR REPLACE MACRO ast_find_control_flow(ast) AS (
 -- ===================================
 
 -- Find leaf nodes (no children)
-CREATE OR REPLACE MACRO ast_find_leaves(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_leaves(ast) AS (
     ast_update(
         ast,
         [node for node in ast.nodes if node.children_count = 0]
@@ -100,7 +100,7 @@ CREATE OR REPLACE MACRO ast_find_leaves(ast) AS (
 );
 
 -- Find parent nodes (have children)
-CREATE OR REPLACE MACRO ast_find_parents(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_parents(ast) AS (
     ast_update(
         ast,
         [node for node in ast.nodes if node.children_count > 0]

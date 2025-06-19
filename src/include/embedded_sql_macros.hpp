@@ -22,14 +22,14 @@ static const std::vector<std::pair<std::string, std::string>> EMBEDDED_SQL_MACRO
 
 -- Add indices to all nodes
 -- Returns array of (idx, node) pairs for use with list_filter
-CREATE OR REPLACE MACRO ast_with_indices(nodes) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_with_indices(nodes) AS (
     [struct_pack(idx := i, node := node) for node, i in nodes]
 );
 
 -- Extract complete subtrees for filtered indexed nodes
 -- Takes original nodes array and filtered indexed results
 -- Returns flattened array of all nodes in the subtrees
-CREATE OR REPLACE MACRO ast_extract_subtrees(nodes, filtered_indices) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_extract_subtrees(nodes, filtered_indices) AS (
     flatten([
         [nodes[j] for j in range(fi.idx, fi.idx + fi.node.descendant_count + 1)]
         for fi in filtered_indices
@@ -41,7 +41,7 @@ CREATE OR REPLACE MACRO ast_extract_subtrees(nodes, filtered_indices) AS (
 -- ===================================
 
 -- Update AST struct with new nodes
-CREATE OR REPLACE MACRO ast_update(ast, new_nodes) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_update(ast, new_nodes) AS (
     struct_pack(
         source := ast.source,
         nodes := new_nodes
@@ -49,7 +49,7 @@ CREATE OR REPLACE MACRO ast_update(ast, new_nodes) AS (
 );
 
 -- Create AST struct from components
-CREATE OR REPLACE MACRO ast_pack(file_path, language, nodes) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_pack(file_path, language, nodes) AS (
     struct_pack(
         source := struct_pack(
             file_path := file_path,
@@ -64,22 +64,22 @@ CREATE OR REPLACE MACRO ast_pack(file_path, language, nodes) AS (
 -- ===================================
 
 -- Get nodes by exact type match
-CREATE OR REPLACE MACRO ast_filter_by_type(nodes, type) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_by_type(nodes, type) AS (
     [indexed for indexed in ast_with_indices(nodes) if indexed.node.type = type]
 );
 
 -- Get nodes by type list
-CREATE OR REPLACE MACRO ast_filter_by_types(nodes, types) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_by_types(nodes, types) AS (
     [indexed for indexed in ast_with_indices(nodes) if list_contains(types, indexed.node.type)]
 );
 
 -- Get nodes by name
-CREATE OR REPLACE MACRO ast_filter_by_name(nodes, name) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_by_name(nodes, name) AS (
     [indexed for indexed in ast_with_indices(nodes) if indexed.node.name = name]
 );
 
 -- Get nodes at specific depth
-CREATE OR REPLACE MACRO ast_filter_by_depth(nodes, depth) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_by_depth(nodes, depth) AS (
     [indexed for indexed in ast_with_indices(nodes) if indexed.node.depth = depth]
 );
 
@@ -88,7 +88,7 @@ CREATE OR REPLACE MACRO ast_filter_by_depth(nodes, depth) AS (
 -- ===================================
 
 -- Get complete subtrees for nodes of a specific type
-CREATE OR REPLACE MACRO ast_get_by_type(ast, type) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_by_type(ast, type) AS (
     ast_update(
         ast,
         ast_extract_subtrees(
@@ -99,7 +99,7 @@ CREATE OR REPLACE MACRO ast_get_by_type(ast, type) AS (
 );
 
 -- Get complete subtrees for nodes matching type list
-CREATE OR REPLACE MACRO ast_get_by_types(ast, types) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_by_types(ast, types) AS (
     ast_update(
         ast,
         ast_extract_subtrees(
@@ -118,17 +118,17 @@ CREATE OR REPLACE MACRO ast_get_by_types(ast, types) AS (
 -- ===================================
 
 -- Get nodes by type(s) - reuse primitives
-CREATE OR REPLACE MACRO ast_get_types(ast, types) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_types(ast, types) AS (
     ast_get_by_types(ast, types)
 );
 
 -- Get nodes by single type - reuse primitives  
-CREATE OR REPLACE MACRO ast_get_type(ast, type) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_type(ast, type) AS (
     ast_get_by_type(ast, type)
 );
 
 -- Get nodes at specific depth
-CREATE OR REPLACE MACRO ast_get_depth(ast, depth) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_depth(ast, depth) AS (
     ast_update(
         ast,
         ast_extract_subtrees(
@@ -139,7 +139,7 @@ CREATE OR REPLACE MACRO ast_get_depth(ast, depth) AS (
 );
 
 -- Get nodes with specific name
-CREATE OR REPLACE MACRO ast_get_name(ast, name) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_name(ast, name) AS (
     ast_update(
         ast,
         ast_extract_subtrees(
@@ -170,7 +170,7 @@ CREATE OR REPLACE MACRO ast_get_name(ast, name) AS (
 -- ===================================
 
 -- Get all functions (works across languages)
-CREATE OR REPLACE MACRO ast_get_functions(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_functions(ast) AS (
     ast_get_types(ast, [
         'function_declaration', 
         'function_definition', 
@@ -181,7 +181,7 @@ CREATE OR REPLACE MACRO ast_get_functions(ast) AS (
 );
 
 -- Get all classes (works across languages)
-CREATE OR REPLACE MACRO ast_get_classes(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_classes(ast) AS (
     ast_get_types(ast, [
         'class_declaration',
         'class_definition',
@@ -190,7 +190,7 @@ CREATE OR REPLACE MACRO ast_get_classes(ast) AS (
 );
 
 -- Get all imports/includes (works across languages)
-CREATE OR REPLACE MACRO ast_get_imports(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_imports(ast) AS (
     ast_get_types(ast, [
         'import_statement',
         'import_from_statement',
@@ -200,7 +200,7 @@ CREATE OR REPLACE MACRO ast_get_imports(ast) AS (
 );
 
 -- Get top-level nodes (direct children of root)
-CREATE OR REPLACE MACRO ast_get_top_level(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_top_level(ast) AS (
     ast_get_depth(ast, 1)
 );
 
@@ -240,7 +240,7 @@ CREATE OR REPLACE MACRO ast_get_top_level(ast) AS (
 -- ===================================
 
 -- Find nodes by type(s) - returns detached nodes
-CREATE OR REPLACE MACRO ast_find_types(ast, types) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_types(ast, types) AS (
     ast_update(
         ast,
         [node for node in ast.nodes if list_contains(types, node.type)]
@@ -248,7 +248,7 @@ CREATE OR REPLACE MACRO ast_find_types(ast, types) AS (
 );
 
 -- Find nodes by single type
-CREATE OR REPLACE MACRO ast_find_type(ast, type) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_type(ast, type) AS (
     ast_update(
         ast,
         [node for node in ast.nodes if node.type = type]
@@ -256,7 +256,7 @@ CREATE OR REPLACE MACRO ast_find_type(ast, type) AS (
 );
 
 -- Find nodes at specific depth
-CREATE OR REPLACE MACRO ast_find_depth(ast, depth) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_depth(ast, depth) AS (
     ast_update(
         ast,
         [node for node in ast.nodes if node.depth = depth]
@@ -264,7 +264,7 @@ CREATE OR REPLACE MACRO ast_find_depth(ast, depth) AS (
 );
 
 -- Find nodes by name
-CREATE OR REPLACE MACRO ast_find_name(ast, name) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_name(ast, name) AS (
     ast_update(
         ast,
         [node for node in ast.nodes if node.name = name]
@@ -272,12 +272,12 @@ CREATE OR REPLACE MACRO ast_find_name(ast, name) AS (
 );
 
 -- Find all identifiers
-CREATE OR REPLACE MACRO ast_find_identifiers(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_identifiers(ast) AS (
     ast_find_type(ast, 'identifier')
 );
 
 -- Find all literals
-CREATE OR REPLACE MACRO ast_find_literals(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_literals(ast) AS (
     ast_update(
         ast,
         [node for node in ast.nodes 
@@ -290,7 +290,7 @@ CREATE OR REPLACE MACRO ast_find_literals(ast) AS (
 -- ===================================
 
 -- Find function/method calls
-CREATE OR REPLACE MACRO ast_find_calls(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_calls(ast) AS (
     ast_find_types(ast, [
         'call_expression',
         'function_call',
@@ -300,7 +300,7 @@ CREATE OR REPLACE MACRO ast_find_calls(ast) AS (
 );
 
 -- Find variable declarations
-CREATE OR REPLACE MACRO ast_find_declarations(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_declarations(ast) AS (
     ast_find_types(ast, [
         'variable_declaration',
         'variable_declarator',
@@ -310,7 +310,7 @@ CREATE OR REPLACE MACRO ast_find_declarations(ast) AS (
 );
 
 -- Find control flow statements
-CREATE OR REPLACE MACRO ast_find_control_flow(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_control_flow(ast) AS (
     ast_find_types(ast, [
         'if_statement',
         'while_statement',
@@ -326,7 +326,7 @@ CREATE OR REPLACE MACRO ast_find_control_flow(ast) AS (
 -- ===================================
 
 -- Find leaf nodes (no children)
-CREATE OR REPLACE MACRO ast_find_leaves(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_leaves(ast) AS (
     ast_update(
         ast,
         [node for node in ast.nodes if node.children_count = 0]
@@ -334,7 +334,7 @@ CREATE OR REPLACE MACRO ast_find_leaves(ast) AS (
 );
 
 -- Find parent nodes (have children)
-CREATE OR REPLACE MACRO ast_find_parents(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_parents(ast) AS (
     ast_update(
         ast,
         [node for node in ast.nodes if node.children_count > 0]
@@ -372,7 +372,7 @@ CREATE OR REPLACE MACRO ast_find_parents(ast) AS (
 -- ===================================
 
 -- Extract all names as array
-CREATE OR REPLACE MACRO ast_to_names(ast, type := NULL) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_names(ast, type := NULL) AS (
     [
         node.name
         for node in ast.nodes
@@ -383,12 +383,12 @@ CREATE OR REPLACE MACRO ast_to_names(ast, type := NULL) AS (
 );
 
 -- Extract all types as array
-CREATE OR REPLACE MACRO ast_to_types(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_types(ast) AS (
     list_distinct([node.type for node in ast.nodes])
 );
 
 -- Extract source text snippets
-CREATE OR REPLACE MACRO ast_to_source(ast, type := NULL) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_source(ast, type := NULL) AS (
     [
         node.source_text
         for node in ast.nodes
@@ -399,7 +399,7 @@ CREATE OR REPLACE MACRO ast_to_source(ast, type := NULL) AS (
 );
 
 -- Convert to location table
-CREATE OR REPLACE MACRO ast_to_locations(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_locations(ast) AS (
     [
         struct_pack(
             node_id := node.node_id,
@@ -420,7 +420,7 @@ CREATE OR REPLACE MACRO ast_to_locations(ast) AS (
 -- ===================================
 
 -- Type frequency table
-CREATE OR REPLACE MACRO ast_to_type_stats(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_type_stats(ast) AS (
     WITH type_counts AS (
         SELECT 
             node.type,
@@ -437,7 +437,7 @@ CREATE OR REPLACE MACRO ast_to_type_stats(ast) AS (
 );
 
 -- Depth distribution
-CREATE OR REPLACE MACRO ast_to_depth_stats(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_depth_stats(ast) AS (
     WITH depth_counts AS (
         SELECT 
             node.depth,
@@ -454,7 +454,7 @@ CREATE OR REPLACE MACRO ast_to_depth_stats(ast) AS (
 );
 
 -- Complexity metrics
-CREATE OR REPLACE MACRO ast_to_complexity_metrics(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_complexity_metrics(ast) AS (
     [
         struct_pack(
             name := node.name,
@@ -475,7 +475,7 @@ CREATE OR REPLACE MACRO ast_to_complexity_metrics(ast) AS (
 -- ===================================
 
 -- Function signatures
-CREATE OR REPLACE MACRO ast_to_signatures(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_signatures(ast) AS (
     [
         struct_pack(
             name := node.name,
@@ -490,7 +490,7 @@ CREATE OR REPLACE MACRO ast_to_signatures(ast) AS (
 );
 
 -- Import/dependency list
-CREATE OR REPLACE MACRO ast_to_dependencies(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_dependencies(ast) AS (
     [
         struct_pack(
             line := node.start_line,
@@ -503,7 +503,7 @@ CREATE OR REPLACE MACRO ast_to_dependencies(ast) AS (
 );
 
 -- Call graph edges (caller -> callee relationships)
-CREATE OR REPLACE MACRO ast_to_call_edges(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_call_edges(ast) AS (
     WITH function_scopes AS (
         SELECT 
             node.node_id,
@@ -535,7 +535,7 @@ CREATE OR REPLACE MACRO ast_to_call_edges(ast) AS (
 -- ===================================
 
 -- Overall AST summary
-CREATE OR REPLACE MACRO ast_to_summary(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_to_summary(ast) AS (
     SELECT 
         ast.file_path,
         ast.language,
@@ -556,27 +556,27 @@ CREATE OR REPLACE MACRO ast_to_summary(ast) AS (
 -- ===================================
 
 -- Get nodes by KIND (semantic category)
-CREATE OR REPLACE MACRO ast_filter_by_kind(nodes, kind_value) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_by_kind(nodes, kind_value) AS (
     [indexed for indexed in ast_with_indices(nodes) if indexed.node.kind = kind_value]
 );
 
 -- Get nodes by multiple KINDs
-CREATE OR REPLACE MACRO ast_filter_by_kinds(nodes, kind_values) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_by_kinds(nodes, kind_values) AS (
     [indexed for indexed in ast_with_indices(nodes) if list_contains(kind_values, indexed.node.kind)]
 );
 
 -- Get all function-like nodes across languages (using KIND)
-CREATE OR REPLACE MACRO ast_filter_functions_by_kind(nodes) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_functions_by_kind(nodes) AS (
     ast_filter_by_kinds(nodes, [4, 5])  -- FUNCTION_DEF=4, METHOD_DEF=5
 );
 
 -- Get all literal nodes (using KIND)
-CREATE OR REPLACE MACRO ast_filter_literals_by_kind(nodes) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_literals_by_kind(nodes) AS (
     ast_filter_by_kind(nodes, 0)  -- LITERAL=0
 );
 
 -- Get all name/identifier nodes (using KIND)
-CREATE OR REPLACE MACRO ast_filter_names_by_kind(nodes) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_names_by_kind(nodes) AS (
     ast_filter_by_kind(nodes, 1)  -- NAME=1
 );
 
@@ -585,17 +585,17 @@ CREATE OR REPLACE MACRO ast_filter_names_by_kind(nodes) AS (
 -- ===================================
 
 -- Get all public nodes (using universal flags)
-CREATE OR REPLACE MACRO ast_filter_public(nodes) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_public(nodes) AS (
     [indexed for indexed in ast_with_indices(nodes) if (indexed.node.universal_flags & 8) != 0]  -- is_public flag
 );
 
 -- Get all builtin nodes
-CREATE OR REPLACE MACRO ast_filter_builtin(nodes) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_builtin(nodes) AS (
     [indexed for indexed in ast_with_indices(nodes) if (indexed.node.universal_flags & 4) != 0]  -- is_builtin flag
 );
 
 -- Get all keyword nodes  
-CREATE OR REPLACE MACRO ast_filter_keywords(nodes) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_filter_keywords(nodes) AS (
     [indexed for indexed in ast_with_indices(nodes) if (indexed.node.universal_flags & 1) != 0]  -- is_keyword flag
 );
 
@@ -604,7 +604,7 @@ CREATE OR REPLACE MACRO ast_filter_keywords(nodes) AS (
 -- ===================================
 
 -- Group nodes by semantic similarity (same semantic_id)
-CREATE OR REPLACE MACRO ast_group_by_semantic_id(nodes) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_group_by_semantic_id(nodes) AS (
     [
         struct_pack(
             semantic_id := sid,
@@ -615,7 +615,7 @@ CREATE OR REPLACE MACRO ast_group_by_semantic_id(nodes) AS (
 );
 
 -- Find nodes with matching semantic pattern
-CREATE OR REPLACE MACRO ast_find_semantic_pattern(nodes, pattern_id) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_semantic_pattern(nodes, pattern_id) AS (
     [indexed for indexed in ast_with_indices(nodes) if indexed.node.semantic_id = pattern_id]
 );
 
@@ -624,7 +624,7 @@ CREATE OR REPLACE MACRO ast_find_semantic_pattern(nodes, pattern_id) AS (
 -- ===================================
 
 -- Get complete subtrees for functions (KIND-based)
-CREATE OR REPLACE MACRO ast_get_functions_by_kind(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_functions_by_kind(ast) AS (
     ast_update(
         ast,
         ast_extract_subtrees(
@@ -635,7 +635,7 @@ CREATE OR REPLACE MACRO ast_get_functions_by_kind(ast) AS (
 );
 
 -- Get public interface nodes only
-CREATE OR REPLACE MACRO ast_get_public_interface(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_public_interface(ast) AS (
     ast_update(
         ast,
         ast_extract_subtrees(
@@ -646,7 +646,7 @@ CREATE OR REPLACE MACRO ast_get_public_interface(ast) AS (
 );
 
 -- Get all cross-language literals
-CREATE OR REPLACE MACRO ast_get_literals_by_kind(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_get_literals_by_kind(ast) AS (
     ast_update(
         ast,
         ast_extract_subtrees(
@@ -661,7 +661,7 @@ CREATE OR REPLACE MACRO ast_get_literals_by_kind(ast) AS (
 -- ===================================
 
 -- Cross-language function finding (using semantic classification)
-CREATE OR REPLACE MACRO ast_find_semantic_functions(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_semantic_functions(ast) AS (
     ast_update(
         ast,
         [node for node in ast.nodes 
@@ -671,7 +671,7 @@ CREATE OR REPLACE MACRO ast_find_semantic_functions(ast) AS (
 );
 
 -- Find all control flow constructs
-CREATE OR REPLACE MACRO ast_find_control_flow_by_kind(ast) AS (
+CREATE OR REPLACE TEMPORARY MACRO ast_find_control_flow_by_kind(ast) AS (
     ast_update(
         ast,
         [node for node in ast.nodes 
