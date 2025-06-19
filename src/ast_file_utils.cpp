@@ -24,7 +24,9 @@ static const std::unordered_map<string, string> EXTENSION_TO_LANGUAGE = {
     // PHP enabled - scanner dependency resolved
     {"php", "php"}, {"php3", "php"}, {"php4", "php"}, {"php5", "php"}, {"phtml", "php"},
     {"html", "html"}, {"htm", "html"},
-    {"css", "css"}
+    {"css", "css"},
+    {"json", "json"},
+    {"yaml", "yaml"}, {"yml", "yaml"}
 };
 
 // Static mapping of languages to their supported extensions
@@ -42,7 +44,9 @@ static const std::unordered_map<string, vector<string>> LANGUAGE_TO_EXTENSIONS =
     {"java", {"java"}},
     {"php", {"php", "php3", "php4", "php5", "phtml"}}, // Enabled
     {"html", {"html", "htm"}},
-    {"css", {"css"}}
+    {"css", {"css"}},
+    {"json", {"json"}},
+    {"yaml", {"yaml", "yml"}}
 };
 
 vector<string> ASTFileUtils::GetFiles(ClientContext &context, const Value &path_value, 

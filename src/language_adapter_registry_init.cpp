@@ -21,6 +21,9 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
     RegisterLanguageFactory("c", []() { return make_uniq<CAdapter>(); });
     // Rust enabled - complete implementation with semantic types
     RegisterLanguageFactory("rust", []() { return make_uniq<RustAdapter>(); });
+    // JSON and YAML enabled - configuration and data format support
+    RegisterLanguageFactory("json", []() { return make_uniq<JSONAdapter>(); });
+    RegisterLanguageFactory("yaml", []() { return make_uniq<YAMLAdapter>(); });
 }
 
 } // namespace duckdb
