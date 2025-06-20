@@ -63,7 +63,7 @@ case "$GRAMMAR_NAME" in
     "tree-sitter-rust")
         apply_patch "fix-rust-grammar-regex"
         ;;
-    "tree-sitter-php/php")
+    "php")
         apply_patch "fix-php-scanner-assert"
         ;;
     *)

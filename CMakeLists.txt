@@ -42,7 +42,13 @@ if(CARGO_EXECUTABLE)
             endif()
             
             # Build dependency list (CLI + grammar.js + any previously generated parsers)
+            # Ensure tree-sitter CLI is built before any parser generation
             set(GENERATION_DEPS ${TREE_SITTER_CLI} ${GRAMMAR_JS})
+            
+            # Add explicit dependency on the CLI target to ensure it's built first
+            if(TARGET tree-sitter-cli)
+                list(APPEND GENERATION_DEPS tree-sitter-cli)
+            endif()
             
             # Add dependency on C grammar for C++ (since C++ requires C)
             if("${GRAMMAR_NAME}" STREQUAL "tree-sitter-cpp")
@@ -66,18 +72,49 @@ if(CARGO_EXECUTABLE)
             set(PATCH_STATUS_DIR "${CMAKE_CURRENT_BINARY_DIR}/patch_status")
             set(PATCH_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/scripts/apply_grammar_patches.sh")
             
-            # Apply patches if script exists
+            # Apply patches before generation using dedicated script
             if(EXISTS ${PATCH_SCRIPT})
+                # Add patch dependency tracking - force regeneration if patches exist
+                # Debug: show what grammar name we got
+                message(STATUS "Processing grammar: ${GRAMMAR_NAME}")
+                
+                file(GLOB GRAMMAR_PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*${GRAMMAR_NAME}*.patch")
+                message(STATUS "Initial pattern '*${GRAMMAR_NAME}*.patch' found: ${GRAMMAR_PATCHES}")
+                
+                if(NOT GRAMMAR_PATCHES)
+                    # Try alternate matching patterns
+                    if("${GRAMMAR_NAME}" STREQUAL "typescript")
+                        file(GLOB GRAMMAR_PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*typescript*.patch")
+                        message(STATUS "TypeScript pattern found: ${GRAMMAR_PATCHES}")
+                    elseif("${GRAMMAR_NAME}" STREQUAL "tree-sitter-cpp") 
+                        file(GLOB GRAMMAR_PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*cpp*.patch")
+                        message(STATUS "C++ pattern found: ${GRAMMAR_PATCHES}")
+                    elseif("${GRAMMAR_NAME}" STREQUAL "tree-sitter-rust")
+                        file(GLOB GRAMMAR_PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*rust*.patch")
+                        message(STATUS "Rust pattern found: ${GRAMMAR_PATCHES}")
+                    elseif("${GRAMMAR_NAME}" STREQUAL "php")
+                        file(GLOB GRAMMAR_PATCHES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*php*.patch")
+                        message(STATUS "PHP pattern found: ${GRAMMAR_PATCHES}")
+                    endif()
+                endif()
+                
+                # Add patches to dependencies to force regeneration when patches change
+                if(GRAMMAR_PATCHES)
+                    list(APPEND GENERATION_DEPS ${GRAMMAR_PATCHES})
+                    message(STATUS "Found patches for ${GRAMMAR_NAME}: ${GRAMMAR_PATCHES}")
+                endif()
+                
                 set(PATCH_COMMANDS 
                     COMMAND ${PATCH_SCRIPT} "${GRAMMAR_NAME}" "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/patches" "${PATCH_STATUS_DIR}")
             else()
                 set(PATCH_COMMANDS "")
             endif()
             
-            # Generate parser with patches
+            # Generate parser with patches applied at build time
             add_custom_command(
                 OUTPUT ${GENERATED_FILES}
                 ${PATCH_COMMANDS}
+                COMMAND test -f ${TREE_SITTER_CLI} || (echo "ERROR: tree-sitter CLI not found at ${TREE_SITTER_CLI}" && exit 1)
                 COMMAND ${TREE_SITTER_CLI} generate
                 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/grammars/${GRAMMAR_DIR}"
                 DEPENDS ${GENERATION_DEPS}
