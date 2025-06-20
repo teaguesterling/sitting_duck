@@ -195,8 +195,6 @@ set(EXTENSION_SOURCES
     src/language_adapters/css_adapter.cpp
     src/language_adapters/c_adapter.cpp
     src/language_adapters/json_adapter.cpp
-    # YAML grammar has complex self-modifying structure incompatible with tree-sitter CLI
-    # src/language_adapters/yaml_adapter.cpp
     src/language_adapters/bash_adapter.cpp
     src/language_adapters/swift_adapter.cpp
     src/read_ast_streaming_function.cpp
@@ -237,9 +235,6 @@ set(EXTENSION_SOURCES
     grammars/tree-sitter-rust/src/parser.c
     grammars/tree-sitter-rust/src/scanner.c
     grammars/tree-sitter-json/src/parser.c
-    # YAML grammar has complex self-modifying structure incompatible with tree-sitter CLI
-    # grammars/tree-sitter-yaml/src/parser.c
-    # grammars/tree-sitter-yaml/src/scanner.c
     grammars/tree-sitter-bash/src/parser.c
     grammars/tree-sitter-bash/src/scanner.c
     grammars/tree-sitter-swift/src/parser.c

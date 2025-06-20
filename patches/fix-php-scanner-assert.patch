@@ -1,7 +1,9 @@
---- a/grammars/tree-sitter-php/php/src/scanner.c
-+++ b/grammars/tree-sitter-php/php/src/scanner.c
-@@ -1,3 +1,4 @@
-+#include <assert.h>
- #include "../../common/scanner.h"
+--- a/grammars/tree-sitter-php/common/scanner.h
++++ b/grammars/tree-sitter-php/common/scanner.h
+@@ -1,5 +1,6 @@
+ #include "tree_sitter/array.h"
+ #include "tree_sitter/parser.h"
  
- void *tree_sitter_php_external_scanner_create() {
++#include <assert.h>
+ #include <string.h>
+ #include <wchar.h>
