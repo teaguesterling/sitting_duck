@@ -1,0 +1,58 @@
+{
+  "name": "John Doe",
+  "age": 30,
+  "isActive": true,
+  "balance": 1234.56,
+  "address": {
+    "street": "123 Main St",
+    "city": "Anytown",
+    "zipcode": "12345",
+    "coordinates": {
+      "lat": 40.7128,
+      "lng": -74.0060
+    }
+  },
+  "hobbies": [
+    "reading",
+    "swimming",
+    "coding"
+  ],
+  "friends": [
+    {
+      "name": "Jane Smith",
+      "age": 28,
+      "contact": {
+        "email": "jane@example.com",
+        "phone": null
+      }
+    },
+    {
+      "name": "Bob Johnson",
+      "age": 32,
+      "contact": {
+        "email": null,
+        "phone": "555-0123"
+      }
+    }
+  ],
+  "metadata": {
+    "created": "2023-01-15T10:30:00Z",
+    "lastUpdated": "2024-06-20T14:45:30Z",
+    "version": 2,
+    "tags": ["user", "active", "premium"],
+    "settings": {
+      "notifications": {
+        "email": true,
+        "sms": false,
+        "push": true
+      },
+      "privacy": {
+        "profileVisible": true,
+        "showAge": false
+      }
+    }
+  },
+  "preferences": [],
+  "notes": null,
+  "score": 0
+}

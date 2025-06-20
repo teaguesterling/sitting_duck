@@ -1,0 +1,130 @@
+# name: test/sql/languages/bash_language_support.test
+# description: Test Bash language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: Bash language is supported
+# ==================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'bash';
+----
+bash
+
+# Test 2: Bash file extension auto-detection
+# ==========================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/bash/simple.sh');
+----
+true
+
+# Test 3: Explicit Bash language specification
+# =============================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/bash/simple.sh', 'bash') WHERE name IS NOT NULL;
+----
+735
+
+# Test 4: Bash function definitions
+# =================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/bash/simple.sh', 'bash')
+WHERE type = 'function_definition';
+----
+5
+
+# Test 5: Bash variable assignments
+# =================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/bash/simple.sh', 'bash')
+WHERE type = 'variable_assignment';
+----
+28
+
+# Test 6: Bash command substitutions
+# ==================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/bash/simple.sh', 'bash')
+WHERE type = 'command_substitution';
+----
+10
+
+# Test 7: Bash control structures
+# ===============================
+
+query III
+SELECT type, COUNT(*) as count, semantic_type
+FROM read_ast('test/data/bash/simple.sh', 'bash')
+WHERE type IN ('if_statement', 'for_statement', 'while_statement', 'case_statement')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+case_statement	2	144
+for_statement	3	148
+if_statement	13	144
+while_statement	2	148
+
+# Test 8: Bash semantic types for key constructs
+# ==============================================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM read_ast('test/data/bash/simple.sh', 'bash')
+WHERE type IN ('function_definition', 'variable_assignment', 'command_substitution')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+command_substitution	208	10
+function_definition	240	5
+variable_assignment	244	28
+
+# Test 9: Bash tree structure validation
+# ======================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/bash/simple.sh', 'bash');
+----
+17	1472
+
+# Test 10: Bash word identifiers
+# ==============================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/bash/simple.sh', 'bash')
+WHERE type = 'word' AND name IS NOT NULL;
+----
+153
+
+# Test 11: Bash string literals
+# =============================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/bash/simple.sh', 'bash')
+WHERE type IN ('string', 'raw_string', 'ansi_c_string');
+----
+90
+
+# Test 12: Bash pipeline operations
+# =================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/bash/simple.sh', 'bash')
+WHERE type = 'pipeline';
+----
+5
+
+# Test 13: Bash array operations
+# ==============================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/bash/simple.sh', 'bash')
+WHERE type IN ('array', 'subscript');
+----
+14

@@ -1,0 +1,130 @@
+# name: test/sql/languages/json_language_support.test
+# description: Test JSON language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: JSON language is supported
+# ==================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'json';
+----
+json
+
+# Test 2: JSON file extension auto-detection
+# ==========================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/json/simple.json');
+----
+true
+
+# Test 3: Explicit JSON language specification
+# =============================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/json/simple.json', 'json') WHERE name IS NOT NULL;
+----
+339
+
+# Test 4: JSON object detection
+# =============================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/json/simple.json', 'json')
+WHERE type = 'object';
+----
+11
+
+# Test 5: JSON array detection
+# ============================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/json/simple.json', 'json')
+WHERE type = 'array';
+----
+4
+
+# Test 6: JSON key-value pairs
+# ============================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/json/simple.json', 'json')
+WHERE type = 'pair';
+----
+39
+
+# Test 7: JSON string literals
+# ============================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/json/simple.json', 'json')
+WHERE type = 'string';
+----
+55
+
+# Test 8: JSON numeric values
+# ===========================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/json/simple.json', 'json')
+WHERE type = 'number';
+----
+8
+
+# Test 9: JSON boolean and null values
+# ====================================
+
+query III
+SELECT type, COUNT(*) as count, semantic_type
+FROM read_ast('test/data/json/simple.json', 'json')
+WHERE type IN ('true', 'false', 'null')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+false	2	72
+null	3	72
+true	4	72
+
+# Test 10: JSON semantic types
+# ============================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM read_ast('test/data/json/simple.json', 'json')
+WHERE type IN ('object', 'array', 'pair', 'string')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+array	76	4
+object	76	11
+pair	96	39
+string	68	55
+
+# Test 11: JSON tree structure validation
+# =======================================
+
+query II
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+FROM read_ast('test/data/json/simple.json', 'json');
+----
+10	394
+
+# Test 12: JSON nested structure depth
+# ====================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/json/simple.json', 'json')
+WHERE depth >= 5;
+----
+266
+
+# Test 13: JSON identifier-like strings
+# =====================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/json/simple.json', 'json')
+WHERE type = 'string' AND name IS NOT NULL;
+----
+55
