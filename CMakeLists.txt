@@ -114,7 +114,6 @@ if(CARGO_EXECUTABLE)
             add_custom_command(
                 OUTPUT ${GENERATED_FILES}
                 ${PATCH_COMMANDS}
-                COMMAND test -f ${TREE_SITTER_CLI} || (echo "ERROR: tree-sitter CLI not found at ${TREE_SITTER_CLI}" && exit 1)
                 COMMAND ${TREE_SITTER_CLI} generate
                 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/grammars/${GRAMMAR_DIR}"
                 DEPENDS ${GENERATION_DEPS}
