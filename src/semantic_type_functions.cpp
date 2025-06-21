@@ -14,6 +14,21 @@ static void SemanticTypeToStringFunction(DataChunk &args, ExpressionState &state
     UnaryExecutor::Execute<uint8_t, string_t>(
         semantic_type_vector, result, count,
         [&](uint8_t semantic_type) {
+            // For backward compatibility, mask out refinement bits but only for refined types
+            // Check if this could be a valid refined type (base type exists + has refinements)
+            uint8_t refinement_bits = semantic_type & 0x03;
+            uint8_t base_semantic_type = semantic_type & 0xFC;
+            
+            if (refinement_bits != 0) {
+                // Has refinement bits - check if base type is valid
+                string base_type_name = SemanticTypes::GetSemanticTypeName(base_semantic_type);
+                if (base_type_name != "UNKNOWN_SEMANTIC_TYPE") {
+                    // Valid base type with refinements - return base type name for compatibility
+                    return StringVector::AddString(result, base_type_name);
+                }
+            }
+            
+            // No refinements or invalid base type - return as-is (might be UNKNOWN)
             string type_name = SemanticTypes::GetSemanticTypeName(semantic_type);
             return StringVector::AddString(result, type_name);
         }
@@ -67,28 +82,29 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
         [&](uint8_t semantic_type, string_t pattern_str) {
             string pattern = pattern_str.GetString();
             uint8_t type = semantic_type;
+            uint8_t base_type = semantic_type & 0xFC; // Mask refinement bits for base comparisons
             
             // Support common patterns
             if (pattern == "FUNCTION") {
-                return type == SemanticTypes::DEFINITION_FUNCTION;
+                return base_type == SemanticTypes::DEFINITION_FUNCTION;
             } else if (pattern == "CLASS") {
-                return type == SemanticTypes::DEFINITION_CLASS;
+                return base_type == SemanticTypes::DEFINITION_CLASS;
             } else if (pattern == "VARIABLE") {
-                return type == SemanticTypes::DEFINITION_VARIABLE;
+                return base_type == SemanticTypes::DEFINITION_VARIABLE;
             } else if (pattern == "IDENTIFIER") {
-                return type == SemanticTypes::NAME_IDENTIFIER;
+                return base_type == SemanticTypes::NAME_IDENTIFIER;
             } else if (pattern == "CALL") {
-                return type == SemanticTypes::COMPUTATION_CALL;
+                return base_type == SemanticTypes::COMPUTATION_CALL;
             } else if (pattern == "LITERAL") {
-                return (type & 0xF0) == SemanticTypes::LITERAL;
+                return (base_type & 0xF0) == SemanticTypes::LITERAL;
             } else if (pattern == "DEFINITION") {
-                return (type & 0xF0) == SemanticTypes::DEFINITION;
+                return (base_type & 0xF0) == SemanticTypes::DEFINITION;
             } else if (pattern == "COMPUTATION") {
-                return (type & 0xC0) == SemanticTypes::COMPUTATION;
+                return (base_type & 0xC0) == SemanticTypes::COMPUTATION;
             }
             
-            // Default: exact string match with semantic type name
-            return SemanticTypes::GetSemanticTypeName(type) == pattern;
+            // Default: exact string match with base semantic type name
+            return SemanticTypes::GetSemanticTypeName(base_type) == pattern;
         }
     );
 }

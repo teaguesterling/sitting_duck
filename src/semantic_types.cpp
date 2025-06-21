@@ -66,7 +66,7 @@ string GetSemanticTypeName(uint8_t semantic_type) {
         case COMPUTATION_CALL: return "COMPUTATION_CALL";
         case COMPUTATION_ACCESS: return "COMPUTATION_ACCESS";
         case COMPUTATION_EXPRESSION: return "COMPUTATION_EXPRESSION";
-        case COMPUTATION_LAMBDA: return "COMPUTATION_LAMBDA";
+        case COMPUTATION_CLOSURE: return "COMPUTATION_CLOSURE";
         
         // TRANSFORM types
         case TRANSFORM_QUERY: return "TRANSFORM_QUERY";
@@ -83,7 +83,7 @@ string GetSemanticTypeName(uint8_t semantic_type) {
         // EXECUTION types
         case EXECUTION_STATEMENT: return "EXECUTION_STATEMENT";
         case EXECUTION_DECLARATION: return "EXECUTION_DECLARATION";
-        case EXECUTION_INVOCATION: return "EXECUTION_INVOCATION";
+        case EXECUTION_STATEMENT_CALL: return "EXECUTION_STATEMENT_CALL";
         case EXECUTION_MUTATION: return "EXECUTION_MUTATION";
         
         // FLOW_CONTROL types
@@ -210,7 +210,7 @@ uint8_t GetSemanticTypeCode(const string& name) {
         {"COMPUTATION_CALL", COMPUTATION_CALL},
         {"COMPUTATION_ACCESS", COMPUTATION_ACCESS},
         {"COMPUTATION_EXPRESSION", COMPUTATION_EXPRESSION},
-        {"COMPUTATION_LAMBDA", COMPUTATION_LAMBDA},
+        {"COMPUTATION_CLOSURE", COMPUTATION_CLOSURE},
         
         // TRANSFORM types
         {"TRANSFORM_QUERY", TRANSFORM_QUERY},
@@ -227,7 +227,7 @@ uint8_t GetSemanticTypeCode(const string& name) {
         // EXECUTION types
         {"EXECUTION_STATEMENT", EXECUTION_STATEMENT},
         {"EXECUTION_DECLARATION", EXECUTION_DECLARATION},
-        {"EXECUTION_INVOCATION", EXECUTION_INVOCATION},
+        {"EXECUTION_STATEMENT_CALL", EXECUTION_STATEMENT_CALL},
         {"EXECUTION_MUTATION", EXECUTION_MUTATION},
         
         // FLOW_CONTROL types
@@ -312,7 +312,8 @@ bool IsDefinition(uint8_t semantic_type) {
 }
 
 bool IsCall(uint8_t semantic_type) {
-    return semantic_type == COMPUTATION_CALL || semantic_type == EXECUTION_INVOCATION;
+    uint8_t base_type = semantic_type & 0xFC; // Mask refinement bits
+    return base_type == COMPUTATION_CALL || base_type == EXECUTION_STATEMENT_CALL;
 }
 
 bool IsControlFlow(uint8_t semantic_type) {
@@ -320,7 +321,8 @@ bool IsControlFlow(uint8_t semantic_type) {
 }
 
 bool IsIdentifier(uint8_t semantic_type) {
-    return semantic_type == NAME_IDENTIFIER || semantic_type == NAME_QUALIFIED || semantic_type == NAME_SCOPED;
+    uint8_t base_type = semantic_type & 0xFC; // Mask refinement bits
+    return base_type == NAME_IDENTIFIER || base_type == NAME_QUALIFIED || base_type == NAME_SCOPED;
 }
 
 bool IsLiteral(uint8_t semantic_type) {

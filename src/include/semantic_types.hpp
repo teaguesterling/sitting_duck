@@ -102,7 +102,7 @@ constexpr uint8_t OPERATOR_ASSIGNMENT = OPERATOR | 0x0C; // 1100 1100 - =, +=, -
 constexpr uint8_t COMPUTATION_CALL = COMPUTATION_NODE | 0x00;      // 1101 0000 - function calls
 constexpr uint8_t COMPUTATION_ACCESS = COMPUTATION_NODE | 0x04;    // 1101 0100 - member access, indexing
 constexpr uint8_t COMPUTATION_EXPRESSION = COMPUTATION_NODE | 0x08; // 1101 1000 - complex expressions
-constexpr uint8_t COMPUTATION_LAMBDA = COMPUTATION_NODE | 0x0C;    // 1101 1100 - lambdas, anonymous functions
+constexpr uint8_t COMPUTATION_CLOSURE = COMPUTATION_NODE | 0x0C;    // 1101 1100 - closures, captured environments
 
 // ===== TRANSFORM super types (1110 ttxx) =====
 constexpr uint8_t TRANSFORM_QUERY = TRANSFORM | 0x00;    // 1110 0000 - SQL queries, LINQ
@@ -119,7 +119,7 @@ constexpr uint8_t DEFINITION_MODULE = DEFINITION | 0x0C;     // 1111 1100 - modu
 // ===== EXECUTION super types (1000 ttxx) =====
 constexpr uint8_t EXECUTION_STATEMENT = EXECUTION | 0x00;    // 1000 0000 - expression statements
 constexpr uint8_t EXECUTION_DECLARATION = EXECUTION | 0x04;  // 1000 0100 - variable declarations
-constexpr uint8_t EXECUTION_INVOCATION = EXECUTION | 0x08;   // 1000 1000 - function/method calls
+constexpr uint8_t EXECUTION_STATEMENT_CALL = EXECUTION | 0x08;   // 1000 1000 - statement-level invocations
 constexpr uint8_t EXECUTION_MUTATION = EXECUTION | 0x0C;     // 1000 1100 - assignments, scope modifications
 
 // ===== FLOW_CONTROL super types (1001 ttxx) =====

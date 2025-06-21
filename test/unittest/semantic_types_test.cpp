@@ -92,7 +92,7 @@ TEST_CASE("Semantic type predicates", "[semantic_types]") {
     
     SECTION("IsCall predicate") {
         REQUIRE(IsCall(208));  // COMPUTATION_CALL
-        REQUIRE(IsCall(136)); // EXECUTION_INVOCATION
+        REQUIRE(IsCall(136)); // EXECUTION_STATEMENT_CALL
         
         REQUIRE(!IsCall(240)); // DEFINITION_FUNCTION
         REQUIRE(!IsCall(84));  // NAME_IDENTIFIER

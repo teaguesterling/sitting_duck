@@ -162,7 +162,7 @@ static void SemanticTypeCodesFunction(ClientContext &context, TableFunctionInput
                 case 0: super_type_name = "COMPUTATION_CALL"; break;
                 case 1: super_type_name = "COMPUTATION_ACCESS"; break;
                 case 2: super_type_name = "COMPUTATION_EXPRESSION"; break;
-                case 3: super_type_name = "COMPUTATION_LAMBDA"; break;
+                case 3: super_type_name = "COMPUTATION_CLOSURE"; break;
             }
         } else if (super_kind_bits == 2 && kind_bits == 0) { // EXECUTION
             switch (super_type_bits) {
