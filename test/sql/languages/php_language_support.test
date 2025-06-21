@@ -33,17 +33,18 @@ SELECT COUNT(*) FROM read_ast('test/data/php/test.php', 'php') WHERE name IS NOT
 
 query II
 SELECT name, type FROM read_ast('test/data/php/test.php') 
-WHERE type IN ('class_declaration', 'function_definition') AND name IS NOT NULL 
+WHERE type IN ('class_declaration', 'function_definition', 'method_declaration') AND name IS NOT NULL 
 ORDER BY start_line;
 ----
 User	class_declaration
-__construct	function_definition
-getName	function_definition
-getEmail	function_definition
-validateEmail	function_definition
-isValid	function_definition
+__construct	method_declaration
+getName	method_declaration
+getEmail	method_declaration
+validateEmail	method_declaration
+isValid	method_declaration
+validate	method_declaration
 EmailValidator	class_declaration
-validate	function_definition
+validate	method_declaration
 createUser	function_definition
 formatName	function_definition
 

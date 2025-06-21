@@ -53,7 +53,8 @@ SELECT name, type FROM read_ast('test/data/rust/simple.rs')
 WHERE type = 'use_declaration' AND name IS NOT NULL
 ORDER BY start_line;
 ----
-std::collections::HashMap	use_declaration
+use std::collections::HashMap;	use_declaration
+use super::*;	use_declaration
 
 # Test 6: Rust semantic types
 # ===========================
