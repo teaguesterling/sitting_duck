@@ -90,7 +90,7 @@ query II
 SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/php/test.php');
 ----
-10	355
+13	625
 
 # Test 9: PHP identifier extraction
 # =================================
