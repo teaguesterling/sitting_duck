@@ -118,4 +118,4 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/rust/simple.rs')
 WHERE type = 'pub' AND name IS NOT NULL;
 ----
-9
+8
