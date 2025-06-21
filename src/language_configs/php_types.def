@@ -8,7 +8,7 @@ DEF_TYPE("require_expression", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0x01)
 DEF_TYPE("require_once_expression", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0x01)
 DEF_TYPE("include_expression", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0x01)
 DEF_TYPE("include_once_expression", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0x01)
-DEF_TYPE("namespace_definition", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("namespace_definition", DEFINITION_MODULE, CUSTOM, NONE, 0x01)
 DEF_TYPE("namespace_use_declaration", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0x01)
 
 // Class and interface definitions

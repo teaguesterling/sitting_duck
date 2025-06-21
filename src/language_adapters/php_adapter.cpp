@@ -71,6 +71,9 @@ string PHPAdapter::ExtractNodeName(TSNode node, const string &content) const {
     if (node_type.find("class") != string::npos || node_type.find("interface") != string::npos) {
         return FindChildByType(node, content, "name");
     }
+    if (node_type == "namespace_definition") {
+        return FindChildByType(node, content, "namespace_name");
+    }
     
     return "";
 }

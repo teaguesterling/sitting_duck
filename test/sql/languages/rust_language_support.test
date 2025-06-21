@@ -66,11 +66,11 @@ WHERE type IN ('struct_item', 'function_item', 'enum_item', 'trait_item', 'impl_
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-enum_item	32	1
-function_item	240	8
-impl_item	32	2
-struct_item	32	1
-trait_item	32	1
+enum_item	248	1
+function_item	240	7
+impl_item	248	2
+struct_item	248	1
+trait_item	248	1
 
 # Test 7: Rust enum and trait detection
 # =====================================

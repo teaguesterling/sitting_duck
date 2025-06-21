@@ -57,6 +57,8 @@ WHERE type IN ('namespace_definition', 'namespace_use_declaration') AND name IS 
 ORDER BY start_line;
 ----
 App\Models	namespace_definition
+use DateTime;	namespace_use_declaration
+use Exception;	namespace_use_declaration
 
 # Test 6: PHP semantic types
 # ==========================
