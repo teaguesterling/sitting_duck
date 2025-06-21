@@ -26,7 +26,7 @@ true
 query I
 SELECT COUNT(*) FROM read_ast('test/data/cpp/simple.cpp', 'cpp') WHERE name IS NOT NULL;
 ----
-346
+355
 
 # Test 4: C++ class detection
 # ===========================

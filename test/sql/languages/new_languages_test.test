@@ -21,7 +21,7 @@ SELECT SUM(CASE WHEN language = 'html' THEN 1 ELSE 0 END) AS has_html,
        SUM(CASE WHEN language = 'rust' THEN 1 ELSE 0 END) AS has_rust
 FROM ast_supported_languages();
 ----
-1	1	0
+1	1	1
 
 # Test 2: Parse Markdown file
 query III

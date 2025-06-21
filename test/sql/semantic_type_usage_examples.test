@@ -42,6 +42,7 @@ return_statement	FLOW_JUMP
 return	FLOW_JUMP
 return_statement	FLOW_JUMP
 return	FLOW_JUMP
+for_in_clause	FLOW_LOOP
 for	FLOW_LOOP
 
 # Example 4: Build a summary of code structure

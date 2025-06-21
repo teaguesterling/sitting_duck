@@ -12,13 +12,13 @@ DEF_TYPE("namespace_definition", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0x01)
 DEF_TYPE("namespace_use_declaration", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0x01)
 
 // Class and interface definitions
-DEF_TYPE("class_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("class_declaration", DEFINITION_CLASS, CUSTOM, NONE, 0x01)
 DEF_TYPE("interface_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0x01)
 DEF_TYPE("trait_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0x01)
 DEF_TYPE("enum_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0x01)
 
 // Function and method definitions
-DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("function_definition", DEFINITION_FUNCTION, CUSTOM, NONE, 0x01)
 DEF_TYPE("method_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0x01)
 DEF_TYPE("constructor_declaration", DEFINITION_FUNCTION, NODE_TEXT, NONE, 0x01)
 DEF_TYPE("destructor_declaration", DEFINITION_FUNCTION, NODE_TEXT, NONE, 0x01)

@@ -59,11 +59,11 @@ string PHPAdapter::ExtractNodeName(TSNode node, const string &content) const {
     const char* node_type_str = ts_node_type(node);
     const NodeConfig* config = GetNodeConfig(node_type_str);
     
-    if (config) {
+    if (config && config->name_strategy != ExtractionStrategy::CUSTOM) {
         return ExtractByStrategy(node, content, config->name_strategy);
     }
     
-    // PHP-specific fallbacks
+    // PHP-specific custom logic for CUSTOM strategy and fallbacks
     string node_type = string(node_type_str);
     if (node_type.find("function") != string::npos || node_type.find("method") != string::npos) {
         return FindChildByType(node, content, "name");
