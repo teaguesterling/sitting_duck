@@ -69,28 +69,26 @@ public:
         return parser_;
     }
     
-    // Parse SQL with proper parser lifecycle
+    // Parse SQL with fresh parser for each call to avoid state issues
     ASTResult ParseSQL(const string& sql_content, const DuckDBAdapter* adapter) const {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (!initialized_) {
-            parser_ = make_uniq<Parser>();
-            initialized_ = true;
-        }
         
-        // Validate parser is properly initialized
-        if (!parser_) {
-            return adapter->CreateErrorResult("Failed to initialize DuckDB parser");
+        // Create a fresh parser for each parse operation to avoid state contamination
+        auto fresh_parser = make_uniq<Parser>();
+        
+        if (!fresh_parser) {
+            return adapter->CreateErrorResult("Failed to create DuckDB parser");
         }
         
         try {
-            parser_->ParseQuery(sql_content);
+            fresh_parser->ParseQuery(sql_content);
             
             // Validate statements were parsed
-            if (parser_->statements.empty()) {
+            if (fresh_parser->statements.empty()) {
                 return adapter->CreateErrorResult("No statements parsed from SQL");
             }
             
-            return adapter->ConvertStatementsToAST(parser_->statements, sql_content);
+            return adapter->ConvertStatementsToAST(fresh_parser->statements, sql_content);
         } catch (const ParserException& e) {
             return adapter->CreateErrorResult("Parse error: " + string(e.what()));
         } catch (const Exception& e) {
@@ -319,7 +317,7 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectNode(const SelectNode& node, uint32_
     // Process SELECT list
     if (!node.select_list.empty()) {
         auto list_node = CreateASTNode("select_list", "", "",
-                                      SemanticTypes::ORGANIZATION_LIST,
+                                      SemanticTypes::ORGANIZATION_CONTAINER,
                                       node_counter++, select_node_id, 3);
         nodes.push_back(list_node);
         
