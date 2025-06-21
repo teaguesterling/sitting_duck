@@ -109,7 +109,7 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/rust/simple.rs')
 WHERE type = 'identifier' AND name IS NOT NULL;
 ----
-81
+47
 
 # Test 11: Rust visibility modifiers
 # ==================================

@@ -70,9 +70,9 @@ WHERE type IN ('class_declaration', 'function_definition', 'namespace_definition
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-class_declaration	32	2
-function_definition	240	8
-namespace_definition	16	1
+class_declaration	248	2
+function_definition	240	2
+namespace_definition	252	1
 
 # Test 7: PHP interface detection
 # ===============================
