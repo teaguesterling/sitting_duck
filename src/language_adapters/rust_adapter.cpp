@@ -59,7 +59,7 @@ string RustAdapter::ExtractNodeName(TSNode node, const string &content) const {
     const char* node_type_str = ts_node_type(node);
     const NodeConfig* config = GetNodeConfig(node_type_str);
     
-    if (config) {
+    if (config && config->name_strategy != ExtractionStrategy::CUSTOM) {
         return ExtractByStrategy(node, content, config->name_strategy);
     }
     

@@ -85,7 +85,7 @@ call_expression	208	7
 class_specifier	248	2
 function_definition	240	11
 namespace_definition	252	1
-template_declaration	0	2
+template_declaration	104	2
 
 # Test 9: C++ tree structure validation
 # =====================================

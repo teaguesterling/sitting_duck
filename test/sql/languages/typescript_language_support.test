@@ -82,7 +82,7 @@ ORDER BY type;
 call_expression	208	12
 class_declaration	248	1
 function_declaration	240	5
-interface_declaration	0	3
+interface_declaration	248	3
 
 # Test 9: TypeScript tree structure validation
 # ============================================
