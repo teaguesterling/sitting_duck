@@ -65,7 +65,7 @@ string PHPAdapter::ExtractNodeName(TSNode node, const string &content) const {
     
     // PHP-specific custom logic for CUSTOM strategy and fallbacks
     string node_type = string(node_type_str);
-    if (node_type.find("function") != string::npos || node_type.find("method") != string::npos) {
+    if (node_type.find("function") != string::npos || node_type.find("method") != string::npos || node_type == "method_declaration") {
         return FindChildByType(node, content, "name");
     }
     if (node_type.find("class") != string::npos || node_type.find("interface") != string::npos) {

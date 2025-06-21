@@ -19,7 +19,7 @@ DEF_TYPE("enum_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0x01)
 
 // Function and method definitions
 DEF_TYPE("function_definition", DEFINITION_FUNCTION, CUSTOM, NONE, 0x01)
-DEF_TYPE("method_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("method_declaration", DEFINITION_FUNCTION, CUSTOM, NONE, 0x01)
 DEF_TYPE("constructor_declaration", DEFINITION_FUNCTION, NODE_TEXT, NONE, 0x01)
 DEF_TYPE("destructor_declaration", DEFINITION_FUNCTION, NODE_TEXT, NONE, 0x01)
 DEF_TYPE("anonymous_function_creation_expression", DEFINITION_FUNCTION, NONE, NONE, 0)

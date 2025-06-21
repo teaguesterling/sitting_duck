@@ -52,12 +52,12 @@ SELECT
     COUNT(*) as node_count
 FROM code_ast
 GROUP BY category
-ORDER BY node_count DESC;
+ORDER BY node_count DESC, category;
 ----
-DATA_STRUCTURE	12
-META_EXTERNAL	12
 COMPUTATION	12
 CONTROL_EFFECTS	12
+DATA_STRUCTURE	12
+META_EXTERNAL	12
 
 # Example 5: Find specific types by name
 query I
