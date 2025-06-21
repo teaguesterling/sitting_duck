@@ -1,0 +1,211 @@
+# name: test/sql/duckdb_native_parser.test
+# description: Test DuckDB native parser capabilities vs tree-sitter
+# group: [sitting_duck]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: Verify DuckDB language is available
+# ===========================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'duckdb';
+----
+duckdb
+
+# Test 2: Basic SELECT parsing accuracy
+# =====================================
+
+query IIIII
+SELECT type, name, semantic_type, depth, descendant_count
+FROM parse_ast('SELECT user_id, COUNT(*) as total FROM orders GROUP BY user_id', 'duckdb') 
+ORDER BY node_id
+LIMIT 8;
+----
+program	NULL	252	0	7
+select_statement	NULL	224	1	6
+select_node	NULL	224	2	5
+select_list	NULL	188	3	2
+column_reference	user_id	68	4	0
+function_call	COUNT	208	4	0
+table_reference	orders	84	3	0
+group_by_clause	NULL	236	3	1
+
+# Test 3: CTE (WITH clause) parsing
+# =================================
+
+query II
+SELECT type, name
+FROM parse_ast('
+WITH regional_sales AS (
+    SELECT region, SUM(sales) as total_sales
+    FROM sales_data 
+    GROUP BY region
+),
+top_regions AS (
+    SELECT region FROM regional_sales WHERE total_sales > 1000
+)
+SELECT * FROM top_regions
+', 'duckdb')
+WHERE type IN ('with_clause', 'cte', 'select_statement')
+ORDER BY type, name;
+----
+cte	regional_sales
+cte	top_regions
+select_statement	NULL
+with_clause	NULL
+
+# Test 4: Complex JOIN parsing
+# ============================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM parse_ast('
+SELECT u.name, p.title, c.content
+FROM users u
+LEFT JOIN posts p ON u.id = p.user_id
+INNER JOIN comments c ON p.id = c.post_id
+WHERE u.active = true
+', 'duckdb')
+GROUP BY type, semantic_type
+HAVING COUNT(*) > 1
+ORDER BY count DESC, type;
+----
+column_reference	68	6
+table_reference	84	3
+join	228	2
+
+# Test 5: Window functions and advanced SQL
+# =========================================
+
+query II
+SELECT type, name
+FROM parse_ast('
+SELECT 
+    name,
+    salary,
+    ROW_NUMBER() OVER (PARTITION BY department ORDER BY salary DESC) as rank,
+    LAG(salary) OVER (ORDER BY hire_date) as prev_salary
+FROM employees
+', 'duckdb')
+WHERE type = 'function_call'
+ORDER BY name;
+----
+function_call	LAG
+function_call	ROW_NUMBER
+
+# Test 6: Semantic type accuracy for SQL constructs
+# =================================================
+
+query II
+SELECT semantic_type_to_string(semantic_type) as semantic_type, COUNT(*) as count
+FROM parse_ast('
+INSERT INTO users (name, email) 
+VALUES (''John'', ''john@example.com'')
+ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
+', 'duckdb')
+GROUP BY semantic_type
+ORDER BY count DESC;
+----
+LITERAL_ATOMIC	3
+EXECUTION_MUTATION_INSERT	1
+NAME_IDENTIFIER	1
+NAME_QUALIFIED	1
+ORGANIZATION_LIST	1
+DEFINITION_MODULE	1
+
+# Test 7: Error handling with malformed SQL
+# =========================================
+
+statement error
+SELECT * FROM parse_ast('SELECT FROM WHERE', 'duckdb');
+
+# Test 8: DuckDB-specific functions and syntax
+# ============================================
+
+query II
+SELECT type, name
+FROM parse_ast('
+SELECT 
+    unnest([1,2,3]) as value,
+    current_timestamp::date as today,
+    ''hello world''::json->>''$.message'' as msg
+FROM generate_series(1, 10)
+', 'duckdb')
+WHERE type = 'function_call'
+ORDER BY name;
+----
+function_call	current_timestamp
+function_call	generate_series
+function_call	unnest
+
+# Test 9: Comparison with tree-sitter SQL parser
+# ==============================================
+
+query IIII
+SELECT 
+    'duckdb' as parser,
+    COUNT(*) as total_nodes,
+    COUNT(CASE WHEN semantic_type IN (208, 224, 228, 236) THEN 1 END) as sql_specific_nodes,
+    COUNT(CASE WHEN name IS NOT NULL THEN 1 END) as named_nodes
+FROM parse_ast('SELECT a.id, b.name FROM table_a a JOIN table_b b ON a.id = b.a_id', 'duckdb')
+UNION ALL
+SELECT 
+    'tree-sitter' as parser,
+    COUNT(*) as total_nodes,
+    COUNT(CASE WHEN semantic_type IN (208, 224, 228, 236) THEN 1 END) as sql_specific_nodes,
+    COUNT(CASE WHEN name IS NOT NULL THEN 1 END) as named_nodes
+FROM parse_ast('SELECT a.id, b.name FROM table_a a JOIN table_b b ON a.id = b.a_id', 'sql')
+ORDER BY parser;
+----
+duckdb	9	4	6
+tree-sitter	35	8	12
+
+# Test 10: Live query debugging capability
+# ========================================
+
+query III
+SELECT type, name, semantic_type_to_string(semantic_type) as semantic_type
+FROM parse_ast('
+EXPLAIN ANALYZE 
+SELECT customer_id, SUM(order_total) 
+FROM orders 
+WHERE order_date >= ''2024-01-01''
+GROUP BY customer_id
+HAVING SUM(order_total) > 1000
+', 'duckdb')
+WHERE name IS NOT NULL
+ORDER BY type, name;
+----
+column_reference	customer_id	NAME_IDENTIFIER
+column_reference	order_date	NAME_IDENTIFIER
+column_reference	order_total	NAME_IDENTIFIER
+function_call	SUM	COMPUTATION_CALL_FUNCTION
+literal	2024-01-01	LITERAL_ATOMIC
+literal	1000	LITERAL_ATOMIC
+table_reference	orders	NAME_QUALIFIED
+
+# Test 11: Validate semantic type consistency
+# ===========================================
+
+query II
+SELECT 
+    get_super_kind(semantic_type) as super_kind,
+    COUNT(*) as count
+FROM parse_ast('
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    price DECIMAL(10,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+', 'duckdb')
+GROUP BY super_kind
+ORDER BY super_kind;
+----
+DATA_STRUCTURE	2
+META_EXTERNAL	1
+COMPUTATION	1
+CONTROL_EFFECTS	1

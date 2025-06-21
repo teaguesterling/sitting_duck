@@ -10,7 +10,7 @@ DEF_TYPE("crate", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Function definitions
 DEF_TYPE("function_item", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("closure_expression", DEFINITION_FUNCTION, NONE, NONE, 0)
+DEF_TYPE("closure_expression", DEFINITION_FUNCTION, FIND_ASSIGNMENT_TARGET, NONE, 0)
 DEF_TYPE("function_signature_item", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0x01)
 
 // Type definitions

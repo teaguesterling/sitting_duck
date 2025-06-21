@@ -1,0 +1,111 @@
+# name: test/sql/r_language_support.test
+# description: Test R language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: Language is supported
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'r';
+----
+r
+
+# Test 2: File extension auto-detection (.R)
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/r/simple.R');
+----
+true
+
+# Test 3: Function detection
+query I
+SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
+WHERE type = 'function_definition' AND name IS NOT NULL;
+----
+2
+
+# Test 4: Variable assignment detection
+query I
+SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
+WHERE semantic_type_to_string(semantic_type) = 'OPERATOR_ASSIGNMENT';
+----
+25
+
+# Test 5: Function calls detection
+query I
+SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
+WHERE type = 'call' AND name IS NOT NULL;
+----
+17
+
+# Test 6: Control flow statements
+query I
+SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
+WHERE semantic_type_to_string(semantic_type) IN ('FLOW_CONDITIONAL', 'FLOW_LOOP');
+----
+10
+
+# Test 7: Literals detection
+query I
+SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
+WHERE semantic_type_to_string(semantic_type) LIKE 'LITERAL_%';
+----
+31
+
+# Test 8: Public vs private function detection (based on R naming convention)
+query II
+SELECT 
+    SUM(CASE WHEN name NOT LIKE '.%' THEN 1 ELSE 0 END) as public_functions,
+    SUM(CASE WHEN name LIKE '.%' THEN 1 ELSE 0 END) as private_functions
+FROM read_ast('test/data/r/simple.R') 
+WHERE type = 'function_definition' AND name IS NOT NULL;
+----
+1	1
+
+# Test 9: Comments detection
+query I
+SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
+WHERE type = 'comment';
+----
+16
+
+# Test 10: Identifier detection
+query I
+SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
+WHERE type = 'identifier' AND name IS NOT NULL;
+----
+73
+
+# Test 11: R-specific operators (assignment operators)
+query I
+SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
+WHERE type IN ('<-', '<<-', '->', '->>', '=', ':=');
+----
+25
+
+# Test 12: R special constants
+query I
+SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
+WHERE type IN ('NA', 'Inf', 'TRUE', 'FALSE', 'null');
+----
+1
+
+# Test 13: Test case sensitivity (both .r and .R should work)
+statement ok
+CREATE OR REPLACE TEMPORARY TABLE r_files AS 
+SELECT 'test/data/r/simple.R' as filepath
+UNION ALL
+SELECT 'test/data/r/simple.r' as filepath;
+
+# Create a copy with .r extension
+statement ok
+COPY (SELECT * FROM read_ast('test/data/r/simple.R')) TO 'test/data/r/simple.r';
+
+# Test both extensions work
+query I
+SELECT COUNT(DISTINCT type) FROM (
+    SELECT type FROM read_ast('test/data/r/simple.R')
+    UNION ALL
+    SELECT type FROM read_ast('test/data/r/simple.r')
+) WHERE type IS NOT NULL;
+----
+55

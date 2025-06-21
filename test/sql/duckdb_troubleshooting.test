@@ -1,0 +1,283 @@
+# name: test/sql/duckdb_troubleshooting.test
+# description: Test DuckDB parser for live query troubleshooting scenarios
+# group: [sitting_duck]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: Query complexity analysis
+# =================================
+
+query IIII
+SELECT 
+    'Simple Query' as query_type,
+    COUNT(*) as total_nodes,
+    MAX(depth) as max_depth,
+    COUNT(CASE WHEN type = 'join' THEN 1 END) as join_count
+FROM parse_ast('SELECT name FROM users WHERE active = true', 'duckdb')
+UNION ALL
+SELECT 
+    'Complex Query' as query_type,
+    COUNT(*) as total_nodes,
+    MAX(depth) as max_depth,
+    COUNT(CASE WHEN type = 'join' THEN 1 END) as join_count
+FROM parse_ast('
+WITH monthly_sales AS (
+    SELECT 
+        DATE_TRUNC(''month'', order_date) as month,
+        SUM(total_amount) as sales
+    FROM orders o
+    JOIN customers c ON o.customer_id = c.id
+    JOIN order_items oi ON o.id = oi.order_id
+    WHERE o.status = ''completed''
+    GROUP BY DATE_TRUNC(''month'', order_date)
+)
+SELECT 
+    month,
+    sales,
+    LAG(sales) OVER (ORDER BY month) as prev_sales,
+    (sales - LAG(sales) OVER (ORDER BY month)) / LAG(sales) OVER (ORDER BY month) * 100 as growth_rate
+FROM monthly_sales
+ORDER BY month
+', 'duckdb')
+ORDER BY query_type;
+----
+Complex Query	26	6	2
+Simple Query	6	4	0
+
+# Test 2: Performance bottleneck identification
+# =============================================
+
+query III
+SELECT 
+    type,
+    COUNT(*) as frequency,
+    CASE 
+        WHEN type = 'join' THEN 'Potential Cartesian Product Risk'
+        WHEN type = 'function_call' AND name LIKE '%DISTINCT%' THEN 'Expensive Deduplication'
+        WHEN type = 'subquery' THEN 'Subquery Optimization Opportunity'
+        WHEN type = 'where_clause' THEN 'Filtering Logic'
+        ELSE 'Normal Operation'
+    END as performance_note
+FROM parse_ast('
+SELECT DISTINCT
+    c.customer_name,
+    (SELECT COUNT(*) FROM orders o2 WHERE o2.customer_id = c.id) as order_count,
+    (SELECT SUM(total) FROM orders o3 WHERE o3.customer_id = c.id) as total_spent
+FROM customers c
+JOIN orders o ON c.id = o.customer_id
+JOIN order_items oi ON o.id = oi.order_id
+WHERE c.registration_date > ''2023-01-01''
+  AND EXISTS (SELECT 1 FROM products p WHERE p.id = oi.product_id AND p.active = true)
+', 'duckdb')
+WHERE type IN ('join', 'subquery', 'where_clause', 'function_call')
+GROUP BY type
+ORDER BY frequency DESC;
+----
+join	2	Potential Cartesian Product Risk
+where_clause	1	Filtering Logic
+
+# Test 3: SQL injection vulnerability scanning
+# ============================================
+
+query II
+SELECT 
+    type,
+    CASE 
+        WHEN peek LIKE '%''%''%' OR peek LIKE '%--;%' THEN 'POTENTIAL INJECTION RISK'
+        WHEN peek LIKE '%UNION%' OR peek LIKE '%DROP%' THEN 'SUSPICIOUS KEYWORDS'
+        WHEN type = 'literal' AND LENGTH(peek) > 100 THEN 'UNUSUALLY LONG LITERAL'
+        ELSE 'SAFE'
+    END as security_assessment
+FROM parse_ast('
+SELECT * FROM users 
+WHERE username = ''admin'' OR ''1''=''1'' 
+   AND password = ''password123''
+', 'duckdb')
+WHERE type = 'literal'
+ORDER BY security_assessment DESC;
+----
+literal	POTENTIAL INJECTION RISK
+literal	SAFE
+
+# Test 4: Index usage optimization hints
+# =====================================
+
+query III
+SELECT 
+    type,
+    name,
+    CASE 
+        WHEN type = 'column_reference' AND name IN ('id', 'user_id', 'customer_id') THEN 'PRIMARY/FOREIGN KEY - Should be indexed'
+        WHEN type = 'column_reference' AND name LIKE '%_date' THEN 'DATE COLUMN - Consider index for time-based queries'
+        WHEN type = 'column_reference' AND name LIKE '%email%' THEN 'UNIQUE FIELD - Should have unique index'
+        WHEN type = 'function_call' AND name = 'COUNT' THEN 'AGGREGATION - Consider covering index'
+        ELSE 'STANDARD COLUMN ACCESS'
+    END as index_recommendation
+FROM parse_ast('
+SELECT 
+    u.id,
+    u.email,
+    u.registration_date,
+    COUNT(o.id) as order_count
+FROM users u
+LEFT JOIN orders o ON u.id = o.customer_id
+WHERE u.registration_date >= ''2024-01-01''
+  AND u.email IS NOT NULL
+GROUP BY u.id, u.email, u.registration_date
+', 'duckdb')
+WHERE type IN ('column_reference', 'function_call') AND name IS NOT NULL
+ORDER BY index_recommendation;
+----
+function_call	COUNT	AGGREGATION - Consider covering index
+column_reference	registration_date	DATE COLUMN - Consider index for time-based queries
+column_reference	email	UNIQUE FIELD - Should have unique index
+column_reference	customer_id	PRIMARY/FOREIGN KEY - Should be indexed
+column_reference	id	PRIMARY/FOREIGN KEY - Should be indexed
+
+# Test 5: Query pattern anti-patterns detection
+# =============================================
+
+query III
+SELECT 
+    anti_pattern,
+    COUNT(*) as occurrences,
+    severity
+FROM (
+    SELECT 
+        CASE 
+            WHEN type = 'function_call' AND name IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE') 
+                THEN 'SQL Injection in Function Call'
+            WHEN type = 'join' AND descendant_count > 20 
+                THEN 'Complex Join - Performance Risk'
+            WHEN type = 'subquery' AND depth > 4 
+                THEN 'Deeply Nested Subquery'
+            WHEN type = 'literal' AND peek LIKE '%*%' 
+                THEN 'SELECT * Usage'
+            WHEN type = 'where_clause' AND descendant_count = 0 
+                THEN 'Empty WHERE Clause'
+            ELSE NULL
+        END as anti_pattern,
+        CASE 
+            WHEN type = 'function_call' AND name IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE') 
+                THEN 'CRITICAL'
+            WHEN type = 'join' AND descendant_count > 20 
+                THEN 'HIGH'
+            WHEN type = 'subquery' AND depth > 4 
+                THEN 'MEDIUM'
+            ELSE 'LOW'
+        END as severity
+    FROM parse_ast('
+    SELECT *
+    FROM orders o
+    JOIN customers c ON o.customer_id = c.id
+    JOIN (
+        SELECT customer_id, COUNT(*) as order_count
+        FROM orders
+        GROUP BY customer_id
+    ) oc ON c.id = oc.customer_id
+    WHERE o.total > (
+        SELECT AVG(total) 
+        FROM orders 
+        WHERE customer_id = o.customer_id
+    )
+    ', 'duckdb')
+) patterns
+WHERE anti_pattern IS NOT NULL
+GROUP BY anti_pattern, severity
+ORDER BY 
+    CASE severity 
+        WHEN 'CRITICAL' THEN 1 
+        WHEN 'HIGH' THEN 2 
+        WHEN 'MEDIUM' THEN 3 
+        ELSE 4 
+    END;
+----
+SELECT * Usage	1	LOW
+
+# Test 6: Data type and schema inference
+# ======================================
+
+query III
+SELECT 
+    type,
+    name,
+    CASE 
+        WHEN name LIKE '%_id' OR name = 'id' THEN 'INTEGER/BIGINT'
+        WHEN name LIKE '%_date' OR name LIKE '%_time%' THEN 'TIMESTAMP/DATE'
+        WHEN name LIKE '%email%' THEN 'VARCHAR(255) UNIQUE'
+        WHEN name LIKE '%name%' OR name LIKE '%title%' THEN 'VARCHAR(100)'
+        WHEN name LIKE '%amount%' OR name LIKE '%price%' OR name LIKE '%total%' THEN 'DECIMAL(10,2)'
+        WHEN name LIKE '%count%' THEN 'INTEGER'
+        WHEN name LIKE '%active%' OR name LIKE '%enabled%' THEN 'BOOLEAN'
+        ELSE 'VARCHAR(50)'
+    END as suggested_type
+FROM parse_ast('
+CREATE TABLE orders (
+    order_id,
+    customer_id, 
+    order_date,
+    total_amount,
+    item_count,
+    is_active
+)
+', 'duckdb')
+WHERE type = 'column_reference' AND name IS NOT NULL
+ORDER BY name;
+----
+column_reference	customer_id	INTEGER/BIGINT
+column_reference	is_active	BOOLEAN
+column_reference	item_count	INTEGER
+column_reference	order_date	TIMESTAMP/DATE
+column_reference	order_id	INTEGER/BIGINT
+column_reference	total_amount	DECIMAL(10,2)
+
+# Test 7: Resource usage estimation
+# =================================
+
+query III
+SELECT 
+    'Query Complexity Score' as metric,
+    (COUNT(*) * 1.0 + 
+     COUNT(CASE WHEN type = 'join' THEN 1 END) * 5.0 +
+     COUNT(CASE WHEN type = 'subquery' THEN 1 END) * 3.0 +
+     COUNT(CASE WHEN type = 'function_call' THEN 1 END) * 1.5 +
+     MAX(depth) * 2.0) as score,
+    CASE 
+        WHEN (COUNT(*) * 1.0 + 
+              COUNT(CASE WHEN type = 'join' THEN 1 END) * 5.0 +
+              COUNT(CASE WHEN type = 'subquery' THEN 1 END) * 3.0 +
+              COUNT(CASE WHEN type = 'function_call' THEN 1 END) * 1.5 +
+              MAX(depth) * 2.0) < 20 THEN 'LOW RESOURCE'
+        WHEN (COUNT(*) * 1.0 + 
+              COUNT(CASE WHEN type = 'join' THEN 1 END) * 5.0 +
+              COUNT(CASE WHEN type = 'subquery' THEN 1 END) * 3.0 +
+              COUNT(CASE WHEN type = 'function_call' THEN 1 END) * 1.5 +
+              MAX(depth) * 2.0) < 50 THEN 'MEDIUM RESOURCE'
+        ELSE 'HIGH RESOURCE'
+    END as resource_category
+FROM parse_ast('
+WITH RECURSIVE org_chart AS (
+    SELECT emp_id, name, manager_id, 1 as level
+    FROM employees 
+    WHERE manager_id IS NULL
+    UNION ALL
+    SELECT e.emp_id, e.name, e.manager_id, oc.level + 1
+    FROM employees e
+    JOIN org_chart oc ON e.manager_id = oc.emp_id
+    WHERE oc.level < 10
+)
+SELECT 
+    level,
+    COUNT(*) as employee_count,
+    AVG(salary) as avg_salary,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY salary) as median_salary
+FROM org_chart oc
+JOIN employee_details ed ON oc.emp_id = ed.emp_id
+GROUP BY level
+ORDER BY level
+', 'duckdb');
+----
+Query Complexity Score	52.0	HIGH RESOURCE

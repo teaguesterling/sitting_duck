@@ -8,12 +8,13 @@ namespace duckdb {
 
 // Extraction strategy for node names/values
 enum class ExtractionStrategy : uint8_t {
-    NONE = 0,           // No extraction needed
-    NODE_TEXT = 1,      // Extract the node's own text content
-    FIRST_CHILD = 2,    // Extract text from first child
-    FIND_IDENTIFIER = 3,// Find first child of type "identifier" 
-    FIND_PROPERTY = 4,  // Find first child of type "property_identifier"
-    CUSTOM = 5          // Language-specific custom logic
+    NONE = 0,                   // No extraction needed
+    NODE_TEXT = 1,              // Extract the node's own text content
+    FIRST_CHILD = 2,            // Extract text from first child
+    FIND_IDENTIFIER = 3,        // Find first child of type "identifier" 
+    FIND_PROPERTY = 4,          // Find first child of type "property_identifier"
+    FIND_ASSIGNMENT_TARGET = 5, // Find identifier in parent assignment (universal pattern)
+    CUSTOM = 6                  // Language-specific custom logic
 };
 
 // Simple node configuration

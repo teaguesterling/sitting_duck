@@ -429,6 +429,29 @@ private:
     static const unordered_map<string, NodeConfig> node_configs;
 };
 
+//==============================================================================
+// R Adapter
+//==============================================================================
+class RAdapter : public LanguageAdapter {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    uint8_t GetNodeFlags(const string &node_type) const override;
+    const NodeConfig* GetNodeConfig(const string &node_type) const override;
+    ParsingFunction GetParsingFunction() const override;
+
+protected:
+    void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+    
+private:
+    static const unordered_map<string, NodeConfig> node_configs;
+};
+
 // Language adapter registry
 class LanguageAdapterRegistry {
 public:

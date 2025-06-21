@@ -1,0 +1,348 @@
+mkdir -p build/release
+cmake  -DEXTENSION_STATIC_BUILD=1 -DDUCKDB_EXTENSION_CONFIGS='/mnt/aux-data/teague/Projects/duckdb_ast/extension_config.cmake'   -DOSX_BUILD_ARCH=   -DVCPKG_BUILD=1 -DCMAKE_TOOLCHAIN_FILE='/home/teague/Dev/vcpkg/scripts/buildsystems/vcpkg.cmake' -DDUCKDB_EXPLICIT_PLATFORM='amd64' -DCUSTOM_LINKER= -DOVERRIDE_GIT_DESCRIBE="" -DUNITTEST_ROOT_DIRECTORY="/mnt/aux-data/teague/Projects/duckdb_ast/" -DBENCHMARK_ROOT_DIRECTORY="/mnt/aux-data/teague/Projects/duckdb_ast/" -DENABLE_UNITTEST_CPP_TESTS=FALSE  -DVCPKG_MANIFEST_DIR='/mnt/aux-data/teague/Projects/duckdb_ast/' -DCMAKE_BUILD_TYPE=Release -S "./duckdb/" -B build/release
+-- Running vcpkg install
+warning: Embedding `vcpkg-configuration` in a manifest file is an EXPERIMENTAL feature.
+All requested packages are currently installed.
+Total install time: 341 ns
+-- Running vcpkg install - done
+-- git hash 2063dda3e6, version v1.3.1, extension folder v1.3.1
+-- Extensions will be deployed to: /mnt/aux-data/teague/Projects/duckdb_ast/build/release/repository
+-- Load extension 'sitting_duck' from '/mnt/aux-data/teague/Projects/duckdb_ast' @ 9aa5df8
+-- Load extension 'core_functions' from '/mnt/aux-data/teague/Projects/duckdb_ast/duckdb/extensions' @ v1.3.1
+-- Load extension 'parquet' from '/mnt/aux-data/teague/Projects/duckdb_ast/duckdb/extensions' @ v1.3.1
+-- Load extension 'jemalloc' from '/mnt/aux-data/teague/Projects/duckdb_ast/duckdb/extensions' @ v1.3.1
+CMake Deprecation Warning at /mnt/aux-data/teague/Projects/duckdb_ast/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- Tree-sitter CLI will be built at: /mnt/aux-data/teague/Projects/duckdb_ast/third_party/tree-sitter/target/release/tree-sitter
+-- Processing grammar: tree-sitter-c
+-- Initial pattern '*tree-sitter-c*.patch' found: 
+-- Parser generation configured for tree-sitter-c
+-- Processing grammar: tree-sitter-cpp
+-- Initial pattern '*tree-sitter-cpp*.patch' found: 
+-- C++ pattern found: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-cpp-grammar-require.patch
+-- Found patches for tree-sitter-cpp: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-cpp-grammar-require.patch
+-- Parser generation configured for tree-sitter-cpp
+-- Processing grammar: tree-sitter-javascript
+-- Initial pattern '*tree-sitter-javascript*.patch' found: 
+-- Parser generation configured for tree-sitter-javascript
+-- Processing grammar: typescript
+-- Initial pattern '*typescript*.patch' found: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-typescript-grammar-require.patch
+-- Found patches for typescript: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-typescript-grammar-require.patch
+-- Parser generation configured for typescript
+-- Processing grammar: tree-sitter-python
+-- Initial pattern '*tree-sitter-python*.patch' found: 
+-- Parser generation configured for tree-sitter-python
+-- Processing grammar: tree-sitter-sql
+-- Initial pattern '*tree-sitter-sql*.patch' found: 
+-- Parser generation configured for tree-sitter-sql
+-- Processing grammar: tree-sitter-go
+-- Initial pattern '*tree-sitter-go*.patch' found: 
+-- Parser generation configured for tree-sitter-go
+-- Processing grammar: tree-sitter-ruby
+-- Initial pattern '*tree-sitter-ruby*.patch' found: 
+-- Parser generation configured for tree-sitter-ruby
+-- Processing grammar: tree-sitter-markdown
+-- Initial pattern '*tree-sitter-markdown*.patch' found: 
+-- Parser generation configured for tree-sitter-markdown
+-- Processing grammar: tree-sitter-java
+-- Initial pattern '*tree-sitter-java*.patch' found: 
+-- Parser generation configured for tree-sitter-java
+-- Processing grammar: php
+-- Initial pattern '*php*.patch' found: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-php-scanner-assert.patch
+-- Found patches for php: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-php-scanner-assert.patch
+-- Parser generation configured for php
+-- Processing grammar: tree-sitter-html
+-- Initial pattern '*tree-sitter-html*.patch' found: 
+-- Parser generation configured for tree-sitter-html
+-- Processing grammar: tree-sitter-css
+-- Initial pattern '*tree-sitter-css*.patch' found: 
+-- Parser generation configured for tree-sitter-css
+-- Processing grammar: tree-sitter-rust
+-- Initial pattern '*tree-sitter-rust*.patch' found: 
+-- Rust pattern found: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-rust-grammar-regex.patch
+-- Found patches for tree-sitter-rust: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-rust-grammar-regex.patch
+-- Parser generation configured for tree-sitter-rust
+-- Processing grammar: tree-sitter-json
+-- Initial pattern '*tree-sitter-json*.patch' found: 
+-- Parser generation configured for tree-sitter-json
+-- Processing grammar: tree-sitter-bash
+-- Initial pattern '*tree-sitter-bash*.patch' found: 
+-- Parser generation configured for tree-sitter-bash
+-- Processing grammar: tree-sitter-swift
+-- Initial pattern '*tree-sitter-swift*.patch' found: 
+-- Parser generation configured for tree-sitter-swift
+-- Generated parser target created with 30 files
+Generated /mnt/aux-data/teague/Projects/duckdb_ast/src/include/embedded_sql_macros.hpp
+-- Extension targets will depend on generated parsers
+-- Extensions linked into DuckDB: [sitting_duck, core_functions, parquet, jemalloc]
+-- Tests loaded for extensions: [sitting_duck]
+-- Configuring done (1.7s)
+-- Generating done (0.6s)
+-- Build files have been written to: /mnt/aux-data/teague/Projects/duckdb_ast/build/release
+cmake --build build/release --config Release
+gmake[1]: Entering directory '/mnt/aux-data/teague/Projects/duckdb_ast/build/release'
+[  5%] Built target duckdb_zstd
+[  5%] Built target duckdb_platform
+[  5%] Built target duckdb_optimizer
+[  5%] Built target duckdb_optimizer_compressed_materialization
+[  5%] Built target duckdb_optimizer_join_order
+[  5%] Built target duckdb_optimizer_matcher
+[  6%] Built target duckdb_optimizer_pullup
+[  6%] Built target duckdb_optimizer_pushdown
+[  6%] Built target duckdb_optimizer_rules
+[  6%] Built target duckdb_optimizer_statistics_expr
+[  6%] Built target duckdb_optimizer_statistics_op
+[  6%] Built target duckdb_planner
+[  6%] Built target duckdb_planner_expression
+[  7%] Built target duckdb_bind_expression
+[  7%] Built target duckdb_bind_query_node
+[  7%] Built target duckdb_bind_statement
+[  7%] Built target duckdb_bind_tableref
+[  7%] Built target duckdb_expression_binders
+[  7%] Built target duckdb_planner_filter
+[  7%] Built target duckdb_planner_operator
+[  8%] Built target duckdb_planner_subquery
+[  8%] Built target duckdb_parser
+[  8%] Built target duckdb_constraints
+[  8%] Built target duckdb_expression
+[  8%] Built target duckdb_parsed_data
+[  8%] Built target duckdb_query_node
+[  8%] Built target duckdb_statement
+[  8%] Built target duckdb_parser_tableref
+[  8%] Built target duckdb_transformer_constraint
+[  8%] Built target duckdb_transformer_expression
+[  8%] Built target duckdb_transformer_helpers
+[  8%] Built target duckdb_transformer_statement
+[  8%] Built target duckdb_transformer_tableref
+[  8%] Built target duckdb_function
+[  8%] Built target duckdb_func_aggr
+[  8%] Built target duckdb_aggr_distr
+[  8%] Built target duckdb_func_cast
+[  8%] Built target duckdb_union_cast
+[  8%] Built target duckdb_func_pragma
+[  8%] Built target duckdb_func_scalar
+[  9%] Built target duckdb_func_compressed_materialization
+[  9%] Built target duckdb_func_date
+[  9%] Built target duckdb_func_generic_main
+[  9%] Built target duckdb_func_list_nested
+[  9%] Built target duckdb_function_map
+[  9%] Built target duckdb_func_ops_main
+[ 10%] Built target duckdb_func_seq
+[ 10%] Built target duckdb_func_string_main
+[ 10%] Built target duckdb_func_string_regexp
+[ 10%] Built target duckdb_func_struct_main
+[ 10%] Built target duckdb_func_system
+[ 10%] Built target duckdb_func_table
+[ 10%] Built target duckdb_table_func_system
+[ 10%] Built target duckdb_func_table_version
+[ 10%] Built target duckdb_arrow_conversion
+[ 11%] Built target duckdb_func_window
+[ 11%] Built target duckdb_catalog
+[ 11%] Built target duckdb_catalog_entries
+[ 12%] Built target duckdb_catalog_entries_dependency
+[ 12%] Built target duckdb_catalog_default_entries
+[ 12%] Built target duckdb_common
+[ 12%] Built target duckdb_adbc
+[ 12%] Built target duckdb_adbc_nanoarrow
+[ 12%] Built target duckdb_common_arrow
+[ 12%] Built target duckdb_common_arrow_appender
+[ 12%] Built target duckdb_common_crypto
+[ 12%] Built target duckdb_common_enums
+[ 12%] Built target duckdb_common_exception
+[ 12%] Built target duckdb_common_multi_file
+[ 12%] Built target duckdb_common_operators
+[ 12%] Built target duckdb_progress_bar
+[ 12%] Built target duckdb_common_tree_renderer
+[ 13%] Built target duckdb_row_operations
+[ 13%] Built target duckdb_common_serializer
+[ 13%] Built target duckdb_sort
+[ 13%] Built target duckdb_common_types
+[ 13%] Built target duckdb_common_types_column
+[ 14%] Built target duckdb_common_types_row
+[ 14%] Built target duckdb_value_operations
+[ 15%] Built target duckdb_vector_operations
+[ 16%] Built target duckdb_logging
+[ 17%] Built target duckdb_execution
+[ 17%] Built target duckdb_expression_executor
+[ 17%] Built target duckdb_nested_loop_join
+[ 17%] Built target duckdb_operator_aggregate
+[ 17%] Built target duckdb_csv_buffer_manager
+[ 17%] Built target duckdb_csv_encode
+[ 17%] Built target duckdb_csv_scanner
+[ 17%] Built target duckdb_csv_sniffer
+[ 17%] Built target duckdb_csv_state_machine
+[ 18%] Built target duckdb_operator_csv_table_function
+[ 18%] Built target duckdb_csv_util
+[ 18%] Built target duckdb_operator_filter
+[ 18%] Built target duckdb_operator_helper
+[ 18%] Built target duckdb_operator_join
+[ 18%] Built target duckdb_operator_order
+[ 18%] Built target duckdb_operator_persistent
+[ 18%] Built target duckdb_operator_projection
+[ 19%] Built target duckdb_operator_scan
+[ 19%] Built target duckdb_operator_schema
+[ 19%] Built target duckdb_operator_set
+[ 19%] Built target duckdb_physical_plan
+[ 19%] Built target duckdb_execution_index
+[ 19%] Built target duckdb_execution_index_art
+[ 19%] Built target duckdb_sample
+[ 19%] Built target duckdb_main
+[ 19%] Built target duckdb_main_capi
+[ 19%] Built target duckdb_main_capi_cast
+[ 19%] Built target duckdb_generated_extension_loader
+[ 20%] Built target duckdb_main_extension
+[ 21%] Built target duckdb_common_http
+[ 21%] Built target duckdb_main_relation
+[ 21%] Built target duckdb_main_secret
+[ 21%] Built target duckdb_main_settings
+[ 21%] Built target duckdb_main_buffered_data
+[ 21%] Built target duckdb_main_chunk_scan_state
+[ 21%] Built target duckdb_parallel
+[ 22%] Built target duckdb_storage
+[ 22%] Built target duckdb_storage_buffer
+[ 22%] Built target duckdb_storage_checkpoint
+[ 22%] Built target duckdb_storage_compression
+[ 22%] Built target duckdb_storage_compression_chimp
+[ 22%] Built target duckdb_storage_compression_alp
+[ 22%] Built target duckdb_storage_compression_roaring
+[ 23%] Built target duckdb_storage_compression_dictionary
+[ 23%] Built target duckdb_storage_compression_dict_fsst
+[ 23%] Built target duckdb_storage_metadata
+[ 23%] Built target duckdb_storage_serialization
+[ 23%] Built target duckdb_storage_statistics
+[ 23%] Built target duckdb_storage_table
+[ 24%] Built target duckdb_transaction
+[ 26%] Built target duckdb_verification
+[ 26%] Built target tree-sitter-cli
+[ 28%] Built target generate-parsers
+[ 30%] Built target tree-sitter
+[ 30%] Built target duckdb_core_functions_algebraic
+[ 30%] Built target duckdb_core_functions_distributive
+[ 30%] Built target duckdb_core_functions_holistic
+[ 30%] Built target duckdb_core_functions_nested
+[ 30%] Built target duckdb_core_functions_regression
+[ 30%] Built target duckdb_core_functions_array
+[ 30%] Built target duckdb_core_functions_bit
+[ 30%] Built target duckdb_core_functions_blob
+[ 30%] Built target duckdb_core_functions_date
+[ 31%] Built target duckdb_core_functions_debug
+[ 31%] Built target duckdb_core_functions_enum
+[ 31%] Built target duckdb_core_functions_generic
+[ 31%] Built target duckdb_core_functions_list
+[ 31%] Built target duckdb_core_functions_map
+[ 32%] Built target duckdb_core_functions_math
+[ 32%] Built target duckdb_core_functions_operators
+[ 32%] Built target duckdb_core_functions_random
+[ 32%] Built target duckdb_core_functions_string
+[ 32%] Built target duckdb_core_functions_struct
+[ 33%] Built target duckdb_core_functions_union
+[ 33%] Built target duckdb_parquet_decoders
+[ 34%] Built target duckdb_parquet_readers
+[ 34%] Built target duckdb_parquet_writers
+[ 43%] Built target jemalloc
+[ 43%] Built target duckdb_fmt
+[ 45%] Built target duckdb_pg_query
+[ 48%] Built target duckdb_re2
+[ 48%] Built target duckdb_miniz
+[ 49%] Built target duckdb_utf8proc
+[ 49%] Built target duckdb_hyperloglog
+[ 49%] Built target duckdb_skiplistlib
+[ 50%] Built target duckdb_fastpforlib
+[ 54%] Built target duckdb_mbedtls
+[ 54%] Built target duckdb_fsst
+[ 54%] Built target duckdb_yyjson
+[ 54%] Built target jemalloc_extension
+[ 61%] Built target parquet_extension
+[ 61%] Built target core_functions_extension
+[ 62%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/duckdb_adapter.cpp.o
+/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp: In member function ‘duckdb::ASTResult duckdb::DuckDBAdapter::CreateErrorResult(const string&) const’:
+/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:503:54: error: ‘ERROR_SYNTAX’ is not a member of ‘duckdb::SemanticTypes’; did you mean ‘PARSER_SYNTAX’?
+  503 |                                       SemanticTypes::ERROR_SYNTAX, 0, -1, 0);
+      |                                                      ^~~~~~~~~~~~
+      |                                                      PARSER_SYNTAX
+/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp: In member function ‘uint32_t duckdb::DuckDBAdapter::CalculateMaxDepth(const duckdb::vector<duckdb::ASTNode>&) const’:
+/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:526:29: error: no matching function for call to ‘max(uint32_t&, const uint8_t&)’
+  526 |         max_depth = std::max(max_depth, node.tree_position.node_depth);
+      |                     ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/include/c++/11/memory:63,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/constants.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/enums/profiler_format.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/main/connection.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/language_adapter.hpp:3,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/duckdb_adapter.hpp:3,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:1:
+/usr/include/c++/11/bits/stl_algobase.h:254:5: note: candidate: ‘template<class _Tp> const _Tp& std::max(const _Tp&, const _Tp&)’
+  254 |     max(const _Tp& __a, const _Tp& __b)
+      |     ^~~
+/usr/include/c++/11/bits/stl_algobase.h:254:5: note:   template argument deduction/substitution failed:
+/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:526:29: note:   deduced conflicting types for parameter ‘const _Tp’ (‘unsigned int’ and ‘uint8_t’ {aka ‘unsigned char’})
+  526 |         max_depth = std::max(max_depth, node.tree_position.node_depth);
+      |                     ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/include/c++/11/memory:63,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/constants.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/enums/profiler_format.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/main/connection.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/language_adapter.hpp:3,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/duckdb_adapter.hpp:3,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:1:
+/usr/include/c++/11/bits/stl_algobase.h:300:5: note: candidate: ‘template<class _Tp, class _Compare> const _Tp& std::max(const _Tp&, const _Tp&, _Compare)’
+  300 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
+      |     ^~~
+/usr/include/c++/11/bits/stl_algobase.h:300:5: note:   template argument deduction/substitution failed:
+/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:526:29: note:   deduced conflicting types for parameter ‘const _Tp’ (‘unsigned int’ and ‘uint8_t’ {aka ‘unsigned char’})
+  526 |         max_depth = std::max(max_depth, node.tree_position.node_depth);
+      |                     ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/include/c++/11/algorithm:62,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/types/string_type.hpp:19,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/types/date.hpp:14,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/types/value.hpp:17,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/catalog/catalog_entry.hpp:17,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/catalog/catalog.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/serializer/write_stream.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/serializer/buffered_file_writer.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/main/connection.hpp:12,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/language_adapter.hpp:3,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/duckdb_adapter.hpp:3,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:1:
+/usr/include/c++/11/bits/stl_algo.h:3461:5: note: candidate: ‘template<class _Tp> _Tp std::max(std::initializer_list<_Tp>)’
+ 3461 |     max(initializer_list<_Tp> __l)
+      |     ^~~
+/usr/include/c++/11/bits/stl_algo.h:3461:5: note:   template argument deduction/substitution failed:
+/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:526:29: note:   mismatched types ‘std::initializer_list<_Tp>’ and ‘unsigned int’
+  526 |         max_depth = std::max(max_depth, node.tree_position.node_depth);
+      |                     ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/include/c++/11/algorithm:62,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/types/string_type.hpp:19,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/types/date.hpp:14,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/types/value.hpp:17,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/catalog/catalog_entry.hpp:17,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/catalog/catalog.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/serializer/write_stream.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/serializer/buffered_file_writer.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/main/connection.hpp:12,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb.hpp:11,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/language_adapter.hpp:3,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/duckdb_adapter.hpp:3,
+                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:1:
+/usr/include/c++/11/bits/stl_algo.h:3467:5: note: candidate: ‘template<class _Tp, class _Compare> _Tp std::max(std::initializer_list<_Tp>, _Compare)’
+ 3467 |     max(initializer_list<_Tp> __l, _Compare __comp)
+      |     ^~~
+/usr/include/c++/11/bits/stl_algo.h:3467:5: note:   template argument deduction/substitution failed:
+/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:526:29: note:   mismatched types ‘std::initializer_list<_Tp>’ and ‘unsigned int’
+  526 |         max_depth = std::max(max_depth, node.tree_position.node_depth);
+      |                     ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+gmake[3]: *** [extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/build.make:344: extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/duckdb_adapter.cpp.o] Error 1
+gmake[2]: *** [CMakeFiles/Makefile2:9282: extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/all] Error 2
+gmake[1]: *** [Makefile:136: all] Error 2
+gmake[1]: Leaving directory '/mnt/aux-data/teague/Projects/duckdb_ast/build/release'
+make: *** [extension-ci-tools/makefiles/duckdb_extension.Makefile:117: release] Error 2

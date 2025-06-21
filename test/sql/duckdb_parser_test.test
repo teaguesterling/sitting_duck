@@ -1,0 +1,112 @@
+# name: test/sql/duckdb_parser_test.test
+# description: Test DuckDB native parser integration
+# group: [sitting_duck]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: DuckDB language is supported
+# ===================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'duckdb';
+----
+duckdb
+
+# Test 2: Simple SELECT statement parsing
+# =======================================
+
+query IIIIII
+SELECT node_id, parent_id, type, name, semantic_type, start_line 
+FROM parse_ast('SELECT id, name FROM users', 'duckdb') 
+ORDER BY node_id 
+LIMIT 10;
+----
+1	0	program	NULL	252	1
+2	1	select_statement	NULL	224	1
+3	2	select_node	NULL	224	1
+4	3	select_list	NULL	188	1
+5	4	column_reference	id	68	1
+6	4	column_reference	name	68	1
+7	3	table_reference	users	84	1
+
+# Test 3: Complex query with JOIN and WHERE
+# ==========================================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM parse_ast('
+SELECT u.name, p.title 
+FROM users u 
+JOIN posts p ON u.id = p.user_id 
+WHERE u.active = true
+', 'duckdb')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+column_reference	68	4
+join	228	1
+literal	64	1
+program	252	1
+select_list	188	1
+select_node	224	1
+select_statement	224	1
+table_reference	84	2
+where_clause	144	1
+
+# Test 4: CTE (Common Table Expression) parsing
+# ==============================================
+
+query II
+SELECT type, name
+FROM parse_ast('
+WITH active_users AS (
+  SELECT * FROM users WHERE active = true
+)
+SELECT name FROM active_users
+', 'duckdb')
+WHERE type IN ('cte', 'with_clause')
+ORDER BY type;
+----
+cte	active_users
+with_clause	NULL
+
+# Test 5: Function call recognition
+# =================================
+
+query II
+SELECT type, name
+FROM parse_ast('SELECT COUNT(*), MAX(created_at) FROM posts', 'duckdb')
+WHERE type = 'function_call'
+ORDER BY name;
+----
+function_call	COUNT
+function_call	MAX
+
+# Test 6: Error handling for invalid SQL
+# ======================================
+
+statement error
+SELECT * FROM parse_ast('SELECT FROM', 'duckdb');
+
+# Test 7: Compare DuckDB vs tree-sitter SQL parsing
+# ==================================================
+
+query III
+SELECT 
+    'duckdb' as parser_type,
+    COUNT(*) as total_nodes,
+    COUNT(CASE WHEN name IS NOT NULL THEN 1 END) as named_nodes
+FROM parse_ast('SELECT u.name, COUNT(*) FROM users u GROUP BY u.name', 'duckdb')
+UNION ALL
+SELECT 
+    'tree-sitter' as parser_type,
+    COUNT(*) as total_nodes,
+    COUNT(CASE WHEN name IS NOT NULL THEN 1 END) as named_nodes
+FROM parse_ast('SELECT u.name, COUNT(*) FROM users u GROUP BY u.name', 'sql')
+ORDER BY parser_type;
+----
+duckdb	10	5
+tree-sitter	25	8

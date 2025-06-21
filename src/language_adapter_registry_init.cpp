@@ -1,4 +1,5 @@
 #include "language_adapter.hpp"
+#include "duckdb_adapter.hpp"
 #include "duckdb/common/helper.hpp"
 
 namespace duckdb {
@@ -10,6 +11,8 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
     RegisterLanguageFactory("cpp", []() { return make_uniq<CPPAdapter>(); });
     RegisterLanguageFactory("typescript", []() { return make_uniq<TypeScriptAdapter>(); });
     RegisterLanguageFactory("sql", []() { return make_uniq<SQLAdapter>(); });
+    // DuckDB native parser - SQL parsing with database-native accuracy
+    RegisterLanguageFactory("duckdb", []() { return make_uniq<DuckDBAdapter>(); });
     RegisterLanguageFactory("go", []() { return make_uniq<GoAdapter>(); });
     RegisterLanguageFactory("ruby", []() { return make_uniq<RubyAdapter>(); });
     RegisterLanguageFactory("markdown", []() { return make_uniq<MarkdownAdapter>(); });
@@ -29,6 +32,8 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
     RegisterLanguageFactory("bash", []() { return make_uniq<BashAdapter>(); });
     // Swift enabled - iOS/macOS development support
     RegisterLanguageFactory("swift", []() { return make_uniq<SwiftAdapter>(); });
+    // R enabled - statistical computing and data analysis support
+    RegisterLanguageFactory("r", []() { return make_uniq<RAdapter>(); });
 }
 
 } // namespace duckdb

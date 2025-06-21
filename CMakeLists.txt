@@ -151,6 +151,7 @@ if(CARGO_EXECUTABLE)
     # generate_parser("tree-sitter-yaml" "tree-sitter-yaml/src/parser.c" "tree-sitter-yaml/src/scanner.c")
     generate_parser("tree-sitter-bash" "tree-sitter-bash/src/parser.c" "tree-sitter-bash/src/scanner.c")
     generate_parser("tree-sitter-swift" "tree-sitter-swift/src/parser.c" "tree-sitter-swift/src/scanner.c")
+    generate_parser("tree-sitter-r" "tree-sitter-r/src/parser.c" "tree-sitter-r/src/scanner.c")
     
     # Create a target for all generated parsers
     if(ALL_GENERATED_PARSERS)
@@ -221,6 +222,7 @@ set(EXTENSION_SOURCES
     src/language_adapters/cpp_adapter.cpp
     src/language_adapters/typescript_adapter.cpp
     src/language_adapters/sql_adapter.cpp
+    src/language_adapters/duckdb_adapter.cpp
     src/language_adapters/go_adapter.cpp
     src/language_adapters/ruby_adapter.cpp
     src/language_adapters/markdown_adapter.cpp
@@ -233,6 +235,7 @@ set(EXTENSION_SOURCES
     src/language_adapters/json_adapter.cpp
     src/language_adapters/bash_adapter.cpp
     src/language_adapters/swift_adapter.cpp
+    src/language_adapters/r_adapter.cpp
     src/read_ast_streaming_function.cpp
     # src/read_ast_objects_hybrid.cpp (removed - objects API not used)
     src/ast_sql_macros.cpp
@@ -275,6 +278,8 @@ set(EXTENSION_SOURCES
     grammars/tree-sitter-bash/src/scanner.c
     grammars/tree-sitter-swift/src/parser.c
     grammars/tree-sitter-swift/src/scanner.c
+    grammars/tree-sitter-r/src/parser.c
+    grammars/tree-sitter-r/src/scanner.c
     )
     # Removed unused files:
     # src/ast_parser.cpp (replaced by unified_ast_backend.cpp)

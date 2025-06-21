@@ -29,7 +29,8 @@ static const std::unordered_map<string, string> EXTENSION_TO_LANGUAGE = {
     // YAML grammar has complex self-modifying structure incompatible with tree-sitter CLI
     // {"yaml", "yaml"}, {"yml", "yaml"},
     {"sh", "bash"}, {"bash", "bash"}, {"zsh", "bash"},
-    {"swift", "swift"}
+    {"swift", "swift"},
+    {"r", "r"}, {"R", "r"}
 };
 
 // Static mapping of languages to their supported extensions
@@ -52,7 +53,8 @@ static const std::unordered_map<string, vector<string>> LANGUAGE_TO_EXTENSIONS =
     // YAML grammar has complex self-modifying structure incompatible with tree-sitter CLI
     // {"yaml", {"yaml", "yml"}},
     {"bash", {"sh", "bash", "zsh"}},
-    {"swift", {"swift"}}
+    {"swift", {"swift"}},
+    {"r", {"r", "R"}}
 };
 
 vector<string> ASTFileUtils::GetFiles(ClientContext &context, const Value &path_value, 

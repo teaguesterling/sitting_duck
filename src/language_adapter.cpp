@@ -1,5 +1,6 @@
 #include "language_adapter.hpp"
 #include "semantic_types.hpp"
+#include "ast_type.hpp"  // For ASTResult definition
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/helper.hpp"
@@ -56,6 +57,30 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
             return FindChildByType(node, content, "identifier");
         case ExtractionStrategy::FIND_PROPERTY:
             return FindChildByType(node, content, "property_identifier");
+        case ExtractionStrategy::FIND_ASSIGNMENT_TARGET: {
+            // Universal pattern: find identifier in parent assignment
+            // Handles: R (name <- func), JS (const name = func), C++ (auto name = lambda), etc.
+            TSNode parent = ts_node_parent(node);
+            if (!ts_node_is_null(parent)) {
+                string parent_type = ts_node_type(parent);
+                // Check for assignment patterns across languages
+                if (parent_type == "binary_operator" ||           // R: name <- function
+                    parent_type == "variable_declarator" ||       // JS/TS: const name = function
+                    parent_type == "init_declarator" ||           // C++: auto name = lambda
+                    parent_type.find("declarator") != string::npos) { // Other declarator patterns
+                    
+                    // Look for the first child which should be the identifier
+                    TSNode first_child = ts_node_child(parent, 0);
+                    if (!ts_node_is_null(first_child)) {
+                        string first_child_type = ts_node_type(first_child);
+                        if (first_child_type == "identifier") {
+                            return ExtractNodeText(first_child, content);
+                        }
+                    }
+                }
+            }
+            return "";
+        }
         case ExtractionStrategy::CUSTOM:
             // Will be overridden by specific language adapters
             return "";
@@ -192,12 +217,26 @@ vector<string> LanguageAdapterRegistry::GetSupportedLanguages() const {
 }
 
 void LanguageAdapterRegistry::ValidateLanguageABI(const LanguageAdapter* adapter) const {
-    // Test parser initialization to validate ABI compatibility
+    // Test adapter functionality to validate ABI compatibility
     try {
+        string language = adapter->GetLanguageName();
+        
+        // For DuckDB adapter, test that parsing function can be retrieved
+        if (language == "duckdb") {
+            // Test that the parsing function is available without calling it
+            ParsingFunction parsing_fn = adapter->GetParsingFunction();
+            if (!parsing_fn) {
+                throw InvalidInputException("DuckDB adapter failed to provide parsing function");
+            }
+            // Parsing function exists - validation successful
+            return;
+        }
+        
+        // For tree-sitter based adapters, test parser creation
         auto test_adapter = const_cast<LanguageAdapter*>(adapter);
         TSParser* parser = test_adapter->GetParser();
         if (!parser) {
-            throw InvalidInputException("Language adapter for '" + adapter->GetLanguageName() + 
+            throw InvalidInputException("Language adapter for '" + language + 
                                        "' failed to create parser");
         }
     } catch (const Exception& e) {

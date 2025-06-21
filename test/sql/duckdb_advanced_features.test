@@ -1,0 +1,248 @@
+# name: test/sql/duckdb_advanced_features.test  
+# description: Test advanced DuckDB parser features for live query debugging
+# group: [sitting_duck]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: DuckDB-specific syntax parsing
+# ======================================
+
+query III
+SELECT type, name, peek
+FROM parse_ast('
+SELECT 
+    list_transform([1,2,3], x -> x * 2) as doubled,
+    struct_pack(name := ''John'', age := 30) as person,
+    map {''key1'': ''value1'', ''key2'': ''value2''} as my_map
+', 'duckdb')
+WHERE type = 'function_call'
+ORDER BY name;
+----
+function_call	list_transform	list_transform
+function_call	map	map
+function_call	struct_pack	struct_pack
+
+# Test 2: Advanced aggregation and window functions
+# =================================================
+
+query II
+SELECT type, name
+FROM parse_ast('
+SELECT 
+    department,
+    salary,
+    PERCENT_RANK() OVER (PARTITION BY department ORDER BY salary) as salary_percentile,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY salary) as median_salary,
+    MODE() WITHIN GROUP (ORDER BY department) as common_dept
+FROM employees
+', 'duckdb')
+WHERE type = 'function_call'
+ORDER BY name;
+----
+function_call	MODE
+function_call	PERCENT_RANK
+function_call	PERCENTILE_CONT
+
+# Test 3: Complex CTE with recursive queries
+# ==========================================
+
+query II
+SELECT type, name  
+FROM parse_ast('
+WITH RECURSIVE employee_hierarchy AS (
+    SELECT id, name, manager_id, 1 as level
+    FROM employees 
+    WHERE manager_id IS NULL
+    
+    UNION ALL
+    
+    SELECT e.id, e.name, e.manager_id, eh.level + 1
+    FROM employees e
+    JOIN employee_hierarchy eh ON e.manager_id = eh.id
+)
+SELECT * FROM employee_hierarchy ORDER BY level, name
+', 'duckdb')
+WHERE type IN ('with_clause', 'cte')
+ORDER BY type, name;
+----
+cte	employee_hierarchy
+with_clause	NULL
+
+# Test 4: PIVOT and UNPIVOT operations
+# ====================================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM parse_ast('
+PIVOT sales_data 
+ON product_category 
+USING SUM(revenue) as total_revenue
+GROUP BY region, quarter
+', 'duckdb')
+GROUP BY type, semantic_type
+ORDER BY count DESC;
+----
+column_reference	68	3
+function_call	208	1
+program	252	1
+select_statement	224	1
+table_reference	84	1
+
+# Test 5: JSON and nested data operations
+# =======================================
+
+query II
+SELECT type, name
+FROM parse_ast('
+SELECT 
+    data->>''$.user.name'' as user_name,
+    json_extract_path_text(metadata, ''category'', ''subcategory'') as category,
+    list_extract(tags, 1) as first_tag,
+    struct_extract(address, ''city'') as city
+FROM events
+', 'duckdb')
+WHERE type = 'function_call'
+ORDER BY name;
+----
+function_call	json_extract_path_text
+function_call	list_extract
+function_call	struct_extract
+
+# Test 6: Advanced JOIN types and conditions
+# ==========================================
+
+query III
+SELECT type, semantic_type, COUNT(*) as count
+FROM parse_ast('
+SELECT *
+FROM table_a a
+FULL OUTER JOIN table_b b USING (id)
+CROSS JOIN table_c c
+ASOF JOIN table_d d ON a.timestamp >= d.timestamp
+WHERE a.status = ''active''
+', 'duckdb')
+WHERE type IN ('join', 'table_reference')
+GROUP BY type, semantic_type
+ORDER BY type;
+----
+join	228	3
+table_reference	84	4
+
+# Test 7: Query optimization hints and pragmas
+# ============================================
+
+query II
+SELECT type, peek
+FROM parse_ast('
+PRAGMA enable_profiling;
+PRAGMA profiling_output = ''/tmp/profile.json'';
+SELECT /*+ USE_INDEX(customers, idx_email) */ 
+    customer_id, email
+FROM customers 
+WHERE email LIKE ''%@company.com''
+', 'duckdb')
+WHERE type IN ('sql_statement', 'literal')
+LIMIT 5;
+----
+sql_statement	PRAGMA enable_profiling;
+PRAGMA profiling_output = '/tmp/profile.json';
+SELECT /*+ USE_INDEX(customers, idx_email) */ 
+    customer_id, email
+FROM customers 
+WHERE email LIKE '%@company.com'
+
+# Test 8: Performance analysis for live debugging
+# ===============================================
+
+query IIII
+SELECT 
+    type,
+    semantic_type_to_string(semantic_type) as semantic_category,
+    COUNT(*) as node_count,
+    AVG(LENGTH(COALESCE(name, peek, ''))) as avg_name_length
+FROM parse_ast('
+EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
+SELECT 
+    p.product_name,
+    SUM(oi.quantity * oi.unit_price) as total_revenue,
+    COUNT(DISTINCT o.customer_id) as unique_customers
+FROM products p
+JOIN order_items oi ON p.product_id = oi.product_id  
+JOIN orders o ON oi.order_id = o.order_id
+WHERE o.order_date BETWEEN ''2024-01-01'' AND ''2024-12-31''
+GROUP BY p.product_id, p.product_name
+HAVING total_revenue > 10000
+ORDER BY total_revenue DESC
+LIMIT 10
+', 'duckdb')
+GROUP BY type, semantic_type
+HAVING COUNT(*) >= 2
+ORDER BY node_count DESC;
+----
+column_reference	NAME_IDENTIFIER	8	10.0
+literal	LITERAL_ATOMIC	3	8.33333
+table_reference	NAME_QUALIFIED	3	6.66667
+join	TRANSFORM_ITERATION	2	0.0
+
+# Test 9: Error location and debugging info
+# =========================================
+
+statement error
+SELECT * FROM parse_ast('
+SELECT user_id, 
+       COUNT(*) as 
+FROM orders
+GROUP BY user_id
+', 'duckdb');
+
+# Test 10: Live query pattern analysis
+# ====================================
+
+query III
+SELECT 
+    CASE 
+        WHEN type IN ('select_statement', 'select_node') THEN 'Query Structure'
+        WHEN type IN ('join', 'table_reference') THEN 'Data Access'
+        WHEN type = 'function_call' THEN 'Computation'
+        WHEN type IN ('where_clause', 'having_clause') THEN 'Filtering'
+        WHEN type IN ('group_by_clause', 'order_by_clause') THEN 'Organization'
+        ELSE 'Other'
+    END as query_pattern,
+    COUNT(*) as pattern_count,
+    COUNT(CASE WHEN name IS NOT NULL THEN 1 END) as named_elements
+FROM parse_ast('
+SELECT 
+    customer_region,
+    product_category, 
+    SUM(revenue) as total_revenue,
+    AVG(profit_margin) as avg_margin,
+    COUNT(DISTINCT order_id) as order_count
+FROM (
+    SELECT 
+        c.region as customer_region,
+        p.category as product_category,
+        oi.quantity * oi.unit_price as revenue,
+        (oi.unit_price - p.cost) / oi.unit_price as profit_margin,
+        o.order_id
+    FROM customers c
+    JOIN orders o ON c.customer_id = o.customer_id
+    JOIN order_items oi ON o.order_id = oi.order_id  
+    JOIN products p ON oi.product_id = p.product_id
+    WHERE o.order_date >= CURRENT_DATE - INTERVAL ''1 year''
+) as sales_data
+GROUP BY customer_region, product_category
+HAVING total_revenue > 50000
+ORDER BY total_revenue DESC
+', 'duckdb')
+GROUP BY query_pattern
+ORDER BY pattern_count DESC;
+----
+Data Access	8	8
+Computation	6	6
+Query Structure	3	0
+Organization	2	0
+Filtering	2	0
+Other	4	0
