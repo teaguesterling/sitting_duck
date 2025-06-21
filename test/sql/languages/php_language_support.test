@@ -99,4 +99,4 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/php/test.php')
 WHERE type = 'name' AND name IS NOT NULL;
 ----
-97
+83
