@@ -13,6 +13,9 @@
 #include "duckdb/parser/expression/columnref_expression.hpp"
 #include "duckdb/parser/expression/function_expression.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
+#include "duckdb/parser/expression/window_expression.hpp"
+#include "duckdb/parser/expression/comparison_expression.hpp"
+#include "duckdb/parser/expression/conjunction_expression.hpp"
 #include <cstring>
 #include <mutex>
 #include <numeric>  // for std::iota
@@ -28,38 +31,6 @@ namespace duckdb {
 // integration with the existing AST extension infrastructure.
 //==============================================================================
 
-// SQL-specific semantic types using language-specific bits (bits 0-1)
-namespace SQLSemanticTypes {
-    // TRANSFORM_QUERY refinements using SQL namespace
-    constexpr uint8_t TRANSFORM_QUERY_SELECT = SemanticTypes::TRANSFORM_QUERY | SemanticRefinements::SQL::Query::SELECT;
-    constexpr uint8_t TRANSFORM_QUERY_CTE = SemanticTypes::TRANSFORM_QUERY | SemanticRefinements::SQL::Query::CTE;
-    constexpr uint8_t TRANSFORM_QUERY_WINDOW = SemanticTypes::TRANSFORM_QUERY | SemanticRefinements::SQL::Query::WINDOW;
-    constexpr uint8_t TRANSFORM_QUERY_SUBQUERY = SemanticTypes::TRANSFORM_QUERY | SemanticRefinements::SQL::Query::SUBQUERY;
-
-    // COMPUTATION_CALL refinements using SQL namespace
-    constexpr uint8_t COMPUTATION_CALL_SCALAR = SemanticTypes::COMPUTATION_CALL | SemanticRefinements::SQL::Call::SCALAR;
-    constexpr uint8_t COMPUTATION_CALL_AGGREGATE = SemanticTypes::COMPUTATION_CALL | SemanticRefinements::SQL::Call::AGGREGATE;
-    constexpr uint8_t COMPUTATION_CALL_WINDOW = SemanticTypes::COMPUTATION_CALL | SemanticRefinements::SQL::Call::WINDOW;
-    constexpr uint8_t COMPUTATION_CALL_TABLE = SemanticTypes::COMPUTATION_CALL | SemanticRefinements::SQL::Call::TABLE;
-
-    // TRANSFORM_ITERATION refinements for JOIN types
-    constexpr uint8_t TRANSFORM_ITERATION_INNER = SemanticTypes::TRANSFORM_ITERATION | SemanticRefinements::SQL::Join::INNER;
-    constexpr uint8_t TRANSFORM_ITERATION_LEFT = SemanticTypes::TRANSFORM_ITERATION | SemanticRefinements::SQL::Join::LEFT;
-    constexpr uint8_t TRANSFORM_ITERATION_RIGHT = SemanticTypes::TRANSFORM_ITERATION | SemanticRefinements::SQL::Join::RIGHT;
-    constexpr uint8_t TRANSFORM_ITERATION_FULL = SemanticTypes::TRANSFORM_ITERATION | SemanticRefinements::SQL::Join::FULL;
-
-    // EXECUTION_MUTATION refinements using SQL namespace
-    constexpr uint8_t EXECUTION_MUTATION_INSERT = SemanticTypes::EXECUTION_MUTATION | SemanticRefinements::SQL::Mutation::INSERT;
-    constexpr uint8_t EXECUTION_MUTATION_UPDATE = SemanticTypes::EXECUTION_MUTATION | SemanticRefinements::SQL::Mutation::UPDATE;
-    constexpr uint8_t EXECUTION_MUTATION_DELETE = SemanticTypes::EXECUTION_MUTATION | SemanticRefinements::SQL::Mutation::DELETE;
-    constexpr uint8_t EXECUTION_MUTATION_MERGE = SemanticTypes::EXECUTION_MUTATION | SemanticRefinements::SQL::Mutation::MERGE;
-
-    // TRANSFORM_AGGREGATION refinements using SQL namespace
-    constexpr uint8_t TRANSFORM_AGGREGATION_GROUP = SemanticTypes::TRANSFORM_AGGREGATION | SemanticRefinements::SQL::Aggregation::GROUP;
-    constexpr uint8_t TRANSFORM_AGGREGATION_HAVING = SemanticTypes::TRANSFORM_AGGREGATION | SemanticRefinements::SQL::Aggregation::HAVING;
-    constexpr uint8_t TRANSFORM_AGGREGATION_WINDOW_FRAME = SemanticTypes::TRANSFORM_AGGREGATION | SemanticRefinements::SQL::Aggregation::WINDOW_FRAME;
-    constexpr uint8_t TRANSFORM_AGGREGATION_ROLLUP = SemanticTypes::TRANSFORM_AGGREGATION | SemanticRefinements::SQL::Aggregation::ROLLUP;
-}
 
 //==============================================================================
 // Thread-Safe Parser Manager (Architecture Plan Section 5.2)
@@ -253,21 +224,21 @@ vector<ASTNode> DuckDBAdapter::ConvertStatement(const SQLStatement& stmt, uint32
         }
         case StatementType::INSERT_STATEMENT: {
             auto node = CreateASTNode("insert_statement", "", stmt.ToString(),
-                                     SQLSemanticTypes::EXECUTION_MUTATION_INSERT,
+                                     SemanticTypes::EXECUTION_MUTATION,
                                      node_counter++, -1, 1);
             nodes.push_back(node);
             break;
         }
         case StatementType::UPDATE_STATEMENT: {
             auto node = CreateASTNode("update_statement", "", stmt.ToString(),
-                                     SQLSemanticTypes::EXECUTION_MUTATION_UPDATE,
+                                     SemanticTypes::EXECUTION_MUTATION,
                                      node_counter++, -1, 1);
             nodes.push_back(node);
             break;
         }
         case StatementType::DELETE_STATEMENT: {
             auto node = CreateASTNode("delete_statement", "", stmt.ToString(),
-                                     SQLSemanticTypes::EXECUTION_MUTATION_DELETE,
+                                     SemanticTypes::EXECUTION_MUTATION,
                                      node_counter++, -1, 1);
             nodes.push_back(node);
             break;
@@ -292,7 +263,7 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectStatement(const SelectStatement& stm
     
     // Main SELECT statement node
     auto select_node = CreateASTNode("select_statement", "", stmt.ToString(),
-                                    SQLSemanticTypes::TRANSFORM_QUERY_SELECT,
+                                    SemanticTypes::TRANSFORM_QUERY,
                                     node_counter++, -1, 1);
     uint32_t select_node_id = select_node.node_id;
     nodes.push_back(select_node);
@@ -339,7 +310,7 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectNode(const SelectNode& node, uint32_
     
     // SELECT node
     auto select_node = CreateASTNode("select_node", "", "",
-                                    SQLSemanticTypes::TRANSFORM_QUERY_SELECT,
+                                    SemanticTypes::TRANSFORM_QUERY,
                                     node_counter++, -1, 2);
     uint32_t select_node_id = select_node.node_id;
     nodes.push_back(select_node);
@@ -476,10 +447,12 @@ vector<ASTNode> DuckDBAdapter::ConvertExpression(const ParsedExpression& expr, u
                     }
                 }
             } else {
+                // Use basic function call semantic type for now
+                uint8_t semantic_type = SemanticTypes::COMPUTATION_CALL;
+                
                 // Create the function call node for user-visible functions
                 auto node = CreateASTNode("function_call", normalized_name, normalized_name,
-                                         SQLSemanticTypes::COMPUTATION_CALL_SCALAR,
-                                         node_counter++, -1, 0);
+                                         semantic_type, node_counter++, -1, 0);
                 nodes.push_back(node);
                 
                 // Process function arguments
@@ -501,10 +474,84 @@ vector<ASTNode> DuckDBAdapter::ConvertExpression(const ParsedExpression& expr, u
         case ExpressionType::VALUE_CONSTANT: {
             const auto& const_expr = expr.Cast<ConstantExpression>();
             string value = const_expr.value.ToString();
-            auto node = CreateASTNode("literal", value, value,
-                                     SemanticTypes::LITERAL_ATOMIC,
+            
+            // Determine appropriate semantic type based on value type
+            uint8_t semantic_type;
+            auto value_type = const_expr.value.type();
+            if (value_type == LogicalType::VARCHAR) {
+                semantic_type = SemanticTypes::LITERAL_STRING;
+            } else if (value_type == LogicalType::INTEGER || 
+                       value_type == LogicalType::BIGINT ||
+                       value_type == LogicalType::DOUBLE ||
+                       value_type.id() == LogicalTypeId::DECIMAL) {
+                semantic_type = SemanticTypes::LITERAL_NUMBER;
+            } else if (value_type == LogicalType::BOOLEAN) {
+                semantic_type = SemanticTypes::LITERAL_ATOMIC;
+            } else {
+                semantic_type = SemanticTypes::LITERAL_ATOMIC;
+            }
+            
+            auto node = CreateASTNode("literal", value, value, semantic_type,
                                      node_counter++, -1, 0);
             nodes.push_back(node);
+            break;
+        }
+        case ExpressionType::COMPARE_EQUAL:
+        case ExpressionType::COMPARE_NOTEQUAL:
+        case ExpressionType::COMPARE_LESSTHAN:
+        case ExpressionType::COMPARE_GREATERTHAN:
+        case ExpressionType::COMPARE_LESSTHANOREQUALTO:
+        case ExpressionType::COMPARE_GREATERTHANOREQUALTO: {
+            const auto& comp_expr = expr.Cast<ComparisonExpression>();
+            
+            // Create comparison operator node
+            auto comp_node = CreateASTNode("comparison", "", expr.ToString(),
+                                          SemanticTypes::OPERATOR_COMPARISON,
+                                          node_counter++, -1, 0);
+            nodes.push_back(comp_node);
+            
+            // Process left and right operands
+            if (comp_expr.left) {
+                auto left_nodes = ConvertExpression(*comp_expr.left, node_counter);
+                for (auto& ln : left_nodes) {
+                    if (ln.tree_position.parent_index == -1) {
+                        ln.tree_position.parent_index = comp_node.node_id;
+                    }
+                    nodes.push_back(ln);
+                }
+            }
+            if (comp_expr.right) {
+                auto right_nodes = ConvertExpression(*comp_expr.right, node_counter);
+                for (auto& rn : right_nodes) {
+                    if (rn.tree_position.parent_index == -1) {
+                        rn.tree_position.parent_index = comp_node.node_id;
+                    }
+                    nodes.push_back(rn);
+                }
+            }
+            break;
+        }
+        case ExpressionType::CONJUNCTION_AND:
+        case ExpressionType::CONJUNCTION_OR: {
+            const auto& conj_expr = expr.Cast<ConjunctionExpression>();
+            
+            // Create conjunction operator node
+            auto conj_node = CreateASTNode("conjunction", "", expr.ToString(),
+                                          SemanticTypes::OPERATOR_LOGICAL,
+                                          node_counter++, -1, 0);
+            nodes.push_back(conj_node);
+            
+            // Process all child expressions
+            for (const auto& child : conj_expr.children) {
+                if (!child) continue;
+                auto child_nodes = ConvertExpression(*child, node_counter);
+                for (auto& cn : child_nodes) {
+                    if (cn.tree_position.parent_index == -1) {
+                        cn.tree_position.parent_index = conj_node.node_id;
+                    }
+                    nodes.push_back(cn);
+                }
+            }
             break;
         }
         default: {

@@ -171,48 +171,6 @@ namespace SemanticRefinements {
         constexpr uint8_t LABEL = 0x03;        // 11 - Labels, tags
     }
     
-    // SQL-specific refinements for database operations and cross-language query patterns
-    namespace SQL {
-        // TRANSFORM_QUERY refinements - Query structure analysis
-        namespace Query {
-            constexpr uint8_t SELECT = 0x00;      // 00 - Basic SELECT statements
-            constexpr uint8_t CTE = 0x01;         // 01 - WITH clauses (Common Table Expressions)
-            constexpr uint8_t WINDOW = 0x02;      // 10 - Window function queries
-            constexpr uint8_t SUBQUERY = 0x03;    // 11 - Subqueries, correlated queries
-        }
-        
-        // COMPUTATION_CALL refinements - Function type analysis for performance  
-        namespace Call {
-            constexpr uint8_t SCALAR = 0x00;      // 00 - Scalar functions (list_transform, struct_pack)
-            constexpr uint8_t AGGREGATE = 0x01;   // 01 - Aggregate functions (SUM, COUNT, AVG, MAX, MIN)
-            constexpr uint8_t WINDOW = 0x02;      // 10 - Window functions (RANK, ROW_NUMBER, LAG, LEAD)
-            constexpr uint8_t TABLE = 0x03;       // 11 - Table functions (unnest, generate_series)
-        }
-        
-        // TRANSFORM_ITERATION refinements - Join type analysis for performance
-        namespace Join {
-            constexpr uint8_t INNER = 0x00;       // 00 - INNER JOIN (most efficient)
-            constexpr uint8_t LEFT = 0x01;        // 01 - LEFT OUTER JOIN
-            constexpr uint8_t RIGHT = 0x02;       // 10 - RIGHT OUTER JOIN
-            constexpr uint8_t FULL = 0x03;        // 11 - FULL OUTER JOIN (most expensive)
-        }
-        
-        // EXECUTION_MUTATION refinements - Data modification analysis
-        namespace Mutation {
-            constexpr uint8_t INSERT = 0x00;      // 00 - INSERT statements
-            constexpr uint8_t UPDATE = 0x01;      // 01 - UPDATE statements
-            constexpr uint8_t DELETE = 0x02;      // 10 - DELETE statements
-            constexpr uint8_t MERGE = 0x03;       // 11 - MERGE/UPSERT statements
-        }
-        
-        // TRANSFORM_AGGREGATION refinements - Aggregation complexity analysis
-        namespace Aggregation {
-            constexpr uint8_t GROUP = 0x00;       // 00 - GROUP BY clauses
-            constexpr uint8_t HAVING = 0x01;      // 01 - HAVING clauses
-            constexpr uint8_t WINDOW_FRAME = 0x02; // 10 - PARTITION BY, ORDER BY in window functions
-            constexpr uint8_t ROLLUP = 0x03;      // 11 - ROLLUP, CUBE, GROUPING SETS
-        }
-    }
     
     // Cross-language query/data patterns (existing, keeping for compatibility)
     namespace Query {

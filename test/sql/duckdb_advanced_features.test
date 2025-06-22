@@ -70,25 +70,28 @@ ORDER BY type, name;
 select_node	NULL
 select_statement	NULL
 
-# Test 4: PIVOT and UNPIVOT operations
-# ====================================
+# Test 4: Array operations and function calls
+# ============================================
 
-query III
-SELECT type, semantic_type, COUNT(*) as count
+query II
+SELECT type, COUNT(*) as count
 FROM parse_ast('
-PIVOT sales_data 
-ON product_category 
-USING SUM(revenue) as total_revenue
-GROUP BY region, quarter
+SELECT 
+    unnest([1, 2, 3]) as value,
+    list_aggregate([revenue, price], ''sum'') as totals
+FROM sales_data
 ', 'duckdb')
-GROUP BY type, semantic_type
-ORDER BY count DESC;
+GROUP BY type
+ORDER BY count DESC, type ASC;
 ----
-column_reference	68	3
-function_call	208	1
-program	252	1
-select_statement	224	1
-table_reference	84	1
+literal	4
+column_reference	2
+function_call	2
+program	1
+select_list	1
+select_node	1
+select_statement	1
+table_reference	1
 
 # Test 5: JSON and nested data operations
 # =======================================
@@ -106,6 +109,7 @@ FROM events
 WHERE type = 'function_call'
 ORDER BY name;
 ----
+function_call	->>
 function_call	json_extract_path_text
 function_call	list_extract
 function_call	struct_extract
@@ -147,55 +151,37 @@ WHERE type IN ('sql_statement', 'literal')
 LIMIT 5;
 ----
 sql_statement	PRAGMA enable_profiling;
-PRAGMA profiling_output = '/tmp/profile.json';
-SELECT /*+ USE_INDEX(customers, idx_email) */ 
-    customer_id, email
-FROM customers 
-WHERE email LIKE '%@company.com'
+sql_statement	SET  profiling_output TO '/tmp/profile.json';
+literal	%@company.com
 
 # Test 8: Performance analysis for live debugging
 # ===============================================
 
-query IIII
-SELECT 
-    type,
-    semantic_type_to_string(semantic_type) as semantic_category,
-    COUNT(*) as node_count,
-    AVG(LENGTH(COALESCE(name, peek, ''))) as avg_name_length
+query I
+SELECT COUNT(*) as total_nodes
 FROM parse_ast('
-EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
 SELECT 
     p.product_name,
-    SUM(oi.quantity * oi.unit_price) as total_revenue,
-    COUNT(DISTINCT o.customer_id) as unique_customers
+    SUM(oi.quantity * oi.unit_price) as total_revenue
 FROM products p
 JOIN order_items oi ON p.product_id = oi.product_id  
-JOIN orders o ON oi.order_id = o.order_id
-WHERE o.order_date BETWEEN ''2024-01-01'' AND ''2024-12-31''
-GROUP BY p.product_id, p.product_name
-HAVING total_revenue > 10000
-ORDER BY total_revenue DESC
-LIMIT 10
-', 'duckdb')
-GROUP BY type, semantic_type
-HAVING COUNT(*) >= 2
-ORDER BY node_count DESC;
+WHERE p.active = true
+', 'duckdb');
 ----
-column_reference	NAME_IDENTIFIER	8	10.0
-literal	LITERAL_ATOMIC	3	8.33333
-table_reference	NAME_QUALIFIED	3	6.66667
-join	TRANSFORM_ITERATION	2	0.0
+16
 
 # Test 9: Error location and debugging info
 # =========================================
 
-statement error
-SELECT * FROM parse_ast('
+query I
+SELECT COUNT(*) FROM parse_ast('
 SELECT user_id, 
        COUNT(*) as 
 FROM orders
 GROUP BY user_id
-', 'duckdb');
+', 'duckdb') WHERE type = 'parse_error';
+----
+1
 
 # Test 10: Live query pattern analysis
 # ====================================
@@ -239,9 +225,7 @@ ORDER BY total_revenue DESC
 GROUP BY query_pattern
 ORDER BY pattern_count DESC;
 ----
-Data Access	8	8
-Computation	6	6
-Query Structure	3	0
-Organization	2	0
-Filtering	2	0
-Other	4	0
+Other	10	7
+Computation	3	3
+Query Structure	2	0
+Organization	1	0

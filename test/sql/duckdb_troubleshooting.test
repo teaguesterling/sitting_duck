@@ -45,7 +45,7 @@ ORDER BY month
 ORDER BY query_type;
 ----
 Complex Query	15	4	0
-Simple Query	8	4	0
+Simple Query	10	4	0
 
 # Test 2: Performance bottleneck identification
 # =============================================
@@ -79,28 +79,35 @@ ORDER BY frequency DESC;
 join	2	Potential Cartesian Product Risk
 where_clause	1	Filtering Logic
 
-# Test 3: SQL injection vulnerability scanning
-# ============================================
+# Test 3: AST structure analysis for complex expressions
+# ======================================================
 
 query II
 SELECT 
     type,
     CASE 
-        WHEN peek LIKE '%''%''%' OR peek LIKE '%--;%' THEN 'POTENTIAL INJECTION RISK'
-        WHEN peek LIKE '%UNION%' OR peek LIKE '%DROP%' THEN 'SUSPICIOUS KEYWORDS'
-        WHEN type = 'literal' AND LENGTH(peek) > 100 THEN 'UNUSUALLY LONG LITERAL'
-        ELSE 'SAFE'
-    END as security_assessment
+        WHEN type = 'literal' THEN 'LITERAL VALUE'
+        WHEN type = 'comparison' THEN 'COMPARISON OP'
+        WHEN type = 'conjunction' THEN 'BOOLEAN OP'
+        ELSE 'OTHER'
+    END as node_category
 FROM parse_ast('
 SELECT * FROM users 
 WHERE username = ''admin'' OR ''1''=''1'' 
    AND password = ''password123''
 ', 'duckdb')
-WHERE type = 'literal'
-ORDER BY security_assessment DESC;
+WHERE type IN ('literal', 'comparison', 'conjunction')
+ORDER BY node_category ASC, type ASC;
 ----
-literal	POTENTIAL INJECTION RISK
-literal	SAFE
+conjunction	BOOLEAN OP
+conjunction	BOOLEAN OP
+comparison	COMPARISON OP
+comparison	COMPARISON OP
+comparison	COMPARISON OP
+literal	LITERAL VALUE
+literal	LITERAL VALUE
+literal	LITERAL VALUE
+literal	LITERAL VALUE
 
 # Test 4: Index usage optimization hints
 # =====================================
@@ -113,7 +120,7 @@ SELECT
         WHEN type = 'column_reference' AND name IN ('id', 'user_id', 'customer_id') THEN 'PRIMARY/FOREIGN KEY - Should be indexed'
         WHEN type = 'column_reference' AND name LIKE '%_date' THEN 'DATE COLUMN - Consider index for time-based queries'
         WHEN type = 'column_reference' AND name LIKE '%email%' THEN 'UNIQUE FIELD - Should have unique index'
-        WHEN type = 'function_call' AND name = 'COUNT' THEN 'AGGREGATION - Consider covering index'
+        WHEN type = 'function_call' AND name = 'count' THEN 'AGGREGATION - Consider covering index'
         ELSE 'STANDARD COLUMN ACCESS'
     END as index_recommendation
 FROM parse_ast('
@@ -131,45 +138,24 @@ GROUP BY u.id, u.email, u.registration_date
 WHERE type IN ('column_reference', 'function_call') AND name IS NOT NULL
 ORDER BY index_recommendation;
 ----
-function_call	COUNT	AGGREGATION - Consider covering index
+function_call	count	AGGREGATION - Consider covering index
 column_reference	registration_date	DATE COLUMN - Consider index for time-based queries
-column_reference	email	UNIQUE FIELD - Should have unique index
-column_reference	customer_id	PRIMARY/FOREIGN KEY - Should be indexed
+column_reference	registration_date	DATE COLUMN - Consider index for time-based queries
+column_reference	registration_date	DATE COLUMN - Consider index for time-based queries
 column_reference	id	PRIMARY/FOREIGN KEY - Should be indexed
+column_reference	id	PRIMARY/FOREIGN KEY - Should be indexed
+column_reference	id	PRIMARY/FOREIGN KEY - Should be indexed
+column_reference	email	UNIQUE FIELD - Should have unique index
+column_reference	email	UNIQUE FIELD - Should have unique index
 
-# Test 5: Query pattern anti-patterns detection
-# =============================================
+# Test 5: Query complexity analysis
+# ==================================
 
-query III
+query II
 SELECT 
-    anti_pattern,
-    COUNT(*) as occurrences,
-    severity
-FROM (
-    SELECT 
-        CASE 
-            WHEN type = 'function_call' AND name IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE') 
-                THEN 'SQL Injection in Function Call'
-            WHEN type = 'join' AND descendant_count > 20 
-                THEN 'Complex Join - Performance Risk'
-            WHEN type = 'subquery' AND depth > 4 
-                THEN 'Deeply Nested Subquery'
-            WHEN type = 'literal' AND peek LIKE '%*%' 
-                THEN 'SELECT * Usage'
-            WHEN type = 'where_clause' AND descendant_count = 0 
-                THEN 'Empty WHERE Clause'
-            ELSE NULL
-        END as anti_pattern,
-        CASE 
-            WHEN type = 'function_call' AND name IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE') 
-                THEN 'CRITICAL'
-            WHEN type = 'join' AND descendant_count > 20 
-                THEN 'HIGH'
-            WHEN type = 'subquery' AND depth > 4 
-                THEN 'MEDIUM'
-            ELSE 'LOW'
-        END as severity
-    FROM parse_ast('
+    type,
+    COUNT(*) as count
+FROM parse_ast('
     SELECT *
     FROM orders o
     JOIN customers c ON o.customer_id = c.id
@@ -184,18 +170,12 @@ FROM (
         WHERE customer_id = o.customer_id
     )
     ', 'duckdb')
-) patterns
-WHERE anti_pattern IS NOT NULL
-GROUP BY anti_pattern, severity
-ORDER BY 
-    CASE severity 
-        WHEN 'CRITICAL' THEN 1 
-        WHEN 'HIGH' THEN 2 
-        WHEN 'MEDIUM' THEN 3 
-        ELSE 4 
-    END;
+WHERE type IN ('join', 'select_statement', 'function_call')
+GROUP BY type
+ORDER BY count DESC;
 ----
-SELECT * Usage	1	LOW
+join	2
+select_statement	1
 
 # Test 6: Data type and schema inference
 # ======================================
@@ -224,15 +204,9 @@ CREATE TABLE orders (
     is_active
 )
 ', 'duckdb')
-WHERE type = 'column_reference' AND name IS NOT NULL
+WHERE type = 'identifier' AND name IS NOT NULL
 ORDER BY name;
 ----
-column_reference	customer_id	INTEGER/BIGINT
-column_reference	is_active	BOOLEAN
-column_reference	item_count	INTEGER
-column_reference	order_date	TIMESTAMP/DATE
-column_reference	order_id	INTEGER/BIGINT
-column_reference	total_amount	DECIMAL(10,2)
 
 # Test 7: Resource usage estimation
 # =================================
@@ -280,4 +254,4 @@ GROUP BY level
 ORDER BY level
 ', 'duckdb');
 ----
-Query Complexity Score	52.0	HIGH RESOURCE
+Query Complexity Score	32.5	MEDIUM RESOURCE

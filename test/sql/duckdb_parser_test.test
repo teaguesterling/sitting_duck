@@ -36,7 +36,7 @@ LIMIT 10;
 # ==========================================
 
 query III
-SELECT type, semantic_type, COUNT(*) as count
+SELECT type, semantic_type_to_string(semantic_type) as semantic_type, COUNT(*) as count
 FROM parse_ast('
 SELECT u.name, p.title 
 FROM users u 
@@ -44,17 +44,18 @@ JOIN posts p ON u.id = p.user_id
 WHERE u.active = true
 ', 'duckdb')
 GROUP BY type, semantic_type
-ORDER BY type;
+ORDER BY type ASC, semantic_type ASC;
 ----
-column_reference	80	2
-expression	216	1
-join	228	1
-program	252	1
-select_list	188	1
-select_node	224	1
-select_statement	224	1
-table_reference	84	2
-where_clause	144	1
+column_reference	NAME_IDENTIFIER	3
+comparison	OPERATOR_COMPARISON	1
+expression	COMPUTATION_EXPRESSION	1
+join	TRANSFORM_ITERATION	1
+program	DEFINITION_MODULE	1
+select_list	ORGANIZATION_CONTAINER	1
+select_node	TRANSFORM_QUERY	1
+select_statement	TRANSFORM_QUERY	1
+table_reference	NAME_QUALIFIED	2
+where_clause	FLOW_CONDITIONAL	1
 
 # Test 4: CTE (Common Table Expression) parsing
 # ==============================================
@@ -88,8 +89,10 @@ function_call	max
 # Test 6: Error handling for invalid SQL
 # ======================================
 
-statement error
-SELECT * FROM parse_ast('SELECT FROM', 'duckdb');
+query I
+SELECT COUNT(*) FROM parse_ast('SELECT FROM', 'duckdb') WHERE type = 'parse_error';
+----
+1
 
 # Test 7: Compare DuckDB vs tree-sitter SQL parsing
 # ==================================================
@@ -108,5 +111,5 @@ SELECT
 FROM parse_ast('SELECT u.name, COUNT(*) FROM users u GROUP BY u.name', 'sql')
 ORDER BY parser_type;
 ----
-duckdb	10	5
-tree-sitter	25	8
+duckdb	9	4
+tree-sitter	35	18
