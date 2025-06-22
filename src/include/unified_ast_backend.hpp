@@ -10,6 +10,48 @@
 
 namespace duckdb {
 
+//==============================================================================
+// Extraction Configuration System
+//==============================================================================
+
+struct ExtractionConfig {
+    ContextLevel context = ContextLevel::NORMALIZED;
+    SourceLevel source = SourceLevel::LINES; 
+    StructureLevel structure = StructureLevel::FULL;
+    PeekLevel peek = PeekLevel::SMART;
+    int32_t peek_size = 120;  // Used when peek == CUSTOM
+    
+    // Validation methods
+    bool is_valid() const {
+        return context <= ContextLevel::NATIVE &&
+               source <= SourceLevel::FULL &&
+               structure <= StructureLevel::FULL &&
+               peek <= PeekLevel::CUSTOM &&
+               peek_size >= 0;
+    }
+    
+    // Performance estimation
+    string get_performance_tier() const {
+        if (context == ContextLevel::NONE && structure == StructureLevel::NONE) {
+            return "FASTEST";
+        }
+        if (context <= ContextLevel::NORMALIZED && structure <= StructureLevel::MINIMAL) {
+            return "FAST";
+        }
+        if (context <= ContextLevel::NATIVE && structure <= StructureLevel::FULL) {
+            return "RICH";
+        }
+        return "MAXIMUM";
+    }
+};
+
+// Parse extraction config from SQL parameters
+ExtractionConfig ParseExtractionConfig(const string& context_str,
+                                     const string& source_str, 
+                                     const string& structure_str,
+                                     const string& peek_str,
+                                     int32_t peek_size = 120);
+
 // Result structure for unified parsing backend
 struct ASTSource {
     string file_path;     // Original file path or "<inline>" for string inputs
@@ -49,8 +91,14 @@ public:
     static ASTResult ParseToASTResult(const string& content, 
                                      const string& language, 
                                      const string& file_path = "<inline>",
-                                     int32_t peek_size = 120,
-                                     const string& peek_mode = "auto");
+                                     const ExtractionConfig& config = ExtractionConfig());
+    
+    // Legacy parsing function (for backward compatibility)
+    static ASTResult ParseToASTResult(const string& content, 
+                                     const string& language, 
+                                     const string& file_path,
+                                     int32_t peek_size,
+                                     const string& peek_mode);
     
     // Multi-file parsing function with glob support
     static ASTResultCollection ParseFilesToASTCollection(ClientContext &context,
@@ -81,13 +129,30 @@ public:
     static vector<string> GetFlatTableColumnNames();
     static LogicalType GetASTStructSchema();
     
+    // NEW: Hierarchical schema functions for structured field access
+    static vector<LogicalType> GetHierarchicalTableSchema();
+    static vector<string> GetHierarchicalTableColumnNames();
+    static LogicalType GetHierarchicalStructSchema();
+    
     // Conversion helpers
     static void ProjectToTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index);
     static Value CreateASTStruct(const ASTResult& result);
     static Value CreateASTStructValue(const ASTResult& result); // For scalar functions
     
+    // NEW: Hierarchical table projection
+    static void ProjectToHierarchicalTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index);
+    static Value CreateHierarchicalASTStruct(const ASTResult& result);
+    
     // Templated parsing implementation - avoids virtual calls in hot path
     // Made public so language adapters can call it from their GetParsingFunction() lambdas
+    template<typename AdapterType>
+    static ASTResult ParseToASTResultTemplated(const AdapterType* adapter,
+                                               const string& content, 
+                                               const string& language, 
+                                               const string& file_path,
+                                               const ExtractionConfig& config);
+                                               
+    // Legacy templated parsing (for backward compatibility)
     template<typename AdapterType>
     static ASTResult ParseToASTResultTemplated(const AdapterType* adapter,
                                                const string& content, 

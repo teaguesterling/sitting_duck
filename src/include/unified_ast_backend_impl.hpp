@@ -25,14 +25,13 @@ static string SanitizeUTF8(const string& input) {
     return string(char_array.begin(), char_array.end() - 1);  // Exclude null terminator
 }
 
-// Template implementation of the parsing function - eliminates virtual calls
+// Template implementation with ExtractionConfig - eliminates virtual calls
 template<typename AdapterType>
 ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapter,
                                                        const string& content, 
                                                        const string& language, 
                                                        const string& file_path,
-                                                       int32_t peek_size,
-                                                       const string& peek_mode) {
+                                                       const ExtractionConfig& config) {
     ASTResult result;
     result.source.file_path = file_path;
     result.source.language = language;
@@ -86,29 +85,25 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
             ast_node.node_id = entry.node_index;
             ast_node.type.raw = ts_node_type(entry.node);
             
-            // Position information
+            // Position information -> NEW STRUCTURED FIELDS
             TSPoint start = ts_node_start_point(entry.node);
             TSPoint end = ts_node_end_point(entry.node);
-            ast_node.file_position.start_line = start.row + 1;
-            ast_node.file_position.end_line = end.row + 1;
-            ast_node.file_position.start_column = start.column + 1;
-            ast_node.file_position.end_column = end.column + 1;
+            ast_node.source.start_line = start.row + 1;
+            ast_node.source.end_line = end.row + 1;
+            ast_node.source.start_column = start.column + 1;
+            ast_node.source.end_column = end.column + 1;
             
-            // Tree position
-            ast_node.tree_position.node_index = entry.node_index;
-            ast_node.tree_position.parent_index = entry.parent_id;
-            ast_node.tree_position.sibling_index = entry.sibling_index;
-            ast_node.tree_position.node_depth = entry.depth;
-            
-            // Subtree information
+            // Tree structure -> NEW STRUCTURED FIELDS
+            ast_node.structure.parent_id = entry.parent_id;
+            ast_node.structure.depth = entry.depth;
+            ast_node.structure.sibling_index = entry.sibling_index;
             uint32_t child_count = ts_node_child_count(entry.node);
-            ast_node.subtree.children_count = child_count;
-            ast_node.subtree.descendant_count = 0; // Will be calculated on second visit
+            ast_node.structure.children_count = child_count;
+            ast_node.structure.descendant_count = 0; // Will be calculated on second visit
             
-            // Extract name (direct call, no virtual dispatch)
+            // Context information -> NEW STRUCTURED FIELDS
             string raw_name = adapter->ExtractNodeName(entry.node, content);
-            ast_node.name.raw = SanitizeUTF8(raw_name);
-            ast_node.name.qualified = ast_node.name.raw; // TODO: Implement qualified name logic
+            ast_node.context.name = SanitizeUTF8(raw_name);
             
             // Extract source text (peek) with configurable size and mode
             uint32_t start_byte = ts_node_start_byte(entry.node);
@@ -117,15 +112,11 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
                 string source_text = content.substr(start_byte, end_byte - start_byte);
                 
                 // Apply peek configuration and sanitize UTF-8
-                if (peek_mode == "none" || peek_size == 0) {
+                if (config.peek == PeekLevel::NONE || config.peek_size == 0) {
                     ast_node.peek = "";  // Empty string will become NULL in output
-                } else if (peek_mode == "full" || peek_size == -1) {
+                } else if (config.peek == PeekLevel::FULL || config.peek_size == -1) {
                     ast_node.peek = SanitizeUTF8(source_text);
-                } else if (peek_mode == "line") {
-                    // Extract just the first line
-                    size_t newline_pos = source_text.find('\n');
-                    ast_node.peek = SanitizeUTF8((newline_pos != string::npos) ? source_text.substr(0, newline_pos) : source_text);
-                } else if (peek_mode == "smart") {
+                } else if (config.peek == PeekLevel::SMART) {
                     // Smart mode: adapt to content size and type
                     if (source_text.length() <= 50) {
                         // Small nodes: full content
@@ -139,62 +130,21 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
                         string first_line = source_text.substr(0, newline_pos);
                         ast_node.peek = SanitizeUTF8(first_line.length() > 80 ? first_line.substr(0, 77) + "..." : first_line);
                     }
-                } else if (peek_mode == "compact") {
-                    // Compact mode: always truncate for table display
-                    uint32_t compact_size = 60;
-                    if (source_text.length() <= compact_size) {
-                        ast_node.peek = SanitizeUTF8(source_text);
-                    } else {
-                        // Smart truncation at word boundary
-                        string truncated = source_text.substr(0, compact_size);
-                        size_t last_space = truncated.find_last_of(" \t");
-                        if (last_space != string::npos && last_space > compact_size / 2) {
-                            ast_node.peek = SanitizeUTF8(truncated.substr(0, last_space) + "...");
-                        } else {
-                            ast_node.peek = SanitizeUTF8(truncated + "...");
-                        }
-                    }
-                } else if (peek_mode == "signature") {
-                    // Signature mode: extract declaration/signature only
-                    if (source_text.find('\n') == string::npos) {
-                        // Single line - use as-is (likely already a signature)
-                        ast_node.peek = SanitizeUTF8(source_text);
-                    } else {
-                        // Multi-line: extract until { or : (function/class signatures)
-                        size_t brace_pos = source_text.find('{');
-                        size_t colon_pos = source_text.find(':');
-                        size_t end_pos = string::npos;
-                        
-                        if (brace_pos != string::npos && colon_pos != string::npos) {
-                            end_pos = std::min(brace_pos, colon_pos);
-                        } else if (brace_pos != string::npos) {
-                            end_pos = brace_pos;
-                        } else if (colon_pos != string::npos) {
-                            end_pos = colon_pos;
-                        }
-                        
-                        if (end_pos != string::npos) {
-                            string signature = source_text.substr(0, end_pos);
-                            // Remove trailing whitespace and newlines
-                            while (!signature.empty() && (signature.back() == ' ' || signature.back() == '\n' || signature.back() == '\t')) {
-                                signature.pop_back();
-                            }
-                            ast_node.peek = SanitizeUTF8(signature);
-                        } else {
-                            // Fallback to first line
-                            size_t newline_pos = source_text.find('\n');
-                            ast_node.peek = SanitizeUTF8((newline_pos != string::npos) ? source_text.substr(0, newline_pos) : source_text);
-                        }
-                    }
-                } else {
-                    // Default/auto mode with configurable size
-                    uint32_t effective_size = (peek_size > 0) ? peek_size : 120;
+                } else if (config.peek == PeekLevel::CUSTOM) {
+                    // Custom size mode
+                    uint32_t effective_size = config.peek_size > 0 ? config.peek_size : 120;
                     ast_node.peek = SanitizeUTF8(source_text.length() > effective_size ? source_text.substr(0, effective_size) : source_text);
+                } else {
+                    // Default fallback (shouldn't happen)
+                    ast_node.peek = SanitizeUTF8(source_text.length() > 120 ? source_text.substr(0, 120) : source_text);
                 }
             }
             
             // Populate semantic type and other fields - pass configs to avoid virtual call
             PopulateSemanticFieldsTemplated(ast_node, adapter, entry.node, content, node_configs);
+            
+            // Update legacy fields for backward compatibility
+            ast_node.UpdateComputedLegacyFields();
             
             result.nodes.push_back(ast_node);
             
@@ -212,7 +162,10 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
             // All nodes between entry.node_index+1 and nodes.size() are descendants
             // due to DFS ordering
             int32_t descendant_count = result.nodes.size() - entry.node_index - 1;
-            result.nodes[entry.node_index].subtree.descendant_count = descendant_count;
+            result.nodes[entry.node_index].structure.descendant_count = descendant_count;
+            
+            // Update legacy fields after descendant count change
+            result.nodes[entry.node_index].UpdateComputedLegacyFields();
             
             stack.pop_back();
         }
@@ -237,36 +190,60 @@ void PopulateSemanticFieldsTemplated(ASTNode& node, const AdapterType* adapter, 
     const NodeConfig* config = (config_it != node_configs.end()) ? &config_it->second : nullptr;
     
     if (config) {
-        // Set semantic type from configuration
-        node.semantic_type = config->semantic_type;
-        
-        // Set universal flags from configuration with conditional logic
-        node.universal_flags = config->flags;
+        // STRUCTURED FIELDS: Set semantic info in context
+        node.context.normalized.semantic_type = config->semantic_type;
+        node.context.normalized.universal_flags = config->flags;
         
         // Handle IS_KEYWORD_IF_LEAF: only apply IS_KEYWORD flag if node has no children
         if (config->flags & ASTNodeFlags::IS_KEYWORD_IF_LEAF) {
             // Remove the conditional flag
-            node.universal_flags &= ~ASTNodeFlags::IS_KEYWORD_IF_LEAF;
+            node.context.normalized.universal_flags &= ~ASTNodeFlags::IS_KEYWORD_IF_LEAF;
             
             // Only add IS_KEYWORD if this is a leaf node (no children)
             if (ts_node_child_count(ts_node) == 0) {
-                node.universal_flags |= ASTNodeFlags::IS_KEYWORD;
+                node.context.normalized.universal_flags |= ASTNodeFlags::IS_KEYWORD;
             }
         }
     } else {
         // Fallback: use PARSER_CONSTRUCT for unknown types
-        node.semantic_type = SemanticTypes::PARSER_CONSTRUCT;
-        node.universal_flags = 0;
+        node.context.normalized.semantic_type = SemanticTypes::PARSER_CONSTRUCT;
+        node.context.normalized.universal_flags = 0;
     }
     
     // Set normalized type for display/compatibility
-    node.type.normalized = SemanticTypes::GetSemanticTypeName(node.semantic_type);
+    node.type.normalized = SemanticTypes::GetSemanticTypeName(node.context.normalized.semantic_type);
     
     // Calculate arity binning
-    node.arity_bin = ASTNode::BinArityFibonacci(ts_node_child_count(ts_node));
+    node.context.normalized.arity_bin = ASTNode::BinArityFibonacci(ts_node_child_count(ts_node));
+}
+
+// Legacy template version for backward compatibility
+template<typename AdapterType>
+ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapter,
+                                                       const string& content, 
+                                                       const string& language, 
+                                                       const string& file_path,
+                                                       int32_t peek_size,
+                                                       const string& peek_mode) {
+    // Convert legacy parameters to ExtractionConfig
+    ExtractionConfig config;
+    config.peek_size = peek_size;
     
-    // Update legacy fields from semantic_type
-    node.UpdateLegacyFields();
+    // Map legacy peek_mode to PeekLevel
+    if (peek_mode == "none") {
+        config.peek = PeekLevel::NONE;
+    } else if (peek_mode == "smart") {
+        config.peek = PeekLevel::SMART;
+    } else if (peek_mode == "full") {
+        config.peek = PeekLevel::FULL;
+    } else if (peek_mode == "compact") {
+        config.peek = PeekLevel::SMART; // Map compact to smart
+    } else {
+        config.peek = PeekLevel::SMART; // Default
+    }
+    
+    // Call the new version
+    return ParseToASTResultTemplated(adapter, content, language, file_path, config);
 }
 
 } // namespace duckdb

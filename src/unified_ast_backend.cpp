@@ -19,12 +19,38 @@ namespace duckdb {
 ASTResult UnifiedASTBackend::ParseToASTResult(const string& content, 
                                             const string& language, 
                                             const string& file_path,
-                                            int32_t peek_size,
-                                            const string& peek_mode) {
+                                            const ExtractionConfig& config) {
     
     // Phase 2: Use template-based parsing with ZERO virtual calls!
     auto& registry = LanguageAdapterRegistry::GetInstance();
-    return registry.ParseContentTemplated(content, language, file_path, peek_size, peek_mode);
+    return registry.ParseContentTemplated(content, language, file_path, config);
+}
+
+// Legacy function for backward compatibility
+ASTResult UnifiedASTBackend::ParseToASTResult(const string& content, 
+                                            const string& language, 
+                                            const string& file_path,
+                                            int32_t peek_size,
+                                            const string& peek_mode) {
+    
+    // Convert legacy parameters to ExtractionConfig
+    ExtractionConfig config;
+    config.peek_size = peek_size;
+    
+    // Map legacy peek_mode to PeekLevel
+    if (peek_mode == "none") {
+        config.peek = PeekLevel::NONE;
+    } else if (peek_mode == "smart") {
+        config.peek = PeekLevel::SMART;
+    } else if (peek_mode == "full") {
+        config.peek = PeekLevel::FULL;
+    } else if (peek_mode == "compact") {
+        config.peek = PeekLevel::SMART; // Map compact to smart
+    } else {
+        config.peek = PeekLevel::SMART; // Default
+    }
+    
+    return ParseToASTResult(content, language, file_path, config);
 }
 
 void UnifiedASTBackend::PopulateSemanticFields(ASTNode& node, const LanguageAdapter* adapter, TSNode ts_node, const string& content) {
@@ -32,36 +58,120 @@ void UnifiedASTBackend::PopulateSemanticFields(ASTNode& node, const LanguageAdap
     const NodeConfig* config = adapter->GetNodeConfig(node.type.raw);
     
     if (config) {
-        // Set semantic type from configuration
-        node.semantic_type = config->semantic_type;
-        
-        // Set universal flags from configuration with conditional logic
-        node.universal_flags = config->flags;
+        // STRUCTURED FIELDS: Set semantic info in context
+        node.context.normalized.semantic_type = config->semantic_type;
+        node.context.normalized.universal_flags = config->flags;
         
         // Handle IS_KEYWORD_IF_LEAF: only apply IS_KEYWORD flag if node has no children
         if (config->flags & ASTNodeFlags::IS_KEYWORD_IF_LEAF) {
             // Remove the conditional flag
-            node.universal_flags &= ~ASTNodeFlags::IS_KEYWORD_IF_LEAF;
+            node.context.normalized.universal_flags &= ~ASTNodeFlags::IS_KEYWORD_IF_LEAF;
             
             // Only add IS_KEYWORD if this is a leaf node (no children)
             if (ts_node_child_count(ts_node) == 0) {
-                node.universal_flags |= ASTNodeFlags::IS_KEYWORD;
+                node.context.normalized.universal_flags |= ASTNodeFlags::IS_KEYWORD;
             }
         }
     } else {
         // Fallback: use PARSER_CONSTRUCT for unknown types
-        node.semantic_type = SemanticTypes::PARSER_CONSTRUCT;
-        node.universal_flags = 0;
+        node.context.normalized.semantic_type = SemanticTypes::PARSER_CONSTRUCT;
+        node.context.normalized.universal_flags = 0;
     }
     
     // Set normalized type for display/compatibility
-    node.type.normalized = SemanticTypes::GetSemanticTypeName(node.semantic_type);
+    node.type.normalized = SemanticTypes::GetSemanticTypeName(node.context.normalized.semantic_type);
     
     // Calculate arity binning
-    node.arity_bin = ASTNode::BinArityFibonacci(ts_node_child_count(ts_node));
+    node.context.normalized.arity_bin = ASTNode::BinArityFibonacci(ts_node_child_count(ts_node));
+}
+
+//==============================================================================
+// Extraction Configuration Parsing
+//==============================================================================
+
+ExtractionConfig ParseExtractionConfig(const string& context_str,
+                                     const string& source_str, 
+                                     const string& structure_str,
+                                     const string& peek_str,
+                                     int32_t peek_size) {
+    ExtractionConfig config;
     
-    // Update legacy fields from semantic_type
-    node.UpdateLegacyFields();
+    // Parse context level
+    string context_lower = StringUtil::Lower(context_str);
+    if (context_lower == "none") {
+        config.context = ContextLevel::NONE;
+    } else if (context_lower == "node_types_only") {
+        config.context = ContextLevel::NODE_TYPES_ONLY;
+    } else if (context_lower == "normalized") {
+        config.context = ContextLevel::NORMALIZED;
+    } else if (context_lower == "native") {
+        config.context = ContextLevel::NATIVE;
+    } else {
+        // Default to normalized for invalid input
+        config.context = ContextLevel::NORMALIZED;
+    }
+    
+    // Parse source level
+    string source_lower = StringUtil::Lower(source_str);
+    if (source_lower == "none") {
+        config.source = SourceLevel::NONE;
+    } else if (source_lower == "path") {
+        config.source = SourceLevel::PATH;
+    } else if (source_lower == "lines_only") {
+        config.source = SourceLevel::LINES_ONLY;
+    } else if (source_lower == "lines") {
+        config.source = SourceLevel::LINES;
+    } else if (source_lower == "full") {
+        config.source = SourceLevel::FULL;
+    } else {
+        // Default to lines for invalid input
+        config.source = SourceLevel::LINES;
+    }
+    
+    // Parse structure level
+    string structure_lower = StringUtil::Lower(structure_str);
+    if (structure_lower == "none") {
+        config.structure = StructureLevel::NONE;
+    } else if (structure_lower == "minimal") {
+        config.structure = StructureLevel::MINIMAL;
+    } else if (structure_lower == "full") {
+        config.structure = StructureLevel::FULL;
+    } else {
+        // Default to full for invalid input
+        config.structure = StructureLevel::FULL;
+    }
+    
+    // Parse peek level  
+    string peek_lower = StringUtil::Lower(peek_str);
+    if (peek_lower == "none") {
+        config.peek = PeekLevel::NONE;
+    } else if (peek_lower == "smart") {
+        config.peek = PeekLevel::SMART;
+    } else if (peek_lower == "full") {
+        config.peek = PeekLevel::FULL;
+    } else {
+        // Try to parse as integer for custom size
+        try {
+            int32_t size = std::stoi(peek_str);
+            if (size >= 0) {
+                config.peek = PeekLevel::CUSTOM;
+                config.peek_size = size;
+            } else {
+                // Default to smart for negative values
+                config.peek = PeekLevel::SMART;
+            }
+        } catch (...) {
+            // Default to smart for invalid input
+            config.peek = PeekLevel::SMART;
+        }
+    }
+    
+    // Override peek_size if provided
+    if (peek_size != 120) {
+        config.peek_size = peek_size;
+    }
+    
+    return config;
 }
 
 
@@ -128,6 +238,107 @@ LogicalType UnifiedASTBackend::GetASTStructSchema() {
     child_list_t<LogicalType> ast_children;
     ast_children.push_back(make_pair("nodes", LogicalType::LIST(LogicalType::STRUCT(node_children))));
     ast_children.push_back(make_pair("source", LogicalType::STRUCT(source_children)));
+    
+    return LogicalType::STRUCT(ast_children);
+}
+
+//==============================================================================
+// NEW: Hierarchical Schema Functions for Structured Field Access
+//==============================================================================
+
+vector<LogicalType> UnifiedASTBackend::GetHierarchicalTableSchema() {
+    return {
+        LogicalType::BIGINT,      // node_id
+        
+        // Source Location (SourceLevel fields)
+        LogicalType::VARCHAR,     // file_path
+        LogicalType::VARCHAR,     // language  
+        LogicalType::UINTEGER,    // start_line
+        LogicalType::UINTEGER,    // start_column
+        LogicalType::UINTEGER,    // end_line
+        LogicalType::UINTEGER,    // end_column
+        
+        // Tree Structure (StructureLevel fields)
+        LogicalType::BIGINT,      // parent_id (stays signed for -1)
+        LogicalType::UINTEGER,    // depth
+        LogicalType::UINTEGER,    // sibling_index
+        LogicalType::UINTEGER,    // children_count
+        LogicalType::UINTEGER,    // descendant_count
+        
+        // Context Information (ContextLevel fields)
+        LogicalType::VARCHAR,     // type (raw)
+        LogicalType::VARCHAR,     // name
+        LogicalType::UTINYINT,    // semantic_type (normalized)
+        LogicalType::UTINYINT,    // universal_flags (normalized)
+        LogicalType::UTINYINT,    // arity_bin (normalized)
+        
+        // Content Preview (PeekLevel fields)
+        LogicalType::VARCHAR      // peek
+    };
+}
+
+vector<string> UnifiedASTBackend::GetHierarchicalTableColumnNames() {
+    return {
+        "node_id",
+        
+        // Source Location group
+        "file_path", "language", "start_line", "start_column", "end_line", "end_column",
+        
+        // Tree Structure group  
+        "parent_id", "depth", "sibling_index", "children_count", "descendant_count",
+        
+        // Context Information group
+        "type", "name", "semantic_type", "universal_flags", "arity_bin",
+        
+        // Content Preview group
+        "peek"
+    };
+}
+
+LogicalType UnifiedASTBackend::GetHierarchicalStructSchema() {
+    // Create structured schema with organized field groups
+    
+    // Source Location group
+    child_list_t<LogicalType> source_location_children;
+    source_location_children.push_back(make_pair("file_path", LogicalType::VARCHAR));
+    source_location_children.push_back(make_pair("language", LogicalType::VARCHAR));
+    source_location_children.push_back(make_pair("start_line", LogicalType::UINTEGER));
+    source_location_children.push_back(make_pair("start_column", LogicalType::UINTEGER));
+    source_location_children.push_back(make_pair("end_line", LogicalType::UINTEGER));
+    source_location_children.push_back(make_pair("end_column", LogicalType::UINTEGER));
+    
+    // Tree Structure group
+    child_list_t<LogicalType> tree_structure_children;
+    tree_structure_children.push_back(make_pair("parent_id", LogicalType::BIGINT));
+    tree_structure_children.push_back(make_pair("depth", LogicalType::UINTEGER));
+    tree_structure_children.push_back(make_pair("sibling_index", LogicalType::UINTEGER));
+    tree_structure_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
+    tree_structure_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
+    
+    // Context Information group
+    child_list_t<LogicalType> context_info_children;
+    context_info_children.push_back(make_pair("type", LogicalType::VARCHAR));
+    context_info_children.push_back(make_pair("name", LogicalType::VARCHAR));
+    context_info_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
+    context_info_children.push_back(make_pair("universal_flags", LogicalType::UTINYINT));
+    context_info_children.push_back(make_pair("arity_bin", LogicalType::UTINYINT));
+    
+    // Node with hierarchical structure
+    child_list_t<LogicalType> node_children;
+    node_children.push_back(make_pair("node_id", LogicalType::BIGINT));
+    node_children.push_back(make_pair("source", LogicalType::STRUCT(source_location_children)));
+    node_children.push_back(make_pair("structure", LogicalType::STRUCT(tree_structure_children)));
+    node_children.push_back(make_pair("context", LogicalType::STRUCT(context_info_children)));
+    node_children.push_back(make_pair("peek", LogicalType::VARCHAR));
+    
+    // AST result with metadata
+    child_list_t<LogicalType> metadata_children;
+    metadata_children.push_back(make_pair("file_path", LogicalType::VARCHAR));
+    metadata_children.push_back(make_pair("language", LogicalType::VARCHAR));
+    
+    child_list_t<LogicalType> ast_children;
+    ast_children.push_back(make_pair("nodes", LogicalType::LIST(LogicalType::STRUCT(node_children))));
+    ast_children.push_back(make_pair("metadata", LogicalType::STRUCT(metadata_children)));
     
     return LogicalType::STRUCT(ast_children);
 }
@@ -281,6 +492,193 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult& result) {
 Value UnifiedASTBackend::CreateASTStructValue(const ASTResult& result) {
     // Same as CreateASTStruct for now - both return a single struct value
     return CreateASTStruct(result);
+}
+
+//==============================================================================
+// NEW: Hierarchical Table and Struct Functions
+//==============================================================================
+
+void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index) {
+    // Verify output chunk has correct number of columns (18 for hierarchical schema)
+    if (output.ColumnCount() != 18) {
+        throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 18 for hierarchical schema");
+    }
+    
+    // Get output vectors - organized by field groups
+    auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
+    
+    // Source Location group (indices 1-6)
+    auto file_path_vec = FlatVector::GetData<string_t>(output.data[1]);
+    auto language_vec = FlatVector::GetData<string_t>(output.data[2]);
+    auto start_line_vec = FlatVector::GetData<uint32_t>(output.data[3]);
+    auto start_column_vec = FlatVector::GetData<uint32_t>(output.data[4]);
+    auto end_line_vec = FlatVector::GetData<uint32_t>(output.data[5]);
+    auto end_column_vec = FlatVector::GetData<uint32_t>(output.data[6]);
+    
+    // Tree Structure group (indices 7-11)
+    auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[7]);
+    auto depth_vec = FlatVector::GetData<uint32_t>(output.data[8]);
+    auto sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[9]);
+    auto children_count_vec = FlatVector::GetData<uint32_t>(output.data[10]);
+    auto descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[11]);
+    
+    // Context Information group (indices 12-16)
+    auto type_vec = FlatVector::GetData<string_t>(output.data[12]);
+    auto name_vec = FlatVector::GetData<string_t>(output.data[13]);
+    auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[14]);
+    auto universal_flags_vec = FlatVector::GetData<uint8_t>(output.data[15]);
+    auto arity_bin_vec = FlatVector::GetData<uint8_t>(output.data[16]);
+    
+    // Content Preview group (index 17)
+    auto peek_vec = FlatVector::GetData<string_t>(output.data[17]);
+    
+    // Get validity masks for nullable fields
+    auto &name_validity = FlatVector::Validity(output.data[13]);
+    auto &parent_validity = FlatVector::Validity(output.data[7]);
+    auto &peek_validity = FlatVector::Validity(output.data[17]);
+    
+    idx_t count = 0;
+    idx_t max_count = STANDARD_VECTOR_SIZE;
+    
+    // Process rows using NEW STRUCTURED FIELDS
+    for (idx_t i = current_row; i < result.nodes.size() && count < max_count; i++) {
+        const auto& node = result.nodes[i];
+        
+        // Core identifier
+        node_id_vec[output_index + count] = node.node_id;
+        
+        // Source Location group - use NEW structured fields
+        file_path_vec[output_index + count] = StringVector::AddString(output.data[1], result.source.file_path);
+        language_vec[output_index + count] = StringVector::AddString(output.data[2], result.source.language);
+        start_line_vec[output_index + count] = node.source.start_line;
+        start_column_vec[output_index + count] = node.source.start_column;
+        end_line_vec[output_index + count] = node.source.end_line;
+        end_column_vec[output_index + count] = node.source.end_column;
+        
+        // Tree Structure group - use NEW structured fields
+        if (node.structure.parent_id < 0) {
+            parent_validity.SetInvalid(output_index + count);
+        } else {
+            parent_id_vec[output_index + count] = node.structure.parent_id;
+        }
+        depth_vec[output_index + count] = node.structure.depth;
+        sibling_index_vec[output_index + count] = node.structure.sibling_index;
+        children_count_vec[output_index + count] = node.structure.children_count;
+        descendant_count_vec[output_index + count] = node.structure.descendant_count;
+        
+        // Context Information group - use NEW structured fields
+        type_vec[output_index + count] = StringVector::AddString(output.data[12], node.type.raw);
+        if (node.context.name.empty()) {
+            name_validity.SetInvalid(output_index + count);
+        } else {
+            name_vec[output_index + count] = StringVector::AddString(output.data[13], node.context.name);
+        }
+        semantic_type_vec[output_index + count] = node.context.normalized.semantic_type;
+        universal_flags_vec[output_index + count] = node.context.normalized.universal_flags;
+        arity_bin_vec[output_index + count] = node.context.normalized.arity_bin;
+        
+        // Content Preview group
+        if (node.peek.empty()) {
+            peek_validity.SetInvalid(output_index + count);
+        } else {
+            peek_vec[output_index + count] = StringVector::AddString(output.data[17], node.peek);
+        }
+        
+        count++;
+        current_row++;
+    }
+    
+    output_index += count;
+}
+
+Value UnifiedASTBackend::CreateHierarchicalASTStruct(const ASTResult& result) {
+    // Create metadata struct
+    child_list_t<Value> metadata_children;
+    metadata_children.push_back(make_pair("file_path", Value(result.source.file_path)));
+    metadata_children.push_back(make_pair("language", Value(result.source.language)));
+    Value metadata_value = Value::STRUCT(metadata_children);
+    
+    // Create nodes array with hierarchical structure
+    vector<Value> node_values;
+    node_values.reserve(result.nodes.size());
+    
+    for (const auto& node : result.nodes) {
+        // Source Location struct - use NEW structured fields
+        child_list_t<Value> source_children;
+        source_children.push_back(make_pair("file_path", Value(result.source.file_path)));
+        source_children.push_back(make_pair("language", Value(result.source.language)));
+        source_children.push_back(make_pair("start_line", Value::UINTEGER(node.source.start_line)));
+        source_children.push_back(make_pair("start_column", Value::UINTEGER(node.source.start_column)));
+        source_children.push_back(make_pair("end_line", Value::UINTEGER(node.source.end_line)));
+        source_children.push_back(make_pair("end_column", Value::UINTEGER(node.source.end_column)));
+        Value source_value = Value::STRUCT(source_children);
+        
+        // Tree Structure struct - use NEW structured fields
+        child_list_t<Value> structure_children;
+        structure_children.push_back(make_pair("parent_id", node.structure.parent_id >= 0 ? 
+                                             Value::BIGINT(node.structure.parent_id) : Value()));
+        structure_children.push_back(make_pair("depth", Value::UINTEGER(node.structure.depth)));
+        structure_children.push_back(make_pair("sibling_index", Value::UINTEGER(node.structure.sibling_index)));
+        structure_children.push_back(make_pair("children_count", Value::UINTEGER(node.structure.children_count)));
+        structure_children.push_back(make_pair("descendant_count", Value::UINTEGER(node.structure.descendant_count)));
+        Value structure_value = Value::STRUCT(structure_children);
+        
+        // Context Information struct - use NEW structured fields
+        child_list_t<Value> context_children;
+        context_children.push_back(make_pair("type", Value(node.type.raw)));
+        context_children.push_back(make_pair("name", Value(node.context.name)));
+        context_children.push_back(make_pair("semantic_type", Value::UTINYINT(node.context.normalized.semantic_type)));
+        context_children.push_back(make_pair("universal_flags", Value::UTINYINT(node.context.normalized.universal_flags)));
+        context_children.push_back(make_pair("arity_bin", Value::UTINYINT(node.context.normalized.arity_bin)));
+        Value context_value = Value::STRUCT(context_children);
+        
+        // Complete node struct
+        child_list_t<Value> node_children;
+        node_children.push_back(make_pair("node_id", Value::BIGINT(node.node_id)));
+        node_children.push_back(make_pair("source", source_value));
+        node_children.push_back(make_pair("structure", structure_value));
+        node_children.push_back(make_pair("context", context_value));
+        node_children.push_back(make_pair("peek", Value(node.peek)));
+        
+        node_values.push_back(Value::STRUCT(node_children));
+    }
+    
+    // Create hierarchical AST struct with proper schema
+    // Get the node schema for the list
+    child_list_t<LogicalType> source_location_children;
+    source_location_children.push_back(make_pair("file_path", LogicalType::VARCHAR));
+    source_location_children.push_back(make_pair("language", LogicalType::VARCHAR));
+    source_location_children.push_back(make_pair("start_line", LogicalType::UINTEGER));
+    source_location_children.push_back(make_pair("start_column", LogicalType::UINTEGER));
+    source_location_children.push_back(make_pair("end_line", LogicalType::UINTEGER));
+    source_location_children.push_back(make_pair("end_column", LogicalType::UINTEGER));
+    
+    child_list_t<LogicalType> tree_structure_children;
+    tree_structure_children.push_back(make_pair("parent_id", LogicalType::BIGINT));
+    tree_structure_children.push_back(make_pair("depth", LogicalType::UINTEGER));
+    tree_structure_children.push_back(make_pair("sibling_index", LogicalType::UINTEGER));
+    tree_structure_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
+    tree_structure_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
+    
+    child_list_t<LogicalType> context_info_children;
+    context_info_children.push_back(make_pair("type", LogicalType::VARCHAR));
+    context_info_children.push_back(make_pair("name", LogicalType::VARCHAR));
+    context_info_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
+    context_info_children.push_back(make_pair("universal_flags", LogicalType::UTINYINT));
+    context_info_children.push_back(make_pair("arity_bin", LogicalType::UTINYINT));
+    
+    child_list_t<LogicalType> node_children;
+    node_children.push_back(make_pair("node_id", LogicalType::BIGINT));
+    node_children.push_back(make_pair("source", LogicalType::STRUCT(source_location_children)));
+    node_children.push_back(make_pair("structure", LogicalType::STRUCT(tree_structure_children)));
+    node_children.push_back(make_pair("context", LogicalType::STRUCT(context_info_children)));
+    node_children.push_back(make_pair("peek", LogicalType::VARCHAR));
+    
+    child_list_t<Value> ast_children;
+    ast_children.push_back(make_pair("nodes", Value::LIST(LogicalType::STRUCT(node_children), node_values)));
+    ast_children.push_back(make_pair("metadata", metadata_value));
+    
+    return Value::STRUCT(ast_children);
 }
 
 ASTResultCollection UnifiedASTBackend::ParseFilesToASTCollection(ClientContext &context,

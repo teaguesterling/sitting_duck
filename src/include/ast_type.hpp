@@ -46,7 +46,90 @@ enum class ASTFlagValues : uint8_t {
     RESERVED = 0x08        // Reserved for future orthogonal properties
 };
 
-// Nested type definitions for ASTNode structure
+// Extraction Level Enums for Structured Extraction
+enum class ContextLevel : uint8_t {
+    NONE = 0,           // No semantic analysis (raw tree only)
+    NODE_TYPES_ONLY,    // + semantic_type, universal_flags, arity_bin
+    NORMALIZED,         // + name extraction (requires node_types_only)
+    NATIVE              // + language-specific signatures (requires normalized)
+};
+
+enum class SourceLevel : uint8_t {
+    NONE = 0,           // No source location info
+    PATH,               // + file_path, language  
+    LINES_ONLY,         // + start_line, end_line (no path duplication)
+    LINES,              // + file_path, language, start_line, end_line
+    FULL                // + file_path, language, start_line, end_line, start_column, end_column
+};
+
+enum class StructureLevel : uint8_t {
+    NONE = 0,           // No tree structure info
+    MINIMAL,            // + parent_id, depth, sibling_index (O(1) fields)
+    FULL                // + children_count, descendant_count (O(child_count) fields)
+};
+
+enum class PeekLevel : uint8_t {
+    NONE = 0,           // No source preview
+    SMART,              // Adaptive preview based on node type
+    FULL,               // Complete source text for node
+    CUSTOM              // Fixed character limit (specified separately)
+};
+
+// Organized Field Groups for Structured Extraction
+struct SourceLocation {
+    string file_path;       // Available if source >= PATH
+    string language;        // Available if source >= PATH  
+    uint32_t start_line;    // Available if source >= LINES_ONLY
+    uint32_t end_line;      // Available if source >= LINES_ONLY
+    uint32_t start_column;  // Available if source >= FULL
+    uint32_t end_column;    // Available if source >= FULL
+    
+    // Default constructor
+    SourceLocation() : start_line(0), end_line(0), start_column(0), end_column(0) {}
+};
+
+struct TreeStructure {
+    int64_t parent_id;          // Available if structure >= MINIMAL (O(1))
+    uint32_t depth;             // Available if structure >= MINIMAL (O(1))
+    uint32_t sibling_index;     // Available if structure >= MINIMAL (O(1))
+    uint32_t children_count;    // Available if structure >= FULL (O(child_count))
+    uint32_t descendant_count;  // Available if structure >= FULL (O(child_count))
+    
+    // Default constructor
+    TreeStructure() : parent_id(-1), depth(0), sibling_index(0), 
+                     children_count(0), descendant_count(0) {}
+};
+
+struct NormalizedSemantics {
+    uint8_t semantic_type;      // Available if context >= NODE_TYPES_ONLY
+    uint8_t universal_flags;    // Available if context >= NODE_TYPES_ONLY  
+    uint8_t arity_bin;          // Available if context >= NODE_TYPES_ONLY
+    
+    // Default constructor
+    NormalizedSemantics() : semantic_type(0), universal_flags(0), arity_bin(0) {}
+};
+
+struct NativeContext {
+    string signature_type;      // Available if context >= NATIVE
+    string parameters;          // Available if context >= NATIVE (JSON array)
+    string modifiers;           // Available if context >= NATIVE (JSON array)
+    string defaults;            // Available if context >= NATIVE
+    string qualified_name;      // Available if context >= NATIVE (future: static resolution)
+    
+    // Default constructor
+    NativeContext() = default;
+};
+
+struct ContextInfo {
+    string name;                    // Available if context >= NORMALIZED
+    NormalizedSemantics normalized; // Available if context >= NODE_TYPES_ONLY
+    NativeContext native;           // Available if context >= NATIVE
+    
+    // Default constructor
+    ContextInfo() = default;
+};
+
+// Legacy type definitions for backward compatibility
 struct ASTTypeInfo {
     string raw;        // Raw parser type (e.g., "binary_expression")
     string normalized; // Normalized type (e.g., "BinaryExpression")
@@ -79,20 +162,25 @@ struct ASTSubtreeInfo {
 };
 
 struct ASTNode {
-    // Core Semantic Identity - simplified to use node_index from tree traversal
-    uint64_t node_id = 0;  // For now, just use tree_position.node_index
+    // Core Semantic Identity
+    uint64_t node_id = 0;  // Unique identifier for this node
     
-    // Grouped information
+    // PHASE 1: Organized grouped fields (NEW STRUCTURE)
+    // These will replace the legacy fields below in future phases
+    SourceLocation source;      // Source location information
+    TreeStructure structure;    // Tree structure information  
+    ContextInfo context;        // Semantic context information
+    string peek;               // Content preview
+    
+    // Legacy grouped information (BACKWARD COMPATIBILITY)
+    // These remain for now to avoid breaking existing code
     ASTTypeInfo type;
     ASTNameInfo name;
     ASTFilePosition file_position;
     ASTTreePosition tree_position;
     ASTSubtreeInfo subtree;
     
-    // Content preview
-    string peek;  // First 120 chars of source_text
-    
-    // Taxonomy fields using unified semantic type encoding
+    // Legacy taxonomy fields (BACKWARD COMPATIBILITY)
     uint8_t semantic_type = 0;    // 8-bit encoding: [ss kk tt ll] where:
                                   // ss = super_kind (2 bits), kk = kind (2 bits)
                                   // tt = super_type (2 bits), ll = language_specific (2 bits)
@@ -110,6 +198,36 @@ struct ASTNode {
     void UpdateLegacyFields() {
         kind = (semantic_type & 0x30) >> 4;      // Extract bits 4-5
         super_type = (semantic_type & 0x0C) >> 2; // Extract bits 2-3
+    }
+    
+    // PHASE 1 TRANSITION: Make legacy fields computed properties
+    // These provide backward compatibility by referencing structured fields
+    void UpdateComputedLegacyFields() {
+        // Legacy file position references structured source
+        file_position.start_line = static_cast<int64_t>(source.start_line);
+        file_position.end_line = static_cast<int64_t>(source.end_line);
+        file_position.start_column = static_cast<uint16_t>(source.start_column);
+        file_position.end_column = static_cast<uint16_t>(source.end_column);
+        
+        // Legacy tree position references structured tree
+        tree_position.parent_index = structure.parent_id;
+        tree_position.node_depth = static_cast<uint8_t>(structure.depth);
+        tree_position.sibling_index = structure.sibling_index;
+        tree_position.node_index = static_cast<int64_t>(node_id);
+        
+        // Legacy subtree info references structured tree
+        subtree.children_count = static_cast<uint16_t>(structure.children_count);
+        subtree.descendant_count = static_cast<uint16_t>(structure.descendant_count);
+        
+        // Legacy name and semantic info references structured context
+        name.raw = context.name;
+        name.qualified = context.name; // TODO: Implement qualified name logic
+        semantic_type = context.normalized.semantic_type;
+        universal_flags = context.normalized.universal_flags;
+        arity_bin = context.normalized.arity_bin;
+        
+        // Update computed taxonomy fields from semantic_type
+        UpdateLegacyFields();
     }
     
     Value ToValue() const;

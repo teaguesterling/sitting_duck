@@ -40,7 +40,104 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
     RegisterLanguageFactory("kotlin", []() { return make_uniq<KotlinAdapter>(); });
 }
 
-// Phase 2: Template-based parsing with zero virtual calls
+// Phase 2: Template-based parsing with zero virtual calls - NEW ExtractionConfig version
+ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, const string& language, 
+                                                        const string& file_path, const ExtractionConfig& config) const {
+    // Normalize language name using alias resolution
+    string normalized_language = language;
+    auto alias_it = alias_to_language.find(language);
+    if (alias_it != alias_to_language.end()) {
+        normalized_language = alias_it->second;
+    }
+    
+    // Fast runtime dispatch to compile-time templates - ZERO virtual calls in parsing!
+    if (normalized_language == "python") {
+        static PythonAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "javascript") {
+        static JavaScriptAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "cpp") {
+        static CPPAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "typescript") {
+        static TypeScriptAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "sql") {
+        static SQLAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "duckdb") {
+        static DuckDBAdapter adapter;
+        // TODO: DuckDB adapter should also support ExtractionConfig
+        return adapter.ParseSQL(content);
+    }
+    if (normalized_language == "go") {
+        static GoAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "ruby") {
+        static RubyAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "markdown") {
+        static MarkdownAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "java") {
+        static JavaAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "php") {
+        static PHPAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "html") {
+        static HTMLAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "css") {
+        static CSSAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "c") {
+        static CAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "rust") {
+        static RustAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "json") {
+        static JSONAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "bash") {
+        static BashAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "swift") {
+        static SwiftAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "r") {
+        static RAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "kotlin") {
+        static KotlinAdapter adapter;
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    
+    // Fallback for unsupported languages
+    throw InvalidInputException("Unsupported language: " + language);
+}
+
+// Legacy version for backward compatibility
 ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, const string& language, 
                                                         const string& file_path, int32_t peek_size, const string& peek_mode) const {
     // Normalize language name using alias resolution

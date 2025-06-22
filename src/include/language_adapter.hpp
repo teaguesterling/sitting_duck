@@ -11,6 +11,7 @@ namespace duckdb {
 
 // Forward declarations
 struct ASTResult;
+struct ExtractionConfig;
 class UnifiedASTBackend;
 
 // Type for the parsing function - takes adapter and parsing parameters, returns ASTResult
@@ -492,6 +493,10 @@ public:
     vector<string> GetSupportedLanguages() const;
     
     // Fast runtime dispatch to compile-time templates - ZERO virtual calls in hot loop!
+    ASTResult ParseContentTemplated(const string& content, const string& language, 
+                                  const string& file_path, const ExtractionConfig& config) const;
+                                  
+    // Legacy parsing for backward compatibility
     ASTResult ParseContentTemplated(const string& content, const string& language, 
                                   const string& file_path, int32_t peek_size, const string& peek_mode) const;
     

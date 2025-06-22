@@ -555,6 +555,7 @@ vector<ASTNode> DuckDBAdapter::ConvertExpression(const ParsedExpression& expr, u
             break;
         }
         default: {
+            // Fallback to generic expression node - avoid re-parsing for now to prevent infinite loops
             auto node = CreateASTNode("expression", "", expr.ToString(),
                                      SemanticTypes::COMPUTATION_EXPRESSION,
                                      node_counter++, -1, 0);
@@ -636,33 +637,31 @@ ASTNode DuckDBAdapter::CreateASTNode(const string& type, const string& name, con
     node.type.raw = type;
     node.type.normalized = type;
     
-    // Names and values - CRITICAL: Fix schema compliance
-    node.name.raw = name;
-    node.name.qualified = name;
-    node.peek = value;  // This provides the content preview and "value" data
+    // STRUCTURED FIELDS (Primary data)
+    // Context information
+    node.context.name = name;
+    node.context.normalized.semantic_type = semantic_type;
+    node.context.normalized.universal_flags = 0;
+    node.context.normalized.arity_bin = 0;
     
-    // Position information (placeholder values for now)
-    node.file_position.start_line = 1;
-    node.file_position.end_line = 1;
-    node.file_position.start_column = 1;
-    node.file_position.end_column = 1;
+    // Source location (placeholder values for now)
+    node.source.start_line = 1;
+    node.source.end_line = 1;
+    node.source.start_column = 1;
+    node.source.end_column = 1;
     
-    // Tree position
-    node.tree_position.node_index = node_id;
-    node.tree_position.parent_index = parent_id;
-    node.tree_position.sibling_index = 0;
-    node.tree_position.node_depth = depth;
+    // Tree structure
+    node.structure.parent_id = parent_id;
+    node.structure.depth = depth;
+    node.structure.sibling_index = 0;
+    node.structure.children_count = 0;
+    node.structure.descendant_count = 0;
     
-    // Semantic information
-    node.semantic_type = semantic_type;
-    node.universal_flags = 0;
+    // Content preview
+    node.peek = value;
     
-    // Subtree information (will be updated later)
-    node.subtree.children_count = 0;
-    node.subtree.descendant_count = 0;
-    
-    // Legacy fields
-    node.UpdateLegacyFields();
+    // Compute legacy fields from structured fields for backward compatibility
+    node.UpdateComputedLegacyFields();
     
     return node;
 }
@@ -698,11 +697,14 @@ void DuckDBAdapter::UpdateDescendantCounts(vector<ASTNode>& nodes) const {
         
         // Count direct children and their descendants
         for (const auto& other : nodes) {
-            if (other.tree_position.parent_index == static_cast<int64_t>(node.node_id)) {
-                count += 1 + other.subtree.descendant_count;
+            if (other.structure.parent_id == static_cast<int64_t>(node.node_id)) {
+                count += 1 + other.structure.descendant_count;
             }
         }
-        node.subtree.descendant_count = count;
+        node.structure.descendant_count = count;
+        
+        // Update legacy fields after descendant count change
+        node.UpdateComputedLegacyFields();
     }
 }
 
@@ -718,6 +720,7 @@ string DuckDBAdapter::NormalizeFunctionName(const string& internal_name) const {
     // Use DuckDB's internal function names as-is - they are the authoritative source
     return internal_name;
 }
+
 
 //==============================================================================
 // Parsing Function Integration
