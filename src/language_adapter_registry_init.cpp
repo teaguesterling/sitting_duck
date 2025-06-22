@@ -134,7 +134,7 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, 
     }
     
     // Fallback for unsupported languages
-    throw InternalException("Language '" + language + "' not supported in template-based parsing");
+    throw InvalidInputException("Unsupported language: " + language);
 }
 
 } // namespace duckdb
