@@ -53,12 +53,57 @@ static void ParseASTExecute(ClientContext &context, TableFunctionInput &data_p, 
     output.SetCardinality(output_index);
 }
 
-void ParseASTFunction::Register(DatabaseInstance &instance) {
-    // Register parse_ast(code, language) -> TABLE with all taxonomy fields
-    TableFunction parse_ast_func("parse_ast", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
-                                ParseASTExecute, ParseASTBind);
-    parse_ast_func.name = "parse_ast";
+//==============================================================================
+// NEW: Hierarchical Schema Functions
+//==============================================================================
+
+static unique_ptr<FunctionData> ParseASTHierarchicalBind(ClientContext &context, TableFunctionBindInput &input,
+                                                        vector<LogicalType> &return_types, vector<string> &names) {
+    if (input.inputs.size() != 2) {
+        throw BinderException("parse_ast requires exactly 2 arguments: code and language");
+    }
     
+    auto code = input.inputs[0].GetValue<string>();
+    auto language = input.inputs[1].GetValue<string>();
+    
+    // Use hierarchical backend schema
+    return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
+    names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
+    
+    return make_uniq<ParseASTData>(code, language);
+}
+
+static void ParseASTHierarchicalExecute(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
+    auto &data = data_p.bind_data->CastNoConst<ParseASTData>();
+    
+    // Parse the code if not already done
+    if (!data.parsed) {
+        try {
+            // Use unified parsing backend
+            data.result = UnifiedASTBackend::ParseToASTResult(data.code, data.language, "<inline>");
+            data.parsed = true;
+        } catch (const Exception &e) {
+            throw IOException("Failed to parse code: " + string(e.what()));
+        }
+    }
+    
+    // Project to hierarchical table format, starting from where we left off
+    idx_t output_index = 0;
+    UnifiedASTBackend::ProjectToHierarchicalTable(data.result, output, data.current_row, output_index);
+    output.SetCardinality(output_index);
+}
+
+void ParseASTFunction::Register(DatabaseInstance &instance) {
+    // Register parse_ast_flat(code, language) -> TABLE with flat schema (legacy)
+    TableFunction parse_ast_flat_func("parse_ast_flat", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
+                                     ParseASTExecute, ParseASTBind);
+    parse_ast_flat_func.name = "parse_ast_flat";
+    ExtensionUtil::RegisterFunction(instance, parse_ast_flat_func);
+    
+    // Register parse_ast(code, language) -> TABLE with hierarchical schema (NEW)
+    TableFunction parse_ast_func("parse_ast", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
+                                ParseASTHierarchicalExecute, ParseASTHierarchicalBind);
+    parse_ast_func.name = "parse_ast";
     ExtensionUtil::RegisterFunction(instance, parse_ast_func);
 }
 
