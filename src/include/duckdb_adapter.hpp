@@ -40,9 +40,11 @@ public:
     
     // DuckDB-specific parsing function
     ASTResult ParseSQL(const string& sql_content) const;
+    
+    // Phase 2: Make GetNodeConfigs public for template access
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 
 protected:
-    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 
 private:
     // Core conversion methods (Architecture Plan Section 4.2)

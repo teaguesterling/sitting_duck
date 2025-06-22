@@ -491,6 +491,10 @@ public:
     // Get list of supported languages
     vector<string> GetSupportedLanguages() const;
     
+    // Fast runtime dispatch to compile-time templates - ZERO virtual calls in hot loop!
+    ASTResult ParseContentTemplated(const string& content, const string& language, 
+                                  const string& file_path, int32_t peek_size, const string& peek_mode) const;
+    
 private:
     LanguageAdapterRegistry();
     mutable unordered_map<string, unique_ptr<LanguageAdapter>> adapters;  // mutable for lazy creation

@@ -22,18 +22,9 @@ ASTResult UnifiedASTBackend::ParseToASTResult(const string& content,
                                             int32_t peek_size,
                                             const string& peek_mode) {
     
-    // Get language adapter
+    // Phase 2: Use template-based parsing with ZERO virtual calls!
     auto& registry = LanguageAdapterRegistry::GetInstance();
-    const LanguageAdapter* adapter = registry.GetAdapter(language);
-    if (!adapter) {
-        throw InvalidInputException("Unsupported language: " + language);
-    }
-    
-    // Get the optimized parsing function (single virtual call)
-    ParsingFunction parsing_fn = adapter->GetParsingFunction();
-    
-    // Call the parsing function with the adapter as context
-    return parsing_fn(adapter, content, language, file_path, peek_size, peek_mode);
+    return registry.ParseContentTemplated(content, language, file_path, peek_size, peek_mode);
 }
 
 void UnifiedASTBackend::PopulateSemanticFields(ASTNode& node, const LanguageAdapter* adapter, TSNode ts_node, const string& content) {
