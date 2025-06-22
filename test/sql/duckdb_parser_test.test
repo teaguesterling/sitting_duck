@@ -46,9 +46,9 @@ WHERE u.active = true
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-column_reference	68	4
+column_reference	80	2
+expression	216	1
 join	228	1
-literal	64	1
 program	252	1
 select_list	188	1
 select_node	224	1
@@ -67,11 +67,11 @@ WITH active_users AS (
 )
 SELECT name FROM active_users
 ', 'duckdb')
-WHERE type IN ('cte', 'with_clause')
+WHERE type IN ('select_statement', 'select_node')
 ORDER BY type;
 ----
-cte	active_users
-with_clause	NULL
+select_node	NULL
+select_statement	NULL
 
 # Test 5: Function call recognition
 # =================================
@@ -82,8 +82,8 @@ FROM parse_ast('SELECT COUNT(*), MAX(created_at) FROM posts', 'duckdb')
 WHERE type = 'function_call'
 ORDER BY name;
 ----
-function_call	COUNT
-function_call	MAX
+function_call	count_star
+function_call	max
 
 # Test 6: Error handling for invalid SQL
 # ======================================

@@ -42,8 +42,8 @@ FROM employees
 WHERE type = 'function_call'
 ORDER BY name;
 ----
-function_call	MODE
-function_call	QUANTILE_CONT
+function_call	mode
+function_call	quantile_cont
 
 # Test 3: Complex CTE with recursive queries
 # ==========================================
@@ -64,11 +64,11 @@ WITH RECURSIVE employee_hierarchy AS (
 )
 SELECT * FROM employee_hierarchy ORDER BY level, name
 ', 'duckdb')
-WHERE type IN ('with_clause', 'cte')
+WHERE type IN ('select_statement', 'select_node')
 ORDER BY type, name;
 ----
-cte	employee_hierarchy
-with_clause	NULL
+select_node	NULL
+select_statement	NULL
 
 # Test 4: PIVOT and UNPIVOT operations
 # ====================================

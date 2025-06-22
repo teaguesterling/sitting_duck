@@ -210,13 +210,22 @@ ASTResult DuckDBAdapter::ConvertStatementsToAST(const vector<unique_ptr<SQLState
             // Skip NULL statements
             continue;
         }
-        auto stmt_nodes = ConvertStatement(*stmt, node_counter);
-        for (auto& node : stmt_nodes) {
-            // Set parent to program node
-            if (node.tree_position.parent_index == -1) {
-                node.tree_position.parent_index = 1; // program node (id=1)
+        
+        try {
+            auto stmt_nodes = ConvertStatement(*stmt, node_counter);
+            for (auto& node : stmt_nodes) {
+                // Set parent to program node
+                if (node.tree_position.parent_index == -1) {
+                    node.tree_position.parent_index = 1; // program node (id=1)
+                }
+                nodes.push_back(node);
             }
-            nodes.push_back(node);
+        } catch (const Exception& e) {
+            // If statement conversion fails, create an error node
+            auto error_node = CreateASTNode("statement_error", "error", string(e.what()),
+                                           SemanticTypes::PARSER_SYNTAX,
+                                           node_counter++, 1, 1);
+            nodes.push_back(error_node);
         }
     }
     
@@ -289,17 +298,33 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectStatement(const SelectStatement& stm
     nodes.push_back(select_node);
     
     // Process the query node if it exists
-    if (stmt.node && stmt.node->type == QueryNodeType::SELECT_NODE) {
-        const auto& query_node = stmt.node->Cast<SelectNode>();
-        auto query_nodes = ConvertSelectNode(query_node, node_counter);
-        
-        // Set parent for all query nodes
-        for (auto& node : query_nodes) {
-            if (node.tree_position.parent_index == -1) {
-                node.tree_position.parent_index = select_node_id;
-                node.tree_position.node_depth = 2;
+    if (stmt.node) {
+        try {
+            if (stmt.node->type == QueryNodeType::SELECT_NODE) {
+                const auto& query_node = stmt.node->Cast<SelectNode>();
+                auto query_nodes = ConvertSelectNode(query_node, node_counter);
+                
+                // Set parent for all query nodes
+                for (auto& node : query_nodes) {
+                    if (node.tree_position.parent_index == -1) {
+                        node.tree_position.parent_index = select_node_id;
+                        node.tree_position.node_depth = 2;
+                    }
+                    nodes.push_back(node);
+                }
+            } else {
+                // Handle other query node types
+                auto generic_node = CreateASTNode("query_node", "", stmt.node->ToString(),
+                                                 SemanticTypes::COMPUTATION_EXPRESSION,
+                                                 node_counter++, select_node_id, 2);
+                nodes.push_back(generic_node);
             }
-            nodes.push_back(node);
+        } catch (const Exception& e) {
+            // If query node processing fails, create an error node
+            auto error_node = CreateASTNode("query_error", "error", string(e.what()),
+                                           SemanticTypes::PARSER_SYNTAX,
+                                           node_counter++, select_node_id, 2);
+            nodes.push_back(error_node);
         }
     }
     
@@ -330,26 +355,42 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectNode(const SelectNode& node, uint32_
             if (!expr) {
                 continue; // Skip NULL expressions
             }
-            auto expr_nodes = ConvertExpression(*expr, node_counter);
-            for (auto& en : expr_nodes) {
-                if (en.tree_position.parent_index == -1) {
-                    en.tree_position.parent_index = list_node.node_id;
-                    en.tree_position.node_depth = 4;
+            try {
+                auto expr_nodes = ConvertExpression(*expr, node_counter);
+                for (auto& en : expr_nodes) {
+                    if (en.tree_position.parent_index == -1) {
+                        en.tree_position.parent_index = list_node.node_id;
+                        en.tree_position.node_depth = 4;
+                    }
+                    nodes.push_back(en);
                 }
-                nodes.push_back(en);
+            } catch (const Exception& e) {
+                // If expression conversion fails, create an error node
+                auto error_node = CreateASTNode("expression_error", "error", string(e.what()),
+                                               SemanticTypes::PARSER_SYNTAX,
+                                               node_counter++, list_node.node_id, 4);
+                nodes.push_back(error_node);
             }
         }
     }
     
     // Process FROM clause
     if (node.from_table) {
-        auto from_nodes = ConvertTableRef(*node.from_table, node_counter);
-        for (auto& fn : from_nodes) {
-            if (fn.tree_position.parent_index == -1) {
-                fn.tree_position.parent_index = select_node_id;
-                fn.tree_position.node_depth = 3;
+        try {
+            auto from_nodes = ConvertTableRef(*node.from_table, node_counter);
+            for (auto& fn : from_nodes) {
+                if (fn.tree_position.parent_index == -1) {
+                    fn.tree_position.parent_index = select_node_id;
+                    fn.tree_position.node_depth = 3;
+                }
+                nodes.push_back(fn);
             }
-            nodes.push_back(fn);
+        } catch (const Exception& e) {
+            // If table reference conversion fails, create an error node
+            auto error_node = CreateASTNode("table_error", "error", string(e.what()),
+                                           SemanticTypes::PARSER_SYNTAX,
+                                           node_counter++, select_node_id, 3);
+            nodes.push_back(error_node);
         }
     }
     
@@ -360,13 +401,21 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectNode(const SelectNode& node, uint32_
                                        node_counter++, select_node_id, 3);
         nodes.push_back(where_node);
         
-        auto expr_nodes = ConvertExpression(*node.where_clause, node_counter);
-        for (auto& en : expr_nodes) {
-            if (en.tree_position.parent_index == -1) {
-                en.tree_position.parent_index = where_node.node_id;
-                en.tree_position.node_depth = 4;
+        try {
+            auto expr_nodes = ConvertExpression(*node.where_clause, node_counter);
+            for (auto& en : expr_nodes) {
+                if (en.tree_position.parent_index == -1) {
+                    en.tree_position.parent_index = where_node.node_id;
+                    en.tree_position.node_depth = 4;
+                }
+                nodes.push_back(en);
             }
-            nodes.push_back(en);
+        } catch (const Exception& e) {
+            // If WHERE expression conversion fails, create an error node
+            auto error_node = CreateASTNode("where_error", "error", string(e.what()),
+                                           SemanticTypes::PARSER_SYNTAX,
+                                           node_counter++, where_node.node_id, 4);
+            nodes.push_back(error_node);
         }
     }
     
