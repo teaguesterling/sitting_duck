@@ -1,6 +1,7 @@
 #include "language_adapter.hpp"
 #include "unified_ast_backend_impl.hpp"
 #include "semantic_types.hpp"
+#include "node_config.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/helper.hpp"
@@ -111,14 +112,8 @@ bool JavaScriptAdapter::IsPublicNode(TSNode node, const string &content) const {
     return true;
 }
 
-uint8_t JavaScriptAdapter::GetNodeFlags(const string &node_type) const {
-    const NodeConfig* config = GetNodeConfig(node_type);
-    return config ? config->flags : 0;
-}
-
-const NodeConfig* JavaScriptAdapter::GetNodeConfig(const string &node_type) const {
-    auto it = node_configs.find(node_type);
-    return it != node_configs.end() ? &it->second : nullptr;
+const unordered_map<string, NodeConfig>& JavaScriptAdapter::GetNodeConfigs() const {
+    return node_configs;
 }
 
 ParsingFunction JavaScriptAdapter::GetParsingFunction() const {

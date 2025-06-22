@@ -34,6 +34,8 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
     RegisterLanguageFactory("swift", []() { return make_uniq<SwiftAdapter>(); });
     // R enabled - statistical computing and data analysis support
     RegisterLanguageFactory("r", []() { return make_uniq<RAdapter>(); });
+    // Kotlin enabled - JVM ecosystem and Android development support
+    RegisterLanguageFactory("kotlin", []() { return make_uniq<KotlinAdapter>(); });
 }
 
 } // namespace duckdb

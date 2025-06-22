@@ -99,14 +99,8 @@ bool GoAdapter::IsPublicNode(TSNode node, const string &content) const {
     return !name.empty() && isupper(name[0]);
 }
 
-uint8_t GoAdapter::GetNodeFlags(const string &node_type) const {
-    const NodeConfig* config = GetNodeConfig(node_type);
-    return config ? config->flags : 0;
-}
-
-const NodeConfig* GoAdapter::GetNodeConfig(const string &node_type) const {
-    auto it = node_configs.find(node_type);
-    return it != node_configs.end() ? &it->second : nullptr;
+const unordered_map<string, NodeConfig>& GoAdapter::GetNodeConfigs() const {
+    return node_configs;
 }
 
 ParsingFunction GoAdapter::GetParsingFunction() const {

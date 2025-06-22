@@ -125,15 +125,10 @@ bool SwiftAdapter::IsPublicNode(TSNode node, const string &content) const {
     return true;
 }
 
-uint8_t SwiftAdapter::GetNodeFlags(const string &node_type) const {
-    const NodeConfig* config = GetNodeConfig(node_type);
-    return config ? config->flags : 0;
+const unordered_map<string, NodeConfig>& SwiftAdapter::GetNodeConfigs() const {
+    return node_configs;
 }
 
-const NodeConfig* SwiftAdapter::GetNodeConfig(const string &node_type) const {
-    auto it = node_configs.find(node_type);
-    return it != node_configs.end() ? &it->second : nullptr;
-}
 
 ParsingFunction SwiftAdapter::GetParsingFunction() const {
     // Return a lambda that captures the templated parsing function

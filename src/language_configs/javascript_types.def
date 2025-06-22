@@ -274,3 +274,9 @@ DEF_TYPE("with", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("yield", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("named_imports", EXTERNAL_IMPORT | SemanticRefinements::Import::SELECTIVE, NONE, NONE, 0)
 DEF_TYPE("import_attribute", EXTERNAL_IMPORT, NONE, NONE, 0)
+
+// ==============================================================================
+// Parser-level semantic mappings only
+// Note: Library-specific function names (map, filter, reduce, etc.) are removed
+// since they're just identifiers - could be user-defined functions with different semantics
+// ==============================================================================

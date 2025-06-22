@@ -28,8 +28,8 @@ LIMIT 10;
 2	1	select_statement	NULL	224	1
 3	2	select_node	NULL	224	1
 4	3	select_list	NULL	188	1
-5	4	column_reference	id	68	1
-6	4	column_reference	name	68	1
+5	4	column_reference	id	80	1
+6	4	column_reference	name	80	1
 7	3	table_reference	users	84	1
 
 # Test 3: Complex query with JOIN and WHERE

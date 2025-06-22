@@ -1,13 +1,13 @@
 // C++ node type mappings
 // Format: DEF_TYPE(raw_type, semantic_type, name_extraction, value_extraction, flags)
 
-// Function definitions
-DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("function_declarator", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("method_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("constructor_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("destructor_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("lambda_expression", DEFINITION_FUNCTION, FIND_ASSIGNMENT_TARGET, NONE, 0)
+// Function definitions with refinements
+DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("function_declarator", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("method_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("constructor_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("destructor_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, NONE, 0)
 
 // Class/struct definitions  
 DEF_TYPE("class_specifier", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
@@ -15,23 +15,23 @@ DEF_TYPE("struct_specifier", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("union_specifier", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("enum_specifier", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
 
-// Variable declarations
-DEF_TYPE("declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("parameter_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("field_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+// Variable declarations with refinements
+DEF_TYPE("declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("parameter_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
 
 // Namespace/module
 DEF_TYPE("namespace_definition", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("translation_unit", DEFINITION_MODULE, NONE, NONE, 0)
 
-// Function calls and expressions
-DEF_TYPE("call_expression", COMPUTATION_CALL, NONE, NONE, 0)
-DEF_TYPE("new_expression", COMPUTATION_CALL, NONE, NONE, 0)
-DEF_TYPE("delete_expression", COMPUTATION_CALL, NONE, NONE, 0)
-DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("update_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+// Function calls and expressions with refinements
+DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, NONE, NONE, 0)
+DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, NONE, NONE, 0)
+DEF_TYPE("delete_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, NONE, NONE, 0)
+DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+DEF_TYPE("update_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
 DEF_TYPE("cast_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
 
 // Member access
@@ -57,29 +57,29 @@ DEF_TYPE("reference_type", TYPE_REFERENCE, NONE, NONE, 0)
 DEF_TYPE("template_type", TYPE_GENERIC, NONE, NONE, 0)
 DEF_TYPE("auto", TYPE_GENERIC, NONE, NONE, 0)
 
-// Literals - name and value both contain the literal text
-DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("raw_string_literal", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("char_literal", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("number_literal", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
+// Literals with refinements - name and value both contain the literal text
+DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("raw_string_literal", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("char_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("number_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NODE_TEXT, 0)
 DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
 DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
 DEF_TYPE("nullptr", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
 DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("initializer_list", LITERAL_STRUCTURED, NONE, NONE, 0)
+DEF_TYPE("initializer_list", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
 
-// Control flow
-DEF_TYPE("if_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("switch_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("conditional_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("for_range_loop", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("while_statement", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("do_statement", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("return_statement", FLOW_JUMP, NONE, NONE, 0)
-DEF_TYPE("break_statement", FLOW_JUMP, NONE, NONE, 0)
-DEF_TYPE("continue_statement", FLOW_JUMP, NONE, NONE, 0)
-DEF_TYPE("goto_statement", FLOW_JUMP, NONE, NONE, 0)
+// Control flow with refinements
+DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+DEF_TYPE("conditional_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, 0)
+DEF_TYPE("for_range_loop", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
+DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
+DEF_TYPE("continue_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
+DEF_TYPE("goto_statement", FLOW_JUMP | SemanticRefinements::Jump::GOTO, NONE, NONE, 0)
 
 // Async/sync constructs (C++20)
 DEF_TYPE("co_await_expression", FLOW_SYNC, NONE, NONE, 0)
@@ -302,6 +302,12 @@ DEF_TYPE("\n", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE("preproc_if", METADATA_DIRECTIVE, NONE, NONE, 0)
 DEF_TYPE("explicit", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("concatenated_string", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+
+// ==============================================================================
+// Parser-level semantic mappings only
+// Note: STL algorithm names (transform, sort, find, etc.) are removed 
+// since they're just identifiers - could be user-defined functions with different semantics
+// ==============================================================================
 
 // Error handling
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)

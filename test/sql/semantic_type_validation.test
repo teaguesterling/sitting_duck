@@ -60,7 +60,7 @@ SELECT * FROM (VALUES
     -- EXECUTION types (0x80)
     (128, 'EXECUTION_STATEMENT'),
     (132, 'EXECUTION_DECLARATION'),
-    (136, 'EXECUTION_INVOCATION'),
+    (136, 'EXECUTION_STATEMENT_CALL'),
     (140, 'EXECUTION_MUTATION'),
     
     -- FLOW_CONTROL types (0x90)
@@ -91,7 +91,7 @@ SELECT * FROM (VALUES
     (208, 'COMPUTATION_CALL'),
     (212, 'COMPUTATION_ACCESS'),
     (216, 'COMPUTATION_EXPRESSION'),
-    (220, 'COMPUTATION_LAMBDA'),
+    (220, 'COMPUTATION_CLOSURE'),
     
     -- TRANSFORM types (0xE0)
     (224, 'TRANSFORM_QUERY'),
@@ -191,14 +191,14 @@ WHERE semantic_type_to_string(type_code) LIKE 'UNKNOWN%';
 
 # Test edge cases with type codes
 query I
-SELECT semantic_type_to_string(255::UTINYINT);  -- Invalid code
+SELECT semantic_type_to_string(255::UTINYINT);  -- DEFINITION_MODULE with max refinement
 ----
-UNKNOWN_SEMANTIC_TYPE
+DEFINITION_MODULE
 
 query I
-SELECT semantic_type_to_string(127::UTINYINT);  -- Unused code
+SELECT semantic_type_to_string(127::UTINYINT);  -- TYPE_GENERIC with max refinement
 ----
-UNKNOWN_SEMANTIC_TYPE
+TYPE_GENERIC
 
 # Test that PARSER_CONSTRUCT is now 0 (the default for uncategorized)
 query I

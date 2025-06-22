@@ -89,14 +89,8 @@ bool PythonAdapter::IsPublicNode(TSNode node, const string &content) const {
     return !name.empty() && name[0] != '_';
 }
 
-uint8_t PythonAdapter::GetNodeFlags(const string &node_type) const {
-    const NodeConfig* config = GetNodeConfig(node_type);
-    return config ? config->flags : 0;
-}
-
-const NodeConfig* PythonAdapter::GetNodeConfig(const string &node_type) const {
-    auto it = node_configs.find(node_type);
-    return it != node_configs.end() ? &it->second : nullptr;
+const unordered_map<string, NodeConfig>& PythonAdapter::GetNodeConfigs() const {
+    return node_configs;
 }
 
 ParsingFunction PythonAdapter::GetParsingFunction() const {

@@ -158,7 +158,7 @@ DEF_TYPE("raise", ERROR_THROW, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("assert", ERROR_THROW, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("with", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("as", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("lambda", COMPUTATION_CLOSURE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("lambda", COMPUTATION_CLOSURE, NONE, NONE, ASTNodeFlags::IS_KEYWORD_IF_LEAF)
 DEF_TYPE("yield", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("async", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("await", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -268,6 +268,19 @@ DEF_TYPE("positional_separator", PARSER_PUNCTUATION, NONE, NONE, 0)
 DEF_TYPE("future_import_statement", EXTERNAL_IMPORT, NONE, NONE, 0)
 DEF_TYPE("__future__", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
 DEF_TYPE("_", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+// ==============================================================================
+// Parser-level semantic mappings only (Python comprehensions have distinct syntax)
+// ==============================================================================
+
+// List comprehensions and generator expressions - these have distinct syntax
+DEF_TYPE("list_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, 0)
+DEF_TYPE("dictionary_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, 0)
+DEF_TYPE("set_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, 0)
+DEF_TYPE("generator_expression", TRANSFORM_QUERY | SemanticRefinements::Query::NESTED, NONE, NONE, 0)
+
+// Note: Built-in function names (map, filter, len, sum, etc.) removed
+// since they're just identifiers that could be user-redefined
 
 // Error handling
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)

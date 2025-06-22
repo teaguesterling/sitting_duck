@@ -3,11 +3,11 @@ cmake  -DEXTENSION_STATIC_BUILD=1 -DDUCKDB_EXTENSION_CONFIGS='/mnt/aux-data/teag
 -- Running vcpkg install
 warning: Embedding `vcpkg-configuration` in a manifest file is an EXPERIMENTAL feature.
 All requested packages are currently installed.
-Total install time: 341 ns
+Total install time: 481 ns
 -- Running vcpkg install - done
 -- git hash 2063dda3e6, version v1.3.1, extension folder v1.3.1
 -- Extensions will be deployed to: /mnt/aux-data/teague/Projects/duckdb_ast/build/release/repository
--- Load extension 'sitting_duck' from '/mnt/aux-data/teague/Projects/duckdb_ast' @ 9aa5df8
+-- Load extension 'sitting_duck' from '/mnt/aux-data/teague/Projects/duckdb_ast' @ 16a883b
 -- Load extension 'core_functions' from '/mnt/aux-data/teague/Projects/duckdb_ast/duckdb/extensions' @ v1.3.1
 -- Load extension 'parquet' from '/mnt/aux-data/teague/Projects/duckdb_ast/duckdb/extensions' @ v1.3.1
 -- Load extension 'jemalloc' from '/mnt/aux-data/teague/Projects/duckdb_ast/duckdb/extensions' @ v1.3.1
@@ -78,13 +78,16 @@ CMake Deprecation Warning at /mnt/aux-data/teague/Projects/duckdb_ast/CMakeLists
 -- Processing grammar: tree-sitter-swift
 -- Initial pattern '*tree-sitter-swift*.patch' found: 
 -- Parser generation configured for tree-sitter-swift
--- Generated parser target created with 30 files
+-- Processing grammar: tree-sitter-r
+-- Initial pattern '*tree-sitter-r*.patch' found: 
+-- Parser generation configured for tree-sitter-r
+-- Generated parser target created with 32 files
 Generated /mnt/aux-data/teague/Projects/duckdb_ast/src/include/embedded_sql_macros.hpp
 -- Extension targets will depend on generated parsers
 -- Extensions linked into DuckDB: [sitting_duck, core_functions, parquet, jemalloc]
 -- Tests loaded for extensions: [sitting_duck]
--- Configuring done (1.7s)
--- Generating done (0.6s)
+-- Configuring done (1.6s)
+-- Generating done (0.5s)
 -- Build files have been written to: /mnt/aux-data/teague/Projects/duckdb_ast/build/release
 cmake --build build/release --config Release
 gmake[1]: Entering directory '/mnt/aux-data/teague/Projects/duckdb_ast/build/release'
@@ -94,254 +97,192 @@ gmake[1]: Entering directory '/mnt/aux-data/teague/Projects/duckdb_ast/build/rel
 [  5%] Built target duckdb_optimizer_compressed_materialization
 [  5%] Built target duckdb_optimizer_join_order
 [  5%] Built target duckdb_optimizer_matcher
-[  6%] Built target duckdb_optimizer_pullup
-[  6%] Built target duckdb_optimizer_pushdown
-[  6%] Built target duckdb_optimizer_rules
+[  5%] Built target duckdb_optimizer_pullup
+[  5%] Built target duckdb_optimizer_pushdown
+[  5%] Built target duckdb_optimizer_rules
 [  6%] Built target duckdb_optimizer_statistics_expr
 [  6%] Built target duckdb_optimizer_statistics_op
-[  6%] Built target duckdb_planner
-[  6%] Built target duckdb_planner_expression
+[  7%] Built target duckdb_planner
+[  7%] Built target duckdb_planner_expression
 [  7%] Built target duckdb_bind_expression
-[  7%] Built target duckdb_bind_query_node
-[  7%] Built target duckdb_bind_statement
-[  7%] Built target duckdb_bind_tableref
-[  7%] Built target duckdb_expression_binders
-[  7%] Built target duckdb_planner_filter
-[  7%] Built target duckdb_planner_operator
+[  8%] Built target duckdb_bind_query_node
+[  8%] Built target duckdb_bind_statement
+[  8%] Built target duckdb_bind_tableref
+[  8%] Built target duckdb_expression_binders
+[  8%] Built target duckdb_planner_filter
+[  8%] Built target duckdb_planner_operator
 [  8%] Built target duckdb_planner_subquery
-[  8%] Built target duckdb_parser
-[  8%] Built target duckdb_constraints
-[  8%] Built target duckdb_expression
-[  8%] Built target duckdb_parsed_data
-[  8%] Built target duckdb_query_node
-[  8%] Built target duckdb_statement
-[  8%] Built target duckdb_parser_tableref
-[  8%] Built target duckdb_transformer_constraint
-[  8%] Built target duckdb_transformer_expression
-[  8%] Built target duckdb_transformer_helpers
-[  8%] Built target duckdb_transformer_statement
-[  8%] Built target duckdb_transformer_tableref
-[  8%] Built target duckdb_function
-[  8%] Built target duckdb_func_aggr
-[  8%] Built target duckdb_aggr_distr
-[  8%] Built target duckdb_func_cast
-[  8%] Built target duckdb_union_cast
-[  8%] Built target duckdb_func_pragma
-[  8%] Built target duckdb_func_scalar
-[  9%] Built target duckdb_func_compressed_materialization
-[  9%] Built target duckdb_func_date
-[  9%] Built target duckdb_func_generic_main
-[  9%] Built target duckdb_func_list_nested
-[  9%] Built target duckdb_function_map
-[  9%] Built target duckdb_func_ops_main
-[ 10%] Built target duckdb_func_seq
-[ 10%] Built target duckdb_func_string_main
-[ 10%] Built target duckdb_func_string_regexp
-[ 10%] Built target duckdb_func_struct_main
-[ 10%] Built target duckdb_func_system
-[ 10%] Built target duckdb_func_table
-[ 10%] Built target duckdb_table_func_system
-[ 10%] Built target duckdb_func_table_version
-[ 10%] Built target duckdb_arrow_conversion
-[ 11%] Built target duckdb_func_window
-[ 11%] Built target duckdb_catalog
-[ 11%] Built target duckdb_catalog_entries
-[ 12%] Built target duckdb_catalog_entries_dependency
-[ 12%] Built target duckdb_catalog_default_entries
-[ 12%] Built target duckdb_common
-[ 12%] Built target duckdb_adbc
-[ 12%] Built target duckdb_adbc_nanoarrow
-[ 12%] Built target duckdb_common_arrow
-[ 12%] Built target duckdb_common_arrow_appender
-[ 12%] Built target duckdb_common_crypto
-[ 12%] Built target duckdb_common_enums
-[ 12%] Built target duckdb_common_exception
-[ 12%] Built target duckdb_common_multi_file
-[ 12%] Built target duckdb_common_operators
-[ 12%] Built target duckdb_progress_bar
-[ 12%] Built target duckdb_common_tree_renderer
-[ 13%] Built target duckdb_row_operations
-[ 13%] Built target duckdb_common_serializer
-[ 13%] Built target duckdb_sort
-[ 13%] Built target duckdb_common_types
-[ 13%] Built target duckdb_common_types_column
-[ 14%] Built target duckdb_common_types_row
-[ 14%] Built target duckdb_value_operations
-[ 15%] Built target duckdb_vector_operations
-[ 16%] Built target duckdb_logging
-[ 17%] Built target duckdb_execution
-[ 17%] Built target duckdb_expression_executor
-[ 17%] Built target duckdb_nested_loop_join
-[ 17%] Built target duckdb_operator_aggregate
-[ 17%] Built target duckdb_csv_buffer_manager
-[ 17%] Built target duckdb_csv_encode
-[ 17%] Built target duckdb_csv_scanner
-[ 17%] Built target duckdb_csv_sniffer
-[ 17%] Built target duckdb_csv_state_machine
-[ 18%] Built target duckdb_operator_csv_table_function
-[ 18%] Built target duckdb_csv_util
-[ 18%] Built target duckdb_operator_filter
-[ 18%] Built target duckdb_operator_helper
-[ 18%] Built target duckdb_operator_join
-[ 18%] Built target duckdb_operator_order
-[ 18%] Built target duckdb_operator_persistent
-[ 18%] Built target duckdb_operator_projection
-[ 19%] Built target duckdb_operator_scan
-[ 19%] Built target duckdb_operator_schema
-[ 19%] Built target duckdb_operator_set
-[ 19%] Built target duckdb_physical_plan
-[ 19%] Built target duckdb_execution_index
-[ 19%] Built target duckdb_execution_index_art
-[ 19%] Built target duckdb_sample
-[ 19%] Built target duckdb_main
-[ 19%] Built target duckdb_main_capi
-[ 19%] Built target duckdb_main_capi_cast
-[ 19%] Built target duckdb_generated_extension_loader
-[ 20%] Built target duckdb_main_extension
-[ 21%] Built target duckdb_common_http
-[ 21%] Built target duckdb_main_relation
-[ 21%] Built target duckdb_main_secret
-[ 21%] Built target duckdb_main_settings
-[ 21%] Built target duckdb_main_buffered_data
-[ 21%] Built target duckdb_main_chunk_scan_state
-[ 21%] Built target duckdb_parallel
-[ 22%] Built target duckdb_storage
-[ 22%] Built target duckdb_storage_buffer
-[ 22%] Built target duckdb_storage_checkpoint
-[ 22%] Built target duckdb_storage_compression
-[ 22%] Built target duckdb_storage_compression_chimp
-[ 22%] Built target duckdb_storage_compression_alp
-[ 22%] Built target duckdb_storage_compression_roaring
-[ 23%] Built target duckdb_storage_compression_dictionary
-[ 23%] Built target duckdb_storage_compression_dict_fsst
-[ 23%] Built target duckdb_storage_metadata
-[ 23%] Built target duckdb_storage_serialization
-[ 23%] Built target duckdb_storage_statistics
-[ 23%] Built target duckdb_storage_table
-[ 24%] Built target duckdb_transaction
-[ 26%] Built target duckdb_verification
-[ 26%] Built target tree-sitter-cli
-[ 28%] Built target generate-parsers
-[ 30%] Built target tree-sitter
-[ 30%] Built target duckdb_core_functions_algebraic
-[ 30%] Built target duckdb_core_functions_distributive
-[ 30%] Built target duckdb_core_functions_holistic
-[ 30%] Built target duckdb_core_functions_nested
-[ 30%] Built target duckdb_core_functions_regression
-[ 30%] Built target duckdb_core_functions_array
-[ 30%] Built target duckdb_core_functions_bit
-[ 30%] Built target duckdb_core_functions_blob
-[ 30%] Built target duckdb_core_functions_date
-[ 31%] Built target duckdb_core_functions_debug
-[ 31%] Built target duckdb_core_functions_enum
-[ 31%] Built target duckdb_core_functions_generic
-[ 31%] Built target duckdb_core_functions_list
-[ 31%] Built target duckdb_core_functions_map
-[ 32%] Built target duckdb_core_functions_math
-[ 32%] Built target duckdb_core_functions_operators
-[ 32%] Built target duckdb_core_functions_random
-[ 32%] Built target duckdb_core_functions_string
-[ 32%] Built target duckdb_core_functions_struct
-[ 33%] Built target duckdb_core_functions_union
-[ 33%] Built target duckdb_parquet_decoders
-[ 34%] Built target duckdb_parquet_readers
-[ 34%] Built target duckdb_parquet_writers
-[ 43%] Built target jemalloc
-[ 43%] Built target duckdb_fmt
-[ 45%] Built target duckdb_pg_query
-[ 48%] Built target duckdb_re2
-[ 48%] Built target duckdb_miniz
+[  9%] Built target duckdb_parser
+[ 10%] Built target duckdb_constraints
+[ 10%] Built target duckdb_expression
+[ 10%] Built target duckdb_parsed_data
+[ 11%] Built target duckdb_query_node
+[ 11%] Built target duckdb_statement
+[ 11%] Built target duckdb_parser_tableref
+[ 11%] Built target duckdb_transformer_constraint
+[ 11%] Built target duckdb_transformer_expression
+[ 11%] Built target duckdb_transformer_helpers
+[ 12%] Built target duckdb_transformer_statement
+[ 12%] Built target duckdb_transformer_tableref
+[ 12%] Built target duckdb_function
+[ 12%] Built target duckdb_func_aggr
+[ 12%] Built target duckdb_aggr_distr
+[ 12%] Built target duckdb_func_cast
+[ 12%] Built target duckdb_union_cast
+[ 12%] Built target duckdb_func_pragma
+[ 12%] Built target duckdb_func_scalar
+[ 12%] Built target duckdb_func_compressed_materialization
+[ 13%] Built target duckdb_func_date
+[ 13%] Built target duckdb_func_generic_main
+[ 13%] Built target duckdb_func_list_nested
+[ 14%] Built target duckdb_function_map
+[ 14%] Built target duckdb_func_ops_main
+[ 14%] Built target duckdb_func_seq
+[ 14%] Built target duckdb_func_string_main
+[ 15%] Built target duckdb_func_string_regexp
+[ 15%] Built target duckdb_func_struct_main
+[ 15%] Built target duckdb_func_system
+[ 15%] Built target duckdb_func_table
+[ 15%] Built target duckdb_table_func_system
+[ 15%] Built target duckdb_func_table_version
+[ 15%] Built target duckdb_arrow_conversion
+[ 15%] Built target duckdb_func_window
+[ 15%] Built target duckdb_catalog
+[ 15%] Built target duckdb_catalog_entries
+[ 15%] Built target duckdb_catalog_entries_dependency
+[ 15%] Built target duckdb_catalog_default_entries
+[ 16%] Built target duckdb_common
+[ 16%] Built target duckdb_adbc
+[ 16%] Built target duckdb_adbc_nanoarrow
+[ 16%] Built target duckdb_common_arrow
+[ 16%] Built target duckdb_common_arrow_appender
+[ 16%] Built target duckdb_common_crypto
+[ 16%] Built target duckdb_common_enums
+[ 16%] Built target duckdb_common_exception
+[ 17%] Built target duckdb_common_multi_file
+[ 17%] Built target duckdb_common_operators
+[ 17%] Built target duckdb_progress_bar
+[ 17%] Built target duckdb_common_tree_renderer
+[ 17%] Built target duckdb_row_operations
+[ 17%] Built target duckdb_common_serializer
+[ 17%] Built target duckdb_sort
+[ 17%] Built target duckdb_common_types
+[ 17%] Built target duckdb_common_types_column
+[ 17%] Built target duckdb_common_types_row
+[ 17%] Built target duckdb_value_operations
+[ 19%] Built target duckdb_vector_operations
+[ 19%] Built target duckdb_logging
+[ 19%] Built target duckdb_execution
+[ 19%] Built target duckdb_expression_executor
+[ 19%] Built target duckdb_nested_loop_join
+[ 19%] Built target duckdb_operator_aggregate
+[ 20%] Built target duckdb_csv_buffer_manager
+[ 20%] Built target duckdb_csv_encode
+[ 20%] Built target duckdb_csv_scanner
+[ 20%] Built target duckdb_csv_sniffer
+[ 20%] Built target duckdb_csv_state_machine
+[ 20%] Built target duckdb_operator_csv_table_function
+[ 20%] Built target duckdb_csv_util
+[ 20%] Built target duckdb_operator_filter
+[ 21%] Built target duckdb_operator_helper
+[ 21%] Built target duckdb_operator_join
+[ 21%] Built target duckdb_operator_order
+[ 21%] Built target duckdb_operator_persistent
+[ 21%] Built target duckdb_operator_projection
+[ 21%] Built target duckdb_operator_scan
+[ 21%] Built target duckdb_operator_schema
+[ 22%] Built target duckdb_operator_set
+[ 22%] Built target duckdb_physical_plan
+[ 23%] Built target duckdb_execution_index
+[ 23%] Built target duckdb_execution_index_art
+[ 23%] Built target duckdb_sample
+[ 23%] Built target duckdb_main
+[ 23%] Built target duckdb_main_capi
+[ 23%] Built target duckdb_main_capi_cast
+[ 23%] Built target duckdb_generated_extension_loader
+[ 24%] Built target duckdb_main_extension
+[ 24%] Built target duckdb_common_http
+[ 24%] Built target duckdb_main_relation
+[ 24%] Built target duckdb_main_secret
+[ 24%] Built target duckdb_main_settings
+[ 25%] Built target duckdb_main_buffered_data
+[ 25%] Built target duckdb_main_chunk_scan_state
+[ 25%] Built target duckdb_parallel
+[ 25%] Built target duckdb_storage
+[ 25%] Built target duckdb_storage_buffer
+[ 25%] Built target duckdb_storage_checkpoint
+[ 26%] Built target duckdb_storage_compression
+[ 26%] Built target duckdb_storage_compression_chimp
+[ 26%] Built target duckdb_storage_compression_alp
+[ 26%] Built target duckdb_storage_compression_roaring
+[ 26%] Built target duckdb_storage_compression_dictionary
+[ 26%] Built target duckdb_storage_compression_dict_fsst
+[ 26%] Built target duckdb_storage_metadata
+[ 27%] Built target duckdb_storage_serialization
+[ 27%] Built target duckdb_storage_statistics
+[ 27%] Built target duckdb_storage_table
+[ 27%] Built target duckdb_transaction
+[ 28%] Built target duckdb_verification
+[ 28%] Built target tree-sitter-cli
+[ 31%] Built target generate-parsers
+[ 33%] Built target tree-sitter
+[ 33%] Built target duckdb_core_functions_algebraic
+[ 34%] Built target duckdb_core_functions_distributive
+[ 34%] Built target duckdb_core_functions_holistic
+[ 35%] Built target duckdb_core_functions_nested
+[ 35%] Built target duckdb_core_functions_regression
+[ 35%] Built target duckdb_core_functions_array
+[ 35%] Built target duckdb_core_functions_bit
+[ 35%] Built target duckdb_core_functions_blob
+[ 35%] Built target duckdb_core_functions_date
+[ 35%] Built target duckdb_core_functions_debug
+[ 35%] Built target duckdb_core_functions_enum
+[ 35%] Built target duckdb_core_functions_generic
+[ 35%] Built target duckdb_core_functions_list
+[ 35%] Built target duckdb_core_functions_map
+[ 35%] Built target duckdb_core_functions_math
+[ 35%] Built target duckdb_core_functions_operators
+[ 35%] Built target duckdb_core_functions_random
+[ 35%] Built target duckdb_core_functions_string
+[ 35%] Built target duckdb_core_functions_struct
+[ 35%] Built target duckdb_core_functions_union
+[ 35%] Built target duckdb_parquet_decoders
+[ 35%] Built target duckdb_parquet_readers
+[ 35%] Built target duckdb_parquet_writers
+[ 44%] Built target jemalloc
+[ 45%] Built target duckdb_fmt
+[ 46%] Built target duckdb_pg_query
+[ 49%] Built target duckdb_re2
+[ 49%] Built target duckdb_miniz
 [ 49%] Built target duckdb_utf8proc
 [ 49%] Built target duckdb_hyperloglog
-[ 49%] Built target duckdb_skiplistlib
+[ 50%] Built target duckdb_skiplistlib
 [ 50%] Built target duckdb_fastpforlib
 [ 54%] Built target duckdb_mbedtls
 [ 54%] Built target duckdb_fsst
 [ 54%] Built target duckdb_yyjson
-[ 54%] Built target jemalloc_extension
-[ 61%] Built target parquet_extension
-[ 61%] Built target core_functions_extension
-[ 62%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/duckdb_adapter.cpp.o
-/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp: In member function ‘duckdb::ASTResult duckdb::DuckDBAdapter::CreateErrorResult(const string&) const’:
-/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:503:54: error: ‘ERROR_SYNTAX’ is not a member of ‘duckdb::SemanticTypes’; did you mean ‘PARSER_SYNTAX’?
-  503 |                                       SemanticTypes::ERROR_SYNTAX, 0, -1, 0);
-      |                                                      ^~~~~~~~~~~~
-      |                                                      PARSER_SYNTAX
-/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp: In member function ‘uint32_t duckdb::DuckDBAdapter::CalculateMaxDepth(const duckdb::vector<duckdb::ASTNode>&) const’:
-/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:526:29: error: no matching function for call to ‘max(uint32_t&, const uint8_t&)’
-  526 |         max_depth = std::max(max_depth, node.tree_position.node_depth);
-      |                     ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-In file included from /usr/include/c++/11/memory:63,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/constants.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/enums/profiler_format.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/main/connection.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/language_adapter.hpp:3,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/duckdb_adapter.hpp:3,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:1:
-/usr/include/c++/11/bits/stl_algobase.h:254:5: note: candidate: ‘template<class _Tp> const _Tp& std::max(const _Tp&, const _Tp&)’
-  254 |     max(const _Tp& __a, const _Tp& __b)
-      |     ^~~
-/usr/include/c++/11/bits/stl_algobase.h:254:5: note:   template argument deduction/substitution failed:
-/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:526:29: note:   deduced conflicting types for parameter ‘const _Tp’ (‘unsigned int’ and ‘uint8_t’ {aka ‘unsigned char’})
-  526 |         max_depth = std::max(max_depth, node.tree_position.node_depth);
-      |                     ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-In file included from /usr/include/c++/11/memory:63,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/constants.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/enums/profiler_format.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/main/connection.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/language_adapter.hpp:3,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/duckdb_adapter.hpp:3,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:1:
-/usr/include/c++/11/bits/stl_algobase.h:300:5: note: candidate: ‘template<class _Tp, class _Compare> const _Tp& std::max(const _Tp&, const _Tp&, _Compare)’
-  300 |     max(const _Tp& __a, const _Tp& __b, _Compare __comp)
-      |     ^~~
-/usr/include/c++/11/bits/stl_algobase.h:300:5: note:   template argument deduction/substitution failed:
-/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:526:29: note:   deduced conflicting types for parameter ‘const _Tp’ (‘unsigned int’ and ‘uint8_t’ {aka ‘unsigned char’})
-  526 |         max_depth = std::max(max_depth, node.tree_position.node_depth);
-      |                     ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-In file included from /usr/include/c++/11/algorithm:62,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/types/string_type.hpp:19,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/types/date.hpp:14,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/types/value.hpp:17,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/catalog/catalog_entry.hpp:17,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/catalog/catalog.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/serializer/write_stream.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/serializer/buffered_file_writer.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/main/connection.hpp:12,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/language_adapter.hpp:3,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/duckdb_adapter.hpp:3,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:1:
-/usr/include/c++/11/bits/stl_algo.h:3461:5: note: candidate: ‘template<class _Tp> _Tp std::max(std::initializer_list<_Tp>)’
- 3461 |     max(initializer_list<_Tp> __l)
-      |     ^~~
-/usr/include/c++/11/bits/stl_algo.h:3461:5: note:   template argument deduction/substitution failed:
-/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:526:29: note:   mismatched types ‘std::initializer_list<_Tp>’ and ‘unsigned int’
-  526 |         max_depth = std::max(max_depth, node.tree_position.node_depth);
-      |                     ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-In file included from /usr/include/c++/11/algorithm:62,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/types/string_type.hpp:19,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/types/date.hpp:14,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/types/value.hpp:17,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/catalog/catalog_entry.hpp:17,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/catalog/catalog.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/serializer/write_stream.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/common/serializer/buffered_file_writer.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb/main/connection.hpp:12,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/duckdb/src/include/duckdb.hpp:11,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/language_adapter.hpp:3,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/include/duckdb_adapter.hpp:3,
-                 from /mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:1:
-/usr/include/c++/11/bits/stl_algo.h:3467:5: note: candidate: ‘template<class _Tp, class _Compare> _Tp std::max(std::initializer_list<_Tp>, _Compare)’
- 3467 |     max(initializer_list<_Tp> __l, _Compare __comp)
-      |     ^~~
-/usr/include/c++/11/bits/stl_algo.h:3467:5: note:   template argument deduction/substitution failed:
-/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/duckdb_adapter.cpp:526:29: note:   mismatched types ‘std::initializer_list<_Tp>’ and ‘unsigned int’
-  526 |         max_depth = std::max(max_depth, node.tree_position.node_depth);
-      |                     ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-gmake[3]: *** [extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/build.make:344: extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/duckdb_adapter.cpp.o] Error 1
+[ 55%] Built target jemalloc_extension
+[ 63%] Built target parquet_extension
+[ 63%] Built target core_functions_extension
+[ 63%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/ruby_adapter.cpp.o
+/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/../language_configs/ruby_types.def:79:20: error: ‘COMPUTATION_LAMBDA’ is not a member of ‘duckdb::SemanticTypes’; did you mean ‘COMPUTATION_NODE’?
+   79 | DEF_TYPE("lambda", COMPUTATION_LAMBDA, NONE, NONE, 0)
+      |                    ^~~~~~~~~~~~~~~~~~
+/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/ruby_adapter.cpp:21:42: note: in definition of macro ‘DEF_TYPE’
+   21 |     {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+      |                                          ^~~~~~~~~~~~~
+/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/../language_configs/ruby_types.def:80:18: error: ‘COMPUTATION_LAMBDA’ is not a member of ‘duckdb::SemanticTypes’; did you mean ‘COMPUTATION_NODE’?
+   80 | DEF_TYPE("proc", COMPUTATION_LAMBDA, NONE, NONE, 0)
+      |                  ^~~~~~~~~~~~~~~~~~
+/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/ruby_adapter.cpp:21:42: note: in definition of macro ‘DEF_TYPE’
+   21 |     {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+      |                                          ^~~~~~~~~~~~~
+/mnt/aux-data/teague/Projects/duckdb_ast/src/language_adapters/ruby_adapter.cpp:25:1: error: could not convert ‘{{"module", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_MODULE)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"class", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_CLASS)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"method", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_FUNCTION)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"singleton_method", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_FUNCTION)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"alias", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_FUNCTION)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"assignment", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_VARIABLE)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"operator_assignment", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_VARIABLE)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"multiple_assignment", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_VARIABLE)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"constant", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_VARIABLE)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}, {"call", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::COMPUTATION_CALL)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"method_call", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::COMPUTATION_CALL)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"chained_call", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::COMPUTATION_CALL)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"element_reference", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::COMPUTATION_ACCESS)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"identifier", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::NAME_IDENTIFIER)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}, {"constant_identifier", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::NAME_IDENTIFIER)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}, {"instance_variable", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::NAME_IDENTIFIER)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}, {"class_variable", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::NAME_IDENTIFIER)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}, {"global_variable", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::NAME_IDENTIFIER)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}, {"integer", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_NUMBER)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"float", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_NUMBER)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"complex", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_NUMBER)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"rational", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_NUMBER)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"string", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"character", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"symbol", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"simple_symbol", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"regex", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"string_array", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRUCTURED)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"symbol_array", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRUCTURED)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"true", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_ATOMIC)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"false", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_ATOMIC)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"nil", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_ATOMIC)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"if", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"unless", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"case", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"when", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"if_modifier", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"unless_modifier", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"while", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_LOOP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"until", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_LOOP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"for", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_LOOP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"while_modifier", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_LOOP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"until_modifier", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_LOOP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"return", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_JUMP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"break", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_JUMP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"next", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_JUMP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"redo", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_JUMP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"retry", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_JUMP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"begin", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ERROR_TRY)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"rescue", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ERROR_CATCH)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"ensure", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ERROR_FINALLY)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"raise", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ERROR_THROW)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"block", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ORGANIZATION_BLOCK)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"do_block", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ORGANIZATION_BLOCK)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"lambda", <expression error>}, {"proc", <expression error>}, {"require", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::EXTERNAL_IMPORT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"require_relative", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::EXTERNAL_IMPORT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"load", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::EXTERNAL_IMPORT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"comment", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::METADATA_COMMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"yield", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_SYNC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"super", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::COMPUTATION_CALL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"self", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::NAME_SCOPED)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}, {"binary", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ARITHMETIC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"unary", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ARITHMETIC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"assignment_operator", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"def", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_FUNCTION)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"end", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ORGANIZATION_BLOCK)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"class", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_CLASS)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"module", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_MODULE)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"if", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"unless", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"else", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"elsif", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"case", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"when", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"while", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_LOOP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"until", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_LOOP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"for", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_LOOP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"in", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_COMPARISON)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"do", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ORGANIZATION_BLOCK)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"begin", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ERROR_TRY)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"rescue", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ERROR_CATCH)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"ensure", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ERROR_FINALLY)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"raise", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ERROR_THROW)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"return", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_JUMP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"break", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_JUMP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"next", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_JUMP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"redo", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_JUMP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"retry", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_JUMP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"yield", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_SYNC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"super", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::COMPUTATION_CALL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"\"", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_DELIMITER)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"\'", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_DELIMITER)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {",", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_PUNCTUATION)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {".", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_PUNCTUATION)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {":", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_PUNCTUATION)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {";", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_PUNCTUATION)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"(", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_DELIMITER)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {")", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_DELIMITER)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"[", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_DELIMITER)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"]", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_DELIMITER)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"{", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_DELIMITER)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"}", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_DELIMITER)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"|", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_DELIMITER)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"+", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ARITHMETIC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"-", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ARITHMETIC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"*", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ARITHMETIC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"/", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ARITHMETIC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"%", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ARITHMETIC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"**", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ARITHMETIC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"&", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ARITHMETIC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"^", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ARITHMETIC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"~", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ARITHMETIC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"<<", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ARITHMETIC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {">>", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ARITHMETIC)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"&&", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_LOGICAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"||", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_LOGICAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"!", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_LOGICAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"and", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_LOGICAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"or", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_LOGICAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"not", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_LOGICAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"==", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_COMPARISON)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"!=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_COMPARISON)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"<", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_COMPARISON)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {">", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_COMPARISON)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"<=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_COMPARISON)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {">=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_COMPARISON)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"<=>", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_COMPARISON)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"===", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_COMPARISON)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"=~", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_COMPARISON)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"!~", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_COMPARISON)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"+=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"-=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"*=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"/=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"%=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"**=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"&=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"|=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"^=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"<<=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {">>=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"&&=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"||=", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"string_content", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"body_statement", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::EXECUTION_STATEMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"argument_list", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ORGANIZATION_LIST)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"program", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_MODULE)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"method_parameters", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ORGANIZATION_LIST)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"in_clause", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_LOOP)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"bare_symbol", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"parameter_list", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ORGANIZATION_LIST)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"block_parameters", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ORGANIZATION_LIST)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"parenthesized_statements", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ORGANIZATION_BLOCK)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"then", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"elsif_clause", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"else_clause", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"rescue_clause", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ERROR_CATCH)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"ensure_clause", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ERROR_FINALLY)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"when_clause", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"scope_resolution", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::COMPUTATION_ACCESS)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"::", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::COMPUTATION_ACCESS)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"splat_argument", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_COLLECT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"hash_splat_argument", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_COLLECT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"keyword_splat", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_COLLECT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"hash", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRUCTURED)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"array", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRUCTURED)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"range", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRUCTURED)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"interpolation", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"escape_sequence", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"heredoc_beginning", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"heredoc_end", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"heredoc_body", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"singleton_method", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_FUNCTION)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"alias_method", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_FUNCTION)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"undef", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::EXECUTION_STATEMENT)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"superclass", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::TYPE_REFERENCE)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"include", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::EXTERNAL_IMPORT)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"extend", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::EXTERNAL_IMPORT)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"prepend", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::EXTERNAL_IMPORT)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"private", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::METADATA_ANNOTATION)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"protected", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::METADATA_ANNOTATION)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"public", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::METADATA_ANNOTATION)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)(1 | 2))))}, {"__FILE__", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::NAME_SCOPED)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}, {"__LINE__", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::NAME_SCOPED)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}, {"__dir__", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::NAME_SCOPED)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}, {"__ENCODING__", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::NAME_SCOPED)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}, {"case_match", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_MATCH)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"in_pattern", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_MATCH)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"variable_pattern", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_DESTRUCTURE)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"array_pattern", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_DESTRUCTURE)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"hash_pattern", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_DESTRUCTURE)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"rest_pattern", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_COLLECT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"attr_reader", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::METADATA_ANNOTATION)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"attr_writer", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::METADATA_ANNOTATION)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"attr_accessor", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::METADATA_ANNOTATION)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"define_method", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_FUNCTION)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"define_singleton_method", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_FUNCTION)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"word_literal", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"symbol_literal", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"regex_literal", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"keyword_pattern", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_MATCH)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"hash_key_symbol", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"bare_string", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"%i(", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_DELIMITER)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"%w(", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_DELIMITER)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"encoding", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::NAME_SCOPED)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}, {"optional_parameter", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_VARIABLE)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"block_body", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ORGANIZATION_BLOCK)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"file", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::NAME_SCOPED)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}, {"destructured_parameter", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_DESTRUCTURE)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"lambda_parameters", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ORGANIZATION_LIST)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {":\"", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_DELIMITER)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"#{", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_DELIMITER)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"delimited_symbol", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"line", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::NAME_SCOPED)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}, {"->", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"keyword_parameter", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::DEFINITION_VARIABLE)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"alternative_pattern", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_MATCH)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"hash_splat_nil", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_COLLECT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"pair", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRUCTURED)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"=>", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::OPERATOR_ASSIGNMENT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"exceptions", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ERROR_CATCH)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"exception_variable", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ERROR_CATCH)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"hash_splat_parameter", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_COLLECT)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"conditional", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"?", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::FLOW_CONDITIONAL)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"&.", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::COMPUTATION_ACCESS)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"..", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRUCTURED)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"heredoc_content", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"block_argument", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ORGANIZATION_LIST)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"defined?", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::COMPUTATION_CALL)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, ((int)((uint8_t)duckdb::ASTNodeFlags::IS_KEYWORD)))}, {"chained_string", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::LITERAL_STRING)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NODE_TEXT, 0)}, {"block_parameter", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::ORGANIZATION_LIST)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"splat_parameter", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_COLLECT)), duckdb::ExtractionStrategy::FIND_IDENTIFIER, duckdb::ExtractionStrategy::NONE, 0)}, {"...", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PATTERN_COLLECT)), duckdb::ExtractionStrategy::NONE, duckdb::ExtractionStrategy::NONE, 0)}, {"ERROR", duckdb::NodeConfig(((int)((uint8_t)duckdb::SemanticTypes::PARSER_SYNTAX)), duckdb::ExtractionStrategy::NODE_TEXT, duckdb::ExtractionStrategy::NONE, 0)}}’ from ‘<brace-enclosed initializer list>’ to ‘const std::unordered_map<std::__cxx11::basic_string<char>, duckdb::NodeConfig>’
+   25 | };
+      | ^
+      | |
+      | <brace-enclosed initializer list>
+gmake[3]: *** [extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/build.make:381: extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/ruby_adapter.cpp.o] Error 1
 gmake[2]: *** [CMakeFiles/Makefile2:9282: extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/all] Error 2
 gmake[1]: *** [Makefile:136: all] Error 2
 gmake[1]: Leaving directory '/mnt/aux-data/teague/Projects/duckdb_ast/build/release'

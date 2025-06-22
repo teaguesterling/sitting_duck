@@ -110,14 +110,8 @@ bool RubyAdapter::IsPublicNode(TSNode node, const string &content) const {
     return true;
 }
 
-uint8_t RubyAdapter::GetNodeFlags(const string &node_type) const {
-    const NodeConfig* config = GetNodeConfig(node_type);
-    return config ? config->flags : 0;
-}
-
-const NodeConfig* RubyAdapter::GetNodeConfig(const string &node_type) const {
-    auto it = node_configs.find(node_type);
-    return it != node_configs.end() ? &it->second : nullptr;
+const unordered_map<string, NodeConfig>& RubyAdapter::GetNodeConfigs() const {
+    return node_configs;
 }
 
 ParsingFunction RubyAdapter::GetParsingFunction() const {

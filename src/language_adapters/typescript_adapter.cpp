@@ -1,6 +1,7 @@
 #include "language_adapter.hpp"
 #include "unified_ast_backend_impl.hpp"
 #include "semantic_types.hpp"
+#include "node_config.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/helper.hpp"
@@ -17,8 +18,8 @@ namespace duckdb {
 // TypeScript Adapter implementation
 //==============================================================================
 
-#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
-    {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags, ...) \
+    {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags, ##__VA_ARGS__)},
 
 const unordered_map<string, NodeConfig> TypeScriptAdapter::node_configs = {
     // TypeScript-specific type definitions (includes JavaScript as base)
@@ -131,14 +132,8 @@ bool TypeScriptAdapter::IsPublicNode(TSNode node, const string &content) const {
     return true;
 }
 
-uint8_t TypeScriptAdapter::GetNodeFlags(const string &node_type) const {
-    const NodeConfig* config = GetNodeConfig(node_type);
-    return config ? config->flags : 0;
-}
-
-const NodeConfig* TypeScriptAdapter::GetNodeConfig(const string &node_type) const {
-    auto it = node_configs.find(node_type);
-    return it != node_configs.end() ? &it->second : nullptr;
+const unordered_map<string, NodeConfig>& TypeScriptAdapter::GetNodeConfigs() const {
+    return node_configs;
 }
 
 ParsingFunction TypeScriptAdapter::GetParsingFunction() const {

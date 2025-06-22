@@ -43,8 +43,7 @@ WHERE type = 'function_call'
 ORDER BY name;
 ----
 function_call	MODE
-function_call	PERCENT_RANK
-function_call	PERCENTILE_CONT
+function_call	QUANTILE_CONT
 
 # Test 3: Complex CTE with recursive queries
 # ==========================================

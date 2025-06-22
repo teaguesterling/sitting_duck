@@ -24,11 +24,11 @@ FROM parse_ast('SELECT user_id, COUNT(*) as total FROM orders GROUP BY user_id',
 ORDER BY node_id
 LIMIT 8;
 ----
-program	NULL	252	0	7
-select_statement	NULL	224	1	6
-select_node	NULL	224	2	5
+program	NULL	252	0	8
+select_statement	NULL	224	1	7
+select_node	NULL	224	2	6
 select_list	NULL	188	3	2
-column_reference	user_id	68	4	0
+column_reference	user_id	80	4	0
 function_call	COUNT	208	4	0
 table_reference	orders	84	3	0
 group_by_clause	NULL	236	3	1

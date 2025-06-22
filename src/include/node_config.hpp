@@ -35,10 +35,10 @@ struct NodeConfig {
 
 // Universal flags for orthogonal node properties
 namespace ASTNodeFlags {
-    constexpr uint8_t IS_KEYWORD = 0x01;   // Reserved language keywords
-    constexpr uint8_t IS_PUBLIC = 0x02;    // Externally visible/accessible
-    constexpr uint8_t IS_UNSAFE = 0x04;    // Unsafe operations
-    constexpr uint8_t RESERVED = 0x08;     // Reserved for future use
+    constexpr uint8_t IS_KEYWORD = 0x01;         // Reserved language keywords
+    constexpr uint8_t IS_PUBLIC = 0x02;          // Externally visible/accessible
+    constexpr uint8_t IS_UNSAFE = 0x04;          // Unsafe operations
+    constexpr uint8_t IS_KEYWORD_IF_LEAF = 0x08; // Only apply IS_KEYWORD if node has no children
 }
 
 // Semantic refinement constants for fine-grained classification
@@ -169,6 +169,78 @@ namespace SemanticRefinements {
         constexpr uint8_t FUNCTION = 0x01;     // 01 - Function name references
         constexpr uint8_t TYPE = 0x02;         // 10 - Class/type name references
         constexpr uint8_t LABEL = 0x03;        // 11 - Labels, tags
+    }
+    
+    // SQL-specific refinements for database operations and cross-language query patterns
+    namespace SQL {
+        // TRANSFORM_QUERY refinements - Query structure analysis
+        namespace Query {
+            constexpr uint8_t SELECT = 0x00;      // 00 - Basic SELECT statements
+            constexpr uint8_t CTE = 0x01;         // 01 - WITH clauses (Common Table Expressions)
+            constexpr uint8_t WINDOW = 0x02;      // 10 - Window function queries
+            constexpr uint8_t SUBQUERY = 0x03;    // 11 - Subqueries, correlated queries
+        }
+        
+        // COMPUTATION_CALL refinements - Function type analysis for performance  
+        namespace Call {
+            constexpr uint8_t SCALAR = 0x00;      // 00 - Scalar functions (list_transform, struct_pack)
+            constexpr uint8_t AGGREGATE = 0x01;   // 01 - Aggregate functions (SUM, COUNT, AVG, MAX, MIN)
+            constexpr uint8_t WINDOW = 0x02;      // 10 - Window functions (RANK, ROW_NUMBER, LAG, LEAD)
+            constexpr uint8_t TABLE = 0x03;       // 11 - Table functions (unnest, generate_series)
+        }
+        
+        // TRANSFORM_ITERATION refinements - Join type analysis for performance
+        namespace Join {
+            constexpr uint8_t INNER = 0x00;       // 00 - INNER JOIN (most efficient)
+            constexpr uint8_t LEFT = 0x01;        // 01 - LEFT OUTER JOIN
+            constexpr uint8_t RIGHT = 0x02;       // 10 - RIGHT OUTER JOIN
+            constexpr uint8_t FULL = 0x03;        // 11 - FULL OUTER JOIN (most expensive)
+        }
+        
+        // EXECUTION_MUTATION refinements - Data modification analysis
+        namespace Mutation {
+            constexpr uint8_t INSERT = 0x00;      // 00 - INSERT statements
+            constexpr uint8_t UPDATE = 0x01;      // 01 - UPDATE statements
+            constexpr uint8_t DELETE = 0x02;      // 10 - DELETE statements
+            constexpr uint8_t MERGE = 0x03;       // 11 - MERGE/UPSERT statements
+        }
+        
+        // TRANSFORM_AGGREGATION refinements - Aggregation complexity analysis
+        namespace Aggregation {
+            constexpr uint8_t GROUP = 0x00;       // 00 - GROUP BY clauses
+            constexpr uint8_t HAVING = 0x01;      // 01 - HAVING clauses
+            constexpr uint8_t WINDOW_FRAME = 0x02; // 10 - PARTITION BY, ORDER BY in window functions
+            constexpr uint8_t ROLLUP = 0x03;      // 11 - ROLLUP, CUBE, GROUPING SETS
+        }
+    }
+    
+    // Cross-language query/data patterns (existing, keeping for compatibility)
+    namespace Query {
+        constexpr uint8_t SIMPLE = 0x00;      // 00 - Basic queries/comprehensions/selects
+        constexpr uint8_t NESTED = 0x01;      // 01 - Nested queries/comprehensions/subqueries
+        constexpr uint8_t FILTERED = 0x02;    // 10 - With WHERE/filter clauses
+        constexpr uint8_t GROUPED = 0x03;     // 11 - With GROUP BY/grouping operations
+    }
+    
+    namespace Aggregation {
+        constexpr uint8_t SIMPLE = 0x00;      // 00 - Basic reduction (sum, count, reduce)
+        constexpr uint8_t CONDITIONAL = 0x01; // 01 - Conditional aggregation (filter-then-reduce)
+        constexpr uint8_t WINDOWED = 0x02;    // 10 - Rolling/windowed operations (sliding window)
+        constexpr uint8_t GROUPED = 0x03;     // 11 - Group-based aggregation (group by, partition)
+    }
+    
+    namespace Iteration {
+        constexpr uint8_t MAP = 0x00;         // 00 - Transform operations (map, select, transform)
+        constexpr uint8_t FILTER = 0x01;      // 01 - Filter operations (where, filter, find)
+        constexpr uint8_t REDUCE = 0x02;      // 10 - Reduction operations (fold, reduce, aggregate)
+        constexpr uint8_t FLAT = 0x03;        // 11 - Flattening operations (flatMap, flatten, SelectMany)
+    }
+    
+    namespace Join {
+        constexpr uint8_t INNER = 0x00;       // 00 - Inner joins/intersections/zip
+        constexpr uint8_t LEFT = 0x01;        // 01 - Left joins/left-biased operations
+        constexpr uint8_t RIGHT = 0x02;       // 10 - Right joins/right-biased operations  
+        constexpr uint8_t OUTER = 0x03;       // 11 - Full outer joins/unions/concatenation
     }
     
     // Generic refinement for types that don't need specific refinements

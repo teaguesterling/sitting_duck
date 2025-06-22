@@ -30,23 +30,35 @@ namespace duckdb {
 
 // SQL-specific semantic types using language-specific bits (bits 0-1)
 namespace SQLSemanticTypes {
-    // TRANSFORM_QUERY variants (1110 00xx)
-    constexpr uint8_t TRANSFORM_QUERY_SELECT = SemanticTypes::TRANSFORM_QUERY | 0x00;
-    constexpr uint8_t TRANSFORM_QUERY_CTE = SemanticTypes::TRANSFORM_QUERY | 0x01;
-    constexpr uint8_t TRANSFORM_QUERY_WINDOW = SemanticTypes::TRANSFORM_QUERY | 0x02;
-    constexpr uint8_t TRANSFORM_QUERY_SUBQUERY = SemanticTypes::TRANSFORM_QUERY | 0x03;
+    // TRANSFORM_QUERY refinements using SQL namespace
+    constexpr uint8_t TRANSFORM_QUERY_SELECT = SemanticTypes::TRANSFORM_QUERY | SemanticRefinements::SQL::Query::SELECT;
+    constexpr uint8_t TRANSFORM_QUERY_CTE = SemanticTypes::TRANSFORM_QUERY | SemanticRefinements::SQL::Query::CTE;
+    constexpr uint8_t TRANSFORM_QUERY_WINDOW = SemanticTypes::TRANSFORM_QUERY | SemanticRefinements::SQL::Query::WINDOW;
+    constexpr uint8_t TRANSFORM_QUERY_SUBQUERY = SemanticTypes::TRANSFORM_QUERY | SemanticRefinements::SQL::Query::SUBQUERY;
 
-    // COMPUTATION_CALL variants (1101 00xx)
-    constexpr uint8_t COMPUTATION_CALL_FUNCTION = SemanticTypes::COMPUTATION_CALL | 0x00;
-    constexpr uint8_t COMPUTATION_CALL_AGGREGATE = SemanticTypes::COMPUTATION_CALL | 0x01;
-    constexpr uint8_t COMPUTATION_CALL_WINDOW = SemanticTypes::COMPUTATION_CALL | 0x02;
-    constexpr uint8_t COMPUTATION_CALL_CAST = SemanticTypes::COMPUTATION_CALL | 0x03;
+    // COMPUTATION_CALL refinements using SQL namespace
+    constexpr uint8_t COMPUTATION_CALL_SCALAR = SemanticTypes::COMPUTATION_CALL | SemanticRefinements::SQL::Call::SCALAR;
+    constexpr uint8_t COMPUTATION_CALL_AGGREGATE = SemanticTypes::COMPUTATION_CALL | SemanticRefinements::SQL::Call::AGGREGATE;
+    constexpr uint8_t COMPUTATION_CALL_WINDOW = SemanticTypes::COMPUTATION_CALL | SemanticRefinements::SQL::Call::WINDOW;
+    constexpr uint8_t COMPUTATION_CALL_TABLE = SemanticTypes::COMPUTATION_CALL | SemanticRefinements::SQL::Call::TABLE;
 
-    // EXECUTION_MUTATION variants (1000 11xx)
-    constexpr uint8_t EXECUTION_MUTATION_INSERT = SemanticTypes::EXECUTION_MUTATION | 0x00;
-    constexpr uint8_t EXECUTION_MUTATION_UPDATE = SemanticTypes::EXECUTION_MUTATION | 0x01;
-    constexpr uint8_t EXECUTION_MUTATION_DELETE = SemanticTypes::EXECUTION_MUTATION | 0x02;
-    constexpr uint8_t EXECUTION_MUTATION_ALTER = SemanticTypes::EXECUTION_MUTATION | 0x03;
+    // TRANSFORM_ITERATION refinements for JOIN types
+    constexpr uint8_t TRANSFORM_ITERATION_INNER = SemanticTypes::TRANSFORM_ITERATION | SemanticRefinements::SQL::Join::INNER;
+    constexpr uint8_t TRANSFORM_ITERATION_LEFT = SemanticTypes::TRANSFORM_ITERATION | SemanticRefinements::SQL::Join::LEFT;
+    constexpr uint8_t TRANSFORM_ITERATION_RIGHT = SemanticTypes::TRANSFORM_ITERATION | SemanticRefinements::SQL::Join::RIGHT;
+    constexpr uint8_t TRANSFORM_ITERATION_FULL = SemanticTypes::TRANSFORM_ITERATION | SemanticRefinements::SQL::Join::FULL;
+
+    // EXECUTION_MUTATION refinements using SQL namespace
+    constexpr uint8_t EXECUTION_MUTATION_INSERT = SemanticTypes::EXECUTION_MUTATION | SemanticRefinements::SQL::Mutation::INSERT;
+    constexpr uint8_t EXECUTION_MUTATION_UPDATE = SemanticTypes::EXECUTION_MUTATION | SemanticRefinements::SQL::Mutation::UPDATE;
+    constexpr uint8_t EXECUTION_MUTATION_DELETE = SemanticTypes::EXECUTION_MUTATION | SemanticRefinements::SQL::Mutation::DELETE;
+    constexpr uint8_t EXECUTION_MUTATION_MERGE = SemanticTypes::EXECUTION_MUTATION | SemanticRefinements::SQL::Mutation::MERGE;
+
+    // TRANSFORM_AGGREGATION refinements using SQL namespace
+    constexpr uint8_t TRANSFORM_AGGREGATION_GROUP = SemanticTypes::TRANSFORM_AGGREGATION | SemanticRefinements::SQL::Aggregation::GROUP;
+    constexpr uint8_t TRANSFORM_AGGREGATION_HAVING = SemanticTypes::TRANSFORM_AGGREGATION | SemanticRefinements::SQL::Aggregation::HAVING;
+    constexpr uint8_t TRANSFORM_AGGREGATION_WINDOW_FRAME = SemanticTypes::TRANSFORM_AGGREGATION | SemanticRefinements::SQL::Aggregation::WINDOW_FRAME;
+    constexpr uint8_t TRANSFORM_AGGREGATION_ROLLUP = SemanticTypes::TRANSFORM_AGGREGATION | SemanticRefinements::SQL::Aggregation::ROLLUP;
 }
 
 //==============================================================================
@@ -149,18 +161,11 @@ bool DuckDBAdapter::IsPublicNode(TSNode node, const string &content) const {
     return true;
 }
 
-uint8_t DuckDBAdapter::GetNodeFlags(const string &node_type) const {
-    // Determine flags based on node type
-    if (node_type.find("keyword") != string::npos) {
-        return ASTNodeFlags::IS_KEYWORD;
-    }
-    return 0;
-}
-
-const NodeConfig* DuckDBAdapter::GetNodeConfig(const string &node_type) const {
-    // For DuckDB adapter, we handle semantic types directly in conversion
-    // Return nullptr to indicate no static configuration
-    return nullptr;
+const unordered_map<string, NodeConfig>& DuckDBAdapter::GetNodeConfigs() const {
+    // DuckDB adapter handles semantic types dynamically during conversion
+    // Return empty static map since we don't use static configuration
+    static const unordered_map<string, NodeConfig> empty_configs;
+    return empty_configs;
 }
 
 //==============================================================================
@@ -408,22 +413,38 @@ vector<ASTNode> DuckDBAdapter::ConvertExpression(const ParsedExpression& expr, u
         case ExpressionType::FUNCTION: {
             const auto& func_expr = expr.Cast<FunctionExpression>();
             string normalized_name = NormalizeFunctionName(func_expr.function_name);
-            auto node = CreateASTNode("function_call", normalized_name, normalized_name,
-                                     SQLSemanticTypes::COMPUTATION_CALL_FUNCTION,
-                                     node_counter++, -1, 0);
-            nodes.push_back(node);
             
-            // Process function arguments
-            for (const auto& arg : func_expr.children) {
-                if (!arg) {
-                    continue; // Skip NULL function arguments
-                }
-                auto arg_nodes = ConvertExpression(*arg, node_counter);
-                for (auto& an : arg_nodes) {
-                    if (an.tree_position.parent_index == -1) {
-                        an.tree_position.parent_index = node.node_id;
+            // Skip internal constructor functions that users don't typically write explicitly
+            if (func_expr.function_name == "list_value" || func_expr.function_name == "struct_pack_internal") {
+                // Process arguments but don't create the function call node
+                for (const auto& arg : func_expr.children) {
+                    if (!arg) {
+                        continue;
                     }
-                    nodes.push_back(an);
+                    auto arg_nodes = ConvertExpression(*arg, node_counter);
+                    for (auto& an : arg_nodes) {
+                        nodes.push_back(an);
+                    }
+                }
+            } else {
+                // Create the function call node for user-visible functions
+                auto node = CreateASTNode("function_call", normalized_name, normalized_name,
+                                         SQLSemanticTypes::COMPUTATION_CALL_SCALAR,
+                                         node_counter++, -1, 0);
+                nodes.push_back(node);
+                
+                // Process function arguments
+                for (const auto& arg : func_expr.children) {
+                    if (!arg) {
+                        continue; // Skip NULL function arguments
+                    }
+                    auto arg_nodes = ConvertExpression(*arg, node_counter);
+                    for (auto& an : arg_nodes) {
+                        if (an.tree_position.parent_index == -1) {
+                            an.tree_position.parent_index = node.node_id;
+                        }
+                        nodes.push_back(an);
+                    }
                 }
             }
             break;
@@ -598,33 +619,8 @@ uint32_t DuckDBAdapter::CalculateMaxDepth(const vector<ASTNode>& nodes) const {
 }
 
 string DuckDBAdapter::NormalizeFunctionName(const string& internal_name) const {
-    // Map DuckDB internal function names to user-friendly names
-    if (internal_name == "count_star") {
-        return "COUNT";
-    }
-    if (internal_name == "sum") {
-        return "SUM"; 
-    }
-    if (internal_name == "avg") {
-        return "AVG";
-    }
-    if (internal_name == "min") {
-        return "MIN";
-    }
-    if (internal_name == "max") {
-        return "MAX";
-    }
-    if (internal_name == "list_transform") {
-        return "list_transform";  // Keep DuckDB-specific functions as-is
-    }
-    if (internal_name == "struct_pack") {
-        return "struct_pack";
-    }
-    
-    // For unknown functions, convert to uppercase (SQL convention)
-    string result = internal_name;
-    std::transform(result.begin(), result.end(), result.begin(), ::toupper);
-    return result;
+    // Use DuckDB's internal function names as-is - they are the authoritative source
+    return internal_name;
 }
 
 //==============================================================================

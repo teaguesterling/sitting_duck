@@ -1,15 +1,16 @@
 // R language node type definitions
 // Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+// Use bitwise OR to combine semantic types with refinements: DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA
 
 // Function definitions and declarations
-DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_ASSIGNMENT_TARGET, NONE, 0)
+DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_ASSIGNMENT_TARGET, NONE, 0)
 DEF_TYPE("function", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Control flow statements
-DEF_TYPE("if_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("while_statement", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("repeat_statement", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("repeat_statement", FLOW_LOOP | SemanticRefinements::Loop::INFINITE, NONE, NONE, 0)
 
 // Jump statements
 DEF_TYPE("return", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -26,10 +27,10 @@ DEF_TYPE("in", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Identifiers and names
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("parameter", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
 
 // Function calls and expressions
-DEF_TYPE("call", COMPUTATION_CALL, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("call", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("binary_operator", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 DEF_TYPE("unary_operator", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 
@@ -41,9 +42,9 @@ DEF_TYPE("namespace_operator", COMPUTATION_ACCESS, NONE, NONE, 0)
 
 // Literals - R has many special constants
 DEF_TYPE("string", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("integer", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("float", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("complex", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("integer", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("float", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("complex", LITERAL_NUMBER | SemanticRefinements::Number::COMPLEX, NODE_TEXT, NODE_TEXT, 0)
 DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
 DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
 
@@ -58,17 +59,24 @@ DEF_TYPE("NA_complex_", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
 DEF_TYPE("inf", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
 DEF_TYPE("nan", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
 
+// R structured literals
+DEF_TYPE("vector", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("list", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("data_frame", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("matrix", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("array", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NODE_TEXT, 0)
+
 // Special R constructs
 DEF_TYPE("dots", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
 DEF_TYPE("dot_dot_i", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
-DEF_TYPE("special", COMPUTATION_CALL, NODE_TEXT, NONE, 0)
+DEF_TYPE("special", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, NODE_TEXT, NONE, 0)
 
 // Organizational structures
-DEF_TYPE("program", ORGANIZATION_CONTAINER, NONE, NONE, 0)
-DEF_TYPE("braced_expression", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("program", ORGANIZATION_CONTAINER | SemanticRefinements::Organization::HIERARCHICAL, NONE, NONE, 0)
+DEF_TYPE("braced_expression", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-DEF_TYPE("arguments", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("parameters", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 DEF_TYPE("argument", ORGANIZATION_LIST, FIND_IDENTIFIER, NONE, 0)
 
 // String components
@@ -87,10 +95,10 @@ DEF_TYPE("=", OPERATOR_ASSIGNMENT, NONE, NODE_TEXT, 0)
 DEF_TYPE(":=", OPERATOR_ASSIGNMENT, NONE, NODE_TEXT, 0)
 
 // Arithmetic operators
-DEF_TYPE("+", OPERATOR_ARITHMETIC, NONE, NODE_TEXT, 0)
-DEF_TYPE("-", OPERATOR_ARITHMETIC, NONE, NODE_TEXT, 0)
-DEF_TYPE("*", OPERATOR_ARITHMETIC, NONE, NODE_TEXT, 0)
-DEF_TYPE("/", OPERATOR_ARITHMETIC, NONE, NODE_TEXT, 0)
+DEF_TYPE("+", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NODE_TEXT, 0)
+DEF_TYPE("-", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NODE_TEXT, 0)
+DEF_TYPE("*", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NODE_TEXT, 0)
+DEF_TYPE("/", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NODE_TEXT, 0)
 DEF_TYPE("^", OPERATOR_ARITHMETIC, NONE, NODE_TEXT, 0)
 DEF_TYPE("**", OPERATOR_ARITHMETIC, NONE, NODE_TEXT, 0)
 DEF_TYPE("%", OPERATOR_ARITHMETIC, NONE, NODE_TEXT, 0)

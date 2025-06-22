@@ -95,15 +95,10 @@ bool PHPAdapter::IsPublicNode(TSNode node, const string &content) const {
     return node_text.find("public") != string::npos;
 }
 
-uint8_t PHPAdapter::GetNodeFlags(const string &node_type) const {
-    const NodeConfig* config = GetNodeConfig(node_type);
-    return config ? config->flags : 0;
+const unordered_map<string, NodeConfig>& PHPAdapter::GetNodeConfigs() const {
+    return node_configs;
 }
 
-const NodeConfig* PHPAdapter::GetNodeConfig(const string &node_type) const {
-    auto it = node_configs.find(node_type);
-    return it != node_configs.end() ? &it->second : nullptr;
-}
 
 ParsingFunction PHPAdapter::GetParsingFunction() const {
     // Return a lambda that captures the templated parsing function

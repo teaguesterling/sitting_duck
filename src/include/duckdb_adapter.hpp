@@ -36,12 +36,13 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
     
     // DuckDB-specific parsing function
     ASTResult ParseSQL(const string& sql_content) const;
+
+protected:
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 
 private:
     // Core conversion methods (Architecture Plan Section 4.2)

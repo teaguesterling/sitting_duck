@@ -7,10 +7,10 @@ DEF_TYPE("package_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0x01)
 DEF_TYPE("import_declaration", EXTERNAL_IMPORT, NONE, NODE_TEXT, 0x01)
 DEF_TYPE("import_spec", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0x01)
 
-// Function declarations and definitions
-DEF_TYPE("function_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("method_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("func_literal", DEFINITION_FUNCTION, NONE, NONE, 0)
+// Function declarations and definitions with refinements
+DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("func_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, NONE, 0)
 
 // Type declarations
 DEF_TYPE("type_declaration", EXECUTION_DECLARATION, FIND_IDENTIFIER, NONE, 0x01)
@@ -18,15 +18,15 @@ DEF_TYPE("type_spec", EXECUTION_DECLARATION, FIND_IDENTIFIER, NONE, 0x01)
 DEF_TYPE("struct_type", DEFINITION_CLASS, NONE, NONE, 0x01)
 DEF_TYPE("interface_type", DEFINITION_CLASS, NONE, NONE, 0x01)
 
-// Variable declarations
-DEF_TYPE("var_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("var_spec", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("const_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("const_spec", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("short_var_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0x01)
+// Variable declarations with refinements
+DEF_TYPE("var_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("var_spec", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("const_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("const_spec", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("short_var_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0x01)
 
-// Expressions and references
-DEF_TYPE("call_expression", COMPUTATION_CALL, FIND_IDENTIFIER, NONE, 0)
+// Expressions and references with refinements
+DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("selector_expression", COMPUTATION_ACCESS, FIND_PROPERTY, NONE, 0)
 DEF_TYPE("index_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 DEF_TYPE("slice_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
@@ -36,21 +36,21 @@ DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE("field_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
 
-// Literals - name and value both contain the literal text
-DEF_TYPE("int_literal", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("float_literal", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("imaginary_literal", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("rune_literal", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("raw_string_literal", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("interpreted_string_literal", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+// Literals with refinements - name and value both contain the literal text
+DEF_TYPE("int_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("float_literal", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("imaginary_literal", LITERAL_NUMBER | SemanticRefinements::Number::COMPLEX, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("rune_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("raw_string_literal", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("interpreted_string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NODE_TEXT, 0)
 
-// Control flow
-DEF_TYPE("if_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("range_clause", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("switch_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("type_switch_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("select_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
+// Control flow with refinements
+DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("range_clause", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+DEF_TYPE("type_switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+DEF_TYPE("select_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 
 // Go-specific constructs
 DEF_TYPE("go_statement", FLOW_SYNC, NONE, NONE, 0)
@@ -205,6 +205,13 @@ DEF_TYPE("generic_type", TYPE_GENERIC, NONE, NONE, 0)
 DEF_TYPE("expression_switch_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
 DEF_TYPE("&^", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 DEF_TYPE("|=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+// ==============================================================================
+// Parser-level semantic mappings only
+// Note: Go built-in function names (make, len, append, etc.) and library functions
+// (Map, Filter, Reduce, etc.) are removed since they're just identifiers - could be 
+// user-defined functions with different semantics
+// ==============================================================================
 
 // Error handling
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
