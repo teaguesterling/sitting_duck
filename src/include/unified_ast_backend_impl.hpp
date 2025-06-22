@@ -57,6 +57,9 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
         idx_t node_index;      // Index in nodes array for this node
     };
     
+    // Hoist GetNodeConfigs outside the hot loop - huge performance optimization!
+    const auto& node_configs = adapter->GetNodeConfigs();
+    
     vector<StackEntry> stack;
     stack.push_back({root, -1, 0, 0, false, 0});
     
@@ -190,8 +193,8 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
                 }
             }
             
-            // Populate semantic type and other fields
-            PopulateSemanticFieldsTemplated(ast_node, adapter, entry.node, content);
+            // Populate semantic type and other fields - pass configs to avoid virtual call
+            PopulateSemanticFieldsTemplated(ast_node, adapter, entry.node, content, node_configs);
             
             result.nodes.push_back(ast_node);
             
@@ -225,17 +228,31 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
     return result;
 }
 
-// Templated version of PopulateSemanticFields - no virtual calls
+// Templated version of PopulateSemanticFields - zero virtual calls!
 template<typename AdapterType>
-void PopulateSemanticFieldsTemplated(ASTNode& node, const AdapterType* adapter, TSNode ts_node, const string& content) {
-    // Get node configuration (direct call, no virtual dispatch)
-    const NodeConfig* config = adapter->GetNodeConfig(node.type.raw);
+void PopulateSemanticFieldsTemplated(ASTNode& node, const AdapterType* adapter, TSNode ts_node, const string& content, 
+                                    const unordered_map<string, NodeConfig>& node_configs) {
+    // Direct hash lookup - no virtual calls!
+    auto config_it = node_configs.find(node.type.raw);
+    const NodeConfig* config = (config_it != node_configs.end()) ? &config_it->second : nullptr;
     
     if (config) {
         // Set semantic type from configuration
         node.semantic_type = config->semantic_type;
-        // Set universal flags from configuration
+        
+        // Set universal flags from configuration with conditional logic
         node.universal_flags = config->flags;
+        
+        // Handle IS_KEYWORD_IF_LEAF: only apply IS_KEYWORD flag if node has no children
+        if (config->flags & ASTNodeFlags::IS_KEYWORD_IF_LEAF) {
+            // Remove the conditional flag
+            node.universal_flags &= ~ASTNodeFlags::IS_KEYWORD_IF_LEAF;
+            
+            // Only add IS_KEYWORD if this is a leaf node (no children)
+            if (ts_node_child_count(ts_node) == 0) {
+                node.universal_flags |= ASTNodeFlags::IS_KEYWORD;
+            }
+        }
     } else {
         // Fallback: use PARSER_CONSTRUCT for unknown types
         node.semantic_type = SemanticTypes::PARSER_CONSTRUCT;

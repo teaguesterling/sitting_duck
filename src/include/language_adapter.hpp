@@ -35,12 +35,21 @@ public:
     
     // Basic node properties
     virtual bool IsPublicNode(TSNode node, const string &content) const = 0;
-    virtual uint8_t GetNodeFlags(const string &node_type) const = 0;
     
-    // Get node configuration
-    virtual const NodeConfig* GetNodeConfig(const string &node_type) const = 0;
+    // Non-virtual hot loop optimizations - these are identical across all adapters
+    uint8_t GetNodeFlags(const string &node_type) const {
+        const NodeConfig* config = GetNodeConfig(node_type);
+        return config ? config->flags : 0;
+    }
     
-    // Get parser (lazy initialization)
+    // Get node configuration - non-virtual base implementation
+    const NodeConfig* GetNodeConfig(const string &node_type) const {
+        const auto& configs = GetNodeConfigs();  // Single virtual call
+        auto it = configs.find(node_type);
+        return (it != configs.end()) ? &it->second : nullptr;
+    }
+    
+    // Get parser (lazy initialization) - made public for registry access
     TSParser* GetParser() const {
         if (!parser_wrapper_) {
             InitializeParser();
@@ -54,6 +63,10 @@ public:
         auto fresh_parser = CreateFreshParser();
         return fresh_parser->ParseString(content);
     }
+    
+    // Pure virtual method to get the static node configs map - each adapter implements this
+    // Made public for template function access (performance optimization)
+    virtual const unordered_map<string, NodeConfig>& GetNodeConfigs() const = 0;
     
 protected:
     // Owned parser instance - created once per adapter
@@ -81,9 +94,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -101,9 +113,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -121,9 +132,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -141,9 +151,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -161,9 +170,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -181,9 +189,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -200,9 +207,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -219,9 +225,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -238,9 +243,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -259,9 +263,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 
 protected:
     void InitializeParser() const override;
@@ -280,9 +283,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 
 protected:
     void InitializeParser() const override;
@@ -300,9 +302,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 
 protected:
     void InitializeParser() const override;
@@ -320,9 +321,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 
 protected:
     void InitializeParser() const override;
@@ -340,9 +340,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -359,9 +358,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -378,9 +376,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
@@ -397,9 +394,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 
 protected:
     void InitializeParser() const override;
@@ -417,9 +413,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 
 protected:
     void InitializeParser() const override;
@@ -440,10 +435,28 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
     ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 
+protected:
+    void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+    
+private:
+    static const unordered_map<string, NodeConfig> node_configs;
+};
+
+// Kotlin language adapter
+class KotlinAdapter : public LanguageAdapter {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 protected:
     void InitializeParser() const override;
     unique_ptr<TSParserWrapper> CreateFreshParser() const override;
