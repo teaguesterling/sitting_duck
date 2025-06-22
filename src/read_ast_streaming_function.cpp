@@ -944,29 +944,57 @@ static void ReadASTHierarchicalFunctionSequential(ClientContext &context, ReadAS
                 break;
             }
         } else {
-            // Single file processing using NEW structured fields
-            OpenFileInfo file;
-            bool found_valid_file = false;
-            
-            while (!found_valid_file && global_state.file_list->Scan(global_state.file_scan_state, file)) {
+            // Single file processing using NEW structured fields - MATCH FLAT VERSION LOGIC
+            // Check if we need to parse a new file
+            if (!global_state.current_file_parsed || 
+                !global_state.current_file_result ||
+                global_state.current_file_row_index >= global_state.current_file_result->nodes.size()) {
+                
+                // Try to get next file that matches our language criteria
+                OpenFileInfo file;
+                bool found_valid_file = false;
+                
+                while (!found_valid_file) {
+                    if (!global_state.file_list->Scan(global_state.file_scan_state, file)) {
+                        // No more files
+                        global_state.files_exhausted = true;
+                        break;
+                    }
+                    
+                    // Only check file extensions when using auto-detection
+                    // If a language is explicitly provided, allow parsing any file
+                    // (even if it might result in 0 nodes due to parse failure)
+                    
+                    found_valid_file = true;
+                }
+                
+                if (!found_valid_file) {
+                    break; // No more valid files
+                }
+                
+                // Parse this single file
                 global_state.current_file_result = UnifiedASTBackend::ParseSingleFileToASTResult(
                     context, file.path, global_state.language, global_state.ignore_errors, 
                     global_state.peek_size, global_state.peek_mode);
                 
-                if (global_state.current_file_result) {
-                    found_valid_file = true;
-                    global_state.current_file_row_index = 0;
+                if (!global_state.current_file_result) {
+                    // File was skipped due to errors, continue to next file
+                    continue;
                 }
+                
+                global_state.current_file_row_index = 0;
+                global_state.current_file_parsed = true;
             }
             
-            if (!found_valid_file) {
+            // Emit rows from current file
+            if (!global_state.current_file_result) {
+                // This shouldn't happen, but add safety check
                 break;
             }
             
             // Stream from current file using NEW structured fields
-            idx_t remaining_capacity = STANDARD_VECTOR_SIZE - output_count;
-            idx_t remaining_rows = global_state.current_file_result->nodes.size() - global_state.current_file_row_index;
-            idx_t rows_to_emit = std::min(remaining_capacity, remaining_rows);
+            idx_t rows_available = global_state.current_file_result->nodes.size() - global_state.current_file_row_index;
+            idx_t rows_to_emit = std::min(STANDARD_VECTOR_SIZE - output_count, rows_available);
             
             for (idx_t i = 0; i < rows_to_emit; i++) {
                 const auto& node = global_state.current_file_result->nodes[global_state.current_file_row_index + i];
