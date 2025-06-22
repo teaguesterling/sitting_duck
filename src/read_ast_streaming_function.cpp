@@ -1050,24 +1050,38 @@ static void ReadASTHierarchicalFunctionSequential(ClientContext &context, ReadAS
 }
 
 static void ReadASTHierarchicalFunctionParallel(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output) {
-    if (global_state.batch_size <= 1) {
-        ReadASTHierarchicalFunctionSequential(context, global_state, output);
-        return;
-    }
-    
-    // Batch all remaining files for parallel processing
-    if (global_state.current_batch_results.empty()) {
-        vector<string> all_files;
-        OpenFileInfo file;
-        while (global_state.file_list->Scan(global_state.file_scan_state, file)) {
-            all_files.push_back(file.path);
+    // Check if we need to do the one-time parallel processing - MATCH FLAT VERSION
+    if (!global_state.parallel_processing_complete) {
+        const auto num_threads = NumericCast<idx_t>(TaskScheduler::GetScheduler(context).NumberOfThreads());
+        const auto files_per_task = MaxValue<idx_t>((global_state.all_file_paths.size() + num_threads - 1) / num_threads, 1);
+        const auto num_tasks = (global_state.all_file_paths.size() + files_per_task - 1) / files_per_task;
+        
+        // Create parsing state for ALL files at once
+        ASTParsingState parsing_state(context, global_state.all_file_paths, global_state.resolved_languages, 
+                                    global_state.ignore_errors, global_state.peek_size, global_state.peek_mode,
+                                    global_state.pre_created_adapters, num_tasks);
+        
+        // Create tasks - let DuckDB's scheduler handle the distribution
+        TaskExecutor executor(context);
+        for (idx_t task_idx = 0; task_idx < num_tasks; task_idx++) {
+            const auto file_idx_start = task_idx * files_per_task;
+            const auto file_idx_end = MinValue<idx_t>(file_idx_start + files_per_task, global_state.all_file_paths.size());
+            
+            auto task = make_uniq<ASTParsingTask>(executor, parsing_state, file_idx_start, file_idx_end, task_idx);
+            executor.ScheduleTask(std::move(task));
         }
         
-        if (!all_files.empty()) {
-            ProcessBatchOfFiles(context, global_state, all_files);
-            global_state.current_batch_result_index = 0;
-            global_state.current_batch_row_index = 0;
-        }
+        // Let DuckDB handle all the parallel work - no artificial batching!
+        executor.WorkOnTasks();
+        
+        // Collect all results
+        parsing_state.CollectResults();
+        
+        // Store all results for streaming
+        global_state.current_batch_results = std::move(parsing_state.results);
+        global_state.current_batch_result_index = 0;
+        global_state.current_batch_row_index = 0;
+        global_state.parallel_processing_complete = true;
     }
     
     // Now stream the results using HIERARCHICAL schema and NEW structured fields
@@ -1178,12 +1192,21 @@ static void ReadASTHierarchicalFunctionParallel(ClientContext &context, ReadASTS
     output.SetCardinality(output_count);
 }
 
-// Main hierarchical execute function
+// Main hierarchical execute function - MATCH FLAT VERSION ROUTING LOGIC
 static void ReadASTHierarchicalFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
     auto &global_state = data.global_state->Cast<ReadASTStreamingGlobalState>();
     
-    // Use hierarchical parallel processing
-    ReadASTHierarchicalFunctionParallel(context, global_state, output);
+    if (global_state.files_exhausted) {
+        output.SetCardinality(0);
+        return;
+    }
+    
+    // Route to appropriate processing mode - SAME AS FLAT VERSION
+    if (global_state.use_parallel_batching) {
+        ReadASTHierarchicalFunctionParallel(context, global_state, output);
+    } else {
+        ReadASTHierarchicalFunctionSequential(context, global_state, output);
+    }
 }
 
 //==============================================================================
