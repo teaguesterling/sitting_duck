@@ -15,14 +15,14 @@
 
 namespace duckdb {
 
-// Forward declarations for streaming functions
-static void ReadASTStreamingFunctionSequential(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output);
-static void ReadASTStreamingFunctionParallel(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output);
+// Forward declarations for flat streaming functions
+static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output);
+static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output);
 static void ProcessBatchOfFiles(ClientContext &context, ReadASTStreamingGlobalState &global_state, const vector<string> &batch_files);
 
-// Bind function for streaming two-argument version (explicit language)
-static unique_ptr<FunctionData> ReadASTStreamingBindTwoArg(ClientContext &context, TableFunctionBindInput &input,
-                                                          vector<LogicalType> &return_types, vector<string> &names) {
+// Bind function for flat streaming two-argument version (explicit language)
+static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &context, TableFunctionBindInput &input,
+                                                              vector<LogicalType> &return_types, vector<string> &names) {
     if (input.inputs.size() != 2) {
         throw BinderException("read_ast requires exactly 2 arguments: file_path and language");
     }
@@ -90,9 +90,9 @@ static unique_ptr<FunctionData> ReadASTStreamingBindTwoArg(ClientContext &contex
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode, batch_size);
 }
 
-// Bind function for streaming one-argument version (auto-detect language)
-static unique_ptr<FunctionData> ReadASTStreamingBindOneArg(ClientContext &context, TableFunctionBindInput &input,
-                                                          vector<LogicalType> &return_types, vector<string> &names) {
+// Bind function for flat streaming one-argument version (auto-detect language)
+static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &context, TableFunctionBindInput &input,
+                                                              vector<LogicalType> &return_types, vector<string> &names) {
     if (input.inputs.size() != 1) {
         throw BinderException("read_ast requires exactly 1 argument: file_path");
     }
@@ -264,7 +264,7 @@ static unique_ptr<GlobalTableFunctionState> ReadASTStreamingInit(ClientContext &
 }
 
 // Streaming execution function with parallel batch processing
-static void ReadASTStreamingFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
+static void ReadASTFlatStreamingFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
     auto &global_state = data_p.global_state->Cast<ReadASTStreamingGlobalState>();
     
     if (global_state.files_exhausted) {
@@ -274,9 +274,9 @@ static void ReadASTStreamingFunction(ClientContext &context, TableFunctionInput 
     
     // Route to appropriate processing mode
     if (global_state.use_parallel_batching) {
-        ReadASTStreamingFunctionParallel(context, global_state, output);
+        ReadASTFlatStreamingFunctionParallel(context, global_state, output);
     } else {
-        ReadASTStreamingFunctionSequential(context, global_state, output);
+        ReadASTFlatStreamingFunctionSequential(context, global_state, output);
     }
 }
 
@@ -346,7 +346,7 @@ static void ProcessBatchOfFiles(ClientContext &context, ReadASTStreamingGlobalSt
 }
 
 // Sequential processing for small file sets (backward compatibility)
-static void ReadASTStreamingFunctionSequential(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output) {
+static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output) {
     idx_t output_count = 0;
     
     // Get output vectors once for efficiency
@@ -566,7 +566,7 @@ static void ReadASTStreamingFunctionSequential(ClientContext &context, ReadASTSt
 }
 
 // PARALLEL PROCESSING without batching - let DuckDB handle task distribution
-static void ReadASTStreamingFunctionParallel(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output) {
+static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output) {
     // Check if we need to do the one-time parallel processing
     if (!global_state.parallel_processing_complete) {
         const auto num_threads = NumericCast<idx_t>(TaskScheduler::GetScheduler(context).NumberOfThreads());
@@ -827,38 +827,30 @@ static unique_ptr<FunctionData> ReadASTHierarchicalBindOneArg(ClientContext &con
 static void ReadASTHierarchicalFunctionSequential(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output) {
     idx_t output_count = 0;
     
-    // Get output vectors for HIERARCHICAL schema (18 columns, organized by groups)
+    // Get output vectors for FLAT schema (currently bound to flat schema)
     auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
+    auto type_vec = FlatVector::GetData<string_t>(output.data[1]);
+    auto name_vec = FlatVector::GetData<string_t>(output.data[2]);
+    auto file_path_vec = FlatVector::GetData<string_t>(output.data[3]);
+    auto language_vec = FlatVector::GetData<string_t>(output.data[4]);
+    auto start_line_vec = FlatVector::GetData<uint32_t>(output.data[5]);
+    auto start_column_vec = FlatVector::GetData<uint32_t>(output.data[6]);
+    auto end_line_vec = FlatVector::GetData<uint32_t>(output.data[7]);
+    auto end_column_vec = FlatVector::GetData<uint32_t>(output.data[8]);
+    auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[9]);
+    auto depth_vec = FlatVector::GetData<uint32_t>(output.data[10]);
+    auto sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[11]);
+    auto children_count_vec = FlatVector::GetData<uint32_t>(output.data[12]);
+    auto descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[13]);
+    auto peek_vec = FlatVector::GetData<string_t>(output.data[14]);
+    auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[15]);
+    auto universal_flags_vec = FlatVector::GetData<uint8_t>(output.data[16]);
+    auto arity_bin_vec = FlatVector::GetData<uint8_t>(output.data[17]);
     
-    // Source Location group (indices 1-6)
-    auto file_path_vec = FlatVector::GetData<string_t>(output.data[1]);
-    auto language_vec = FlatVector::GetData<string_t>(output.data[2]);
-    auto start_line_vec = FlatVector::GetData<uint32_t>(output.data[3]);
-    auto start_column_vec = FlatVector::GetData<uint32_t>(output.data[4]);
-    auto end_line_vec = FlatVector::GetData<uint32_t>(output.data[5]);
-    auto end_column_vec = FlatVector::GetData<uint32_t>(output.data[6]);
-    
-    // Tree Structure group (indices 7-11)
-    auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[7]);
-    auto depth_vec = FlatVector::GetData<uint32_t>(output.data[8]);
-    auto sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[9]);
-    auto children_count_vec = FlatVector::GetData<uint32_t>(output.data[10]);
-    auto descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[11]);
-    
-    // Context Information group (indices 12-16)
-    auto type_vec = FlatVector::GetData<string_t>(output.data[12]);
-    auto name_vec = FlatVector::GetData<string_t>(output.data[13]);
-    auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[14]);
-    auto universal_flags_vec = FlatVector::GetData<uint8_t>(output.data[15]);
-    auto arity_bin_vec = FlatVector::GetData<uint8_t>(output.data[16]);
-    
-    // Content Preview group (index 17)
-    auto peek_vec = FlatVector::GetData<string_t>(output.data[17]);
-    
-    // Get validity masks
-    auto &name_validity = FlatVector::Validity(output.data[13]);
-    auto &parent_validity = FlatVector::Validity(output.data[7]);
-    auto &peek_validity = FlatVector::Validity(output.data[17]);
+    // Get validity masks for flat schema
+    auto &name_validity = FlatVector::Validity(output.data[2]);
+    auto &parent_validity = FlatVector::Validity(output.data[9]);
+    auto &peek_validity = FlatVector::Validity(output.data[14]);
     
     while (output_count < STANDARD_VECTOR_SIZE) {
         // Handle batch processing if enabled
@@ -897,35 +889,35 @@ static void ReadASTHierarchicalFunctionSequential(ClientContext &context, ReadAS
                     // HIERARCHICAL PROJECTION - use NEW structured fields
                     node_id_vec[output_count] = node.node_id;
                     
-                    // Source Location group - NEW structured fields
+                    // Source Location group - use legacy fields for now
                     file_path_vec[output_count] = StringVector::AddString(output.data[1], result.source.file_path);
                     language_vec[output_count] = StringVector::AddString(output.data[2], result.source.language);
-                    start_line_vec[output_count] = node.source.start_line;
-                    start_column_vec[output_count] = node.source.start_column;
-                    end_line_vec[output_count] = node.source.end_line;
-                    end_column_vec[output_count] = node.source.end_column;
+                    start_line_vec[output_count] = node.file_position.start_line;
+                    start_column_vec[output_count] = node.file_position.start_column;
+                    end_line_vec[output_count] = node.file_position.end_line;
+                    end_column_vec[output_count] = node.file_position.end_column;
                     
-                    // Tree Structure group - NEW structured fields
-                    if (node.structure.parent_id < 0) {
+                    // Tree Structure group - use legacy fields for now
+                    if (node.tree_position.parent_index < 0) {
                         parent_validity.SetInvalid(output_count);
                     } else {
-                        parent_id_vec[output_count] = node.structure.parent_id;
+                        parent_id_vec[output_count] = node.tree_position.parent_index;
                     }
-                    depth_vec[output_count] = node.structure.depth;
-                    sibling_index_vec[output_count] = node.structure.sibling_index;
-                    children_count_vec[output_count] = node.structure.children_count;
-                    descendant_count_vec[output_count] = node.structure.descendant_count;
+                    depth_vec[output_count] = node.tree_position.node_depth;
+                    sibling_index_vec[output_count] = node.tree_position.sibling_index;
+                    children_count_vec[output_count] = node.subtree.children_count;
+                    descendant_count_vec[output_count] = node.subtree.descendant_count;
                     
-                    // Context Information group - NEW structured fields
+                    // Context Information group - use legacy fields for now
                     type_vec[output_count] = StringVector::AddString(output.data[12], node.type.raw);
-                    if (!node.context.name.empty()) {
-                        name_vec[output_count] = StringVector::AddString(output.data[13], node.context.name);
-                    } else {
+                    if (node.name.raw.empty()) {
                         name_validity.SetInvalid(output_count);
+                    } else {
+                        name_vec[output_count] = StringVector::AddString(output.data[13], node.name.raw);
                     }
-                    semantic_type_vec[output_count] = node.context.normalized.semantic_type;
-                    universal_flags_vec[output_count] = node.context.normalized.universal_flags;
-                    arity_bin_vec[output_count] = node.context.normalized.arity_bin;
+                    semantic_type_vec[output_count] = node.semantic_type;
+                    universal_flags_vec[output_count] = node.universal_flags;
+                    arity_bin_vec[output_count] = node.arity_bin;
                     
                     // Content Preview group
                     if (!node.peek.empty()) {
@@ -1003,35 +995,35 @@ static void ReadASTHierarchicalFunctionSequential(ClientContext &context, ReadAS
                 // HIERARCHICAL PROJECTION - use NEW structured fields
                 node_id_vec[output_idx] = node.node_id;
                 
-                // Source Location group - NEW structured fields
+                // Source Location group - use legacy fields for now
                 file_path_vec[output_idx] = StringVector::AddString(output.data[1], global_state.current_file_result->source.file_path);
                 language_vec[output_idx] = StringVector::AddString(output.data[2], global_state.current_file_result->source.language);
-                start_line_vec[output_idx] = node.source.start_line;
-                start_column_vec[output_idx] = node.source.start_column;
-                end_line_vec[output_idx] = node.source.end_line;
-                end_column_vec[output_idx] = node.source.end_column;
+                start_line_vec[output_idx] = node.file_position.start_line;
+                start_column_vec[output_idx] = node.file_position.start_column;
+                end_line_vec[output_idx] = node.file_position.end_line;
+                end_column_vec[output_idx] = node.file_position.end_column;
                 
-                // Tree Structure group - NEW structured fields
-                if (node.structure.parent_id < 0) {
+                // Tree Structure group - use legacy fields for now
+                if (node.tree_position.parent_index < 0) {
                     parent_validity.SetInvalid(output_idx);
                 } else {
-                    parent_id_vec[output_idx] = node.structure.parent_id;
+                    parent_id_vec[output_idx] = node.tree_position.parent_index;
                 }
-                depth_vec[output_idx] = node.structure.depth;
-                sibling_index_vec[output_idx] = node.structure.sibling_index;
-                children_count_vec[output_idx] = node.structure.children_count;
-                descendant_count_vec[output_idx] = node.structure.descendant_count;
+                depth_vec[output_idx] = node.tree_position.node_depth;
+                sibling_index_vec[output_idx] = node.tree_position.sibling_index;
+                children_count_vec[output_idx] = node.subtree.children_count;
+                descendant_count_vec[output_idx] = node.subtree.descendant_count;
                 
-                // Context Information group - NEW structured fields
+                // Context Information group - use legacy fields for now
                 type_vec[output_idx] = StringVector::AddString(output.data[12], node.type.raw);
-                if (node.context.name.empty()) {
+                if (node.name.raw.empty()) {
                     name_validity.SetInvalid(output_idx);
                 } else {
-                    name_vec[output_idx] = StringVector::AddString(output.data[13], node.context.name);
+                    name_vec[output_idx] = StringVector::AddString(output.data[13], node.name.raw);
                 }
-                semantic_type_vec[output_idx] = node.context.normalized.semantic_type;
-                universal_flags_vec[output_idx] = node.context.normalized.universal_flags;
-                arity_bin_vec[output_idx] = node.context.normalized.arity_bin;
+                semantic_type_vec[output_idx] = node.semantic_type;
+                universal_flags_vec[output_idx] = node.universal_flags;
+                arity_bin_vec[output_idx] = node.arity_bin;
                 
                 // Content Preview group
                 if (node.peek.empty()) {
@@ -1143,35 +1135,35 @@ static void ReadASTHierarchicalFunctionParallel(ClientContext &context, ReadASTS
             // HIERARCHICAL PROJECTION - use NEW structured fields
             node_id_vec[output_idx] = node.node_id;
             
-            // Source Location group - NEW structured fields
+            // Source Location group - use legacy fields for now
             file_path_vec[output_idx] = StringVector::AddString(output.data[1], current_result.source.file_path);
             language_vec[output_idx] = StringVector::AddString(output.data[2], current_result.source.language);
-            start_line_vec[output_idx] = node.source.start_line;
-            start_column_vec[output_idx] = node.source.start_column;
-            end_line_vec[output_idx] = node.source.end_line;
-            end_column_vec[output_idx] = node.source.end_column;
+            start_line_vec[output_idx] = node.file_position.start_line;
+            start_column_vec[output_idx] = node.file_position.start_column;
+            end_line_vec[output_idx] = node.file_position.end_line;
+            end_column_vec[output_idx] = node.file_position.end_column;
             
-            // Tree Structure group - NEW structured fields  
-            if (node.structure.parent_id < 0) {
+            // Tree Structure group - use legacy fields for now
+            if (node.tree_position.parent_index < 0) {
                 parent_validity.SetInvalid(output_idx);
             } else {
-                parent_id_vec[output_idx] = node.structure.parent_id;
+                parent_id_vec[output_idx] = node.tree_position.parent_index;
             }
-            depth_vec[output_idx] = node.structure.depth;
-            sibling_index_vec[output_idx] = node.structure.sibling_index;
-            children_count_vec[output_idx] = node.structure.children_count;
-            descendant_count_vec[output_idx] = node.structure.descendant_count;
+            depth_vec[output_idx] = node.tree_position.node_depth;
+            sibling_index_vec[output_idx] = node.tree_position.sibling_index;
+            children_count_vec[output_idx] = node.subtree.children_count;
+            descendant_count_vec[output_idx] = node.subtree.descendant_count;
             
-            // Context Information group - NEW structured fields
+            // Context Information group - use legacy fields for now
             type_vec[output_idx] = StringVector::AddString(output.data[12], node.type.raw);
-            if (node.context.name.empty()) {
+            if (node.name.raw.empty()) {
                 name_validity.SetInvalid(output_idx);
             } else {
-                name_vec[output_idx] = StringVector::AddString(output.data[13], node.context.name);
+                name_vec[output_idx] = StringVector::AddString(output.data[13], node.name.raw);
             }
-            semantic_type_vec[output_idx] = node.context.normalized.semantic_type;
-            universal_flags_vec[output_idx] = node.context.normalized.universal_flags;
-            arity_bin_vec[output_idx] = node.context.normalized.arity_bin;
+            semantic_type_vec[output_idx] = node.semantic_type;
+            universal_flags_vec[output_idx] = node.universal_flags;
+            arity_bin_vec[output_idx] = node.arity_bin;
             
             // Content Preview group
             if (node.peek.empty()) {
@@ -1213,10 +1205,10 @@ static void ReadASTHierarchicalFunction(ClientContext &context, TableFunctionInp
 // Legacy Flat Schema Functions
 //==============================================================================
 
-// New default read_ast functions using streaming implementation
+// Flat schema read_ast functions using flat streaming implementation
 static TableFunction GetReadASTFlatFunctionTwoArg() {
     TableFunction read_ast_flat("read_ast_flat", {LogicalType::ANY, LogicalType::VARCHAR}, 
-                               ReadASTStreamingFunction, ReadASTStreamingBindTwoArg, ReadASTStreamingInit);
+                               ReadASTFlatStreamingFunction, ReadASTFlatStreamingBindTwoArg, ReadASTStreamingInit);
     read_ast_flat.name = "read_ast_flat";
     read_ast_flat.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     read_ast_flat.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -1227,7 +1219,7 @@ static TableFunction GetReadASTFlatFunctionTwoArg() {
 
 static TableFunction GetReadASTFunctionTwoArg() {
     TableFunction read_ast("read_ast", {LogicalType::ANY, LogicalType::VARCHAR}, 
-                          ReadASTStreamingFunction, ReadASTHierarchicalBindTwoArg, ReadASTStreamingInit);
+                          ReadASTFlatStreamingFunction, ReadASTFlatStreamingBindTwoArg, ReadASTStreamingInit);
     read_ast.name = "read_ast";
     read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -1239,7 +1231,7 @@ static TableFunction GetReadASTFunctionTwoArg() {
 // Legacy flat schema functions
 static TableFunction GetReadASTFlatFunctionOneArg() {
     TableFunction read_ast_flat("read_ast_flat", {LogicalType::ANY}, 
-                               ReadASTStreamingFunction, ReadASTStreamingBindOneArg, ReadASTStreamingInit);
+                               ReadASTFlatStreamingFunction, ReadASTFlatStreamingBindOneArg, ReadASTStreamingInit);
     read_ast_flat.name = "read_ast_flat";
     read_ast_flat.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     read_ast_flat.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -1248,10 +1240,10 @@ static TableFunction GetReadASTFlatFunctionOneArg() {
     return read_ast_flat;
 }
 
-// NEW: Hierarchical schema functions
+// Default read_ast functions (currently identical to flat - will become hierarchical later)
 static TableFunction GetReadASTFunctionOneArg() {
     TableFunction read_ast("read_ast", {LogicalType::ANY}, 
-                          ReadASTStreamingFunction, ReadASTHierarchicalBindOneArg, ReadASTStreamingInit);
+                          ReadASTFlatStreamingFunction, ReadASTFlatStreamingBindOneArg, ReadASTStreamingInit);
     read_ast.name = "read_ast";
     read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -1260,10 +1252,10 @@ static TableFunction GetReadASTFunctionOneArg() {
     return read_ast;
 }
 
-// Keep streaming functions as well for explicit access
+// Keep streaming functions as well for explicit access (these use flat schema)
 static TableFunction GetReadASTStreamingFunctionTwoArg() {
     TableFunction read_ast_streaming("read_ast_streaming", {LogicalType::ANY, LogicalType::VARCHAR}, 
-                                   ReadASTStreamingFunction, ReadASTStreamingBindTwoArg, ReadASTStreamingInit);
+                                   ReadASTFlatStreamingFunction, ReadASTFlatStreamingBindTwoArg, ReadASTStreamingInit);
     read_ast_streaming.name = "read_ast_streaming";
     read_ast_streaming.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     read_ast_streaming.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -1274,7 +1266,7 @@ static TableFunction GetReadASTStreamingFunctionTwoArg() {
 
 static TableFunction GetReadASTStreamingFunctionOneArg() {
     TableFunction read_ast_streaming("read_ast_streaming", {LogicalType::ANY}, 
-                                   ReadASTStreamingFunction, ReadASTStreamingBindOneArg, ReadASTStreamingInit);
+                                   ReadASTFlatStreamingFunction, ReadASTFlatStreamingBindOneArg, ReadASTStreamingInit);
     read_ast_streaming.name = "read_ast_streaming";
     read_ast_streaming.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     read_ast_streaming.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -1284,11 +1276,11 @@ static TableFunction GetReadASTStreamingFunctionOneArg() {
 }
 
 void RegisterReadASTFunction(DatabaseInstance &instance) {
-    // Register flat schema functions (legacy)
+    // Register flat schema functions (explicit legacy access)
     ExtensionUtil::RegisterFunction(instance, GetReadASTFlatFunctionOneArg());    // ANY (auto-detect)
     ExtensionUtil::RegisterFunction(instance, GetReadASTFlatFunctionTwoArg());    // ANY, VARCHAR (explicit language)
     
-    // Register hierarchical schema functions (NEW - replaces read_ast)
+    // Register default read_ast functions (currently identical to flat - will become hierarchical STRUCT later)
     ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionOneArg());    // ANY (auto-detect)
     ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionTwoArg());    // ANY, VARCHAR (explicit language)
 }
