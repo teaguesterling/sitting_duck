@@ -27,4 +27,4 @@ IO Error
 statement error
 SELECT * FROM read_ast('test/data/python/simple.py', 'invalid_language');
 ----
-IO Error: Failed to parse file 'test/data/python/simple.py'
+IO Error: Failed to process test/data/python/simple.py

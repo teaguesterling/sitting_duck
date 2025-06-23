@@ -108,4 +108,4 @@ SELECT COUNT(DISTINCT type) FROM (
     SELECT type FROM read_ast('test/data/r/simple.r')
 ) WHERE type IS NOT NULL;
 ----
-55
+56
