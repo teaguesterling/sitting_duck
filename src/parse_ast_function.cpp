@@ -66,9 +66,9 @@ static unique_ptr<FunctionData> ParseASTHierarchicalBind(ClientContext &context,
     auto code = input.inputs[0].GetValue<string>();
     auto language = input.inputs[1].GetValue<string>();
     
-    // Temporarily use hierarchical table schema while debugging STRUCT implementation
-    return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
-    names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
+    // Temporarily use flat schema until STRUCT functions are properly implemented
+    return_types = UnifiedASTBackend::GetFlatTableSchema();
+    names = UnifiedASTBackend::GetFlatTableColumnNames();
     
     return make_uniq<ParseASTData>(code, language);
 }
@@ -87,9 +87,9 @@ static void ParseASTHierarchicalExecute(ClientContext &context, TableFunctionInp
         }
     }
     
-    // Project to hierarchical table format, starting from where we left off
+    // Project to flat table format, starting from where we left off
     idx_t output_index = 0;
-    UnifiedASTBackend::ProjectToHierarchicalTable(data.result, output, data.current_row, output_index);
+    UnifiedASTBackend::ProjectToTable(data.result, output, data.current_row, output_index);
     output.SetCardinality(output_index);
 }
 
@@ -100,7 +100,7 @@ void ParseASTFunction::Register(DatabaseInstance &instance) {
     parse_ast_flat_func.name = "parse_ast_flat";
     ExtensionUtil::RegisterFunction(instance, parse_ast_flat_func);
     
-    // Register parse_ast(code, language) -> TABLE with hierarchical schema (NEW)
+    // Register parse_ast(code, language) -> TABLE with flat schema (temporarily)
     TableFunction parse_ast_func("parse_ast", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
                                 ParseASTHierarchicalExecute, ParseASTHierarchicalBind);
     parse_ast_func.name = "parse_ast";

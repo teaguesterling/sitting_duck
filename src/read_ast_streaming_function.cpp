@@ -757,9 +757,9 @@ static unique_ptr<FunctionData> ReadASTHierarchicalBindTwoArg(ClientContext &con
         }
     }
     
-    // Temporarily use hierarchical table schema while debugging STRUCT implementation
-    return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
-    names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
+    // Temporarily use flat schema until STRUCT functions are properly implemented
+    return_types = UnifiedASTBackend::GetFlatTableSchema();
+    names = UnifiedASTBackend::GetFlatTableColumnNames();
     
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode, batch_size);
 }
@@ -816,9 +816,9 @@ static unique_ptr<FunctionData> ReadASTHierarchicalBindOneArg(ClientContext &con
     // Use auto-detect for language
     string language = "auto";
     
-    // Use hierarchical backend schema
-    return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
-    names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
+    // Temporarily use flat schema until STRUCT functions are properly implemented
+    return_types = UnifiedASTBackend::GetFlatTableSchema();
+    names = UnifiedASTBackend::GetFlatTableColumnNames();
     
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode, batch_size);
 }
@@ -1227,7 +1227,7 @@ static TableFunction GetReadASTFlatFunctionTwoArg() {
 
 static TableFunction GetReadASTFunctionTwoArg() {
     TableFunction read_ast("read_ast", {LogicalType::ANY, LogicalType::VARCHAR}, 
-                          ReadASTHierarchicalFunction, ReadASTHierarchicalBindTwoArg, ReadASTStreamingInit);
+                          ReadASTStreamingFunction, ReadASTHierarchicalBindTwoArg, ReadASTStreamingInit);
     read_ast.name = "read_ast";
     read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -1251,7 +1251,7 @@ static TableFunction GetReadASTFlatFunctionOneArg() {
 // NEW: Hierarchical schema functions
 static TableFunction GetReadASTFunctionOneArg() {
     TableFunction read_ast("read_ast", {LogicalType::ANY}, 
-                          ReadASTHierarchicalFunction, ReadASTHierarchicalBindOneArg, ReadASTStreamingInit);
+                          ReadASTStreamingFunction, ReadASTHierarchicalBindOneArg, ReadASTStreamingInit);
     read_ast.name = "read_ast";
     read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;

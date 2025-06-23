@@ -247,51 +247,47 @@ LogicalType UnifiedASTBackend::GetASTStructSchema() {
 //==============================================================================
 
 vector<LogicalType> UnifiedASTBackend::GetHierarchicalTableSchema() {
+    // Source Location STRUCT
+    child_list_t<LogicalType> source_children;
+    source_children.push_back(make_pair("file_path", LogicalType::VARCHAR));
+    source_children.push_back(make_pair("language", LogicalType::VARCHAR));
+    source_children.push_back(make_pair("start_line", LogicalType::UINTEGER));
+    source_children.push_back(make_pair("start_column", LogicalType::UINTEGER));
+    source_children.push_back(make_pair("end_line", LogicalType::UINTEGER));
+    source_children.push_back(make_pair("end_column", LogicalType::UINTEGER));
+    
+    // Tree Structure STRUCT
+    child_list_t<LogicalType> structure_children;
+    structure_children.push_back(make_pair("parent_id", LogicalType::BIGINT));
+    structure_children.push_back(make_pair("depth", LogicalType::UINTEGER));
+    structure_children.push_back(make_pair("sibling_index", LogicalType::UINTEGER));
+    structure_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
+    structure_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
+    
+    // Context Information STRUCT
+    child_list_t<LogicalType> context_children;
+    context_children.push_back(make_pair("type", LogicalType::VARCHAR));
+    context_children.push_back(make_pair("name", LogicalType::VARCHAR));
+    context_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
+    context_children.push_back(make_pair("universal_flags", LogicalType::UTINYINT));
+    context_children.push_back(make_pair("arity_bin", LogicalType::UTINYINT));
+    
     return {
-        LogicalType::BIGINT,      // node_id
-        
-        // Source Location (SourceLevel fields)
-        LogicalType::VARCHAR,     // file_path
-        LogicalType::VARCHAR,     // language  
-        LogicalType::UINTEGER,    // start_line
-        LogicalType::UINTEGER,    // start_column
-        LogicalType::UINTEGER,    // end_line
-        LogicalType::UINTEGER,    // end_column
-        
-        // Tree Structure (StructureLevel fields)
-        LogicalType::BIGINT,      // parent_id (stays signed for -1)
-        LogicalType::UINTEGER,    // depth
-        LogicalType::UINTEGER,    // sibling_index
-        LogicalType::UINTEGER,    // children_count
-        LogicalType::UINTEGER,    // descendant_count
-        
-        // Context Information (ContextLevel fields)
-        LogicalType::VARCHAR,     // type (raw)
-        LogicalType::VARCHAR,     // name
-        LogicalType::UTINYINT,    // semantic_type (normalized)
-        LogicalType::UTINYINT,    // universal_flags (normalized)
-        LogicalType::UTINYINT,    // arity_bin (normalized)
-        
-        // Content Preview (PeekLevel fields)
-        LogicalType::VARCHAR      // peek
+        LogicalType::BIGINT,                          // node_id
+        LogicalType::STRUCT(source_children),         // source
+        LogicalType::STRUCT(structure_children),      // structure  
+        LogicalType::STRUCT(context_children),        // context
+        LogicalType::VARCHAR                          // peek
     };
 }
 
 vector<string> UnifiedASTBackend::GetHierarchicalTableColumnNames() {
     return {
-        "node_id",
-        
-        // Source Location group
-        "file_path", "language", "start_line", "start_column", "end_line", "end_column",
-        
-        // Tree Structure group  
-        "parent_id", "depth", "sibling_index", "children_count", "descendant_count",
-        
-        // Context Information group
-        "type", "name", "semantic_type", "universal_flags", "arity_bin",
-        
-        // Content Preview group
-        "peek"
+        "node_id",     // BIGINT
+        "source",      // STRUCT(file_path, language, start_line, start_column, end_line, end_column)
+        "structure",   // STRUCT(parent_id, depth, sibling_index, children_count, descendant_count)
+        "context",     // STRUCT(type, name, semantic_type, universal_flags, arity_bin)
+        "peek"         // VARCHAR
     };
 }
 
@@ -499,89 +495,76 @@ Value UnifiedASTBackend::CreateASTStructValue(const ASTResult& result) {
 //==============================================================================
 
 void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index) {
-    // Verify output chunk has correct number of columns (18 for hierarchical schema)
-    if (output.ColumnCount() != 18) {
-        throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 18 for hierarchical schema");
+    // Verify output chunk has correct number of columns (5 for hierarchical STRUCT schema)
+    if (output.ColumnCount() != 5) {
+        throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 5 for hierarchical STRUCT schema");
     }
     
-    // Get output vectors - organized by field groups
+    // Get output vectors for STRUCT columns
     auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
+    auto &source_vector = output.data[1];      // STRUCT column
+    auto &structure_vector = output.data[2];   // STRUCT column  
+    auto &context_vector = output.data[3];     // STRUCT column
+    auto peek_vec = FlatVector::GetData<string_t>(output.data[4]);
     
-    // Source Location group (indices 1-6)
-    auto file_path_vec = FlatVector::GetData<string_t>(output.data[1]);
-    auto language_vec = FlatVector::GetData<string_t>(output.data[2]);
-    auto start_line_vec = FlatVector::GetData<uint32_t>(output.data[3]);
-    auto start_column_vec = FlatVector::GetData<uint32_t>(output.data[4]);
-    auto end_line_vec = FlatVector::GetData<uint32_t>(output.data[5]);
-    auto end_column_vec = FlatVector::GetData<uint32_t>(output.data[6]);
-    
-    // Tree Structure group (indices 7-11)
-    auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[7]);
-    auto depth_vec = FlatVector::GetData<uint32_t>(output.data[8]);
-    auto sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[9]);
-    auto children_count_vec = FlatVector::GetData<uint32_t>(output.data[10]);
-    auto descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[11]);
-    
-    // Context Information group (indices 12-16)
-    auto type_vec = FlatVector::GetData<string_t>(output.data[12]);
-    auto name_vec = FlatVector::GetData<string_t>(output.data[13]);
-    auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[14]);
-    auto universal_flags_vec = FlatVector::GetData<uint8_t>(output.data[15]);
-    auto arity_bin_vec = FlatVector::GetData<uint8_t>(output.data[16]);
-    
-    // Content Preview group (index 17)
-    auto peek_vec = FlatVector::GetData<string_t>(output.data[17]);
-    
-    // Get validity masks for nullable fields
-    auto &name_validity = FlatVector::Validity(output.data[13]);
-    auto &parent_validity = FlatVector::Validity(output.data[7]);
-    auto &peek_validity = FlatVector::Validity(output.data[17]);
+    // Get validity masks
+    auto &peek_validity = FlatVector::Validity(output.data[4]);
     
     idx_t count = 0;
     idx_t max_count = STANDARD_VECTOR_SIZE;
     
-    // Process rows using NEW STRUCTURED FIELDS
+    // Process rows using NEW STRUCTURED FIELDS and create STRUCT values
     for (idx_t i = current_row; i < result.nodes.size() && count < max_count; i++) {
         const auto& node = result.nodes[i];
+        idx_t row_idx = output_index + count;
         
-        // Core identifier
-        node_id_vec[output_index + count] = node.node_id;
+        // Core identity
+        node_id_vec[row_idx] = node.node_id;
         
-        // Source Location group - use NEW structured fields
-        file_path_vec[output_index + count] = StringVector::AddString(output.data[1], result.source.file_path);
-        language_vec[output_index + count] = StringVector::AddString(output.data[2], result.source.language);
-        start_line_vec[output_index + count] = node.source.start_line;
-        start_column_vec[output_index + count] = node.source.start_column;
-        end_line_vec[output_index + count] = node.source.end_line;
-        end_column_vec[output_index + count] = node.source.end_column;
+        // Create source STRUCT (use legacy fields for now)
+        child_list_t<Value> source_values;
+        source_values.push_back(make_pair("file_path", Value(result.source.file_path)));
+        source_values.push_back(make_pair("language", Value(result.source.language)));
+        source_values.push_back(make_pair("start_line", Value::UINTEGER(node.file_position.start_line)));
+        source_values.push_back(make_pair("start_column", Value::UINTEGER(node.file_position.start_column)));
+        source_values.push_back(make_pair("end_line", Value::UINTEGER(node.file_position.end_line)));
+        source_values.push_back(make_pair("end_column", Value::UINTEGER(node.file_position.end_column)));
+        Value source_struct = Value::STRUCT(source_values);
+        FlatVector::GetData<Value>(source_vector)[row_idx] = source_struct;
         
-        // Tree Structure group - use NEW structured fields
-        if (node.structure.parent_id < 0) {
-            parent_validity.SetInvalid(output_index + count);
+        // Create structure STRUCT (use legacy fields for now)
+        child_list_t<Value> structure_values;
+        if (node.tree_position.parent_index < 0) {
+            structure_values.push_back(make_pair("parent_id", Value()));  // NULL
         } else {
-            parent_id_vec[output_index + count] = node.structure.parent_id;
+            structure_values.push_back(make_pair("parent_id", Value::BIGINT(node.tree_position.parent_index)));
         }
-        depth_vec[output_index + count] = node.structure.depth;
-        sibling_index_vec[output_index + count] = node.structure.sibling_index;
-        children_count_vec[output_index + count] = node.structure.children_count;
-        descendant_count_vec[output_index + count] = node.structure.descendant_count;
+        structure_values.push_back(make_pair("depth", Value::UINTEGER(node.tree_position.node_depth)));
+        structure_values.push_back(make_pair("sibling_index", Value::UINTEGER(node.tree_position.sibling_index)));
+        structure_values.push_back(make_pair("children_count", Value::UINTEGER(node.subtree.children_count)));
+        structure_values.push_back(make_pair("descendant_count", Value::UINTEGER(node.subtree.descendant_count)));
+        Value structure_struct = Value::STRUCT(structure_values);
+        FlatVector::GetData<Value>(structure_vector)[row_idx] = structure_struct;
         
-        // Context Information group - use NEW structured fields
-        type_vec[output_index + count] = StringVector::AddString(output.data[12], node.type.raw);
-        if (node.context.name.empty()) {
-            name_validity.SetInvalid(output_index + count);
+        // Create context STRUCT (use legacy fields for now)
+        child_list_t<Value> context_values;
+        context_values.push_back(make_pair("type", Value(node.type.raw)));
+        if (!node.name.raw.empty()) {
+            context_values.push_back(make_pair("name", Value(node.name.raw)));
         } else {
-            name_vec[output_index + count] = StringVector::AddString(output.data[13], node.context.name);
+            context_values.push_back(make_pair("name", Value()));  // NULL
         }
-        semantic_type_vec[output_index + count] = node.context.normalized.semantic_type;
-        universal_flags_vec[output_index + count] = node.context.normalized.universal_flags;
-        arity_bin_vec[output_index + count] = node.context.normalized.arity_bin;
+        context_values.push_back(make_pair("semantic_type", Value::UTINYINT(node.semantic_type)));
+        context_values.push_back(make_pair("universal_flags", Value::UTINYINT(node.universal_flags)));
+        context_values.push_back(make_pair("arity_bin", Value::UTINYINT(node.arity_bin)));
+        Value context_struct = Value::STRUCT(context_values);
+        FlatVector::GetData<Value>(context_vector)[row_idx] = context_struct;
         
-        // Content Preview group
-        if (node.peek.empty()) {
-            peek_validity.SetInvalid(output_index + count);
+        // Content Preview 
+        if (!node.peek.empty()) {
+            peek_vec[row_idx] = StringVector::AddString(output.data[4], node.peek);
         } else {
-            peek_vec[output_index + count] = StringVector::AddString(output.data[17], node.peek);
+            peek_validity.SetInvalid(row_idx);
         }
         
         count++;
@@ -603,33 +586,33 @@ Value UnifiedASTBackend::CreateHierarchicalASTStruct(const ASTResult& result) {
     node_values.reserve(result.nodes.size());
     
     for (const auto& node : result.nodes) {
-        // Source Location struct - use NEW structured fields
+        // Source Location struct - use legacy fields for now
         child_list_t<Value> source_children;
         source_children.push_back(make_pair("file_path", Value(result.source.file_path)));
         source_children.push_back(make_pair("language", Value(result.source.language)));
-        source_children.push_back(make_pair("start_line", Value::UINTEGER(node.source.start_line)));
-        source_children.push_back(make_pair("start_column", Value::UINTEGER(node.source.start_column)));
-        source_children.push_back(make_pair("end_line", Value::UINTEGER(node.source.end_line)));
-        source_children.push_back(make_pair("end_column", Value::UINTEGER(node.source.end_column)));
+        source_children.push_back(make_pair("start_line", Value::UINTEGER(node.file_position.start_line)));
+        source_children.push_back(make_pair("start_column", Value::UINTEGER(node.file_position.start_column)));
+        source_children.push_back(make_pair("end_line", Value::UINTEGER(node.file_position.end_line)));
+        source_children.push_back(make_pair("end_column", Value::UINTEGER(node.file_position.end_column)));
         Value source_value = Value::STRUCT(source_children);
         
-        // Tree Structure struct - use NEW structured fields
+        // Tree Structure struct - use legacy fields for now
         child_list_t<Value> structure_children;
-        structure_children.push_back(make_pair("parent_id", node.structure.parent_id >= 0 ? 
-                                             Value::BIGINT(node.structure.parent_id) : Value()));
-        structure_children.push_back(make_pair("depth", Value::UINTEGER(node.structure.depth)));
-        structure_children.push_back(make_pair("sibling_index", Value::UINTEGER(node.structure.sibling_index)));
-        structure_children.push_back(make_pair("children_count", Value::UINTEGER(node.structure.children_count)));
-        structure_children.push_back(make_pair("descendant_count", Value::UINTEGER(node.structure.descendant_count)));
+        structure_children.push_back(make_pair("parent_id", node.tree_position.parent_index >= 0 ? 
+                                             Value::BIGINT(node.tree_position.parent_index) : Value()));
+        structure_children.push_back(make_pair("depth", Value::UINTEGER(node.tree_position.node_depth)));
+        structure_children.push_back(make_pair("sibling_index", Value::UINTEGER(node.tree_position.sibling_index)));
+        structure_children.push_back(make_pair("children_count", Value::UINTEGER(node.subtree.children_count)));
+        structure_children.push_back(make_pair("descendant_count", Value::UINTEGER(node.subtree.descendant_count)));
         Value structure_value = Value::STRUCT(structure_children);
         
-        // Context Information struct - use NEW structured fields
+        // Context Information struct - use legacy fields for now
         child_list_t<Value> context_children;
         context_children.push_back(make_pair("type", Value(node.type.raw)));
-        context_children.push_back(make_pair("name", Value(node.context.name)));
-        context_children.push_back(make_pair("semantic_type", Value::UTINYINT(node.context.normalized.semantic_type)));
-        context_children.push_back(make_pair("universal_flags", Value::UTINYINT(node.context.normalized.universal_flags)));
-        context_children.push_back(make_pair("arity_bin", Value::UTINYINT(node.context.normalized.arity_bin)));
+        context_children.push_back(make_pair("name", Value(node.name.raw)));
+        context_children.push_back(make_pair("semantic_type", Value::UTINYINT(node.semantic_type)));
+        context_children.push_back(make_pair("universal_flags", Value::UTINYINT(node.universal_flags)));
+        context_children.push_back(make_pair("arity_bin", Value::UTINYINT(node.arity_bin)));
         Value context_value = Value::STRUCT(context_children);
         
         // Complete node struct

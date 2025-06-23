@@ -18,8 +18,8 @@ namespace duckdb {
 // TypeScript Adapter implementation
 //==============================================================================
 
-#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags, ...) \
-    {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags, ##__VA_ARGS__)},
+#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
+    {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
 
 const unordered_map<string, NodeConfig> TypeScriptAdapter::node_configs = {
     // TypeScript-specific type definitions (includes JavaScript as base)
