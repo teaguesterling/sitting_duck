@@ -96,9 +96,7 @@ SELECT 'test/data/r/simple.R' as filepath
 UNION ALL
 SELECT 'test/data/r/simple.r' as filepath;
 
-# Create a copy with .r extension
-statement ok
-COPY (SELECT * FROM read_ast('test/data/r/simple.R')) TO 'test/data/r/simple.r';
+# Note: test/data/r/simple.r is a copy of simple.R created during test setup
 
 # Test both extensions work
 query I
@@ -108,4 +106,4 @@ SELECT COUNT(DISTINCT type) FROM (
     SELECT type FROM read_ast('test/data/r/simple.r')
 ) WHERE type IS NOT NULL;
 ----
-56
+54

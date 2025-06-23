@@ -186,8 +186,9 @@ ASTResult DuckDBAdapter::ConvertStatementsToAST(const vector<unique_ptr<SQLState
             auto stmt_nodes = ConvertStatement(*stmt, node_counter);
             for (auto& node : stmt_nodes) {
                 // Set parent to program node
-                if (node.tree_position.parent_index == -1) {
-                    node.tree_position.parent_index = 1; // program node (id=1)
+                if (node.structure.parent_id == -1) {
+                    node.structure.parent_id = 1; // program node (id=1)
+                    node.UpdateComputedLegacyFields();
                 }
                 nodes.push_back(node);
             }
@@ -277,9 +278,10 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectStatement(const SelectStatement& stm
                 
                 // Set parent for all query nodes
                 for (auto& node : query_nodes) {
-                    if (node.tree_position.parent_index == -1) {
-                        node.tree_position.parent_index = select_node_id;
-                        node.tree_position.node_depth = 2;
+                    if (node.structure.parent_id == -1) {
+                        node.structure.parent_id = select_node_id;
+                        node.structure.depth = 2;
+                        node.UpdateComputedLegacyFields();
                     }
                     nodes.push_back(node);
                 }
@@ -329,9 +331,10 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectNode(const SelectNode& node, uint32_
             try {
                 auto expr_nodes = ConvertExpression(*expr, node_counter);
                 for (auto& en : expr_nodes) {
-                    if (en.tree_position.parent_index == -1) {
-                        en.tree_position.parent_index = list_node.node_id;
-                        en.tree_position.node_depth = 4;
+                    if (en.structure.parent_id == -1) {
+                        en.structure.parent_id = list_node.node_id;
+                        en.structure.depth = 4;
+                        en.UpdateComputedLegacyFields();
                     }
                     nodes.push_back(en);
                 }
@@ -350,9 +353,10 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectNode(const SelectNode& node, uint32_
         try {
             auto from_nodes = ConvertTableRef(*node.from_table, node_counter);
             for (auto& fn : from_nodes) {
-                if (fn.tree_position.parent_index == -1) {
-                    fn.tree_position.parent_index = select_node_id;
-                    fn.tree_position.node_depth = 3;
+                if (fn.structure.parent_id == -1) {
+                    fn.structure.parent_id = select_node_id;
+                    fn.structure.depth = 3;
+                    fn.UpdateComputedLegacyFields();
                 }
                 nodes.push_back(fn);
             }
@@ -375,9 +379,10 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectNode(const SelectNode& node, uint32_
         try {
             auto expr_nodes = ConvertExpression(*node.where_clause, node_counter);
             for (auto& en : expr_nodes) {
-                if (en.tree_position.parent_index == -1) {
-                    en.tree_position.parent_index = where_node.node_id;
-                    en.tree_position.node_depth = 4;
+                if (en.structure.parent_id == -1) {
+                    en.structure.parent_id = where_node.node_id;
+                    en.structure.depth = 4;
+                    en.UpdateComputedLegacyFields();
                 }
                 nodes.push_back(en);
             }
@@ -402,9 +407,10 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectNode(const SelectNode& node, uint32_
             if (expr) {
                 auto group_expr_nodes = ConvertExpression(*expr, node_counter);
                 for (auto& gen : group_expr_nodes) {
-                    if (gen.tree_position.parent_index == -1) {
-                        gen.tree_position.parent_index = group_by_node.node_id;
-                        gen.tree_position.node_depth = 4;
+                    if (gen.structure.parent_id == -1) {
+                        gen.structure.parent_id = group_by_node.node_id;
+                        gen.structure.depth = 4;
+                        gen.UpdateComputedLegacyFields();
                     }
                     nodes.push_back(gen);
                 }
@@ -462,8 +468,9 @@ vector<ASTNode> DuckDBAdapter::ConvertExpression(const ParsedExpression& expr, u
                     }
                     auto arg_nodes = ConvertExpression(*arg, node_counter);
                     for (auto& an : arg_nodes) {
-                        if (an.tree_position.parent_index == -1) {
-                            an.tree_position.parent_index = node.node_id;
+                        if (an.structure.parent_id == -1) {
+                            an.structure.parent_id = node.node_id;
+                            an.UpdateComputedLegacyFields();
                         }
                         nodes.push_back(an);
                     }
@@ -514,8 +521,9 @@ vector<ASTNode> DuckDBAdapter::ConvertExpression(const ParsedExpression& expr, u
             if (comp_expr.left) {
                 auto left_nodes = ConvertExpression(*comp_expr.left, node_counter);
                 for (auto& ln : left_nodes) {
-                    if (ln.tree_position.parent_index == -1) {
-                        ln.tree_position.parent_index = comp_node.node_id;
+                    if (ln.structure.parent_id == -1) {
+                        ln.structure.parent_id = comp_node.node_id;
+                        ln.UpdateComputedLegacyFields();
                     }
                     nodes.push_back(ln);
                 }
@@ -523,8 +531,9 @@ vector<ASTNode> DuckDBAdapter::ConvertExpression(const ParsedExpression& expr, u
             if (comp_expr.right) {
                 auto right_nodes = ConvertExpression(*comp_expr.right, node_counter);
                 for (auto& rn : right_nodes) {
-                    if (rn.tree_position.parent_index == -1) {
-                        rn.tree_position.parent_index = comp_node.node_id;
+                    if (rn.structure.parent_id == -1) {
+                        rn.structure.parent_id = comp_node.node_id;
+                        rn.UpdateComputedLegacyFields();
                     }
                     nodes.push_back(rn);
                 }
@@ -546,8 +555,9 @@ vector<ASTNode> DuckDBAdapter::ConvertExpression(const ParsedExpression& expr, u
                 if (!child) continue;
                 auto child_nodes = ConvertExpression(*child, node_counter);
                 for (auto& cn : child_nodes) {
-                    if (cn.tree_position.parent_index == -1) {
-                        cn.tree_position.parent_index = conj_node.node_id;
+                    if (cn.structure.parent_id == -1) {
+                        cn.structure.parent_id = conj_node.node_id;
+                        cn.UpdateComputedLegacyFields();
                     }
                     nodes.push_back(cn);
                 }
@@ -599,14 +609,16 @@ vector<ASTNode> DuckDBAdapter::ConvertTableRef(const TableRef& table_ref, uint32
             }
             
             for (auto& ln : left_nodes) {
-                if (ln.tree_position.parent_index == -1) {
-                    ln.tree_position.parent_index = node.node_id;
+                if (ln.structure.parent_id == -1) {
+                    ln.structure.parent_id = node.node_id;
+                    ln.UpdateComputedLegacyFields();
                 }
                 nodes.push_back(ln);
             }
             for (auto& rn : right_nodes) {
-                if (rn.tree_position.parent_index == -1) {
-                    rn.tree_position.parent_index = node.node_id;
+                if (rn.structure.parent_id == -1) {
+                    rn.structure.parent_id = node.node_id;
+                    rn.UpdateComputedLegacyFields();
                 }
                 nodes.push_back(rn);
             }

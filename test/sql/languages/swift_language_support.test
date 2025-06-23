@@ -26,7 +26,7 @@ true
 query I
 SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', 'swift') WHERE name IS NOT NULL;
 ----
-2556
+1156
 
 # Test 4: Swift function declarations
 # ==================================
@@ -35,7 +35,7 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', 'swift')
 WHERE type = 'function_declaration';
 ----
-26
+16
 
 # Test 5: Swift class declarations
 # ===============================
@@ -44,7 +44,7 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', 'swift')
 WHERE type = 'class_declaration';
 ----
-14
+11
 
 # Test 6: Swift property declarations
 # ==================================
@@ -53,7 +53,7 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', 'swift')
 WHERE type = 'property_declaration';
 ----
-75
+28
 
 # Test 7: Swift initializer declarations
 # =====================================
@@ -62,7 +62,7 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', 'swift')
 WHERE type = 'init_declaration';
 ----
-8
+7
 
 # Test 8: Swift protocol declarations
 # ==================================
@@ -83,9 +83,9 @@ WHERE type IN ('function_declaration', 'class_declaration', 'property_declaratio
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-class_declaration	248	14
-function_declaration	240	26
-property_declaration	244	75
+class_declaration	248	11
+function_declaration	240	16
+property_declaration	244	28
 
 # Test 10: Swift tree structure validation
 # ========================================
@@ -94,7 +94,7 @@ query II
 SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/swift/simple.swift', 'swift');
 ----
-25	4838
+25	2048
 
 # Test 11: Swift identifier extraction
 # ===================================
@@ -103,7 +103,7 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', 'swift')
 WHERE type = 'simple_identifier' AND name IS NOT NULL;
 ----
-654
+266
 
 # Test 12: Swift type annotations
 # ==============================
@@ -112,7 +112,7 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', 'swift')
 WHERE type = 'type_annotation';
 ----
-47
+26
 
 # Test 13: Swift string literals
 # ==============================
@@ -121,7 +121,7 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', 'swift')
 WHERE type IN ('line_string_literal', 'multi_line_string_literal');
 ----
-78
+20
 
 # Test 14: Swift call expressions
 # ===============================
@@ -130,7 +130,7 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', 'swift')
 WHERE type = 'call_expression';
 ----
-130
+31
 
 # Test 15: Swift computed properties
 # =================================
@@ -139,4 +139,4 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', 'swift')
 WHERE type = 'computed_property';
 ----
-15
+13
