@@ -324,21 +324,21 @@ static void ProcessBatchOfFiles(ClientContext &context, ReadASTStreamingGlobalSt
             content.resize(file_size);
             handle->Read((void*)content.data(), file_size);
             
-            // Parse file using unified backend
-            auto result = UnifiedASTBackend::ParseToASTResult(
-                content,
-                file_language,
-                file_path,
-                global_state.peek_size,
-                global_state.peek_mode
+            // Use ParseSingleFileToASTResult for consistent error handling with sequential path
+            auto result_ptr = UnifiedASTBackend::ParseSingleFileToASTResult(
+                context, file_path, file_language, global_state.ignore_errors,
+                global_state.peek_size, global_state.peek_mode
             );
             
-            // ASTResult doesn't have success/error fields - exceptions handle errors
-            global_state.current_batch_results.emplace_back(std::move(result));
+            if (result_ptr) {
+                global_state.current_batch_results.emplace_back(std::move(*result_ptr));
+            }
+            // If result_ptr is null, file was skipped due to errors (when ignore_errors=true)
             
         } catch (const std::exception& e) {
             if (!global_state.ignore_errors) {
-                throw InvalidInputException("Failed to process " + file_path + ": " + e.what());
+                // This should rarely happen since ParseSingleFileToASTResult handles errors
+                throw IOException("Failed to process " + file_path + ": " + e.what());
             }
             // Continue with next file on error when ignore_errors is true
         }
@@ -757,7 +757,7 @@ static unique_ptr<FunctionData> ReadASTHierarchicalBindTwoArg(ClientContext &con
         }
     }
     
-    // Use hierarchical backend schema
+    // Temporarily use hierarchical table schema while debugging STRUCT implementation
     return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
     names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
     

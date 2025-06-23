@@ -66,7 +66,7 @@ static unique_ptr<FunctionData> ParseASTHierarchicalBind(ClientContext &context,
     auto code = input.inputs[0].GetValue<string>();
     auto language = input.inputs[1].GetValue<string>();
     
-    // Use hierarchical backend schema
+    // Temporarily use hierarchical table schema while debugging STRUCT implementation
     return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
     names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
     
