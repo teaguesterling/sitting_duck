@@ -24,7 +24,7 @@ true
 # =============================================
 
 query I
-SELECT COUNT(*) FROM read_ast('test/data/json/simple.json', 'json') WHERE name IS NOT NULL;
+SELECT COUNT(*) FROM read_ast('test/data/json/simple.json', 'json') WHERE context.name IS NOT NULL;
 ----
 339
 

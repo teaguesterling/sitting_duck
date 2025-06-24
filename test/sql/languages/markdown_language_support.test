@@ -50,7 +50,7 @@ true
 # ==========================================
 
 query II
-SELECT MAX(depth) > 0 as has_depth, COUNT(*) > 0 as has_nodes
+SELECT MAX(structure.depth) > 0 as has_depth, COUNT(*) > 0 as has_nodes
 FROM read_ast('test/data/languages/markdown/test.md');
 ----
 true	true
