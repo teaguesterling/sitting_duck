@@ -1,0 +1,255 @@
+# name: test/sql/duckdb_hierarchical_parser.test
+# description: Test hierarchical schema functions and compare with flat parsing
+# group: [sitting_duck]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: Verify hierarchical function is available
+# ================================================
+
+query I
+SELECT COUNT(*) FROM read_ast_hierarchical('test/data/sql/example.sql', 'sql') LIMIT 1;
+----
+177
+
+# Test 2: Test hierarchical STRUCT schema structure
+# =================================================
+
+query I
+SELECT 
+    column_name
+FROM (
+    DESCRIBE SELECT * FROM read_ast_hierarchical('test/data/sql/example.sql', 'sql') LIMIT 0
+)
+ORDER BY column_name;
+----
+context
+node_id
+peek
+source
+structure
+type
+
+# Test 3: Basic SELECT parsing with flat schema using parse_ast
+# ==============================================================
+
+query II
+SELECT 
+    type as node_type,
+    semantic_type
+FROM parse_ast('SELECT user_id, COUNT(*) as total FROM orders GROUP BY user_id', 'duckdb') 
+ORDER BY node_id
+LIMIT 8;
+----
+program	252
+select_statement	224
+select_node	224
+select_list	188
+column_reference	80
+function_call	208
+table_reference	84
+group_by_clause	236
+
+# Test 4: Test flat schema field access - names
+# ==============================================
+
+query II
+SELECT 
+    type as node_type,
+    name as node_name
+FROM parse_ast('SELECT user_id, COUNT(*) as total FROM orders GROUP BY user_id', 'duckdb') 
+WHERE name IS NOT NULL
+ORDER BY node_id;
+----
+column_reference	user_id
+function_call	count_star
+table_reference	orders
+column_reference	user_id
+
+# Test 5: Test STRUCT field access - source locations
+# ====================================================
+
+query III
+SELECT 
+    type as node_type,
+    start_line as start_line,
+    start_column as start_col
+FROM parse_ast('SELECT user_id FROM orders', 'duckdb') 
+WHERE type IN ('column_reference', 'table_reference')
+ORDER BY start_column;
+----
+column_reference	1	1
+table_reference	1	1
+
+# Test 6: Test context semantic_type access
+# ==========================================
+
+query II
+SELECT 
+    type as node_type,
+    semantic_type as semantic_type
+FROM parse_ast('INSERT INTO users (name, email) VALUES (''John'', ''john@example.com'')', 'duckdb') 
+WHERE semantic_type IN (1, 252)
+ORDER BY node_id;
+----
+program	252
+insert_statement	1
+
+# Test 7: Test context flags access
+# ==================================
+
+query II
+SELECT 
+    type as node_type,
+    flags as flags_value
+FROM parse_ast('CREATE TABLE test (id INT)', 'duckdb') 
+WHERE flags > 0
+ORDER BY node_id
+LIMIT 5;
+----
+create_table_statement	1
+builtin_type	8
+
+# Test 8: Complex query with window functions (hierarchical)
+# ==========================================================
+
+query II
+SELECT 
+    type as node_type,
+    COUNT(*) as count
+FROM parse_ast('
+SELECT 
+    name,
+    salary,
+    ROW_NUMBER() OVER (PARTITION BY department ORDER BY salary DESC) as rank,
+    LAG(salary) OVER (ORDER BY hire_date) as prev_salary
+FROM employees
+', 'duckdb')
+WHERE type IN ('expression', 'column_reference')
+GROUP BY type
+ORDER BY type;
+----
+column_reference	2
+expression	2
+
+# Test 9: Test hierarchical CTE parsing
+# ======================================
+
+query II
+SELECT 
+    type as node_type,
+    name as node_name
+FROM parse_ast('
+WITH regional_sales AS (
+    SELECT region, SUM(sales) as total_sales
+    FROM sales_data 
+    GROUP BY region
+)
+SELECT * FROM regional_sales
+', 'duckdb')
+WHERE type = 'table_reference' AND name IS NOT NULL
+ORDER BY node_id;
+----
+table_reference	sales_data
+table_reference	regional_sales
+
+# Test 10: Test hierarchical JOIN parsing
+# ========================================
+
+query III
+SELECT 
+    type as node_type,
+    semantic_type as semantic_type,
+    COUNT(*) as count
+FROM parse_ast('
+SELECT u.name, p.title, c.content
+FROM users u
+LEFT JOIN posts p ON u.id = p.user_id
+INNER JOIN comments c ON p.id = c.post_id
+WHERE u.active = true
+', 'duckdb')
+GROUP BY type, semantic_type
+HAVING COUNT(*) > 1
+ORDER BY count DESC, type;
+----
+column_reference	80	4
+table_reference	84	3
+join	228	2
+
+# Test 11: Test hierarchical error handling
+# ==========================================
+
+query I
+SELECT COUNT(*) 
+FROM parse_ast('SELECT FROM WHERE', 'duckdb') 
+WHERE type = 'parse_error';
+----
+1
+
+# Test 12: Test hierarchical DuckDB-specific functions
+# ====================================================
+
+query II
+SELECT 
+    type as node_type,
+    name as function_name
+FROM parse_ast('
+SELECT 
+    unnest([1,2,3]) as value,
+    current_timestamp::date as today
+FROM generate_series(1, 10)
+', 'duckdb')
+WHERE type = 'function_call' AND name IS NOT NULL
+ORDER BY name;
+----
+function_call	unnest
+
+# Test 13: Test parse_ast vs parse_ast_flat consistency
+# =====================================================
+
+query I
+SELECT 
+    (flat_total.total_nodes = parse_total.total_nodes) as consistent_node_count
+FROM (
+    SELECT COUNT(*) as total_nodes
+    FROM parse_ast_flat('SELECT a.id, b.name FROM table_a a JOIN table_b b ON a.id = b.a_id', 'duckdb')
+) flat_total,
+(
+    SELECT COUNT(*) as total_nodes
+    FROM parse_ast('SELECT a.id, b.name FROM table_a a JOIN table_b b ON a.id = b.a_id', 'duckdb')
+) parse_total;
+----
+true
+
+# Test 14: Test hierarchical semantic type consistency
+# ====================================================
+
+query II
+SELECT 
+    get_super_kind(semantic_type) as super_kind,
+    COUNT(*) as count
+FROM parse_ast('
+CREATE TABLE products (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    price DECIMAL(10,2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+', 'duckdb')
+GROUP BY get_super_kind(semantic_type)
+ORDER BY super_kind;
+----
+COMPUTATION	1
+CONTROL_EFFECTS	1
+
+# Test 15: Test parse_ast live query debugging
+# ==============================================
+
+query I
+SELECT COUNT(*) 
+FROM parse_ast('SELECT COUNT(*) FROM users', 'duckdb');
+----
+6

@@ -196,8 +196,7 @@ vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
         LogicalType::VARCHAR,     // peek (source_text)
         // Semantic type fields
         LogicalType::UTINYINT,    // semantic_type
-        LogicalType::UTINYINT,    // universal_flags
-        LogicalType::UTINYINT     // arity_bin
+        LogicalType::UTINYINT     // flags (renamed from universal_flags, removed arity_bin)
     };
 }
 
@@ -208,7 +207,7 @@ vector<string> UnifiedASTBackend::GetFlatTableColumnNames() {
         "parent_id", "depth", "sibling_index", "children_count", "descendant_count",
         "peek",
         // Semantic type fields  
-        "semantic_type", "universal_flags", "arity_bin"
+        "semantic_type", "flags"
     };
 }
 
@@ -234,8 +233,7 @@ LogicalType UnifiedASTBackend::GetASTStructSchema() {
     node_children.push_back(make_pair("peek", LogicalType::VARCHAR));
     // Semantic type fields
     node_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
-    node_children.push_back(make_pair("universal_flags", LogicalType::UTINYINT));
-    node_children.push_back(make_pair("arity_bin", LogicalType::UTINYINT));
+    node_children.push_back(make_pair("flags", LogicalType::UTINYINT));
     
     child_list_t<LogicalType> ast_children;
     ast_children.push_back(make_pair("nodes", LogicalType::LIST(LogicalType::STRUCT(node_children))));
@@ -266,16 +264,15 @@ vector<LogicalType> UnifiedASTBackend::GetHierarchicalTableSchema() {
     structure_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
     structure_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
     
-    // Context Information STRUCT
+    // Context Information STRUCT (semantic information only)
     child_list_t<LogicalType> context_children;
-    context_children.push_back(make_pair("type", LogicalType::VARCHAR));
     context_children.push_back(make_pair("name", LogicalType::VARCHAR));
     context_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
-    context_children.push_back(make_pair("universal_flags", LogicalType::UTINYINT));
-    context_children.push_back(make_pair("arity_bin", LogicalType::UTINYINT));
+    context_children.push_back(make_pair("flags", LogicalType::UTINYINT));
     
     return {
         LogicalType::BIGINT,                          // node_id
+        LogicalType::VARCHAR,                         // type (moved to base level)
         LogicalType::STRUCT(source_children),         // source
         LogicalType::STRUCT(structure_children),      // structure  
         LogicalType::STRUCT(context_children),        // context
@@ -286,9 +283,10 @@ vector<LogicalType> UnifiedASTBackend::GetHierarchicalTableSchema() {
 vector<string> UnifiedASTBackend::GetHierarchicalTableColumnNames() {
     return {
         "node_id",     // BIGINT
+        "type",        // VARCHAR (moved to base level)
         "source",      // STRUCT(file_path, language, start_line, start_column, end_line, end_column)
         "structure",   // STRUCT(parent_id, depth, sibling_index, children_count, descendant_count)
-        "context",     // STRUCT(type, name, semantic_type, universal_flags, arity_bin)
+        "context",     // STRUCT(name, semantic_type, flags)
         "peek"         // VARCHAR
     };
 }
@@ -313,17 +311,16 @@ LogicalType UnifiedASTBackend::GetHierarchicalStructSchema() {
     tree_structure_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
     tree_structure_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
     
-    // Context Information group
+    // Context Information group (semantic information only)
     child_list_t<LogicalType> context_info_children;
-    context_info_children.push_back(make_pair("type", LogicalType::VARCHAR));
     context_info_children.push_back(make_pair("name", LogicalType::VARCHAR));
     context_info_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
-    context_info_children.push_back(make_pair("universal_flags", LogicalType::UTINYINT));
-    context_info_children.push_back(make_pair("arity_bin", LogicalType::UTINYINT));
+    context_info_children.push_back(make_pair("flags", LogicalType::UTINYINT));
     
     // Node with hierarchical structure
     child_list_t<LogicalType> node_children;
     node_children.push_back(make_pair("node_id", LogicalType::BIGINT));
+    node_children.push_back(make_pair("type", LogicalType::VARCHAR));
     node_children.push_back(make_pair("source", LogicalType::STRUCT(source_location_children)));
     node_children.push_back(make_pair("structure", LogicalType::STRUCT(tree_structure_children)));
     node_children.push_back(make_pair("context", LogicalType::STRUCT(context_info_children)));
@@ -342,9 +339,9 @@ LogicalType UnifiedASTBackend::GetHierarchicalStructSchema() {
 }
 
 void UnifiedASTBackend::ProjectToTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index) {
-    // Verify output chunk has correct number of columns (18 with language)
-    if (output.ColumnCount() != 18) {
-        throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 18");
+    // Verify output chunk has correct number of columns (17 with language, removed arity_bin)
+    if (output.ColumnCount() != 17) {
+        throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 17");
     }
     
     // Get output vectors
@@ -365,8 +362,7 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult& result, DataChunk& outpu
     auto peek_vec = FlatVector::GetData<string_t>(output.data[14]);
     // Semantic type fields
     auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[15]);
-    auto universal_flags_vec = FlatVector::GetData<uint8_t>(output.data[16]);
-    auto arity_bin_vec = FlatVector::GetData<uint8_t>(output.data[17]);
+    auto flags_vec = FlatVector::GetData<uint8_t>(output.data[16]);
     
     // Get validity masks for nullable fields
     auto &name_validity = FlatVector::Validity(output.data[2]);
@@ -416,8 +412,7 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult& result, DataChunk& outpu
         
         // Semantic type fields
         semantic_type_vec[output_index + count] = node.semantic_type;
-        universal_flags_vec[output_index + count] = node.universal_flags;
-        arity_bin_vec[output_index + count] = node.arity_bin;
+        flags_vec[output_index + count] = node.universal_flags;
         
         count++;
         current_row++;  // Track which row we're on
@@ -455,8 +450,7 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult& result) {
         node_children.push_back(make_pair("peek", Value(node.peek)));
         // Semantic type fields
         node_children.push_back(make_pair("semantic_type", Value::UTINYINT(node.semantic_type)));
-        node_children.push_back(make_pair("universal_flags", Value::UTINYINT(node.universal_flags)));
-        node_children.push_back(make_pair("arity_bin", Value::UTINYINT(node.arity_bin)));
+        node_children.push_back(make_pair("flags", Value::UTINYINT(node.universal_flags)));
         
         node_values.push_back(Value::STRUCT(node_children));
     }
@@ -477,8 +471,7 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult& result) {
     node_schema.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
     node_schema.push_back(make_pair("peek", LogicalType::VARCHAR));
     node_schema.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
-    node_schema.push_back(make_pair("universal_flags", LogicalType::UTINYINT));
-    node_schema.push_back(make_pair("arity_bin", LogicalType::UTINYINT));
+    node_schema.push_back(make_pair("flags", LogicalType::UTINYINT));
     
     child_list_t<Value> ast_children;
     ast_children.push_back(make_pair("nodes", Value::LIST(LogicalType::STRUCT(node_schema), node_values)));
@@ -557,8 +550,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult& result, Data
             context_values.push_back(make_pair("name", Value()));  // NULL
         }
         context_values.push_back(make_pair("semantic_type", Value::UTINYINT(node.semantic_type)));
-        context_values.push_back(make_pair("universal_flags", Value::UTINYINT(node.universal_flags)));
-        context_values.push_back(make_pair("arity_bin", Value::UTINYINT(node.arity_bin)));
+        context_values.push_back(make_pair("flags", Value::UTINYINT(node.universal_flags)));
         Value context_struct = Value::STRUCT(context_values);
         FlatVector::GetData<Value>(context_vector)[row_idx] = context_struct;
         
@@ -579,20 +571,21 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult& result, Data
 void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode>& nodes, DataChunk& output, 
                                                           idx_t start_row, idx_t& output_index, 
                                                           const ASTSource& source_info) {
-    // Verify output chunk has correct number of columns (5 for hierarchical STRUCT schema)
-    if (output.ColumnCount() != 5) {
-        throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 5 for hierarchical STRUCT schema");
+    // Verify output chunk has correct number of columns (6 for hierarchical STRUCT schema)
+    if (output.ColumnCount() != 6) {
+        throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 6 for hierarchical STRUCT schema");
     }
     
-    // Get output vectors
+    // Get output vectors for new 6-column schema: node_id, type, source, structure, context, peek
     auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
-    auto peek_vec = FlatVector::GetData<string_t>(output.data[4]);
-    auto &peek_validity = FlatVector::Validity(output.data[4]);
+    auto type_vec = FlatVector::GetData<string_t>(output.data[1]);
+    auto peek_vec = FlatVector::GetData<string_t>(output.data[5]);
+    auto &peek_validity = FlatVector::Validity(output.data[5]);
     
     // Get STRUCT child vectors using StructVector::GetEntries()
-    auto &source_entries = StructVector::GetEntries(output.data[1]);
-    auto &structure_entries = StructVector::GetEntries(output.data[2]);
-    auto &context_entries = StructVector::GetEntries(output.data[3]);
+    auto &source_entries = StructVector::GetEntries(output.data[2]);
+    auto &structure_entries = StructVector::GetEntries(output.data[3]);
+    auto &context_entries = StructVector::GetEntries(output.data[4]);
     
     // Source STRUCT child vectors (file_path, language, start_line, start_column, end_line, end_column)
     auto source_file_path_vec = FlatVector::GetData<string_t>(*source_entries[0]);
@@ -610,13 +603,11 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
     auto structure_children_count_vec = FlatVector::GetData<uint32_t>(*structure_entries[3]);
     auto structure_descendant_count_vec = FlatVector::GetData<uint32_t>(*structure_entries[4]);
     
-    // Context STRUCT child vectors (type, name, semantic_type, universal_flags, arity_bin)
-    auto context_type_vec = FlatVector::GetData<string_t>(*context_entries[0]);
-    auto context_name_vec = FlatVector::GetData<string_t>(*context_entries[1]);
-    auto &context_name_validity = FlatVector::Validity(*context_entries[1]);
-    auto context_semantic_type_vec = FlatVector::GetData<uint8_t>(*context_entries[2]);
-    auto context_universal_flags_vec = FlatVector::GetData<uint8_t>(*context_entries[3]);
-    auto context_arity_bin_vec = FlatVector::GetData<uint8_t>(*context_entries[4]);
+    // Context STRUCT child vectors (name, semantic_type, flags) - type moved to base level
+    auto context_name_vec = FlatVector::GetData<string_t>(*context_entries[0]);
+    auto &context_name_validity = FlatVector::Validity(*context_entries[0]);
+    auto context_semantic_type_vec = FlatVector::GetData<uint8_t>(*context_entries[1]);
+    auto context_flags_vec = FlatVector::GetData<uint8_t>(*context_entries[2]);
     
     idx_t count = 0;
     idx_t max_count = STANDARD_VECTOR_SIZE - output_index;  // Account for already used rows
@@ -626,8 +617,9 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
         const auto& node = nodes[i];
         idx_t row_idx = output_index + count;
         
-        // Core identity
+        // Core identity and type (moved to base level)
         node_id_vec[row_idx] = node.node_id;
+        type_vec[row_idx] = StringVector::AddString(output.data[1], node.type.raw);
         
         // Populate source STRUCT fields
         source_file_path_vec[row_idx] = StringVector::AddString(*source_entries[0], source_info.file_path);
@@ -648,20 +640,18 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
         structure_children_count_vec[row_idx] = node.subtree.children_count;
         structure_descendant_count_vec[row_idx] = node.subtree.descendant_count;
         
-        // Populate context STRUCT fields
-        context_type_vec[row_idx] = StringVector::AddString(*context_entries[0], node.type.raw);
+        // Populate context STRUCT fields (no type field - moved to base level)
         if (!node.name.raw.empty()) {
-            context_name_vec[row_idx] = StringVector::AddString(*context_entries[1], node.name.raw);
+            context_name_vec[row_idx] = StringVector::AddString(*context_entries[0], node.name.raw);
         } else {
             context_name_validity.SetInvalid(row_idx);
         }
         context_semantic_type_vec[row_idx] = node.semantic_type;
-        context_universal_flags_vec[row_idx] = node.universal_flags;
-        context_arity_bin_vec[row_idx] = node.arity_bin;
+        context_flags_vec[row_idx] = node.universal_flags;
         
         // Content Preview 
         if (!node.peek.empty()) {
-            peek_vec[row_idx] = StringVector::AddString(output.data[4], node.peek);
+            peek_vec[row_idx] = StringVector::AddString(output.data[5], node.peek);
         } else {
             peek_validity.SetInvalid(row_idx);
         }
@@ -704,18 +694,17 @@ Value UnifiedASTBackend::CreateHierarchicalASTStruct(const ASTResult& result) {
         structure_children.push_back(make_pair("descendant_count", Value::UINTEGER(node.subtree.descendant_count)));
         Value structure_value = Value::STRUCT(structure_children);
         
-        // Context Information struct - use legacy fields for now
+        // Context Information struct (semantic information only)
         child_list_t<Value> context_children;
-        context_children.push_back(make_pair("type", Value(node.type.raw)));
         context_children.push_back(make_pair("name", Value(node.name.raw)));
         context_children.push_back(make_pair("semantic_type", Value::UTINYINT(node.semantic_type)));
-        context_children.push_back(make_pair("universal_flags", Value::UTINYINT(node.universal_flags)));
-        context_children.push_back(make_pair("arity_bin", Value::UTINYINT(node.arity_bin)));
+        context_children.push_back(make_pair("flags", Value::UTINYINT(node.universal_flags)));
         Value context_value = Value::STRUCT(context_children);
         
-        // Complete node struct
+        // Complete node struct with type at base level
         child_list_t<Value> node_children;
         node_children.push_back(make_pair("node_id", Value::BIGINT(node.node_id)));
+        node_children.push_back(make_pair("type", Value(node.type.raw)));
         node_children.push_back(make_pair("source", source_value));
         node_children.push_back(make_pair("structure", structure_value));
         node_children.push_back(make_pair("context", context_value));
@@ -745,11 +734,11 @@ Value UnifiedASTBackend::CreateHierarchicalASTStruct(const ASTResult& result) {
     context_info_children.push_back(make_pair("type", LogicalType::VARCHAR));
     context_info_children.push_back(make_pair("name", LogicalType::VARCHAR));
     context_info_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
-    context_info_children.push_back(make_pair("universal_flags", LogicalType::UTINYINT));
-    context_info_children.push_back(make_pair("arity_bin", LogicalType::UTINYINT));
+    context_info_children.push_back(make_pair("flags", LogicalType::UTINYINT));
     
     child_list_t<LogicalType> node_children;
     node_children.push_back(make_pair("node_id", LogicalType::BIGINT));
+    node_children.push_back(make_pair("type", LogicalType::VARCHAR));
     node_children.push_back(make_pair("source", LogicalType::STRUCT(source_location_children)));
     node_children.push_back(make_pair("structure", LogicalType::STRUCT(tree_structure_children)));
     node_children.push_back(make_pair("context", LogicalType::STRUCT(context_info_children)));
