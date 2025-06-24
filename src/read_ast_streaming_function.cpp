@@ -366,8 +366,7 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
     auto descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[13]);
     auto peek_vec = FlatVector::GetData<string_t>(output.data[14]);
     auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[15]);
-    auto universal_flags_vec = FlatVector::GetData<uint8_t>(output.data[16]);
-    auto arity_bin_vec = FlatVector::GetData<uint8_t>(output.data[17]);
+    auto flags_vec = FlatVector::GetData<uint8_t>(output.data[16]);
     
     // Get validity masks
     auto &name_validity = FlatVector::Validity(output.data[2]);
@@ -446,8 +445,7 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
                     }
                     
                     semantic_type_vec[output_count] = node.semantic_type;
-                    universal_flags_vec[output_count] = node.universal_flags;
-                    arity_bin_vec[output_count] = node.arity_bin;
+                    flags_vec[output_count] = node.universal_flags;
                     
                     output_count++;
                     global_state.current_batch_row_index++;
@@ -554,8 +552,7 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
             }
             
             semantic_type_vec[output_idx] = node.semantic_type;
-            universal_flags_vec[output_idx] = node.universal_flags;
-            arity_bin_vec[output_idx] = node.arity_bin;
+            flags_vec[output_idx] = node.universal_flags;
         }
         
         global_state.current_file_row_index += rows_to_emit;
@@ -621,8 +618,7 @@ static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadAST
     auto descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[13]);
     auto peek_vec = FlatVector::GetData<string_t>(output.data[14]);
     auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[15]);
-    auto universal_flags_vec = FlatVector::GetData<uint8_t>(output.data[16]);
-    auto arity_bin_vec = FlatVector::GetData<uint8_t>(output.data[17]);
+    auto flags_vec = FlatVector::GetData<uint8_t>(output.data[16]);
     
     // Get validity masks
     auto &name_validity = FlatVector::Validity(output.data[2]);
@@ -687,8 +683,7 @@ static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadAST
             }
             
             semantic_type_vec[output_idx] = node.semantic_type;
-            universal_flags_vec[output_idx] = node.universal_flags;
-            arity_bin_vec[output_idx] = node.arity_bin;
+            flags_vec[output_idx] = node.universal_flags;
         }
         
         global_state.current_batch_row_index += rows_to_emit;
@@ -1103,17 +1098,17 @@ static TableFunction GetReadASTStreamingFunctionOneArg() {
     return read_ast_streaming;
 }
 
-// Hierarchical bind functions that actually return STRUCT schema
-static unique_ptr<FunctionData> ReadASTHierarchicalTestBindTwoArg(ClientContext &context, TableFunctionBindInput &input,
-                                                                  vector<LogicalType> &return_types, vector<string> &names) {
+// Hierarchical streaming bind function for two-argument version (explicit language)
+static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientContext &context, TableFunctionBindInput &input,
+                                                                       vector<LogicalType> &return_types, vector<string> &names) {
     if (input.inputs.size() != 2) {
-        throw BinderException("read_ast_hierarchical requires exactly 2 arguments: file_path and language");
+        throw BinderException("read_ast requires exactly 2 arguments: file_path and language");
     }
     
     auto file_path_value = input.inputs[0];
     auto language = input.inputs[1].GetValue<string>();
     
-    // Handle both VARCHAR and LIST(VARCHAR) inputs
+    // Handle both VARCHAR and LIST(VARCHAR) inputs (DuckDB-consistent pattern)
     vector<string> file_patterns;
     if (file_path_value.type().id() == LogicalTypeId::VARCHAR) {
         file_patterns.push_back(file_path_value.ToString());
@@ -1132,43 +1127,57 @@ static unique_ptr<FunctionData> ReadASTHierarchicalTestBindTwoArg(ClientContext 
         throw BinderException("File patterns must be VARCHAR or LIST(VARCHAR)");
     }
     
-    // Extract named parameters
-    bool ignore_errors = false;
-    int32_t peek_size = 120;
-    string peek_mode = "smart";
-    int32_t batch_size = 100;
+    // Check for duplicate parameters (following DuckDB YAML extension pattern)
+    std::unordered_set<std::string> seen_parameters;
+    for (auto &param : input.named_parameters) {
+        if (seen_parameters.find(param.first) != seen_parameters.end()) {
+            throw BinderException("Duplicate parameter name: " + param.first);
+        }
+        seen_parameters.insert(param.first);
+    }
     
-    for (auto &kv : input.named_parameters) {
-        if (kv.first == "ignore_errors") {
-            ignore_errors = kv.second.GetValue<bool>();
-        } else if (kv.first == "peek_size") {
-            peek_size = kv.second.GetValue<int32_t>();
-        } else if (kv.first == "peek_mode") {
-            peek_mode = kv.second.GetValue<string>();
-        } else if (kv.first == "batch_size") {
-            batch_size = kv.second.GetValue<int32_t>();
-            if (batch_size <= 0) {
-                throw BinderException("batch_size must be positive");
-            }
+    // Parse optional named parameters
+    bool ignore_errors = false;
+    if (seen_parameters.find("ignore_errors") != seen_parameters.end()) {
+        ignore_errors = input.named_parameters.at("ignore_errors").GetValue<bool>();
+    }
+    
+    int32_t peek_size = 120;  // Default 120 characters
+    if (seen_parameters.find("peek_size") != seen_parameters.end()) {
+        peek_size = input.named_parameters.at("peek_size").GetValue<int32_t>();
+    }
+    
+    string peek_mode = "auto";  // Default auto mode
+    if (seen_parameters.find("peek_mode") != seen_parameters.end()) {
+        peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
+    }
+    
+    int32_t batch_size = 1;  // Default = current streaming behavior
+    if (seen_parameters.find("batch_size") != seen_parameters.end()) {
+        batch_size = input.named_parameters.at("batch_size").GetValue<int32_t>();
+        if (batch_size < 1) {
+            throw BinderException("batch_size must be positive");
         }
     }
     
-    // Return STRUCT schema for hierarchical test function
+    // Use hierarchical backend schema
     return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
     names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
     
+    // Use the new vector<string> constructor for consistent handling
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode, batch_size);
 }
 
-static unique_ptr<FunctionData> ReadASTHierarchicalTestBindOneArg(ClientContext &context, TableFunctionBindInput &input,
-                                                                  vector<LogicalType> &return_types, vector<string> &names) {
+// Hierarchical streaming bind function for one-argument version (auto-detect language)
+static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientContext &context, TableFunctionBindInput &input,
+                                                                       vector<LogicalType> &return_types, vector<string> &names) {
     if (input.inputs.size() != 1) {
-        throw BinderException("read_ast_hierarchical requires exactly 1 argument: file_path");
+        throw BinderException("read_ast requires exactly 1 argument: file_path");
     }
     
     auto file_path_value = input.inputs[0];
     
-    // Handle both VARCHAR and LIST(VARCHAR) inputs
+    // Handle both VARCHAR and LIST(VARCHAR) inputs (DuckDB-consistent pattern)
     vector<string> file_patterns;
     if (file_path_value.type().id() == LogicalTypeId::VARCHAR) {
         file_patterns.push_back(file_path_value.ToString());
@@ -1187,41 +1196,54 @@ static unique_ptr<FunctionData> ReadASTHierarchicalTestBindOneArg(ClientContext 
         throw BinderException("File patterns must be VARCHAR or LIST(VARCHAR)");
     }
     
-    // Extract named parameters
-    bool ignore_errors = false;
-    int32_t peek_size = 120;
-    string peek_mode = "smart";
-    int32_t batch_size = 100;
+    // Check for duplicate parameters (following DuckDB YAML extension pattern)
+    std::unordered_set<std::string> seen_parameters;
+    for (auto &param : input.named_parameters) {
+        if (seen_parameters.find(param.first) != seen_parameters.end()) {
+            throw BinderException("Duplicate parameter name: " + param.first);
+        }
+        seen_parameters.insert(param.first);
+    }
     
-    for (auto &kv : input.named_parameters) {
-        if (kv.first == "ignore_errors") {
-            ignore_errors = kv.second.GetValue<bool>();
-        } else if (kv.first == "peek_size") {
-            peek_size = kv.second.GetValue<int32_t>();
-        } else if (kv.first == "peek_mode") {
-            peek_mode = kv.second.GetValue<string>();
-        } else if (kv.first == "batch_size") {
-            batch_size = kv.second.GetValue<int32_t>();
-            if (batch_size <= 0) {
-                throw BinderException("batch_size must be positive");
-            }
+    // Parse optional named parameters
+    bool ignore_errors = false;
+    if (seen_parameters.find("ignore_errors") != seen_parameters.end()) {
+        ignore_errors = input.named_parameters.at("ignore_errors").GetValue<bool>();
+    }
+    
+    int32_t peek_size = 120;  // Default 120 characters
+    if (seen_parameters.find("peek_size") != seen_parameters.end()) {
+        peek_size = input.named_parameters.at("peek_size").GetValue<int32_t>();
+    }
+    
+    string peek_mode = "auto";  // Default auto mode
+    if (seen_parameters.find("peek_mode") != seen_parameters.end()) {
+        peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
+    }
+    
+    int32_t batch_size = 1;  // Default = current streaming behavior
+    if (seen_parameters.find("batch_size") != seen_parameters.end()) {
+        batch_size = input.named_parameters.at("batch_size").GetValue<int32_t>();
+        if (batch_size < 1) {
+            throw BinderException("batch_size must be positive");
         }
     }
     
     // Use auto-detect for language
     string language = "auto";
     
-    // Return STRUCT schema for hierarchical test function
+    // Use hierarchical backend schema
     return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
     names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
     
+    // Use the new vector<string> constructor for consistent handling
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode, batch_size);
 }
 
-// Test hierarchical functions with STRUCT schema
+// Hierarchical functions with STRUCT schema using streaming bind
 static TableFunction GetReadASTHierarchicalFunctionTwoArg() {
     TableFunction read_ast_hierarchical("read_ast_hierarchical", {LogicalType::ANY, LogicalType::VARCHAR}, 
-                                       ReadASTHierarchicalFunction, ReadASTHierarchicalTestBindTwoArg, ReadASTStreamingInit);
+                                       ReadASTHierarchicalFunction, ReadASTHierarchicalStreamingBindTwoArg, ReadASTStreamingInit);
     read_ast_hierarchical.name = "read_ast_hierarchical";
     read_ast_hierarchical.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     read_ast_hierarchical.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -1232,7 +1254,7 @@ static TableFunction GetReadASTHierarchicalFunctionTwoArg() {
 
 static TableFunction GetReadASTHierarchicalFunctionOneArg() {
     TableFunction read_ast_hierarchical("read_ast_hierarchical", {LogicalType::ANY}, 
-                                       ReadASTHierarchicalFunction, ReadASTHierarchicalTestBindOneArg, ReadASTStreamingInit);
+                                       ReadASTHierarchicalFunction, ReadASTHierarchicalStreamingBindOneArg, ReadASTStreamingInit);
     read_ast_hierarchical.name = "read_ast_hierarchical";
     read_ast_hierarchical.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
     read_ast_hierarchical.named_parameters["peek_size"] = LogicalType::INTEGER;
