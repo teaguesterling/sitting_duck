@@ -60,10 +60,10 @@ def foo():
 # Count nodes by kind
 query II
 SELECT 
-    get_kind(semantic_type) as kind,
+    get_kind(context.semantic_type) as kind,
     COUNT(*) as count
 FROM test_ast
-WHERE get_kind(semantic_type) != 'PARSER_SPECIFIC'
+WHERE get_kind(context.semantic_type) != 'PARSER_SPECIFIC'
 GROUP BY kind
 ORDER BY count DESC, kind;
 ----
@@ -80,20 +80,20 @@ COMPUTATION_NODE	1
 query I
 SELECT COUNT(*)
 FROM test_ast
-WHERE is_kind(semantic_type, 'DEFINITION');
+WHERE is_kind(context.semantic_type, 'DEFINITION');
 ----
 4
 
 query I
 SELECT COUNT(*)
 FROM test_ast
-WHERE is_kind(semantic_type, 'NAME');
+WHERE is_kind(context.semantic_type, 'NAME');
 ----
 5
 
 query I
 SELECT COUNT(*)
 FROM test_ast
-WHERE is_kind(semantic_type, 'OPERATOR');
+WHERE is_kind(context.semantic_type, 'OPERATOR');
 ----
 3

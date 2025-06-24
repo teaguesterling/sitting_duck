@@ -11,7 +11,7 @@ LOAD sitting_duck;
 # ======================================
 
 query III
-SELECT type, name, peek
+SELECT type, context.name, peek
 FROM parse_ast('
 SELECT 
     list_transform([1,2,3], x -> x * 2) as doubled,
@@ -19,7 +19,7 @@ SELECT
     map {''key1'': ''value1'', ''key2'': ''value2''} as my_map
 ', 'duckdb')
 WHERE type = 'function_call'
-ORDER BY name;
+ORDER BY context.name;
 ----
 function_call	list_transform	list_transform
 function_call	map	map
@@ -29,7 +29,7 @@ function_call	struct_pack	struct_pack
 # =================================================
 
 query II
-SELECT type, name
+SELECT type, context.name
 FROM parse_ast('
 SELECT 
     department,
@@ -40,7 +40,7 @@ SELECT
 FROM employees
 ', 'duckdb')
 WHERE type = 'function_call'
-ORDER BY name;
+ORDER BY context.name;
 ----
 function_call	mode
 function_call	quantile_cont
@@ -49,7 +49,7 @@ function_call	quantile_cont
 # ==========================================
 
 query II
-SELECT type, name  
+SELECT type, context.name  
 FROM parse_ast('
 WITH RECURSIVE employee_hierarchy AS (
     SELECT id, name, manager_id, 1 as level
@@ -65,7 +65,7 @@ WITH RECURSIVE employee_hierarchy AS (
 SELECT * FROM employee_hierarchy ORDER BY level, name
 ', 'duckdb')
 WHERE type IN ('select_statement', 'select_node')
-ORDER BY type, name;
+ORDER BY type, context.name;
 ----
 select_node	NULL
 select_statement	NULL
@@ -97,7 +97,7 @@ table_reference	1
 # =======================================
 
 query II
-SELECT type, name
+SELECT type, context.name
 FROM parse_ast('
 SELECT 
     data->>''$.user.name'' as user_name,
@@ -107,7 +107,7 @@ SELECT
 FROM events
 ', 'duckdb')
 WHERE type = 'function_call'
-ORDER BY name;
+ORDER BY context.name;
 ----
 function_call	->>
 function_call	json_extract_path_text
@@ -118,7 +118,7 @@ function_call	struct_extract
 # ==========================================
 
 query III
-SELECT type, semantic_type, COUNT(*) as count
+SELECT type, context.semantic_type, COUNT(*) as count
 FROM parse_ast('
 SELECT *
 FROM table_a a
@@ -128,7 +128,7 @@ ASOF JOIN table_d d ON a.timestamp >= d.timestamp
 WHERE a.status = ''active''
 ', 'duckdb')
 WHERE type IN ('join', 'table_reference')
-GROUP BY type, semantic_type
+GROUP BY type, context.semantic_type
 ORDER BY type;
 ----
 join	228	3
@@ -197,7 +197,7 @@ SELECT
         ELSE 'Other'
     END as query_pattern,
     COUNT(*) as pattern_count,
-    COUNT(CASE WHEN name IS NOT NULL THEN 1 END) as named_elements
+    COUNT(CASE WHEN context.name IS NOT NULL THEN 1 END) as named_elements
 FROM parse_ast('
 SELECT 
     customer_region,

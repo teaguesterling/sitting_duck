@@ -24,7 +24,7 @@ true
 # ===========================================
 
 query I
-SELECT COUNT(*) FROM read_ast('test/data/php/test.php', 'php') WHERE name IS NOT NULL;
+SELECT COUNT(*) FROM read_ast('test/data/php/test.php', 'php') WHERE context.name IS NOT NULL;
 ----
 196
 
@@ -32,9 +32,9 @@ SELECT COUNT(*) FROM read_ast('test/data/php/test.php', 'php') WHERE name IS NOT
 # ==============================================
 
 query II
-SELECT name, type FROM read_ast('test/data/php/test.php') 
-WHERE type IN ('class_declaration', 'function_definition', 'method_declaration') AND name IS NOT NULL 
-ORDER BY start_line;
+SELECT context.name, type FROM read_ast('test/data/php/test.php') 
+WHERE type IN ('class_declaration', 'function_definition', 'method_declaration') AND context.name IS NOT NULL 
+ORDER BY source.start_line;
 ----
 User	class_declaration
 __construct	method_declaration
@@ -52,9 +52,9 @@ formatName	function_definition
 # ==========================================
 
 query II
-SELECT name, type FROM read_ast('test/data/php/test.php')
-WHERE type IN ('namespace_definition', 'namespace_use_declaration') AND name IS NOT NULL
-ORDER BY start_line;
+SELECT context.name, type FROM read_ast('test/data/php/test.php')
+WHERE type IN ('namespace_definition', 'namespace_use_declaration') AND context.name IS NOT NULL
+ORDER BY source.start_line;
 ----
 App\Models	namespace_definition
 use DateTime;	namespace_use_declaration
@@ -64,10 +64,10 @@ use Exception;	namespace_use_declaration
 # ==========================
 
 query III
-SELECT type, semantic_type, COUNT(*) as count
+SELECT type, context.semantic_type, COUNT(*) as count
 FROM read_ast('test/data/php/test.php')
 WHERE type IN ('class_declaration', 'function_definition', 'namespace_definition')
-GROUP BY type, semantic_type
+GROUP BY type, context.semantic_type
 ORDER BY type;
 ----
 class_declaration	248	2
@@ -78,8 +78,8 @@ namespace_definition	252	1
 # ===============================
 
 query II
-SELECT name, type FROM read_ast('test/data/php/test.php')
-WHERE type = 'interface_declaration' AND name IS NOT NULL;
+SELECT context.name, type FROM read_ast('test/data/php/test.php')
+WHERE type = 'interface_declaration' AND context.name IS NOT NULL;
 ----
 Validator	interface_declaration
 
@@ -87,7 +87,7 @@ Validator	interface_declaration
 # =====================================
 
 query II
-SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+SELECT MAX(structure.depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/php/test.php');
 ----
 13	625
@@ -97,6 +97,6 @@ FROM read_ast('test/data/php/test.php');
 
 query I
 SELECT COUNT(*) FROM read_ast('test/data/php/test.php')
-WHERE type = 'name' AND name IS NOT NULL;
+WHERE type = 'name' AND context.name IS NOT NULL;
 ----
 83
