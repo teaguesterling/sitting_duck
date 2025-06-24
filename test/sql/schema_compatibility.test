@@ -1,0 +1,279 @@
+# name: test/sql/schema_compatibility.test
+# description: Test compatibility and equivalence between flat and hierarchical schemas
+# group: [sitting_duck]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: Verify node counts are identical between schemas
+# ========================================================
+
+query I
+SELECT 
+    (flat_count.total = hier_count.total) as counts_match
+FROM (
+    SELECT COUNT(*) as total
+    FROM read_ast_flat('test/data/python/simple.py', 'python')
+) flat_count,
+(
+    SELECT COUNT(*) as total
+    FROM read_ast_hierarchical('test/data/python/simple.py', 'python')
+) hier_count;
+----
+true
+
+# Test 2: Verify node_id values are identical
+# ============================================
+
+query I
+SELECT COUNT(*) = 0 as no_id_mismatches
+FROM (
+    SELECT f.node_id as flat_id, h.node_id as hier_id
+    FROM read_ast_flat('test/data/python/simple.py', 'python') f
+    FULL OUTER JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+        ON f.node_id = h.node_id
+    WHERE f.node_id IS NULL OR h.node_id IS NULL
+);
+----
+true
+
+# Test 3: Verify type values are identical
+# =========================================
+
+query I
+SELECT COUNT(*) = 0 as no_type_mismatches
+FROM (
+    SELECT f.type as flat_type, h.type as hier_type
+    FROM read_ast_flat('test/data/python/simple.py', 'python') f
+    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+        ON f.node_id = h.node_id
+    WHERE f.type != h.type
+);
+----
+true
+
+# Test 4: Verify name values are identical (flat vs hierarchical context.name)
+# =============================================================================
+
+query I
+SELECT COUNT(*) = 0 as no_name_mismatches
+FROM (
+    SELECT 
+        COALESCE(f.name, '') as flat_name, 
+        COALESCE(h.context.name, '') as hier_name
+    FROM read_ast_flat('test/data/python/simple.py', 'python') f
+    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+        ON f.node_id = h.node_id
+    WHERE COALESCE(f.name, '') != COALESCE(h.context.name, '')
+);
+----
+true
+
+# Test 5: Verify semantic_type values are identical
+# ==================================================
+
+query I
+SELECT COUNT(*) = 0 as no_semantic_type_mismatches
+FROM (
+    SELECT f.semantic_type as flat_st, h.context.semantic_type as hier_st
+    FROM read_ast_flat('test/data/python/simple.py', 'python') f
+    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+        ON f.node_id = h.node_id
+    WHERE f.semantic_type != h.context.semantic_type
+);
+----
+true
+
+# Test 6: Verify flags values are identical
+# ==========================================
+
+query I
+SELECT COUNT(*) = 0 as no_flags_mismatches
+FROM (
+    SELECT f.flags as flat_flags, h.context.flags as hier_flags
+    FROM read_ast_flat('test/data/python/simple.py', 'python') f
+    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+        ON f.node_id = h.node_id
+    WHERE f.flags != h.context.flags
+);
+----
+true
+
+# Test 7: Verify file location fields are identical
+# ==================================================
+
+query I
+SELECT COUNT(*) = 0 as no_location_mismatches
+FROM (
+    SELECT 
+        f.start_line as flat_sl, h.source.start_line as hier_sl,
+        f.start_column as flat_sc, h.source.start_column as hier_sc,
+        f.end_line as flat_el, h.source.end_line as hier_el,
+        f.end_column as flat_ec, h.source.end_column as hier_ec
+    FROM read_ast_flat('test/data/python/simple.py', 'python') f
+    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+        ON f.node_id = h.node_id
+    WHERE f.start_line != h.source.start_line
+       OR f.start_column != h.source.start_column
+       OR f.end_line != h.source.end_line
+       OR f.end_column != h.source.end_column
+);
+----
+true
+
+# Test 8: Verify tree structure fields are identical
+# ===================================================
+
+query I
+SELECT COUNT(*) = 0 as no_structure_mismatches
+FROM (
+    SELECT 
+        COALESCE(f.parent_id, -1) as flat_pid, 
+        COALESCE(h.structure.parent_id, -1) as hier_pid,
+        f.depth as flat_depth, h.structure.depth as hier_depth,
+        f.sibling_index as flat_si, h.structure.sibling_index as hier_si,
+        f.children_count as flat_cc, h.structure.children_count as hier_cc,
+        f.descendant_count as flat_dc, h.structure.descendant_count as hier_dc
+    FROM read_ast_flat('test/data/python/simple.py', 'python') f
+    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+        ON f.node_id = h.node_id
+    WHERE COALESCE(f.parent_id, -1) != COALESCE(h.structure.parent_id, -1)
+       OR f.depth != h.structure.depth
+       OR f.sibling_index != h.structure.sibling_index
+       OR f.children_count != h.structure.children_count
+       OR f.descendant_count != h.structure.descendant_count
+);
+----
+true
+
+# Test 9: Verify file path and language are identical
+# ====================================================
+
+query I
+SELECT COUNT(*) = 0 as no_source_mismatches
+FROM (
+    SELECT 
+        f.file_path as flat_fp, h.source.file_path as hier_fp,
+        f.language as flat_lang, h.source.language as hier_lang
+    FROM read_ast_flat('test/data/python/simple.py', 'python') f
+    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+        ON f.node_id = h.node_id
+    WHERE f.file_path != h.source.file_path
+       OR f.language != h.source.language
+);
+----
+true
+
+# Test 10: Verify peek values are identical
+# ==========================================
+
+query I
+SELECT COUNT(*) = 0 as no_peek_mismatches
+FROM (
+    SELECT 
+        COALESCE(f.peek, '') as flat_peek, 
+        COALESCE(h.peek, '') as hier_peek
+    FROM read_ast_flat('test/data/python/simple.py', 'python') f
+    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+        ON f.node_id = h.node_id
+    WHERE COALESCE(f.peek, '') != COALESCE(h.peek, '')
+);
+----
+true
+
+# Test 11: Test complex queries work identically in both schemas
+# ===============================================================
+
+query I
+SELECT 
+    (flat_result.count = hier_result.count) as complex_query_match
+FROM (
+    SELECT COUNT(*) as count
+    FROM read_ast_flat('test/data/python/simple.py', 'python')
+    WHERE semantic_type = 64 AND depth > 1
+) flat_result,
+(
+    SELECT COUNT(*) as count
+    FROM read_ast_hierarchical('test/data/python/simple.py', 'python')
+    WHERE context.semantic_type = 64 AND structure.depth > 1
+) hier_result;
+----
+true
+
+# Test 12: Test aggregation queries work identically
+# ===================================================
+
+query I
+SELECT 
+    (flat_result.max_depth = hier_result.max_depth) as aggregation_match
+FROM (
+    SELECT MAX(depth) as max_depth
+    FROM read_ast_flat('test/data/python/simple.py', 'python')
+) flat_result,
+(
+    SELECT MAX(structure.depth) as max_depth
+    FROM read_ast_hierarchical('test/data/python/simple.py', 'python')
+) hier_result;
+----
+true
+
+# Test 13: Test filtering queries work identically
+# =================================================
+
+query I
+SELECT 
+    (flat_result.count = hier_result.count) as filtering_match
+FROM (
+    SELECT COUNT(*) as count
+    FROM read_ast_flat('test/data/python/simple.py', 'python')
+    WHERE type = 'identifier' AND name IS NOT NULL
+) flat_result,
+(
+    SELECT COUNT(*) as count
+    FROM read_ast_hierarchical('test/data/python/simple.py', 'python')
+    WHERE type = 'identifier' AND context.name IS NOT NULL
+) hier_result;
+----
+true
+
+# Test 14: Test join queries work identically between schemas
+# ===========================================================
+
+query I
+SELECT 
+    (flat_result.count = hier_result.count) as join_match
+FROM (
+    SELECT COUNT(*) as count
+    FROM read_ast_flat('test/data/python/simple.py', 'python') parent
+    JOIN read_ast_flat('test/data/python/simple.py', 'python') child
+        ON parent.node_id = child.parent_id
+    WHERE parent.type = 'function_definition'
+) flat_result,
+(
+    SELECT COUNT(*) as count
+    FROM read_ast_hierarchical('test/data/python/simple.py', 'python') parent
+    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') child
+        ON parent.node_id = child.structure.parent_id
+    WHERE parent.type = 'function_definition'
+) hier_result;
+----
+true
+
+# Test 15: Test multi-file parsing consistency between schemas
+# ============================================================
+
+query I
+SELECT 
+    (flat_result.total = hier_result.total) as multifile_match
+FROM (
+    SELECT COUNT(*) as total
+    FROM read_ast_flat(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto')
+) flat_result,
+(
+    SELECT COUNT(*) as total
+    FROM read_ast_hierarchical(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto')
+) hier_result;
+----
+true

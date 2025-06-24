@@ -1,0 +1,299 @@
+# name: test/sql/hierarchical_struct_schema.test
+# description: Test hierarchical STRUCT schema field access and navigation
+# group: [sitting_duck]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: Verify hierarchical function structure and field access
+# ===============================================================
+
+query I
+SELECT COUNT(*) FROM read_ast_hierarchical('test/data/sql/example.sql', 'sql') LIMIT 1;
+----
+177
+
+# Test 2: Test STRUCT schema columns are available
+# =================================================
+
+query I
+SELECT 
+    column_name
+FROM (
+    DESCRIBE SELECT * FROM read_ast_hierarchical('test/data/sql/example.sql', 'sql') LIMIT 0
+)
+ORDER BY column_name;
+----
+context
+node_id
+peek
+source
+structure
+type
+
+# Test 3: Test basic STRUCT field access - source fields
+# =======================================================
+
+query III
+SELECT 
+    type as node_type,
+    source.file_path as file_path,
+    source.language as language
+FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
+WHERE type = 'module'
+LIMIT 1;
+----
+module	test/data/python/simple.py	python
+
+# Test 4: Test STRUCT field access - source location fields  
+# ==========================================================
+
+query IIII
+SELECT 
+    type as node_type,
+    source.start_line as start_line,
+    source.start_column as start_col,
+    source.end_line as end_line
+FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
+WHERE type = 'function_definition'
+LIMIT 1;
+----
+function_definition	1	1	3
+
+# Test 5: Test STRUCT field access - structure fields
+# ====================================================
+
+query IIII
+SELECT 
+    type as node_type,
+    structure.parent_id as parent_id,
+    structure.depth as depth,
+    structure.children_count as children_count
+FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
+WHERE type = 'function_definition'
+LIMIT 1;
+----
+function_definition	0	1	5
+
+# Test 6: Test STRUCT field access - context fields
+# ==================================================
+
+query III
+SELECT 
+    type as node_type,
+    context.name as name,
+    context.semantic_type as semantic_type
+FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
+WHERE context.name IS NOT NULL
+ORDER BY node_id
+LIMIT 3;
+----
+function_definition	hello	240
+identifier	hello	80
+string	"""Say hello"""	68
+
+# Test 7: Test hierarchical vs flat schema consistency
+# ====================================================
+
+query I
+SELECT 
+    (hier_count.total = flat_count.total) as consistent_counts
+FROM (
+    SELECT COUNT(*) as total
+    FROM read_ast_hierarchical('test/data/python/simple.py', 'python')
+) hier_count,
+(
+    SELECT COUNT(*) as total
+    FROM read_ast_flat('test/data/python/simple.py', 'python')
+) flat_count;
+----
+true
+
+# Test 8: Test complex STRUCT field queries with JOINs
+# =====================================================
+
+query II
+SELECT 
+    parent.type as parent_type,
+    COUNT(*) as child_count
+FROM read_ast_hierarchical('test/data/python/simple.py', 'python') child
+JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') parent
+    ON child.structure.parent_id = parent.node_id
+WHERE parent.type IN ('function_definition', 'module')
+GROUP BY parent.type
+ORDER BY parent.type;
+----
+function_definition	20
+module	4
+
+# Test 9: Test hierarchical semantic type filtering
+# =================================================
+
+query II
+SELECT 
+    type as node_type,
+    context.semantic_type as semantic_type
+FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
+WHERE context.semantic_type IN (64, 240)  -- integers and functions
+ORDER BY type, context.semantic_type
+LIMIT 2;
+----
+def	240
+def	240
+
+# Test 10: Test nested STRUCT access in WHERE clauses
+# ====================================================
+
+query I
+SELECT COUNT(*)
+FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
+WHERE source.start_line = 1 
+  AND structure.depth > 0 
+  AND context.name IS NOT NULL;
+----
+2
+
+# Test 11: Test STRUCT field access with aggregations
+# ====================================================
+
+query II
+SELECT 
+    source.language as language,
+    MAX(structure.depth) as max_depth
+FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
+GROUP BY source.language;
+----
+python	8
+
+# Test 12: Test hierarchical parsing with multiple languages
+# ==========================================================
+
+query III
+SELECT 
+    source.language as language,
+    type as node_type,
+    COUNT(*) as count
+FROM read_ast_hierarchical(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto')
+WHERE type IN ('module', 'program')
+GROUP BY source.language, type
+ORDER BY language, type;
+----
+javascript	program	1
+python	module	1
+
+# Test 13: Test STRUCT NULL handling
+# ===================================
+
+query II
+SELECT 
+    type as node_type,
+    (context.name IS NULL) as name_is_null
+FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
+WHERE type = 'module'
+LIMIT 1;
+----
+module	true
+
+# Test 14: Test complex hierarchical query with STRUCT fields
+# ===========================================================
+
+query III
+SELECT 
+    type as node_type,
+    context.name as name,
+    structure.descendant_count as descendant_count
+FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
+WHERE structure.descendant_count > 3
+ORDER BY structure.descendant_count DESC
+LIMIT 2;
+----
+module	NULL	109
+class_definition	MyClass	45
+
+# Test 15: Test hierarchical error handling with STRUCT access
+# =============================================================
+
+statement ok
+SELECT 
+    source.file_path,
+    context.semantic_type
+FROM read_ast_hierarchical('test/data/python/syntax_error.py', 'python', ignore_errors := true) 
+WHERE type = 'ERROR'
+LIMIT 1;
+
+# Test 16: Test peek field access in hierarchical schema
+# ======================================================
+
+query II
+SELECT 
+    type as node_type,
+    (peek IS NOT NULL) as has_peek
+FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
+WHERE type = 'function_definition'
+LIMIT 1;
+----
+function_definition	true
+
+# Test 17: Test hierarchical DuckDB SQL parsing
+# ==============================================
+
+query III
+SELECT 
+    type as node_type,
+    context.name as name,
+    source.start_line as line
+FROM read_ast_hierarchical('test/data/sql/example.sql', 'sql') 
+WHERE context.name IS NOT NULL
+ORDER BY source.start_column
+LIMIT 3;
+----
+keyword_select	SELECT	2
+keyword_from	FROM	6
+keyword_left	LEFT	7
+
+# Test 18: Test structure.parent_id relationships
+# ===============================================
+
+query I
+SELECT COUNT(*)
+FROM read_ast_hierarchical('test/data/python/simple.py', 'python') child
+WHERE EXISTS (
+    SELECT 1 FROM read_ast_hierarchical('test/data/python/simple.py', 'python') parent 
+    WHERE parent.node_id = child.structure.parent_id
+);
+----
+109
+
+# Test 19: Test hierarchical context.flags access
+# ===============================================
+
+query II
+SELECT 
+    type as node_type,
+    context.flags as flags
+FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
+WHERE context.flags > 0
+ORDER BY node_id
+LIMIT 2;
+----
+def	1
+class	1
+
+# Test 20: Test hierarchical batch processing consistency 
+# =======================================================
+
+query I
+SELECT 
+    (batch1.total = batch100.total) as consistent_batching
+FROM (
+    SELECT COUNT(*) as total
+    FROM read_ast_hierarchical('test/data/python/simple.py', 'python', batch_size := 1)
+) batch1,
+(
+    SELECT COUNT(*) as total
+    FROM read_ast_hierarchical('test/data/python/simple.py', 'python', batch_size := 100)
+) batch100;
+----
+true
