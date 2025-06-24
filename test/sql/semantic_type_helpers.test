@@ -168,9 +168,9 @@ class MyClass:
 
 # Test filtering with predicate functions
 query II
-SELECT name, semantic_type_to_string(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT)
+SELECT context.name, semantic_type_to_string(CASE WHEN context.semantic_type < 0 THEN (256 + context.semantic_type) ELSE context.semantic_type END::UTINYINT)
 FROM test_ast
-WHERE is_definition(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT) AND name IS NOT NULL
+WHERE is_definition(CASE WHEN context.semantic_type < 0 THEN (256 + context.semantic_type) ELSE context.semantic_type END::UTINYINT) AND context.name IS NOT NULL
 ORDER BY node_id;
 ----
 hello	DEFINITION_FUNCTION
@@ -178,9 +178,9 @@ MyClass	DEFINITION_CLASS
 method	DEFINITION_FUNCTION
 
 query II
-SELECT name, semantic_type_to_string(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT)
+SELECT context.name, semantic_type_to_string(CASE WHEN context.semantic_type < 0 THEN (256 + context.semantic_type) ELSE context.semantic_type END::UTINYINT)
 FROM test_ast
-WHERE is_call(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT)
+WHERE is_call(CASE WHEN context.semantic_type < 0 THEN (256 + context.semantic_type) ELSE context.semantic_type END::UTINYINT)
 ORDER BY node_id;
 ----
 NULL	COMPUTATION_CALL

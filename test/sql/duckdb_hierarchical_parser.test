@@ -39,7 +39,7 @@ type
 query II
 SELECT 
     type as node_type,
-    semantic_type
+    context.semantic_type
 FROM parse_ast('SELECT user_id, COUNT(*) as total FROM orders GROUP BY user_id', 'duckdb') 
 ORDER BY node_id
 LIMIT 8;
@@ -59,9 +59,9 @@ group_by_clause	236
 query II
 SELECT 
     type as node_type,
-    name as node_name
+    context.name as node_name
 FROM parse_ast('SELECT user_id, COUNT(*) as total FROM orders GROUP BY user_id', 'duckdb') 
-WHERE name IS NOT NULL
+WHERE context.name IS NOT NULL
 ORDER BY node_id;
 ----
 column_reference	user_id
@@ -75,11 +75,11 @@ column_reference	user_id
 query III
 SELECT 
     type as node_type,
-    start_line as start_line,
-    start_column as start_col
+    source.start_line as start_line,
+    source.start_column as start_col
 FROM parse_ast('SELECT user_id FROM orders', 'duckdb') 
 WHERE type IN ('column_reference', 'table_reference')
-ORDER BY start_column;
+ORDER BY source.start_column;
 ----
 column_reference	1	1
 table_reference	1	1
@@ -90,7 +90,7 @@ table_reference	1	1
 query II
 SELECT 
     type as node_type,
-    semantic_type as semantic_type
+    context.semantic_type as semantic_type
 FROM parse_ast('INSERT INTO users (name, email) VALUES (''John'', ''john@example.com'')', 'duckdb') 
 WHERE semantic_type IN (140, 252)
 ORDER BY node_id;
@@ -104,9 +104,9 @@ insert_statement	140
 query II
 SELECT 
     type as node_type,
-    flags as flags_value
+    context.flags as flags_value
 FROM parse_ast('def foo(): pass', 'python') 
-WHERE flags > 0
+WHERE context.flags > 0
 ORDER BY node_id
 LIMIT 5;
 ----
@@ -141,7 +141,7 @@ expression	2
 query II
 SELECT 
     type as node_type,
-    name as node_name
+    context.name as node_name
 FROM parse_ast('
 WITH regional_sales AS (
     SELECT region, SUM(sales) as total_sales
@@ -150,7 +150,7 @@ WITH regional_sales AS (
 )
 SELECT * FROM regional_sales
 ', 'duckdb')
-WHERE type = 'table_reference' AND name IS NOT NULL
+WHERE type = 'table_reference' AND context.name IS NOT NULL
 ORDER BY node_id;
 ----
 table_reference	regional_sales
@@ -161,7 +161,7 @@ table_reference	regional_sales
 query III
 SELECT 
     type as node_type,
-    semantic_type as semantic_type,
+    context.semantic_type as semantic_type,
     COUNT(*) as count
 FROM parse_ast('
 SELECT u.name, p.title, c.content
@@ -194,15 +194,15 @@ WHERE type = 'parse_error';
 query II
 SELECT 
     type as node_type,
-    name as function_name
+    context.name as function_name
 FROM parse_ast('
 SELECT 
     unnest([1,2,3]) as value,
     current_timestamp::date as today
 FROM generate_series(1, 10)
 ', 'duckdb')
-WHERE type = 'function_call' AND name IS NOT NULL
-ORDER BY name;
+WHERE type = 'function_call' AND context.name IS NOT NULL
+ORDER BY context.name;
 ----
 function_call	unnest
 
@@ -228,7 +228,7 @@ true
 
 query II
 SELECT 
-    get_super_kind(semantic_type) as super_kind,
+    get_super_kind(context.semantic_type) as super_kind,
     COUNT(*) as count
 FROM parse_ast('
 CREATE TABLE products (
@@ -238,7 +238,7 @@ CREATE TABLE products (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 ', 'duckdb')
-GROUP BY get_super_kind(semantic_type)
+GROUP BY get_super_kind(context.semantic_type)
 ORDER BY super_kind;
 ----
 COMPUTATION	1

@@ -24,7 +24,7 @@ true
 # ============================================
 
 query I
-SELECT COUNT(*) FROM read_ast('test/data/ruby/simple.rb', 'ruby') WHERE name IS NOT NULL;
+SELECT COUNT(*) FROM read_ast('test/data/ruby/simple.rb', 'ruby') WHERE context.name IS NOT NULL;
 ----
 32
 
@@ -32,9 +32,9 @@ SELECT COUNT(*) FROM read_ast('test/data/ruby/simple.rb', 'ruby') WHERE name IS 
 # ===================================
 
 query II
-SELECT name, type FROM read_ast('test/data/ruby/simple.rb') 
-WHERE type IN ('method', 'singleton_method') AND name IS NOT NULL 
-ORDER BY start_line;
+SELECT context.name, type FROM read_ast('test/data/ruby/simple.rb') 
+WHERE type IN ('method', 'singleton_method') AND context.name IS NOT NULL 
+ORDER BY source.start_line;
 ----
 initialize	method
 greet	method
@@ -45,9 +45,9 @@ say_hello	method
 # ============================
 
 query II
-SELECT name, type FROM read_ast('test/data/ruby/simple.rb')
-WHERE type = 'constant' AND name IS NOT NULL
-ORDER BY start_line;
+SELECT context.name, type FROM read_ast('test/data/ruby/simple.rb')
+WHERE type = 'constant' AND context.name IS NOT NULL
+ORDER BY source.start_line;
 ----
 Person	constant
 Person	constant
@@ -56,10 +56,10 @@ Person	constant
 # ===========================
 
 query III
-SELECT type, semantic_type, COUNT(*) as count
+SELECT type, context.semantic_type, COUNT(*) as count
 FROM read_ast('test/data/ruby/simple.rb')
 WHERE type IN ('method', 'singleton_method', 'class', 'call', 'assignment')
-GROUP BY type, semantic_type
+GROUP BY type, context.semantic_type
 ORDER BY type;
 ----
 assignment	244	2
@@ -72,7 +72,7 @@ singleton_method	240	1
 # ======================================
 
 query II
-SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+SELECT MAX(structure.depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/ruby/simple.rb');
 ----
 9	80
@@ -82,7 +82,7 @@ FROM read_ast('test/data/ruby/simple.rb');
 
 query I
 SELECT COUNT(*) FROM read_ast('test/data/ruby/simple.rb')
-WHERE type = 'identifier' AND name IS NOT NULL;
+WHERE type = 'identifier' AND context.name IS NOT NULL;
 ----
 14
 
@@ -90,8 +90,8 @@ WHERE type = 'identifier' AND name IS NOT NULL;
 # ===============================
 
 query II
-SELECT name, type FROM read_ast('test/data/ruby/simple.rb')
-WHERE type = 'instance_variable' AND name IS NOT NULL;
+SELECT context.name, type FROM read_ast('test/data/ruby/simple.rb')
+WHERE type = 'instance_variable' AND context.name IS NOT NULL;
 ----
 @name	instance_variable
 @name	instance_variable

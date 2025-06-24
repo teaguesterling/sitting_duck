@@ -24,7 +24,7 @@ true
 # =============================================
 
 query I
-SELECT COUNT(*) FROM read_ast('test/data/bash/simple.sh', 'bash') WHERE name IS NOT NULL;
+SELECT COUNT(*) FROM read_ast('test/data/bash/simple.sh', 'bash') WHERE context.name IS NOT NULL;
 ----
 735
 
@@ -59,10 +59,10 @@ WHERE type = 'command_substitution';
 # ===============================
 
 query III
-SELECT type, COUNT(*) as count, semantic_type
+SELECT type, COUNT(*) as count, context.semantic_type
 FROM read_ast('test/data/bash/simple.sh', 'bash')
 WHERE type IN ('if_statement', 'for_statement', 'while_statement', 'case_statement')
-GROUP BY type, semantic_type
+GROUP BY type, context.semantic_type
 ORDER BY type;
 ----
 case_statement	2	144
@@ -74,10 +74,10 @@ while_statement	2	148
 # ==============================================
 
 query III
-SELECT type, semantic_type, COUNT(*) as count
+SELECT type, context.semantic_type, COUNT(*) as count
 FROM read_ast('test/data/bash/simple.sh', 'bash')
 WHERE type IN ('function_definition', 'variable_assignment', 'command_substitution')
-GROUP BY type, semantic_type
+GROUP BY type, context.semantic_type
 ORDER BY type;
 ----
 command_substitution	208	10
@@ -88,7 +88,7 @@ variable_assignment	244	28
 # ======================================
 
 query II
-SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+SELECT MAX(structure.depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/bash/simple.sh', 'bash');
 ----
 17	1472
@@ -98,7 +98,7 @@ FROM read_ast('test/data/bash/simple.sh', 'bash');
 
 query I
 SELECT COUNT(*) FROM read_ast('test/data/bash/simple.sh', 'bash')
-WHERE type = 'word' AND name IS NOT NULL;
+WHERE type = 'word' AND context.name IS NOT NULL;
 ----
 153
 

@@ -19,7 +19,7 @@ duckdb
 # =====================================
 
 query IIIII
-SELECT type, name, semantic_type, depth, descendant_count
+SELECT type, context.name, context.semantic_type, structure.depth, structure.descendant_count
 FROM parse_ast('SELECT user_id, COUNT(*) as total FROM orders GROUP BY user_id', 'duckdb') 
 ORDER BY node_id
 LIMIT 8;
@@ -37,7 +37,7 @@ group_by_clause	NULL	236	3	1
 # =================================
 
 query II
-SELECT type, name
+SELECT type, context.name
 FROM parse_ast('
 WITH regional_sales AS (
     SELECT region, SUM(sales) as total_sales
@@ -50,7 +50,7 @@ top_regions AS (
 SELECT * FROM top_regions
 ', 'duckdb')
 WHERE type IN ('select_statement', 'select_node')
-ORDER BY type, name;
+ORDER BY type, context.name;
 ----
 select_node	NULL
 select_statement	NULL
@@ -59,7 +59,7 @@ select_statement	NULL
 # ============================
 
 query III
-SELECT type, semantic_type, COUNT(*) as count
+SELECT type, context.semantic_type, COUNT(*) as count
 FROM parse_ast('
 SELECT u.name, p.title, c.content
 FROM users u
@@ -67,7 +67,7 @@ LEFT JOIN posts p ON u.id = p.user_id
 INNER JOIN comments c ON p.id = c.post_id
 WHERE u.active = true
 ', 'duckdb')
-GROUP BY type, semantic_type
+GROUP BY type, context.semantic_type
 HAVING COUNT(*) > 1
 ORDER BY count DESC, type;
 ----
@@ -99,13 +99,13 @@ expression	2
 # =================================================
 
 query II
-SELECT semantic_type_to_string(semantic_type) as semantic_type, COUNT(*) as count
+SELECT semantic_type_to_string(context.semantic_type) as semantic_type, COUNT(*) as count
 FROM parse_ast('
 INSERT INTO users (name, email) 
 VALUES (''John'', ''john@example.com'')
 ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
 ', 'duckdb')
-GROUP BY semantic_type
+GROUP BY context.semantic_type
 ORDER BY count DESC;
 ----
 EXECUTION_MUTATION	1
@@ -123,7 +123,7 @@ SELECT COUNT(*) FROM parse_ast('SELECT FROM WHERE', 'duckdb') WHERE type = 'pars
 # ============================================
 
 query II
-SELECT type, name
+SELECT type, context.name
 FROM parse_ast('
 SELECT 
     unnest([1,2,3]) as value,
@@ -132,7 +132,7 @@ SELECT
 FROM generate_series(1, 10)
 ', 'duckdb')
 WHERE type = 'function_call'
-ORDER BY name;
+ORDER BY context.name;
 ----
 function_call	->>
 function_call	unnest
@@ -144,15 +144,15 @@ query IIII
 SELECT 
     'duckdb' as parser,
     COUNT(*) as total_nodes,
-    COUNT(CASE WHEN semantic_type IN (208, 224, 228, 236) THEN 1 END) as sql_specific_nodes,
-    COUNT(CASE WHEN name IS NOT NULL THEN 1 END) as named_nodes
+    COUNT(CASE WHEN context.semantic_type IN (208, 224, 228, 236) THEN 1 END) as sql_specific_nodes,
+    COUNT(CASE WHEN context.name IS NOT NULL THEN 1 END) as named_nodes
 FROM parse_ast('SELECT a.id, b.name FROM table_a a JOIN table_b b ON a.id = b.a_id', 'duckdb')
 UNION ALL
 SELECT 
     'tree-sitter' as parser,
     COUNT(*) as total_nodes,
-    COUNT(CASE WHEN semantic_type IN (208, 224, 228, 236) THEN 1 END) as sql_specific_nodes,
-    COUNT(CASE WHEN name IS NOT NULL THEN 1 END) as named_nodes
+    COUNT(CASE WHEN context.semantic_type IN (208, 224, 228, 236) THEN 1 END) as sql_specific_nodes,
+    COUNT(CASE WHEN context.name IS NOT NULL THEN 1 END) as named_nodes
 FROM parse_ast('SELECT a.id, b.name FROM table_a a JOIN table_b b ON a.id = b.a_id', 'sql')
 ORDER BY parser;
 ----
@@ -172,7 +172,7 @@ SELECT COUNT(*) FROM parse_ast('SELECT COUNT(*) FROM users', 'duckdb');
 
 query II
 SELECT 
-    get_super_kind(semantic_type) as super_kind,
+    get_super_kind(context.semantic_type) as super_kind,
     COUNT(*) as count
 FROM parse_ast('
 CREATE TABLE products (
