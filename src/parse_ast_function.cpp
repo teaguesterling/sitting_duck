@@ -66,9 +66,9 @@ static unique_ptr<FunctionData> ParseASTHierarchicalBind(ClientContext &context,
     auto code = input.inputs[0].GetValue<string>();
     auto language = input.inputs[1].GetValue<string>();
     
-    // Temporarily use flat schema until STRUCT functions are properly implemented
-    return_types = UnifiedASTBackend::GetFlatTableSchema();
-    names = UnifiedASTBackend::GetFlatTableColumnNames();
+    // Use hierarchical STRUCT schema
+    return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
+    names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
     
     return make_uniq<ParseASTData>(code, language);
 }
@@ -87,9 +87,15 @@ static void ParseASTHierarchicalExecute(ClientContext &context, TableFunctionInp
         }
     }
     
-    // Project to flat table format, starting from where we left off
+    // Project to hierarchical STRUCT table format using streaming projection
     idx_t output_index = 0;
-    UnifiedASTBackend::ProjectToTable(data.result, output, data.current_row, output_index);
+    idx_t old_output_index = output_index;
+    UnifiedASTBackend::ProjectToHierarchicalTableStreaming(data.result.nodes, output, data.current_row, output_index, data.result.source);
+    
+    // Update current_row based on how many rows were processed
+    idx_t rows_processed = output_index - old_output_index;
+    data.current_row += rows_processed;
+    
     output.SetCardinality(output_index);
 }
 

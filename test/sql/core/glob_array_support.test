@@ -15,25 +15,25 @@ FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js']);
 # Test 2: Array with auto-detect language
 # =======================================
 query I
-SELECT COUNT(DISTINCT language) as language_count
+SELECT COUNT(DISTINCT source.language) as language_count
 FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'])
-WHERE language IN ('python', 'javascript');
+WHERE source.language IN ('python', 'javascript');
 ----
 2
 
 # Test 3: Array with explicit language (should auto-detect per file)
 # =================================================================
 query I  
-SELECT COUNT(DISTINCT language) as language_count
+SELECT COUNT(DISTINCT source.language) as language_count
 FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto')
-WHERE language IN ('python', 'javascript');
+WHERE source.language IN ('python', 'javascript');
 ----
 2
 
 # Test 4: Array with specific language override
 # ============================================
 query I
-SELECT DISTINCT language 
+SELECT DISTINCT source.language 
 FROM read_ast(['test/data/python/simple.py', 'test/data/python/comments.py'], 'python');
 ----
 python
@@ -49,7 +49,7 @@ FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/*.js']);
 # Test 6: Multiple glob patterns
 # =============================
 query I  
-SELECT COUNT(DISTINCT language) >= 2 as has_multiple_languages
+SELECT COUNT(DISTINCT source.language) >= 2 as has_multiple_languages
 FROM read_ast(['test/data/python/*.py', 'test/data/javascript/*.js']);
 ----
 1
@@ -57,9 +57,9 @@ FROM read_ast(['test/data/python/*.py', 'test/data/javascript/*.js']);
 # Test 7: File deduplication (same file in multiple patterns)
 # ==========================================================
 query I
-SELECT COUNT(DISTINCT file_path) as unique_files
+SELECT COUNT(DISTINCT source.file_path) as unique_files
 FROM read_ast(['test/data/python/simple.py', 'test/data/python/simple.py'])
-WHERE file_path LIKE '%simple.py';
+WHERE source.file_path LIKE '%simple.py';
 ----
 1
 
@@ -97,18 +97,18 @@ FROM read_ast(['test/data/python/nonexistent.py', 'test/data/python/simple.py'],
 # =================================================
 query III
 SELECT 
-    language,
+    source.language,
     COUNT(*) as file_count,
-    COUNT(DISTINCT file_path) as unique_files
+    COUNT(DISTINCT source.file_path) as unique_files
 FROM read_ast([
     'test/data/python/*.py',
     'test/data/javascript/*.js', 
     'test/data/cpp/*.cpp',
     'test/data/go/*.go'
 ])
-GROUP BY language
+GROUP BY source.language
 HAVING COUNT(*) > 0
-ORDER BY language;
+ORDER BY source.language;
 ----
 cpp	498	1
 go	104	2
@@ -118,7 +118,7 @@ python	1042	9
 # Test 13: Consistent ordering (DuckDB convention)
 # ===============================================
 query I
-SELECT COUNT(DISTINCT file_path) as unique_files
+SELECT COUNT(DISTINCT source.file_path) as unique_files
 FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js']);
 ----
 2

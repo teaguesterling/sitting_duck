@@ -490,20 +490,21 @@ Value UnifiedASTBackend::CreateASTStructValue(const ASTResult& result) {
 //==============================================================================
 
 void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index) {
-    // Verify output chunk has correct number of columns (5 for hierarchical STRUCT schema)
-    if (output.ColumnCount() != 5) {
-        throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 5 for hierarchical STRUCT schema");
+    // Verify output chunk has correct number of columns (6 for hierarchical STRUCT schema)
+    if (output.ColumnCount() != 6) {
+        throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 6 for hierarchical STRUCT schema");
     }
     
-    // Get output vectors for STRUCT columns
+    // Get output vectors for hierarchical schema: node_id, type, source, structure, context, peek
     auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
-    auto &source_vector = output.data[1];      // STRUCT column
-    auto &structure_vector = output.data[2];   // STRUCT column  
-    auto &context_vector = output.data[3];     // STRUCT column
-    auto peek_vec = FlatVector::GetData<string_t>(output.data[4]);
+    auto type_vec = FlatVector::GetData<string_t>(output.data[1]);
+    auto &source_vector = output.data[2];      // STRUCT column
+    auto &structure_vector = output.data[3];   // STRUCT column  
+    auto &context_vector = output.data[4];     // STRUCT column
+    auto peek_vec = FlatVector::GetData<string_t>(output.data[5]);
     
     // Get validity masks
-    auto &peek_validity = FlatVector::Validity(output.data[4]);
+    auto &peek_validity = FlatVector::Validity(output.data[5]);
     
     idx_t count = 0;
     idx_t max_count = STANDARD_VECTOR_SIZE;
@@ -515,6 +516,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult& result, Data
         
         // Core identity
         node_id_vec[row_idx] = node.node_id;
+        type_vec[row_idx] = StringVector::AddString(output.data[1], node.type.raw);
         
         // Create source STRUCT (use legacy fields for now)
         child_list_t<Value> source_values;

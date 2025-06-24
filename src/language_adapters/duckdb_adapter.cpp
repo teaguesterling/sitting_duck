@@ -564,10 +564,23 @@ vector<ASTNode> DuckDBAdapter::ConvertExpression(const ParsedExpression& expr, u
             }
             break;
         }
-        default: {
-            // Fallback to generic expression node - avoid re-parsing for now to prevent infinite loops
-            auto node = CreateASTNode("expression", "", expr.ToString(),
+        case ExpressionType::OPERATOR_CAST: {
+            // Handle cast expressions (like CAST('t' AS BOOLEAN) for boolean literals)
+            string expr_text = expr.ToString();
+            
+            auto node = CreateASTNode("expression", "", expr_text,
                                      SemanticTypes::COMPUTATION_EXPRESSION,
+                                     node_counter++, -1, 0);
+            nodes.push_back(node);
+            break;
+        }
+        default: {
+            // If we reach this case, DuckDB's parser couldn't handle this expression type
+            // This is our indicator of incomplete parsing - no need for complex detection
+            string expr_text = expr.ToString();
+            
+            auto node = CreateASTNode("expression", "incomplete_parsing", expr_text,
+                                     SemanticTypes::PARSER_CONSTRUCT,  // Mark as needing attention
                                      node_counter++, -1, 0);
             nodes.push_back(node);
             break;
@@ -732,6 +745,7 @@ string DuckDBAdapter::NormalizeFunctionName(const string& internal_name) const {
     // Use DuckDB's internal function names as-is - they are the authoritative source
     return internal_name;
 }
+
 
 
 //==============================================================================

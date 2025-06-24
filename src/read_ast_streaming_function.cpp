@@ -1040,16 +1040,6 @@ static TableFunction GetReadASTFlatFunctionTwoArg() {
     return read_ast_flat;
 }
 
-static TableFunction GetReadASTFunctionTwoArg() {
-    TableFunction read_ast("read_ast", {LogicalType::ANY, LogicalType::VARCHAR}, 
-                          ReadASTFlatStreamingFunction, ReadASTFlatStreamingBindTwoArg, ReadASTStreamingInit);
-    read_ast.name = "read_ast";
-    read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-    read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
-    read_ast.named_parameters["peek_mode"] = LogicalType::VARCHAR;
-    read_ast.named_parameters["batch_size"] = LogicalType::INTEGER;
-    return read_ast;
-}
 
 // Legacy flat schema functions
 static TableFunction GetReadASTFlatFunctionOneArg() {
@@ -1063,17 +1053,6 @@ static TableFunction GetReadASTFlatFunctionOneArg() {
     return read_ast_flat;
 }
 
-// Default read_ast functions (currently identical to flat - will become hierarchical later)
-static TableFunction GetReadASTFunctionOneArg() {
-    TableFunction read_ast("read_ast", {LogicalType::ANY}, 
-                          ReadASTFlatStreamingFunction, ReadASTFlatStreamingBindOneArg, ReadASTStreamingInit);
-    read_ast.name = "read_ast";
-    read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-    read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
-    read_ast.named_parameters["peek_mode"] = LogicalType::VARCHAR;
-    read_ast.named_parameters["batch_size"] = LogicalType::INTEGER;
-    return read_ast;
-}
 
 // Keep streaming functions as well for explicit access (these use flat schema)
 static TableFunction GetReadASTStreamingFunctionTwoArg() {
@@ -1240,7 +1219,19 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientCon
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode, batch_size);
 }
 
-// Hierarchical functions with STRUCT schema using streaming bind
+// Functions for read_ast (using hierarchical STRUCT schema)
+static TableFunction GetReadASTFunctionTwoArg() {
+    TableFunction read_ast("read_ast", {LogicalType::ANY, LogicalType::VARCHAR}, 
+                          ReadASTHierarchicalFunction, ReadASTHierarchicalStreamingBindTwoArg, ReadASTStreamingInit);
+    read_ast.name = "read_ast";
+    read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
+    read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
+    read_ast.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+    read_ast.named_parameters["batch_size"] = LogicalType::INTEGER;
+    return read_ast;
+}
+
+// Hierarchical functions with STRUCT schema using streaming bind (explicit access)
 static TableFunction GetReadASTHierarchicalFunctionTwoArg() {
     TableFunction read_ast_hierarchical("read_ast_hierarchical", {LogicalType::ANY, LogicalType::VARCHAR}, 
                                        ReadASTHierarchicalFunction, ReadASTHierarchicalStreamingBindTwoArg, ReadASTStreamingInit);
@@ -1250,6 +1241,17 @@ static TableFunction GetReadASTHierarchicalFunctionTwoArg() {
     read_ast_hierarchical.named_parameters["peek_mode"] = LogicalType::VARCHAR;
     read_ast_hierarchical.named_parameters["batch_size"] = LogicalType::INTEGER;
     return read_ast_hierarchical;
+}
+
+static TableFunction GetReadASTFunctionOneArg() {
+    TableFunction read_ast("read_ast", {LogicalType::ANY}, 
+                          ReadASTHierarchicalFunction, ReadASTHierarchicalStreamingBindOneArg, ReadASTStreamingInit);
+    read_ast.name = "read_ast";
+    read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
+    read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
+    read_ast.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+    read_ast.named_parameters["batch_size"] = LogicalType::INTEGER;
+    return read_ast;
 }
 
 static TableFunction GetReadASTHierarchicalFunctionOneArg() {
@@ -1268,11 +1270,11 @@ void RegisterReadASTFunction(DatabaseInstance &instance) {
     ExtensionUtil::RegisterFunction(instance, GetReadASTFlatFunctionOneArg());    // ANY (auto-detect)
     ExtensionUtil::RegisterFunction(instance, GetReadASTFlatFunctionTwoArg());    // ANY, VARCHAR (explicit language)
     
-    // Register default read_ast functions (currently using flat execution but will become hierarchical STRUCT later)
+    // Register default read_ast functions (now using hierarchical STRUCT schema)
     ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionOneArg());    // ANY (auto-detect)
     ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionTwoArg());    // ANY, VARCHAR (explicit language)
     
-    // Register hierarchical test functions with STRUCT schema
+    // Register hierarchical functions for explicit access with STRUCT schema
     ExtensionUtil::RegisterFunction(instance, GetReadASTHierarchicalFunctionOneArg());    // ANY (auto-detect)
     ExtensionUtil::RegisterFunction(instance, GetReadASTHierarchicalFunctionTwoArg());    // ANY, VARCHAR (explicit language)
 }

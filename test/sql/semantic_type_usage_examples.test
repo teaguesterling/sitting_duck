@@ -12,11 +12,11 @@ SELECT * FROM read_ast('test/data/python/test_classes.py');
 
 # Example 1: Find all function and class definitions
 query II
-SELECT name, semantic_type_to_string(semantic_type) as type
+SELECT context.name, semantic_type_to_string(context.semantic_type) as type
 FROM code_ast
-WHERE is_definition(semantic_type) 
-  AND name IS NOT NULL
-ORDER BY start_line;
+WHERE is_definition(context.semantic_type) 
+  AND context.name IS NOT NULL
+ORDER BY source.start_line;
 ----
 calculate_sum	DEFINITION_FUNCTION
 DataProcessor	DEFINITION_CLASS
@@ -27,16 +27,16 @@ process	DEFINITION_FUNCTION
 query I
 SELECT COUNT(*)
 FROM code_ast
-WHERE is_call(semantic_type);
+WHERE is_call(context.semantic_type);
 ----
 1
 
 # Example 3: Find all control flow constructs
 query II
-SELECT type, semantic_type_to_string(semantic_type) as semantic_type
+SELECT type, semantic_type_to_string(context.semantic_type) as semantic_type
 FROM code_ast
-WHERE is_control_flow(semantic_type)
-ORDER BY start_line;
+WHERE is_control_flow(context.semantic_type)
+ORDER BY source.start_line;
 ----
 return_statement	FLOW_JUMP
 return	FLOW_JUMP
@@ -48,7 +48,7 @@ for	FLOW_LOOP
 # Example 4: Build a summary of code structure
 query II
 SELECT 
-    get_super_kind(semantic_type) as category,
+    get_super_kind(context.semantic_type) as category,
     COUNT(*) as node_count
 FROM code_ast
 GROUP BY category
@@ -63,17 +63,17 @@ META_EXTERNAL	12
 query I
 SELECT COUNT(*)
 FROM code_ast
-WHERE semantic_type = semantic_type_code('DEFINITION_FUNCTION');
+WHERE context.semantic_type = semantic_type_code('DEFINITION_FUNCTION');
 ----
 4
 
 # Example 6: Filter to only searchable types for building an index
 statement ok
 CREATE TEMP TABLE code_index AS
-SELECT node_id, name, type, semantic_type, start_line, end_line
+SELECT node_id, context.name, type, context.semantic_type, source.start_line, source.end_line
 FROM code_ast
-WHERE semantic_type = ANY(get_searchable_types())
-  AND name IS NOT NULL;
+WHERE context.semantic_type = ANY(get_searchable_types())
+  AND context.name IS NOT NULL;
 
 query I
 SELECT COUNT(*) FROM code_index;
@@ -83,10 +83,10 @@ SELECT COUNT(*) FROM code_index;
 # Example 7: Analyze code patterns
 query II
 WITH function_calls AS (
-    SELECT COALESCE(name, '<anonymous>') as name, COUNT(*) as call_count
+    SELECT COALESCE(context.name, '<anonymous>') as name, COUNT(*) as call_count
     FROM code_ast
-    WHERE is_call(semantic_type)
-    GROUP BY name
+    WHERE is_call(context.semantic_type)
+    GROUP BY context.name
 )
 SELECT * FROM function_calls
 ORDER BY call_count DESC, name;
@@ -95,9 +95,9 @@ ORDER BY call_count DESC, name;
 
 # Example 8: Find error handling patterns
 query I
-SELECT COUNT(DISTINCT parent_id) as try_blocks
+SELECT COUNT(DISTINCT structure.parent_id) as try_blocks
 FROM code_ast
-WHERE semantic_type IN (
+WHERE context.semantic_type IN (
     semantic_type_code('ERROR_TRY'),
     semantic_type_code('ERROR_CATCH'),
     semantic_type_code('ERROR_THROW'),
@@ -109,18 +109,18 @@ WHERE semantic_type IN (
 # Example 9: Create a code navigation index
 query IIII
 SELECT 
-    name,
-    semantic_type_to_string(semantic_type) as type,
-    start_line,
-    end_line
+    context.name,
+    semantic_type_to_string(context.semantic_type) as type,
+    source.start_line,
+    source.end_line
 FROM code_ast
-WHERE semantic_type IN (
+WHERE context.semantic_type IN (
     semantic_type_code('DEFINITION_FUNCTION'),
     semantic_type_code('DEFINITION_CLASS'),
     semantic_type_code('EXTERNAL_IMPORT')
 )
-AND name IS NOT NULL
-ORDER BY start_line;
+AND context.name IS NOT NULL
+ORDER BY source.start_line;
 ----
 calculate_sum	DEFINITION_FUNCTION	1	2
 DataProcessor	DEFINITION_CLASS	4	6
@@ -138,11 +138,11 @@ SELECT *, 'java' as language FROM parse_ast('public void hello() {}', 'java');
 query III
 SELECT 
     language,
-    name,
-    semantic_type_to_string(semantic_type) as type
+    context.name,
+    semantic_type_to_string(context.semantic_type) as type
 FROM multi_lang_ast
-WHERE is_definition(semantic_type)
-  AND name = 'hello'
+WHERE is_definition(context.semantic_type)
+  AND context.name = 'hello'
 ORDER BY language;
 ----
 java	hello	DEFINITION_FUNCTION

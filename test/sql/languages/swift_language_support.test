@@ -24,7 +24,7 @@ true
 # =============================================
 
 query I
-SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', 'swift') WHERE name IS NOT NULL;
+SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', 'swift') WHERE context.name IS NOT NULL;
 ----
 2556
 
@@ -77,10 +77,10 @@ WHERE type = 'protocol_declaration';
 # ===============================================
 
 query III
-SELECT type, semantic_type, COUNT(*) as count
+SELECT type, context.semantic_type, COUNT(*) as count
 FROM read_ast('test/data/swift/simple.swift', 'swift')
 WHERE type IN ('function_declaration', 'class_declaration', 'property_declaration')
-GROUP BY type, semantic_type
+GROUP BY type, context.semantic_type
 ORDER BY type;
 ----
 class_declaration	248	14
@@ -91,7 +91,7 @@ property_declaration	244	75
 # ========================================
 
 query II
-SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+SELECT MAX(structure.depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/swift/simple.swift', 'swift');
 ----
 25	4838
@@ -101,7 +101,7 @@ FROM read_ast('test/data/swift/simple.swift', 'swift');
 
 query I
 SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', 'swift')
-WHERE type = 'simple_identifier' AND name IS NOT NULL;
+WHERE type = 'simple_identifier' AND context.name IS NOT NULL;
 ----
 654
 
