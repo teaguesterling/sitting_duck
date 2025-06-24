@@ -24,7 +24,7 @@ true
 # ===========================================
 
 query I
-SELECT COUNT(*) FROM read_ast('test/data/cpp/simple.cpp', 'cpp') WHERE name IS NOT NULL;
+SELECT COUNT(*) FROM read_ast('test/data/cpp/simple.cpp', 'cpp') WHERE context.name IS NOT NULL;
 ----
 356
 
@@ -32,9 +32,9 @@ SELECT COUNT(*) FROM read_ast('test/data/cpp/simple.cpp', 'cpp') WHERE name IS N
 # ===========================
 
 query II
-SELECT DISTINCT name, type FROM read_ast('test/data/cpp/simple.cpp')
-WHERE type = 'type_identifier' AND name IN ('Container', 'Calculator')
-ORDER BY name;
+SELECT DISTINCT context.name, type FROM read_ast('test/data/cpp/simple.cpp')
+WHERE type = 'type_identifier' AND context.name IN ('Container', 'Calculator')
+ORDER BY context.name;
 ----
 Calculator	type_identifier
 Container	type_identifier
@@ -43,9 +43,9 @@ Container	type_identifier
 # ===============================
 
 query II
-SELECT DISTINCT name, type FROM read_ast('test/data/cpp/simple.cpp')
-WHERE type = 'namespace_identifier' AND name IS NOT NULL
-ORDER BY name;
+SELECT DISTINCT context.name, type FROM read_ast('test/data/cpp/simple.cpp')
+WHERE type = 'namespace_identifier' AND context.name IS NOT NULL
+ORDER BY context.name;
 ----
 std	namespace_identifier
 utils	namespace_identifier
@@ -54,9 +54,9 @@ utils	namespace_identifier
 # ==============================
 
 query II
-SELECT DISTINCT name, type FROM read_ast('test/data/cpp/simple.cpp')
-WHERE type = 'field_identifier' AND name IN ('add', 'multiply', 'size')
-ORDER BY name;
+SELECT DISTINCT context.name, type FROM read_ast('test/data/cpp/simple.cpp')
+WHERE type = 'field_identifier' AND context.name IN ('add', 'multiply', 'size')
+ORDER BY context.name;
 ----
 add	field_identifier
 multiply	field_identifier
@@ -75,10 +75,10 @@ WHERE type = 'template_declaration';
 # ==========================
 
 query III
-SELECT type, semantic_type, COUNT(*) as count
+SELECT type, context.semantic_type, COUNT(*) as count
 FROM read_ast('test/data/cpp/simple.cpp')
 WHERE type IN ('class_specifier', 'function_definition', 'namespace_definition', 'template_declaration', 'call_expression')
-GROUP BY type, semantic_type
+GROUP BY type, context.semantic_type
 ORDER BY type;
 ----
 call_expression	208	7
@@ -91,7 +91,7 @@ template_declaration	104	2
 # =====================================
 
 query II
-SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+SELECT MAX(structure.depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/cpp/simple.cpp');
 ----
 11	498
@@ -101,6 +101,6 @@ FROM read_ast('test/data/cpp/simple.cpp');
 
 query I
 SELECT COUNT(*) FROM read_ast('test/data/cpp/simple.cpp')
-WHERE type = 'identifier' AND name IS NOT NULL;
+WHERE type = 'identifier' AND context.name IS NOT NULL;
 ----
 53

@@ -24,7 +24,7 @@ true
 # ==============================================
 
 query I
-SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python') WHERE name IS NOT NULL;
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python') WHERE context.name IS NOT NULL;
 ----
 31
 
@@ -32,9 +32,9 @@ SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python') WHERE name
 # =======================================
 
 query II
-SELECT name, type FROM read_ast('test/data/python/simple.py')
-WHERE type = 'function_definition' AND name IS NOT NULL
-ORDER BY start_line;
+SELECT context.name, type FROM read_ast('test/data/python/simple.py')
+WHERE type = 'function_definition' AND context.name IS NOT NULL
+ORDER BY source.start_line;
 ----
 hello	function_definition
 __init__	function_definition
@@ -45,8 +45,8 @@ main	function_definition
 # ==============================
 
 query II
-SELECT name, type FROM read_ast('test/data/python/simple.py')
-WHERE type = 'class_definition' AND name IS NOT NULL;
+SELECT context.name, type FROM read_ast('test/data/python/simple.py')
+WHERE type = 'class_definition' AND context.name IS NOT NULL;
 ----
 MyClass	class_definition
 
@@ -63,10 +63,10 @@ WHERE type = 'call';
 # =============================
 
 query III
-SELECT type, semantic_type, COUNT(*) as count
+SELECT type, context.semantic_type, COUNT(*) as count
 FROM read_ast('test/data/python/simple.py')
 WHERE type IN ('function_definition', 'class_definition', 'call', 'assignment')
-GROUP BY type, semantic_type
+GROUP BY type, context.semantic_type
 ORDER BY type;
 ----
 assignment	244	2
@@ -78,7 +78,7 @@ function_definition	240	4
 # ========================================
 
 query II
-SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
+SELECT MAX(structure.depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/python/simple.py');
 ----
 8	110
@@ -88,7 +88,7 @@ FROM read_ast('test/data/python/simple.py');
 
 query I
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py')
-WHERE type = 'identifier' AND name IS NOT NULL;
+WHERE type = 'identifier' AND context.name IS NOT NULL;
 ----
 19
 
@@ -97,6 +97,6 @@ WHERE type = 'identifier' AND name IS NOT NULL;
 
 query I
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py')
-WHERE type = 'string' AND name IS NOT NULL;
+WHERE type = 'string' AND context.name IS NOT NULL;
 ----
 4
