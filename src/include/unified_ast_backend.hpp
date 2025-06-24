@@ -141,6 +141,9 @@ public:
     
     // NEW: Hierarchical table projection
     static void ProjectToHierarchicalTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index);
+    static void ProjectToHierarchicalTableStreaming(const vector<ASTNode>& nodes, DataChunk& output, 
+                                                   idx_t start_row, idx_t& output_index, 
+                                                   const ASTSource& source_info);
     static Value CreateHierarchicalASTStruct(const ASTResult& result);
     
     // Templated parsing implementation - avoids virtual calls in hot path

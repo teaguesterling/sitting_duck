@@ -7,6 +7,8 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/file_system.hpp"
+#include "duckdb/common/vector_operations/generic_executor.hpp"
+#include "duckdb/common/types/vector.hpp"
 #include "duckdb/parallel/task_executor.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "utf8proc_wrapper.hpp"
@@ -569,6 +571,102 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult& result, Data
         
         count++;
         current_row++;
+    }
+    
+    output_index += count;
+}
+
+void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode>& nodes, DataChunk& output, 
+                                                          idx_t start_row, idx_t& output_index, 
+                                                          const ASTSource& source_info) {
+    // Verify output chunk has correct number of columns (5 for hierarchical STRUCT schema)
+    if (output.ColumnCount() != 5) {
+        throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 5 for hierarchical STRUCT schema");
+    }
+    
+    // Get output vectors
+    auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
+    auto peek_vec = FlatVector::GetData<string_t>(output.data[4]);
+    auto &peek_validity = FlatVector::Validity(output.data[4]);
+    
+    // Get STRUCT child vectors using StructVector::GetEntries()
+    auto &source_entries = StructVector::GetEntries(output.data[1]);
+    auto &structure_entries = StructVector::GetEntries(output.data[2]);
+    auto &context_entries = StructVector::GetEntries(output.data[3]);
+    
+    // Source STRUCT child vectors (file_path, language, start_line, start_column, end_line, end_column)
+    auto source_file_path_vec = FlatVector::GetData<string_t>(*source_entries[0]);
+    auto source_language_vec = FlatVector::GetData<string_t>(*source_entries[1]);
+    auto source_start_line_vec = FlatVector::GetData<uint32_t>(*source_entries[2]);
+    auto source_start_column_vec = FlatVector::GetData<uint32_t>(*source_entries[3]);
+    auto source_end_line_vec = FlatVector::GetData<uint32_t>(*source_entries[4]);
+    auto source_end_column_vec = FlatVector::GetData<uint32_t>(*source_entries[5]);
+    
+    // Structure STRUCT child vectors (parent_id, depth, sibling_index, children_count, descendant_count)
+    auto structure_parent_id_vec = FlatVector::GetData<int64_t>(*structure_entries[0]);
+    auto &structure_parent_validity = FlatVector::Validity(*structure_entries[0]);
+    auto structure_depth_vec = FlatVector::GetData<uint32_t>(*structure_entries[1]);
+    auto structure_sibling_index_vec = FlatVector::GetData<uint32_t>(*structure_entries[2]);
+    auto structure_children_count_vec = FlatVector::GetData<uint32_t>(*structure_entries[3]);
+    auto structure_descendant_count_vec = FlatVector::GetData<uint32_t>(*structure_entries[4]);
+    
+    // Context STRUCT child vectors (type, name, semantic_type, universal_flags, arity_bin)
+    auto context_type_vec = FlatVector::GetData<string_t>(*context_entries[0]);
+    auto context_name_vec = FlatVector::GetData<string_t>(*context_entries[1]);
+    auto &context_name_validity = FlatVector::Validity(*context_entries[1]);
+    auto context_semantic_type_vec = FlatVector::GetData<uint8_t>(*context_entries[2]);
+    auto context_universal_flags_vec = FlatVector::GetData<uint8_t>(*context_entries[3]);
+    auto context_arity_bin_vec = FlatVector::GetData<uint8_t>(*context_entries[4]);
+    
+    idx_t count = 0;
+    idx_t max_count = STANDARD_VECTOR_SIZE - output_index;  // Account for already used rows
+    
+    // Process nodes starting from start_row
+    for (idx_t i = start_row; i < nodes.size() && count < max_count; i++) {
+        const auto& node = nodes[i];
+        idx_t row_idx = output_index + count;
+        
+        // Core identity
+        node_id_vec[row_idx] = node.node_id;
+        
+        // Populate source STRUCT fields
+        source_file_path_vec[row_idx] = StringVector::AddString(*source_entries[0], source_info.file_path);
+        source_language_vec[row_idx] = StringVector::AddString(*source_entries[1], source_info.language);
+        source_start_line_vec[row_idx] = node.file_position.start_line;
+        source_start_column_vec[row_idx] = node.file_position.start_column;
+        source_end_line_vec[row_idx] = node.file_position.end_line;
+        source_end_column_vec[row_idx] = node.file_position.end_column;
+        
+        // Populate structure STRUCT fields
+        if (node.tree_position.parent_index < 0) {
+            structure_parent_validity.SetInvalid(row_idx);
+        } else {
+            structure_parent_id_vec[row_idx] = node.tree_position.parent_index;
+        }
+        structure_depth_vec[row_idx] = node.tree_position.node_depth;
+        structure_sibling_index_vec[row_idx] = node.tree_position.sibling_index;
+        structure_children_count_vec[row_idx] = node.subtree.children_count;
+        structure_descendant_count_vec[row_idx] = node.subtree.descendant_count;
+        
+        // Populate context STRUCT fields
+        context_type_vec[row_idx] = StringVector::AddString(*context_entries[0], node.type.raw);
+        if (!node.name.raw.empty()) {
+            context_name_vec[row_idx] = StringVector::AddString(*context_entries[1], node.name.raw);
+        } else {
+            context_name_validity.SetInvalid(row_idx);
+        }
+        context_semantic_type_vec[row_idx] = node.semantic_type;
+        context_universal_flags_vec[row_idx] = node.universal_flags;
+        context_arity_bin_vec[row_idx] = node.arity_bin;
+        
+        // Content Preview 
+        if (!node.peek.empty()) {
+            peek_vec[row_idx] = StringVector::AddString(output.data[4], node.peek);
+        } else {
+            peek_validity.SetInvalid(row_idx);
+        }
+        
+        count++;
     }
     
     output_index += count;
