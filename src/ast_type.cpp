@@ -13,41 +13,71 @@ Value ASTNode::ToValue() const {
     // Core Semantic Identity
     struct_values.emplace_back("node_id", Value::UBIGINT(node_id));
     
-    // Type struct
-    child_list_t<Value> type_values;
-    type_values.emplace_back("raw", Value(type.raw));
-    type_values.emplace_back("normalized", Value(type.normalized));
-    type_values.emplace_back("kind", Value(type.kind));
-    struct_values.emplace_back("type", Value::STRUCT(move(type_values)));
+    // HIERARCHICAL STRUCTURE: Raw type (simplified)
+    struct_values.emplace_back("type", Value(type.raw));
     
-    // Name struct
-    child_list_t<Value> name_values;
-    name_values.emplace_back("raw", name.raw.empty() ? Value(LogicalType::VARCHAR) : Value(name.raw));
-    name_values.emplace_back("qualified", name.qualified.empty() ? Value(LogicalType::VARCHAR) : Value(name.qualified));
-    struct_values.emplace_back("name", Value::STRUCT(move(name_values)));
+    // Source location struct
+    child_list_t<Value> source_values;
+    source_values.emplace_back("file_path", source.file_path.empty() ? Value(LogicalType::VARCHAR) : Value(source.file_path));
+    source_values.emplace_back("language", source.language.empty() ? Value(LogicalType::VARCHAR) : Value(source.language));
+    source_values.emplace_back("start_line", Value::UINTEGER(source.start_line));
+    source_values.emplace_back("start_column", Value::UINTEGER(source.start_column));
+    source_values.emplace_back("end_line", Value::UINTEGER(source.end_line));
+    source_values.emplace_back("end_column", Value::UINTEGER(source.end_column));
+    struct_values.emplace_back("source", Value::STRUCT(move(source_values)));
     
-    // File position struct
-    child_list_t<Value> file_pos_values;
-    file_pos_values.emplace_back("start_line", Value::BIGINT(file_position.start_line));
-    file_pos_values.emplace_back("end_line", Value::BIGINT(file_position.end_line));
-    file_pos_values.emplace_back("start_column", Value::USMALLINT(file_position.start_column));
-    file_pos_values.emplace_back("end_column", Value::USMALLINT(file_position.end_column));
-    struct_values.emplace_back("file_position", Value::STRUCT(move(file_pos_values)));
+    // Tree structure struct
+    child_list_t<Value> structure_values;
+    structure_values.emplace_back("parent_id", structure.parent_id < 0 ? Value(LogicalType::BIGINT) : Value::BIGINT(structure.parent_id));
+    structure_values.emplace_back("depth", Value::UINTEGER(structure.depth));
+    structure_values.emplace_back("sibling_index", Value::UINTEGER(structure.sibling_index));
+    structure_values.emplace_back("children_count", Value::UINTEGER(structure.children_count));
+    structure_values.emplace_back("descendant_count", Value::UINTEGER(structure.descendant_count));
+    struct_values.emplace_back("structure", Value::STRUCT(move(structure_values)));
     
-    // Tree position struct
-    child_list_t<Value> tree_pos_values;
-    tree_pos_values.emplace_back("node_index", Value::BIGINT(tree_position.node_index));
-    tree_pos_values.emplace_back("parent_index", tree_position.parent_index < 0 ? Value(LogicalType::BIGINT) : Value::BIGINT(tree_position.parent_index));
-    tree_pos_values.emplace_back("sibling_index", Value::UINTEGER(tree_position.sibling_index));
-    tree_pos_values.emplace_back("node_depth", Value::UTINYINT(tree_position.node_depth));
-    struct_values.emplace_back("tree_position", Value::STRUCT(move(tree_pos_values)));
+    // Context struct with native context
+    child_list_t<Value> context_values;
+    context_values.emplace_back("name", context.name.empty() ? Value(LogicalType::VARCHAR) : Value(context.name));
+    context_values.emplace_back("semantic_type", Value::UTINYINT(context.normalized.semantic_type));
+    context_values.emplace_back("flags", Value::UTINYINT(context.normalized.universal_flags));
     
-    // Subtree info struct
-    child_list_t<Value> subtree_values;
-    subtree_values.emplace_back("tree_depth", Value::UTINYINT(subtree.tree_depth));
-    subtree_values.emplace_back("children_count", Value::USMALLINT(subtree.children_count));
-    subtree_values.emplace_back("descendant_count", Value::USMALLINT(subtree.descendant_count));
-    struct_values.emplace_back("subtree", Value::STRUCT(move(subtree_values)));
+    // Native context struct
+    child_list_t<Value> native_values;
+    native_values.emplace_back("signature_type", context.native.signature_type.empty() ? Value(LogicalType::VARCHAR) : Value(context.native.signature_type));
+    
+    // Parameters array
+    vector<Value> param_values;
+    for (const auto& param : context.native.parameters) {
+        child_list_t<Value> param_struct;
+        param_struct.emplace_back("name", param.name.empty() ? Value(LogicalType::VARCHAR) : Value(param.name));
+        param_struct.emplace_back("type", param.type.empty() ? Value(LogicalType::VARCHAR) : Value(param.type));
+        param_struct.emplace_back("default_value", param.default_value.empty() ? Value(LogicalType::VARCHAR) : Value(param.default_value));
+        param_struct.emplace_back("is_optional", Value::BOOLEAN(param.is_optional));
+        param_struct.emplace_back("is_variadic", Value::BOOLEAN(param.is_variadic));
+        param_struct.emplace_back("annotations", param.annotations.empty() ? Value(LogicalType::VARCHAR) : Value(param.annotations));
+        param_values.push_back(Value::STRUCT(move(param_struct)));
+    }
+    native_values.emplace_back("parameters", Value::LIST(LogicalType::STRUCT({
+        {"name", LogicalType::VARCHAR},
+        {"type", LogicalType::VARCHAR}, 
+        {"default_value", LogicalType::VARCHAR},
+        {"is_optional", LogicalType::BOOLEAN},
+        {"is_variadic", LogicalType::BOOLEAN},
+        {"annotations", LogicalType::VARCHAR}
+    }), param_values));
+    
+    // Modifiers array
+    vector<Value> modifier_values;
+    for (const auto& modifier : context.native.modifiers) {
+        modifier_values.push_back(Value(modifier));
+    }
+    native_values.emplace_back("modifiers", Value::LIST(LogicalType::VARCHAR, modifier_values));
+    
+    native_values.emplace_back("qualified_name", context.native.qualified_name.empty() ? Value(LogicalType::VARCHAR) : Value(context.native.qualified_name));
+    native_values.emplace_back("annotations", context.native.annotations.empty() ? Value(LogicalType::VARCHAR) : Value(context.native.annotations));
+    
+    context_values.emplace_back("native", Value::STRUCT(move(native_values)));
+    struct_values.emplace_back("context", Value::STRUCT(move(context_values)));
     
     // Content preview
     struct_values.emplace_back("peek", Value(peek));

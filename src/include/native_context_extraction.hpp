@@ -50,13 +50,59 @@ struct NativeExtractionTraits {
     using ExtractorType = NativeExtractor<Strategy>;
 };
 
-// Specializations for each language adapter (to be defined in adapter files)
-// Example:
-// template<>
-// struct NativeExtractionTraits<PythonAdapter> {
-//     template<NativeExtractionStrategy Strategy>
-//     using ExtractorType = PythonNativeExtractor<Strategy>;
-// };
+// Forward declare language adapters for traits
+class PythonAdapter;
+class JavaScriptAdapter;
+class TypeScriptAdapter;
+
+// Specializations for each language adapter
+template<>
+struct NativeExtractionTraits<PythonAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = PythonNativeExtractor<Strategy>;
+};
+
+template<>
+struct NativeExtractionTraits<JavaScriptAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = JavaScriptNativeExtractor<Strategy>;
+};
+
+template<>
+struct NativeExtractionTraits<TypeScriptAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = TypeScriptNativeExtractor<Strategy>;
+};
+
+//==============================================================================
+// Main Template Dispatch Function (Zero Virtual Calls)
+//==============================================================================
+
+// Dynamic strategy dispatch function - called from hot loop
+template<typename AdapterType>
+NativeContext ExtractNativeContextTemplated(TSNode node, const string& content, NativeExtractionStrategy strategy) {
+    // Runtime dispatch to language-specific extractors
+    // Uses template traits to get the correct extractor type for each language
+    switch (strategy) {
+        case NativeExtractionStrategy::FUNCTION_WITH_PARAMS:
+            return NativeExtractionTraits<AdapterType>::template ExtractorType<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
+        case NativeExtractionStrategy::ASYNC_FUNCTION:
+            return NativeExtractionTraits<AdapterType>::template ExtractorType<NativeExtractionStrategy::ASYNC_FUNCTION>::Extract(node, content);
+        case NativeExtractionStrategy::CLASS_WITH_METHODS:
+            return NativeExtractionTraits<AdapterType>::template ExtractorType<NativeExtractionStrategy::CLASS_WITH_METHODS>::Extract(node, content);
+        case NativeExtractionStrategy::VARIABLE_WITH_TYPE:
+            return NativeExtractionTraits<AdapterType>::template ExtractorType<NativeExtractionStrategy::VARIABLE_WITH_TYPE>::Extract(node, content);
+        case NativeExtractionStrategy::ARROW_FUNCTION:
+            return NativeExtractionTraits<AdapterType>::template ExtractorType<NativeExtractionStrategy::ARROW_FUNCTION>::Extract(node, content);
+        case NativeExtractionStrategy::CLASS_WITH_INHERITANCE:
+            return NativeExtractionTraits<AdapterType>::template ExtractorType<NativeExtractionStrategy::CLASS_WITH_INHERITANCE>::Extract(node, content);
+        case NativeExtractionStrategy::FUNCTION_WITH_DECORATORS:
+            return NativeExtractionTraits<AdapterType>::template ExtractorType<NativeExtractionStrategy::FUNCTION_WITH_DECORATORS>::Extract(node, content);
+        case NativeExtractionStrategy::NONE:
+        default:
+            return NativeContext(); // Return empty context for NONE or unknown strategies
+    }
+}
 
 //==============================================================================
 // Helper Functions for Common Extraction Patterns
@@ -77,4 +123,12 @@ vector<string> ExtractModifiersFromNode(TSNode node, const string& content);
 // Helper function to build qualified name from context
 string BuildQualifiedName(TSNode node, const string& content, const string& base_name);
 
+// Helper function to extract node text content
+string ExtractNodeText(TSNode node, const string& content);
+
 } // namespace duckdb
+
+// Include language-specific extractors after function declarations
+#include "python_native_extractors.hpp"
+#include "javascript_native_extractors.hpp"
+#include "typescript_native_extractors.hpp"
