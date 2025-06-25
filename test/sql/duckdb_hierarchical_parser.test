@@ -92,7 +92,7 @@ SELECT
     type as node_type,
     context.semantic_type as semantic_type
 FROM parse_ast('INSERT INTO users (name, email) VALUES (''John'', ''john@example.com'')', 'duckdb') 
-WHERE semantic_type IN (140, 252)
+WHERE context.semantic_type IN (140, 252)
 ORDER BY node_id;
 ----
 program	252
