@@ -4,7 +4,7 @@
 // Package and imports
 DEF_TYPE("package_clause", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0x01)
 DEF_TYPE("package_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0x01)
-DEF_TYPE("import_declaration", EXTERNAL_IMPORT, NONE, NODE_TEXT, 0x01)
+DEF_TYPE("import_declaration", EXTERNAL_IMPORT, NONE, NONE, 0x01)
 DEF_TYPE("import_spec", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0x01)
 
 // Function declarations and definitions with refinements
@@ -37,12 +37,12 @@ DEF_TYPE("field_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
 
 // Literals with refinements - name and value both contain the literal text
-DEF_TYPE("int_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("float_literal", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("imaginary_literal", LITERAL_NUMBER | SemanticRefinements::Number::COMPLEX, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("rune_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("raw_string_literal", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("interpreted_string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("int_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
+DEF_TYPE("float_literal", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
+DEF_TYPE("imaginary_literal", LITERAL_NUMBER | SemanticRefinements::Number::COMPLEX, NODE_TEXT, NONE, 0)
+DEF_TYPE("rune_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("raw_string_literal", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
+DEF_TYPE("interpreted_string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 
 // Control flow with refinements
 DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
@@ -125,9 +125,9 @@ DEF_TYPE(">=", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE("!=", OPERATOR_COMPARISON, NONE, NONE, 0)
 
 // Literals and constants
-DEF_TYPE("nil", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("nil", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
 // Type constructs
 DEF_TYPE("pointer_type", TYPE_REFERENCE, NONE, NONE, 0)
@@ -150,15 +150,15 @@ DEF_TYPE("inc_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
 DEF_TYPE("literal_element", LITERAL_STRUCTURED, NONE, NONE, 0)
 DEF_TYPE("literal_value", LITERAL_STRUCTURED, NONE, NONE, 0)
 DEF_TYPE("composite_literal", LITERAL_STRUCTURED, NONE, NONE, 0)
-DEF_TYPE("interpreted_string_literal_content", LITERAL_STRING, NONE, NODE_TEXT, 0)
+DEF_TYPE("interpreted_string_literal_content", LITERAL_STRING, NONE, NONE, 0)
 
 // Control flow constructs
 DEF_TYPE("expression_case", FLOW_CONDITIONAL, NONE, NONE, 0)
 
 // Comments (mark as syntax to filter out by default)
-DEF_TYPE("comment", METADATA_COMMENT, NONE, NODE_TEXT, 0x08)
-DEF_TYPE("line_comment", METADATA_COMMENT, NONE, NODE_TEXT, 0x08)
-DEF_TYPE("block_comment", METADATA_COMMENT, NONE, NODE_TEXT, 0x08)
+DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0x08)
+DEF_TYPE("line_comment", METADATA_COMMENT, NONE, NONE, 0x08)
+DEF_TYPE("block_comment", METADATA_COMMENT, NONE, NONE, 0x08)
 
 // Go perfection - remaining 2,505 unclassified nodes
 DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, 0)
@@ -167,7 +167,7 @@ DEF_TYPE("|", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 DEF_TYPE("field_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("slice_type", TYPE_COMPOSITE, NONE, NONE, 0)
 DEF_TYPE("dec_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
-DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NODE_TEXT, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
 DEF_TYPE("type_conversion_expression", COMPUTATION_CALL, NONE, NONE, 0)
 DEF_TYPE("label_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE("import_spec_list", ORGANIZATION_LIST, NONE, NONE, 0)
@@ -195,7 +195,7 @@ DEF_TYPE("type_elem", TYPE_REFERENCE, NONE, NONE, 0)
 DEF_TYPE("variadic_parameter_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("type_instantiation_expression", TYPE_GENERIC, NONE, NONE, 0)
 DEF_TYPE("type_arguments", TYPE_GENERIC, NONE, NONE, 0)
-DEF_TYPE("iota", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("iota", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("go", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("map_type", TYPE_COMPOSITE, NONE, NONE, 0)
 DEF_TYPE("map", TYPE_COMPOSITE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)

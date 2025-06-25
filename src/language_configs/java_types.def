@@ -51,17 +51,17 @@ DEF_TYPE("method_reference", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)
 
 // Identifiers and literals
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("decimal_integer_literal", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("hex_integer_literal", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("octal_integer_literal", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("binary_integer_literal", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("decimal_floating_point_literal", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("hex_floating_point_literal", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("character_literal", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("decimal_integer_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("hex_integer_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("octal_integer_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("binary_integer_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("decimal_floating_point_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("hex_floating_point_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("character_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
 // Control flow
 DEF_TYPE("if_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
@@ -89,8 +89,8 @@ DEF_TYPE("marker_annotation", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("annotation_argument_list", ORGANIZATION_LIST, NONE, NONE, 0)
 
 // Comments
-DEF_TYPE("line_comment", METADATA_COMMENT, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("block_comment", METADATA_COMMENT, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("line_comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
+DEF_TYPE("block_comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 // Modifiers
 DEF_TYPE("modifiers", METADATA_ANNOTATION, NONE, NONE, 0)
@@ -141,7 +141,7 @@ DEF_TYPE("formal_parameters", ORGANIZATION_LIST, NONE, NONE, 0)
 DEF_TYPE("block", ORGANIZATION_BLOCK, NONE, NONE, 0)
 DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
 DEF_TYPE("scoped_identifier", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
-DEF_TYPE("string_fragment", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("string_fragment", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("enum_constant", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
 
 // Punctuation

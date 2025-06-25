@@ -58,14 +58,14 @@ DEF_TYPE("template_type", TYPE_GENERIC, NONE, NONE, 0)
 DEF_TYPE("auto", TYPE_GENERIC, NONE, NONE, 0)
 
 // Literals with refinements - name and value both contain the literal text
-DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("raw_string_literal", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("char_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("number_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("nullptr", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("raw_string_literal", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
+DEF_TYPE("char_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("number_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
+DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("nullptr", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("initializer_list", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
 
 // Control flow with refinements
@@ -98,14 +98,14 @@ DEF_TYPE("argument_list", ORGANIZATION_LIST, NONE, NONE, 0)
 DEF_TYPE("template_parameter_list", ORGANIZATION_LIST, NONE, NONE, 0)
 
 // External/Import
-DEF_TYPE("preproc_include", EXTERNAL_IMPORT, NONE, NODE_TEXT, 0)
+DEF_TYPE("preproc_include", EXTERNAL_IMPORT, NONE, NONE, 0)
 DEF_TYPE("using_declaration", EXTERNAL_IMPORT, NONE, NONE, 0)
 
 // Preprocessor/Metadata
-DEF_TYPE("preproc_def", METADATA_DIRECTIVE, NONE, NODE_TEXT, 0)
+DEF_TYPE("preproc_def", METADATA_DIRECTIVE, NONE, NONE, 0)
 DEF_TYPE("preproc_ifdef", METADATA_DIRECTIVE, NONE, NONE, 0)
 DEF_TYPE("preproc_ifndef", METADATA_DIRECTIVE, NONE, NONE, 0)
-DEF_TYPE("comment", METADATA_COMMENT, NONE, NODE_TEXT, 0)
+DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
 
 // ====================================
 // PUNCTUATION TOKENS (12.2M misclassified nodes fix)
@@ -222,9 +222,9 @@ DEF_TYPE("sizeof", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWOR
 DEF_TYPE("new", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("delete", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("this", NAME_SCOPED, NODE_TEXT, NONE, 0)
-DEF_TYPE("nullptr", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("nullptr", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
 // Preprocessor directives
 DEF_TYPE("#include", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
@@ -239,9 +239,9 @@ DEF_TYPE("#undef", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
 DEF_TYPE("#pragma", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
 
 // String/character content
-DEF_TYPE("string_content", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("character", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("string_content", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("character", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
 // C++ specific constructs
 DEF_TYPE("template_function", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
@@ -281,9 +281,9 @@ DEF_TYPE("preproc_params", ORGANIZATION_LIST, NONE, NONE, 0)
 DEF_TYPE("preproc_function_def", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("default_method_clause", DEFINITION_FUNCTION, NONE, NONE, 0)
 DEF_TYPE("operator", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("raw_string_delimiter", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("raw_string_delimiter", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("operator_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("raw_string_content", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("raw_string_content", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("R\"", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE("noexcept", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("destructor_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
@@ -301,7 +301,7 @@ DEF_TYPE("preproc_else", METADATA_DIRECTIVE, NONE, NONE, 0)
 DEF_TYPE("\n", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE("preproc_if", METADATA_DIRECTIVE, NONE, NONE, 0)
 DEF_TYPE("explicit", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("concatenated_string", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("concatenated_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
 // ==============================================================================
 // Parser-level semantic mappings only

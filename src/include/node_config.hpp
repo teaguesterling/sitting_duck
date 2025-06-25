@@ -17,20 +17,40 @@ enum class ExtractionStrategy : uint8_t {
     CUSTOM = 6                  // Language-specific custom logic
 };
 
+// Native context extraction strategies - pattern-based approach
+enum class NativeExtractionStrategy : uint8_t {
+    NONE = 0,                   // No native context extraction
+    FUNCTION_WITH_PARAMS,       // Standard function with parameter list
+    FUNCTION_WITH_DECORATORS,   // Function with annotations/decorators  
+    ARROW_FUNCTION,             // Lambda/arrow function pattern
+    ASYNC_FUNCTION,             // Async function pattern
+    CLASS_WITH_INHERITANCE,     // Class with base classes
+    CLASS_WITH_METHODS,         // Class with method definitions
+    VARIABLE_WITH_TYPE,         // Typed variable assignment
+    GENERIC_FUNCTION,           // Function with generic parameters
+    METHOD_DEFINITION,          // Class/object method
+    CONSTRUCTOR_DEFINITION,     // Constructor/initializer
+    INTERFACE_DEFINITION,       // Interface/trait/protocol
+    ENUM_DEFINITION,            // Enum/union type
+    IMPORT_STATEMENT,           // Import/include/using
+    EXPORT_STATEMENT,           // Export/public declarations
+    CUSTOM = 255                // Language-specific custom logic
+};
+
 // Simple node configuration
 struct NodeConfig {
-    uint8_t semantic_type;          // 8-bit: bits 2-7 = type, bits 0-1 = refinement (using unused language_specific bits)
-    ExtractionStrategy name_strategy;  // How to extract names
-    ExtractionStrategy value_strategy; // How to extract values
-    uint8_t flags;                  // Basic flags (IS_KEYWORD, IS_PUBLIC, IS_UNSAFE)
+    uint8_t semantic_type;              // 8-bit: bits 2-7 = type, bits 0-1 = refinement
+    ExtractionStrategy name_strategy;   // How to extract names
+    NativeExtractionStrategy native_strategy; // Native context extraction pattern (repurposed from value_strategy)
+    uint8_t flags;                      // Basic flags (IS_KEYWORD, IS_PUBLIC, IS_UNSAFE)
     
     // Constructor
     NodeConfig(uint8_t sem_type = 0, 
                ExtractionStrategy name_strat = ExtractionStrategy::NONE,
-               ExtractionStrategy value_strat = ExtractionStrategy::NONE,
+               NativeExtractionStrategy native_strat = NativeExtractionStrategy::NONE,
                uint8_t node_flags = 0)
         : semantic_type(sem_type), name_strategy(name_strat), 
-          value_strategy(value_strat), flags(node_flags) {}
+          native_strategy(native_strat), flags(node_flags) {}
 };
 
 // Universal flags for orthogonal node properties
