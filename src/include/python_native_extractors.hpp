@@ -22,21 +22,42 @@ template<>
 struct PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
-        context.signature_type = ""; // Python functions don't have explicit return type unless annotated
+        
+        // Debug: Add a test modifier to verify extractor is called
+        context.modifiers.push_back("python_extractor_called");
+        
+        // Extract return type if present (for type-annotated functions)
+        context.signature_type = ExtractPythonReturnType(node, content);
         
         // Extract function parameters
         context.parameters = ExtractPythonParameters(node, content);
         
         // Extract decorators if present
         auto decorators = ExtractPythonDecorators(node, content);
-        if (!decorators.empty()) {
-            context.modifiers = decorators;
+        for (const auto& decorator : decorators) {
+            context.modifiers.push_back(decorator);
         }
         
         return context;
     }
     
 private:
+    static string ExtractPythonReturnType(TSNode node, const string& content) {
+        // Look for type annotation after -> in function definition
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (strcmp(child_type, "->") == 0 && i + 1 < child_count) {
+                // Next child should be the return type
+                TSNode type_node = ts_node_child(node, i + 1);
+                return ExtractNodeText(type_node, content);
+            }
+        }
+        return ""; // No return type annotation
+    }
+
     static vector<ParameterInfo> ExtractPythonParameters(TSNode node, const string& content) {
         vector<ParameterInfo> params;
         
@@ -48,12 +69,112 @@ private:
             
             if (strcmp(child_type, "parameters") == 0) {
                 // Extract each parameter from the parameters list
-                params = ExtractParameterList(child, content);
+                params = ExtractPythonParametersDirect(child, content);
                 break;
             }
         }
         
         return params;
+    }
+    
+    static vector<ParameterInfo> ExtractPythonParametersDirect(TSNode params_node, const string& content) {
+        vector<ParameterInfo> parameters;
+        
+        uint32_t child_count = ts_node_child_count(params_node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(params_node, i);
+            const char* child_type = ts_node_type(child);
+            
+            ParameterInfo param;
+            bool is_valid_param = false;
+            
+            if (strcmp(child_type, "identifier") == 0) {
+                // Simple parameter: def func(param):
+                param.name = ExtractNodeText(child, content);
+                is_valid_param = true;
+            } else if (strcmp(child_type, "typed_parameter") == 0) {
+                // Typed parameter: def func(param: int):
+                param = ExtractTypedParameter(child, content);
+                is_valid_param = !param.name.empty();
+            } else if (strcmp(child_type, "default_parameter") == 0) {
+                // Parameter with default: def func(param=default):
+                param = ExtractDefaultParameter(child, content);
+                is_valid_param = !param.name.empty();
+            } else if (strcmp(child_type, "typed_default_parameter") == 0) {
+                // Typed parameter with default: def func(param: int = default):
+                param = ExtractTypedDefaultParameter(child, content);
+                is_valid_param = !param.name.empty();
+            }
+            
+            if (is_valid_param) {
+                parameters.push_back(param);
+            }
+        }
+        
+        return parameters;
+    }
+    
+    static ParameterInfo ExtractTypedParameter(TSNode node, const string& content) {
+        ParameterInfo param;
+        uint32_t child_count = ts_node_child_count(node);
+        
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (strcmp(child_type, "identifier") == 0) {
+                param.name = ExtractNodeText(child, content);
+            } else if (strcmp(child_type, "type") == 0) {
+                param.type = ExtractNodeText(child, content);
+            }
+        }
+        
+        return param;
+    }
+    
+    static ParameterInfo ExtractDefaultParameter(TSNode node, const string& content) {
+        ParameterInfo param;
+        param.is_optional = true;
+        uint32_t child_count = ts_node_child_count(node);
+        
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (strcmp(child_type, "identifier") == 0) {
+                param.name = ExtractNodeText(child, content);
+            } else if (strcmp(child_type, "=") != 0 && param.name.empty() == false) {
+                // This is likely the default value (skip the = sign)
+                param.default_value = ExtractNodeText(child, content);
+            }
+        }
+        
+        return param;
+    }
+    
+    static ParameterInfo ExtractTypedDefaultParameter(TSNode node, const string& content) {
+        ParameterInfo param;
+        param.is_optional = true;
+        uint32_t child_count = ts_node_child_count(node);
+        
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (strcmp(child_type, "identifier") == 0) {
+                param.name = ExtractNodeText(child, content);
+            } else if (strcmp(child_type, "type") == 0) {
+                param.type = ExtractNodeText(child, content);
+            } else if (strcmp(child_type, "=") != 0 && 
+                       strcmp(child_type, "identifier") != 0 &&
+                       strcmp(child_type, "type") != 0 &&
+                       strcmp(child_type, ":") != 0) {
+                // This is likely the default value
+                param.default_value = ExtractNodeText(child, content);
+            }
+        }
+        
+        return param;
     }
     
     static vector<string> ExtractPythonDecorators(TSNode node, const string& content) {

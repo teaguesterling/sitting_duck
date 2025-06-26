@@ -152,6 +152,7 @@ struct ContextInfo {
     string name;                    // Available if context >= NORMALIZED
     NormalizedSemantics normalized; // Available if context >= NODE_TYPES_ONLY
     NativeContext native;           // Available if context >= NATIVE
+    bool native_extraction_attempted = false; // Track if native extraction was attempted
     
     // Default constructor
     ContextInfo() = default;

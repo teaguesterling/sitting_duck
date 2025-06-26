@@ -622,11 +622,15 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
     auto structure_children_count_vec = FlatVector::GetData<uint32_t>(*structure_entries[3]);
     auto structure_descendant_count_vec = FlatVector::GetData<uint32_t>(*structure_entries[4]);
     
-    // Context STRUCT child vectors (name, semantic_type, flags) - type moved to base level
+    // Context STRUCT child vectors (name, semantic_type, flags, native) - type moved to base level
     auto context_name_vec = FlatVector::GetData<string_t>(*context_entries[0]);
     auto &context_name_validity = FlatVector::Validity(*context_entries[0]);
     auto context_semantic_type_vec = FlatVector::GetData<uint8_t>(*context_entries[1]);
     auto context_flags_vec = FlatVector::GetData<uint8_t>(*context_entries[2]);
+    
+    // Native context STRUCT child vectors (4th field in context)
+    auto &native_entries = StructVector::GetEntries(*context_entries[3]);
+    auto &native_validity = FlatVector::Validity(*context_entries[3]);
     
     idx_t count = 0;
     idx_t max_count = STANDARD_VECTOR_SIZE - output_index;  // Account for already used rows
@@ -660,13 +664,80 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
         structure_descendant_count_vec[row_idx] = node.subtree.descendant_count;
         
         // Populate context STRUCT fields (no type field - moved to base level)
-        if (!node.name.raw.empty()) {
-            context_name_vec[row_idx] = StringVector::AddString(*context_entries[0], node.name.raw);
+        if (!node.context.name.empty()) {
+            context_name_vec[row_idx] = StringVector::AddString(*context_entries[0], node.context.name);
         } else {
             context_name_validity.SetInvalid(row_idx);
         }
-        context_semantic_type_vec[row_idx] = node.semantic_type;
-        context_flags_vec[row_idx] = node.universal_flags;
+        context_semantic_type_vec[row_idx] = node.context.normalized.semantic_type;
+        context_flags_vec[row_idx] = node.context.normalized.universal_flags;
+        
+        // Populate native context STRUCT (4th field in context)
+        if (node.context.native_extraction_attempted) {
+            // TRACE: Debug native context population
+            if (node.type.raw == "function_definition") {
+                printf("TRACE: Populating native context, modifiers count=%zu\n", node.context.native.modifiers.size());
+            }
+            
+            // Native context was extracted - populate the struct fields directly
+            // Native struct has: signature_type, parameters, modifiers, qualified_name, annotations
+            auto native_signature_type_vec = FlatVector::GetData<string_t>(*native_entries[0]);
+            auto &native_signature_type_validity = FlatVector::Validity(*native_entries[0]);
+            auto native_qualified_name_vec = FlatVector::GetData<string_t>(*native_entries[3]);
+            auto &native_qualified_name_validity = FlatVector::Validity(*native_entries[3]);
+            auto native_annotations_vec = FlatVector::GetData<string_t>(*native_entries[4]);
+            auto &native_annotations_validity = FlatVector::Validity(*native_entries[4]);
+            
+            // Populate simple fields
+            if (!node.context.native.signature_type.empty()) {
+                native_signature_type_vec[row_idx] = StringVector::AddString(*native_entries[0], node.context.native.signature_type);
+            } else {
+                native_signature_type_validity.SetInvalid(row_idx);
+            }
+            
+            if (!node.context.native.qualified_name.empty()) {
+                native_qualified_name_vec[row_idx] = StringVector::AddString(*native_entries[3], node.context.native.qualified_name);
+            } else {
+                native_qualified_name_validity.SetInvalid(row_idx);
+            }
+            
+            if (!node.context.native.annotations.empty()) {
+                native_annotations_vec[row_idx] = StringVector::AddString(*native_entries[4], node.context.native.annotations);
+            } else {
+                native_annotations_validity.SetInvalid(row_idx);
+            }
+            
+            // Handle modifiers list (native_entries[2])
+            auto &modifiers_list_vector = *native_entries[2];
+            auto modifiers_data = ListVector::GetData(modifiers_list_vector);
+            auto &modifiers_validity = FlatVector::Validity(modifiers_list_vector);
+            
+            if (!node.context.native.modifiers.empty()) {
+                // Set up the list entry for this row
+                modifiers_data[row_idx].offset = ListVector::GetListSize(modifiers_list_vector);
+                modifiers_data[row_idx].length = node.context.native.modifiers.size();
+                
+                // Get the child vector (string values)
+                auto &modifiers_child = ListVector::GetEntry(modifiers_list_vector);
+                auto modifiers_child_data = FlatVector::GetData<string_t>(modifiers_child);
+                
+                // Add each modifier to the child vector
+                for (const auto& modifier : node.context.native.modifiers) {
+                    auto child_idx = ListVector::GetListSize(modifiers_list_vector);
+                    ListVector::PushBack(modifiers_list_vector, Value(modifier));
+                }
+            } else {
+                // Empty list
+                modifiers_data[row_idx].offset = ListVector::GetListSize(modifiers_list_vector);
+                modifiers_data[row_idx].length = 0;
+            }
+            
+            // TODO: Handle parameters list (native_entries[1]) - more complex struct list
+            
+        } else {
+            // No extraction attempted - set native field to NULL
+            native_validity.SetInvalid(row_idx);
+        }
         
         // Content Preview 
         if (!node.peek.empty()) {

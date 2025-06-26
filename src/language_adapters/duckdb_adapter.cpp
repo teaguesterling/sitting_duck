@@ -425,169 +425,299 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectNode(const SelectNode& node, uint32_
 // Expression Processing
 //==============================================================================
 vector<ASTNode> DuckDBAdapter::ConvertExpression(const ParsedExpression& expr, uint32_t& node_counter) const {
-    vector<ASTNode> nodes;
+    // Use categorical approach based on ExpressionClass instead of individual ExpressionType
+    auto expr_class = expr.GetExpressionClass();
     
-    switch (expr.type) {
-        case ExpressionType::COLUMN_REF: {
-            const auto& col_ref = expr.Cast<ColumnRefExpression>();
-            auto node = CreateASTNode("column_reference", col_ref.GetColumnName(), col_ref.ToString(),
-                                     SemanticTypes::NAME_IDENTIFIER,
-                                     node_counter++, -1, 0);
-            nodes.push_back(node);
-            break;
-        }
-        case ExpressionType::FUNCTION: {
-            const auto& func_expr = expr.Cast<FunctionExpression>();
-            string normalized_name = NormalizeFunctionName(func_expr.function_name);
+    switch (expr_class) {
+        case ExpressionClass::COLUMN_REF:
+            return HandleColumnReference(expr, node_counter);
             
-            // Skip internal constructor functions that users don't typically write explicitly
-            if (func_expr.function_name == "list_value" || func_expr.function_name == "struct_pack_internal") {
-                // Process arguments but don't create the function call node
-                for (const auto& arg : func_expr.children) {
-                    if (!arg) {
-                        continue;
-                    }
-                    auto arg_nodes = ConvertExpression(*arg, node_counter);
-                    for (auto& an : arg_nodes) {
-                        nodes.push_back(an);
-                    }
-                }
-            } else {
-                // Use basic function call semantic type for now
-                uint8_t semantic_type = SemanticTypes::COMPUTATION_CALL;
-                
-                // Create the function call node for user-visible functions
-                auto node = CreateASTNode("function_call", normalized_name, normalized_name,
-                                         semantic_type, node_counter++, -1, 0);
-                nodes.push_back(node);
-                
-                // Process function arguments
-                for (const auto& arg : func_expr.children) {
-                    if (!arg) {
-                        continue; // Skip NULL function arguments
-                    }
-                    auto arg_nodes = ConvertExpression(*arg, node_counter);
-                    for (auto& an : arg_nodes) {
-                        if (an.structure.parent_id == -1) {
-                            an.structure.parent_id = node.node_id;
-                            an.UpdateComputedLegacyFields();
-                        }
-                        nodes.push_back(an);
-                    }
-                }
-            }
-            break;
-        }
-        case ExpressionType::VALUE_CONSTANT: {
-            const auto& const_expr = expr.Cast<ConstantExpression>();
-            string value = const_expr.value.ToString();
+        case ExpressionClass::CONSTANT:
+            return HandleConstant(expr, node_counter);
             
-            // Determine appropriate semantic type based on value type
-            uint8_t semantic_type;
-            auto value_type = const_expr.value.type();
-            if (value_type == LogicalType::VARCHAR) {
-                semantic_type = SemanticTypes::LITERAL_STRING;
-            } else if (value_type == LogicalType::INTEGER || 
-                       value_type == LogicalType::BIGINT ||
-                       value_type == LogicalType::DOUBLE ||
-                       value_type.id() == LogicalTypeId::DECIMAL) {
-                semantic_type = SemanticTypes::LITERAL_NUMBER;
-            } else if (value_type == LogicalType::BOOLEAN) {
-                semantic_type = SemanticTypes::LITERAL_ATOMIC;
-            } else {
-                semantic_type = SemanticTypes::LITERAL_ATOMIC;
-            }
+        case ExpressionClass::FUNCTION:
+            return HandleFunction(expr, node_counter);
             
-            auto node = CreateASTNode("literal", value, value, semantic_type,
-                                     node_counter++, -1, 0);
-            nodes.push_back(node);
-            break;
-        }
-        case ExpressionType::COMPARE_EQUAL:
-        case ExpressionType::COMPARE_NOTEQUAL:
-        case ExpressionType::COMPARE_LESSTHAN:
-        case ExpressionType::COMPARE_GREATERTHAN:
-        case ExpressionType::COMPARE_LESSTHANOREQUALTO:
-        case ExpressionType::COMPARE_GREATERTHANOREQUALTO: {
-            const auto& comp_expr = expr.Cast<ComparisonExpression>();
+        case ExpressionClass::COMPARISON:
+            return HandleComparison(expr, node_counter);
             
-            // Create comparison operator node
-            auto comp_node = CreateASTNode("comparison", "", expr.ToString(),
-                                          SemanticTypes::OPERATOR_COMPARISON,
-                                          node_counter++, -1, 0);
-            nodes.push_back(comp_node);
+        case ExpressionClass::CONJUNCTION:
+            return HandleConjunction(expr, node_counter);
             
-            // Process left and right operands
-            if (comp_expr.left) {
-                auto left_nodes = ConvertExpression(*comp_expr.left, node_counter);
-                for (auto& ln : left_nodes) {
-                    if (ln.structure.parent_id == -1) {
-                        ln.structure.parent_id = comp_node.node_id;
-                        ln.UpdateComputedLegacyFields();
-                    }
-                    nodes.push_back(ln);
-                }
-            }
-            if (comp_expr.right) {
-                auto right_nodes = ConvertExpression(*comp_expr.right, node_counter);
-                for (auto& rn : right_nodes) {
-                    if (rn.structure.parent_id == -1) {
-                        rn.structure.parent_id = comp_node.node_id;
-                        rn.UpdateComputedLegacyFields();
-                    }
-                    nodes.push_back(rn);
-                }
-            }
-            break;
-        }
-        case ExpressionType::CONJUNCTION_AND:
-        case ExpressionType::CONJUNCTION_OR: {
-            const auto& conj_expr = expr.Cast<ConjunctionExpression>();
+        case ExpressionClass::CAST:
+            return HandleCast(expr, node_counter);
             
-            // Create conjunction operator node
-            auto conj_node = CreateASTNode("conjunction", "", expr.ToString(),
-                                          SemanticTypes::OPERATOR_LOGICAL,
-                                          node_counter++, -1, 0);
-            nodes.push_back(conj_node);
+        case ExpressionClass::CASE:
+            return HandleCase(expr, node_counter);
             
-            // Process all child expressions
-            for (const auto& child : conj_expr.children) {
-                if (!child) continue;
-                auto child_nodes = ConvertExpression(*child, node_counter);
-                for (auto& cn : child_nodes) {
-                    if (cn.structure.parent_id == -1) {
-                        cn.structure.parent_id = conj_node.node_id;
-                        cn.UpdateComputedLegacyFields();
-                    }
-                    nodes.push_back(cn);
-                }
-            }
-            break;
-        }
-        case ExpressionType::OPERATOR_CAST: {
-            // Handle cast expressions (like CAST('t' AS BOOLEAN) for boolean literals)
-            string expr_text = expr.ToString();
+        case ExpressionClass::WINDOW:
+            return HandleWindow(expr, node_counter);
             
-            auto node = CreateASTNode("expression", "", expr_text,
-                                     SemanticTypes::COMPUTATION_EXPRESSION,
-                                     node_counter++, -1, 0);
-            nodes.push_back(node);
-            break;
-        }
-        default: {
-            // If we reach this case, DuckDB's parser couldn't handle this expression type
-            // This is our indicator of incomplete parsing - no need for complex detection
-            string expr_text = expr.ToString();
+        case ExpressionClass::AGGREGATE:
+            return HandleAggregate(expr, node_counter);
             
-            auto node = CreateASTNode("expression", "incomplete_parsing", expr_text,
-                                     SemanticTypes::PARSER_CONSTRUCT,  // Mark as needing attention
-                                     node_counter++, -1, 0);
-            nodes.push_back(node);
-            break;
-        }
+        case ExpressionClass::OPERATOR:
+            return HandleOperator(expr, node_counter);
+            
+        case ExpressionClass::BETWEEN:
+            return HandleBetween(expr, node_counter);
+            
+        case ExpressionClass::SUBQUERY:
+            return HandleSubquery(expr, node_counter);
+            
+        case ExpressionClass::STAR:
+            return HandleStar(expr, node_counter);
+            
+        default:
+            return HandleIncompleteExpression(expr, node_counter);
+    }
+}
+
+//==============================================================================
+// Categorical Expression Handlers (Architecture Plan Section 4.3)
+//==============================================================================
+
+vector<ASTNode> DuckDBAdapter::HandleColumnReference(const ParsedExpression& expr, uint32_t& node_counter) const {
+    const auto& col_ref = expr.Cast<ColumnRefExpression>();
+    auto node = CreateASTNode("column_reference", col_ref.GetColumnName(), col_ref.ToString(),
+                             SemanticTypes::NAME_IDENTIFIER,
+                             node_counter++, -1, 0);
+    return {node};
+}
+
+vector<ASTNode> DuckDBAdapter::HandleConstant(const ParsedExpression& expr, uint32_t& node_counter) const {
+    const auto& const_expr = expr.Cast<ConstantExpression>();
+    string value = const_expr.value.ToString();
+    
+    // Determine appropriate semantic type based on value type
+    uint8_t semantic_type;
+    auto value_type = const_expr.value.type();
+    if (value_type == LogicalType::VARCHAR) {
+        semantic_type = SemanticTypes::LITERAL_STRING;
+    } else if (value_type == LogicalType::INTEGER || 
+               value_type == LogicalType::BIGINT ||
+               value_type == LogicalType::DOUBLE ||
+               value_type.id() == LogicalTypeId::DECIMAL) {
+        semantic_type = SemanticTypes::LITERAL_NUMBER;
+    } else if (value_type == LogicalType::BOOLEAN) {
+        semantic_type = SemanticTypes::LITERAL_ATOMIC;
+    } else {
+        semantic_type = SemanticTypes::LITERAL_ATOMIC;
     }
     
+    auto node = CreateASTNode("literal", value, value, semantic_type,
+                             node_counter++, -1, 0);
+    return {node};
+}
+
+vector<ASTNode> DuckDBAdapter::HandleFunction(const ParsedExpression& expr, uint32_t& node_counter) const {
+    const auto& func_expr = expr.Cast<FunctionExpression>();
+    string normalized_name = NormalizeFunctionName(func_expr.function_name);
+    vector<ASTNode> nodes;
+    
+    // Skip internal constructor functions that users don't typically write explicitly
+    if (func_expr.function_name == "list_value" || func_expr.function_name == "struct_pack_internal") {
+        // Process arguments but don't create the function call node
+        for (const auto& arg : func_expr.children) {
+            if (!arg) {
+                continue;
+            }
+            auto arg_nodes = ConvertExpression(*arg, node_counter);
+            for (auto& an : arg_nodes) {
+                nodes.push_back(an);
+            }
+        }
+    } else {
+        // Use basic function call semantic type for now
+        uint8_t semantic_type = SemanticTypes::COMPUTATION_CALL;
+        
+        // Create the function call node for user-visible functions
+        auto node = CreateASTNode("function_call", normalized_name, normalized_name,
+                                 semantic_type, node_counter++, -1, 0);
+        nodes.push_back(node);
+        
+        // Process function arguments
+        for (const auto& arg : func_expr.children) {
+            if (!arg) {
+                continue; // Skip NULL function arguments
+            }
+            auto arg_nodes = ConvertExpression(*arg, node_counter);
+            for (auto& an : arg_nodes) {
+                if (an.structure.parent_id == -1) {
+                    an.structure.parent_id = node.node_id;
+                    an.UpdateComputedLegacyFields();
+                }
+                nodes.push_back(an);
+            }
+        }
+    }
     return nodes;
+}
+
+vector<ASTNode> DuckDBAdapter::HandleComparison(const ParsedExpression& expr, uint32_t& node_counter) const {
+    const auto& comp_expr = expr.Cast<ComparisonExpression>();
+    vector<ASTNode> nodes;
+    
+    // Create comparison operator node
+    auto comp_node = CreateASTNode("comparison", "", expr.ToString(),
+                                  SemanticTypes::OPERATOR_COMPARISON,
+                                  node_counter++, -1, 0);
+    nodes.push_back(comp_node);
+    
+    // Process left and right operands
+    if (comp_expr.left) {
+        auto left_nodes = ConvertExpression(*comp_expr.left, node_counter);
+        for (auto& ln : left_nodes) {
+            if (ln.structure.parent_id == -1) {
+                ln.structure.parent_id = comp_node.node_id;
+                ln.UpdateComputedLegacyFields();
+            }
+            nodes.push_back(ln);
+        }
+    }
+    if (comp_expr.right) {
+        auto right_nodes = ConvertExpression(*comp_expr.right, node_counter);
+        for (auto& rn : right_nodes) {
+            if (rn.structure.parent_id == -1) {
+                rn.structure.parent_id = comp_node.node_id;
+                rn.UpdateComputedLegacyFields();
+            }
+            nodes.push_back(rn);
+        }
+    }
+    return nodes;
+}
+
+vector<ASTNode> DuckDBAdapter::HandleConjunction(const ParsedExpression& expr, uint32_t& node_counter) const {
+    const auto& conj_expr = expr.Cast<ConjunctionExpression>();
+    vector<ASTNode> nodes;
+    
+    // Create conjunction operator node
+    auto conj_node = CreateASTNode("conjunction", "", expr.ToString(),
+                                  SemanticTypes::OPERATOR_LOGICAL,
+                                  node_counter++, -1, 0);
+    nodes.push_back(conj_node);
+    
+    // Process all child expressions
+    for (const auto& child : conj_expr.children) {
+        if (!child) continue;
+        auto child_nodes = ConvertExpression(*child, node_counter);
+        for (auto& cn : child_nodes) {
+            if (cn.structure.parent_id == -1) {
+                cn.structure.parent_id = conj_node.node_id;
+                cn.UpdateComputedLegacyFields();
+            }
+            nodes.push_back(cn);
+        }
+    }
+    return nodes;
+}
+
+vector<ASTNode> DuckDBAdapter::HandleCast(const ParsedExpression& expr, uint32_t& node_counter) const {
+    // Handle cast expressions (like CAST('t' AS BOOLEAN) for boolean literals)
+    string expr_text = expr.ToString();
+    
+    auto node = CreateASTNode("cast_expression", "", expr_text,
+                             SemanticTypes::COMPUTATION_EXPRESSION,
+                             node_counter++, -1, 0);
+    return {node};
+}
+
+vector<ASTNode> DuckDBAdapter::HandleCase(const ParsedExpression& expr, uint32_t& node_counter) const {
+    // Handle CASE WHEN expressions
+    auto node = CreateASTNode("case_expression", "", expr.ToString(),
+                             SemanticTypes::FLOW_CONDITIONAL,
+                             node_counter++, -1, 0);
+    return {node};
+}
+
+vector<ASTNode> DuckDBAdapter::HandleWindow(const ParsedExpression& expr, uint32_t& node_counter) const {
+    // Handle window functions (ROW_NUMBER() OVER, LAG() OVER, etc.)
+    auto node = CreateASTNode("window_function", "", expr.ToString(),
+                             SemanticTypes::COMPUTATION_CALL,
+                             node_counter++, -1, 0);
+    return {node};
+}
+
+vector<ASTNode> DuckDBAdapter::HandleAggregate(const ParsedExpression& expr, uint32_t& node_counter) const {
+    // Handle aggregate functions (COUNT, SUM, AVG, etc.)
+    auto node = CreateASTNode("aggregate_function", "", expr.ToString(),
+                             SemanticTypes::COMPUTATION_CALL,
+                             node_counter++, -1, 0);
+    return {node};
+}
+
+vector<ASTNode> DuckDBAdapter::HandleOperator(const ParsedExpression& expr, uint32_t& node_counter) const {
+    // Handle various operators (COALESCE, IS NULL, etc.)
+    string operator_name = "";
+    uint8_t semantic_type = SemanticTypes::OPERATOR_LOGICAL;
+    
+    switch (expr.type) {
+        case ExpressionType::OPERATOR_IS_NULL:
+            operator_name = "is_null";
+            break;
+        case ExpressionType::OPERATOR_IS_NOT_NULL:
+            operator_name = "is_not_null";
+            break;
+        case ExpressionType::OPERATOR_COALESCE:
+            operator_name = "coalesce";
+            break;
+        case ExpressionType::OPERATOR_NULLIF:
+            operator_name = "nullif";
+            break;
+        default:
+            operator_name = "operator";
+            break;
+    }
+    
+    auto node = CreateASTNode("operator_expression", operator_name, expr.ToString(),
+                             semantic_type, node_counter++, -1, 0);
+    return {node};
+}
+
+vector<ASTNode> DuckDBAdapter::HandleBetween(const ParsedExpression& expr, uint32_t& node_counter) const {
+    // Handle BETWEEN expressions
+    auto node = CreateASTNode("between_expression", "", expr.ToString(),
+                             SemanticTypes::OPERATOR_COMPARISON,
+                             node_counter++, -1, 0);
+    return {node};
+}
+
+vector<ASTNode> DuckDBAdapter::HandleSubquery(const ParsedExpression& expr, uint32_t& node_counter) const {
+    // Handle subquery expressions (IN subquery, EXISTS, etc.)
+    auto node = CreateASTNode("subquery_expression", "", expr.ToString(),
+                             SemanticTypes::TRANSFORM_QUERY,
+                             node_counter++, -1, 0);
+    return {node};
+}
+
+vector<ASTNode> DuckDBAdapter::HandleStar(const ParsedExpression& expr, uint32_t& node_counter) const {
+    // Handle star expressions (SELECT *, table.*)
+    auto node = CreateASTNode("star_expression", "", expr.ToString(),
+                             SemanticTypes::NAME_QUALIFIED,
+                             node_counter++, -1, 0);
+    return {node};
+}
+
+vector<ASTNode> DuckDBAdapter::HandleIncompleteExpression(const ParsedExpression& expr, uint32_t& node_counter) const {
+    // Enhanced incomplete parsing detection with more context
+    string expr_type_name = "unknown";
+    
+    // Try to get a meaningful type name
+    try {
+        expr_type_name = StringUtil::Format("ExpressionType_%d", static_cast<int>(expr.type));
+    } catch (...) {
+        expr_type_name = "unknown_expression_type";
+    }
+    
+    auto node = CreateASTNode("expression", expr_type_name, expr.ToString(),
+                             SemanticTypes::PARSER_CONSTRUCT,  // Mark as needing attention
+                             node_counter++, -1, 0);
+                             
+    // Add flag to indicate this was incomplete parsing
+    node.context.normalized.universal_flags |= 1; // INCOMPLETE_PARSING_FLAG
+    
+    return {node};
 }
 
 //==============================================================================

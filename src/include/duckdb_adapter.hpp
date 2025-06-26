@@ -60,6 +60,22 @@ private:
     vector<ASTNode> ConvertExpression(const ParsedExpression& expr, uint32_t& node_counter) const;
     vector<ASTNode> ConvertTableRef(const TableRef& table_ref, uint32_t& node_counter) const;
     
+    // Categorical expression handlers (Architecture Plan Section 4.3)
+    vector<ASTNode> HandleColumnReference(const ParsedExpression& expr, uint32_t& node_counter) const;
+    vector<ASTNode> HandleConstant(const ParsedExpression& expr, uint32_t& node_counter) const;
+    vector<ASTNode> HandleFunction(const ParsedExpression& expr, uint32_t& node_counter) const;
+    vector<ASTNode> HandleComparison(const ParsedExpression& expr, uint32_t& node_counter) const;
+    vector<ASTNode> HandleConjunction(const ParsedExpression& expr, uint32_t& node_counter) const;
+    vector<ASTNode> HandleCast(const ParsedExpression& expr, uint32_t& node_counter) const;
+    vector<ASTNode> HandleCase(const ParsedExpression& expr, uint32_t& node_counter) const;
+    vector<ASTNode> HandleWindow(const ParsedExpression& expr, uint32_t& node_counter) const;
+    vector<ASTNode> HandleAggregate(const ParsedExpression& expr, uint32_t& node_counter) const;
+    vector<ASTNode> HandleOperator(const ParsedExpression& expr, uint32_t& node_counter) const;
+    vector<ASTNode> HandleBetween(const ParsedExpression& expr, uint32_t& node_counter) const;
+    vector<ASTNode> HandleSubquery(const ParsedExpression& expr, uint32_t& node_counter) const;
+    vector<ASTNode> HandleStar(const ParsedExpression& expr, uint32_t& node_counter) const;
+    vector<ASTNode> HandleIncompleteExpression(const ParsedExpression& expr, uint32_t& node_counter) const;
+    
     // Utility functions (Architecture Plan Section 5.3)
     ASTNode CreateASTNode(const string& type, const string& name, const string& value,
                           uint8_t semantic_type, uint32_t node_id, int64_t parent_id, 

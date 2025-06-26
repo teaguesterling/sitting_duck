@@ -394,6 +394,13 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
                     updated_node.source.file_path = result.source.file_path;
                     updated_node.source.language = result.source.language;
                     
+                    // TRACE: Check if native context survives the copy
+                    if (updated_node.type.raw == "function_definition") {
+                        printf("TRACE: Before ToValue - updated_node modifiers count=%zu, attempted=%s\n", 
+                               updated_node.context.native.modifiers.size(),
+                               updated_node.context.native_extraction_attempted ? "true" : "false");
+                    }
+                    
                     // Use ASTNode::ToValue() for proper hierarchical serialization
                     Value node_value = updated_node.ToValue();
                     auto &struct_children = StructValue::GetChildren(node_value);
@@ -648,9 +655,9 @@ static unique_ptr<FunctionData> ReadASTHierarchicalBindTwoArg(ClientContext &con
         }
     }
     
-    // Temporarily use flat schema until STRUCT functions are properly implemented
-    return_types = UnifiedASTBackend::GetFlatTableSchema();
-    names = UnifiedASTBackend::GetFlatTableColumnNames();
+    // Use hierarchical backend schema for structured access
+    return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
+    names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
     
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode, batch_size);
 }
@@ -707,9 +714,9 @@ static unique_ptr<FunctionData> ReadASTHierarchicalBindOneArg(ClientContext &con
     // Use auto-detect for language
     string language = "auto";
     
-    // Temporarily use flat schema until STRUCT functions are properly implemented
-    return_types = UnifiedASTBackend::GetFlatTableSchema();
-    names = UnifiedASTBackend::GetFlatTableColumnNames();
+    // Use hierarchical backend schema for structured access
+    return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
+    names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
     
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode, batch_size);
 }
