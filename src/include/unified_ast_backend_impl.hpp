@@ -2,6 +2,18 @@
 
 #include "unified_ast_backend.hpp"
 #include "native_context_extraction.hpp"
+#include "python_native_extractors.hpp"
+#include "javascript_native_extractors.hpp"
+#include "typescript_native_extractors.hpp"
+#include "java_native_extractors.hpp"
+#include "cpp_native_extractors.hpp"
+#include "rust_native_extractors.hpp"
+#include "go_native_extractors.hpp"
+#include "c_native_extractors.hpp"
+#include "php_native_extractors.hpp"
+#include "ruby_native_extractors.hpp"
+#include "swift_native_extractors.hpp"
+#include "kotlin_native_extractors.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "utf8proc_wrapper.hpp"
 #include <algorithm>
