@@ -42,6 +42,11 @@ template<NativeExtractionStrategy Strategy> struct TypeScriptNativeExtractor;
 template<NativeExtractionStrategy Strategy> struct RustNativeExtractor;
 template<NativeExtractionStrategy Strategy> struct CppNativeExtractor;
 template<NativeExtractionStrategy Strategy> struct GoNativeExtractor;
+template<NativeExtractionStrategy Strategy> struct CNativeExtractor;
+template<NativeExtractionStrategy Strategy> struct PHPNativeExtractor;
+template<NativeExtractionStrategy Strategy> struct RubyNativeExtractor;
+template<NativeExtractionStrategy Strategy> struct SwiftNativeExtractor;
+template<NativeExtractionStrategy Strategy> struct KotlinNativeExtractor;
 
 // Language adapter traits - each adapter defines its extractor type
 template<typename AdapterType>
@@ -59,6 +64,11 @@ class JavaAdapter;
 class CppAdapter;
 class RustAdapter;
 class GoAdapter;
+class CAdapter;
+class PHPAdapter;
+class RubyAdapter;
+class SwiftAdapter;
+class KotlinAdapter;
 
 // Specializations for each language adapter
 template<>
@@ -101,6 +111,36 @@ template<>
 struct NativeExtractionTraits<GoAdapter> {
     template<NativeExtractionStrategy Strategy>
     using ExtractorType = GoNativeExtractor<Strategy>;
+};
+
+template<>
+struct NativeExtractionTraits<CAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = CNativeExtractor<Strategy>;
+};
+
+template<>
+struct NativeExtractionTraits<PHPAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = PHPNativeExtractor<Strategy>;
+};
+
+template<>
+struct NativeExtractionTraits<RubyAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = RubyNativeExtractor<Strategy>;
+};
+
+template<>
+struct NativeExtractionTraits<SwiftAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = SwiftNativeExtractor<Strategy>;
+};
+
+template<>
+struct NativeExtractionTraits<KotlinAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = KotlinNativeExtractor<Strategy>;
 };
 
 //==============================================================================
