@@ -41,6 +41,7 @@ template<NativeExtractionStrategy Strategy> struct JavaNativeExtractor;
 template<NativeExtractionStrategy Strategy> struct TypeScriptNativeExtractor;
 template<NativeExtractionStrategy Strategy> struct RustNativeExtractor;
 template<NativeExtractionStrategy Strategy> struct CppNativeExtractor;
+template<NativeExtractionStrategy Strategy> struct GoNativeExtractor;
 
 // Language adapter traits - each adapter defines its extractor type
 template<typename AdapterType>
@@ -54,6 +55,10 @@ struct NativeExtractionTraits {
 class PythonAdapter;
 class JavaScriptAdapter;
 class TypeScriptAdapter;
+class JavaAdapter;
+class CppAdapter;
+class RustAdapter;
+class GoAdapter;
 
 // Specializations for each language adapter
 template<>
@@ -72,6 +77,30 @@ template<>
 struct NativeExtractionTraits<TypeScriptAdapter> {
     template<NativeExtractionStrategy Strategy>
     using ExtractorType = TypeScriptNativeExtractor<Strategy>;
+};
+
+template<>
+struct NativeExtractionTraits<JavaAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = JavaNativeExtractor<Strategy>;
+};
+
+template<>
+struct NativeExtractionTraits<CppAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = CppNativeExtractor<Strategy>;
+};
+
+template<>
+struct NativeExtractionTraits<RustAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = RustNativeExtractor<Strategy>;
+};
+
+template<>
+struct NativeExtractionTraits<GoAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = GoNativeExtractor<Strategy>;
 };
 
 //==============================================================================
@@ -132,3 +161,7 @@ string ExtractNodeText(TSNode node, const string& content);
 #include "python_native_extractors.hpp"
 #include "javascript_native_extractors.hpp"
 #include "typescript_native_extractors.hpp"
+#include "java_native_extractors.hpp"
+#include "cpp_native_extractors.hpp"
+#include "rust_native_extractors.hpp"
+#include "go_native_extractors.hpp"
