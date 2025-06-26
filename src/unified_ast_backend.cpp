@@ -713,17 +713,13 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
             auto &modifiers_validity = FlatVector::Validity(modifiers_list_vector);
             
             if (!node.context.native.modifiers.empty()) {
-                // Set up the list entry for this row
-                modifiers_data[row_idx].offset = ListVector::GetListSize(modifiers_list_vector);
+                // Set up the list entry for this row - get offset before adding elements
+                auto list_offset = ListVector::GetListSize(modifiers_list_vector);
+                modifiers_data[row_idx].offset = list_offset;
                 modifiers_data[row_idx].length = node.context.native.modifiers.size();
                 
-                // Get the child vector (string values)
-                auto &modifiers_child = ListVector::GetEntry(modifiers_list_vector);
-                auto modifiers_child_data = FlatVector::GetData<string_t>(modifiers_child);
-                
-                // Add each modifier to the child vector
+                // Add each modifier to the child vector atomically
                 for (const auto& modifier : node.context.native.modifiers) {
-                    auto child_idx = ListVector::GetListSize(modifiers_list_vector);
                     ListVector::PushBack(modifiers_list_vector, Value(modifier));
                 }
             } else {
@@ -732,7 +728,36 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
                 modifiers_data[row_idx].length = 0;
             }
             
-            // TODO: Handle parameters list (native_entries[1]) - more complex struct list
+            // Handle parameters list (native_entries[1]) - complex struct list
+            auto &parameters_list_vector = *native_entries[1];
+            auto parameters_data = ListVector::GetData(parameters_list_vector);
+            auto &parameters_validity = FlatVector::Validity(parameters_list_vector);
+            
+            if (!node.context.native.parameters.empty()) {
+                printf("DEBUG: ProjectToHierarchicalTableStreaming: Processing %zu parameters for %s\n", 
+                       node.context.native.parameters.size(), node.context.name.c_str());
+                // Set up the list entry for this row
+                auto list_offset = ListVector::GetListSize(parameters_list_vector);
+                parameters_data[row_idx].offset = list_offset;
+                parameters_data[row_idx].length = node.context.native.parameters.size();
+                
+                // Add each parameter as a struct to the child vector
+                for (const auto& param : node.context.native.parameters) {
+                    child_list_t<Value> param_struct;
+                    param_struct.emplace_back("name", param.name.empty() ? Value(LogicalType::VARCHAR) : Value(param.name));
+                    param_struct.emplace_back("type", param.type.empty() ? Value(LogicalType::VARCHAR) : Value(param.type));
+                    param_struct.emplace_back("default_value", param.default_value.empty() ? Value(LogicalType::VARCHAR) : Value(param.default_value));
+                    param_struct.emplace_back("is_optional", Value::BOOLEAN(param.is_optional));
+                    param_struct.emplace_back("is_variadic", Value::BOOLEAN(param.is_variadic));
+                    param_struct.emplace_back("annotations", param.annotations.empty() ? Value(LogicalType::VARCHAR) : Value(param.annotations));
+                    
+                    ListVector::PushBack(parameters_list_vector, Value::STRUCT(move(param_struct)));
+                }
+            } else {
+                // Empty list
+                parameters_data[row_idx].offset = ListVector::GetListSize(parameters_list_vector);
+                parameters_data[row_idx].length = 0;
+            }
             
         } else {
             // No extraction attempted - set native field to NULL

@@ -19,7 +19,7 @@ FROM (
 ) flat_count,
 (
     SELECT COUNT(*) as total
-    FROM read_ast_hierarchical('test/data/python/simple.py', 'python')
+    FROM read_ast('test/data/python/simple.py', 'python')
 ) hier_count;
 ----
 true
@@ -32,7 +32,7 @@ SELECT COUNT(*) = 0 as no_id_mismatches
 FROM (
     SELECT f.node_id as flat_id, h.node_id as hier_id
     FROM read_ast_flat('test/data/python/simple.py', 'python') f
-    FULL OUTER JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+    FULL OUTER JOIN read_ast('test/data/python/simple.py', 'python') h
         ON f.node_id = h.node_id
     WHERE f.node_id IS NULL OR h.node_id IS NULL
 );
@@ -47,7 +47,7 @@ SELECT COUNT(*) = 0 as no_type_mismatches
 FROM (
     SELECT f.type as flat_type, h.type as hier_type
     FROM read_ast_flat('test/data/python/simple.py', 'python') f
-    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+    JOIN read_ast('test/data/python/simple.py', 'python') h
         ON f.node_id = h.node_id
     WHERE f.type != h.type
 );
@@ -61,12 +61,12 @@ query I
 SELECT COUNT(*) = 0 as no_name_mismatches
 FROM (
     SELECT 
-        COALESCE(f.name, '') as flat_name, 
+        COALESCE(f.context.name, '') as flat_name, 
         COALESCE(h.context.name, '') as hier_name
     FROM read_ast_flat('test/data/python/simple.py', 'python') f
-    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+    JOIN read_ast('test/data/python/simple.py', 'python') h
         ON f.node_id = h.node_id
-    WHERE COALESCE(f.name, '') != COALESCE(h.context.name, '')
+    WHERE COALESCE(f.context.name, '') != COALESCE(h.context.name, '')
 );
 ----
 true
@@ -77,11 +77,11 @@ true
 query I
 SELECT COUNT(*) = 0 as no_semantic_type_mismatches
 FROM (
-    SELECT f.semantic_type as flat_st, h.context.semantic_type as hier_st
+    SELECT f.context.semantic_type as flat_st, h.context.semantic_type as hier_st
     FROM read_ast_flat('test/data/python/simple.py', 'python') f
-    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+    JOIN read_ast('test/data/python/simple.py', 'python') h
         ON f.node_id = h.node_id
-    WHERE f.semantic_type != h.context.semantic_type
+    WHERE f.context.semantic_type != h.context.semantic_type
 );
 ----
 true
@@ -92,11 +92,11 @@ true
 query I
 SELECT COUNT(*) = 0 as no_flags_mismatches
 FROM (
-    SELECT f.flags as flat_flags, h.context.flags as hier_flags
+    SELECT f.context.flags as flat_flags, h.context.flags as hier_flags
     FROM read_ast_flat('test/data/python/simple.py', 'python') f
-    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+    JOIN read_ast('test/data/python/simple.py', 'python') h
         ON f.node_id = h.node_id
-    WHERE f.flags != h.context.flags
+    WHERE f.context.flags != h.context.flags
 );
 ----
 true
@@ -108,17 +108,17 @@ query I
 SELECT COUNT(*) = 0 as no_location_mismatches
 FROM (
     SELECT 
-        f.start_line as flat_sl, h.source.start_line as hier_sl,
-        f.start_column as flat_sc, h.source.start_column as hier_sc,
-        f.end_line as flat_el, h.source.end_line as hier_el,
-        f.end_column as flat_ec, h.source.end_column as hier_ec
+        f.source.start_line as flat_sl, h.source.start_line as hier_sl,
+        f.source.start_column as flat_sc, h.source.start_column as hier_sc,
+        f.source.end_line as flat_el, h.source.end_line as hier_el,
+        f.source.end_column as flat_ec, h.source.end_column as hier_ec
     FROM read_ast_flat('test/data/python/simple.py', 'python') f
-    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+    JOIN read_ast('test/data/python/simple.py', 'python') h
         ON f.node_id = h.node_id
-    WHERE f.start_line != h.source.start_line
-       OR f.start_column != h.source.start_column
-       OR f.end_line != h.source.end_line
-       OR f.end_column != h.source.end_column
+    WHERE f.source.start_line != h.source.start_line
+       OR f.source.start_column != h.source.start_column
+       OR f.source.end_line != h.source.end_line
+       OR f.source.end_column != h.source.end_column
 );
 ----
 true
@@ -137,7 +137,7 @@ FROM (
         f.children_count as flat_cc, h.structure.children_count as hier_cc,
         f.descendant_count as flat_dc, h.structure.descendant_count as hier_dc
     FROM read_ast_flat('test/data/python/simple.py', 'python') f
-    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+    JOIN read_ast('test/data/python/simple.py', 'python') h
         ON f.node_id = h.node_id
     WHERE COALESCE(f.parent_id, -1) != COALESCE(h.structure.parent_id, -1)
        OR f.depth != h.structure.depth
@@ -158,7 +158,7 @@ FROM (
         f.file_path as flat_fp, h.source.file_path as hier_fp,
         f.language as flat_lang, h.source.language as hier_lang
     FROM read_ast_flat('test/data/python/simple.py', 'python') f
-    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+    JOIN read_ast('test/data/python/simple.py', 'python') h
         ON f.node_id = h.node_id
     WHERE f.file_path != h.source.file_path
        OR f.language != h.source.language
@@ -176,7 +176,7 @@ FROM (
         COALESCE(f.peek, '') as flat_peek, 
         COALESCE(h.peek, '') as hier_peek
     FROM read_ast_flat('test/data/python/simple.py', 'python') f
-    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') h
+    JOIN read_ast('test/data/python/simple.py', 'python') h
         ON f.node_id = h.node_id
     WHERE COALESCE(f.peek, '') != COALESCE(h.peek, '')
 );
@@ -196,7 +196,7 @@ FROM (
 ) flat_result,
 (
     SELECT COUNT(*) as count
-    FROM read_ast_hierarchical('test/data/python/simple.py', 'python')
+    FROM read_ast('test/data/python/simple.py', 'python')
     WHERE context.semantic_type = 64 AND structure.depth > 1
 ) hier_result;
 ----
@@ -214,7 +214,7 @@ FROM (
 ) flat_result,
 (
     SELECT MAX(structure.depth) as max_depth
-    FROM read_ast_hierarchical('test/data/python/simple.py', 'python')
+    FROM read_ast('test/data/python/simple.py', 'python')
 ) hier_result;
 ----
 true
@@ -232,7 +232,7 @@ FROM (
 ) flat_result,
 (
     SELECT COUNT(*) as count
-    FROM read_ast_hierarchical('test/data/python/simple.py', 'python')
+    FROM read_ast('test/data/python/simple.py', 'python')
     WHERE type = 'identifier' AND context.name IS NOT NULL
 ) hier_result;
 ----
@@ -253,8 +253,8 @@ FROM (
 ) flat_result,
 (
     SELECT COUNT(*) as count
-    FROM read_ast_hierarchical('test/data/python/simple.py', 'python') parent
-    JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') child
+    FROM read_ast('test/data/python/simple.py', 'python') parent
+    JOIN read_ast('test/data/python/simple.py', 'python') child
         ON parent.node_id = child.structure.parent_id
     WHERE parent.type = 'function_definition'
 ) hier_result;
@@ -273,7 +273,7 @@ FROM (
 ) flat_result,
 (
     SELECT COUNT(*) as total
-    FROM read_ast_hierarchical(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto')
+    FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto')
 ) hier_result;
 ----
 true

@@ -88,12 +88,12 @@ SELECT
     LAG(salary) OVER (ORDER BY hire_date) as prev_salary
 FROM employees
 ', 'duckdb')
-WHERE type IN ('expression', 'column_reference')
+WHERE type IN ('expression', 'column_reference', 'window_function')
 GROUP BY type
 ORDER BY type;
 ----
 column_reference	2
-expression	2
+window_function	2
 
 # Test 6: Semantic type accuracy for SQL constructs
 # =================================================

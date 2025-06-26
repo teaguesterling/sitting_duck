@@ -46,9 +46,9 @@ WHERE u.active = true
 GROUP BY type, context.semantic_type
 ORDER BY type ASC, context.semantic_type ASC;
 ----
+cast_expression	COMPUTATION_EXPRESSION	1
 column_reference	NAME_IDENTIFIER	3
 comparison	OPERATOR_COMPARISON	1
-expression	COMPUTATION_EXPRESSION	1
 join	TRANSFORM_ITERATION	1
 program	DEFINITION_MODULE	1
 select_list	ORGANIZATION_CONTAINER	1
