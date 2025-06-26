@@ -17,8 +17,8 @@ namespace duckdb {
 // HTML Adapter implementation
 //==============================================================================
 
-#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
-    {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+#define DEF_TYPE(raw_type, semantic_type, name_strat, native_strat, flags) \
+    {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> HTMLAdapter::node_configs = {
     #include "../language_configs/html_types.def"
@@ -78,14 +78,9 @@ string HTMLAdapter::ExtractNodeValue(TSNode node, const string &content) const {
     const NodeConfig* config = GetNodeConfig(node_type_str);
     
     if (config) {
-        // Handle custom HTML strategies
-        if (config->value_strategy == ExtractionStrategy::CUSTOM) {
-            string node_type = string(node_type_str);
-            if (node_type == "attribute") {
-                return FindChildByType(node, content, "attribute_value");
-            }
-        }
-        return ExtractByStrategy(node, content, config->value_strategy);
+        // Note: value_strategy is now repurposed as native_strategy for pattern-based extraction
+        // For backward compatibility, we'll return empty string since most nodes don't need legacy value extraction
+        return "";
     }
     
     return "";

@@ -18,8 +18,8 @@ namespace duckdb {
 // TypeScript Adapter implementation
 //==============================================================================
 
-#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
-    {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+#define DEF_TYPE(raw_type, semantic_type, name_strat, native_strat, flags) \
+    {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> TypeScriptAdapter::node_configs = {
     // TypeScript-specific type definitions (includes JavaScript as base)
@@ -79,7 +79,9 @@ string TypeScriptAdapter::ExtractNodeValue(TSNode node, const string &content) c
     const NodeConfig* config = GetNodeConfig(node_type_str);
     
     if (config) {
-        return ExtractByStrategy(node, content, config->value_strategy);
+        // Note: value_strategy is now repurposed as native_strategy for pattern-based extraction
+        // For backward compatibility, we'll return empty string since most nodes don't need legacy value extraction
+        return "";
     }
     
     return "";

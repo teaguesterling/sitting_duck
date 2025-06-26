@@ -106,10 +106,10 @@ VALUES (''John'', ''john@example.com'')
 ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
 ', 'duckdb')
 GROUP BY context.semantic_type
-ORDER BY count DESC;
+ORDER BY semantic_type;
 ----
-EXECUTION_MUTATION	1
 DEFINITION_MODULE	1
+EXECUTION_MUTATION	1
 
 # Test 7: Error handling with malformed SQL
 # =========================================

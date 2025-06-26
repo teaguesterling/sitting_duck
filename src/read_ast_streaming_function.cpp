@@ -82,9 +82,9 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
         }
     }
     
-    // Use unified backend schema
-    return_types = UnifiedASTBackend::GetFlatTableSchema();
-    names = UnifiedASTBackend::GetFlatTableColumnNames();
+    // Use hierarchical backend schema for structured access
+    return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
+    names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
     
     // Use the new vector<string> constructor for consistent handling
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode, batch_size);
@@ -154,9 +154,9 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
     // Use auto-detect for language
     string language = "auto";
     
-    // Use unified backend schema
-    return_types = UnifiedASTBackend::GetFlatTableSchema();
-    names = UnifiedASTBackend::GetFlatTableColumnNames();
+    // Use hierarchical backend schema for structured access
+    return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
+    names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
     
     // Use the new vector<string> constructor for consistent handling
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode, batch_size);
@@ -349,29 +349,8 @@ static void ProcessBatchOfFiles(ClientContext &context, ReadASTStreamingGlobalSt
 static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output) {
     idx_t output_count = 0;
     
-    // Get output vectors once for efficiency
-    auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
-    auto type_vec = FlatVector::GetData<string_t>(output.data[1]);
-    auto name_vec = FlatVector::GetData<string_t>(output.data[2]);
-    auto file_path_vec = FlatVector::GetData<string_t>(output.data[3]);
-    auto language_vec = FlatVector::GetData<string_t>(output.data[4]);
-    auto start_line_vec = FlatVector::GetData<uint32_t>(output.data[5]);
-    auto start_column_vec = FlatVector::GetData<uint32_t>(output.data[6]);
-    auto end_line_vec = FlatVector::GetData<uint32_t>(output.data[7]);
-    auto end_column_vec = FlatVector::GetData<uint32_t>(output.data[8]);
-    auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[9]);
-    auto depth_vec = FlatVector::GetData<uint32_t>(output.data[10]);
-    auto sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[11]);
-    auto children_count_vec = FlatVector::GetData<uint32_t>(output.data[12]);
-    auto descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[13]);
-    auto peek_vec = FlatVector::GetData<string_t>(output.data[14]);
-    auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[15]);
-    auto flags_vec = FlatVector::GetData<uint8_t>(output.data[16]);
-    
-    // Get validity masks
-    auto &name_validity = FlatVector::Validity(output.data[2]);
-    auto &parent_validity = FlatVector::Validity(output.data[9]);
-    auto &peek_validity = FlatVector::Validity(output.data[14]);
+    // Use hierarchical structure with ASTNode::ToValue()
+    // Columns: node_id, type, source, structure, context, peek
     
     while (output_count < STANDARD_VECTOR_SIZE) {
         // Handle batch processing if enabled
@@ -410,42 +389,22 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
                 if (global_state.current_batch_row_index < result.nodes.size()) {
                     auto& node = result.nodes[global_state.current_batch_row_index];
                     
-                    // Populate output vectors (existing logic)
-                    node_id_vec[output_count] = node.node_id;
-                    type_vec[output_count] = StringVector::AddString(output.data[1], node.type.raw);
+                    // Update node with source information from result
+                    ASTNode updated_node = node;
+                    updated_node.source.file_path = result.source.file_path;
+                    updated_node.source.language = result.source.language;
                     
-                    if (!node.name.raw.empty()) {
-                        name_vec[output_count] = StringVector::AddString(output.data[2], node.name.raw);
-                    } else {
-                        name_validity.SetInvalid(output_count);
-                    }
+                    // Use ASTNode::ToValue() for proper hierarchical serialization
+                    Value node_value = updated_node.ToValue();
+                    auto &struct_children = StructValue::GetChildren(node_value);
                     
-                    file_path_vec[output_count] = StringVector::AddString(output.data[3], result.source.file_path);
-                    language_vec[output_count] = StringVector::AddString(output.data[4], result.source.language);
-                    start_line_vec[output_count] = node.file_position.start_line;
-                    start_column_vec[output_count] = node.file_position.start_column;
-                    end_line_vec[output_count] = node.file_position.end_line;
-                    end_column_vec[output_count] = node.file_position.end_column;
-                    
-                    if (node.tree_position.parent_index != -1) {
-                        parent_id_vec[output_count] = node.tree_position.parent_index;
-                    } else {
-                        parent_validity.SetInvalid(output_count);
-                    }
-                    
-                    depth_vec[output_count] = node.tree_position.node_depth;
-                    sibling_index_vec[output_count] = node.tree_position.sibling_index;
-                    children_count_vec[output_count] = node.subtree.children_count;
-                    descendant_count_vec[output_count] = node.subtree.descendant_count;
-                    
-                    if (!node.peek.empty()) {
-                        peek_vec[output_count] = StringVector::AddString(output.data[14], node.peek);
-                    } else {
-                        peek_validity.SetInvalid(output_count);
-                    }
-                    
-                    semantic_type_vec[output_count] = node.semantic_type;
-                    flags_vec[output_count] = node.universal_flags;
+                    // Extract hierarchical fields: node_id, type, source, structure, context, peek
+                    output.SetValue(0, output_count, struct_children[0]);  // node_id
+                    output.SetValue(1, output_count, struct_children[1]);  // type
+                    output.SetValue(2, output_count, struct_children[2]);  // source
+                    output.SetValue(3, output_count, struct_children[3]);  // structure
+                    output.SetValue(4, output_count, struct_children[4]);  // context
+                    output.SetValue(5, output_count, struct_children[5]);  // peek
                     
                     output_count++;
                     global_state.current_batch_row_index++;
@@ -511,48 +470,27 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
         idx_t rows_available = global_state.current_file_result->nodes.size() - global_state.current_file_row_index;
         idx_t rows_to_emit = std::min(STANDARD_VECTOR_SIZE - output_count, rows_available);
         
-        // Copy rows directly into output vectors
+        // Copy rows using hierarchical structure
         for (idx_t i = 0; i < rows_to_emit; i++) {
             const auto& node = global_state.current_file_result->nodes[global_state.current_file_row_index + i];
             idx_t output_idx = output_count + i;
             
-            // Fill output vectors directly (same logic as original function)
-            node_id_vec[output_idx] = node.node_id;
-            type_vec[output_idx] = StringVector::AddString(output.data[1], node.type.raw);
+            // Update node with source information from result
+            ASTNode updated_node = node;
+            updated_node.source.file_path = global_state.current_file_result->source.file_path;
+            updated_node.source.language = global_state.current_file_result->source.language;
             
-            if (node.name.raw.empty()) {
-                name_validity.SetInvalid(output_idx);
-            } else {
-                name_vec[output_idx] = StringVector::AddString(output.data[2], node.name.raw);
-            }
+            // Use ASTNode::ToValue() for proper hierarchical serialization
+            Value node_value = updated_node.ToValue();
+            auto &struct_children = StructValue::GetChildren(node_value);
             
-            file_path_vec[output_idx] = StringVector::AddString(output.data[3], global_state.current_file_result->source.file_path);
-            language_vec[output_idx] = StringVector::AddString(output.data[4], global_state.current_file_result->source.language);
-            start_line_vec[output_idx] = node.file_position.start_line;
-            start_column_vec[output_idx] = node.file_position.start_column;
-            end_line_vec[output_idx] = node.file_position.end_line;
-            end_column_vec[output_idx] = node.file_position.end_column;
-            
-            if (node.tree_position.parent_index < 0) {
-                parent_validity.SetInvalid(output_idx);
-            } else {
-                parent_id_vec[output_idx] = node.tree_position.parent_index;
-            }
-            
-            depth_vec[output_idx] = node.tree_position.node_depth;
-            sibling_index_vec[output_idx] = node.tree_position.sibling_index;
-            children_count_vec[output_idx] = node.subtree.children_count;
-            descendant_count_vec[output_idx] = node.subtree.descendant_count;
-            
-            // Handle peek with NULL support
-            if (node.peek.empty()) {
-                peek_validity.SetInvalid(output_idx);
-            } else {
-                peek_vec[output_idx] = StringVector::AddString(output.data[14], node.peek);
-            }
-            
-            semantic_type_vec[output_idx] = node.semantic_type;
-            flags_vec[output_idx] = node.universal_flags;
+            // Extract hierarchical fields: node_id, type, source, structure, context, peek
+            output.SetValue(0, output_idx, struct_children[0]);  // node_id
+            output.SetValue(1, output_idx, struct_children[1]);  // type
+            output.SetValue(2, output_idx, struct_children[2]);  // source
+            output.SetValue(3, output_idx, struct_children[3]);  // structure
+            output.SetValue(4, output_idx, struct_children[4]);  // context
+            output.SetValue(5, output_idx, struct_children[5]);  // peek
         }
         
         global_state.current_file_row_index += rows_to_emit;
@@ -601,29 +539,8 @@ static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadAST
     // Now just stream the results
     idx_t output_count = 0;
     
-    // Get output vectors
-    auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
-    auto type_vec = FlatVector::GetData<string_t>(output.data[1]);
-    auto name_vec = FlatVector::GetData<string_t>(output.data[2]);
-    auto file_path_vec = FlatVector::GetData<string_t>(output.data[3]);
-    auto language_vec = FlatVector::GetData<string_t>(output.data[4]);
-    auto start_line_vec = FlatVector::GetData<uint32_t>(output.data[5]);
-    auto start_column_vec = FlatVector::GetData<uint32_t>(output.data[6]);
-    auto end_line_vec = FlatVector::GetData<uint32_t>(output.data[7]);
-    auto end_column_vec = FlatVector::GetData<uint32_t>(output.data[8]);
-    auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[9]);
-    auto depth_vec = FlatVector::GetData<uint32_t>(output.data[10]);
-    auto sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[11]);
-    auto children_count_vec = FlatVector::GetData<uint32_t>(output.data[12]);
-    auto descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[13]);
-    auto peek_vec = FlatVector::GetData<string_t>(output.data[14]);
-    auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[15]);
-    auto flags_vec = FlatVector::GetData<uint8_t>(output.data[16]);
-    
-    // Get validity masks
-    auto &name_validity = FlatVector::Validity(output.data[2]);
-    auto &parent_validity = FlatVector::Validity(output.data[9]);
-    auto &peek_validity = FlatVector::Validity(output.data[14]);
+    // Use hierarchical structure with ASTNode::ToValue()
+    // Columns: node_id, type, source, structure, context, peek
 
     // Stream results from all completed parsing
     while (output_count < STANDARD_VECTOR_SIZE && 
@@ -642,48 +559,27 @@ static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadAST
         const idx_t rows_available = current_result.nodes.size() - global_state.current_batch_row_index;
         const idx_t rows_to_emit = std::min(STANDARD_VECTOR_SIZE - output_count, rows_available);
         
-        // Copy rows directly into output vectors
+        // Copy rows using hierarchical structure
         for (idx_t i = 0; i < rows_to_emit; i++) {
             const auto& node = current_result.nodes[global_state.current_batch_row_index + i];
             const idx_t output_idx = output_count + i;
             
-            // Fill output vectors
-            node_id_vec[output_idx] = node.node_id;
-            type_vec[output_idx] = StringVector::AddString(output.data[1], node.type.raw);
+            // Update node with source information from result
+            ASTNode updated_node = node;
+            updated_node.source.file_path = current_result.source.file_path;
+            updated_node.source.language = current_result.source.language;
             
-            if (node.name.raw.empty()) {
-                name_validity.SetInvalid(output_idx);
-            } else {
-                name_vec[output_idx] = StringVector::AddString(output.data[2], node.name.raw);
-            }
+            // Use ASTNode::ToValue() for proper hierarchical serialization
+            Value node_value = updated_node.ToValue();
+            auto &struct_children = StructValue::GetChildren(node_value);
             
-            file_path_vec[output_idx] = StringVector::AddString(output.data[3], current_result.source.file_path);
-            language_vec[output_idx] = StringVector::AddString(output.data[4], current_result.source.language);
-            start_line_vec[output_idx] = node.file_position.start_line;
-            start_column_vec[output_idx] = node.file_position.start_column;
-            end_line_vec[output_idx] = node.file_position.end_line;
-            end_column_vec[output_idx] = node.file_position.end_column;
-            
-            if (node.tree_position.parent_index < 0) {
-                parent_validity.SetInvalid(output_idx);
-            } else {
-                parent_id_vec[output_idx] = node.tree_position.parent_index;
-            }
-            
-            depth_vec[output_idx] = node.tree_position.node_depth;
-            sibling_index_vec[output_idx] = node.tree_position.sibling_index;
-            children_count_vec[output_idx] = node.subtree.children_count;
-            descendant_count_vec[output_idx] = node.subtree.descendant_count;
-            
-            // Handle peek with NULL support
-            if (node.peek.empty()) {
-                peek_validity.SetInvalid(output_idx);
-            } else {
-                peek_vec[output_idx] = StringVector::AddString(output.data[14], node.peek);
-            }
-            
-            semantic_type_vec[output_idx] = node.semantic_type;
-            flags_vec[output_idx] = node.universal_flags;
+            // Extract hierarchical fields: node_id, type, source, structure, context, peek
+            output.SetValue(0, output_idx, struct_children[0]);  // node_id
+            output.SetValue(1, output_idx, struct_children[1]);  // type
+            output.SetValue(2, output_idx, struct_children[2]);  // source
+            output.SetValue(3, output_idx, struct_children[3]);  // structure
+            output.SetValue(4, output_idx, struct_children[4]);  // context
+            output.SetValue(5, output_idx, struct_children[5]);  // peek
         }
         
         global_state.current_batch_row_index += rows_to_emit;

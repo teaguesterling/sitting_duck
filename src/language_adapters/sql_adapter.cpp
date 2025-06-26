@@ -17,8 +17,8 @@ namespace duckdb {
 // SQL Adapter implementation
 //==============================================================================
 
-#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
-    {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+#define DEF_TYPE(raw_type, semantic_type, name_strat, native_strat, flags) \
+    {raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     // SQL-specific node types - DDL statements
@@ -62,11 +62,11 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     DEF_TYPE("<", OPERATOR_COMPARISON, NONE, NONE, 0)
     DEF_TYPE(">", OPERATOR_COMPARISON, NONE, NONE, 0)
     
-    // Literals - name and value both contain the literal text
-    DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-    DEF_TYPE("number_literal", LITERAL_NUMBER, NODE_TEXT, NODE_TEXT, 0)
-    DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
-    DEF_TYPE("literal", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, 0)
+    // Literals - name extraction only (no native context needed)
+    DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+    DEF_TYPE("number_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+    DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+    DEF_TYPE("literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
     
     // Keywords with semantic meaning - query operations
     DEF_TYPE("keyword_select", TRANSFORM_QUERY, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -136,7 +136,7 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     // Generic keywords and aliases
     DEF_TYPE("keyword", PARSER_CONSTRUCT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("keyword_as", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-    DEF_TYPE("comment", METADATA_COMMENT, NONE, NODE_TEXT, 0)
+    DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
     
     // Core SQL constructs 
     DEF_TYPE("select_expression", TRANSFORM_QUERY, NONE, NONE, 0)
@@ -261,7 +261,7 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     DEF_TYPE("ordered_columns", ORGANIZATION_LIST, NONE, NONE, 0)
     DEF_TYPE("array_size_definition", TYPE_COMPOSITE, NONE, NONE, 0)
     DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-    DEF_TYPE("keyword_true", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE("keyword_true", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("create_type", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
     DEF_TYPE("double", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
     DEF_TYPE("keyword_double", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -271,13 +271,13 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     DEF_TYPE("keyword_function", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("keyword_without", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("keyword_zone", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-    DEF_TYPE("marginalia", METADATA_COMMENT, NODE_TEXT, NODE_TEXT, 0)
+    DEF_TYPE("marginalia", METADATA_COMMENT, NODE_TEXT, NONE, 0)
     DEF_TYPE("keyword_header", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("keyword_delimiter", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("keyword_recursive", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-    DEF_TYPE("filename", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+    DEF_TYPE("filename", LITERAL_STRING, NODE_TEXT, NONE, 0)
     DEF_TYPE("frame_definition", TRANSFORM_QUERY, NONE, NONE, 0)
-    DEF_TYPE("keyword_false", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE("keyword_false", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("keyword_database", DEFINITION_MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("keyword_float", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("cross_join", TRANSFORM_ITERATION, NONE, NONE, 0)
@@ -288,7 +288,7 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     DEF_TYPE("keyword_intersect", TRANSFORM_AGGREGATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("window_frame", TRANSFORM_QUERY, NONE, NONE, 0)
     DEF_TYPE("values", LITERAL_STRUCTURED, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-    DEF_TYPE("keyword_current_timestamp", LITERAL_ATOMIC, NODE_TEXT, NODE_TEXT, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE("keyword_current_timestamp", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("keyword_set", EXECUTION_MUTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("keyword_boolean", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("assignment", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
@@ -397,7 +397,9 @@ string SQLAdapter::ExtractNodeValue(TSNode node, const string &content) const {
     const NodeConfig* config = GetNodeConfig(node_type_str);
     
     if (config) {
-        return ExtractByStrategy(node, content, config->value_strategy);
+        // Note: value_strategy is now repurposed as native_strategy for pattern-based extraction
+        // For backward compatibility, we'll return empty string since most nodes don't need legacy value extraction
+        return "";
     }
     
     return "";

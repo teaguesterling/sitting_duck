@@ -250,6 +250,7 @@ set(EXTENSION_SOURCES
     src/semantic_type_functions.cpp
     src/ast_file_utils.cpp
     src/ast_supported_languages_function.cpp
+    src/native_context_extraction.cpp
     grammars/tree-sitter-python/src/parser.c
     grammars/tree-sitter-python/src/scanner.c
     grammars/tree-sitter-javascript/src/parser.c

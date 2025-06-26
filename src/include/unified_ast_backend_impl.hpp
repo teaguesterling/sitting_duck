@@ -1,6 +1,7 @@
 #pragma once
 
 #include "unified_ast_backend.hpp"
+#include "native_context_extraction.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "utf8proc_wrapper.hpp"
 #include <algorithm>
@@ -203,6 +204,12 @@ void PopulateSemanticFieldsTemplated(ASTNode& node, const AdapterType* adapter, 
             if (ts_node_child_count(ts_node) == 0) {
                 node.context.normalized.universal_flags |= ASTNodeFlags::IS_KEYWORD;
             }
+        }
+        
+        // NATIVE CONTEXT EXTRACTION: Use template specialization for zero-virtual-call performance
+        if (config->native_strategy != NativeExtractionStrategy::NONE) {
+            // Extract native context using compile-time template dispatch
+            node.context.native = ExtractNativeContextTemplated<AdapterType>(ts_node, content, config->native_strategy);
         }
     } else {
         // Fallback: use PARSER_CONSTRUCT for unknown types

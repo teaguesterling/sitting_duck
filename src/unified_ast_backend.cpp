@@ -264,11 +264,28 @@ vector<LogicalType> UnifiedASTBackend::GetHierarchicalTableSchema() {
     structure_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
     structure_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
     
-    // Context Information STRUCT (semantic information only)
+    // Context Information STRUCT (including native context)
     child_list_t<LogicalType> context_children;
     context_children.push_back(make_pair("name", LogicalType::VARCHAR));
     context_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
     context_children.push_back(make_pair("flags", LogicalType::UTINYINT));
+    
+    // Native context STRUCT
+    child_list_t<LogicalType> native_children;
+    native_children.push_back(make_pair("signature_type", LogicalType::VARCHAR));
+    native_children.push_back(make_pair("parameters", LogicalType::LIST(LogicalType::STRUCT({
+        {"name", LogicalType::VARCHAR},
+        {"type", LogicalType::VARCHAR},
+        {"default_value", LogicalType::VARCHAR},
+        {"is_optional", LogicalType::BOOLEAN},
+        {"is_variadic", LogicalType::BOOLEAN},
+        {"annotations", LogicalType::VARCHAR}
+    }))));
+    native_children.push_back(make_pair("modifiers", LogicalType::LIST(LogicalType::VARCHAR)));
+    native_children.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
+    native_children.push_back(make_pair("annotations", LogicalType::VARCHAR));
+    
+    context_children.push_back(make_pair("native", LogicalType::STRUCT(native_children)));
     
     return {
         LogicalType::BIGINT,                          // node_id
@@ -286,7 +303,7 @@ vector<string> UnifiedASTBackend::GetHierarchicalTableColumnNames() {
         "type",        // VARCHAR (moved to base level)
         "source",      // STRUCT(file_path, language, start_line, start_column, end_line, end_column)
         "structure",   // STRUCT(parent_id, depth, sibling_index, children_count, descendant_count)
-        "context",     // STRUCT(name, semantic_type, flags)
+        "context",     // STRUCT(name, semantic_type, flags, native)
         "peek"         // VARCHAR
     };
 }

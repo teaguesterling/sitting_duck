@@ -8,8 +8,8 @@ DEF_TYPE("doctype", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
 
 // Elements
 DEF_TYPE("element", ORGANIZATION_BLOCK, CUSTOM, NONE, 0)
-DEF_TYPE("script_element", EXTERNAL_EMBED, CUSTOM, NODE_TEXT, 0)
-DEF_TYPE("style_element", EXTERNAL_EMBED, CUSTOM, NODE_TEXT, 0)
+DEF_TYPE("script_element", EXTERNAL_EMBED, CUSTOM, NONE, 0)
+DEF_TYPE("style_element", EXTERNAL_EMBED, CUSTOM, NONE, 0)
 DEF_TYPE("start_tag", PARSER_DELIMITER, CUSTOM, NONE, 0)
 DEF_TYPE("end_tag", PARSER_DELIMITER, CUSTOM, NONE, 0)
 DEF_TYPE("self_closing_tag", PARSER_DELIMITER, CUSTOM, NONE, 0)
@@ -18,13 +18,13 @@ DEF_TYPE("tag_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 // Attributes
 DEF_TYPE("attribute", DEFINITION_VARIABLE, CUSTOM, CUSTOM, 0)
 DEF_TYPE("attribute_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("attribute_value", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("quoted_attribute_value", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("attribute_value", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("quoted_attribute_value", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
 // Text and content
-DEF_TYPE("text", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("raw_text", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("text", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("raw_text", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 // Special HTML5 elements
 DEF_TYPE("erroneous_end_tag", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
@@ -50,14 +50,14 @@ DEF_TYPE("/>", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE("<!", PARSER_DELIMITER, NONE, NONE, 0)
 
 // HTML entities and special constructs  
-DEF_TYPE("entity", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("entity", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("erroneous_end_tag_name", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
 
 // Additional HTML constructs
-DEF_TYPE("quoted_attribute_value", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("unquoted_attribute_value", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("cdata_section", LITERAL_STRING, NODE_TEXT, NODE_TEXT, 0)
-DEF_TYPE("processing_instruction", METADATA_DIRECTIVE, NODE_TEXT, NODE_TEXT, 0)
+DEF_TYPE("quoted_attribute_value", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("unquoted_attribute_value", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("cdata_section", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("processing_instruction", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
 
 // Common HTML tag names (could be handled by tag_name but adding for completeness)
 DEF_TYPE("html", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)

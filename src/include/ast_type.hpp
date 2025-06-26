@@ -109,15 +109,43 @@ struct NormalizedSemantics {
     NormalizedSemantics() : semantic_type(0), universal_flags(0), arity_bin(0) {}
 };
 
+struct ParameterInfo {
+    string name;               // Parameter name
+    string type;               // Parameter type (empty if not typed)
+    string default_value;      // Default value (empty if none)
+    bool is_optional;          // Whether parameter is optional
+    bool is_variadic;          // Whether parameter is variadic (*args, **kwargs, ...rest)
+    string annotations;        // JSON for language-specific metadata
+    
+    // Constructor
+    ParameterInfo(const string& param_name = "", 
+                  const string& param_type = "",
+                  const string& default_val = "",
+                  bool optional = false,
+                  bool variadic = false,
+                  const string& annot = "{}")
+        : name(param_name), type(param_type), default_value(default_val),
+          is_optional(optional), is_variadic(variadic), annotations(annot) {}
+};
+
 struct NativeContext {
-    string signature_type;      // Available if context >= NATIVE
-    string parameters;          // Available if context >= NATIVE (JSON array)
-    string modifiers;           // Available if context >= NATIVE (JSON array)
-    string defaults;            // Available if context >= NATIVE
-    string qualified_name;      // Available if context >= NATIVE (future: static resolution)
+    string signature_type;              // Return type (functions) | Variable type | Class type
+    vector<ParameterInfo> parameters;   // Function/method parameters (empty for non-parameterized)
+    vector<string> modifiers;           // ['async', 'public', 'static'] - cross-language standard
+    string qualified_name;              // 'MyClass.my_method' (if determinable from AST)
+    string annotations;                 // JSON for language-specific metadata, decorators, etc.
     
     // Default constructor
     NativeContext() = default;
+    
+    // Helper constructor
+    NativeContext(const string& sig_type,
+                  const vector<ParameterInfo>& params = {},
+                  const vector<string>& mods = {},
+                  const string& qual_name = "",
+                  const string& annot = "{}")
+        : signature_type(sig_type), parameters(params), modifiers(mods),
+          qualified_name(qual_name), annotations(annot) {}
 };
 
 struct ContextInfo {
