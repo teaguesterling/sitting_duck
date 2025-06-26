@@ -734,8 +734,6 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
             auto &parameters_validity = FlatVector::Validity(parameters_list_vector);
             
             if (!node.context.native.parameters.empty()) {
-                printf("DEBUG: ProjectToHierarchicalTableStreaming: Processing %zu parameters for %s\n", 
-                       node.context.native.parameters.size(), node.context.name.c_str());
                 // Set up the list entry for this row
                 auto list_offset = ListVector::GetListSize(parameters_list_vector);
                 parameters_data[row_idx].offset = list_offset;

@@ -23,9 +23,6 @@ struct PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
         
-        // Debug: Add a test modifier to verify extractor is called
-        context.modifiers.push_back("python_extractor_called");
-        
         // Extract return type if present (for type-annotated functions)
         context.signature_type = ExtractPythonReturnType(node, content);
         
@@ -34,9 +31,7 @@ struct PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
         
         // Extract decorators if present
         auto decorators = ExtractPythonDecorators(node, content);
-        for (const auto& decorator : decorators) {
-            context.modifiers.push_back(decorator);
-        }
+        context.modifiers = decorators;
         
         return context;
     }
@@ -52,7 +47,11 @@ private:
             if (strcmp(child_type, "->") == 0 && i + 1 < child_count) {
                 // Next child should be the return type
                 TSNode type_node = ts_node_child(node, i + 1);
-                return ExtractNodeText(type_node, content);
+                uint32_t start = ts_node_start_byte(type_node);
+                uint32_t end = ts_node_end_byte(type_node);
+                if (start < content.length() && end <= content.length()) {
+                    return content.substr(start, end - start);
+                }
             }
         }
         return ""; // No return type annotation
@@ -81,6 +80,7 @@ private:
         vector<ParameterInfo> parameters;
         
         uint32_t child_count = ts_node_child_count(params_node);
+        
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(params_node, i);
             const char* child_type = ts_node_type(child);
@@ -90,8 +90,12 @@ private:
             
             if (strcmp(child_type, "identifier") == 0) {
                 // Simple parameter: def func(param):
-                param.name = ExtractNodeText(child, content);
-                is_valid_param = true;
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                if (start < content.length() && end <= content.length()) {
+                    param.name = content.substr(start, end - start);
+                    is_valid_param = true;
+                }
             } else if (strcmp(child_type, "typed_parameter") == 0) {
                 // Typed parameter: def func(param: int):
                 param = ExtractTypedParameter(child, content);
@@ -123,9 +127,17 @@ private:
             const char* child_type = ts_node_type(child);
             
             if (strcmp(child_type, "identifier") == 0) {
-                param.name = ExtractNodeText(child, content);
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                if (start < content.length() && end <= content.length()) {
+                    param.name = content.substr(start, end - start);
+                }
             } else if (strcmp(child_type, "type") == 0) {
-                param.type = ExtractNodeText(child, content);
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                if (start < content.length() && end <= content.length()) {
+                    param.type = content.substr(start, end - start);
+                }
             }
         }
         
@@ -142,10 +154,18 @@ private:
             const char* child_type = ts_node_type(child);
             
             if (strcmp(child_type, "identifier") == 0) {
-                param.name = ExtractNodeText(child, content);
-            } else if (strcmp(child_type, "=") != 0 && param.name.empty() == false) {
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                if (start < content.length() && end <= content.length()) {
+                    param.name = content.substr(start, end - start);
+                }
+            } else if (strcmp(child_type, "=") != 0 && !param.name.empty()) {
                 // This is likely the default value (skip the = sign)
-                param.default_value = ExtractNodeText(child, content);
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                if (start < content.length() && end <= content.length()) {
+                    param.default_value = content.substr(start, end - start);
+                }
             }
         }
         
@@ -162,15 +182,27 @@ private:
             const char* child_type = ts_node_type(child);
             
             if (strcmp(child_type, "identifier") == 0) {
-                param.name = ExtractNodeText(child, content);
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                if (start < content.length() && end <= content.length()) {
+                    param.name = content.substr(start, end - start);
+                }
             } else if (strcmp(child_type, "type") == 0) {
-                param.type = ExtractNodeText(child, content);
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                if (start < content.length() && end <= content.length()) {
+                    param.type = content.substr(start, end - start);
+                }
             } else if (strcmp(child_type, "=") != 0 && 
                        strcmp(child_type, "identifier") != 0 &&
                        strcmp(child_type, "type") != 0 &&
                        strcmp(child_type, ":") != 0) {
                 // This is likely the default value
-                param.default_value = ExtractNodeText(child, content);
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                if (start < content.length() && end <= content.length()) {
+                    param.default_value = content.substr(start, end - start);
+                }
             }
         }
         

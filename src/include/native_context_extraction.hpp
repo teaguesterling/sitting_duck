@@ -18,13 +18,7 @@ namespace duckdb {
 template<NativeExtractionStrategy Strategy>
 struct NativeExtractor {
     static NativeContext Extract(TSNode node, const string& content) {
-        NativeContext context;
-        if (Strategy == NativeExtractionStrategy::FUNCTION_WITH_PARAMS) {
-            context.modifiers.push_back("base_function_with_params");
-        } else {
-            context.modifiers.push_back("base_extractor_called");
-        }
-        return context; // Default: no extraction with debug marker
+        return NativeContext(); // Default: no extraction
     }
 };
 
@@ -87,23 +81,8 @@ struct NativeExtractionTraits<TypeScriptAdapter> {
 // Dynamic strategy dispatch function - called from hot loop
 template<typename AdapterType>
 NativeContext ExtractNativeContextTemplated(TSNode node, const string& content, NativeExtractionStrategy strategy) {
-    // TRACE: Add tracing to the dispatch function
-    printf("TRACE: ExtractNativeContextTemplated called with strategy=%d\n", static_cast<int>(strategy));
-    
-    // DEBUG: Always return a test context to verify this function is called
-    NativeContext debug_context;
-    debug_context.modifiers.push_back("dispatch_called");
-    
-    if (strategy == NativeExtractionStrategy::FUNCTION_WITH_PARAMS) {
-        debug_context.modifiers.push_back("function_with_params_strategy");
-        printf("TRACE: Processing FUNCTION_WITH_PARAMS strategy\n");
-    }
-    
-    printf("TRACE: Returning context with %zu modifiers\n", debug_context.modifiers.size());
-    return debug_context;
-    
-    // Original dispatch logic (commented out for debugging)
-    /*
+    // Runtime dispatch to language-specific extractors
+    // Uses template traits to get the correct extractor type for each language
     switch (strategy) {
         case NativeExtractionStrategy::FUNCTION_WITH_PARAMS:
             return NativeExtractionTraits<AdapterType>::template ExtractorType<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
@@ -123,7 +102,6 @@ NativeContext ExtractNativeContextTemplated(TSNode node, const string& content, 
         default:
             return NativeContext(); // Return empty context for NONE or unknown strategies
     }
-    */
 }
 
 //==============================================================================

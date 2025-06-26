@@ -8,11 +8,6 @@
 namespace duckdb {
 
 Value ASTNode::ToValue() const {
-    // TRACE: Add general serialization tracing
-    if (type.raw == "function_definition") {
-        printf("TRACE: ToValue called for function_definition, name='%s', native_extraction_attempted=%s\n", 
-               context.name.c_str(), context.native_extraction_attempted ? "true" : "false");
-    }
     
     child_list_t<Value> struct_values;
     
@@ -49,10 +44,6 @@ Value ASTNode::ToValue() const {
     
     // Native context struct - NULL if no extraction was attempted
     if (context.native_extraction_attempted) {
-        // TRACE: Add tracing to serialization
-        if (type.raw == "function_definition") {
-            printf("TRACE: Serializing native context, modifiers count=%zu\n", context.native.modifiers.size());
-        }
         
         child_list_t<Value> native_values;
         native_values.emplace_back("signature_type", context.native.signature_type.empty() ? Value(LogicalType::VARCHAR) : Value(context.native.signature_type));
