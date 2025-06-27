@@ -674,10 +674,6 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
         
         // Populate native context STRUCT (4th field in context)
         if (node.context.native_extraction_attempted) {
-            // TRACE: Debug native context population
-            if (node.type.raw == "function_definition") {
-                printf("TRACE: Populating native context, modifiers count=%zu\n", node.context.native.modifiers.size());
-            }
             
             // Native context was extracted - populate the struct fields directly
             // Native struct has: signature_type, parameters, modifiers, qualified_name, annotations

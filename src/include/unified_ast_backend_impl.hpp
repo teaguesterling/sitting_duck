@@ -219,35 +219,23 @@ void PopulateSemanticFieldsTemplated(ASTNode& node, const AdapterType* adapter, 
         }
         
         // NATIVE CONTEXT EXTRACTION: Use template specialization for zero-virtual-call performance
-        // TRACE: Add comprehensive tracing for debugging
-        if (node.type.raw == "function_definition") {
-            printf("TRACE: Processing function_definition node, name='%s'\n", node.context.name.c_str());
-            if (config) {
-                printf("TRACE: Config exists, native_strategy=%d\n", static_cast<int>(config->native_strategy));
-            } else {
-                printf("TRACE: Config is NULL!\n");
-            }
-        }
-        
         if (config && config->native_strategy != NativeExtractionStrategy::NONE) {
-            if (node.type.raw == "function_definition") {
-                printf("TRACE: Calling ExtractNativeContextTemplated for function_definition\n");
-            }
-            
-            // Extract native context using compile-time template dispatch
-            node.context.native = ExtractNativeContextTemplated<AdapterType>(ts_node, content, config->native_strategy);
-            node.context.native_extraction_attempted = true;
-            
-            if (node.type.raw == "function_definition") {
-                printf("TRACE: Extraction complete, modifiers count=%zu\n", node.context.native.modifiers.size());
+            try {
+                // Extract native context using compile-time template dispatch with error handling
+                node.context.native = ExtractNativeContextTemplated<AdapterType>(ts_node, content, config->native_strategy);
+                node.context.native_extraction_attempted = true;
+            } catch (const std::exception& e) {
+                // Log error but don't fail the entire parsing operation
+                node.context.native_extraction_attempted = false;
+                // Optionally log: printf("Native extraction error for node type '%s': %s\n", node.type.raw.c_str(), e.what());
+            } catch (...) {
+                // Catch any other errors
+                node.context.native_extraction_attempted = false;
+                // Optionally log: printf("Unknown native extraction error for node type '%s'\n", node.type.raw.c_str());
             }
         } else {
             // Explicitly mark that no extraction was attempted
             node.context.native_extraction_attempted = false;
-            if (node.type.raw == "function_definition") {
-                printf("TRACE: No extraction attempted (config=%p, strategy=%d)\n", 
-                       config, config ? static_cast<int>(config->native_strategy) : -1);
-            }
         }
     } else {
         // Fallback: use PARSER_CONSTRUCT for unknown types
