@@ -47,7 +47,8 @@ public:
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
             
-            if (strcmp(child_type, "return_type") == 0) {
+            if (strcmp(child_type, "primitive_type") == 0 ||
+                strcmp(child_type, "return_type") == 0) {
                 uint32_t start = ts_node_start_byte(child);
                 uint32_t end = ts_node_end_byte(child);
                 if (start < content.length() && end <= content.length()) {
@@ -136,7 +137,8 @@ public:
                 if (start < content.length() && end <= content.length()) {
                     param.name = content.substr(start, end - start);
                 }
-            } else if (strcmp(child_type, "type_declaration") == 0 ||
+            } else if (strcmp(child_type, "primitive_type") == 0 ||
+                       strcmp(child_type, "type_declaration") == 0 ||
                        strcmp(child_type, "union_type") == 0 ||
                        strcmp(child_type, "intersection_type") == 0) {
                 // Parameter type hint
@@ -169,7 +171,8 @@ public:
                 if (start < content.length() && end <= content.length()) {
                     param.name = content.substr(start, end - start);
                 }
-            } else if (strcmp(child_type, "type_declaration") == 0) {
+            } else if (strcmp(child_type, "primitive_type") == 0 ||
+                       strcmp(child_type, "type_declaration") == 0) {
                 uint32_t start = ts_node_start_byte(child);
                 uint32_t end = ts_node_end_byte(child);
                 if (start < content.length() && end <= content.length()) {
@@ -203,7 +206,8 @@ public:
                 if (start < content.length() && end <= content.length()) {
                     param.name = content.substr(start, end - start);
                 }
-            } else if (strcmp(child_type, "type_declaration") == 0) {
+            } else if (strcmp(child_type, "primitive_type") == 0 ||
+                       strcmp(child_type, "type_declaration") == 0) {
                 uint32_t start = ts_node_start_byte(child);
                 uint32_t end = ts_node_end_byte(child);
                 if (start < content.length() && end <= content.length()) {
@@ -229,7 +233,8 @@ public:
                 if (start < content.length() && end <= content.length()) {
                     param.name = content.substr(start, end - start);
                 }
-            } else if (strcmp(child_type, "type_declaration") == 0) {
+            } else if (strcmp(child_type, "primitive_type") == 0 ||
+                       strcmp(child_type, "type_declaration") == 0) {
                 uint32_t start = ts_node_start_byte(child);
                 uint32_t end = ts_node_end_byte(child);
                 if (start < content.length() && end <= content.length()) {

@@ -60,10 +60,36 @@ string SwiftAdapter::ExtractNodeName(TSNode node, const string &content) const {
     const NodeConfig* config = GetNodeConfig(node_type_str);
     
     if (config) {
-        return ExtractByStrategy(node, content, config->name_strategy);
+        if (config->name_strategy == ExtractionStrategy::CUSTOM) {
+            // Swift-specific custom extraction
+            string node_type = string(node_type_str);
+            if (node_type == "function_declaration" || node_type == "init_declaration") {
+                return FindChildByType(node, content, "simple_identifier");
+            }
+            if (node_type == "class_declaration" || node_type == "struct_declaration" || 
+                node_type == "enum_declaration" || node_type == "protocol_declaration") {
+                return FindChildByType(node, content, "type_identifier");
+            }
+            if (node_type == "property_declaration" || node_type == "variable_declaration") {
+                return FindChildByType(node, content, "pattern");
+            }
+            if (node_type == "call_expression") {
+                // Extract function name from call expression
+                uint32_t child_count = ts_node_child_count(node);
+                for (uint32_t i = 0; i < child_count; i++) {
+                    TSNode child = ts_node_child(node, i);
+                    string child_type = ts_node_type(child);
+                    if (child_type == "simple_identifier" || child_type == "navigation_expression") {
+                        return ExtractNodeText(child, content);
+                    }
+                }
+            }
+        } else {
+            return ExtractByStrategy(node, content, config->name_strategy);
+        }
     }
     
-    // Swift-specific fallbacks
+    // Swift-specific fallbacks for unknown types
     string node_type = string(node_type_str);
     if (node_type == "function_declaration" || node_type == "init_declaration") {
         return FindChildByType(node, content, "simple_identifier");

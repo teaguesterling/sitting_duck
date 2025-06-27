@@ -59,7 +59,22 @@ string KotlinAdapter::ExtractNodeName(TSNode node, const string &content) const 
     const NodeConfig* config = GetNodeConfig(node_type_str);
     
     if (config) {
-        return ExtractByStrategy(node, content, config->name_strategy);
+        if (config->name_strategy == ExtractionStrategy::CUSTOM) {
+            // Kotlin-specific custom extraction
+            string node_type = string(node_type_str);
+            if (node_type.find("declaration") != string::npos || 
+                node_type.find("definition") != string::npos) {
+                // Try simple_identifier first (Kotlin-specific)
+                string identifier = FindChildByType(node, content, "simple_identifier");
+                if (!identifier.empty()) {
+                    return identifier;
+                }
+                // Fallback to regular identifier
+                return FindChildByType(node, content, "identifier");
+            }
+        } else {
+            return ExtractByStrategy(node, content, config->name_strategy);
+        }
     }
     
     // Fallback: try to find identifier child for common declaration types

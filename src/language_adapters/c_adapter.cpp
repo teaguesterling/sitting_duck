@@ -58,10 +58,34 @@ string CAdapter::ExtractNodeName(TSNode node, const string &content) const {
     const NodeConfig* config = GetNodeConfig(node_type_str);
     
     if (config) {
-        return ExtractByStrategy(node, content, config->name_strategy);
+        if (config->name_strategy == ExtractionStrategy::CUSTOM) {
+            // C-specific custom extraction
+            string node_type = string(node_type_str);
+            if (node_type == "function_definition") {
+                // Function name is in: function_definition -> function_declarator -> identifier
+                uint32_t child_count = ts_node_child_count(node);
+                for (uint32_t i = 0; i < child_count; i++) {
+                    TSNode child = ts_node_child(node, i);
+                    const char* child_type = ts_node_type(child);
+                    if (string(child_type) == "function_declarator") {
+                        // Look for identifier inside function_declarator
+                        return FindChildByType(child, content, "identifier");
+                    }
+                }
+                return "";
+            }
+            // General C fallback for other custom extractions
+            if (node_type.find("declarator") != string::npos || 
+                node_type.find("specifier") != string::npos ||
+                node_type.find("definition") != string::npos) {
+                return FindChildByType(node, content, "identifier");
+            }
+        } else {
+            return ExtractByStrategy(node, content, config->name_strategy);
+        }
     }
     
-    // C-specific fallbacks
+    // C-specific fallbacks for unknown types
     string node_type = string(node_type_str);
     if (node_type.find("declarator") != string::npos || 
         node_type.find("specifier") != string::npos ||

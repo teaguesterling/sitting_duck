@@ -65,15 +65,24 @@ public:
     static vector<ParameterInfo> ExtractCParameters(TSNode node, const string& content) {
         vector<ParameterInfo> params;
         
-        // Find parameter_list node
+        // Find function_declarator, then parameter_list inside it
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
             
-            if (strcmp(child_type, "parameter_list") == 0) {
-                params = ExtractCParametersDirect(child, content);
-                break;
+            if (strcmp(child_type, "function_declarator") == 0) {
+                // Look for parameter_list inside function_declarator
+                uint32_t declarator_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < declarator_count; j++) {
+                    TSNode declarator_child = ts_node_child(child, j);
+                    const char* declarator_child_type = ts_node_type(declarator_child);
+                    
+                    if (strcmp(declarator_child_type, "parameter_list") == 0) {
+                        params = ExtractCParametersDirect(declarator_child, content);
+                        return params;
+                    }
+                }
             }
         }
         
