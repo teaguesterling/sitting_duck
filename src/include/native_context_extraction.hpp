@@ -5,6 +5,9 @@
 #include "ast_type.hpp"  // For ParameterInfo and NativeContext definitions
 #include <tree_sitter/api.h>
 #include <vector>
+#include <type_traits>
+
+// Language-specific extractors will be included at the END to avoid circular dependencies
 
 namespace duckdb {
 
@@ -197,7 +200,7 @@ string ExtractNodeText(TSNode node, const string& content);
 
 } // namespace duckdb
 
-// Include language-specific extractors after function declarations
+// Include language-specific extractors AFTER all declarations to prevent circular dependencies
 #include "python_native_extractors.hpp"
 #include "javascript_native_extractors.hpp"
 #include "typescript_native_extractors.hpp"
@@ -205,3 +208,8 @@ string ExtractNodeText(TSNode node, const string& content);
 #include "cpp_native_extractors.hpp"
 #include "rust_native_extractors.hpp"
 #include "go_native_extractors.hpp"
+#include "c_native_extractors.hpp"
+#include "php_native_extractors.hpp"
+#include "ruby_native_extractors.hpp"
+#include "swift_native_extractors.hpp"
+#include "kotlin_native_extractors.hpp"

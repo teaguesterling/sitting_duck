@@ -23,8 +23,14 @@ struct PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
         
-        // Extract return type if present (for type-annotated functions)
-        context.signature_type = ExtractPythonReturnType(node, content);
+        // ALWAYS set fallback to verify this extractor is being called
+        context.signature_type = "python_extractor_called";
+        
+        // Extract return type if present (for type-annotated functions)  
+        string return_type = ExtractPythonReturnType(node, content);
+        if (!return_type.empty()) {
+            context.signature_type = return_type;
+        }
         
         // Extract function parameters
         context.parameters = ExtractPythonParameters(node, content);
