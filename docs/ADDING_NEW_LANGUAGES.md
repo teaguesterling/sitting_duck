@@ -114,19 +114,106 @@ The patch will be automatically applied during build via `scripts/apply_grammar_
 
 ## Phase 2: Language Adapter Implementation
 
-### 2.1 Create Semantic Type Definitions
+### 2.1 Native Context Extraction Setup (CRITICAL)
+
+**For languages requiring native context extraction (functions with parameters, classes with methods), you MUST update these four critical files with EXACT class name consistency:**
+
+1. **Forward declaration in `src/include/native_context_extraction.hpp`** (line ~67):
+```cpp
+class <Language>Adapter;  // EXACT class name match required
+```
+
+2. **Template trait specialization in `src/include/native_context_extraction.hpp`** (line ~100+):
+```cpp
+template<>
+struct NativeExtractionTraits<<Language>Adapter> {  // EXACT class name match required
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = <Language>NativeExtractor<Strategy>;
+};
+```
+
+3. **Include extractor header in `src/include/native_context_extraction.hpp`** (line ~204):
+```cpp
+#include "<language>_native_extractors.hpp"
+```
+
+4. **Create native extractor file `src/include/<language>_native_extractors.hpp`**:
+```cpp
+#pragma once
+
+#include "native_context_extraction.hpp"
+#include <tree_sitter/api.h>
+
+namespace duckdb {
+
+// Forward declaration for <Language>Adapter - EXACT class name match required
+class <Language>Adapter;
+
+// Base template for <Language> extractors - default returns empty context
+template<NativeExtractionStrategy Strategy>
+struct <Language>NativeExtractor {
+    static NativeContext Extract(TSNode node, const string& content) {
+        return NativeContext(); // Default: no extraction
+    }
+};
+
+// Specialization for FUNCTION_WITH_PARAMS
+template<>
+struct <Language>NativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        NativeContext context;
+        try {
+            // Extract function signature and parameters
+            context.signature_type = Extract<Language>ReturnType(node, content);
+            context.parameters = Extract<Language>Parameters(node, content);
+            context.modifiers = Extract<Language>Modifiers(node, content);
+        } catch (...) {
+            context.signature_type = "";  // Empty string becomes NULL in output
+            context.parameters.clear();
+            context.modifiers.clear();
+        }
+        return context;
+    }
+
+private:
+    static string Extract<Language>ReturnType(TSNode node, const string& content) {
+        // Language-specific return type extraction logic
+        return "";
+    }
+    
+    static vector<ParameterInfo> Extract<Language>Parameters(TSNode node, const string& content) {
+        // Language-specific parameter extraction logic
+        return {};
+    }
+    
+    static vector<string> Extract<Language>Modifiers(TSNode node, const string& content) {
+        // Language-specific modifier extraction logic
+        return {};
+    }
+};
+
+// Add other strategy specializations as needed...
+
+} // namespace duckdb
+```
+
+**CRITICAL**: The class name in the forward declaration, template trait specialization, and actual adapter class declaration MUST match EXACTLY (including case). Template resolution will silently fail if there's any mismatch.
+
+**Common Pitfall**: Using `CppAdapter` vs `CPPAdapter` or `JavascriptAdapter` vs `JavaScriptAdapter` will cause template dispatch to fail and native extraction to return NULL.
+
+### 2.2 Create Semantic Type Definitions
 
 Create `src/language_configs/<language>_types.def` with semantic mappings:
 
 ```cpp
 // <Language> language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, native_strategy, flags)
 
-// Definitions (functions, classes, variables)
-DEF_TYPE(function_definition, DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE(class_definition, DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0) 
-DEF_TYPE(method_definition, DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE(variable_declaration, DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+// Definitions (functions, classes, variables) - WITH NATIVE EXTRACTION
+DEF_TYPE(function_definition, DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE(class_definition, DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0) 
+DEF_TYPE(method_definition, DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE(variable_declaration, DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
 
 // Names and identifiers
 DEF_TYPE(identifier, NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
@@ -187,8 +274,8 @@ public:
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
-    uint8_t GetNodeFlags(const string &node_type) const override;
-    const NodeConfig* GetNodeConfig(const string &node_type) const override;
+    ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
 
 protected:
     void InitializeParser() const override;
@@ -204,8 +291,9 @@ private:
 Create `src/language_adapters/<language>_adapter.cpp`:
 
 ```cpp
-#include "include/language_adapter.hpp"
-#include "include/semantic_types.hpp"
+#include "language_adapter.hpp"
+#include "unified_ast_backend_impl.hpp"
+#include "semantic_types.hpp"
 
 namespace duckdb {
 
@@ -218,8 +306,8 @@ extern "C" {
 // <Language> Adapter Implementation
 //==============================================================================
 
-#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
-    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+#define DEF_TYPE(raw_type, semantic_type, name_strat, native_strat, flags) \
+    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> <Language>Adapter::node_configs = {
     #include "language_configs/<language>_types.def"
@@ -284,7 +372,9 @@ string <Language>Adapter::ExtractNodeValue(TSNode node, const string &content) c
     const NodeConfig* config = GetNodeConfig(node_type_str);
     
     if (config) {
-        return ExtractByStrategy(node, content, config->value_strategy);
+        // Note: value_strategy is now repurposed as native_strategy for pattern-based extraction
+        // For backward compatibility, we'll return empty string since most nodes don't need legacy value extraction
+        return "";
     }
     
     return "";
@@ -318,14 +408,17 @@ bool <Language>Adapter::IsPublicNode(TSNode node, const string &content) const {
     return true;
 }
 
-uint8_t <Language>Adapter::GetNodeFlags(const string &node_type) const {
-    const NodeConfig* config = GetNodeConfig(node_type);
-    return config ? config->flags : 0;
+const unordered_map<string, NodeConfig>& <Language>Adapter::GetNodeConfigs() const {
+    return node_configs;
 }
 
-const NodeConfig* <Language>Adapter::GetNodeConfig(const string &node_type) const {
-    auto it = node_configs.find(node_type);
-    return it != node_configs.end() ? &it->second : nullptr;
+ParsingFunction <Language>Adapter::GetParsingFunction() const {
+    // Return a lambda that captures the templated parsing function
+    return [](const void* adapter, const string& content, const string& language, 
+              const string& file_path, int32_t peek_size, const string& peek_mode) -> ASTResult {
+        auto typed_adapter = static_cast<const <Language>Adapter*>(adapter);
+        return UnifiedASTBackend::ParseToASTResultTemplated(typed_adapter, content, language, file_path, peek_size, peek_mode);
+    };
 }
 
 } // namespace duckdb
@@ -768,8 +861,9 @@ private:
 
 **src/language_adapters/kotlin_adapter.cpp** (complete file):
 ```cpp
-#include "include/language_adapter.hpp"
-#include "include/semantic_types.hpp"
+#include "language_adapter.hpp"
+#include "unified_ast_backend_impl.hpp"
+#include "semantic_types.hpp"
 
 namespace duckdb {
 
@@ -781,8 +875,8 @@ extern "C" {
 // Kotlin Adapter Implementation
 //==============================================================================
 
-#define DEF_TYPE(raw_type, semantic_type, name_strat, value_strat, flags) \
-    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, ExtractionStrategy::value_strat, flags)},
+#define DEF_TYPE(raw_type, semantic_type, name_strat, native_strat, flags) \
+    {#raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat, NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> KotlinAdapter::node_configs = {
     #include "language_configs/kotlin_types.def"
@@ -866,14 +960,17 @@ bool KotlinAdapter::IsPublicNode(TSNode node, const string &content) const {
     return !name.empty();
 }
 
-uint8_t KotlinAdapter::GetNodeFlags(const string &node_type) const {
-    const NodeConfig* config = GetNodeConfig(node_type);
-    return config ? config->flags : 0;
+const unordered_map<string, NodeConfig>& KotlinAdapter::GetNodeConfigs() const {
+    return node_configs;
 }
 
-const NodeConfig* KotlinAdapter::GetNodeConfig(const string &node_type) const {
-    auto it = node_configs.find(node_type);
-    return it != node_configs.end() ? &it->second : nullptr;
+ParsingFunction KotlinAdapter::GetParsingFunction() const {
+    // Return a lambda that captures the templated parsing function
+    return [](const void* adapter, const string& content, const string& language, 
+              const string& file_path, int32_t peek_size, const string& peek_mode) -> ASTResult {
+        auto typed_adapter = static_cast<const KotlinAdapter*>(adapter);
+        return UnifiedASTBackend::ParseToASTResultTemplated(typed_adapter, content, language, file_path, peek_size, peek_mode);
+    };
 }
 
 } // namespace duckdb

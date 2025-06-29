@@ -23,11 +23,18 @@ struct JavaScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
         
-        // Extract function parameters
-        context.parameters = ExtractJavaScriptParameters(node, content);
-        
-        // JavaScript functions don't have explicit return type annotations (pre-TypeScript)
-        context.signature_type = ""; 
+        try {
+            // Extract function parameters
+            context.parameters = ExtractJavaScriptParameters(node, content);
+            
+            // JavaScript functions don't have explicit return type annotations (pre-TypeScript)
+            // Return empty string for NULL in output
+            context.signature_type = "";
+            
+        } catch (...) {
+            context.signature_type = "";
+            context.parameters.clear();
+        }
         
         return context;
     }

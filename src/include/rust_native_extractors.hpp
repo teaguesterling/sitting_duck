@@ -26,15 +26,27 @@ struct RustNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
         
-        // Extract return type (Rust functions use -> Type syntax)
-        context.signature_type = ExtractRustReturnType(node, content);
-        
-        // Extract function parameters with Rust type annotations
-        context.parameters = ExtractRustParameters(node, content);
-        
-        // Extract function modifiers and attributes
-        auto modifiers = ExtractRustModifiers(node, content);
-        context.modifiers = modifiers;
+        try {
+            // Extract return type (Rust functions use -> Type syntax)
+            context.signature_type = ExtractRustReturnType(node, content);
+            
+            // If no explicit return type, default to unit type ()
+            if (context.signature_type.empty()) {
+                context.signature_type = "()";
+            }
+            
+            // Extract function parameters with Rust type annotations
+            context.parameters = ExtractRustParameters(node, content);
+            
+            // Extract function modifiers and attributes
+            auto modifiers = ExtractRustModifiers(node, content);
+            context.modifiers = modifiers;
+            
+        } catch (...) {
+            context.signature_type = "()";  // Default to unit type
+            context.parameters.clear();
+            context.modifiers.clear();
+        }
         
         return context;
     }

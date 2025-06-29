@@ -6,7 +6,7 @@
 namespace duckdb {
 
 //==============================================================================
-// C++ Native Context Extractors
+// C++ Native Context Extractors  
 //==============================================================================
 
 // Forward declaration for CppAdapter
@@ -26,15 +26,23 @@ struct CppNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
         
-        // Extract return type (C++ functions have explicit return types)
-        context.signature_type = ExtractCppReturnType(node, content);
-        
-        // Extract function parameters with C++ type annotations
-        context.parameters = ExtractCppParameters(node, content);
-        
-        // Extract function specifiers and qualifiers
-        auto modifiers = ExtractCppModifiers(node, content);
-        context.modifiers = modifiers;
+        try {
+            // Extract return type (C++ functions have explicit return types)
+            context.signature_type = ExtractCppReturnType(node, content);
+            
+            // Extract function parameters with C++ type annotations
+            context.parameters = ExtractCppParameters(node, content);
+            
+            // Extract function specifiers and qualifiers
+            auto modifiers = ExtractCppModifiers(node, content);
+            context.modifiers = modifiers;
+            
+        } catch (...) {
+            // Fallback on any error: provide minimal working context
+            context.signature_type = "";  // Empty string becomes NULL in output
+            context.parameters.clear();
+            context.modifiers.clear();
+        }
         
         return context;
     }
@@ -151,12 +159,20 @@ private:
         // For function_definition nodes, look for type nodes before function_declarator
         uint32_t child_count = ts_node_child_count(node);
         
+        // Debug: Track what we find
+        bool found_declarator = false;
+        string function_name;
+        
+        // First pass: find function name and look for explicit return type
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
             
             // Stop when we reach the function_declarator - return type comes before it
             if (strcmp(child_type, "function_declarator") == 0) {
+                found_declarator = true;
+                // Extract function name for constructor detection
+                function_name = ExtractFunctionName(child, content);
                 break;
             }
             
@@ -185,7 +201,69 @@ private:
             }
         }
         
-        // If no explicit return type found, it might be a constructor/destructor
+        // If no explicit return type found, check if this is a constructor
+        if (!function_name.empty()) {
+            // Check if function name matches containing class name (constructor)
+            string class_name = ExtractContainingClassName(node, content);
+            if (!class_name.empty() && function_name == class_name) {
+                return class_name; // Constructor returns instance of the class
+            }
+            
+            // Check for destructor
+            if (function_name.length() > 1 && function_name[0] == '~') {
+                return "void"; // Destructors return void
+            }
+        }
+        
+        return "";
+    }
+    
+    static string ExtractFunctionName(TSNode function_declarator, const string& content) {
+        uint32_t child_count = ts_node_child_count(function_declarator);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(function_declarator, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (strcmp(child_type, "identifier") == 0) {
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                if (start < content.length() && end <= content.length()) {
+                    return content.substr(start, end - start);
+                }
+            } else if (strcmp(child_type, "destructor_name") == 0) {
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                if (start < content.length() && end <= content.length()) {
+                    return content.substr(start, end - start);
+                }
+            }
+        }
+        return "";
+    }
+    
+    static string ExtractContainingClassName(TSNode node, const string& content) {
+        // Walk up the AST to find the containing class
+        TSNode current = ts_node_parent(node);
+        while (!ts_node_is_null(current)) {
+            const char* node_type = ts_node_type(current);
+            if (strcmp(node_type, "class_specifier") == 0 || 
+                strcmp(node_type, "struct_specifier") == 0) {
+                // Found containing class, extract its name
+                uint32_t child_count = ts_node_child_count(current);
+                for (uint32_t i = 0; i < child_count; i++) {
+                    TSNode child = ts_node_child(current, i);
+                    const char* child_type = ts_node_type(child);
+                    if (strcmp(child_type, "type_identifier") == 0) {
+                        uint32_t start = ts_node_start_byte(child);
+                        uint32_t end = ts_node_end_byte(child);
+                        if (start < content.length() && end <= content.length()) {
+                            return content.substr(start, end - start);
+                        }
+                    }
+                }
+            }
+            current = ts_node_parent(current);
+        }
         return "";
     }
     
