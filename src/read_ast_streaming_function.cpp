@@ -1019,7 +1019,7 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientCon
     }
     
     // Parse extraction config parameters
-    string context_str = "normalized";  // Default
+    string context_str = "native";  // Default to native for backward compatibility  // Default
     if (seen_parameters.find("context") != seen_parameters.end()) {
         context_str = input.named_parameters.at("context").GetValue<string>();
     }
@@ -1128,7 +1128,7 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientCon
     }
     
     // Parse extraction config parameters
-    string context_str = "normalized";  // Default
+    string context_str = "native";  // Default to native for backward compatibility  // Default
     if (seen_parameters.find("context") != seen_parameters.end()) {
         context_str = input.named_parameters.at("context").GetValue<string>();
     }

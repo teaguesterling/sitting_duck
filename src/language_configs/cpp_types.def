@@ -3,7 +3,7 @@
 
 // Function definitions with refinements
 DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_QUALIFIED_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
-DEF_TYPE("function_declarator", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("function_declarator", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
 DEF_TYPE("method_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
 DEF_TYPE("constructor_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("destructor_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, NONE, 0)
@@ -25,10 +25,10 @@ DEF_TYPE("namespace_definition", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("translation_unit", DEFINITION_MODULE, NONE, NONE, 0)
 
 // Function calls and expressions with refinements
-DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, NONE, NONE, 0)
+DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, CUSTOM, FUNCTION_WITH_PARAMS, 0)
 DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, NONE, NONE, 0)
 DEF_TYPE("delete_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, NONE, NONE, 0)
-DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
 DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
 DEF_TYPE("update_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
@@ -40,10 +40,10 @@ DEF_TYPE("subscript_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 DEF_TYPE("pointer_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 
 // Identifiers and references
-DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("field_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("field_identifier", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("namespace_identifier", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
-DEF_TYPE("qualified_identifier", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
+DEF_TYPE("qualified_identifier", NAME_QUALIFIED, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("scoped_identifier", NAME_SCOPED, NODE_TEXT, NONE, 0)
 
 // Types
@@ -76,7 +76,7 @@ DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, 
 DEF_TYPE("for_range_loop", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
 DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
 DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
+DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
 DEF_TYPE("continue_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
 DEF_TYPE("goto_statement", FLOW_JUMP | SemanticRefinements::Jump::GOTO, NONE, NONE, 0)
@@ -92,9 +92,9 @@ DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
 DEF_TYPE("throw_statement", ERROR_THROW, NONE, NONE, 0)
 
 // Structure/Organization
-DEF_TYPE("compound_statement", ORGANIZATION_BLOCK, NONE, NONE, 0)
-DEF_TYPE("parameter_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("argument_list", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("compound_statement", ORGANIZATION_BLOCK, NONE, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("parameter_list", ORGANIZATION_LIST, NONE, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("argument_list", ORGANIZATION_LIST, NONE, FUNCTION_WITH_PARAMS, 0)
 DEF_TYPE("template_parameter_list", ORGANIZATION_LIST, NONE, NONE, 0)
 
 // External/Import
@@ -250,7 +250,7 @@ DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
 DEF_TYPE("type_qualifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("storage_class_specifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("placeholder_type_specifier", TYPE_GENERIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
+DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, VARIABLE_WITH_TYPE, 0)
 
 // C++ perfection - remaining 1,408 unclassified nodes
 DEF_TYPE("virtual_specifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)

@@ -205,9 +205,9 @@ EOF
             exit 1
         fi
         if [[ -n "${3:-}" ]]; then
-            sql_parquet_out "SELECT file_path, name, type, start_line FROM read_ast('$2') WHERE type LIKE '%function%' AND name LIKE '%$3%' $SEMANTIC_FILTER ORDER BY file_path, start_line;"
+            sql_parquet_out "SELECT file_path, name, type, start_line, end_line FROM read_ast('$2') WHERE type LIKE '%function%' AND name LIKE '%$3%' $SEMANTIC_FILTER ORDER BY file_path, start_line;"
         else
-            sql_parquet_out "SELECT file_path, name, type, start_line FROM read_ast('$2') WHERE type LIKE '%function%' $SEMANTIC_FILTER ORDER BY file_path, start_line;"
+            sql_parquet_out "SELECT file_path, name, type, start_line, end_line FROM read_ast('$2') WHERE type LIKE '%function%' $SEMANTIC_FILTER ORDER BY file_path, start_line;"
         fi
         ;;
         
@@ -221,7 +221,7 @@ EOF
             lang=${table%_nodes}
             echo "=== $lang ==="
             sql_parquet_out "
-            SELECT name, file_path, descendant_count as complexity, start_line 
+            SELECT name, file_path, descendant_count as complexity, start_line, end_line
             FROM $table 
             WHERE descendant_count >= $threshold AND name IS NOT NULL AND name != '' 
             ORDER BY descendant_count DESC 
@@ -238,7 +238,7 @@ EOF
             lang=${table%_nodes}
             echo "=== $lang ==="
             sql_parquet_out "
-            SELECT name, file_path, descendant_count, start_line 
+            SELECT name, file_path, descendant_count, start_line, end_line
             FROM $table 
             WHERE type LIKE '%function%' AND descendant_count >= $threshold 
             ORDER BY descendant_count DESC"
@@ -254,7 +254,7 @@ EOF
         
         echo "Searching for function: $2"
         for table in $(sql_parquet "SELECT table_name FROM information_schema.tables WHERE table_name LIKE '%_nodes'"); do
-            result=$(sql_parquet_out "SELECT file_path, name, source_text, start_line FROM $table WHERE name = '$2' AND type LIKE '%function%' LIMIT 1" 2>/dev/null || true)
+            result=$(sql_parquet_out "SELECT file_path, name, source_text, start_line, end_line FROM $table WHERE name = '$2' AND type LIKE '%function%' LIMIT 1" 2>/dev/null || true)
             if [[ -n "$result" ]]; then
                 echo "$result"
                 break

@@ -15,7 +15,7 @@ namespace duckdb {
 //==============================================================================
 
 struct ExtractionConfig {
-    ContextLevel context = ContextLevel::NORMALIZED;
+    ContextLevel context = ContextLevel::NATIVE;  // Default to native for backward compatibility
     SourceLevel source = SourceLevel::LINES; 
     StructureLevel structure = StructureLevel::FULL;
     PeekLevel peek = PeekLevel::SMART;
