@@ -53,6 +53,8 @@ template<NativeExtractionStrategy Strategy> struct KotlinNativeExtractor;
 template<NativeExtractionStrategy Strategy> struct RNativeExtractor;
 template<NativeExtractionStrategy Strategy> struct BashNativeExtractor;
 template<NativeExtractionStrategy Strategy> struct SQLNativeExtractor;
+template<NativeExtractionStrategy Strategy> struct CSSNativeExtractor;
+template<NativeExtractionStrategy Strategy> struct HTMLNativeExtractor;
 
 // Language adapter traits - each adapter defines its extractor type
 template<typename AdapterType>
@@ -78,6 +80,8 @@ class KotlinAdapter;
 class RAdapter;
 class BashAdapter;
 class SQLAdapter;
+class CSSAdapter;
+class HTMLAdapter;
 
 // Specializations for each language adapter
 template<>
@@ -170,6 +174,18 @@ struct NativeExtractionTraits<SQLAdapter> {
     using ExtractorType = SQLNativeExtractor<Strategy>;
 };
 
+template<>
+struct NativeExtractionTraits<CSSAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = CSSNativeExtractor<Strategy>;
+};
+
+template<>
+struct NativeExtractionTraits<HTMLAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = HTMLNativeExtractor<Strategy>;
+};
+
 //==============================================================================
 // Main Template Dispatch Function (Zero Virtual Calls)
 //==============================================================================
@@ -240,3 +256,5 @@ string ExtractNodeText(TSNode node, const string& content);
 #include "r_native_extractors.hpp"
 #include "bash_native_extractors.hpp"
 #include "sql_native_extractors.hpp"
+#include "css_native_extractors.hpp"
+#include "html_native_extractors.hpp"
