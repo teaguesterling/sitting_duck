@@ -88,24 +88,74 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
             ast_node.type.raw = ts_node_type(entry.node);
             
             // Position information -> NEW STRUCTURED FIELDS
-            TSPoint start = ts_node_start_point(entry.node);
-            TSPoint end = ts_node_end_point(entry.node);
-            ast_node.source.start_line = start.row + 1;
-            ast_node.source.end_line = end.row + 1;
-            ast_node.source.start_column = start.column + 1;
-            ast_node.source.end_column = end.column + 1;
+            // Only populate source location fields based on config.source level
+            if (config.source >= SourceLevel::PATH) {
+                // File path and language available at PATH level and above
+                ast_node.source.file_path = file_path;
+                ast_node.source.language = language;
+            } else {
+                ast_node.source.file_path = "";
+                ast_node.source.language = "";
+            }
+            
+            if (config.source >= SourceLevel::LINES_ONLY) {
+                TSPoint start = ts_node_start_point(entry.node);
+                TSPoint end = ts_node_end_point(entry.node);
+                ast_node.source.start_line = start.row + 1;
+                ast_node.source.end_line = end.row + 1;
+                
+                // Column information only available at FULL level
+                if (config.source >= SourceLevel::FULL) {
+                    ast_node.source.start_column = start.column + 1;
+                    ast_node.source.end_column = end.column + 1;
+                } else {
+                    ast_node.source.start_column = 0;
+                    ast_node.source.end_column = 0;
+                }
+            } else {
+                // No line/column info
+                ast_node.source.start_line = 0;
+                ast_node.source.end_line = 0;
+                ast_node.source.start_column = 0;
+                ast_node.source.end_column = 0;
+            }
             
             // Tree structure -> NEW STRUCTURED FIELDS
-            ast_node.structure.parent_id = entry.parent_id;
-            ast_node.structure.depth = entry.depth;
-            ast_node.structure.sibling_index = entry.sibling_index;
+            // Only populate structure fields based on config.structure level
+            if (config.structure >= StructureLevel::MINIMAL) {
+                ast_node.structure.parent_id = entry.parent_id;
+                ast_node.structure.depth = entry.depth;
+                ast_node.structure.sibling_index = entry.sibling_index;
+                
+                // Child/descendant counts only available at FULL level
+                if (config.structure >= StructureLevel::FULL) {
+                    uint32_t child_count = ts_node_child_count(entry.node);
+                    ast_node.structure.children_count = child_count;
+                    ast_node.structure.descendant_count = 0; // Will be calculated on second visit
+                } else {
+                    ast_node.structure.children_count = 0;
+                    ast_node.structure.descendant_count = 0;
+                }
+            } else {
+                // No structure info
+                ast_node.structure.parent_id = -1;
+                ast_node.structure.depth = 0;
+                ast_node.structure.sibling_index = 0;
+                ast_node.structure.children_count = 0;
+                ast_node.structure.descendant_count = 0;
+            }
+            
+            // Store child_count for later use regardless of structure level
             uint32_t child_count = ts_node_child_count(entry.node);
-            ast_node.structure.children_count = child_count;
-            ast_node.structure.descendant_count = 0; // Will be calculated on second visit
             
             // Context information -> NEW STRUCTURED FIELDS
-            string raw_name = adapter->ExtractNodeName(entry.node, content);
-            ast_node.context.name = SanitizeUTF8(raw_name);
+            // Only populate context fields based on config.context level
+            if (config.context >= ContextLevel::NORMALIZED) {
+                string raw_name = adapter->ExtractNodeName(entry.node, content);
+                ast_node.context.name = SanitizeUTF8(raw_name);
+            } else {
+                ast_node.context.name = "";
+            }
             
             // Extract source text (peek) with configurable size and mode
             uint32_t start_byte = ts_node_start_byte(entry.node);
@@ -143,7 +193,17 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
             }
             
             // Populate semantic type and other fields - pass configs to avoid virtual call
-            PopulateSemanticFieldsTemplated(ast_node, adapter, entry.node, content, node_configs);
+            // Only populate semantic fields based on config.context level
+            if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
+                PopulateSemanticFieldsTemplated(ast_node, adapter, entry.node, content, node_configs, config);
+            } else {
+                // No context info - set minimal defaults
+                ast_node.context.normalized.semantic_type = 0;
+                ast_node.context.normalized.universal_flags = 0;
+                ast_node.context.normalized.arity_bin = 0;
+                ast_node.type.normalized = "";
+                ast_node.context.native_extraction_attempted = false;
+            }
             
             // Update legacy fields for backward compatibility
             ast_node.UpdateComputedLegacyFields();
@@ -163,8 +223,11 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
             // O(1) descendant count calculation!
             // All nodes between entry.node_index+1 and nodes.size() are descendants
             // due to DFS ordering
-            int32_t descendant_count = result.nodes.size() - entry.node_index - 1;
-            result.nodes[entry.node_index].structure.descendant_count = descendant_count;
+            // Only update if structure level allows it
+            if (config.structure >= StructureLevel::FULL) {
+                int32_t descendant_count = result.nodes.size() - entry.node_index - 1;
+                result.nodes[entry.node_index].structure.descendant_count = descendant_count;
+            }
             
             // Update legacy fields after descendant count change
             result.nodes[entry.node_index].UpdateComputedLegacyFields();
@@ -186,18 +249,18 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
 // Templated version of PopulateSemanticFields - zero virtual calls!
 template<typename AdapterType>
 void PopulateSemanticFieldsTemplated(ASTNode& node, const AdapterType* adapter, TSNode ts_node, const string& content, 
-                                    const unordered_map<string, NodeConfig>& node_configs) {
+                                    const unordered_map<string, NodeConfig>& node_configs, const ExtractionConfig& config) {
     // Direct hash lookup - no virtual calls!
     auto config_it = node_configs.find(node.type.raw);
-    const NodeConfig* config = (config_it != node_configs.end()) ? &config_it->second : nullptr;
+    const NodeConfig* node_config = (config_it != node_configs.end()) ? &config_it->second : nullptr;
     
-    if (config) {
+    if (node_config) {
         // STRUCTURED FIELDS: Set semantic info in context
-        node.context.normalized.semantic_type = config->semantic_type;
-        node.context.normalized.universal_flags = config->flags;
+        node.context.normalized.semantic_type = node_config->semantic_type;
+        node.context.normalized.universal_flags = node_config->flags;
         
         // Handle IS_KEYWORD_IF_LEAF: only apply IS_KEYWORD flag if node has no children
-        if (config->flags & ASTNodeFlags::IS_KEYWORD_IF_LEAF) {
+        if (node_config->flags & ASTNodeFlags::IS_KEYWORD_IF_LEAF) {
             // Remove the conditional flag
             node.context.normalized.universal_flags &= ~ASTNodeFlags::IS_KEYWORD_IF_LEAF;
             
@@ -208,10 +271,11 @@ void PopulateSemanticFieldsTemplated(ASTNode& node, const AdapterType* adapter, 
         }
         
         // NATIVE CONTEXT EXTRACTION: Use template specialization for zero-virtual-call performance
-        if (config && config->native_strategy != NativeExtractionStrategy::NONE) {
+        // Only extract native context if the config level allows it
+        if (config.context >= ContextLevel::NATIVE && node_config->native_strategy != NativeExtractionStrategy::NONE) {
             try {
                 // Extract native context using compile-time template dispatch with error handling
-                node.context.native = ExtractNativeContextTemplated<AdapterType>(ts_node, content, config->native_strategy);
+                node.context.native = ExtractNativeContextTemplated<AdapterType>(ts_node, content, node_config->native_strategy);
                 node.context.native_extraction_attempted = true;
             } catch (const std::exception& e) {
                 // Log error but don't fail the entire parsing operation

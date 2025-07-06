@@ -1,0 +1,204 @@
+# name: test/sql/extraction_config_parameters.test
+# description: Test ExtractionConfig parameters for controlling field population in AST functions
+# group: [duckdb_ast]
+
+# Test basic functionality - all functions should accept extraction config parameters
+statement ok
+CREATE TABLE test_results AS 
+SELECT * FROM read_ast('test/data/python/simple.py', 'python') LIMIT 0;
+
+statement ok
+DROP TABLE test_results;
+
+# Test 1: read_ast function with extraction config parameters
+query IIII
+SELECT context.name, source.start_line, structure.parent_id, peek
+FROM read_ast('test/data/python/simple.py', 'python', 
+    context := 'none', 
+    source := 'none', 
+    structure := 'none', 
+    peek := 'none')
+LIMIT 3;
+----
+NULL	0	NULL	NULL
+NULL	0	NULL	NULL
+NULL	0	NULL	NULL
+
+# Test 2: read_ast with partial enablement
+query IIII
+SELECT context.name, source.start_line, structure.parent_id, peek
+FROM read_ast('test/data/python/simple.py', 'python', 
+    context := 'normalized', 
+    source := 'lines', 
+    structure := 'minimal', 
+    peek := 'smart')
+LIMIT 3;
+----
+NULL	1	NULL	def hello():
+hello	1	0	def hello():
+NULL	1	1	def
+
+# Test 3: read_ast with full enablement
+query IIIII
+SELECT context.name, source.start_line, source.start_column, structure.children_count, peek
+FROM read_ast('test/data/python/simple.py', 'python', 
+    context := 'native', 
+    source := 'full', 
+    structure := 'full', 
+    peek := 'full')
+LIMIT 2;
+----
+NULL	1	1	4	(empty)
+hello	1	1	5	(empty)
+
+# Test 4: read_ast_hierarchical function (legacy name)
+query IIII
+SELECT context.name, source.start_line, structure.parent_id, peek
+FROM read_ast_hierarchical('test/data/python/simple.py', 'python', 
+    context := 'none', 
+    source := 'none', 
+    structure := 'none', 
+    peek := 'none')
+LIMIT 3;
+----
+NULL	0	NULL	NULL
+NULL	0	NULL	NULL
+NULL	0	NULL	NULL
+
+# Test 5: parse_ast function with extraction config
+query IIII
+SELECT context.name, source.start_line, structure.parent_id, peek
+FROM parse_ast('def hello(): pass', 'python', 
+    context := 'normalized', 
+    source := 'lines', 
+    structure := 'minimal', 
+    peek := 'smart')
+LIMIT 3;
+----
+NULL	1	NULL	def hello(): pass
+hello	1	0	def hello(): pass
+NULL	1	1	def
+
+# Test 6: parse_ast with all features disabled
+query IIII
+SELECT context.name, source.start_line, structure.parent_id, peek
+FROM parse_ast('def hello(): pass', 'python', 
+    context := 'none', 
+    source := 'none', 
+    structure := 'none', 
+    peek := 'none')
+LIMIT 3;
+----
+NULL	0	NULL	NULL
+NULL	0	NULL	NULL
+NULL	0	NULL	NULL
+
+# Test 7: parse_ast_flat function with flat schema
+query IIII
+SELECT name, start_line, parent_id, peek
+FROM parse_ast_flat('def hello(): pass', 'python', 
+    context := 'none', 
+    source := 'none', 
+    structure := 'none', 
+    peek := 'none')
+LIMIT 3;
+----
+NULL	0	NULL	NULL
+NULL	0	NULL	NULL
+NULL	0	NULL	NULL
+
+# Test 8: parse_ast_flat with features enabled
+query IIII
+SELECT name, start_line, parent_id, peek
+FROM parse_ast_flat('def hello(): pass', 'python', 
+    context := 'normalized', 
+    source := 'lines', 
+    structure := 'minimal', 
+    peek := 'smart')
+LIMIT 3;
+----
+NULL	1	NULL	def hello(): pass
+hello	1	0	def hello(): pass
+NULL	1	1	def
+
+# Test 9: Unified peek parameter with integer value
+query II
+SELECT context.name, LENGTH(peek) as peek_len
+FROM parse_ast('def very_long_function_name_for_testing(): pass', 'python', 
+    peek := 10)
+WHERE context.name = 'very_long_function_name_for_testing'
+LIMIT 1;
+----
+very_long_function_name_for_testing	(empty)
+
+# Test 10: Unified peek parameter with string values
+query II
+SELECT context.name, peek
+FROM parse_ast('def hello(): pass', 'python', 
+    peek := 'none')
+WHERE context.name = 'hello'
+LIMIT 1;
+----
+hello	NULL
+
+# Test 11: Source level progression
+query II
+SELECT source.file_path, source.start_line
+FROM parse_ast('def hello(): pass', 'python', source := 'none')
+LIMIT 1;
+----
+(empty)	0
+
+query II
+SELECT source.file_path, source.start_line  
+FROM parse_ast('def hello(): pass', 'python', source := 'path')
+LIMIT 1;
+----
+<inline>	0
+
+query II
+SELECT source.file_path, source.start_line
+FROM parse_ast('def hello(): pass', 'python', source := 'lines')
+LIMIT 1;
+----
+<inline>	1
+
+# Test 12: Structure level progression
+query II
+SELECT structure.parent_id, structure.children_count
+FROM parse_ast('def hello(): pass', 'python', structure := 'none')
+LIMIT 1;
+----
+NULL	0
+
+query II
+SELECT structure.parent_id, structure.children_count
+FROM parse_ast('def hello(): pass', 'python', structure := 'minimal')
+WHERE structure.parent_id IS NOT NULL
+LIMIT 1;
+----
+0	0
+
+query II
+SELECT structure.parent_id, structure.children_count
+FROM parse_ast('def hello(): pass', 'python', structure := 'full')
+WHERE structure.parent_id IS NOT NULL
+LIMIT 1;
+----
+0	(empty)
+
+# Test 13: Context level progression
+query II
+SELECT context.name, context.normalized.semantic_type
+FROM parse_ast('def hello(): pass', 'python', context := 'none')
+LIMIT 1;
+----
+(empty)	0
+
+query II
+SELECT context.name, context.normalized.semantic_type
+FROM parse_ast('def hello(): pass', 'python', context := 'normalized')
+WHERE context.name = 'hello'
+LIMIT 1;
+----
+hello	(empty)
