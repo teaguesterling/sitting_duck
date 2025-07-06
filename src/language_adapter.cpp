@@ -352,6 +352,8 @@ const TSLanguage* LanguageAdapterRegistry::GetTSLanguage(const string &language)
 }
 
 const LanguageAdapter* LanguageAdapterRegistry::GetAdapter(const string &language) const {
+    lock_guard<mutex> lock(registry_mutex_);
+    
     // First try direct lookup in already-created adapters
     auto it = adapters.find(language);
     if (it != adapters.end()) {
@@ -390,6 +392,8 @@ const LanguageAdapter* LanguageAdapterRegistry::GetAdapter(const string &languag
 }
 
 unique_ptr<LanguageAdapter> LanguageAdapterRegistry::CreateAdapter(const string &language) const {
+    lock_guard<mutex> lock(registry_mutex_);
+    
     // Resolve alias to actual language name
     string actual_language = language;
     auto alias_it = alias_to_language.find(language);

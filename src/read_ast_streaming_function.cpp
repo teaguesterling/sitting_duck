@@ -502,6 +502,37 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
 }
 
 // PARALLEL PROCESSING without batching - let DuckDB handle task distribution
+// Helper function to convert ExtractionConfig to legacy parameters for ParsingFunction compatibility
+static pair<int32_t, string> ConvertExtractionConfigToLegacyParams(const ExtractionConfig &config) {
+    int32_t peek_size;
+    string peek_mode;
+    
+    switch (config.peek) {
+        case PeekLevel::NONE:
+            peek_size = 0;
+            peek_mode = "none";
+            break;
+        case PeekLevel::SMART:
+            peek_size = -1;  // Smart mode uses adaptive sizing
+            peek_mode = "smart";
+            break;
+        case PeekLevel::FULL:
+            peek_size = -2;  // Full mode means read entire file
+            peek_mode = "full";
+            break;
+        case PeekLevel::CUSTOM:
+            peek_size = config.peek_size;
+            peek_mode = "custom";
+            break;
+        default:
+            peek_size = -1;
+            peek_mode = "smart";
+            break;
+    }
+    
+    return make_pair(peek_size, peek_mode);
+}
+
 static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output) {
     // Check if we need to do the one-time parallel processing
     if (!global_state.parallel_processing_complete) {
@@ -509,9 +540,12 @@ static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadAST
         const auto files_per_task = MaxValue<idx_t>((global_state.all_file_paths.size() + num_threads - 1) / num_threads, 1);
         const auto num_tasks = (global_state.all_file_paths.size() + files_per_task - 1) / files_per_task;
         
-        // Create parsing state for ALL files at once
+        // Convert ExtractionConfig to legacy parameters for ParsingFunction compatibility
+        auto [peek_size, peek_mode] = ConvertExtractionConfigToLegacyParams(global_state.extraction_config);
+        
+        // Create parsing state for ALL files at once using converted parameters
         ASTParsingState parsing_state(context, global_state.all_file_paths, global_state.resolved_languages, 
-                                    global_state.ignore_errors, global_state.peek_size, global_state.peek_mode,
+                                    global_state.ignore_errors, peek_size, peek_mode,
                                     global_state.pre_created_adapters, num_tasks);
         
         // Create tasks - let DuckDB's scheduler handle the distribution
@@ -1019,7 +1053,7 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientCon
     }
     
     // Parse extraction config parameters
-    string context_str = "native";  // Default to native for backward compatibility  // Default
+    string context_str = "normalized";  // Default to normalized until native extraction memory issues are fixed
     if (seen_parameters.find("context") != seen_parameters.end()) {
         context_str = input.named_parameters.at("context").GetValue<string>();
     }
@@ -1128,7 +1162,7 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientCon
     }
     
     // Parse extraction config parameters
-    string context_str = "native";  // Default to native for backward compatibility  // Default
+    string context_str = "normalized";  // Default to normalized until native extraction memory issues are fixed
     if (seen_parameters.find("context") != seen_parameters.end()) {
         context_str = input.named_parameters.at("context").GetValue<string>();
     }
