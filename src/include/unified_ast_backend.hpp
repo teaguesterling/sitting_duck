@@ -124,6 +124,13 @@ public:
                                                            int32_t peek_size = 120,
                                                            const string& peek_mode = "auto");
     
+    // Single file parsing with ExtractionConfig
+    static unique_ptr<ASTResult> ParseSingleFileToASTResult(ClientContext &context,
+                                                           const string& file_path,
+                                                           const string& language,
+                                                           bool ignore_errors,
+                                                           const ExtractionConfig& config);
+    
     // Helper functions for different output formats
     static vector<LogicalType> GetFlatTableSchema();
     static vector<string> GetFlatTableColumnNames();

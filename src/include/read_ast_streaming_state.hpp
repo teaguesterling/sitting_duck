@@ -40,6 +40,7 @@ struct ReadASTStreamingGlobalState : public GlobalTableFunctionState {
     int32_t peek_size;
     string peek_mode;
     int32_t batch_size = 1;
+    ExtractionConfig extraction_config;  // NEW: Full extraction configuration
     
     // Batch processing state
     vector<string> current_batch_files;
@@ -61,6 +62,7 @@ struct ReadASTStreamingBindData : public TableFunctionData {
     int32_t peek_size;
     string peek_mode;
     int32_t batch_size;
+    ExtractionConfig extraction_config; // NEW: Full extraction configuration
     
     // Constructor for Value-based input (legacy)
     ReadASTStreamingBindData(Value file_path_value, string language, bool ignore_errors = false, 
@@ -75,6 +77,14 @@ struct ReadASTStreamingBindData : public TableFunctionData {
         : file_patterns(std::move(file_patterns)), use_patterns_vector(true),
           language(std::move(language)), ignore_errors(ignore_errors),
           peek_size(peek_size), peek_mode(std::move(peek_mode)), batch_size(batch_size) {}
+    
+    // NEW: Constructor with full ExtractionConfig
+    ReadASTStreamingBindData(vector<string> file_patterns, string language, bool ignore_errors,
+                           const ExtractionConfig& config, int32_t batch_size = 1)
+        : file_patterns(std::move(file_patterns)), use_patterns_vector(true),
+          language(std::move(language)), ignore_errors(ignore_errors),
+          peek_size(config.peek_size), peek_mode("smart"), batch_size(batch_size),
+          extraction_config(config) {}
 };
 
 } // namespace duckdb
