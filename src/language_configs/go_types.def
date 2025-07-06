@@ -8,22 +8,22 @@ DEF_TYPE("import_declaration", EXTERNAL_IMPORT, NONE, NONE, 0x01)
 DEF_TYPE("import_spec", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0x01)
 
 // Function declarations and definitions with refinements
-DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("func_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, NONE, 0)
+DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
+DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
+DEF_TYPE("func_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
 
 // Type declarations
-DEF_TYPE("type_declaration", EXECUTION_DECLARATION, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("type_spec", EXECUTION_DECLARATION, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("struct_type", DEFINITION_CLASS, NONE, NONE, 0x01)
-DEF_TYPE("interface_type", DEFINITION_CLASS, NONE, NONE, 0x01)
+DEF_TYPE("type_declaration", EXECUTION_DECLARATION, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("type_spec", EXECUTION_DECLARATION, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("struct_type", DEFINITION_CLASS, NONE, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("interface_type", DEFINITION_CLASS, NONE, CLASS_WITH_METHODS, 0x01)
 
 // Variable declarations with refinements
-DEF_TYPE("var_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("var_spec", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("const_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("const_spec", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("short_var_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("var_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("var_spec", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("const_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("const_spec", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("short_var_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
 
 // Expressions and references with refinements
 DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, NONE, 0)

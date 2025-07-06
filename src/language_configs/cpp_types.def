@@ -2,7 +2,7 @@
 // Format: DEF_TYPE(raw_type, semantic_type, name_extraction, value_extraction, flags)
 
 // Function definitions with refinements
-DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_QUALIFIED_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
 DEF_TYPE("function_declarator", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("method_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
 DEF_TYPE("constructor_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, NONE, 0)
