@@ -22,31 +22,31 @@ namespace duckdb {
 
 const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     // SQL-specific node types - DDL statements
-    DEF_TYPE("create_table", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
-    DEF_TYPE("create_view", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+    DEF_TYPE("create_table", DEFINITION_CLASS, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+    DEF_TYPE("create_view", DEFINITION_CLASS, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
     DEF_TYPE("create_index", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
     DEF_TYPE("drop_statement", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
     DEF_TYPE("alter_table", EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0)
     
     // DML statements - queries and transforms
-    DEF_TYPE("select_statement", TRANSFORM_QUERY, NONE, NONE, 0)
-    DEF_TYPE("insert_statement", EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0)
-    DEF_TYPE("update_statement", EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0)
-    DEF_TYPE("delete_statement", EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0)
+    DEF_TYPE("select_statement", TRANSFORM_QUERY, NONE, FUNCTION_WITH_PARAMS, 0)
+    DEF_TYPE("insert_statement", EXECUTION_MUTATION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+    DEF_TYPE("update_statement", EXECUTION_MUTATION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+    DEF_TYPE("delete_statement", EXECUTION_MUTATION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
     
     // Identifiers and names - most common unclassified types
-    DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-    DEF_TYPE("field", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-    DEF_TYPE("object_reference", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
-    DEF_TYPE("column_reference", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-    DEF_TYPE("table_reference", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
-    DEF_TYPE("relation", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
-    DEF_TYPE("function_call", COMPUTATION_CALL, FIND_IDENTIFIER, NONE, 0)
-    DEF_TYPE("invocation", COMPUTATION_CALL, FIND_IDENTIFIER, NONE, 0)
+    DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+    DEF_TYPE("field", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+    DEF_TYPE("object_reference", NAME_QUALIFIED, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+    DEF_TYPE("column_reference", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+    DEF_TYPE("table_reference", NAME_QUALIFIED, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+    DEF_TYPE("relation", NAME_QUALIFIED, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+    DEF_TYPE("function_call", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+    DEF_TYPE("invocation", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
     
     // Expressions and operations
-    DEF_TYPE("binary_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-    DEF_TYPE("term", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+    DEF_TYPE("binary_expression", COMPUTATION_EXPRESSION, NONE, FUNCTION_WITH_PARAMS, 0)
+    DEF_TYPE("term", COMPUTATION_EXPRESSION, NONE, FUNCTION_WITH_PARAMS, 0)
     
     // Punctuation and operators
     DEF_TYPE(",", PARSER_PUNCTUATION, NONE, NONE, 0)
@@ -63,10 +63,10 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     DEF_TYPE(">", OPERATOR_COMPARISON, NONE, NONE, 0)
     
     // Literals - name extraction only (no native context needed)
-    DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
-    DEF_TYPE("number_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
-    DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-    DEF_TYPE("literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+    DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+    DEF_TYPE("number_literal", LITERAL_NUMBER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+    DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+    DEF_TYPE("literal", LITERAL_ATOMIC, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
     
     // Keywords with semantic meaning - query operations
     DEF_TYPE("keyword_select", TRANSFORM_QUERY, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -124,12 +124,12 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     DEF_TYPE("keyword_json", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     
     // Data types
-    DEF_TYPE("bigint", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+    DEF_TYPE("bigint", TYPE_PRIMITIVE, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
     
     // SQL constructs
     DEF_TYPE("function_argument", ORGANIZATION_LIST, NONE, NONE, 0)
     DEF_TYPE("window_specification", TRANSFORM_QUERY, NONE, NONE, 0)
-    DEF_TYPE("window_function", COMPUTATION_CALL, FIND_IDENTIFIER, NONE, 0)
+    DEF_TYPE("window_function", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
     DEF_TYPE("set_operation", TRANSFORM_AGGREGATION, NONE, NONE, 0)
     DEF_TYPE("not_like", OPERATOR_COMPARISON, NONE, NONE, 0)
     
@@ -143,8 +143,8 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     DEF_TYPE("select", TRANSFORM_QUERY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("from", TRANSFORM_QUERY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE(";", PARSER_PUNCTUATION, NONE, NONE, 0)
-    DEF_TYPE("statement", EXECUTION_STATEMENT, NONE, NONE, 0)
-    DEF_TYPE("column_definition", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+    DEF_TYPE("statement", EXECUTION_STATEMENT, NONE, FUNCTION_WITH_PARAMS, 0)
+    DEF_TYPE("column_definition", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
     DEF_TYPE("*", OPERATOR_ARITHMETIC, NONE, NONE, 0)
     DEF_TYPE("where", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("order_target", ORGANIZATION_LIST, NONE, NONE, 0)
@@ -152,7 +152,7 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
     DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, 0)
     DEF_TYPE("+", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-    DEF_TYPE("list", ORGANIZATION_LIST, NONE, NONE, 0)
+    DEF_TYPE("list", ORGANIZATION_LIST, NONE, FUNCTION_WITH_PARAMS, 0)
     DEF_TYPE("subquery", TRANSFORM_QUERY, NONE, NONE, 0)
     DEF_TYPE("order_by", ORGANIZATION_LIST, NONE, NONE, 0)
     DEF_TYPE("group_by", TRANSFORM_AGGREGATION, NONE, NONE, 0)
@@ -174,8 +174,8 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     
     // Major remaining SQL constructs for improved classification - 9547 nodes
     DEF_TYPE("cast", COMPUTATION_CALL, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
-    DEF_TYPE("varchar", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-    DEF_TYPE("keyword_varchar", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE("varchar", TYPE_PRIMITIVE, NODE_TEXT, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE("keyword_varchar", TYPE_PRIMITIVE, NODE_TEXT, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("-", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
     DEF_TYPE("join", TRANSFORM_ITERATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("keyword_end", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -210,7 +210,7 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     DEF_TYPE("/", OPERATOR_ARITHMETIC, NONE, NONE, 0)
     DEF_TYPE("keyword_date", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("keyword_outer", TRANSFORM_ITERATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-    DEF_TYPE("column", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+    DEF_TYPE("column", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
     DEF_TYPE("decimal", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
     DEF_TYPE("keyword_decimal", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
     DEF_TYPE("column_definitions", ORGANIZATION_LIST, NONE, NONE, 0)
