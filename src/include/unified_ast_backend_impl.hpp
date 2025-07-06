@@ -216,11 +216,9 @@ void PopulateSemanticFieldsTemplated(ASTNode& node, const AdapterType* adapter, 
             } catch (const std::exception& e) {
                 // Log error but don't fail the entire parsing operation
                 node.context.native_extraction_attempted = false;
-                // Optionally log: printf("Native extraction error for node type '%s': %s\n", node.type.raw.c_str(), e.what());
             } catch (...) {
                 // Catch any other errors
                 node.context.native_extraction_attempted = false;
-                // Optionally log: printf("Unknown native extraction error for node type '%s'\n", node.type.raw.c_str());
             }
         } else {
             // Explicitly mark that no extraction was attempted

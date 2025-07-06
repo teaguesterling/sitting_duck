@@ -60,6 +60,10 @@ string CPPAdapter::ExtractNodeName(TSNode node, const string &content) const {
     const NodeConfig* config = GetNodeConfig(node_type_str);
     
     if (config) {
+        if (config->name_strategy == ExtractionStrategy::CUSTOM) {
+            // Custom C++ name extraction logic
+            return ExtractCppCustomName(node, content, node_type_str);
+        }
         return ExtractByStrategy(node, content, config->name_strategy);
     }
     
@@ -67,8 +71,69 @@ string CPPAdapter::ExtractNodeName(TSNode node, const string &content) const {
     string node_type = string(node_type_str);
     if (node_type.find("specifier") != string::npos || 
         node_type.find("definition") != string::npos) {
-        // Try multiple identifier types
+        // Try multiple identifier types in order of preference
         string result = FindChildByType(node, content, "identifier");
+        if (result.empty()) {
+            result = FindChildByType(node, content, "qualified_identifier");
+        }
+        if (result.empty()) {
+            result = FindChildByType(node, content, "type_identifier");
+        }
+        return result;
+    }
+    
+    return "";
+}
+
+string CPPAdapter::ExtractCppCustomName(TSNode node, const string &content, const char* node_type_str) const {
+    string node_type = string(node_type_str);
+    
+    if (node_type == "function_definition") {
+        // For function_definition: Look in function_declarator for qualified_identifier or identifier
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (strcmp(child_type, "function_declarator") == 0) {
+                // Found function_declarator, now look for name inside it
+                uint32_t decl_child_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < decl_child_count; j++) {
+                    TSNode decl_child = ts_node_child(child, j);
+                    const char* decl_child_type = ts_node_type(decl_child);
+                    
+                    if (strcmp(decl_child_type, "identifier") == 0) {
+                        // Simple function name
+                        return ExtractNodeText(decl_child, content);
+                    } else if (strcmp(decl_child_type, "qualified_identifier") == 0) {
+                        // Qualified name like UnifiedASTBackend::ParseToASTResult
+                        // Extract just the function name part (the identifier child)
+                        uint32_t qual_child_count = ts_node_child_count(decl_child);
+                        for (uint32_t k = 0; k < qual_child_count; k++) {
+                            TSNode qual_child = ts_node_child(decl_child, k);
+                            const char* qual_child_type = ts_node_type(qual_child);
+                            
+                            if (strcmp(qual_child_type, "identifier") == 0) {
+                                // This is the function name part
+                                return ExtractNodeText(qual_child, content);
+                            }
+                        }
+                        // If we can't find the identifier part, return the full qualified name
+                        return ExtractNodeText(decl_child, content);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Fallback to existing logic
+    if (node_type.find("specifier") != string::npos || 
+        node_type.find("definition") != string::npos) {
+        // Try multiple identifier types in order of preference
+        string result = FindChildByType(node, content, "identifier");
+        if (result.empty()) {
+            result = FindChildByType(node, content, "qualified_identifier");
+        }
         if (result.empty()) {
             result = FindChildByType(node, content, "type_identifier");
         }

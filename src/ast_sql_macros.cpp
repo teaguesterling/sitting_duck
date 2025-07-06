@@ -95,9 +95,6 @@ void RegisterASTSQLMacros(DatabaseInstance &instance) {
             successful_statements++;
         }
     }
-    
-    // Log success (in debug builds, you might want to actually log this)
-    // printf("Successfully loaded %d SQL statements from embedded macros\n", successful_statements);
 }
 
 } // namespace duckdb

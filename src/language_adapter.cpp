@@ -39,6 +39,211 @@ string LanguageAdapter::FindChildByType(TSNode node, const string &content, cons
     return "";
 }
 
+string LanguageAdapter::ExtractQualifiedIdentifierName(TSNode node, const string &content) const {
+    // Universal qualified identifier extraction
+    // Searches for qualified/scoped identifiers and extracts just the name part
+    
+    // Common qualified identifier patterns across languages:
+    // - qualified_identifier (C++): ClassName::methodName 
+    // - scoped_identifier (Java, Rust): package.ClassName.methodName
+    // - nested_identifier (TypeScript): module.submodule.functionName
+    
+    vector<string> patterns = {
+        "qualified_identifier",
+        "scoped_identifier", 
+        "nested_identifier",
+        "property_identifier"  // For JS/TS object.method patterns
+    };
+    
+    // First, search direct children
+    for (const string& pattern : patterns) {
+        TSNode qualified_node = FindChildByTypeNode(node, pattern);
+        if (!ts_node_is_null(qualified_node)) {
+            // Found a qualified identifier, now extract the name part
+            return ExtractNameFromQualifiedNode(qualified_node, content);
+        }
+    }
+    
+    // If not found directly, search recursively in common containers
+    vector<string> container_patterns = {
+        "function_declarator",
+        "method_declarator", 
+        "declarator",
+        "class_body",
+        "interface_body"
+    };
+    
+    for (const string& container : container_patterns) {
+        TSNode container_node = FindChildByTypeNode(node, container);
+        if (!ts_node_is_null(container_node)) {
+            // Recursively search in the container
+            string result = ExtractQualifiedIdentifierName(container_node, content);
+            if (!result.empty()) {
+                return result;
+            }
+        }
+    }
+    
+    // Fallback: try regular identifier
+    return FindChildByType(node, content, "identifier");
+}
+
+TSNode LanguageAdapter::FindChildByTypeNode(TSNode node, const string &child_type) const {
+    uint32_t child_count = ts_node_child_count(node);
+    for (uint32_t i = 0; i < child_count; i++) {
+        TSNode child = ts_node_child(node, i);
+        const char* type = ts_node_type(child);
+        if (child_type == type) {
+            return child;
+        }
+    }
+    return {0}; // Return null node
+}
+
+string LanguageAdapter::ExtractNameFromQualifiedNode(TSNode qualified_node, const string &content) const {
+    // Extract the final identifier from qualified names like:
+    // - ClassName::methodName -> methodName
+    // - package.Class.method -> method
+    // - module.submodule.func -> func
+    
+    uint32_t child_count = ts_node_child_count(qualified_node);
+    
+    // Look for the last identifier in the qualified chain
+    string last_identifier = "";
+    for (uint32_t i = 0; i < child_count; i++) {
+        TSNode child = ts_node_child(qualified_node, i);
+        const char* child_type = ts_node_type(child);
+        
+        if (strcmp(child_type, "identifier") == 0) {
+            // Keep track of the last identifier found
+            last_identifier = ExtractNodeText(child, content);
+        }
+    }
+    
+    // If we found an identifier, return it; otherwise return the full qualified name
+    if (!last_identifier.empty()) {
+        return last_identifier;
+    }
+    
+    // Fallback: return the entire qualified identifier text
+    return ExtractNodeText(qualified_node, content);
+}
+
+string LanguageAdapter::ExtractNameFromDeclarator(TSNode node, const string &content) const {
+    // Universal declarator extraction
+    // Searches for identifiers inside declarator nodes
+    
+    // Common declarator patterns across languages:
+    // - function_declarator (C/C++): contains function name and parameters
+    // - method_declarator (Java): contains method name and parameters  
+    // - declarator (various): general declaration pattern
+    
+    vector<string> declarator_patterns = {
+        "function_declarator",
+        "method_declarator",
+        "declarator",
+        "procedure_declarator",  // Pascal-like languages
+        "init_declarator"        // C++ initializing declarators
+    };
+    
+    for (const string& pattern : declarator_patterns) {
+        TSNode declarator_node = FindChildByTypeNode(node, pattern);
+        if (!ts_node_is_null(declarator_node)) {
+            // Found a declarator, extract identifier from it
+            // First try qualified identifier (for method names like Class::method)
+            string result = ExtractQualifiedIdentifierName(declarator_node, content);
+            if (!result.empty()) {
+                return result;
+            }
+            
+            // Fallback to simple identifier
+            result = FindChildByType(declarator_node, content, "identifier");
+            if (!result.empty()) {
+                return result;
+            }
+        }
+    }
+    
+    // Fallback: try direct identifier search on the original node
+    string result = FindChildByType(node, content, "identifier");
+    if (!result.empty()) {
+        return result;
+    }
+    
+    // Last resort: text-based extraction for malformed AST structures
+    return ExtractFunctionNameFromText(node, content);
+}
+
+string LanguageAdapter::ExtractFunctionNameFromText(TSNode node, const string &content) const {
+    // Text-based extraction for malformed AST structures
+    // Handles cases where tree-sitter parsing fails but we can extract from raw text
+    
+    string node_text = ExtractNodeText(node, content);
+    if (node_text.empty()) {
+        return "";
+    }
+    
+    // Look for function name patterns in C/C++ style:
+    // ReturnType ClassName::FunctionName(parameters) {
+    // ReturnType FunctionName(parameters) const {
+    
+    // Find the position of the opening parenthesis
+    size_t paren_pos = node_text.find('(');
+    if (paren_pos == string::npos) {
+        return "";  // Not a function signature
+    }
+    
+    // Extract everything before the parenthesis
+    string before_paren = node_text.substr(0, paren_pos);
+    
+    // Trim whitespace from the end
+    while (!before_paren.empty() && isspace(before_paren.back())) {
+        before_paren.pop_back();
+    }
+    
+    if (before_paren.empty()) {
+        return "";
+    }
+    
+    // Find the last identifier before the parenthesis
+    // This handles patterns like:
+    // - "ReturnType FunctionName" -> "FunctionName"  
+    // - "ReturnType ClassName::FunctionName" -> "FunctionName"
+    // - "const ReturnType& ClassName::FunctionName" -> "FunctionName"
+    
+    size_t last_space = before_paren.find_last_of(" \t");
+    size_t last_colon = before_paren.find_last_of(':');
+    
+    // Find the start position of the function name
+    size_t start_pos = 0;
+    if (last_colon != string::npos && last_colon > last_space) {
+        // Case: ClassName::FunctionName
+        start_pos = last_colon + 1;
+    } else if (last_space != string::npos) {
+        // Case: ReturnType FunctionName
+        start_pos = last_space + 1;
+    }
+    
+    // Extract the function name
+    string function_name = before_paren.substr(start_pos);
+    
+    // Trim any remaining whitespace
+    while (!function_name.empty() && isspace(function_name.front())) {
+        function_name.erase(0, 1);
+    }
+    while (!function_name.empty() && isspace(function_name.back())) {
+        function_name.pop_back();
+    }
+    
+    // Validate that this looks like a valid identifier
+    if (function_name.empty() || 
+        (!isalpha(function_name[0]) && function_name[0] != '_' && function_name[0] != '~')) {
+        return "";
+    }
+    
+    return function_name;
+}
+
 string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, ExtractionStrategy strategy) const {
     switch (strategy) {
         case ExtractionStrategy::NONE:
@@ -53,10 +258,20 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
             }
             return "";
         }
-        case ExtractionStrategy::FIND_IDENTIFIER:
-            return FindChildByType(node, content, "identifier");
+        case ExtractionStrategy::FIND_IDENTIFIER: {
+            // Try identifier first, then qualified_identifier for languages like C++
+            string result = FindChildByType(node, content, "identifier");
+            if (result.empty()) {
+                result = FindChildByType(node, content, "qualified_identifier");
+            }
+            return result;
+        }
         case ExtractionStrategy::FIND_PROPERTY:
             return FindChildByType(node, content, "property_identifier");
+        case ExtractionStrategy::FIND_QUALIFIED_IDENTIFIER:
+            return ExtractQualifiedIdentifierName(node, content);
+        case ExtractionStrategy::FIND_IN_DECLARATOR:
+            return ExtractNameFromDeclarator(node, content);
         case ExtractionStrategy::FIND_ASSIGNMENT_TARGET: {
             // Universal pattern: find identifier in parent assignment
             // Handles: R (name <- func), JS (const name = func), C++ (auto name = lambda), etc.

@@ -84,6 +84,13 @@ protected:
     string FindChildByType(TSNode node, const string &content, const string &child_type) const;
     string ExtractByStrategy(TSNode node, const string &content, ExtractionStrategy strategy) const;
     
+    // Qualified identifier extraction helpers
+    string ExtractQualifiedIdentifierName(TSNode node, const string &content) const;
+    TSNode FindChildByTypeNode(TSNode node, const string &child_type) const;
+    string ExtractNameFromQualifiedNode(TSNode qualified_node, const string &content) const;
+    string ExtractNameFromDeclarator(TSNode node, const string &content) const;
+    string ExtractFunctionNameFromText(TSNode node, const string &content) const;
+    
 };
 
 // Python language adapter
@@ -141,6 +148,7 @@ protected:
     
 private:
     static const unordered_map<string, NodeConfig> node_configs;
+    string ExtractCppCustomName(TSNode node, const string &content, const char* node_type_str) const;
 };
 
 // TypeScript language adapter
