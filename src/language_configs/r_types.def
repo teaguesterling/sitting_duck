@@ -3,7 +3,7 @@
 // Use bitwise OR to combine semantic types with refinements: DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA
 
 // Function definitions and declarations
-DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_ASSIGNMENT_TARGET, NONE, 0)
+DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_ASSIGNMENT_TARGET, FUNCTION_WITH_PARAMS, 0)
 DEF_TYPE("function", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Control flow statements

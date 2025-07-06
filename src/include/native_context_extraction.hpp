@@ -50,6 +50,8 @@ template<NativeExtractionStrategy Strategy> struct PHPNativeExtractor;
 template<NativeExtractionStrategy Strategy> struct RubyNativeExtractor;
 template<NativeExtractionStrategy Strategy> struct SwiftNativeExtractor;
 template<NativeExtractionStrategy Strategy> struct KotlinNativeExtractor;
+template<NativeExtractionStrategy Strategy> struct RNativeExtractor;
+template<NativeExtractionStrategy Strategy> struct BashNativeExtractor;
 
 // Language adapter traits - each adapter defines its extractor type
 template<typename AdapterType>
@@ -64,7 +66,7 @@ class PythonAdapter;
 class JavaScriptAdapter;
 class TypeScriptAdapter;
 class JavaAdapter;
-class CppAdapter;
+class CPPAdapter;
 class RustAdapter;
 class GoAdapter;
 class CAdapter;
@@ -72,6 +74,8 @@ class PHPAdapter;
 class RubyAdapter;
 class SwiftAdapter;
 class KotlinAdapter;
+class RAdapter;
+class BashAdapter;
 
 // Specializations for each language adapter
 template<>
@@ -99,7 +103,7 @@ struct NativeExtractionTraits<JavaAdapter> {
 };
 
 template<>
-struct NativeExtractionTraits<CppAdapter> {
+struct NativeExtractionTraits<CPPAdapter> {
     template<NativeExtractionStrategy Strategy>
     using ExtractorType = CppNativeExtractor<Strategy>;
 };
@@ -144,6 +148,18 @@ template<>
 struct NativeExtractionTraits<KotlinAdapter> {
     template<NativeExtractionStrategy Strategy>
     using ExtractorType = KotlinNativeExtractor<Strategy>;
+};
+
+template<>
+struct NativeExtractionTraits<RAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = RNativeExtractor<Strategy>;
+};
+
+template<>
+struct NativeExtractionTraits<BashAdapter> {
+    template<NativeExtractionStrategy Strategy>
+    using ExtractorType = BashNativeExtractor<Strategy>;
 };
 
 //==============================================================================
@@ -213,3 +229,5 @@ string ExtractNodeText(TSNode node, const string& content);
 #include "ruby_native_extractors.hpp"
 #include "swift_native_extractors.hpp"
 #include "kotlin_native_extractors.hpp"
+#include "r_native_extractors.hpp"
+#include "bash_native_extractors.hpp"
