@@ -1010,15 +1010,12 @@ static void ReadASTHierarchicalFunctionParallel(ClientContext &context, ReadASTS
         
         // Use streaming projection for this result
         idx_t old_output_index = output_index;
-        printf("[DEBUG] Table function calling ProjectToHierarchicalTableStreaming: old_output_index=%zu\n", old_output_index);
         
         UnifiedASTBackend::ProjectToHierarchicalTableStreaming(
             current_result.nodes, output, global_state.current_batch_row_index, output_index, current_result.source);
         
         // Update tracking based on how many rows were processed
         idx_t rows_processed = output_index - old_output_index;
-        printf("[DEBUG] Table function after ProjectToHierarchicalTableStreaming: new_output_index=%zu, rows_processed=%zu\n", 
-               output_index, rows_processed);
         
         global_state.current_batch_row_index += rows_processed;
         
@@ -1032,9 +1029,7 @@ static void ReadASTHierarchicalFunctionParallel(ClientContext &context, ReadASTS
         global_state.files_exhausted = true;
     }
     
-    printf("[DEBUG] Table function about to call SetCardinality with output_index=%zu\n", output_index);
     output.SetCardinality(output_index);
-    printf("[DEBUG] Table function completed SetCardinality successfully\n");
 }
 
 // Main hierarchical execute function - MATCH FLAT VERSION ROUTING LOGIC

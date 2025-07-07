@@ -160,7 +160,6 @@ private:
         uint32_t child_count = ts_node_child_count(node);
         
         // Debug: Track what we find
-        bool found_declarator = false;
         string function_name;
         
         // First pass: find function name and look for explicit return type
@@ -170,7 +169,6 @@ private:
             
             // Stop when we reach the function_declarator - return type comes before it
             if (strcmp(child_type, "function_declarator") == 0) {
-                found_declarator = true;
                 // Extract function name for constructor detection
                 function_name = ExtractFunctionName(child, content);
                 break;

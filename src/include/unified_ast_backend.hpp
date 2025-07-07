@@ -141,6 +141,10 @@ public:
     static vector<string> GetHierarchicalTableColumnNames();
     static LogicalType GetHierarchicalStructSchema();
     
+    // Dynamic schema functions based on ExtractionConfig parameters
+    static vector<LogicalType> GetDynamicTableSchema(const ExtractionConfig& config);
+    static vector<string> GetDynamicTableColumnNames(const ExtractionConfig& config);
+    
     // Conversion helpers
     static void ProjectToTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index);
     static Value CreateASTStruct(const ASTResult& result);
@@ -174,6 +178,7 @@ public:
 private:
     // Internal helpers
     static void PopulateSemanticFields(ASTNode& node, const LanguageAdapter* adapter, TSNode ts_node, const string& content);
+    static void ResetStructVectorState(Vector& vector);
 };
 
 } // namespace duckdb

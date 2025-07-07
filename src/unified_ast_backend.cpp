@@ -873,9 +873,9 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
     auto native_annotations_vec = FlatVector::GetData<string_t>(*native_entries[4]);
     auto &native_annotations_validity = FlatVector::Validity(*native_entries[4]);
     
-    // Get ListVectors for separate processing
-    auto &parameters_list_vector = *native_entries[1];
-    auto &modifiers_list_vector = *native_entries[2];
+    // Get ListVectors for separate processing - TODO: restore when implementing parameter/modifier arrays
+    // auto &parameters_list_vector = *native_entries[1];
+    // auto &modifiers_list_vector = *native_entries[2];
     
     // Process all collected rows - populate basic fields first
     for (idx_t i = 0; i < collected_rows.size(); i++) {
@@ -918,7 +918,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
         context_flags_vec[row_idx] = row_data.flags;
         
         // Native context fields - populate with extracted data
-        if (row_data.has_native_context) {
+        if (row_data.has_native_context || !row_data.signature_type.empty()) {
             // Populate native context struct fields
             if (row_data.has_signature_type) {
                 native_signature_type_vec[row_idx] = string_t(row_data.signature_type.c_str(), row_data.signature_type.length());

@@ -48,16 +48,11 @@ void ASTParsingTask::ProcessSingleFile(idx_t file_idx) {
             }
         }
         
-        // Get language adapter from pre-created adapters (no singleton lookup)
-        const LanguageAdapter* adapter = nullptr;
-        auto adapter_it = parsing_state.pre_created_adapters.find(file_language);
-        if (adapter_it != parsing_state.pre_created_adapters.end()) {
-            adapter = adapter_it->second.get();
-        } else {
-            // Fallback to singleton for compatibility (when not using pre-created adapters)
-            auto& registry = LanguageAdapterRegistry::GetInstance();
-            adapter = registry.GetAdapter(file_language);
-        }
+        // MEMORY SAFETY FIX: Create fresh adapter for each file to prevent state accumulation
+        // This eliminates the segfault caused by persistent adapter state across multiple files
+        auto& registry = LanguageAdapterRegistry::GetInstance();
+        auto fresh_adapter = registry.CreateAdapter(file_language);
+        const LanguageAdapter* adapter = fresh_adapter.get();
         
         if (!adapter) {
             throw InvalidInputException("Unsupported language: " + file_language);
