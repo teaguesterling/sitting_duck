@@ -19,6 +19,7 @@ namespace duckdb {
 static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output);
 static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output);
 static void ProcessBatchOfFiles(ClientContext &context, ReadASTStreamingGlobalState &global_state, const vector<string> &batch_files);
+static void PopulateDynamicColumns(DataChunk &output, idx_t output_idx, const Value &node_value, const ExtractionConfig &config);
 
 // Bind function for flat streaming two-argument version (explicit language)
 static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &context, TableFunctionBindInput &input,
@@ -65,7 +66,7 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
     }
     
     // Parse extraction config parameters
-    string context_str = "normalized";  // Default to normalized until native extraction is fixed
+    string context_str = "native";  // Default to native - memory issues fixed with flat schema
     if (seen_parameters.find("context") != seen_parameters.end()) {
         context_str = input.named_parameters.at("context").GetValue<string>();
     }
@@ -122,9 +123,9 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
     // Create ExtractionConfig from parsed parameters
     ExtractionConfig extraction_config = ParseExtractionConfig(context_str, source_str, structure_str, peek_mode, peek_size);
     
-    // Use hierarchical backend schema for structured access
-    return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
-    names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
+    // Use dynamic schema based on extraction config parameters
+    return_types = UnifiedASTBackend::GetDynamicTableSchema(extraction_config);
+    names = UnifiedASTBackend::GetDynamicTableColumnNames(extraction_config);
     
     // Use the new ExtractionConfig constructor
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, extraction_config, batch_size);
@@ -174,7 +175,7 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
     }
     
     // Parse extraction config parameters
-    string context_str = "normalized";  // Default to normalized until native extraction is fixed
+    string context_str = "native";  // Default to native - memory issues fixed with flat schema
     if (seen_parameters.find("context") != seen_parameters.end()) {
         context_str = input.named_parameters.at("context").GetValue<string>();
     }
@@ -234,9 +235,9 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
     // Create ExtractionConfig from parsed parameters
     ExtractionConfig extraction_config = ParseExtractionConfig(context_str, source_str, structure_str, peek_mode, peek_size);
     
-    // Use hierarchical backend schema for structured access
-    return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
-    names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
+    // Use dynamic schema based on extraction config parameters
+    return_types = UnifiedASTBackend::GetDynamicTableSchema(extraction_config);
+    names = UnifiedASTBackend::GetDynamicTableColumnNames(extraction_config);
     
     // Use the new ExtractionConfig constructor
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, extraction_config, batch_size);
@@ -345,6 +346,33 @@ static unique_ptr<GlobalTableFunctionState> ReadASTStreamingInit(ClientContext &
 }
 
 // Streaming execution function with parallel batch processing
+// Helper function to populate columns dynamically based on ExtractionConfig
+static void PopulateDynamicColumns(DataChunk &output, idx_t output_idx, const Value &node_value, const ExtractionConfig &config) {
+    auto &struct_children = StructValue::GetChildren(node_value);
+    idx_t column_idx = 0;
+    
+    // Always include core columns
+    output.SetValue(column_idx++, output_idx, struct_children[0]);  // node_id
+    output.SetValue(column_idx++, output_idx, struct_children[1]);  // type
+    
+    // Conditionally include columns based on config
+    if (config.source != SourceLevel::NONE) {
+        output.SetValue(column_idx++, output_idx, struct_children[2]);  // source
+    }
+    
+    if (config.structure != StructureLevel::NONE) {
+        output.SetValue(column_idx++, output_idx, struct_children[3]);  // structure
+    }
+    
+    if (config.context != ContextLevel::NONE) {
+        output.SetValue(column_idx++, output_idx, struct_children[4]);  // context
+    }
+    
+    if (config.peek != PeekLevel::NONE) {
+        output.SetValue(column_idx++, output_idx, struct_children[5]);  // peek
+    }
+}
+
 static void ReadASTFlatStreamingFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
     auto &global_state = data_p.global_state->Cast<ReadASTStreamingGlobalState>();
     
@@ -477,15 +505,9 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
                     
                     // Use ASTNode::ToValue() for proper hierarchical serialization
                     Value node_value = updated_node.ToValue();
-                    auto &struct_children = StructValue::GetChildren(node_value);
                     
-                    // Extract hierarchical fields: node_id, type, source, structure, context, peek
-                    output.SetValue(0, output_count, struct_children[0]);  // node_id
-                    output.SetValue(1, output_count, struct_children[1]);  // type
-                    output.SetValue(2, output_count, struct_children[2]);  // source
-                    output.SetValue(3, output_count, struct_children[3]);  // structure
-                    output.SetValue(4, output_count, struct_children[4]);  // context
-                    output.SetValue(5, output_count, struct_children[5]);  // peek
+                    // Populate columns dynamically based on extraction config
+                    PopulateDynamicColumns(output, output_count, node_value, global_state.extraction_config);
                     
                     output_count++;
                     global_state.current_batch_row_index++;
@@ -563,15 +585,9 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
             
             // Use ASTNode::ToValue() for proper hierarchical serialization
             Value node_value = updated_node.ToValue();
-            auto &struct_children = StructValue::GetChildren(node_value);
             
-            // Extract hierarchical fields: node_id, type, source, structure, context, peek
-            output.SetValue(0, output_idx, struct_children[0]);  // node_id
-            output.SetValue(1, output_idx, struct_children[1]);  // type
-            output.SetValue(2, output_idx, struct_children[2]);  // source
-            output.SetValue(3, output_idx, struct_children[3]);  // structure
-            output.SetValue(4, output_idx, struct_children[4]);  // context
-            output.SetValue(5, output_idx, struct_children[5]);  // peek
+            // Populate columns dynamically based on extraction config
+            PopulateDynamicColumns(output, output_idx, node_value, global_state.extraction_config);
         }
         
         global_state.current_file_row_index += rows_to_emit;
@@ -688,15 +704,9 @@ static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadAST
             
             // Use ASTNode::ToValue() for proper hierarchical serialization
             Value node_value = updated_node.ToValue();
-            auto &struct_children = StructValue::GetChildren(node_value);
             
-            // Extract hierarchical fields: node_id, type, source, structure, context, peek
-            output.SetValue(0, output_idx, struct_children[0]);  // node_id
-            output.SetValue(1, output_idx, struct_children[1]);  // type
-            output.SetValue(2, output_idx, struct_children[2]);  // source
-            output.SetValue(3, output_idx, struct_children[3]);  // structure
-            output.SetValue(4, output_idx, struct_children[4]);  // context
-            output.SetValue(5, output_idx, struct_children[5]);  // peek
+            // Populate columns dynamically based on extraction config
+            PopulateDynamicColumns(output, output_idx, node_value, global_state.extraction_config);
         }
         
         global_state.current_batch_row_index += rows_to_emit;
@@ -1154,7 +1164,7 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientCon
     }
     
     // Parse extraction config parameters
-    string context_str = "normalized";  // Default to normalized until native extraction memory issues are fixed
+    string context_str = "native";  // Default to native - memory issues fixed with flat schema
     if (seen_parameters.find("context") != seen_parameters.end()) {
         context_str = input.named_parameters.at("context").GetValue<string>();
     }
@@ -1263,7 +1273,7 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientCon
     }
     
     // Parse extraction config parameters
-    string context_str = "normalized";  // Default to normalized until native extraction memory issues are fixed
+    string context_str = "native";  // Default to native - memory issues fixed with flat schema
     if (seen_parameters.find("context") != seen_parameters.end()) {
         context_str = input.named_parameters.at("context").GetValue<string>();
     }

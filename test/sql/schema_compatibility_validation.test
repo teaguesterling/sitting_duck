@@ -1,0 +1,302 @@
+# name: test/sql/schema_compatibility_validation.test
+# description: Schema compatibility and breaking change detection tests
+# group: [duckdb_ast_critical]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: Core schema fields must always be present
+# =================================================
+query I
+SELECT COUNT(*) 
+FROM (
+    DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', 'python') LIMIT 0
+) 
+WHERE column_name IN ('node_id', 'type', 'source', 'structure', 'context', 'peek');
+----
+6
+
+query I
+SELECT COUNT(*) 
+FROM (
+    DESCRIBE SELECT * FROM parse_ast('def hello(): pass', 'python') LIMIT 0
+) 
+WHERE column_name IN ('node_id', 'type', 'source', 'structure', 'context', 'peek');
+----
+6
+
+# Test 2: Source struct schema validation
+# =======================================
+query I
+SELECT 
+    (column_type LIKE '%file_path%' AND 
+     column_type LIKE '%language%' AND
+     column_type LIKE '%start_line%' AND
+     column_type LIKE '%end_line%' AND
+     column_type LIKE '%start_column%' AND
+     column_type LIKE '%end_column%') as source_schema_valid
+FROM (
+    DESCRIBE SELECT source FROM read_ast('test/data/python/simple.py', 'python') LIMIT 0
+)
+WHERE column_name = 'source';
+----
+true
+
+# Test 3: Structure struct schema validation
+# ==========================================
+query I
+SELECT 
+    (column_type LIKE '%parent_id%' AND 
+     column_type LIKE '%depth%' AND
+     column_type LIKE '%sibling_index%' AND
+     column_type LIKE '%children_count%' AND
+     column_type LIKE '%descendant_count%') as structure_schema_valid
+FROM (
+    DESCRIBE SELECT structure FROM read_ast('test/data/python/simple.py', 'python') LIMIT 0
+)
+WHERE column_name = 'structure';
+----
+true
+
+# Test 4: Context struct schema validation
+# ========================================
+query I
+SELECT 
+    (column_type LIKE '%name%' AND 
+     column_type LIKE '%semantic_type%' AND
+     column_type LIKE '%flags%' AND
+     column_type LIKE '%native%') as context_schema_valid
+FROM (
+    DESCRIBE SELECT context FROM read_ast('test/data/python/simple.py', 'python') LIMIT 0
+)
+WHERE column_name = 'context';
+----
+true
+
+# Test 5: Native context struct schema validation
+# ===============================================
+query I
+SELECT 
+    (column_type LIKE '%signature_type%' AND
+     column_type LIKE '%parameters%' AND
+     column_type LIKE '%modifiers%' AND
+     column_type LIKE '%qualified_name%' AND
+     column_type LIKE '%annotations%') as native_schema_valid
+FROM (
+    DESCRIBE SELECT context.native FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 0
+)
+WHERE column_name = 'native';
+----
+true
+
+# Test 6: Schema consistency across context levels
+# ================================================
+query I
+SELECT 
+    (none_schema.type = norm_schema.type AND 
+     norm_schema.type = native_schema.type) as consistent_schemas
+FROM (
+    SELECT column_type as type
+    FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', 'python', context := 'none') LIMIT 0)
+    WHERE column_name = 'context'
+) none_schema,
+(
+    SELECT column_type as type
+    FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', 'python', context := 'normalized') LIMIT 0)
+    WHERE column_name = 'context'
+) norm_schema,
+(
+    SELECT column_type as type
+    FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 0)
+    WHERE column_name = 'context'
+) native_schema;
+----
+true
+
+# Test 7: Flat vs hierarchical schema compatibility
+# =================================================
+query I
+SELECT 
+    (hier_cols.count >= flat_cols.count) as hierarchical_superset
+FROM (
+    SELECT COUNT(*) as count
+    FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', 'python') LIMIT 0)
+) hier_cols,
+(
+    SELECT COUNT(*) as count
+    FROM (DESCRIBE SELECT * FROM read_ast_flat('test/data/python/simple.py', 'python') LIMIT 0)
+) flat_cols;
+----
+true
+
+# Test 8: Schema field types validation
+# =====================================
+query I
+SELECT 
+    (node_id_type LIKE '%BIGINT%' AND
+     type_type LIKE '%VARCHAR%' AND
+     peek_type LIKE '%VARCHAR%') as core_types_valid
+FROM (
+    SELECT 
+        MAX(CASE WHEN column_name = 'node_id' THEN column_type END) as node_id_type,
+        MAX(CASE WHEN column_name = 'type' THEN column_type END) as type_type,
+        MAX(CASE WHEN column_name = 'peek' THEN column_type END) as peek_type
+    FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', 'python') LIMIT 0)
+);
+----
+true
+
+# Test 9: Backward compatibility - legacy column access
+# =====================================================
+statement ok
+SELECT node_id, type, peek 
+FROM read_ast('test/data/python/simple.py', 'python') 
+LIMIT 1;
+
+statement ok
+SELECT source.file_path, source.language, source.start_line
+FROM read_ast('test/data/python/simple.py', 'python') 
+LIMIT 1;
+
+statement ok
+SELECT structure.parent_id, structure.depth, structure.children_count
+FROM read_ast('test/data/python/simple.py', 'python') 
+LIMIT 1;
+
+statement ok
+SELECT context.name, context.semantic_type, context.flags
+FROM read_ast('test/data/python/simple.py', 'python') 
+LIMIT 1;
+
+# Test 10: Schema stability across all supported languages
+# ========================================================
+query I
+SELECT COUNT(DISTINCT schema_hash) = 1 as schemas_consistent
+FROM (
+    SELECT column_name || ':' || column_type as schema_hash
+    FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', 'python') LIMIT 0)
+    UNION ALL
+    SELECT column_name || ':' || column_type as schema_hash
+    FROM (DESCRIBE SELECT * FROM read_ast('test/data/javascript/simple.js', 'javascript') LIMIT 0)
+    UNION ALL
+    SELECT column_name || ':' || column_type as schema_hash
+    FROM (DESCRIBE SELECT * FROM read_ast('test/data/cpp/simple.cpp', 'cpp') LIMIT 0)
+);
+----
+true
+
+# Test 11: Native context NULL handling compatibility
+# ===================================================
+statement ok
+SELECT context.native
+FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+WHERE context.native IS NULL OR context.native IS NOT NULL
+LIMIT 1;
+
+# Test 12: Schema evolution safety checks
+# =======================================
+query I
+SELECT 
+    (column_count >= 6) as minimum_columns_present
+FROM (
+    SELECT COUNT(*) as column_count
+    FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', 'python') LIMIT 0)
+);
+----
+true
+
+# Test 13: Type safety for numeric fields
+# =======================================
+statement ok
+SELECT 
+    node_id + 0 as numeric_node_id,
+    source.start_line + 0 as numeric_start_line,
+    structure.depth + 0 as numeric_depth
+FROM read_ast('test/data/python/simple.py', 'python')
+LIMIT 1;
+
+# Test 14: String field safety
+# ============================
+statement ok
+SELECT 
+    LENGTH(type) as type_length,
+    LENGTH(COALESCE(context.name, '')) as name_length,
+    LENGTH(COALESCE(peek, '')) as peek_length
+FROM read_ast('test/data/python/simple.py', 'python')
+WHERE type IS NOT NULL
+LIMIT 1;
+
+# Test 15: Schema consistency under different extraction configs
+# ==============================================================
+query I
+SELECT 
+    (min_config.count = max_config.count) as schema_config_independent
+FROM (
+    SELECT COUNT(*) as count
+    FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', 'python', 
+        context := 'none', source := 'none', structure := 'none', peek := 'none') LIMIT 0)
+) min_config,
+(
+    SELECT COUNT(*) as count
+    FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', 'python', 
+        context := 'native', source := 'full', structure := 'full', peek := 'full') LIMIT 0)
+) max_config;
+----
+true
+
+# Test 16: Critical field non-null guarantees
+# ===========================================
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/python/simple.py', 'python')
+WHERE node_id IS NOT NULL AND type IS NOT NULL;
+----
+110
+
+# Test 17: Struct field accessibility
+# ===================================
+statement ok
+SELECT 
+    source.file_path,
+    structure.parent_id,
+    context.semantic_type
+FROM read_ast('test/data/python/simple.py', 'python')
+WHERE node_id = 0;
+
+# Test 18: Schema resilience to parsing errors
+# ============================================
+statement ok
+SELECT COUNT(*) 
+FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/syntax_error.py', 'python', ignore_errors := true) LIMIT 0)
+WHERE column_name IN ('node_id', 'type', 'source', 'structure', 'context', 'peek');
+
+# Test 19: Multi-function schema consistency
+# ==========================================
+query I
+SELECT 
+    (read_ast_schema.hash = parse_ast_schema.hash) as function_schemas_match
+FROM (
+    SELECT string_agg(column_name || ':' || column_type, '|' ORDER BY column_name) as hash
+    FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', 'python') LIMIT 0)
+) read_ast_schema,
+(
+    SELECT string_agg(column_name || ':' || column_type, '|' ORDER BY column_name) as hash
+    FROM (DESCRIBE SELECT * FROM parse_ast('def hello(): pass', 'python') LIMIT 0)
+) parse_ast_schema;
+----
+true
+
+# Test 20: Future-proofing - schema extensibility checks
+# ======================================================
+statement ok
+SELECT 
+    node_id,
+    type,
+    source,
+    structure,
+    context,
+    peek
+FROM read_ast('test/data/python/simple.py', 'python')
+LIMIT 1;

@@ -1,0 +1,197 @@
+# name: test/sql/memory_corruption_prevention.test
+# description: Comprehensive tests to prevent memory corruption issues in AST functions
+# group: [duckdb_ast_critical]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: Native context extraction stability - single execution
+# ===============================================================
+query I
+SELECT COUNT(*) > 0 as has_results
+FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+LIMIT 1;
+----
+true
+
+# Test 2: Native context extraction stability - multiple consecutive executions
+# =============================================================================
+query I
+SELECT COUNT(*) as execution_1
+FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+LIMIT 1;
+----
+110
+
+query I
+SELECT COUNT(*) as execution_2
+FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+LIMIT 1;
+----
+110
+
+query I
+SELECT COUNT(*) as execution_3
+FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+LIMIT 1;
+----
+110
+
+# Test 3: Native context field access without corruption
+# ======================================================
+query I
+SELECT COUNT(*) 
+FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+WHERE context.native IS NOT NULL OR context.native IS NULL;
+----
+110
+
+# Test 4: Context parameter validation - all valid levels
+# =======================================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'none') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'node_types_only') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'normalized') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+# Test 5: Invalid context parameter handling
+# ==========================================
+statement error
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'invalid');
+----
+Binder Error
+
+statement error
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := '');
+----
+Binder Error
+
+statement error
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 123);
+----
+Binder Error
+
+# Test 6: Large file processing without memory issues
+# ===================================================
+query I
+SELECT COUNT(*) > 100 as processes_large_file
+FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+LIMIT 1;
+----
+true
+
+# Test 7: Repeated large file processing
+# ======================================
+query I
+SELECT (exec1.count = exec2.count) as consistent_large_processing
+FROM (
+    SELECT COUNT(*) as count
+    FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+) exec1,
+(
+    SELECT COUNT(*) as count
+    FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+) exec2;
+----
+true
+
+# Test 8: Mixed context levels in same session
+# ============================================
+query I
+SELECT 
+    (norm_count.total > 0 AND nat_count.total > 0) as mixed_contexts_work
+FROM (
+    SELECT COUNT(*) as total
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'normalized')
+) norm_count,
+(
+    SELECT COUNT(*) as total
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+) nat_count;
+----
+true
+
+# Test 9: Native context schema validation
+# ========================================
+query I
+SELECT 
+    column_name
+FROM (
+    DESCRIBE SELECT context.native FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 0
+)
+WHERE column_name = 'native';
+----
+native
+
+# Test 10: Stress test - rapid repeated executions
+# ================================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+# Test 11: Multi-language native context stability
+# ================================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/cpp/simple.cpp', 'cpp', context := 'native') LIMIT 1;
+
+# Test 12: Memory-intensive operations with native context
+# ========================================================
+query I
+SELECT COUNT(*) > 0 as handles_complex_query
+FROM (
+    SELECT 
+        node_id,
+        context.native,
+        context.name,
+        structure.descendant_count
+    FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+    WHERE structure.descendant_count > 5
+    ORDER BY structure.descendant_count DESC
+) 
+LIMIT 50;
+----
+true
+
+# Test 13: Edge case - empty file with native context
+# ===================================================
+statement ok
+SELECT COUNT(*) FROM parse_ast('', 'python', context := 'native');
+
+# Test 14: Edge case - single token with native context
+# =====================================================
+statement ok
+SELECT COUNT(*) FROM parse_ast('x', 'python', context := 'native');
+
+# Test 15: Native context with all extraction levels
+# ==================================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', 
+    context := 'native',
+    source := 'full',
+    structure := 'full',
+    peek := 'full') LIMIT 1;

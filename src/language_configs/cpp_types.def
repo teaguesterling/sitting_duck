@@ -26,8 +26,8 @@ DEF_TYPE("translation_unit", DEFINITION_MODULE, NONE, NONE, 0)
 
 // Function calls and expressions with refinements
 DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, CUSTOM, FUNCTION_WITH_PARAMS, 0)
-DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, NONE, NONE, 0)
-DEF_TYPE("delete_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, NONE, NONE, 0)
+DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, NONE, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("delete_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, NONE, FUNCTION_WITH_PARAMS, 0)
 DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
 DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
