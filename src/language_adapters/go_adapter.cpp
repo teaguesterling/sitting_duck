@@ -53,13 +53,6 @@ string GoAdapter::GetNormalizedType(const string &node_type) const {
     return node_type;  // Fallback to raw type
 }
 
-string GoAdapter::GetSemanticTypeName(const string &node_type) const {
-    const NodeConfig* config = GetNodeConfig(node_type);
-    if (config) {
-        return SemanticTypes::GetSemanticTypeName(config->semantic_type);
-    }
-    return node_type;  // Fallback to raw type
-}
 
 string GoAdapter::ExtractNodeName(TSNode node, const string &content) const {
     const char* node_type_str = ts_node_type(node);

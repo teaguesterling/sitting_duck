@@ -195,7 +195,6 @@ public:
     string GetLanguageName() const override;
     vector<string> GetAliases() const override;
     string GetNormalizedType(const string &node_type) const override;
-    string GetSemanticTypeName(const string &node_type) const;
     string ExtractNodeName(TSNode node, const string &content) const override;
     string ExtractNodeValue(TSNode node, const string &content) const override;
     bool IsPublicNode(TSNode node, const string &content) const override;
