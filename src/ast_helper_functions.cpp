@@ -1,7 +1,6 @@
 #include "ast_helper_functions.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "duckdb/main/extension_util.hpp"
 #include "duckdb/common/types/value.hpp"
 #include <sstream>
 
@@ -299,10 +298,10 @@ void ASTImportsFunction::Execute(ClientContext &context, TableFunctionInput &dat
     }
 }
 
-void RegisterASTHelperFunctions(DatabaseInstance &instance) {
-    ExtensionUtil::RegisterFunction(instance, ASTFunctionsFunction::GetFunction());
-    ExtensionUtil::RegisterFunction(instance, ASTClassesFunction::GetFunction());
-    ExtensionUtil::RegisterFunction(instance, ASTImportsFunction::GetFunction());
+void RegisterASTHelperFunctions(ExtensionLoader &loader) {
+    loader.RegisterFunction(ASTFunctionsFunction::GetFunction());
+    loader.RegisterFunction(ASTClassesFunction::GetFunction());
+    loader.RegisterFunction(ASTImportsFunction::GetFunction());
 }
 
 } // namespace duckdb

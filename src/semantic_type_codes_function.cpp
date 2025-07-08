@@ -1,6 +1,5 @@
 #include "duckdb.hpp"
 #include "duckdb/function/table_function.hpp"
-#include "duckdb/main/extension_util.hpp"
 #include "semantic_types.hpp"
 
 namespace duckdb {
@@ -199,10 +198,10 @@ static void SemanticTypeCodesFunction(ClientContext &context, TableFunctionInput
     output.SetCardinality(output_count);
 }
 
-void RegisterSemanticTypeCodesFunction(DatabaseInstance &instance) {
+void RegisterSemanticTypeCodesFunction(ExtensionLoader &loader) {
     TableFunction semantic_type_codes("semantic_type_codes", {}, SemanticTypeCodesFunction, SemanticTypeCodesBind, SemanticTypeCodesInit);
     semantic_type_codes.name = "semantic_type_codes";
-    ExtensionUtil::RegisterFunction(instance, semantic_type_codes);
+    loader.RegisterFunction(semantic_type_codes);
 }
 
 } // namespace duckdb

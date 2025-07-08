@@ -7,7 +7,7 @@ namespace duckdb {
 
 class ParseASTFunction {
 public:
-    static void Register(DatabaseInstance &instance);
+    static void Register(ExtensionLoader &loader);
     
 private:
     static void ParseASTScalarFunction(DataChunk &args, ExpressionState &state, Vector &result);

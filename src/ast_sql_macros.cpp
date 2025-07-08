@@ -1,6 +1,5 @@
 #include "duckdb.hpp"
 #include "duckdb/parser/parser.hpp"
-#include "duckdb/main/extension_util.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/connection.hpp"
 #include "embedded_sql_macros.hpp"
@@ -48,9 +47,9 @@ static vector<string> SplitSQLStatements(const string &sql) {
     return statements;
 }
 
-void RegisterASTSQLMacros(DatabaseInstance &instance) {
+void RegisterASTSQLMacros(ExtensionLoader &loader) {
     // Get a connection to execute SQL
-    auto conn = make_uniq<Connection>(instance);
+    auto conn = make_uniq<Connection>(loader.GetDatabaseInstance());
     
     int total_statements = 0;
     int successful_statements = 0;

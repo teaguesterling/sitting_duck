@@ -1,6 +1,5 @@
 #include "duckdb.hpp"
 #include "duckdb/function/table_function.hpp"
-#include "duckdb/main/extension_util.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
@@ -1441,28 +1440,28 @@ static TableFunction GetReadASTFlatAliasFunctionTwoArg() {
     return read_ast_flat;
 }
 
-void RegisterReadASTFunction(DatabaseInstance &instance) {
+void RegisterReadASTFunction(ExtensionLoader &loader) {
     // Register default read_ast functions (now using flat schema - production ready)
-    ExtensionUtil::RegisterFunction(instance, GetReadASTFlatFunctionOneArg());    // ANY (auto-detect)
-    ExtensionUtil::RegisterFunction(instance, GetReadASTFlatFunctionTwoArg());    // ANY, VARCHAR (explicit language)
+    loader.RegisterFunction(GetReadASTFlatFunctionOneArg());    // ANY (auto-detect)
+    loader.RegisterFunction(GetReadASTFlatFunctionTwoArg());    // ANY, VARCHAR (explicit language)
     
     // Register read_ast_flat aliases (explicit access to flat schema)
-    ExtensionUtil::RegisterFunction(instance, GetReadASTFlatAliasFunctionOneArg());    // ANY (auto-detect)
-    ExtensionUtil::RegisterFunction(instance, GetReadASTFlatAliasFunctionTwoArg());    // ANY, VARCHAR (explicit language)
+    loader.RegisterFunction(GetReadASTFlatAliasFunctionOneArg());    // ANY (auto-detect)
+    loader.RegisterFunction(GetReadASTFlatAliasFunctionTwoArg());    // ANY, VARCHAR (explicit language)
     
     // Register read_ast_hierarchical_new functions (hierarchical STRUCT schema with memory issues)
-    ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionOneArg());    // ANY (auto-detect)
-    ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionTwoArg());    // ANY, VARCHAR (explicit language)
+    loader.RegisterFunction(GetReadASTFunctionOneArg());    // ANY (auto-detect)
+    loader.RegisterFunction(GetReadASTFunctionTwoArg());    // ANY, VARCHAR (explicit language)
     
     // Register read_ast_hierarchical functions for backward compatibility
-    ExtensionUtil::RegisterFunction(instance, GetReadASTHierarchicalFunctionOneArg());    // ANY (auto-detect)
-    ExtensionUtil::RegisterFunction(instance, GetReadASTHierarchicalFunctionTwoArg());    // ANY, VARCHAR (explicit language)
+    loader.RegisterFunction(GetReadASTHierarchicalFunctionOneArg());    // ANY (auto-detect)
+    loader.RegisterFunction(GetReadASTHierarchicalFunctionTwoArg());    // ANY, VARCHAR (explicit language)
 }
 
-void RegisterReadASTStreamingFunction(DatabaseInstance &instance) {
+void RegisterReadASTStreamingFunction(ExtensionLoader &loader) {
     // Register explicit streaming functions for comparison
-    ExtensionUtil::RegisterFunction(instance, GetReadASTStreamingFunctionOneArg());
-    ExtensionUtil::RegisterFunction(instance, GetReadASTStreamingFunctionTwoArg());
+    loader.RegisterFunction(GetReadASTStreamingFunctionOneArg());
+    loader.RegisterFunction(GetReadASTStreamingFunctionTwoArg());
 }
 
 } // namespace duckdb

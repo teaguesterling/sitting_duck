@@ -1,6 +1,5 @@
 #include "duckdb.hpp"
 #include "duckdb/parser/parser.hpp"
-#include "duckdb/main/extension_util.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/connection.hpp"
 #include "duckdb/common/file_system.hpp"
