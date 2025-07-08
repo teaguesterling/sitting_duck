@@ -50,86 +50,87 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, 
         normalized_language = alias_it->second;
     }
     
-    // Fast runtime dispatch to compile-time templates - ZERO virtual calls in parsing!
+    // CRITICAL FIX: Use fresh adapter instances to prevent static state accumulation
+    // Static adapters were causing cumulative memory leaks leading to segfaults after 3+ large queries
     if (normalized_language == "python") {
-        static PythonAdapter adapter;
+        PythonAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "javascript") {
-        static JavaScriptAdapter adapter;
+        JavaScriptAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "cpp") {
-        static CPPAdapter adapter;
+        CPPAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "typescript") {
-        static TypeScriptAdapter adapter;
+        TypeScriptAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "sql") {
-        static SQLAdapter adapter;
+        SQLAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "duckdb") {
-        static DuckDBAdapter adapter;
+        DuckDBAdapter adapter;  // Fresh instance - no static state persistence
         // TODO: DuckDB adapter should also support ExtractionConfig
         return adapter.ParseSQL(content);
     }
     if (normalized_language == "go") {
-        static GoAdapter adapter;
+        GoAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "ruby") {
-        static RubyAdapter adapter;
+        RubyAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "markdown") {
-        static MarkdownAdapter adapter;
+        MarkdownAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "java") {
-        static JavaAdapter adapter;
+        JavaAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "php") {
-        static PHPAdapter adapter;
+        PHPAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "html") {
-        static HTMLAdapter adapter;
+        HTMLAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "css") {
-        static CSSAdapter adapter;
+        CSSAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "c") {
-        static CAdapter adapter;
+        CAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "rust") {
-        static RustAdapter adapter;
+        RustAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "json") {
-        static JSONAdapter adapter;
+        JSONAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "bash") {
-        static BashAdapter adapter;
+        BashAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "swift") {
-        static SwiftAdapter adapter;
+        SwiftAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "r") {
-        static RAdapter adapter;
+        RAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     if (normalized_language == "kotlin") {
-        static KotlinAdapter adapter;
+        KotlinAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
     
@@ -147,86 +148,86 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, 
         normalized_language = alias_it->second;
     }
     
-    // Fast runtime dispatch to compile-time templates - ZERO virtual calls in parsing!
+    // CRITICAL FIX: Use fresh adapter instances to prevent static state accumulation (legacy version)
     if (normalized_language == "python") {
-        static PythonAdapter adapter;
+        PythonAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "javascript") {
-        static JavaScriptAdapter adapter;
+        JavaScriptAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "cpp") {
-        static CPPAdapter adapter;
+        CPPAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "typescript") {
-        static TypeScriptAdapter adapter;
+        TypeScriptAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "sql") {
-        static SQLAdapter adapter;
+        SQLAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "duckdb") {
-        static DuckDBAdapter adapter;
+        DuckDBAdapter adapter;  // Fresh instance - no static state persistence
         // DuckDB adapter uses native parser, not tree-sitter template system
         return adapter.ParseSQL(content);
     }
     if (normalized_language == "go") {
-        static GoAdapter adapter;
+        GoAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "ruby") {
-        static RubyAdapter adapter;
+        RubyAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "markdown") {
-        static MarkdownAdapter adapter;
+        MarkdownAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "java") {
-        static JavaAdapter adapter;
+        JavaAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "php") {
-        static PHPAdapter adapter;
+        PHPAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "html") {
-        static HTMLAdapter adapter;
+        HTMLAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "css") {
-        static CSSAdapter adapter;
+        CSSAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "c") {
-        static CAdapter adapter;
+        CAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "rust") {
-        static RustAdapter adapter;
+        RustAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "json") {
-        static JSONAdapter adapter;
+        JSONAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "bash") {
-        static BashAdapter adapter;
+        BashAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "swift") {
-        static SwiftAdapter adapter;
+        SwiftAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "r") {
-        static RAdapter adapter;
+        RAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     if (normalized_language == "kotlin") {
-        static KotlinAdapter adapter;
+        KotlinAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
     

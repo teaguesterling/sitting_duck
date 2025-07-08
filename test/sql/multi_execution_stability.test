@@ -1,0 +1,355 @@
+# name: test/sql/multi_execution_stability.test
+# description: Multi-execution stability tests to prevent deadlocks and corruption
+# group: [duckdb_ast_critical]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: Basic stability - same query repeated
+# =============================================
+query I
+SELECT COUNT(*) as exec_1
+FROM read_ast('test/data/python/simple.py', 'python');
+----
+110
+
+query I
+SELECT COUNT(*) as exec_2
+FROM read_ast('test/data/python/simple.py', 'python');
+----
+110
+
+query I
+SELECT COUNT(*) as exec_3
+FROM read_ast('test/data/python/simple.py', 'python');
+----
+110
+
+# Test 2: Context level switching stability
+# =========================================
+query I
+SELECT COUNT(*) as none_context
+FROM read_ast('test/data/python/simple.py', 'python', context := 'none');
+----
+110
+
+query I
+SELECT COUNT(*) as normalized_context
+FROM read_ast('test/data/python/simple.py', 'python', context := 'normalized');
+----
+110
+
+query I
+SELECT COUNT(*) as native_context
+FROM read_ast('test/data/python/simple.py', 'python', context := 'native');
+----
+110
+
+query I
+SELECT COUNT(*) as back_to_normalized
+FROM read_ast('test/data/python/simple.py', 'python', context := 'normalized');
+----
+110
+
+query I
+SELECT COUNT(*) as back_to_native
+FROM read_ast('test/data/python/simple.py', 'python', context := 'native');
+----
+110
+
+# Test 3: Rapid successive executions
+# ===================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+# Test 4: Different files, same context level
+# ===========================================
+query I
+SELECT COUNT(*) > 0 as python_works
+FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+----
+true
+
+query I
+SELECT COUNT(*) > 0 as javascript_works  
+FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'native') LIMIT 1;
+----
+true
+
+query I
+SELECT COUNT(*) > 0 as cpp_works
+FROM read_ast('test/data/cpp/simple.cpp', 'cpp', context := 'native') LIMIT 1;
+----
+true
+
+query I
+SELECT COUNT(*) > 0 as python_still_works
+FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+----
+true
+
+# Test 5: Parse vs read function stability
+# ========================================
+query I
+SELECT COUNT(*) as parse_result
+FROM parse_ast('def hello(): pass', 'python', context := 'native');
+----
+9
+
+query I
+SELECT COUNT(*) as read_result
+FROM read_ast('test/data/python/simple.py', 'python', context := 'native');
+----
+110
+
+query I
+SELECT COUNT(*) as parse_again
+FROM parse_ast('def hello(): pass', 'python', context := 'native');
+----
+9
+
+query I
+SELECT COUNT(*) as read_again
+FROM read_ast('test/data/python/simple.py', 'python', context := 'native');
+----
+110
+
+# Test 6: Large file stability
+# ============================
+query I
+SELECT COUNT(*) as large_file_exec_1
+FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+LIMIT 1;
+----
+1
+
+query I
+SELECT COUNT(*) as large_file_exec_2
+FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+LIMIT 1;
+----
+1
+
+query I
+SELECT COUNT(*) as large_file_exec_3
+FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+LIMIT 1;
+----
+1
+
+# Test 7: Mixed extraction config stability
+# =========================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', 
+    context := 'native', source := 'full', structure := 'full') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', 
+    context := 'none', source := 'none', structure := 'none') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', 
+    context := 'normalized', source := 'lines', structure := 'minimal') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', 
+    context := 'native', source := 'full', structure := 'full') LIMIT 1;
+
+# Test 8: Session state isolation
+# ===============================
+query I
+SELECT 
+    (exec1.count = exec2.count) as results_consistent
+FROM (
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+) exec1,
+(
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+) exec2;
+----
+true
+
+# Test 9: Native context field access stability
+# =============================================
+statement ok
+SELECT context.native FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT context.native FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT context.native FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+# Test 10: Complex query stability with native context
+# ====================================================
+query I
+SELECT COUNT(*) > 0 as complex_query_stable
+FROM (
+    SELECT 
+        node_id,
+        type,
+        context.native,
+        context.name,
+        structure.parent_id,
+        source.start_line
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+    WHERE structure.parent_id IS NOT NULL
+    ORDER BY node_id
+) complex_result;
+----
+true
+
+query I
+SELECT COUNT(*) > 0 as complex_query_stable_2
+FROM (
+    SELECT 
+        node_id,
+        type,
+        context.native,
+        context.name,
+        structure.parent_id,
+        source.start_line
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+    WHERE structure.parent_id IS NOT NULL
+    ORDER BY node_id
+) complex_result;
+----
+true
+
+# Test 11: Error recovery stability
+# ================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/syntax_error.py', 'python', 
+    context := 'native', ignore_errors := true) LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', 
+    context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/syntax_error.py', 'python', 
+    context := 'native', ignore_errors := true) LIMIT 1;
+
+# Test 12: Nested query stability
+# ===============================
+query I
+SELECT COUNT(*) > 0 as nested_stable
+FROM (
+    SELECT node_id
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+    WHERE node_id IN (
+        SELECT structure.parent_id
+        FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+        WHERE structure.parent_id IS NOT NULL
+    )
+);
+----
+true
+
+query I
+SELECT COUNT(*) > 0 as nested_stable_2
+FROM (
+    SELECT node_id
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+    WHERE node_id IN (
+        SELECT structure.parent_id
+        FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+        WHERE structure.parent_id IS NOT NULL
+    )
+);
+----
+true
+
+# Test 13: Transaction stability
+# ==============================
+statement ok
+BEGIN TRANSACTION;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+COMMIT;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+# Test 14: Multi-language session stability
+# =========================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/cpp/simple.cpp', 'cpp', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/cpp/simple.cpp', 'cpp', context := 'native') LIMIT 1;
+
+# Test 15: Stress test - rapid context switching
+# ==============================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'none') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'normalized') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'none') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'normalized') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;

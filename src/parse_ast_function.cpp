@@ -28,7 +28,7 @@ static unique_ptr<FunctionData> ParseASTBind(ClientContext &context, TableFuncti
     auto language = input.inputs[1].GetValue<string>();
     
     // Parse extraction config parameters (same as read_ast)
-    string context_str = "normalized";
+    string context_str = "native";  // Default to native for backward compatibility
     string source_str = "lines";
     string structure_str = "full";
     string peek_str = "smart";
@@ -103,7 +103,7 @@ static unique_ptr<FunctionData> ParseASTHierarchicalBind(ClientContext &context,
     names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
     
     // Parse extraction config parameters (same as read_ast)
-    string context_str = "normalized";
+    string context_str = "native";  // Default to native for backward compatibility
     string source_str = "lines";
     string structure_str = "full";
     string peek_str = "smart";

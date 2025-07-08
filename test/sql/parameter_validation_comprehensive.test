@@ -1,0 +1,242 @@
+# name: test/sql/parameter_validation_comprehensive.test
+# description: Comprehensive parameter validation tests for all AST functions
+# group: [duckdb_ast_critical]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: Context parameter validation - all functions
+# ====================================================
+
+# read_ast function
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'none') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'node_types_only') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'normalized') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+# parse_ast function
+statement ok
+SELECT COUNT(*) FROM parse_ast('def hello(): pass', 'python', context := 'none') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM parse_ast('def hello(): pass', 'python', context := 'normalized') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM parse_ast('def hello(): pass', 'python', context := 'native') LIMIT 1;
+
+# Test 2: Invalid context parameters should fail
+# ==============================================
+statement error
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'invalid');
+----
+Binder Error
+
+statement error
+SELECT COUNT(*) FROM parse_ast('def hello(): pass', 'python', context := 'wrong');
+----
+Binder Error
+
+statement error
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'NONE');
+----
+Binder Error
+
+# Test 3: Source parameter validation
+# ===================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', source := 'none') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', source := 'input_only') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', source := 'lines') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', source := 'full') LIMIT 1;
+
+# Invalid source parameters
+statement error
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', source := 'invalid');
+----
+Binder Error
+
+# Test 4: Structure parameter validation
+# ======================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', structure := 'none') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', structure := 'minimal') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', structure := 'full') LIMIT 1;
+
+# Invalid structure parameters
+statement error
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', structure := 'invalid');
+----
+Binder Error
+
+# Test 5: Peek parameter validation - string values
+# =================================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 'none') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 'smart') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 'full') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 'custom') LIMIT 1;
+
+# Test 6: Peek parameter validation - integer values
+# ==================================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 0) LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 50) LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 120) LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 1000) LIMIT 1;
+
+# Invalid peek parameters
+statement error
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 'invalid');
+----
+Binder Error
+
+statement error
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := -1);
+----
+Binder Error
+
+# Test 7: Combined parameter validation
+# ====================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', 
+    context := 'native',
+    source := 'full', 
+    structure := 'full',
+    peek := 120) LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', 
+    context := 'none',
+    source := 'none', 
+    structure := 'none',
+    peek := 'none') LIMIT 1;
+
+# Test 8: Parameter precedence and consistency
+# ============================================
+query I
+SELECT COUNT(*) > 0 as consistent_parameters
+FROM read_ast('test/data/python/simple.py', 'python', 
+    context := 'normalized',
+    source := 'lines',
+    structure := 'minimal')
+WHERE context.name IS NOT NULL OR context.name IS NULL;
+----
+true
+
+# Test 9: Legacy parameter compatibility
+# =====================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', 
+    ignore_errors := false,
+    peek_size := 120,
+    peek_mode := 'auto') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', 
+    batch_size := 1) LIMIT 1;
+
+# Test 10: Default parameter behavior
+# ==================================
+query I
+SELECT 
+    (default_params.count = explicit_params.count) as defaults_work
+FROM (
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/python/simple.py', 'python')
+) default_params,
+(
+    SELECT COUNT(*) as count  
+    FROM read_ast('test/data/python/simple.py', 'python', 
+        context := 'normalized',
+        source := 'lines',
+        structure := 'full',
+        peek := 'smart')
+) explicit_params;
+----
+true
+
+# Test 11: Parameter case sensitivity
+# ==================================
+statement error
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'NORMALIZED');
+----
+Binder Error
+
+statement error
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', Context := 'normalized');
+----
+Binder Error
+
+# Test 12: Multiple parameter validation with parse_ast
+# =====================================================
+statement ok
+SELECT COUNT(*) FROM parse_ast('def hello(): pass', 'python',
+    context := 'native',
+    source := 'full',
+    structure := 'full',
+    peek := 50) LIMIT 1;
+
+# Test 13: Boundary value testing
+# ===============================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 1) LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 10000) LIMIT 1;
+
+# Test 14: Parameter parsing with special characters in file paths
+# ================================================================
+statement ok
+SELECT COUNT(*) FROM parse_ast('def hello(): pass', 'python',
+    context := 'normalized') LIMIT 1;
+
+# Test 15: Native context parameter stability over multiple calls
+# ===============================================================
+query I
+SELECT 
+    (call1.count = call2.count AND call2.count = call3.count) as stable_native_params
+FROM (
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+) call1,
+(
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+) call2,
+(
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+) call3;
+----
+true

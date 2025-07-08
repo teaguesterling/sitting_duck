@@ -160,7 +160,6 @@ private:
         uint32_t child_count = ts_node_child_count(node);
         
         // Debug: Track what we find
-        bool found_declarator = false;
         string function_name;
         
         // First pass: find function name and look for explicit return type
@@ -170,7 +169,6 @@ private:
             
             // Stop when we reach the function_declarator - return type comes before it
             if (strcmp(child_type, "function_declarator") == 0) {
-                found_declarator = true;
                 // Extract function name for constructor detection
                 function_name = ExtractFunctionName(child, content);
                 break;
@@ -728,6 +726,174 @@ private:
         }
         
         return modifiers;
+    }
+};
+
+// Specialization for CUSTOM (C++ function calls and expressions)
+template<>
+struct CppNativeExtractor<NativeExtractionStrategy::CUSTOM> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        NativeContext context;
+        
+        try {
+            const char* node_type = ts_node_type(node);
+            
+            if (strcmp(node_type, "call_expression") == 0) {
+                context = ExtractCallExpression(node, content);
+            } else if (strcmp(node_type, "new_expression") == 0) {
+                context = ExtractNewExpression(node, content);
+            } else if (strcmp(node_type, "delete_expression") == 0) {
+                context = ExtractDeleteExpression(node, content);
+            } else {
+                // Unknown node type for CUSTOM strategy
+                context.signature_type = "";
+            }
+            
+        } catch (...) {
+            context.signature_type = "";
+            context.parameters.clear();
+            context.modifiers.clear();
+        }
+        
+        return context;
+    }
+    
+private:
+    static NativeContext ExtractCallExpression(TSNode node, const string& content) {
+        NativeContext context;
+        
+        // For call_expression: extract function name and arguments
+        uint32_t child_count = ts_node_child_count(node);
+        
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            // First child is usually the function identifier or member expression
+            if (i == 0) {
+                if (strcmp(child_type, "identifier") == 0 ||
+                    strcmp(child_type, "qualified_identifier") == 0 ||
+                    strcmp(child_type, "field_expression") == 0) {
+                    
+                    uint32_t start = ts_node_start_byte(child);
+                    uint32_t end = ts_node_end_byte(child);
+                    
+                    if (start < content.length() && end <= content.length() && end > start) {
+                        context.signature_type = content.substr(start, end - start);
+                    }
+                }
+            }
+            
+            // Extract arguments from argument_list
+            if (strcmp(child_type, "argument_list") == 0) {
+                context.parameters = ExtractCallArguments(child, content);
+            }
+        }
+        
+        if (context.signature_type.empty()) {
+            context.signature_type = "function_call";  // Fallback
+        }
+        
+        return context;
+    }
+    
+    static NativeContext ExtractNewExpression(TSNode node, const string& content) {
+        NativeContext context;
+        
+        // For new_expression: extract class name and constructor arguments
+        uint32_t child_count = ts_node_child_count(node);
+        
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            // Skip "new" keyword, look for type identifier
+            if (strcmp(child_type, "type_identifier") == 0 ||
+                strcmp(child_type, "identifier") == 0 ||
+                strcmp(child_type, "qualified_identifier") == 0) {
+                
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                
+                if (start < content.length() && end <= content.length() && end > start) {
+                    context.signature_type = content.substr(start, end - start);
+                }
+            }
+            
+            // Extract constructor arguments from argument_list
+            if (strcmp(child_type, "argument_list") == 0) {
+                context.parameters = ExtractCallArguments(child, content);
+            }
+        }
+        
+        if (context.signature_type.empty()) {
+            context.signature_type = "constructor_call";  // Fallback
+        }
+        
+        return context;
+    }
+    
+    static NativeContext ExtractDeleteExpression(TSNode node, const string& content) {
+        NativeContext context;
+        
+        // For delete_expression: extract object identifier
+        uint32_t child_count = ts_node_child_count(node);
+        
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            // Skip "delete" keyword, look for identifier
+            if (strcmp(child_type, "identifier") == 0 ||
+                strcmp(child_type, "qualified_identifier") == 0 ||
+                strcmp(child_type, "field_expression") == 0) {
+                
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                
+                if (start < content.length() && end <= content.length() && end > start) {
+                    context.signature_type = content.substr(start, end - start);
+                }
+            }
+        }
+        
+        if (context.signature_type.empty()) {
+            context.signature_type = "delete_call";  // Fallback
+        }
+        
+        return context;
+    }
+    
+    static vector<ParameterInfo> ExtractCallArguments(TSNode args_node, const string& content) {
+        vector<ParameterInfo> arguments;
+        
+        uint32_t child_count = ts_node_child_count(args_node);
+        
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(args_node, i);
+            const char* child_type = ts_node_type(child);
+            
+            // Skip punctuation like "," and "(" and ")"
+            if (strcmp(child_type, ",") == 0 || 
+                strcmp(child_type, "(") == 0 || 
+                strcmp(child_type, ")") == 0) {
+                continue;
+            }
+            
+            ParameterInfo arg;
+            
+            // Extract argument text as the "type" field
+            uint32_t start = ts_node_start_byte(child);
+            uint32_t end = ts_node_end_byte(child);
+            
+            if (start < content.length() && end <= content.length() && end > start) {
+                arg.type = content.substr(start, end - start);
+                arg.name = "";  // Arguments don't typically have names in calls
+                arguments.push_back(arg);
+            }
+        }
+        
+        return arguments;
     }
 };
 

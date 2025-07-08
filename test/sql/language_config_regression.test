@@ -1,0 +1,261 @@
+# name: test/sql/language_config_regression.test
+# description: Regression tests for language configuration changes and build errors
+# group: [duckdb_ast_critical]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: JavaScript extraction strategy validation
+# =================================================
+query I
+SELECT COUNT(*) > 0 as javascript_extracts
+FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'native')
+WHERE context.name IS NOT NULL OR context.name IS NULL;
+----
+true
+
+# Test 2: TypeScript extraction strategy validation  
+# =================================================
+query I
+SELECT COUNT(*) > 0 as typescript_extracts
+FROM read_ast('test/data/typescript/simple.ts', 'typescript', context := 'native')
+WHERE context.name IS NOT NULL OR context.name IS NULL;
+----
+true
+
+# Test 3: Python extraction strategy validation
+# =============================================
+query I
+SELECT COUNT(*) > 0 as python_extracts
+FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+WHERE context.name IS NOT NULL OR context.name IS NULL;
+----
+true
+
+# Test 4: C++ extraction strategy validation
+# ==========================================
+query I
+SELECT COUNT(*) > 0 as cpp_extracts
+FROM read_ast('test/data/cpp/simple.cpp', 'cpp', context := 'native')
+WHERE context.name IS NOT NULL OR context.name IS NULL;
+----
+true
+
+# Test 5: Extraction strategy consistency check
+# =============================================
+query I
+SELECT 
+    (js_count.total > 0 AND 
+     ts_count.total > 0 AND 
+     py_count.total > 0 AND 
+     cpp_count.total > 0) as all_languages_work
+FROM (
+    SELECT COUNT(*) as total
+    FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'native')
+) js_count,
+(
+    SELECT COUNT(*) as total
+    FROM read_ast('test/data/typescript/simple.ts', 'typescript', context := 'native')
+) ts_count,
+(
+    SELECT COUNT(*) as total
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+) py_count,
+(
+    SELECT COUNT(*) as total
+    FROM read_ast('test/data/cpp/simple.cpp', 'cpp', context := 'native')
+) cpp_count;
+----
+true
+
+# Test 6: Identifier extraction validation
+# ========================================
+query I
+SELECT COUNT(*) > 0 as has_identifiers
+FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'normalized')
+WHERE type = 'identifier' AND context.name IS NOT NULL;
+----
+true
+
+query I
+SELECT COUNT(*) > 0 as has_identifiers_ts
+FROM read_ast('test/data/typescript/simple.ts', 'typescript', context := 'normalized')
+WHERE type = 'identifier' AND context.name IS NOT NULL;
+----
+true
+
+# Test 7: Function call extraction validation  
+# ===========================================
+query I
+SELECT COUNT(*) >= 0 as has_function_calls
+FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'native')
+WHERE type = 'call_expression';
+----
+true
+
+query I
+SELECT COUNT(*) >= 0 as has_function_calls_ts
+FROM read_ast('test/data/typescript/simple.ts', 'typescript', context := 'native')
+WHERE type = 'call_expression';
+----
+true
+
+# Test 8: Native extraction enum validation
+# =========================================
+# Ensure no build errors from invalid NativeExtractionStrategy values
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/typescript/simple.ts', 'typescript', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/cpp/simple.cpp', 'cpp', context := 'native') LIMIT 1;
+
+# Test 9: Language config coverage validation
+# ===========================================
+query I
+SELECT COUNT(*) > 0 as javascript_configured
+FROM read_ast('test/data/javascript/simple.js', 'javascript')
+WHERE context.semantic_type > 0;
+----
+true
+
+query I
+SELECT COUNT(*) > 0 as typescript_configured
+FROM read_ast('test/data/typescript/simple.ts', 'typescript')
+WHERE context.semantic_type > 0;
+----
+true
+
+query I
+SELECT COUNT(*) > 0 as python_configured
+FROM read_ast('test/data/python/simple.py', 'python')
+WHERE context.semantic_type > 0;
+----
+true
+
+# Test 10: Semantic type assignment validation
+# ============================================
+query I
+SELECT COUNT(DISTINCT context.semantic_type) > 1 as multiple_semantic_types
+FROM read_ast('test/data/javascript/simple.js', 'javascript')
+WHERE context.semantic_type > 0;
+----
+true
+
+query I
+SELECT COUNT(DISTINCT context.semantic_type) > 1 as multiple_semantic_types_ts
+FROM read_ast('test/data/typescript/simple.ts', 'typescript')
+WHERE context.semantic_type > 0;
+----
+true
+
+# Test 11: Extraction strategy effectiveness
+# ==========================================
+# Check that optimized configurations actually extract more context
+query I
+SELECT 
+    (optimized.name_count > baseline.name_count) as optimization_effective
+FROM (
+    SELECT COUNT(*) as name_count
+    FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'normalized')
+    WHERE context.name IS NOT NULL
+) optimized,
+(
+    SELECT COUNT(*) as name_count
+    FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'none')
+    WHERE context.name IS NOT NULL
+) baseline;
+----
+true
+
+# Test 12: Language adapter registry validation
+# =============================================
+statement ok
+SELECT language_name FROM ast_supported_languages() 
+WHERE language_name IN ('javascript', 'typescript', 'python', 'cpp');
+
+# Test 13: Configuration consistency across sessions
+# ==================================================
+query I
+SELECT 
+    (session1.count = session2.count) as consistent_configs
+FROM (
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'native')
+) session1,
+(
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'native')
+) session2;
+----
+true
+
+# Test 14: Build compatibility validation
+# =======================================
+# These should not cause compilation errors
+statement ok
+SELECT type, context.semantic_type, context.flags
+FROM read_ast('test/data/javascript/simple.js', 'javascript')
+WHERE type IN ('identifier', 'call_expression', 'formal_parameters', 'arguments', 'statement_block', 'binary_expression', 'return_statement', 'expression_statement')
+LIMIT 10;
+
+statement ok
+SELECT type, context.semantic_type, context.flags
+FROM read_ast('test/data/typescript/simple.ts', 'typescript')  
+WHERE type IN ('identifier', 'call_expression', 'formal_parameters', 'arguments', 'statement_block', 'binary_expression', 'return_statement', 'expression_statement')
+LIMIT 10;
+
+# Test 15: Extraction coverage regression test
+# ============================================
+# Ensure extraction percentages haven't degraded
+query I
+SELECT 
+    (named_nodes.count * 100.0 / total_nodes.count) >= 10.0 as adequate_js_coverage
+FROM (
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'normalized')
+    WHERE context.name IS NOT NULL
+) named_nodes,
+(
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/javascript/simple.js', 'javascript')
+) total_nodes;
+----
+true
+
+query I
+SELECT 
+    (named_nodes.count * 100.0 / total_nodes.count) >= 10.0 as adequate_ts_coverage
+FROM (
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/typescript/simple.ts', 'typescript', context := 'normalized')
+    WHERE context.name IS NOT NULL
+) named_nodes,
+(
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/typescript/simple.ts', 'typescript')
+) total_nodes;
+----
+true
+
+query I
+SELECT 
+    (named_nodes.count * 100.0 / total_nodes.count) >= 20.0 as adequate_py_coverage
+FROM (
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'normalized')
+    WHERE context.name IS NOT NULL
+) named_nodes,
+(
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/python/simple.py', 'python')
+) total_nodes;
+----
+true

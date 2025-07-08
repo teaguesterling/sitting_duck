@@ -789,6 +789,16 @@ struct SQLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_DECORATORS> {
     }
 };
 
+// Specialization for CUSTOM (SQL custom extraction)
+template<>
+struct SQLNativeExtractor<NativeExtractionStrategy::CUSTOM> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        NativeContext context;
+        context.signature_type = "sql_custom";  // Placeholder
+        return context;
+    }
+};
+
 // Note: Template trait specialization for SQLAdapter is defined in native_context_extraction.hpp
 
 } // namespace duckdb

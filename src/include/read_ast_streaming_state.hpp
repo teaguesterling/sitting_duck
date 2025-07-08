@@ -69,14 +69,52 @@ struct ReadASTStreamingBindData : public TableFunctionData {
                            int32_t peek_size = 120, string peek_mode = "auto", int32_t batch_size = 1) 
         : file_path_value(std::move(file_path_value)), use_patterns_vector(false),
           language(std::move(language)), ignore_errors(ignore_errors), 
-          peek_size(peek_size), peek_mode(std::move(peek_mode)), batch_size(batch_size) {}
+          peek_size(peek_size), peek_mode(std::move(peek_mode)), batch_size(batch_size) {
+        // Initialize extraction_config with legacy parameters for backward compatibility
+        extraction_config.context = ContextLevel::NATIVE;  // Default to native for backward compatibility
+        extraction_config.source = SourceLevel::LINES;
+        extraction_config.structure = StructureLevel::FULL;
+        extraction_config.peek_size = peek_size;
+        
+        // Map legacy peek_mode to PeekLevel
+        if (peek_mode == "none") {
+            extraction_config.peek = PeekLevel::NONE;
+        } else if (peek_mode == "smart") {
+            extraction_config.peek = PeekLevel::SMART;
+        } else if (peek_mode == "full") {
+            extraction_config.peek = PeekLevel::FULL;
+        } else if (peek_mode == "auto") {
+            extraction_config.peek = PeekLevel::SMART; // Map auto to smart
+        } else {
+            extraction_config.peek = PeekLevel::SMART; // Default fallback
+        }
+    }
     
     // Constructor for vector<string> patterns (new DuckDB-consistent approach)
     ReadASTStreamingBindData(vector<string> file_patterns, string language, bool ignore_errors = false,
                            int32_t peek_size = 120, string peek_mode = "auto", int32_t batch_size = 1)
         : file_patterns(std::move(file_patterns)), use_patterns_vector(true),
           language(std::move(language)), ignore_errors(ignore_errors),
-          peek_size(peek_size), peek_mode(std::move(peek_mode)), batch_size(batch_size) {}
+          peek_size(peek_size), peek_mode(std::move(peek_mode)), batch_size(batch_size) {
+        // Initialize extraction_config with legacy parameters for backward compatibility
+        extraction_config.context = ContextLevel::NATIVE;  // Default to native for backward compatibility
+        extraction_config.source = SourceLevel::LINES;
+        extraction_config.structure = StructureLevel::FULL;
+        extraction_config.peek_size = peek_size;
+        
+        // Map legacy peek_mode to PeekLevel
+        if (peek_mode == "none") {
+            extraction_config.peek = PeekLevel::NONE;
+        } else if (peek_mode == "smart") {
+            extraction_config.peek = PeekLevel::SMART;
+        } else if (peek_mode == "full") {
+            extraction_config.peek = PeekLevel::FULL;
+        } else if (peek_mode == "auto") {
+            extraction_config.peek = PeekLevel::SMART; // Map auto to smart
+        } else {
+            extraction_config.peek = PeekLevel::SMART; // Default fallback
+        }
+    }
     
     // NEW: Constructor with full ExtractionConfig
     ReadASTStreamingBindData(vector<string> file_patterns, string language, bool ignore_errors,

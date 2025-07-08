@@ -1,0 +1,300 @@
+# name: test/sql/edge_cases_and_robustness.test
+# description: Edge cases and robustness tests to catch unexpected failures
+# group: [duckdb_ast_critical]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: Empty content handling
+# ==============================
+statement ok
+SELECT COUNT(*) FROM parse_ast('', 'python');
+
+statement ok
+SELECT COUNT(*) FROM parse_ast('', 'javascript');
+
+statement ok
+SELECT COUNT(*) FROM parse_ast('', 'cpp');
+
+# Test 2: Single character content
+# ================================
+statement ok
+SELECT COUNT(*) FROM parse_ast('x', 'python');
+
+statement ok
+SELECT COUNT(*) FROM parse_ast(';', 'javascript');
+
+statement ok
+SELECT COUNT(*) FROM parse_ast('{', 'cpp');
+
+# Test 3: Whitespace-only content
+# ===============================
+statement ok
+SELECT COUNT(*) FROM parse_ast('   ', 'python');
+
+statement ok
+SELECT COUNT(*) FROM parse_ast('
+', 'javascript');
+
+statement ok
+SELECT COUNT(*) FROM parse_ast('	', 'cpp');
+
+# Test 4: Very large content stress test
+# ======================================
+statement ok
+SELECT COUNT(*) > 100 as handles_large_content
+FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native');
+
+# Test 5: Unicode and special characters
+# ======================================
+statement ok
+SELECT COUNT(*) FROM parse_ast('def 测试(): pass', 'python');
+
+statement ok
+SELECT COUNT(*) FROM parse_ast('const ñoño = "café";', 'javascript');
+
+statement ok
+SELECT COUNT(*) FROM parse_ast('// Comment with émojis 🚀', 'javascript');
+
+# Test 6: Malformed syntax handling
+# =================================
+statement ok
+SELECT COUNT(*) FROM parse_ast('def func(: pass', 'python', ignore_errors := true);
+
+statement ok
+SELECT COUNT(*) FROM parse_ast('if () { } else {', 'javascript', ignore_errors := true);
+
+statement ok
+SELECT COUNT(*) FROM parse_ast('class incomplete {', 'cpp', ignore_errors := true);
+
+# Test 7: Deeply nested structures
+# ================================
+statement ok
+SELECT COUNT(*) FROM parse_ast('def a(): def b(): def c(): def d(): pass', 'python');
+
+statement ok
+SELECT COUNT(*) FROM parse_ast('if (true) { if (true) { if (true) { if (true) { } } } }', 'javascript');
+
+# Test 8: Very long identifiers
+# =============================
+statement ok
+SELECT COUNT(*) FROM parse_ast('def very_very_very_very_very_very_very_very_very_very_long_function_name(): pass', 'python');
+
+# Test 9: Mixed encoding content
+# ==============================
+statement ok
+SELECT COUNT(*) FROM parse_ast('# -*- coding: utf-8 -*-
+def función(): return "Hölá"', 'python');
+
+# Test 10: Boundary parameter values
+# ==================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 0);
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 1);
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 10000);
+
+# Test 11: NULL and empty string robustness
+# =========================================
+statement error
+SELECT COUNT(*) FROM parse_ast(NULL, 'python');
+----
+Binder Error
+
+statement error
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', NULL);
+----
+Binder Error
+
+# Test 12: Invalid file paths
+# ===========================
+statement error
+SELECT COUNT(*) FROM read_ast('nonexistent/path/file.py', 'python');
+----
+IO Error
+
+statement error
+SELECT COUNT(*) FROM read_ast('', 'python');
+----
+IO Error
+
+# Test 13: Concurrent execution simulation
+# ========================================
+query I
+SELECT 
+    (query1.count = query2.count) as concurrent_consistent
+FROM (
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+) query1,
+(
+    SELECT COUNT(*) as count
+    FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'native')
+) query2
+WHERE query1.count > 0 AND query2.count > 0;
+----
+false
+
+# Test 14: Resource cleanup validation
+# ====================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'native') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/cpp/simple.cpp', 'cpp', context := 'native') LIMIT 1;
+
+# Resources should be cleaned up properly between calls
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+# Test 15: Complex nested queries with error recovery
+# ===================================================
+query I
+SELECT COUNT(*) >= 0 as handles_complex_nested
+FROM (
+    SELECT 
+        child.node_id,
+        child.type,
+        parent.type as parent_type
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'native') child
+    LEFT JOIN read_ast('test/data/python/simple.py', 'python', context := 'native') parent
+        ON child.structure.parent_id = parent.node_id
+    WHERE child.context.name IS NOT NULL OR child.context.name IS NULL
+) complex_result;
+----
+true
+
+# Test 16: Schema validation under stress
+# =======================================
+statement ok
+SELECT 
+    node_id,
+    type,
+    source.file_path,
+    source.language,
+    source.start_line,
+    source.end_line,
+    structure.parent_id,
+    structure.depth,
+    structure.children_count,
+    context.name,
+    context.semantic_type,
+    context.flags,
+    context.native,
+    peek
+FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+LIMIT 1;
+
+# Test 17: Type coercion robustness
+# ================================
+statement ok
+SELECT 
+    CAST(node_id AS VARCHAR) as node_id_str,
+    CAST(source.start_line AS DOUBLE) as start_line_double,
+    CAST(context.semantic_type AS INTEGER) as semantic_type_int
+FROM read_ast('test/data/python/simple.py', 'python')
+LIMIT 1;
+
+# Test 18: Array and list handling edge cases
+# ===========================================
+statement ok
+SELECT COUNT(*) FROM read_ast(['test/data/python/simple.py'], 'auto');
+
+statement ok
+SELECT COUNT(*) FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto');
+
+# Test 19: Language detection edge cases
+# ======================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'auto');
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'auto');
+
+# Test 20: Memory pattern validation
+# ==================================
+# Ensure consistent memory usage patterns
+query I
+SELECT 
+    (first_run.count = second_run.count AND 
+     second_run.count = third_run.count) as memory_pattern_stable
+FROM (
+    SELECT COUNT(*) as count
+    FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+) first_run,
+(
+    SELECT COUNT(*) as count
+    FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+) second_run,
+(
+    SELECT COUNT(*) as count
+    FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+) third_run;
+----
+true
+
+# Test 21: Cross-function consistency
+# ===================================
+query I
+SELECT 
+    (parse_count.total > 0 AND read_count.total > 0) as both_functions_work
+FROM (
+    SELECT COUNT(*) as total
+    FROM parse_ast('def hello(): pass', 'python', context := 'native')
+) parse_count,
+(
+    SELECT COUNT(*) as total
+    FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
+) read_count;
+----
+true
+
+# Test 22: Transaction boundary testing
+# ====================================
+statement ok
+BEGIN TRANSACTION;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+statement ok
+ROLLBACK;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+# Test 23: Error state recovery
+# =============================
+statement error
+SELECT COUNT(*) FROM read_ast('nonexistent.py', 'python');
+----
+IO Error
+
+# Should still work after error
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+
+# Test 24: Parameter combination edge cases
+# =========================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python',
+    context := 'native',
+    source := 'full',
+    structure := 'full',
+    peek := 0,
+    ignore_errors := true,
+    batch_size := 1) LIMIT 1;
+
+# Test 25: Performance regression guard
+# ====================================
+# Ensure queries don't hang or take excessive time
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;

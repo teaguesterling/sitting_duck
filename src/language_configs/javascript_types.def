@@ -18,20 +18,20 @@ DEF_TYPE("variable_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_
 DEF_TYPE("lexical_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
 
 // Function calls and expressions
-DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, NONE, NONE, 0)
-DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, NONE, NONE, 0)
-DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, CUSTOM, CUSTOM, 0)
+DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, NONE, CUSTOM, 0)
+DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
 DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 DEF_TYPE("update_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
 
 // Member access
-DEF_TYPE("member_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
+DEF_TYPE("member_expression", COMPUTATION_ACCESS, CUSTOM, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("subscript_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 
 // Identifiers and references
-DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("property_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("property_identifier", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
 
 // Literals - name and value both contain the literal text
 DEF_TYPE("string", LITERAL_STRING, NODE_TEXT, NONE, 0)
@@ -53,7 +53,7 @@ DEF_TYPE("for_in_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NO
 DEF_TYPE("for_of_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
 DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
 DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("return_statement", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("return_statement", FLOW_JUMP, NONE, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("break_statement", FLOW_JUMP, NONE, NONE, 0)
 DEF_TYPE("continue_statement", FLOW_JUMP, NONE, NONE, 0)
 
@@ -68,7 +68,7 @@ DEF_TYPE("throw_statement", ERROR_THROW, NONE, NONE, 0)
 DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
 
 // Structure/Organization
-DEF_TYPE("statement_block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+DEF_TYPE("statement_block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, 0)
 DEF_TYPE("import_statement", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0)
 DEF_TYPE("export_statement", EXTERNAL_EXPORT, NONE, NONE, 0)
@@ -157,12 +157,12 @@ DEF_TYPE("||=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 DEF_TYPE("?\?=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 
 // Common missing constructs in JavaScript/TypeScript
-DEF_TYPE("arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, FUNCTION_WITH_PARAMS, 0)
 DEF_TYPE(":", PARSER_PUNCTUATION, NONE, NONE, 0)
 DEF_TYPE("'", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
-DEF_TYPE("formal_parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE("variable_declarator", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("formal_parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("variable_declarator", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
 DEF_TYPE("switch_case", FLOW_CONDITIONAL, NONE, NONE, 0)
 DEF_TYPE("case", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -187,7 +187,7 @@ DEF_TYPE("computed_property_name", COMPUTATION_EXPRESSION, NONE, NONE, 0)
 DEF_TYPE("method_signature", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("property_signature", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("optional_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("optional_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("rest_parameter", PATTERN_COLLECT, FIND_IDENTIFIER, NONE, 0)
 
 // Template literals and modern syntax

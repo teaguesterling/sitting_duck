@@ -6,6 +6,7 @@
 #include <tree_sitter/api.h>
 #include <unordered_map>
 #include <functional>
+#include "duckdb/common/mutex.hpp"
 
 namespace duckdb {
 
@@ -510,6 +511,7 @@ public:
     
 private:
     LanguageAdapterRegistry();
+    mutable mutex registry_mutex_;  // Synchronize access to mutable shared state
     mutable unordered_map<string, unique_ptr<LanguageAdapter>> adapters;  // mutable for lazy creation
     mutable unordered_map<string, AdapterFactory> language_factories;      // mutable for lazy creation
     unordered_map<string, string> alias_to_language;

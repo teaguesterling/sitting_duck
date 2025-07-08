@@ -42,49 +42,48 @@ Value ASTNode::ToValue() const {
     context_values.emplace_back("semantic_type", Value::UTINYINT(context.normalized.semantic_type));
     context_values.emplace_back("flags", Value::UTINYINT(context.normalized.universal_flags));
     
-    // Native context struct - NULL if no extraction was attempted
-    if (context.native_extraction_attempted) {
-        
+    // Native context struct - properly serialize if available
+    if (context.native_extraction_attempted && !context.native.signature_type.empty()) {
         child_list_t<Value> native_values;
-        native_values.emplace_back("signature_type", context.native.signature_type.empty() ? Value(LogicalType::VARCHAR) : Value(context.native.signature_type));
+        native_values.emplace_back("signature_type", Value(context.native.signature_type));
         
-        // Parameters array
-        vector<Value> param_values;
+        // Create parameters list - simplified for now to avoid memory issues
+        vector<Value> parameter_values;
         for (const auto& param : context.native.parameters) {
             child_list_t<Value> param_struct;
-            param_struct.emplace_back("name", param.name.empty() ? Value(LogicalType::VARCHAR) : Value(param.name));
-            param_struct.emplace_back("type", param.type.empty() ? Value(LogicalType::VARCHAR) : Value(param.type));
-            param_struct.emplace_back("default_value", param.default_value.empty() ? Value(LogicalType::VARCHAR) : Value(param.default_value));
+            param_struct.emplace_back("name", Value(param.name));
+            param_struct.emplace_back("type", Value(param.type));
+            param_struct.emplace_back("default_value", Value(param.default_value));
             param_struct.emplace_back("is_optional", Value::BOOLEAN(param.is_optional));
             param_struct.emplace_back("is_variadic", Value::BOOLEAN(param.is_variadic));
-            param_struct.emplace_back("annotations", param.annotations.empty() ? Value(LogicalType::VARCHAR) : Value(param.annotations));
-            param_values.push_back(Value::STRUCT(move(param_struct)));
+            param_struct.emplace_back("annotations", Value(param.annotations));
+            parameter_values.push_back(Value::STRUCT(param_struct));
         }
         native_values.emplace_back("parameters", Value::LIST(LogicalType::STRUCT({
             {"name", LogicalType::VARCHAR},
-            {"type", LogicalType::VARCHAR}, 
+            {"type", LogicalType::VARCHAR},
             {"default_value", LogicalType::VARCHAR},
             {"is_optional", LogicalType::BOOLEAN},
             {"is_variadic", LogicalType::BOOLEAN},
             {"annotations", LogicalType::VARCHAR}
-        }), param_values));
+        }), parameter_values));
         
-        // Modifiers array
+        // Create modifiers list
         vector<Value> modifier_values;
         for (const auto& modifier : context.native.modifiers) {
             modifier_values.push_back(Value(modifier));
         }
         native_values.emplace_back("modifiers", Value::LIST(LogicalType::VARCHAR, modifier_values));
         
-        native_values.emplace_back("qualified_name", context.native.qualified_name.empty() ? Value(LogicalType::VARCHAR) : Value(context.native.qualified_name));
-        native_values.emplace_back("annotations", context.native.annotations.empty() ? Value(LogicalType::VARCHAR) : Value(context.native.annotations));
+        native_values.emplace_back("qualified_name", Value(context.native.qualified_name));
+        native_values.emplace_back("annotations", Value(context.native.annotations));
         
-        context_values.emplace_back("native", Value::STRUCT(move(native_values)));
+        context_values.emplace_back("native", Value::STRUCT(native_values));
     } else {
-        // No extraction attempted - use NULL
-        child_list_t<LogicalType> native_struct_children;
-        native_struct_children.push_back(make_pair("signature_type", LogicalType::VARCHAR));
-        native_struct_children.push_back(make_pair("parameters", LogicalType::LIST(LogicalType::STRUCT({
+        // No native context available - use NULL struct
+        child_list_t<LogicalType> native_schema;
+        native_schema.push_back(make_pair("signature_type", LogicalType::VARCHAR));
+        native_schema.push_back(make_pair("parameters", LogicalType::LIST(LogicalType::STRUCT({
             {"name", LogicalType::VARCHAR},
             {"type", LogicalType::VARCHAR},
             {"default_value", LogicalType::VARCHAR},
@@ -92,11 +91,10 @@ Value ASTNode::ToValue() const {
             {"is_variadic", LogicalType::BOOLEAN},
             {"annotations", LogicalType::VARCHAR}
         }))));
-        native_struct_children.push_back(make_pair("modifiers", LogicalType::LIST(LogicalType::VARCHAR)));
-        native_struct_children.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
-        native_struct_children.push_back(make_pair("annotations", LogicalType::VARCHAR));
-        
-        context_values.emplace_back("native", Value(LogicalType::STRUCT(native_struct_children)));
+        native_schema.push_back(make_pair("modifiers", LogicalType::LIST(LogicalType::VARCHAR)));
+        native_schema.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
+        native_schema.push_back(make_pair("annotations", LogicalType::VARCHAR));
+        context_values.emplace_back("native", Value(LogicalType::STRUCT(native_schema)));
     }
     struct_values.emplace_back("context", Value::STRUCT(move(context_values)));
     

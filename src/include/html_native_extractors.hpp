@@ -666,4 +666,14 @@ struct HTMLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_DECORATORS> {
     }
 };
 
+// Specialization for CUSTOM (HTML custom extraction)
+template<>
+struct HTMLNativeExtractor<NativeExtractionStrategy::CUSTOM> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        NativeContext context;
+        context.signature_type = "html_custom";  // Placeholder
+        return context;
+    }
+};
+
 } // namespace duckdb

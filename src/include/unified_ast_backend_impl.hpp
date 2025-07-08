@@ -276,6 +276,8 @@ void PopulateSemanticFieldsTemplated(ASTNode& node, const AdapterType* adapter, 
             try {
                 // Extract native context using compile-time template dispatch with error handling
                 node.context.native = ExtractNativeContextTemplated<AdapterType>(ts_node, content, node_config->native_strategy);
+                
+                // Always mark as attempted if we get this far, and set to true if we got any data
                 node.context.native_extraction_attempted = true;
             } catch (const std::exception& e) {
                 // Log error but don't fail the entire parsing operation

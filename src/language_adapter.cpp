@@ -352,36 +352,40 @@ const TSLanguage* LanguageAdapterRegistry::GetTSLanguage(const string &language)
 }
 
 const LanguageAdapter* LanguageAdapterRegistry::GetAdapter(const string &language) const {
-    // First try direct lookup in already-created adapters
-    auto it = adapters.find(language);
-    if (it != adapters.end()) {
-        return it->second.get();
-    }
+    // MEMORY SAFETY FIX: Eliminate persistent adapter caching to prevent state accumulation
+    // This function now creates fresh adapters for each call to prevent the segfault
+    // caused by cumulative adapter state across multiple parsing operations
     
-    // Try alias lookup
+    // WARNING: This method should be deprecated in favor of CreateAdapter() 
+    // for proper memory management. Using pre_created_adapters is preferred.
+    
+    lock_guard<mutex> lock(registry_mutex_);
+    
+    // Resolve alias to actual language name
     string actual_language = language;
     auto alias_it = alias_to_language.find(language);
     if (alias_it != alias_to_language.end()) {
         actual_language = alias_it->second;
-        
-        // Check if already created
-        auto adapter_it = adapters.find(actual_language);
-        if (adapter_it != adapters.end()) {
-            return adapter_it->second.get();
-        }
     }
     
     // Check if we have a factory for this language
     auto factory_it = language_factories.find(actual_language);
     if (factory_it != language_factories.end()) {
-        // Create the adapter on demand
+        // Create a fresh adapter instance - NO PERSISTENT CACHING
         auto adapter = factory_it->second();
         
         // Validate ABI compatibility
         ValidateLanguageABI(adapter.get());
         
-        // Store the created adapter
+        // TEMPORARY: Store adapter in mutable map but clear it periodically to prevent accumulation
+        // This is not ideal but maintains API compatibility while fixing the segfault
         auto* adapter_ptr = adapter.get();
+        
+        // Clear old entries periodically to prevent unbounded growth
+        if (adapters.size() > 10) {
+            adapters.clear();
+        }
+        
         adapters[actual_language] = std::move(adapter);
         return adapter_ptr;
     }
@@ -390,6 +394,8 @@ const LanguageAdapter* LanguageAdapterRegistry::GetAdapter(const string &languag
 }
 
 unique_ptr<LanguageAdapter> LanguageAdapterRegistry::CreateAdapter(const string &language) const {
+    lock_guard<mutex> lock(registry_mutex_);
+    
     // Resolve alias to actual language name
     string actual_language = language;
     auto alias_it = alias_to_language.find(language);

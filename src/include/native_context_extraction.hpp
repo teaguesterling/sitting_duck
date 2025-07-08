@@ -210,6 +210,8 @@ NativeContext ExtractNativeContextTemplated(TSNode node, const string& content, 
             return NativeExtractionTraits<AdapterType>::template ExtractorType<NativeExtractionStrategy::CLASS_WITH_INHERITANCE>::Extract(node, content);
         case NativeExtractionStrategy::FUNCTION_WITH_DECORATORS:
             return NativeExtractionTraits<AdapterType>::template ExtractorType<NativeExtractionStrategy::FUNCTION_WITH_DECORATORS>::Extract(node, content);
+        case NativeExtractionStrategy::CUSTOM:
+            return NativeExtractionTraits<AdapterType>::template ExtractorType<NativeExtractionStrategy::CUSTOM>::Extract(node, content);
         case NativeExtractionStrategy::NONE:
         default:
             return NativeContext(); // Return empty context for NONE or unknown strategies
