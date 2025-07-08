@@ -36,6 +36,7 @@ enum class NativeExtractionStrategy : uint8_t {
     ENUM_DEFINITION,            // Enum/union type
     IMPORT_STATEMENT,           // Import/include/using
     EXPORT_STATEMENT,           // Export/public declarations
+    FUNCTION_CALL,              // Function call/invocation with arguments
     CUSTOM = 255                // Language-specific custom logic
 };
 

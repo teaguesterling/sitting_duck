@@ -1,6 +1,7 @@
 #pragma once
 
 #include "native_context_extraction.hpp"
+#include "function_call_extractor.hpp"
 #include <tree_sitter/api.h>
 
 namespace duckdb {
@@ -729,7 +730,15 @@ private:
     }
 };
 
-// Specialization for CUSTOM (C++ function calls and expressions)
+// Specialization for FUNCTION_CALL (C++ function calls and expressions) 
+template<>
+struct CppNativeExtractor<NativeExtractionStrategy::FUNCTION_CALL> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        return UnifiedFunctionCallExtractor<CppLanguageTag>::Extract(node, content);
+    }
+};
+
+// Specialization for CUSTOM (C++ function calls and expressions) - DEPRECATED: Use FUNCTION_CALL
 template<>
 struct CppNativeExtractor<NativeExtractionStrategy::CUSTOM> {
     static NativeContext Extract(TSNode node, const string& content) {

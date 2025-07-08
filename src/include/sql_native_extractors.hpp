@@ -789,6 +789,16 @@ struct SQLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_DECORATORS> {
     }
 };
 
+// Specialization for FUNCTION_CALL (SQL function calls)
+template<>
+struct SQLNativeExtractor<NativeExtractionStrategy::FUNCTION_CALL> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        NativeContext context;
+        context.signature_type = "sql_function_call";  // Placeholder
+        return context;
+    }
+};
+
 // Specialization for CUSTOM (SQL custom extraction)
 template<>
 struct SQLNativeExtractor<NativeExtractionStrategy::CUSTOM> {

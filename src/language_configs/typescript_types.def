@@ -190,8 +190,8 @@ DEF_TYPE("catch", ERROR_CATCH, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("instantiation_expression", COMPUTATION_CALL, NONE, NONE, 0)
 
 // Function calls and expressions (TypeScript inherits JavaScript syntax)
-DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, CUSTOM, CUSTOM, 0)
-DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, NONE, CUSTOM, 0)
+DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_CALL, 0)
 
 DEF_TYPE("meta", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("delete", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)

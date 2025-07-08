@@ -518,6 +518,16 @@ struct CSSNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_DECORATORS> {
     }
 };
 
+// Specialization for FUNCTION_CALL (CSS function calls)
+template<>
+struct CSSNativeExtractor<NativeExtractionStrategy::FUNCTION_CALL> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        NativeContext context;
+        context.signature_type = "css_function_call";  // Placeholder
+        return context;
+    }
+};
+
 // Specialization for CUSTOM (CSS custom extraction)
 template<>
 struct CSSNativeExtractor<NativeExtractionStrategy::CUSTOM> {

@@ -666,6 +666,16 @@ struct HTMLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_DECORATORS> {
     }
 };
 
+// Specialization for FUNCTION_CALL (HTML function calls)
+template<>
+struct HTMLNativeExtractor<NativeExtractionStrategy::FUNCTION_CALL> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        NativeContext context;
+        context.signature_type = "html_function_call";  // Placeholder
+        return context;
+    }
+};
+
 // Specialization for CUSTOM (HTML custom extraction)
 template<>
 struct HTMLNativeExtractor<NativeExtractionStrategy::CUSTOM> {

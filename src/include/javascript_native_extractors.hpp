@@ -1,6 +1,7 @@
 #pragma once
 
 #include "native_context_extraction.hpp"
+#include "function_call_extractor.hpp"
 #include <tree_sitter/api.h>
 
 namespace duckdb {
@@ -305,7 +306,15 @@ public:
     }
 };
 
-// Specialization for CUSTOM (JavaScript function calls and expressions)
+// Specialization for FUNCTION_CALL (JavaScript function calls and expressions)
+template<>
+struct JavaScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_CALL> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        return UnifiedFunctionCallExtractor<JavaScriptLanguageTag>::Extract(node, content);
+    }
+};
+
+// Specialization for CUSTOM (JavaScript function calls and expressions) - DEPRECATED: Use FUNCTION_CALL
 template<>
 struct JavaScriptNativeExtractor<NativeExtractionStrategy::CUSTOM> {
     static NativeContext Extract(TSNode node, const string& content) {
