@@ -518,6 +518,16 @@ struct CSSNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_DECORATORS> {
     }
 };
 
+// Specialization for CUSTOM (CSS custom extraction)
+template<>
+struct CSSNativeExtractor<NativeExtractionStrategy::CUSTOM> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        NativeContext context;
+        context.signature_type = "css_custom";  // Placeholder
+        return context;
+    }
+};
+
 // Note: Template trait specialization for CSSAdapter is defined in native_context_extraction.hpp
 
 } // namespace duckdb
