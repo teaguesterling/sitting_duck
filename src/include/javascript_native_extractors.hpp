@@ -305,4 +305,139 @@ public:
     }
 };
 
+// Specialization for CUSTOM (JavaScript function calls and expressions)
+template<>
+struct JavaScriptNativeExtractor<NativeExtractionStrategy::CUSTOM> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        NativeContext context;
+        
+        try {
+            const char* node_type = ts_node_type(node);
+            
+            if (strcmp(node_type, "call_expression") == 0) {
+                context = ExtractJSCallExpression(node, content);
+            } else if (strcmp(node_type, "new_expression") == 0) {
+                context = ExtractJSNewExpression(node, content);
+            } else {
+                // Unknown node type for CUSTOM strategy
+                context.signature_type = "";
+            }
+            
+        } catch (...) {
+            context.signature_type = "";
+            context.parameters.clear();
+            context.modifiers.clear();
+        }
+        
+        return context;
+    }
+    
+private:
+    static NativeContext ExtractJSCallExpression(TSNode node, const string& content) {
+        NativeContext context;
+        
+        // For call_expression: extract function name and arguments
+        uint32_t child_count = ts_node_child_count(node);
+        
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            // First child is usually the function identifier or member expression
+            if (i == 0) {
+                if (strcmp(child_type, "identifier") == 0 ||
+                    strcmp(child_type, "member_expression") == 0 ||
+                    strcmp(child_type, "property_identifier") == 0) {
+                    
+                    uint32_t start = ts_node_start_byte(child);
+                    uint32_t end = ts_node_end_byte(child);
+                    
+                    if (start < content.length() && end <= content.length() && end > start) {
+                        context.signature_type = content.substr(start, end - start);
+                    }
+                }
+            }
+            
+            // Extract arguments from arguments node
+            if (strcmp(child_type, "arguments") == 0) {
+                context.parameters = ExtractJSCallArguments(child, content);
+            }
+        }
+        
+        if (context.signature_type.empty()) {
+            context.signature_type = "function_call";  // Fallback
+        }
+        
+        return context;
+    }
+    
+    static NativeContext ExtractJSNewExpression(TSNode node, const string& content) {
+        NativeContext context;
+        
+        // For new_expression: extract class name and constructor arguments
+        uint32_t child_count = ts_node_child_count(node);
+        
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            // Skip "new" keyword, look for identifier
+            if (strcmp(child_type, "identifier") == 0 ||
+                strcmp(child_type, "member_expression") == 0 ||
+                strcmp(child_type, "property_identifier") == 0) {
+                
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                
+                if (start < content.length() && end <= content.length() && end > start) {
+                    context.signature_type = content.substr(start, end - start);
+                }
+            }
+            
+            // Extract constructor arguments from arguments node
+            if (strcmp(child_type, "arguments") == 0) {
+                context.parameters = ExtractJSCallArguments(child, content);
+            }
+        }
+        
+        if (context.signature_type.empty()) {
+            context.signature_type = "constructor_call";  // Fallback
+        }
+        
+        return context;
+    }
+    
+    static vector<ParameterInfo> ExtractJSCallArguments(TSNode args_node, const string& content) {
+        vector<ParameterInfo> arguments;
+        
+        uint32_t child_count = ts_node_child_count(args_node);
+        
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(args_node, i);
+            const char* child_type = ts_node_type(child);
+            
+            // Skip punctuation like "," and "(" and ")"
+            if (strcmp(child_type, ",") == 0 || 
+                strcmp(child_type, "(") == 0 || 
+                strcmp(child_type, ")") == 0) {
+                continue;
+            }
+            
+            ParameterInfo arg;
+            
+            // Extract argument text as the "type" field
+            uint32_t start = ts_node_start_byte(child);
+            uint32_t end = ts_node_end_byte(child);
+            
+            if (start < content.length() && end <= content.length() && end > start) {
+                arg.type = content.substr(start, end - start);
+                arg.name = "";  // Arguments don't have names in calls
+                arguments.push_back(arg);
+            }
+        }
+        
+        return arguments;
+    }
+};
+
 } // namespace duckdb

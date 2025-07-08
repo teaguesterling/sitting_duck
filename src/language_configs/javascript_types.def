@@ -18,8 +18,8 @@ DEF_TYPE("variable_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_
 DEF_TYPE("lexical_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
 
 // Function calls and expressions
-DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, CUSTOM, FUNCTION_WITH_PARAMS, 0)
-DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, NONE, NONE, 0)
+DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, CUSTOM, CUSTOM, 0)
+DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, NONE, CUSTOM, 0)
 DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
 DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
