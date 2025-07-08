@@ -1,0 +1,321 @@
+mkdir -p build/release
+cmake  -DEXTENSION_STATIC_BUILD=1 -DDUCKDB_EXTENSION_CONFIGS='/mnt/aux-data/teague/Projects/duckdb_ast/extension_config.cmake'   -DOSX_BUILD_ARCH=   -DVCPKG_BUILD=1 -DCMAKE_TOOLCHAIN_FILE='/home/teague/Dev/vcpkg/scripts/buildsystems/vcpkg.cmake' -DDUCKDB_EXPLICIT_PLATFORM='amd64' -DCUSTOM_LINKER= -DOVERRIDE_GIT_DESCRIBE="" -DUNITTEST_ROOT_DIRECTORY="/mnt/aux-data/teague/Projects/duckdb_ast/" -DBENCHMARK_ROOT_DIRECTORY="/mnt/aux-data/teague/Projects/duckdb_ast/" -DENABLE_UNITTEST_CPP_TESTS=FALSE  -DVCPKG_MANIFEST_DIR='/mnt/aux-data/teague/Projects/duckdb_ast/' -DCMAKE_BUILD_TYPE=Release -S "./duckdb/" -B build/release
+-- Running vcpkg install
+warning: Embedding `vcpkg-configuration` in a manifest file is an EXPERIMENTAL feature.
+All requested packages are currently installed.
+All requested installations completed successfully in: 39.6 us
+-- Running vcpkg install - done
+-- git hash 2063dda3e6, version v1.3.1, extension folder v1.3.1
+-- Extensions will be deployed to: /mnt/aux-data/teague/Projects/duckdb_ast/build/release/repository
+-- Load extension 'sitting_duck' from '/mnt/aux-data/teague/Projects/duckdb_ast' @ 82855d4
+-- Load extension 'core_functions' from '/mnt/aux-data/teague/Projects/duckdb_ast/duckdb/extensions' @ v1.3.1
+-- Load extension 'parquet' from '/mnt/aux-data/teague/Projects/duckdb_ast/duckdb/extensions' @ v1.3.1
+-- Load extension 'jemalloc' from '/mnt/aux-data/teague/Projects/duckdb_ast/duckdb/extensions' @ v1.3.1
+CMake Deprecation Warning at /mnt/aux-data/teague/Projects/duckdb_ast/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- Tree-sitter CLI will be built at: /mnt/aux-data/teague/Projects/duckdb_ast/third_party/tree-sitter/target/release/tree-sitter
+-- Processing grammar: tree-sitter-c
+-- Initial pattern '*tree-sitter-c*.patch' found: 
+-- Parser generation configured for tree-sitter-c
+-- Processing grammar: tree-sitter-cpp
+-- Initial pattern '*tree-sitter-cpp*.patch' found: 
+-- C++ pattern found: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-cpp-grammar-require.patch
+-- Found patches for tree-sitter-cpp: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-cpp-grammar-require.patch
+-- Parser generation configured for tree-sitter-cpp
+-- Processing grammar: tree-sitter-javascript
+-- Initial pattern '*tree-sitter-javascript*.patch' found: 
+-- Parser generation configured for tree-sitter-javascript
+-- Processing grammar: typescript
+-- Initial pattern '*typescript*.patch' found: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-typescript-grammar-require.patch
+-- Found patches for typescript: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-typescript-grammar-require.patch
+-- Parser generation configured for typescript
+-- Processing grammar: tree-sitter-python
+-- Initial pattern '*tree-sitter-python*.patch' found: 
+-- Parser generation configured for tree-sitter-python
+-- Processing grammar: tree-sitter-sql
+-- Initial pattern '*tree-sitter-sql*.patch' found: 
+-- Parser generation configured for tree-sitter-sql
+-- Processing grammar: tree-sitter-go
+-- Initial pattern '*tree-sitter-go*.patch' found: 
+-- Parser generation configured for tree-sitter-go
+-- Processing grammar: tree-sitter-ruby
+-- Initial pattern '*tree-sitter-ruby*.patch' found: 
+-- Parser generation configured for tree-sitter-ruby
+-- Processing grammar: tree-sitter-markdown
+-- Initial pattern '*tree-sitter-markdown*.patch' found: 
+-- Parser generation configured for tree-sitter-markdown
+-- Processing grammar: tree-sitter-java
+-- Initial pattern '*tree-sitter-java*.patch' found: 
+-- Parser generation configured for tree-sitter-java
+-- Processing grammar: php
+-- Initial pattern '*php*.patch' found: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-php-scanner-assert.patch
+-- Found patches for php: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-php-scanner-assert.patch
+-- Parser generation configured for php
+-- Processing grammar: tree-sitter-html
+-- Initial pattern '*tree-sitter-html*.patch' found: 
+-- Parser generation configured for tree-sitter-html
+-- Processing grammar: tree-sitter-css
+-- Initial pattern '*tree-sitter-css*.patch' found: 
+-- Parser generation configured for tree-sitter-css
+-- Processing grammar: tree-sitter-rust
+-- Initial pattern '*tree-sitter-rust*.patch' found: 
+-- Rust pattern found: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-rust-grammar-regex.patch
+-- Found patches for tree-sitter-rust: /mnt/aux-data/teague/Projects/duckdb_ast/patches/fix-rust-grammar-regex.patch
+-- Parser generation configured for tree-sitter-rust
+-- Processing grammar: tree-sitter-json
+-- Initial pattern '*tree-sitter-json*.patch' found: 
+-- Parser generation configured for tree-sitter-json
+-- Processing grammar: tree-sitter-bash
+-- Initial pattern '*tree-sitter-bash*.patch' found: 
+-- Parser generation configured for tree-sitter-bash
+-- Processing grammar: tree-sitter-swift
+-- Initial pattern '*tree-sitter-swift*.patch' found: 
+-- Parser generation configured for tree-sitter-swift
+-- Processing grammar: tree-sitter-r
+-- Initial pattern '*tree-sitter-r*.patch' found: 
+-- Parser generation configured for tree-sitter-r
+-- Processing grammar: tree-sitter-kotlin
+-- Initial pattern '*tree-sitter-kotlin*.patch' found: 
+-- Parser generation configured for tree-sitter-kotlin
+-- Generated parser target created with 34 files
+Generated /mnt/aux-data/teague/Projects/duckdb_ast/src/include/embedded_sql_macros.hpp
+-- Extension targets will depend on generated parsers
+-- Extensions linked into DuckDB: [sitting_duck, core_functions, parquet, jemalloc]
+-- Tests loaded for extensions: [sitting_duck]
+-- Configuring done (1.5s)
+-- Generating done (0.5s)
+-- Build files have been written to: /mnt/aux-data/teague/Projects/duckdb_ast/build/release
+cmake --build build/release --config Release
+gmake[1]: Entering directory '/mnt/aux-data/teague/Projects/duckdb_ast/build/release'
+[  4%] Built target duckdb_zstd
+[  4%] Built target duckdb_platform
+[  4%] Built target duckdb_optimizer
+[  4%] Built target duckdb_optimizer_compressed_materialization
+[  5%] Built target duckdb_optimizer_join_order
+[  5%] Built target duckdb_optimizer_matcher
+[  5%] Built target duckdb_optimizer_pullup
+[  5%] Built target duckdb_optimizer_pushdown
+[  5%] Built target duckdb_optimizer_rules
+[  5%] Built target duckdb_optimizer_statistics_expr
+[  5%] Built target duckdb_optimizer_statistics_op
+[  5%] Built target duckdb_planner
+[  5%] Built target duckdb_planner_expression
+[  5%] Built target duckdb_bind_expression
+[  6%] Built target duckdb_bind_query_node
+[  6%] Built target duckdb_bind_statement
+[  6%] Built target duckdb_bind_tableref
+[  6%] Built target duckdb_expression_binders
+[  6%] Built target duckdb_planner_filter
+[  7%] Built target duckdb_planner_operator
+[  7%] Built target duckdb_planner_subquery
+[  7%] Built target duckdb_parser
+[  8%] Built target duckdb_constraints
+[  8%] Built target duckdb_expression
+[  8%] Built target duckdb_parsed_data
+[  8%] Built target duckdb_query_node
+[  8%] Built target duckdb_statement
+[  8%] Built target duckdb_parser_tableref
+[  8%] Built target duckdb_transformer_constraint
+[  8%] Built target duckdb_transformer_expression
+[  8%] Built target duckdb_transformer_helpers
+[  8%] Built target duckdb_transformer_statement
+[  8%] Built target duckdb_transformer_tableref
+[  8%] Built target duckdb_function
+[  8%] Built target duckdb_func_aggr
+[  8%] Built target duckdb_aggr_distr
+[  8%] Built target duckdb_func_cast
+[  8%] Built target duckdb_union_cast
+[  8%] Built target duckdb_func_pragma
+[  8%] Built target duckdb_func_scalar
+[  8%] Built target duckdb_func_compressed_materialization
+[  8%] Built target duckdb_func_date
+[  8%] Built target duckdb_func_generic_main
+[  9%] Built target duckdb_func_list_nested
+[  9%] Built target duckdb_function_map
+[  9%] Built target duckdb_func_ops_main
+[  9%] Built target duckdb_func_seq
+[  9%] Built target duckdb_func_string_main
+[  9%] Built target duckdb_func_string_regexp
+[ 10%] Built target duckdb_func_struct_main
+[ 10%] Built target duckdb_func_system
+[ 10%] Built target duckdb_func_table
+[ 10%] Built target duckdb_table_func_system
+[ 10%] Built target duckdb_func_table_version
+[ 10%] Built target duckdb_arrow_conversion
+[ 10%] Built target duckdb_func_window
+[ 10%] Built target duckdb_catalog
+[ 10%] Built target duckdb_catalog_entries
+[ 10%] Built target duckdb_catalog_entries_dependency
+[ 10%] Built target duckdb_catalog_default_entries
+[ 11%] Built target duckdb_common
+[ 11%] Built target duckdb_adbc
+[ 11%] Built target duckdb_adbc_nanoarrow
+[ 11%] Built target duckdb_common_arrow
+[ 11%] Built target duckdb_common_arrow_appender
+[ 11%] Built target duckdb_common_crypto
+[ 11%] Built target duckdb_common_enums
+[ 11%] Built target duckdb_common_exception
+[ 12%] Built target duckdb_common_multi_file
+[ 12%] Built target duckdb_common_operators
+[ 12%] Built target duckdb_progress_bar
+[ 12%] Built target duckdb_common_tree_renderer
+[ 12%] Built target duckdb_row_operations
+[ 12%] Built target duckdb_common_serializer
+[ 12%] Built target duckdb_sort
+[ 12%] Built target duckdb_common_types
+[ 12%] Built target duckdb_common_types_column
+[ 12%] Built target duckdb_common_types_row
+[ 12%] Built target duckdb_value_operations
+[ 13%] Built target duckdb_vector_operations
+[ 13%] Built target duckdb_logging
+[ 13%] Built target duckdb_execution
+[ 13%] Built target duckdb_expression_executor
+[ 13%] Built target duckdb_nested_loop_join
+[ 13%] Built target duckdb_operator_aggregate
+[ 13%] Built target duckdb_csv_buffer_manager
+[ 14%] Built target duckdb_csv_encode
+[ 14%] Built target duckdb_csv_scanner
+[ 14%] Built target duckdb_csv_sniffer
+[ 14%] Built target duckdb_csv_state_machine
+[ 14%] Built target duckdb_operator_csv_table_function
+[ 14%] Built target duckdb_csv_util
+[ 14%] Built target duckdb_operator_filter
+[ 14%] Built target duckdb_operator_helper
+[ 14%] Built target duckdb_operator_join
+[ 14%] Built target duckdb_operator_order
+[ 15%] Built target duckdb_operator_persistent
+[ 15%] Built target duckdb_operator_projection
+[ 15%] Built target duckdb_operator_scan
+[ 15%] Built target duckdb_operator_schema
+[ 15%] Built target duckdb_operator_set
+[ 15%] Built target duckdb_physical_plan
+[ 15%] Built target duckdb_execution_index
+[ 16%] Built target duckdb_execution_index_art
+[ 16%] Built target duckdb_sample
+[ 16%] Built target duckdb_main
+[ 17%] Built target duckdb_main_capi
+[ 17%] Built target duckdb_main_capi_cast
+[ 18%] Built target duckdb_generated_extension_loader
+[ 18%] Built target duckdb_main_extension
+[ 18%] Built target duckdb_common_http
+[ 19%] Built target duckdb_main_relation
+[ 19%] Built target duckdb_main_secret
+[ 19%] Built target duckdb_main_settings
+[ 19%] Built target duckdb_main_buffered_data
+[ 19%] Built target duckdb_main_chunk_scan_state
+[ 20%] Built target duckdb_parallel
+[ 21%] Built target duckdb_storage
+[ 21%] Built target duckdb_storage_buffer
+[ 21%] Built target duckdb_storage_checkpoint
+[ 21%] Built target duckdb_storage_compression
+[ 21%] Built target duckdb_storage_compression_chimp
+[ 21%] Built target duckdb_storage_compression_alp
+[ 21%] Built target duckdb_storage_compression_roaring
+[ 22%] Built target duckdb_storage_compression_dictionary
+[ 22%] Built target duckdb_storage_compression_dict_fsst
+[ 22%] Built target duckdb_storage_metadata
+[ 22%] Built target duckdb_storage_serialization
+[ 22%] Built target duckdb_storage_statistics
+[ 22%] Built target duckdb_storage_table
+[ 23%] Built target duckdb_transaction
+[ 25%] Built target duckdb_verification
+[ 25%] Built target tree-sitter-cli
+[ 28%] Built target generate-parsers
+[ 28%] Building C object extension/sitting_duck/third_party/tree-sitter/lib/CMakeFiles/tree-sitter.dir/src/alloc.c.o
+[ 29%] Building C object extension/sitting_duck/third_party/tree-sitter/lib/CMakeFiles/tree-sitter.dir/src/get_changed_ranges.c.o
+[ 29%] Building C object extension/sitting_duck/third_party/tree-sitter/lib/CMakeFiles/tree-sitter.dir/src/language.c.o
+[ 29%] Building C object extension/sitting_duck/third_party/tree-sitter/lib/CMakeFiles/tree-sitter.dir/src/lexer.c.o
+[ 29%] Building C object extension/sitting_duck/third_party/tree-sitter/lib/CMakeFiles/tree-sitter.dir/src/node.c.o
+[ 29%] Building C object extension/sitting_duck/third_party/tree-sitter/lib/CMakeFiles/tree-sitter.dir/src/parser.c.o
+[ 29%] Building C object extension/sitting_duck/third_party/tree-sitter/lib/CMakeFiles/tree-sitter.dir/src/query.c.o
+[ 29%] Building C object extension/sitting_duck/third_party/tree-sitter/lib/CMakeFiles/tree-sitter.dir/src/stack.c.o
+[ 30%] Building C object extension/sitting_duck/third_party/tree-sitter/lib/CMakeFiles/tree-sitter.dir/src/subtree.c.o
+[ 30%] Building C object extension/sitting_duck/third_party/tree-sitter/lib/CMakeFiles/tree-sitter.dir/src/tree.c.o
+[ 30%] Building C object extension/sitting_duck/third_party/tree-sitter/lib/CMakeFiles/tree-sitter.dir/src/tree_cursor.c.o
+[ 30%] Building C object extension/sitting_duck/third_party/tree-sitter/lib/CMakeFiles/tree-sitter.dir/src/wasm_store.c.o
+[ 30%] Linking C static library libtree-sitter.a
+[ 30%] Built target tree-sitter
+[ 30%] Built target duckdb_core_functions_algebraic
+[ 30%] Built target duckdb_core_functions_distributive
+[ 30%] Built target duckdb_core_functions_holistic
+[ 30%] Built target duckdb_core_functions_nested
+[ 30%] Built target duckdb_core_functions_regression
+[ 30%] Built target duckdb_core_functions_array
+[ 30%] Built target duckdb_core_functions_bit
+[ 30%] Built target duckdb_core_functions_blob
+[ 30%] Built target duckdb_core_functions_date
+[ 30%] Built target duckdb_core_functions_debug
+[ 31%] Built target duckdb_core_functions_enum
+[ 31%] Built target duckdb_core_functions_generic
+[ 31%] Built target duckdb_core_functions_list
+[ 31%] Built target duckdb_core_functions_map
+[ 31%] Built target duckdb_core_functions_math
+[ 32%] Built target duckdb_core_functions_operators
+[ 32%] Built target duckdb_core_functions_random
+[ 32%] Built target duckdb_core_functions_string
+[ 32%] Built target duckdb_core_functions_struct
+[ 32%] Built target duckdb_core_functions_union
+[ 32%] Built target duckdb_parquet_decoders
+[ 32%] Built target duckdb_parquet_readers
+[ 32%] Built target duckdb_parquet_writers
+[ 41%] Built target jemalloc
+[ 42%] Built target duckdb_fmt
+[ 44%] Built target duckdb_pg_query
+[ 48%] Built target duckdb_re2
+[ 49%] Built target duckdb_miniz
+[ 50%] Built target duckdb_utf8proc
+[ 50%] Built target duckdb_hyperloglog
+[ 50%] Built target duckdb_skiplistlib
+[ 50%] Built target duckdb_fastpforlib
+[ 53%] Built target duckdb_mbedtls
+[ 53%] Built target duckdb_fsst
+[ 53%] Built target duckdb_yyjson
+[ 53%] Built target jemalloc_extension
+[ 61%] Built target parquet_extension
+[ 61%] Built target core_functions_extension
+[ 61%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/sitting_duck_extension.cpp.o
+[ 61%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapter.cpp.o
+[ 61%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapter_registry_init.cpp.o
+[ 61%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/python_adapter.cpp.o
+[ 61%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/javascript_adapter.cpp.o
+[ 62%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/cpp_adapter.cpp.o
+[ 62%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/typescript_adapter.cpp.o
+[ 62%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/sql_adapter.cpp.o
+[ 62%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/duckdb_adapter.cpp.o
+[ 62%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/go_adapter.cpp.o
+[ 62%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/ruby_adapter.cpp.o
+[ 62%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/markdown_adapter.cpp.o
+[ 63%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/java_adapter.cpp.o
+[ 63%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/php_adapter.cpp.o
+[ 63%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/rust_adapter.cpp.o
+[ 63%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/html_adapter.cpp.o
+[ 63%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/css_adapter.cpp.o
+[ 63%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/c_adapter.cpp.o
+[ 63%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/json_adapter.cpp.o
+[ 63%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/bash_adapter.cpp.o
+[ 64%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/swift_adapter.cpp.o
+[ 64%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/r_adapter.cpp.o
+[ 64%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/language_adapters/kotlin_adapter.cpp.o
+[ 64%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/read_ast_streaming_function.cpp.o
+[ 64%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/ast_sql_macros.cpp.o
+[ 64%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/parse_ast_function.cpp.o
+[ 64%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/unified_ast_backend.cpp.o
+[ 65%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/ast_parsing_task.cpp.o
+[ 65%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/ast_type.cpp.o
+[ 65%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/semantic_types.cpp.o
+[ 65%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/semantic_type_functions.cpp.o
+[ 65%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/ast_file_utils.cpp.o
+[ 65%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/ast_supported_languages_function.cpp.o
+[ 65%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/src/native_context_extraction.cpp.o
+[ 66%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/grammars/tree-sitter-python/src/parser.c.o
+[ 66%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/grammars/tree-sitter-python/src/scanner.c.o
+[ 66%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/grammars/tree-sitter-javascript/src/parser.c.o
+[ 66%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/grammars/tree-sitter-javascript/src/scanner.c.o
+[ 66%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_extension.dir/grammars/tree-sitter-cpp/src/parser.c.o

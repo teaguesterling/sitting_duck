@@ -1406,10 +1406,49 @@ static TableFunction GetReadASTHierarchicalFunctionOneArg() {
     return read_ast_hierarchical;
 }
 
+// Create read_ast_flat alias functions (explicit access to flat schema)
+static TableFunction GetReadASTFlatAliasFunctionOneArg() {
+    TableFunction read_ast_flat("read_ast_flat", {LogicalType::ANY}, 
+                               ReadASTFlatStreamingFunction, ReadASTFlatStreamingBindOneArg, ReadASTStreamingInit);
+    read_ast_flat.name = "read_ast_flat";
+    read_ast_flat.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
+    read_ast_flat.named_parameters["context"] = LogicalType::VARCHAR;
+    read_ast_flat.named_parameters["source"] = LogicalType::VARCHAR;
+    read_ast_flat.named_parameters["structure"] = LogicalType::VARCHAR;
+    read_ast_flat.named_parameters["peek"] = LogicalType::ANY;  // Can be INTEGER or VARCHAR
+    read_ast_flat.named_parameters["batch_size"] = LogicalType::INTEGER;
+    
+    // Legacy parameters for backward compatibility
+    read_ast_flat.named_parameters["peek_size"] = LogicalType::INTEGER;
+    read_ast_flat.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+    return read_ast_flat;
+}
+
+static TableFunction GetReadASTFlatAliasFunctionTwoArg() {
+    TableFunction read_ast_flat("read_ast_flat", {LogicalType::ANY, LogicalType::VARCHAR}, 
+                               ReadASTFlatStreamingFunction, ReadASTFlatStreamingBindTwoArg, ReadASTStreamingInit);
+    read_ast_flat.name = "read_ast_flat";
+    read_ast_flat.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
+    read_ast_flat.named_parameters["context"] = LogicalType::VARCHAR;
+    read_ast_flat.named_parameters["source"] = LogicalType::VARCHAR;
+    read_ast_flat.named_parameters["structure"] = LogicalType::VARCHAR;
+    read_ast_flat.named_parameters["peek"] = LogicalType::ANY;  // Can be INTEGER or VARCHAR
+    read_ast_flat.named_parameters["batch_size"] = LogicalType::INTEGER;
+    
+    // Legacy parameters for backward compatibility
+    read_ast_flat.named_parameters["peek_size"] = LogicalType::INTEGER;
+    read_ast_flat.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+    return read_ast_flat;
+}
+
 void RegisterReadASTFunction(DatabaseInstance &instance) {
     // Register default read_ast functions (now using flat schema - production ready)
     ExtensionUtil::RegisterFunction(instance, GetReadASTFlatFunctionOneArg());    // ANY (auto-detect)
     ExtensionUtil::RegisterFunction(instance, GetReadASTFlatFunctionTwoArg());    // ANY, VARCHAR (explicit language)
+    
+    // Register read_ast_flat aliases (explicit access to flat schema)
+    ExtensionUtil::RegisterFunction(instance, GetReadASTFlatAliasFunctionOneArg());    // ANY (auto-detect)
+    ExtensionUtil::RegisterFunction(instance, GetReadASTFlatAliasFunctionTwoArg());    // ANY, VARCHAR (explicit language)
     
     // Register read_ast_hierarchical_new functions (hierarchical STRUCT schema with memory issues)
     ExtensionUtil::RegisterFunction(instance, GetReadASTFunctionOneArg());    // ANY (auto-detect)
