@@ -151,6 +151,9 @@ ExtractionConfig ParseExtractionConfig(const string& context_str,
         config.peek = PeekLevel::SMART;
     } else if (peek_lower == "full") {
         config.peek = PeekLevel::FULL;
+    } else if (peek_lower == "custom") {
+        // Custom peek mode (size will be set by peek_size parameter)
+        config.peek = PeekLevel::CUSTOM;
     } else {
         // Try to parse as integer for custom size
         try {
