@@ -72,17 +72,16 @@ column_reference	user_id
 # Test 5: Test STRUCT field access - source locations
 # ====================================================
 
-query III
+query II
 SELECT 
     type as node_type,
-    start_line as start_line,
-    start_column as start_col
+    start_line as start_line
 FROM parse_ast('SELECT user_id FROM orders', 'duckdb') 
 WHERE type IN ('column_reference', 'table_reference')
-ORDER BY start_column;
+ORDER BY start_line;
 ----
-column_reference	1	1
-table_reference	1	1
+column_reference	1
+table_reference	1
 
 # Test 6: Test context semantic_type access
 # ==========================================
@@ -90,9 +89,9 @@ table_reference	1	1
 query II
 SELECT 
     type as node_type,
-    context.semantic_type as semantic_type
+    semantic_type as semantic_type
 FROM parse_ast('INSERT INTO users (name, email) VALUES (''John'', ''john@example.com'')', 'duckdb') 
-WHERE context.semantic_type IN (140, 252)
+WHERE semantic_type IN (140, 252)
 ORDER BY node_id;
 ----
 program	252

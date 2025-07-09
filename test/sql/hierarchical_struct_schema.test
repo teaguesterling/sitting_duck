@@ -159,10 +159,10 @@ WHERE source.start_line = 1
 
 query II
 SELECT 
-    language as language,
-    MAX(depth) as max_depth
+    source.language as language,
+    MAX(structure.depth) as max_depth
 FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
-GROUP BY language;
+GROUP BY source.language;
 ----
 python	8
 
@@ -171,12 +171,12 @@ python	8
 
 query III
 SELECT 
-    language as language,
+    source.language as language,
     type as node_type,
     COUNT(*) as count
 FROM read_ast_hierarchical(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto')
 WHERE type IN ('module', 'program')
-GROUP BY language, type
+GROUP BY source.language, type
 ORDER BY language, type;
 ----
 javascript	program	1
@@ -188,7 +188,7 @@ python	module	1
 query II
 SELECT 
     type as node_type,
-    (name IS NULL) as name_is_null
+    (context.name IS NULL) as name_is_null
 FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
 WHERE type = 'module'
 LIMIT 1;
