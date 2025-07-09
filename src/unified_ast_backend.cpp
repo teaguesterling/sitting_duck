@@ -432,6 +432,122 @@ vector<string> UnifiedASTBackend::GetDynamicTableColumnNames(const ExtractionCon
     return names;
 }
 
+//==============================================================================
+// Flat Dynamic Schema Functions Based on ExtractionConfig
+//==============================================================================
+
+vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const ExtractionConfig& config) {
+    vector<LogicalType> schema;
+    
+    // Always include core columns
+    schema.push_back(LogicalType::BIGINT);    // node_id
+    schema.push_back(LogicalType::VARCHAR);   // type
+    
+    // Conditionally include context fields
+    if (config.context != ContextLevel::NONE) {
+        if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
+            schema.push_back(LogicalType::UTINYINT);  // semantic_type
+            schema.push_back(LogicalType::UTINYINT);  // flags
+        }
+        if (config.context >= ContextLevel::NORMALIZED) {
+            schema.push_back(LogicalType::VARCHAR);   // name
+        }
+    }
+    
+    // Conditionally include source fields
+    if (config.source != SourceLevel::NONE) {
+        schema.push_back(LogicalType::VARCHAR);     // file_path
+        schema.push_back(LogicalType::VARCHAR);     // language
+        
+        if (config.source >= SourceLevel::LINES_ONLY) {
+            schema.push_back(LogicalType::UINTEGER); // start_line
+            schema.push_back(LogicalType::UINTEGER); // end_line
+        }
+        
+        if (config.source >= SourceLevel::FULL) {
+            schema.push_back(LogicalType::UINTEGER); // start_column
+            schema.push_back(LogicalType::UINTEGER); // end_column
+        }
+    }
+    
+    // Conditionally include structure fields
+    if (config.structure != StructureLevel::NONE) {
+        if (config.structure >= StructureLevel::MINIMAL) {
+            schema.push_back(LogicalType::BIGINT);    // parent_id
+            schema.push_back(LogicalType::UINTEGER);  // depth
+        }
+        
+        if (config.structure >= StructureLevel::FULL) {
+            schema.push_back(LogicalType::UINTEGER);  // sibling_index
+            schema.push_back(LogicalType::UINTEGER);  // children_count
+            schema.push_back(LogicalType::UINTEGER);  // descendant_count
+        }
+    }
+    
+    // Conditionally include peek
+    if (config.peek != PeekLevel::NONE) {
+        schema.push_back(LogicalType::VARCHAR);     // peek
+    }
+    
+    return schema;
+}
+
+vector<string> UnifiedASTBackend::GetFlatDynamicTableColumnNames(const ExtractionConfig& config) {
+    vector<string> names;
+    
+    // Always include core columns
+    names.push_back("node_id");
+    names.push_back("type");
+    
+    // Conditionally include context fields
+    if (config.context != ContextLevel::NONE) {
+        if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
+            names.push_back("semantic_type");
+            names.push_back("flags");
+        }
+        if (config.context >= ContextLevel::NORMALIZED) {
+            names.push_back("name");
+        }
+    }
+    
+    // Conditionally include source fields
+    if (config.source != SourceLevel::NONE) {
+        names.push_back("file_path");
+        names.push_back("language");
+        
+        if (config.source >= SourceLevel::LINES_ONLY) {
+            names.push_back("start_line");
+            names.push_back("end_line");
+        }
+        
+        if (config.source >= SourceLevel::FULL) {
+            names.push_back("start_column");
+            names.push_back("end_column");
+        }
+    }
+    
+    // Conditionally include structure fields
+    if (config.structure != StructureLevel::NONE) {
+        if (config.structure >= StructureLevel::MINIMAL) {
+            names.push_back("parent_id");
+            names.push_back("depth");
+        }
+        
+        if (config.structure >= StructureLevel::FULL) {
+            names.push_back("sibling_index");
+            names.push_back("children_count");
+            names.push_back("descendant_count");
+        }
+    }
+    
+    // Conditionally include peek
+    if (config.peek != PeekLevel::NONE) {
+        names.push_back("peek");
+    }
+    
+    return names;
+}
+
 LogicalType UnifiedASTBackend::GetHierarchicalStructSchema() {
     // Create structured schema with organized field groups
     
@@ -557,6 +673,185 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult& result, DataChunk& outpu
         
         count++;
         current_row++;  // Track which row we're on
+    }
+    
+    output_index += count;
+}
+
+void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index, const ExtractionConfig& config) {
+    // Dynamic projection based on ExtractionConfig
+    if (output.ColumnCount() == 0) {
+        return; // No columns to project
+    }
+    
+    const idx_t chunk_size = STANDARD_VECTOR_SIZE;
+    idx_t count = 0;
+    idx_t col_idx = 0;
+    
+    // Get vectors for core columns (always present)
+    auto* node_id_vec = FlatVector::GetData<int64_t>(output.data[col_idx++]);
+    auto* type_vec = FlatVector::GetData<string_t>(output.data[col_idx++]);
+    
+    // Context columns based on config.context
+    uint8_t* semantic_type_vec = nullptr;
+    uint8_t* flags_vec = nullptr;
+    string_t* name_vec = nullptr;
+    
+    if (config.context != ContextLevel::NONE) {
+        if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
+            semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[col_idx++]);
+            flags_vec = FlatVector::GetData<uint8_t>(output.data[col_idx++]);
+        }
+        if (config.context >= ContextLevel::NORMALIZED) {
+            name_vec = FlatVector::GetData<string_t>(output.data[col_idx++]);
+        }
+    }
+    
+    // Source columns based on config.source
+    string_t* file_path_vec = nullptr;
+    string_t* language_vec = nullptr;
+    uint32_t* start_line_vec = nullptr;
+    uint32_t* end_line_vec = nullptr;
+    uint32_t* start_column_vec = nullptr;
+    uint32_t* end_column_vec = nullptr;
+    
+    if (config.source != SourceLevel::NONE) {
+        file_path_vec = FlatVector::GetData<string_t>(output.data[col_idx++]);
+        language_vec = FlatVector::GetData<string_t>(output.data[col_idx++]);
+        
+        if (config.source >= SourceLevel::LINES_ONLY) {
+            start_line_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
+            end_line_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
+        }
+        
+        if (config.source >= SourceLevel::FULL) {
+            start_column_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
+            end_column_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
+        }
+    }
+    
+    // Structure columns based on config.structure
+    int64_t* parent_id_vec = nullptr;
+    uint32_t* depth_vec = nullptr;
+    uint32_t* sibling_index_vec = nullptr;
+    uint32_t* children_count_vec = nullptr;
+    uint32_t* descendant_count_vec = nullptr;
+    ValidityMask* parent_validity = nullptr;
+    
+    if (config.structure != StructureLevel::NONE) {
+        if (config.structure >= StructureLevel::MINIMAL) {
+            parent_id_vec = FlatVector::GetData<int64_t>(output.data[col_idx]);
+            parent_validity = &FlatVector::Validity(output.data[col_idx++]);
+            depth_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
+            sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
+        }
+        
+        if (config.structure >= StructureLevel::FULL) {
+            children_count_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
+            descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
+        }
+    }
+    
+    // Peek column based on config.peek
+    string_t* peek_vec = nullptr;
+    ValidityMask* peek_validity = nullptr;
+    
+    if (config.peek != PeekLevel::NONE) {
+        peek_vec = FlatVector::GetData<string_t>(output.data[col_idx]);
+        peek_validity = &FlatVector::Validity(output.data[col_idx++]);
+    }
+    
+    // Process nodes
+    for (idx_t i = current_row; i < result.nodes.size() && count < chunk_size; i++) {
+        const auto& node = result.nodes[i];
+        
+        // Core columns (always present)
+        node_id_vec[output_index + count] = node.node_id;
+        type_vec[output_index + count] = StringVector::AddString(output.data[1], node.type.raw);
+        
+        // Context columns
+        if (config.context != ContextLevel::NONE) {
+            if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
+                semantic_type_vec[output_index + count] = node.semantic_type;
+                flags_vec[output_index + count] = node.universal_flags;
+            }
+            if (config.context >= ContextLevel::NORMALIZED) {
+                // Find the name column index
+                idx_t name_col = 2; // Start after node_id and type
+                if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
+                    name_col += 2; // Skip semantic_type and flags
+                }
+                name_vec[output_index + count] = StringVector::AddString(output.data[name_col], node.name.raw);
+            }
+        }
+        
+        // Source columns
+        if (config.source != SourceLevel::NONE) {
+            // Calculate file_path and language column indices
+            idx_t file_path_col = 2; // Start after node_id and type
+            if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
+                file_path_col += 2; // Skip semantic_type and flags
+            }
+            if (config.context >= ContextLevel::NORMALIZED) {
+                file_path_col += 1; // Skip name
+            }
+            idx_t language_col = file_path_col + 1;
+            
+            if (result.source.file_path == "<inline>") {
+                // For parse_ast, set file_path to NULL when source='none'
+                if (config.source == SourceLevel::PATH) {
+                    FlatVector::SetNull(output.data[file_path_col], output_index + count, true);
+                } else {
+                    file_path_vec[output_index + count] = StringVector::AddString(output.data[file_path_col], result.source.file_path);
+                }
+            } else {
+                file_path_vec[output_index + count] = StringVector::AddString(output.data[file_path_col], result.source.file_path);
+            }
+            language_vec[output_index + count] = StringVector::AddString(output.data[language_col], result.source.language);
+            
+            if (config.source >= SourceLevel::LINES_ONLY) {
+                start_line_vec[output_index + count] = node.file_position.start_line;
+                end_line_vec[output_index + count] = node.file_position.end_line;
+            }
+            
+            if (config.source >= SourceLevel::FULL) {
+                start_column_vec[output_index + count] = node.file_position.start_column;
+                end_column_vec[output_index + count] = node.file_position.end_column;
+            }
+        }
+        
+        // Structure columns
+        if (config.structure != StructureLevel::NONE) {
+            if (config.structure >= StructureLevel::MINIMAL) {
+                if (node.tree_position.parent_index < 0) {
+                    parent_validity->SetInvalid(output_index + count);
+                } else {
+                    parent_id_vec[output_index + count] = node.tree_position.parent_index;
+                }
+                depth_vec[output_index + count] = node.tree_position.node_depth;
+                sibling_index_vec[output_index + count] = node.tree_position.sibling_index;
+            }
+            
+            if (config.structure >= StructureLevel::FULL) {
+                children_count_vec[output_index + count] = node.subtree.children_count;
+                descendant_count_vec[output_index + count] = node.subtree.descendant_count;
+            }
+        }
+        
+        // Peek column
+        if (config.peek != PeekLevel::NONE) {
+            // Calculate peek column index (last column)
+            idx_t peek_col = output.ColumnCount() - 1;
+            
+            if (node.peek.empty()) {
+                peek_validity->SetInvalid(output_index + count);
+            } else {
+                peek_vec[output_index + count] = StringVector::AddString(output.data[peek_col], node.peek);
+            }
+        }
+        
+        count++;
+        current_row++;
     }
     
     output_index += count;

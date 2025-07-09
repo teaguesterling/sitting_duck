@@ -122,9 +122,9 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
     // Create ExtractionConfig from parsed parameters
     ExtractionConfig extraction_config = ParseExtractionConfig(context_str, source_str, structure_str, peek_mode, peek_size);
     
-    // Use flat schema for read_ast function
-    return_types = UnifiedASTBackend::GetFlatTableSchema();
-    names = UnifiedASTBackend::GetFlatTableColumnNames();
+    // Use flat dynamic schema based on extraction config
+    return_types = UnifiedASTBackend::GetFlatDynamicTableSchema(extraction_config);
+    names = UnifiedASTBackend::GetFlatDynamicTableColumnNames(extraction_config);
     
     // Use the new ExtractionConfig constructor
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, extraction_config, batch_size);
@@ -234,9 +234,9 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
     // Create ExtractionConfig from parsed parameters
     ExtractionConfig extraction_config = ParseExtractionConfig(context_str, source_str, structure_str, peek_mode, peek_size);
     
-    // Use flat schema for read_ast function
-    return_types = UnifiedASTBackend::GetFlatTableSchema();
-    names = UnifiedASTBackend::GetFlatTableColumnNames();
+    // Use flat dynamic schema based on extraction config
+    return_types = UnifiedASTBackend::GetFlatDynamicTableSchema(extraction_config);
+    names = UnifiedASTBackend::GetFlatDynamicTableColumnNames(extraction_config);
     
     // Use the new ExtractionConfig constructor
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, extraction_config, batch_size);
@@ -495,8 +495,8 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
                 auto& result = global_state.current_batch_results[global_state.current_batch_result_index];
                 
                 if (global_state.current_batch_row_index < result.nodes.size()) {
-                    // Use flat projection to populate individual columns
-                    UnifiedASTBackend::ProjectToTable(result, output, global_state.current_batch_row_index, output_index);
+                    // Use dynamic projection to populate individual columns based on extraction config
+                    UnifiedASTBackend::ProjectToDynamicTable(result, output, global_state.current_batch_row_index, output_index, global_state.extraction_config);
                     
                     global_state.current_batch_row_index++;
                 } else {
@@ -559,7 +559,7 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
         }
         
         // Use flat projection to populate individual columns
-        UnifiedASTBackend::ProjectToTable(*global_state.current_file_result, output, global_state.current_file_row_index, output_index);
+        UnifiedASTBackend::ProjectToDynamicTable(*global_state.current_file_result, output, global_state.current_file_row_index, output_index, global_state.extraction_config);
     }
     
     output.SetCardinality(output_index);
@@ -657,7 +657,7 @@ static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadAST
         }
         
         // Use flat projection to populate individual columns
-        UnifiedASTBackend::ProjectToTable(current_result, output, global_state.current_batch_row_index, output_index);
+        UnifiedASTBackend::ProjectToDynamicTable(current_result, output, global_state.current_batch_row_index, output_index, global_state.extraction_config);
         
         global_state.current_batch_row_index++;
     }

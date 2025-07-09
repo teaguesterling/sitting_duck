@@ -145,8 +145,13 @@ public:
     static vector<LogicalType> GetDynamicTableSchema(const ExtractionConfig& config);
     static vector<string> GetDynamicTableColumnNames(const ExtractionConfig& config);
     
+    // Flat dynamic schema functions 
+    static vector<LogicalType> GetFlatDynamicTableSchema(const ExtractionConfig& config);
+    static vector<string> GetFlatDynamicTableColumnNames(const ExtractionConfig& config);
+    
     // Conversion helpers
     static void ProjectToTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index);
+    static void ProjectToDynamicTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index, const ExtractionConfig& config);
     static Value CreateASTStruct(const ASTResult& result);
     static Value CreateASTStructValue(const ASTResult& result); // For scalar functions
     

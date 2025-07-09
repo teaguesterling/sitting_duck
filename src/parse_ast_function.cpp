@@ -57,9 +57,9 @@ static unique_ptr<FunctionData> ParseASTBind(ClientContext &context, TableFuncti
     // Create extraction config
     ExtractionConfig config = ParseExtractionConfig(context_str, source_str, structure_str, peek_str, peek_size);
     
-    // Use unified backend schema
-    return_types = UnifiedASTBackend::GetFlatTableSchema();
-    names = UnifiedASTBackend::GetFlatTableColumnNames();
+    // Use flat dynamic schema based on extraction config
+    return_types = UnifiedASTBackend::GetFlatDynamicTableSchema(config);
+    names = UnifiedASTBackend::GetFlatDynamicTableColumnNames(config);
     
     return make_uniq<ParseASTData>(code, language, config);
 }
@@ -78,9 +78,9 @@ static void ParseASTExecute(ClientContext &context, TableFunctionInput &data_p, 
         }
     }
     
-    // Project to table format, starting from where we left off
+    // Project to dynamic table format based on extraction config, starting from where we left off
     idx_t output_index = 0;
-    UnifiedASTBackend::ProjectToTable(data.result, output, data.current_row, output_index);
+    UnifiedASTBackend::ProjectToDynamicTable(data.result, output, data.current_row, output_index, data.extraction_config);
     output.SetCardinality(output_index);
 }
 
