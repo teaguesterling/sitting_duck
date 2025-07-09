@@ -204,12 +204,18 @@ true
 # =============================================
 statement error
 SELECT context.native FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+----
+Binder Error
 
 statement error
 SELECT context.native FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+----
+Binder Error
 
 statement error
 SELECT context.native FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
+----
+Binder Error
 
 # Test 10: Complex query stability with native context
 # ====================================================
@@ -219,10 +225,9 @@ FROM (
     SELECT 
         node_id,
         type,
-        context.native,
-        context.name,
+        name,
         parent_id,
-        source.start_line
+        start_line
     FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
     WHERE parent_id IS NOT NULL
     ORDER BY node_id
@@ -236,10 +241,9 @@ FROM (
     SELECT 
         node_id,
         type,
-        context.native,
-        context.name,
+        name,
         parent_id,
-        source.start_line
+        start_line
     FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
     WHERE parent_id IS NOT NULL
     ORDER BY node_id

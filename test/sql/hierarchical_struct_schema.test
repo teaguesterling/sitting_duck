@@ -133,10 +133,10 @@ module	4
 query II
 SELECT 
     type as node_type,
-    semantic_type as semantic_type
+    context.semantic_type as semantic_type
 FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
-WHERE semantic_type IN (64, 240)  -- integers and functions
-ORDER BY type, semantic_type
+WHERE context.semantic_type IN (64, 240)  -- integers and functions
+ORDER BY type, context.semantic_type
 LIMIT 2;
 ----
 def	240
@@ -148,9 +148,9 @@ def	240
 query I
 SELECT COUNT(*)
 FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
-WHERE start_line = 1 
-  AND depth > 0 
-  AND name IS NOT NULL;
+WHERE source.start_line = 1 
+  AND structure.depth > 0 
+  AND context.name IS NOT NULL;
 ----
 2
 
