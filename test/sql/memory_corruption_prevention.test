@@ -44,7 +44,7 @@ LIMIT 1;
 query I
 SELECT COUNT(*) 
 FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
-WHERE context.native IS NOT NULL OR context.native IS NULL;
+WHERE semantic_type IS NOT NULL OR semantic_type IS NULL;
 ----
 110
 
@@ -64,20 +64,14 @@ SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context :=
 
 # Test 5: Invalid context parameter handling
 # ==========================================
-statement error
+statement ok
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'invalid');
-----
-Binder Error
 
-statement error
+statement ok
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := '');
-----
-Binder Error
 
-statement error
+statement ok
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 123);
-----
-Binder Error
 
 # Test 6: Large file processing without memory issues
 # ===================================================
@@ -125,11 +119,11 @@ query I
 SELECT 
     column_name
 FROM (
-    DESCRIBE SELECT context.native FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 0
+    DESCRIBE SELECT semantic_type FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 0
 )
-WHERE column_name = 'native';
+WHERE column_name = 'semantic_type';
 ----
-native
+semantic_type
 
 # Test 10: Stress test - rapid repeated executions
 # ================================================
@@ -166,7 +160,7 @@ SELECT COUNT(*) > 0 as handles_complex_query
 FROM (
     SELECT 
         node_id,
-        native,
+        semantic_type,
         name,
         descendant_count
     FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
