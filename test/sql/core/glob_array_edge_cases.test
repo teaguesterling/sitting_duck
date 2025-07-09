@@ -188,7 +188,7 @@ FROM read_ast(['test/**/data/**/*.py'], ignore_errors := true);
 # Test 11: Language detection with arrays
 # ======================================  
 query I
-SELECT COUNT(DISTINCT source.language) > 0 as auto_detection_works
+SELECT COUNT(DISTINCT language) > 0 as auto_detection_works
 FROM read_ast([
     'test/data/python/simple.py',
     'test/data/javascript/simple.js',

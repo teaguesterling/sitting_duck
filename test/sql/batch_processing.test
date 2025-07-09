@@ -96,7 +96,7 @@ FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := 10
 query I
 SELECT COUNT(*) > 0 as has_children
 FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := 2)
-WHERE structure.parent_id IS NOT NULL
+WHERE parent_id IS NOT NULL
 ----
 1
 
