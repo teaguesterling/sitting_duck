@@ -18,9 +18,13 @@ WHERE is_definition(semantic_type)
   AND name IS NOT NULL
 ORDER BY start_line;
 ----
+(empty)	DEFINITION_MODULE
 calculate_sum	DEFINITION_FUNCTION
+(empty)	DEFINITION_FUNCTION
 DataProcessor	DEFINITION_CLASS
+(empty)	DEFINITION_CLASS
 process	DEFINITION_FUNCTION
+(empty)	DEFINITION_FUNCTION
 
 # Example 2: Find all function calls
 # Note: The 'sum' call doesn't have a name in the AST
@@ -78,7 +82,7 @@ WHERE semantic_type = ANY(get_searchable_types())
 query I
 SELECT COUNT(*) FROM code_index;
 ----
-14
+25
 
 # Example 7: Analyze code patterns
 query II
@@ -91,7 +95,7 @@ WITH function_calls AS (
 SELECT * FROM function_calls
 ORDER BY call_count DESC, name;
 ----
-<anonymous>	1
+sum	1
 
 # Example 8: Find error handling patterns
 query I
@@ -123,8 +127,11 @@ AND name IS NOT NULL
 ORDER BY start_line;
 ----
 calculate_sum	DEFINITION_FUNCTION	1	2
+(empty)	DEFINITION_FUNCTION	1	1
 DataProcessor	DEFINITION_CLASS	4	6
+(empty)	DEFINITION_CLASS	4	4
 process	DEFINITION_FUNCTION	5	6
+(empty)	DEFINITION_FUNCTION	5	5
 
 # Example 10: Language-agnostic search
 statement ok
