@@ -1,6 +1,7 @@
 #pragma once
 
 #include "native_context_extraction.hpp"
+#include "function_call_extractor.hpp"
 #include <tree_sitter/api.h>
 
 namespace duckdb {
@@ -356,6 +357,14 @@ private:
         }
         
         return modifiers;
+    }
+};
+
+// Specialization for FUNCTION_CALL (Java method invocations and object creation)
+template<>
+struct JavaNativeExtractor<NativeExtractionStrategy::FUNCTION_CALL> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        return UnifiedFunctionCallExtractor<JavaLanguageTag>::Extract(node, content);
     }
 };
 

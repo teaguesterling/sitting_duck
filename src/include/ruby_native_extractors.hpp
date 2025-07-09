@@ -1,6 +1,7 @@
 #pragma once
 
 #include "native_context_extraction.hpp"
+#include "function_call_extractor.hpp"
 #include <tree_sitter/api.h>
 
 namespace duckdb {
@@ -367,6 +368,14 @@ public:
         }
         
         return modifiers;
+    }
+};
+
+// Specialization for FUNCTION_CALL (Ruby function calls and method calls)
+template<>
+struct RubyNativeExtractor<NativeExtractionStrategy::FUNCTION_CALL> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        return UnifiedFunctionCallExtractor<RubyLanguageTag>::Extract(node, content);
     }
 };
 

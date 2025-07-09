@@ -1,6 +1,7 @@
 #pragma once
 
 #include "native_context_extraction.hpp"
+#include "function_call_extractor.hpp"
 #include <tree_sitter/api.h>
 
 namespace duckdb {
@@ -324,6 +325,14 @@ struct PythonNativeExtractor<NativeExtractionStrategy::VARIABLE_WITH_TYPE> {
         }
         
         return context;
+    }
+};
+
+// Specialization for FUNCTION_CALL (Python function calls)
+template<>
+struct PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_CALL> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        return UnifiedFunctionCallExtractor<PythonLanguageTag>::Extract(node, content);
     }
 };
 

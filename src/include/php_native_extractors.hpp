@@ -1,6 +1,7 @@
 #pragma once
 
 #include "native_context_extraction.hpp"
+#include "function_call_extractor.hpp"
 #include <tree_sitter/api.h>
 
 namespace duckdb {
@@ -390,6 +391,14 @@ public:
         }
         
         return modifiers;
+    }
+};
+
+// Specialization for FUNCTION_CALL (PHP function calls and method calls)
+template<>
+struct PHPNativeExtractor<NativeExtractionStrategy::FUNCTION_CALL> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        return UnifiedFunctionCallExtractor<PHPLanguageTag>::Extract(node, content);
     }
 };
 

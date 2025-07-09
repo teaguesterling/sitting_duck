@@ -50,7 +50,7 @@ DEF_TYPE("break_statement", FLOW_JUMP, NONE, NONE, 0)
 DEF_TYPE("return_statement", FLOW_JUMP, NONE, NONE, 0)
 
 // Expressions
-DEF_TYPE("call_expression", COMPUTATION_CALL, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("call_expression", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_CALL, 0)
 DEF_TYPE("field_expression", COMPUTATION_ACCESS, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("subscript_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT, NONE, NONE, 0)

@@ -26,7 +26,7 @@ DEF_TYPE("const_spec", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMU
 DEF_TYPE("short_var_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
 
 // Expressions and references with refinements
-DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, FUNCTION_CALL, 0)
 DEF_TYPE("selector_expression", COMPUTATION_ACCESS, FIND_PROPERTY, NONE, 0)
 DEF_TYPE("index_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 DEF_TYPE("slice_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
@@ -168,7 +168,7 @@ DEF_TYPE("field_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("slice_type", TYPE_COMPOSITE, NONE, NONE, 0)
 DEF_TYPE("dec_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
 DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("type_conversion_expression", COMPUTATION_CALL, NONE, NONE, 0)
+DEF_TYPE("type_conversion_expression", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_CALL, 0)
 DEF_TYPE("label_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE("import_spec_list", ORGANIZATION_LIST, NONE, NONE, 0)
 DEF_TYPE("interface", TYPE_COMPOSITE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
