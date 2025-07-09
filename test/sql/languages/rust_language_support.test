@@ -24,7 +24,7 @@ true
 # ============================================
 
 query I
-SELECT COUNT(*) FROM read_ast('test/data/rust/simple.rs', 'rust') WHERE context.name IS NOT NULL;
+SELECT COUNT(*) FROM read_ast('test/data/rust/simple.rs', 'rust') WHERE name IS NOT NULL;
 ----
 362
 
@@ -32,9 +32,9 @@ SELECT COUNT(*) FROM read_ast('test/data/rust/simple.rs', 'rust') WHERE context.
 # ================================================
 
 query II
-SELECT context.name, type FROM read_ast('test/data/rust/simple.rs') 
-WHERE type IN ('struct_item', 'function_item') AND context.name IS NOT NULL 
-ORDER BY source.start_line;
+SELECT name, type FROM read_ast('test/data/rust/simple.rs') 
+WHERE type IN ('struct_item', 'function_item') AND name IS NOT NULL 
+ORDER BY start_line;
 ----
 User	struct_item
 new	function_item
@@ -49,9 +49,9 @@ test_user_creation	function_item
 # =============================
 
 query II
-SELECT context.name, type FROM read_ast('test/data/rust/simple.rs')
-WHERE type = 'use_declaration' AND context.name IS NOT NULL
-ORDER BY source.start_line;
+SELECT name, type FROM read_ast('test/data/rust/simple.rs')
+WHERE type = 'use_declaration' AND name IS NOT NULL
+ORDER BY start_line;
 ----
 use std::collections::HashMap;	use_declaration
 use super::*;	use_declaration
@@ -60,10 +60,10 @@ use super::*;	use_declaration
 # ===========================
 
 query III
-SELECT type, context.semantic_type, COUNT(*) as count
+SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/rust/simple.rs')
 WHERE type IN ('struct_item', 'function_item', 'enum_item', 'trait_item', 'impl_item')
-GROUP BY type, context.semantic_type
+GROUP BY type, semantic_type
 ORDER BY type;
 ----
 enum_item	248	1
@@ -76,9 +76,9 @@ trait_item	248	1
 # =====================================
 
 query II
-SELECT context.name, type FROM read_ast('test/data/rust/simple.rs')
-WHERE type IN ('enum_item', 'trait_item') AND context.name IS NOT NULL
-ORDER BY source.start_line;
+SELECT name, type FROM read_ast('test/data/rust/simple.rs')
+WHERE type IN ('enum_item', 'trait_item') AND name IS NOT NULL
+ORDER BY start_line;
 ----
 Status	enum_item
 Validate	trait_item
@@ -87,8 +87,8 @@ Validate	trait_item
 # =============================
 
 query II
-SELECT context.name, type FROM read_ast('test/data/rust/simple.rs')
-WHERE type = 'mod_item' AND context.name IS NOT NULL;
+SELECT name, type FROM read_ast('test/data/rust/simple.rs')
+WHERE type = 'mod_item' AND name IS NOT NULL;
 ----
 utils	mod_item
 tests	mod_item
@@ -97,7 +97,7 @@ tests	mod_item
 # ======================================
 
 query II
-SELECT MAX(structure.depth) as max_depth, COUNT(*) as total_nodes
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/rust/simple.rs');
 ----
 13	477
@@ -107,7 +107,7 @@ FROM read_ast('test/data/rust/simple.rs');
 
 query I
 SELECT COUNT(*) FROM read_ast('test/data/rust/simple.rs')
-WHERE type = 'identifier' AND context.name IS NOT NULL;
+WHERE type = 'identifier' AND name IS NOT NULL;
 ----
 47
 
@@ -116,6 +116,6 @@ WHERE type = 'identifier' AND context.name IS NOT NULL;
 
 query I
 SELECT COUNT(*) FROM read_ast('test/data/rust/simple.rs')
-WHERE type = 'pub' AND context.name IS NOT NULL;
+WHERE type = 'pub' AND name IS NOT NULL;
 ----
 8

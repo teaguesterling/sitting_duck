@@ -131,17 +131,17 @@ SELECT COUNT(*) = 0 as no_structure_mismatches
 FROM (
     SELECT 
         COALESCE(f.parent_id, -1) as flat_pid, 
-        COALESCE(h.structure.parent_id, -1) as hier_pid,
-        f.depth as flat_depth, h.structure.depth as hier_depth,
-        f.sibling_index as flat_si, h.structure.sibling_index as hier_si,
+        COALESCE(h.parent_id, -1) as hier_pid,
+        f.depth as flat_depth, h.depth as hier_depth,
+        f.sibling_index as flat_si, h.sibling_index as hier_si,
         f.children_count as flat_cc, h.structure.children_count as hier_cc,
         f.descendant_count as flat_dc, h.structure.descendant_count as hier_dc
     FROM read_ast_flat('test/data/python/simple.py', 'python') f
     JOIN read_ast('test/data/python/simple.py', 'python') h
         ON f.node_id = h.node_id
-    WHERE COALESCE(f.parent_id, -1) != COALESCE(h.structure.parent_id, -1)
-       OR f.depth != h.structure.depth
-       OR f.sibling_index != h.structure.sibling_index
+    WHERE COALESCE(f.parent_id, -1) != COALESCE(h.parent_id, -1)
+       OR f.depth != h.depth
+       OR f.sibling_index != h.sibling_index
        OR f.children_count != h.structure.children_count
        OR f.descendant_count != h.structure.descendant_count
 );
@@ -197,7 +197,7 @@ FROM (
 (
     SELECT COUNT(*) as count
     FROM read_ast('test/data/python/simple.py', 'python')
-    WHERE context.semantic_type = 64 AND structure.depth > 1
+    WHERE context.semantic_type = 64 AND depth > 1
 ) hier_result;
 ----
 true
@@ -213,7 +213,7 @@ FROM (
     FROM read_ast_flat('test/data/python/simple.py', 'python')
 ) flat_result,
 (
-    SELECT MAX(structure.depth) as max_depth
+    SELECT MAX(depth) as max_depth
     FROM read_ast('test/data/python/simple.py', 'python')
 ) hier_result;
 ----
@@ -255,7 +255,7 @@ FROM (
     SELECT COUNT(*) as count
     FROM read_ast('test/data/python/simple.py', 'python') parent
     JOIN read_ast('test/data/python/simple.py', 'python') child
-        ON parent.node_id = child.structure.parent_id
+        ON parent.node_id = child.parent_id
     WHERE parent.type = 'function_definition'
 ) hier_result;
 ----

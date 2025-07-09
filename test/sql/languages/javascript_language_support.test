@@ -24,7 +24,7 @@ true
 # ==================================================
 
 query I
-SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript') WHERE context.name IS NOT NULL;
+SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript') WHERE name IS NOT NULL;
 ----
 83
 
@@ -32,9 +32,9 @@ SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript') WH
 # ===========================================
 
 query II
-SELECT context.name, type FROM read_ast('test/data/javascript/simple.js')
-WHERE type = 'function_declaration' AND context.name IS NOT NULL
-ORDER BY source.start_line;
+SELECT name, type FROM read_ast('test/data/javascript/simple.js')
+WHERE type = 'function_declaration' AND name IS NOT NULL
+ORDER BY start_line;
 ----
 hello	function_declaration
 fetchData	function_declaration
@@ -43,8 +43,8 @@ fetchData	function_declaration
 # ==================================
 
 query II
-SELECT context.name, type FROM read_ast('test/data/javascript/simple.js')
-WHERE type = 'class_declaration' AND context.name IS NOT NULL;
+SELECT name, type FROM read_ast('test/data/javascript/simple.js')
+WHERE type = 'class_declaration' AND name IS NOT NULL;
 ----
 Calculator	class_declaration
 
@@ -70,10 +70,10 @@ WHERE type = 'call_expression';
 # =================================
 
 query III
-SELECT type, context.semantic_type, COUNT(*) as count
+SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/javascript/simple.js')
 WHERE type IN ('function_declaration', 'class_declaration', 'call_expression', 'lexical_declaration')
-GROUP BY type, context.semantic_type
+GROUP BY type, semantic_type
 ORDER BY type;
 ----
 call_expression	208	6
@@ -85,7 +85,7 @@ lexical_declaration	244	7
 # ============================================
 
 query II
-SELECT MAX(structure.depth) as max_depth, COUNT(*) as total_nodes
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/javascript/simple.js');
 ----
 11	309
@@ -95,6 +95,6 @@ FROM read_ast('test/data/javascript/simple.js');
 
 query I
 SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js')
-WHERE type = 'identifier' AND context.name IS NOT NULL;
+WHERE type = 'identifier' AND name IS NOT NULL;
 ----
 40

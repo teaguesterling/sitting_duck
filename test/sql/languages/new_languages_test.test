@@ -34,10 +34,10 @@ true	true	true
 
 # Test 3: Extract Markdown headings
 query I
-SELECT context.name
+SELECT name
 FROM read_ast('test/data/languages/markdown/test.md')
 WHERE type = 'atx_heading'
-ORDER BY source.start_line
+ORDER BY start_line
 LIMIT 3;
 ----
 Test Markdown Document
@@ -55,11 +55,11 @@ true	true	true
 
 # Test 5: Extract Java class and method names
 query I
-SELECT context.name
+SELECT name
 FROM read_ast('test/data/languages/java/Test.java')
 WHERE type IN ('class_declaration', 'method_declaration', 'interface_declaration', 'enum_declaration')
-  AND context.name != ''
-ORDER BY source.start_line
+  AND name != ''
+ORDER BY start_line
 LIMIT 5;
 ----
 Test
@@ -81,11 +81,11 @@ true	true	true
 
 # Test 7: Extract HTML tag names
 query I
-SELECT DISTINCT context.name
+SELECT DISTINCT name
 FROM read_ast('test/data/languages/html/test.html')
 WHERE type = 'tag_name'
-  AND context.name != ''
-ORDER BY context.name
+  AND name != ''
+ORDER BY name
 LIMIT 5;
 ----
 a
@@ -105,10 +105,10 @@ true	true	true
 
 # Test 9: Extract CSS selectors and properties
 query I
-SELECT COUNT(DISTINCT context.name) > 10 AS has_many_properties
+SELECT COUNT(DISTINCT name) > 10 AS has_many_properties
 FROM read_ast('test/data/languages/css/test.css')
 WHERE type = 'property_name'
-  AND context.name != '';
+  AND name != '';
 ----
 true
 
@@ -139,14 +139,14 @@ true
 
 # Test 12: Test literal extraction in new languages
 query I
-SELECT COUNT(CASE WHEN type = 'string_literal' AND context.name != '' THEN 1 END) > 0 AS java_strings
+SELECT COUNT(CASE WHEN type = 'string_literal' AND name != '' THEN 1 END) > 0 AS java_strings
 FROM read_ast('test/data/languages/java/Test.java');
 ----
 true
 
 # Test 13: Test parse_ast with new languages
 query II
-SELECT type, context.name
+SELECT type, name
 FROM parse_ast('# Hello World', 'markdown')
 WHERE type = 'atx_heading'
 LIMIT 1;
@@ -154,7 +154,7 @@ LIMIT 1;
 atx_heading	Hello World
 
 query II
-SELECT type, context.name
+SELECT type, name
 FROM parse_ast('public class Test {}', 'java')
 WHERE type = 'class_declaration'
 LIMIT 1;
@@ -162,16 +162,16 @@ LIMIT 1;
 class_declaration	Test
 
 query II
-SELECT type, context.name
+SELECT type, name
 FROM parse_ast('<div class="test">Hello</div>', 'html')
 WHERE type = 'tag_name'
-ORDER BY source.start_line
+ORDER BY start_line
 LIMIT 1;
 ----
 tag_name	div
 
 query II
-SELECT type, context.name
+SELECT type, name
 FROM parse_ast('.test { color: red; }', 'css')
 WHERE type = 'class_selector'
 LIMIT 1;

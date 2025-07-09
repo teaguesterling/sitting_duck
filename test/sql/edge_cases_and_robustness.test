@@ -166,8 +166,8 @@ FROM (
         parent.type as parent_type
     FROM read_ast('test/data/python/simple.py', 'python', context := 'native') child
     LEFT JOIN read_ast('test/data/python/simple.py', 'python', context := 'native') parent
-        ON child.structure.parent_id = parent.node_id
-    WHERE child.context.name IS NOT NULL OR child.context.name IS NULL
+        ON child.parent_id = parent.node_id
+    WHERE child.name IS NOT NULL OR child.name IS NULL
 ) complex_result;
 ----
 true
@@ -178,15 +178,15 @@ statement ok
 SELECT 
     node_id,
     type,
-    source.file_path,
-    source.language,
-    source.start_line,
-    source.end_line,
-    structure.parent_id,
-    structure.depth,
-    structure.children_count,
-    context.name,
-    context.semantic_type,
+    file_path,
+    language,
+    start_line,
+    end_line,
+    parent_id,
+    depth,
+    children_count,
+    name,
+    semantic_type,
     context.flags,
     context.native,
     peek
@@ -198,8 +198,8 @@ LIMIT 1;
 statement ok
 SELECT 
     CAST(node_id AS VARCHAR) as node_id_str,
-    CAST(source.start_line AS DOUBLE) as start_line_double,
-    CAST(context.semantic_type AS INTEGER) as semantic_type_int
+    CAST(start_line AS DOUBLE) as start_line_double,
+    CAST(semantic_type AS INTEGER) as semantic_type_int
 FROM read_ast('test/data/python/simple.py', 'python')
 LIMIT 1;
 

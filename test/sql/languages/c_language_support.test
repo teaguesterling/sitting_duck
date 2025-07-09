@@ -42,7 +42,7 @@ true
 
 query I
 SELECT COUNT(*) > 0 FROM read_ast('test/data/languages/c/test.c')
-WHERE type = 'identifier' AND context.name IS NOT NULL;
+WHERE type = 'identifier' AND name IS NOT NULL;
 ----
 true
 
@@ -50,7 +50,7 @@ true
 # ===================================
 
 query II
-SELECT MAX(structure.depth) > 0 as has_depth, COUNT(*) > 0 as has_nodes
+SELECT MAX(depth) > 0 as has_depth, COUNT(*) > 0 as has_nodes
 FROM read_ast('test/data/languages/c/test.c');
 ----
 true	true

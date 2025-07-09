@@ -24,7 +24,7 @@ true
 # ==========================================
 
 query I
-SELECT COUNT(*) FROM read_ast('test/data/go/simple.go', 'go') WHERE context.name IS NOT NULL;
+SELECT COUNT(*) FROM read_ast('test/data/go/simple.go', 'go') WHERE name IS NOT NULL;
 ----
 13
 
@@ -32,9 +32,9 @@ SELECT COUNT(*) FROM read_ast('test/data/go/simple.go', 'go') WHERE context.name
 # ===================================
 
 query II
-SELECT context.name, type FROM read_ast('test/data/go/simple.go') 
-WHERE type = 'function_declaration' AND context.name IS NOT NULL 
-ORDER BY source.start_line;
+SELECT name, type FROM read_ast('test/data/go/simple.go') 
+WHERE type = 'function_declaration' AND name IS NOT NULL 
+ORDER BY start_line;
 ----
 Hello	function_declaration
 main	function_declaration
@@ -43,9 +43,9 @@ main	function_declaration
 # =======================================
 
 query II
-SELECT context.name, type FROM read_ast('test/data/go/simple.go')
-WHERE type IN ('package_identifier', 'import_spec') AND context.name IS NOT NULL
-ORDER BY source.start_line;
+SELECT name, type FROM read_ast('test/data/go/simple.go')
+WHERE type IN ('package_identifier', 'import_spec') AND name IS NOT NULL
+ORDER BY start_line;
 ----
 main	package_identifier
 "fmt"	import_spec
@@ -54,10 +54,10 @@ main	package_identifier
 # =========================
 
 query III
-SELECT type, context.semantic_type, COUNT(*) as count
+SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/go/simple.go')
 WHERE type IN ('function_declaration', 'package_identifier', 'import_spec')
-GROUP BY type, context.semantic_type
+GROUP BY type, semantic_type
 ORDER BY type;
 ----
 function_declaration	240	2
@@ -68,7 +68,7 @@ package_identifier	80	1
 # ====================================
 
 query II
-SELECT MAX(structure.depth) as max_depth, COUNT(*) as total_nodes
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/go/simple.go');
 ----
 8	51
@@ -78,6 +78,6 @@ FROM read_ast('test/data/go/simple.go');
 
 query I
 SELECT COUNT(*) FROM read_ast('test/data/go/simple.go')
-WHERE type = 'identifier' AND context.name IS NOT NULL;
+WHERE type = 'identifier' AND name IS NOT NULL;
 ----
 4

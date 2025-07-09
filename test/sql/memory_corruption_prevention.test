@@ -166,12 +166,12 @@ SELECT COUNT(*) > 0 as handles_complex_query
 FROM (
     SELECT 
         node_id,
-        context.native,
-        context.name,
-        structure.descendant_count
+        native,
+        name,
+        descendant_count
     FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
-    WHERE structure.descendant_count > 5
-    ORDER BY structure.descendant_count DESC
+    WHERE descendant_count > 5
+    ORDER BY descendant_count DESC
 ) 
 LIMIT 50;
 ----

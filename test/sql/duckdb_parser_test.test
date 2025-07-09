@@ -19,7 +19,7 @@ duckdb
 # =======================================
 
 query IIIIII
-SELECT node_id, structure.parent_id, type, context.name, context.semantic_type, source.start_line 
+SELECT node_id, parent_id, type, name, semantic_type, start_line 
 FROM parse_ast('SELECT id, name FROM users', 'duckdb') 
 ORDER BY node_id 
 LIMIT 10;
@@ -36,15 +36,15 @@ LIMIT 10;
 # ==========================================
 
 query III
-SELECT type, semantic_type_to_string(context.semantic_type) as semantic_type, COUNT(*) as count
+SELECT type, semantic_type_to_string(semantic_type) as semantic_type, COUNT(*) as count
 FROM parse_ast('
 SELECT u.name, p.title 
 FROM users u 
 JOIN posts p ON u.id = p.user_id 
 WHERE u.active = true
 ', 'duckdb')
-GROUP BY type, context.semantic_type
-ORDER BY type ASC, context.semantic_type ASC;
+GROUP BY type, semantic_type
+ORDER BY type ASC, semantic_type ASC;
 ----
 cast_expression	COMPUTATION_EXPRESSION	1
 column_reference	NAME_IDENTIFIER	3
@@ -61,7 +61,7 @@ where_clause	FLOW_CONDITIONAL	1
 # ==============================================
 
 query II
-SELECT type, context.name
+SELECT type, name
 FROM parse_ast('
 WITH active_users AS (
   SELECT * FROM users WHERE active = true
@@ -78,10 +78,10 @@ select_statement	NULL
 # =================================
 
 query II
-SELECT type, context.name
+SELECT type, name
 FROM parse_ast('SELECT COUNT(*), MAX(created_at) FROM posts', 'duckdb')
 WHERE type = 'function_call'
-ORDER BY context.name;
+ORDER BY name;
 ----
 function_call	count_star
 function_call	max
@@ -101,13 +101,13 @@ query III
 SELECT 
     'duckdb' as parser_type,
     COUNT(*) as total_nodes,
-    COUNT(CASE WHEN context.name IS NOT NULL THEN 1 END) as named_nodes
+    COUNT(CASE WHEN name IS NOT NULL THEN 1 END) as named_nodes
 FROM parse_ast('SELECT u.name, COUNT(*) FROM users u GROUP BY u.name', 'duckdb')
 UNION ALL
 SELECT 
     'tree-sitter' as parser_type,
     COUNT(*) as total_nodes,
-    COUNT(CASE WHEN context.name IS NOT NULL THEN 1 END) as named_nodes
+    COUNT(CASE WHEN name IS NOT NULL THEN 1 END) as named_nodes
 FROM parse_ast('SELECT u.name, COUNT(*) FROM users u GROUP BY u.name', 'sql')
 ORDER BY parser_type;
 ----

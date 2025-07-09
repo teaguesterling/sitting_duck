@@ -221,10 +221,10 @@ FROM (
         type,
         context.native,
         context.name,
-        structure.parent_id,
+        parent_id,
         source.start_line
     FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
-    WHERE structure.parent_id IS NOT NULL
+    WHERE parent_id IS NOT NULL
     ORDER BY node_id
 ) complex_result;
 ----
@@ -238,10 +238,10 @@ FROM (
         type,
         context.native,
         context.name,
-        structure.parent_id,
+        parent_id,
         source.start_line
     FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
-    WHERE structure.parent_id IS NOT NULL
+    WHERE parent_id IS NOT NULL
     ORDER BY node_id
 ) complex_result;
 ----
@@ -269,9 +269,9 @@ FROM (
     SELECT node_id
     FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
     WHERE node_id IN (
-        SELECT structure.parent_id
+        SELECT parent_id
         FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
-        WHERE structure.parent_id IS NOT NULL
+        WHERE parent_id IS NOT NULL
     )
 );
 ----
@@ -283,9 +283,9 @@ FROM (
     SELECT node_id
     FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
     WHERE node_id IN (
-        SELECT structure.parent_id
+        SELECT parent_id
         FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
-        WHERE structure.parent_id IS NOT NULL
+        WHERE parent_id IS NOT NULL
     )
 );
 ----

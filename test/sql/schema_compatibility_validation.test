@@ -161,7 +161,7 @@ FROM read_ast('test/data/python/simple.py', 'python')
 LIMIT 1;
 
 statement ok
-SELECT structure.parent_id, structure.depth, structure.children_count
+SELECT parent_id, depth, children_count
 FROM read_ast('test/data/python/simple.py', 'python') 
 LIMIT 1;
 
@@ -213,7 +213,7 @@ statement ok
 SELECT 
     node_id + 0 as numeric_node_id,
     source.start_line + 0 as numeric_start_line,
-    structure.depth + 0 as numeric_depth
+    depth + 0 as numeric_depth
 FROM read_ast('test/data/python/simple.py', 'python')
 LIMIT 1;
 
@@ -260,7 +260,7 @@ WHERE node_id IS NOT NULL AND type IS NOT NULL;
 statement ok
 SELECT 
     source.file_path,
-    structure.parent_id,
+    parent_id,
     context.semantic_type
 FROM read_ast('test/data/python/simple.py', 'python')
 WHERE node_id = 0;

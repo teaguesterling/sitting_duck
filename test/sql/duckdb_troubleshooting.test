@@ -14,14 +14,14 @@ query IIII
 SELECT 
     'Simple Query' as query_type,
     COUNT(*) as total_nodes,
-    MAX(structure.depth) as max_depth,
+    MAX(depth) as max_depth,
     COUNT(CASE WHEN type = 'join' THEN 1 END) as join_count
 FROM parse_ast('SELECT name FROM users WHERE active = true', 'duckdb')
 UNION ALL
 SELECT 
     'Complex Query' as query_type,
     COUNT(*) as total_nodes,
-    MAX(structure.depth) as max_depth,
+    MAX(depth) as max_depth,
     COUNT(CASE WHEN type = 'join' THEN 1 END) as join_count
 FROM parse_ast('
 WITH monthly_sales AS (
@@ -115,12 +115,12 @@ literal	LITERAL VALUE
 query III
 SELECT 
     type,
-    context.name,
+    name,
     CASE 
-        WHEN type = 'column_reference' AND context.name IN ('id', 'user_id', 'customer_id') THEN 'PRIMARY/FOREIGN KEY - Should be indexed'
-        WHEN type = 'column_reference' AND context.name LIKE '%_date' THEN 'DATE COLUMN - Consider index for time-based queries'
-        WHEN type = 'column_reference' AND context.name LIKE '%email%' THEN 'UNIQUE FIELD - Should have unique index'
-        WHEN type = 'function_call' AND context.name = 'count' THEN 'AGGREGATION - Consider covering index'
+        WHEN type = 'column_reference' AND name IN ('id', 'user_id', 'customer_id') THEN 'PRIMARY/FOREIGN KEY - Should be indexed'
+        WHEN type = 'column_reference' AND name LIKE '%_date' THEN 'DATE COLUMN - Consider index for time-based queries'
+        WHEN type = 'column_reference' AND name LIKE '%email%' THEN 'UNIQUE FIELD - Should have unique index'
+        WHEN type = 'function_call' AND name = 'count' THEN 'AGGREGATION - Consider covering index'
         ELSE 'STANDARD COLUMN ACCESS'
     END as index_recommendation
 FROM parse_ast('
@@ -135,7 +135,7 @@ WHERE u.registration_date >= ''2024-01-01''
   AND u.email IS NOT NULL
 GROUP BY u.id, u.email, u.registration_date
 ', 'duckdb')
-WHERE type IN ('column_reference', 'function_call') AND context.name IS NOT NULL
+WHERE type IN ('column_reference', 'function_call') AND name IS NOT NULL
 ORDER BY index_recommendation;
 ----
 function_call	count	AGGREGATION - Consider covering index
@@ -183,15 +183,15 @@ select_statement	1
 query III
 SELECT 
     type,
-    context.name,
+    name,
     CASE 
-        WHEN context.name LIKE '%_id' OR context.name = 'id' THEN 'INTEGER/BIGINT'
-        WHEN context.name LIKE '%_date' OR context.name LIKE '%_time%' THEN 'TIMESTAMP/DATE'
-        WHEN context.name LIKE '%email%' THEN 'VARCHAR(255) UNIQUE'
-        WHEN context.name LIKE '%name%' OR context.name LIKE '%title%' THEN 'VARCHAR(100)'
-        WHEN context.name LIKE '%amount%' OR context.name LIKE '%price%' OR context.name LIKE '%total%' THEN 'DECIMAL(10,2)'
-        WHEN context.name LIKE '%count%' THEN 'INTEGER'
-        WHEN context.name LIKE '%active%' OR context.name LIKE '%enabled%' THEN 'BOOLEAN'
+        WHEN name LIKE '%_id' OR name = 'id' THEN 'INTEGER/BIGINT'
+        WHEN name LIKE '%_date' OR name LIKE '%_time%' THEN 'TIMESTAMP/DATE'
+        WHEN name LIKE '%email%' THEN 'VARCHAR(255) UNIQUE'
+        WHEN name LIKE '%name%' OR name LIKE '%title%' THEN 'VARCHAR(100)'
+        WHEN name LIKE '%amount%' OR name LIKE '%price%' OR name LIKE '%total%' THEN 'DECIMAL(10,2)'
+        WHEN name LIKE '%count%' THEN 'INTEGER'
+        WHEN name LIKE '%active%' OR name LIKE '%enabled%' THEN 'BOOLEAN'
         ELSE 'VARCHAR(50)'
     END as suggested_type
 FROM parse_ast('
@@ -204,8 +204,8 @@ CREATE TABLE orders (
     is_active
 )
 ', 'duckdb')
-WHERE type = 'identifier' AND context.name IS NOT NULL
-ORDER BY context.name;
+WHERE type = 'identifier' AND name IS NOT NULL
+ORDER BY name;
 ----
 
 # Test 7: Resource usage estimation
@@ -218,18 +218,18 @@ SELECT
      COUNT(CASE WHEN type = 'join' THEN 1 END) * 5.0 +
      COUNT(CASE WHEN type = 'subquery' THEN 1 END) * 3.0 +
      COUNT(CASE WHEN type = 'function_call' THEN 1 END) * 1.5 +
-     MAX(structure.depth) * 2.0) as score,
+     MAX(depth) * 2.0) as score,
     CASE 
         WHEN (COUNT(*) * 1.0 + 
               COUNT(CASE WHEN type = 'join' THEN 1 END) * 5.0 +
               COUNT(CASE WHEN type = 'subquery' THEN 1 END) * 3.0 +
               COUNT(CASE WHEN type = 'function_call' THEN 1 END) * 1.5 +
-              MAX(structure.depth) * 2.0) < 20 THEN 'LOW RESOURCE'
+              MAX(depth) * 2.0) < 20 THEN 'LOW RESOURCE'
         WHEN (COUNT(*) * 1.0 + 
               COUNT(CASE WHEN type = 'join' THEN 1 END) * 5.0 +
               COUNT(CASE WHEN type = 'subquery' THEN 1 END) * 3.0 +
               COUNT(CASE WHEN type = 'function_call' THEN 1 END) * 1.5 +
-              MAX(structure.depth) * 2.0) < 50 THEN 'MEDIUM RESOURCE'
+              MAX(depth) * 2.0) < 50 THEN 'MEDIUM RESOURCE'
         ELSE 'HIGH RESOURCE'
     END as resource_category
 FROM parse_ast('

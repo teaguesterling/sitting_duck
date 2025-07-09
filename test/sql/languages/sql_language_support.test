@@ -24,7 +24,7 @@ true
 # ===========================================
 
 query I
-SELECT COUNT(*) FROM read_ast('test/data/sql/example.sql', 'sql') WHERE context.name IS NOT NULL;
+SELECT COUNT(*) FROM read_ast('test/data/sql/example.sql', 'sql') WHERE name IS NOT NULL;
 ----
 109
 
@@ -41,8 +41,8 @@ WHERE type = 'identifier';
 # ============================
 
 query I
-SELECT COUNT(DISTINCT context.name) FROM read_ast('test/data/sql/example.sql')
-WHERE type = 'identifier' AND context.name IN ('users', 'orders', 'customers');
+SELECT COUNT(DISTINCT name) FROM read_ast('test/data/sql/example.sql')
+WHERE type = 'identifier' AND name IN ('users', 'orders', 'customers');
 ----
 3
 
@@ -69,10 +69,10 @@ WHERE type = 'literal';
 # ==========================
 
 query III
-SELECT type, context.semantic_type, COUNT(*) as count
+SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/sql/example.sql')
 WHERE type IN ('identifier', 'literal', 'comment')
-GROUP BY type, context.semantic_type
+GROUP BY type, semantic_type
 ORDER BY type;
 ----
 comment	32	3
@@ -83,7 +83,7 @@ literal	72	7
 # =====================================
 
 query II
-SELECT MAX(structure.depth) as max_depth, COUNT(*) as total_nodes
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/sql/example.sql');
 ----
 9	177

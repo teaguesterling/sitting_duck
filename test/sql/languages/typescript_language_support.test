@@ -24,7 +24,7 @@ true
 # ==================================================
 
 query I
-SELECT COUNT(*) FROM read_ast('test/data/javascript/typed_example.ts', 'typescript') WHERE context.name IS NOT NULL;
+SELECT COUNT(*) FROM read_ast('test/data/javascript/typed_example.ts', 'typescript') WHERE name IS NOT NULL;
 ----
 303
 
@@ -32,9 +32,9 @@ SELECT COUNT(*) FROM read_ast('test/data/javascript/typed_example.ts', 'typescri
 # ===========================================
 
 query II
-SELECT context.name, type FROM read_ast('test/data/javascript/typed_example.ts')
-WHERE type = 'function_declaration' AND context.name IS NOT NULL
-ORDER BY source.start_line;
+SELECT name, type FROM read_ast('test/data/javascript/typed_example.ts')
+WHERE type = 'function_declaration' AND name IS NOT NULL
+ORDER BY start_line;
 ----
 calculateTotal	function_declaration
 mapArray	function_declaration
@@ -73,10 +73,10 @@ WHERE type = 'type_annotation';
 # =================================
 
 query III
-SELECT type, context.semantic_type, COUNT(*) as count
+SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/javascript/typed_example.ts')
 WHERE type IN ('function_declaration', 'class_declaration', 'interface_declaration', 'call_expression')
-GROUP BY type, context.semantic_type
+GROUP BY type, semantic_type
 ORDER BY type;
 ----
 call_expression	208	12
@@ -88,7 +88,7 @@ interface_declaration	248	3
 # ============================================
 
 query II
-SELECT MAX(structure.depth) as max_depth, COUNT(*) as total_nodes
+SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/javascript/typed_example.ts');
 ----
 16	1015
@@ -98,6 +98,6 @@ FROM read_ast('test/data/javascript/typed_example.ts');
 
 query I
 SELECT COUNT(*) FROM read_ast('test/data/javascript/typed_example.ts')
-WHERE type = 'identifier' AND context.name IS NOT NULL;
+WHERE type = 'identifier' AND name IS NOT NULL;
 ----
 82
