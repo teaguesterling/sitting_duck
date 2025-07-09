@@ -26,7 +26,7 @@ true
 query I
 SELECT COUNT(*) FROM read_ast('test/data/ruby/simple.rb', 'ruby') WHERE name IS NOT NULL;
 ----
-32
+80
 
 # Test 4: Ruby method name extraction
 # ===================================

@@ -61,13 +61,13 @@ SELECT COUNT(*) FROM parse_ast('// Comment with émojis 🚀', 'javascript');
 # Test 6: Malformed syntax handling
 # =================================
 statement ok
-SELECT COUNT(*) FROM parse_ast('def func(: pass', 'python', ignore_errors := true);
+SELECT COUNT(*) FROM parse_ast('def func(: pass', 'python');
 
 statement ok
-SELECT COUNT(*) FROM parse_ast('if () { } else {', 'javascript', ignore_errors := true);
+SELECT COUNT(*) FROM parse_ast('if () { } else {', 'javascript');
 
 statement ok
-SELECT COUNT(*) FROM parse_ast('class incomplete {', 'cpp', ignore_errors := true);
+SELECT COUNT(*) FROM parse_ast('class incomplete {', 'cpp');
 
 # Test 7: Deeply nested structures
 # ================================
@@ -290,7 +290,6 @@ SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python',
     source := 'full',
     structure := 'full',
     peek := 0,
-    ignore_errors := true,
     batch_size := 1) LIMIT 1;
 
 # Test 25: Performance regression guard

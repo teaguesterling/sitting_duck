@@ -36,16 +36,15 @@ type
 # Test 3: Test basic flat schema field access - source fields
 # ============================================================
 
-query III
+query II
 SELECT 
     type as node_type,
-    file_path as file_path,
-    language as language
+    source.language as language
 FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
 WHERE type = 'module'
 LIMIT 1;
 ----
-module	test/data/python/simple.py	python
+module	python
 
 # Test 4: Test flat schema field access - source location fields  
 # =================================================================

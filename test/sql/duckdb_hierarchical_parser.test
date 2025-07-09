@@ -39,7 +39,7 @@ type
 query II
 SELECT 
     type as node_type,
-    context.semantic_type
+    semantic_type
 FROM parse_ast('SELECT user_id, COUNT(*) as total FROM orders GROUP BY user_id', 'duckdb') 
 ORDER BY node_id
 LIMIT 8;

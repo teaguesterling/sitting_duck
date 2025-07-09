@@ -743,10 +743,10 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
             parent_id_vec = FlatVector::GetData<int64_t>(output.data[col_idx]);
             parent_validity = &FlatVector::Validity(output.data[col_idx++]);
             depth_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
-            sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
         }
         
         if (config.structure >= StructureLevel::FULL) {
+            sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
             children_count_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
             descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
         }
@@ -829,10 +829,10 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
                     parent_id_vec[output_index + count] = node.tree_position.parent_index;
                 }
                 depth_vec[output_index + count] = node.tree_position.node_depth;
-                sibling_index_vec[output_index + count] = node.tree_position.sibling_index;
             }
             
             if (config.structure >= StructureLevel::FULL) {
+                sibling_index_vec[output_index + count] = node.tree_position.sibling_index;
                 children_count_vec[output_index + count] = node.subtree.children_count;
                 descendant_count_vec[output_index + count] = node.subtree.descendant_count;
             }

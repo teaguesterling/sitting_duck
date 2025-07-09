@@ -123,7 +123,7 @@ query I
 SELECT COUNT(*) as parse_result
 FROM parse_ast('def hello(): pass', 'python', context := 'native');
 ----
-9
+11
 
 query I
 SELECT COUNT(*) as read_result

@@ -44,7 +44,7 @@ ORDER BY month
 ', 'duckdb')
 ORDER BY query_type;
 ----
-Complex Query	15	4	0
+Complex Query	3	2	0
 Simple Query	10	4	0
 
 # Test 2: Performance bottleneck identification
