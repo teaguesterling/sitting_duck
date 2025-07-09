@@ -67,9 +67,9 @@ function_definition	1	0	3
 query IIII
 SELECT 
     type as node_type,
-    parent_id as parent_id,
-    depth as depth,
-    children_count as children_count
+    structure.parent_id as parent_id,
+    structure.depth as depth,
+    structure.children_count as children_count
 FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
 WHERE type = 'function_definition'
 LIMIT 1;
@@ -82,10 +82,10 @@ function_definition	0	1	5
 query III
 SELECT 
     type as node_type,
-    name as name,
-    semantic_type as semantic_type
+    context.name as name,
+    context.semantic_type as semantic_type
 FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
-WHERE name IS NOT NULL
+WHERE context.name IS NOT NULL
 ORDER BY node_id
 LIMIT 3;
 ----
@@ -119,7 +119,7 @@ SELECT
     COUNT(*) as child_count
 FROM read_ast_hierarchical('test/data/python/simple.py', 'python') child
 JOIN read_ast_hierarchical('test/data/python/simple.py', 'python') parent
-    ON child.parent_id = parent.node_id
+    ON child.structure.parent_id = parent.node_id
 WHERE parent.type IN ('function_definition', 'module')
 GROUP BY parent.type
 ORDER BY parent.type;

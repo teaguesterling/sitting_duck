@@ -185,8 +185,7 @@ SELECT
     children_count,
     name,
     semantic_type,
-    context.flags,
-    context.native,
+    flags,
     peek
 FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
 LIMIT 1;

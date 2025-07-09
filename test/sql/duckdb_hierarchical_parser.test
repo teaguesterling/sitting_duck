@@ -61,7 +61,7 @@ SELECT
     type as node_type,
     name as node_name
 FROM parse_ast('SELECT user_id, COUNT(*) as total FROM orders GROUP BY user_id', 'duckdb') 
-WHERE name IS NOT NULL
+WHERE name IS NOT NULL AND LENGTH(name) > 0
 ORDER BY node_id;
 ----
 column_reference	user_id
@@ -75,11 +75,11 @@ column_reference	user_id
 query III
 SELECT 
     type as node_type,
-    source.start_line as start_line,
-    source.start_column as start_col
+    start_line as start_line,
+    start_column as start_col
 FROM parse_ast('SELECT user_id FROM orders', 'duckdb') 
 WHERE type IN ('column_reference', 'table_reference')
-ORDER BY source.start_column;
+ORDER BY start_column;
 ----
 column_reference	1	1
 table_reference	1	1

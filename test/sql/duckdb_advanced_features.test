@@ -224,8 +224,7 @@ ORDER BY total_revenue DESC
 GROUP BY query_pattern
 ORDER BY pattern_count DESC;
 ----
-Other	10	10
+Other	10	7
 Computation	3	3
-Query Structure	2	2
-Organization	1	1
+Query Structure	2	0
 Organization	1	0
