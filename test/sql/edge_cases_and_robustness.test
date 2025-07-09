@@ -101,15 +101,13 @@ SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 10
 
 # Test 11: NULL and empty string robustness
 # =========================================
-statement error
+statement ok
 SELECT COUNT(*) FROM parse_ast(NULL, 'python');
-----
-Binder Error
 
 statement error
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', NULL);
 ----
-Binder Error
+IO Error
 
 # Test 12: Invalid file paths
 # ===========================

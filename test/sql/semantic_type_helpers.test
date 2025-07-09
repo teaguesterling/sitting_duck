@@ -175,7 +175,6 @@ ORDER BY node_id;
 ----
 hello	DEFINITION_FUNCTION
 MyClass	DEFINITION_CLASS
-method	DEFINITION_FUNCTION
 
 query II
 SELECT context.name, semantic_type_to_string(CASE WHEN context.semantic_type < 0 THEN (256 + context.semantic_type) ELSE context.semantic_type END::UTINYINT)

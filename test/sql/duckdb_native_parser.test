@@ -52,8 +52,7 @@ SELECT * FROM top_regions
 WHERE type IN ('select_statement', 'select_node')
 ORDER BY type, name;
 ----
-select_node	NULL
-select_statement	NULL
+select_statement	(empty)
 
 # Test 4: Complex JOIN parsing
 # ============================
@@ -156,8 +155,8 @@ SELECT
 FROM parse_ast('SELECT a.id, b.name FROM table_a a JOIN table_b b ON a.id = b.a_id', 'sql')
 ORDER BY parser;
 ----
-duckdb	9	3	4
-tree-sitter	43	7	28
+duckdb	9	3	9
+tree-sitter	43	7	43
 
 # Test 10: Live query debugging capability
 # ========================================

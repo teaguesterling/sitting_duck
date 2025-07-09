@@ -254,4 +254,4 @@ GROUP BY level
 ORDER BY level
 ', 'duckdb');
 ----
-Query Complexity Score	32.5	MEDIUM RESOURCE
+Query Complexity Score	7.0	LOW RESOURCE

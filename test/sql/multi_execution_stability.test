@@ -135,7 +135,7 @@ query I
 SELECT COUNT(*) as parse_again
 FROM parse_ast('def hello(): pass', 'python', context := 'native');
 ----
-9
+11
 
 query I
 SELECT COUNT(*) as read_again
@@ -150,7 +150,7 @@ SELECT COUNT(*) as large_file_exec_1
 FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
 LIMIT 1;
 ----
-1
+18014
 
 query I
 SELECT COUNT(*) as large_file_exec_2

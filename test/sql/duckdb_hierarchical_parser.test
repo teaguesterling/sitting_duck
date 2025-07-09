@@ -59,9 +59,9 @@ group_by_clause	236
 query II
 SELECT 
     type as node_type,
-    context.name as node_name
+    name as node_name
 FROM parse_ast('SELECT user_id, COUNT(*) as total FROM orders GROUP BY user_id', 'duckdb') 
-WHERE context.name IS NOT NULL
+WHERE name IS NOT NULL
 ORDER BY node_id;
 ----
 column_reference	user_id
