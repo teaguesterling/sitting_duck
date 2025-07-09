@@ -150,7 +150,7 @@ FROM read_ast('test/data/python/simple.py', 'python',
     context := 'normalized',
     source := 'lines',
     structure := 'minimal')
-WHERE context.name IS NOT NULL OR context.name IS NULL;
+WHERE name IS NOT NULL OR name IS NULL;
 ----
 true
 

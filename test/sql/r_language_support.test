@@ -19,45 +19,45 @@ true
 # Test 3: Function detection
 query I
 SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
-WHERE type = 'function_definition' AND context.name IS NOT NULL;
+WHERE type = 'function_definition' AND name IS NOT NULL;
 ----
 2
 
 # Test 4: Variable assignment detection
 query I
 SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
-WHERE semantic_type_to_string(context.semantic_type) = 'OPERATOR_ASSIGNMENT';
+WHERE semantic_type_to_string(semantic_type) = 'OPERATOR_ASSIGNMENT';
 ----
 25
 
 # Test 5: Function calls detection
 query I
 SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
-WHERE type = 'call' AND context.name IS NOT NULL;
+WHERE type = 'call' AND name IS NOT NULL;
 ----
 17
 
 # Test 6: Control flow statements
 query I
 SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
-WHERE semantic_type_to_string(context.semantic_type) IN ('FLOW_CONDITIONAL', 'FLOW_LOOP');
+WHERE semantic_type_to_string(semantic_type) IN ('FLOW_CONDITIONAL', 'FLOW_LOOP');
 ----
 10
 
 # Test 7: Literals detection
 query I
 SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
-WHERE semantic_type_to_string(context.semantic_type) LIKE 'LITERAL_%';
+WHERE semantic_type_to_string(semantic_type) LIKE 'LITERAL_%';
 ----
 31
 
 # Test 8: Public vs private function detection (based on R naming convention)
 query II
 SELECT 
-    SUM(CASE WHEN context.name NOT LIKE '.%' THEN 1 ELSE 0 END) as public_functions,
-    SUM(CASE WHEN context.name LIKE '.%' THEN 1 ELSE 0 END) as private_functions
+    SUM(CASE WHEN name NOT LIKE '.%' THEN 1 ELSE 0 END) as public_functions,
+    SUM(CASE WHEN name LIKE '.%' THEN 1 ELSE 0 END) as private_functions
 FROM read_ast('test/data/r/simple.R') 
-WHERE type = 'function_definition' AND context.name IS NOT NULL;
+WHERE type = 'function_definition' AND name IS NOT NULL;
 ----
 1	1
 
@@ -71,7 +71,7 @@ WHERE type = 'comment';
 # Test 10: Identifier detection
 query I
 SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
-WHERE type = 'identifier' AND context.name IS NOT NULL;
+WHERE type = 'identifier' AND name IS NOT NULL;
 ----
 73
 

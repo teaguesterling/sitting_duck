@@ -162,7 +162,20 @@ static void ParseASTHierarchicalExecute(ClientContext &context, TableFunctionInp
 }
 
 void ParseASTFunction::Register(ExtensionLoader &loader) {
-    // Register parse_ast_flat(code, language) -> TABLE with flat schema (legacy)
+    // Register parse_ast(code, language) -> TABLE with flat schema (default)
+    TableFunction parse_ast_func("parse_ast", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
+                                 ParseASTExecute, ParseASTBind);
+    parse_ast_func.name = "parse_ast";
+    
+    // Add extraction config parameters
+    parse_ast_func.named_parameters["context"] = LogicalType::VARCHAR;
+    parse_ast_func.named_parameters["source"] = LogicalType::VARCHAR;
+    parse_ast_func.named_parameters["structure"] = LogicalType::VARCHAR;
+    parse_ast_func.named_parameters["peek"] = LogicalType::ANY;  // Can be INTEGER or VARCHAR
+    
+    loader.RegisterFunction(parse_ast_func);
+    
+    // Register parse_ast_flat(code, language) -> TABLE with flat schema (alias)
     TableFunction parse_ast_flat_func("parse_ast_flat", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
                                      ParseASTExecute, ParseASTBind);
     parse_ast_flat_func.name = "parse_ast_flat";
@@ -175,18 +188,18 @@ void ParseASTFunction::Register(ExtensionLoader &loader) {
     
     loader.RegisterFunction(parse_ast_flat_func);
     
-    // Register parse_ast(code, language) -> TABLE with hierarchical schema
-    TableFunction parse_ast_func("parse_ast", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
-                                ParseASTHierarchicalExecute, ParseASTHierarchicalBind);
-    parse_ast_func.name = "parse_ast";
+    // Register parse_ast_hierarchical(code, language) -> TABLE with hierarchical schema (legacy)
+    TableFunction parse_ast_hierarchical_func("parse_ast_hierarchical", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
+                                              ParseASTHierarchicalExecute, ParseASTHierarchicalBind);
+    parse_ast_hierarchical_func.name = "parse_ast_hierarchical";
     
     // Add extraction config parameters
-    parse_ast_func.named_parameters["context"] = LogicalType::VARCHAR;
-    parse_ast_func.named_parameters["source"] = LogicalType::VARCHAR;
-    parse_ast_func.named_parameters["structure"] = LogicalType::VARCHAR;
-    parse_ast_func.named_parameters["peek"] = LogicalType::ANY;  // Can be INTEGER or VARCHAR
+    parse_ast_hierarchical_func.named_parameters["context"] = LogicalType::VARCHAR;
+    parse_ast_hierarchical_func.named_parameters["source"] = LogicalType::VARCHAR;
+    parse_ast_hierarchical_func.named_parameters["structure"] = LogicalType::VARCHAR;
+    parse_ast_hierarchical_func.named_parameters["peek"] = LogicalType::ANY;  // Can be INTEGER or VARCHAR
     
-    loader.RegisterFunction(parse_ast_func);
+    loader.RegisterFunction(parse_ast_hierarchical_func);
 }
 
 } // namespace duckdb

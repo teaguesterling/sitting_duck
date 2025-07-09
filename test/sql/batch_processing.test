@@ -63,9 +63,9 @@ batch_size must be positive
 
 # Test that file_path and language are correctly preserved in batch mode
 query II
-SELECT DISTINCT source.file_path, source.language 
+SELECT DISTINCT file_path, language 
 FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := 1)
-ORDER BY source.file_path
+ORDER BY file_path
 ----
 test/data/javascript/simple.js	javascript
 
@@ -74,7 +74,7 @@ test/data/javascript/simple.js	javascript
 
 # Test batch processing with multiple files
 query I
-SELECT COUNT(DISTINCT source.file_path) as unique_files
+SELECT COUNT(DISTINCT file_path) as unique_files
 FROM read_ast(['test/data/javascript/simple.js', 'test/data/javascript/count_test.js'], 'javascript', batch_size := 2)
 ----
 2
@@ -102,7 +102,7 @@ WHERE structure.parent_id IS NOT NULL
 
 # Test that semantic types are correctly assigned in batch mode
 query I
-SELECT COUNT(DISTINCT context.semantic_type) > 1 as has_multiple_types
+SELECT COUNT(DISTINCT semantic_type) > 1 as has_multiple_types
 FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := 2)
 ----
 1
@@ -112,8 +112,8 @@ FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := 2)
 
 # Test batch processing with auto-detect language
 query I
-SELECT COUNT(DISTINCT source.language) as language_count
+SELECT COUNT(DISTINCT language) as language_count
 FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto', batch_size := 2)
-WHERE source.language IN ('python', 'javascript')
+WHERE language IN ('python', 'javascript')
 ----
 2

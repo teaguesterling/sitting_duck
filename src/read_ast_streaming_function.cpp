@@ -122,9 +122,9 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
     // Create ExtractionConfig from parsed parameters
     ExtractionConfig extraction_config = ParseExtractionConfig(context_str, source_str, structure_str, peek_mode, peek_size);
     
-    // Use dynamic schema based on extraction config parameters
-    return_types = UnifiedASTBackend::GetDynamicTableSchema(extraction_config);
-    names = UnifiedASTBackend::GetDynamicTableColumnNames(extraction_config);
+    // Use flat schema for read_ast function
+    return_types = UnifiedASTBackend::GetFlatTableSchema();
+    names = UnifiedASTBackend::GetFlatTableColumnNames();
     
     // Use the new ExtractionConfig constructor
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, extraction_config, batch_size);
@@ -234,9 +234,9 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
     // Create ExtractionConfig from parsed parameters
     ExtractionConfig extraction_config = ParseExtractionConfig(context_str, source_str, structure_str, peek_mode, peek_size);
     
-    // Use dynamic schema based on extraction config parameters
-    return_types = UnifiedASTBackend::GetDynamicTableSchema(extraction_config);
-    names = UnifiedASTBackend::GetDynamicTableColumnNames(extraction_config);
+    // Use flat schema for read_ast function
+    return_types = UnifiedASTBackend::GetFlatTableSchema();
+    names = UnifiedASTBackend::GetFlatTableColumnNames();
     
     // Use the new ExtractionConfig constructor
     return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, extraction_config, batch_size);
@@ -455,12 +455,12 @@ static void ProcessBatchOfFiles(ClientContext &context, ReadASTStreamingGlobalSt
 
 // Sequential processing for small file sets (backward compatibility)
 static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output) {
-    idx_t output_count = 0;
+    idx_t output_index = 0;
     
-    // Use hierarchical structure with ASTNode::ToValue()
-    // Columns: node_id, type, source, structure, context, peek
+    // Use flat projection for individual columns
+    // Columns: node_id, type, name, file_path, language, start_line, start_column, end_line, end_column, parent_id, depth, sibling_index, children_count, descendant_count, peek, semantic_type, flags
     
-    while (output_count < STANDARD_VECTOR_SIZE) {
+    while (output_index < STANDARD_VECTOR_SIZE) {
         // Handle batch processing if enabled
         if (global_state.batch_size > 1) {
             // Check if we need to process a new batch
@@ -488,27 +488,16 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
                 ProcessBatchOfFiles(context, global_state, batch_files);
             }
             
-            // Output nodes from current batch results
-            while (output_count < STANDARD_VECTOR_SIZE && 
+            // Output nodes from current batch results using flat projection
+            while (output_index < STANDARD_VECTOR_SIZE && 
                    global_state.current_batch_result_index < global_state.current_batch_results.size()) {
                 
                 auto& result = global_state.current_batch_results[global_state.current_batch_result_index];
                 
                 if (global_state.current_batch_row_index < result.nodes.size()) {
-                    auto& node = result.nodes[global_state.current_batch_row_index];
+                    // Use flat projection to populate individual columns
+                    UnifiedASTBackend::ProjectToTable(result, output, global_state.current_batch_row_index, output_index);
                     
-                    // Update node with source information from result
-                    ASTNode updated_node = node;
-                    updated_node.source.file_path = result.source.file_path;
-                    updated_node.source.language = result.source.language;
-                    
-                    // Use ASTNode::ToValue() for proper hierarchical serialization
-                    Value node_value = updated_node.ToValue();
-                    
-                    // Populate columns dynamically based on extraction config
-                    PopulateDynamicColumns(output, output_count, node_value, global_state.extraction_config);
-                    
-                    output_count++;
                     global_state.current_batch_row_index++;
                 } else {
                     // Move to next result in batch
@@ -563,37 +552,17 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
             global_state.current_file_parsed = true;
         }
         
-        // Emit rows from current file
+        // Emit rows from current file using flat projection
         if (!global_state.current_file_result) {
             // This shouldn't happen, but add safety check
             break;
         }
         
-        idx_t rows_available = global_state.current_file_result->nodes.size() - global_state.current_file_row_index;
-        idx_t rows_to_emit = std::min(STANDARD_VECTOR_SIZE - output_count, rows_available);
-        
-        // Copy rows using hierarchical structure
-        for (idx_t i = 0; i < rows_to_emit; i++) {
-            const auto& node = global_state.current_file_result->nodes[global_state.current_file_row_index + i];
-            idx_t output_idx = output_count + i;
-            
-            // Update node with source information from result
-            ASTNode updated_node = node;
-            updated_node.source.file_path = global_state.current_file_result->source.file_path;
-            updated_node.source.language = global_state.current_file_result->source.language;
-            
-            // Use ASTNode::ToValue() for proper hierarchical serialization
-            Value node_value = updated_node.ToValue();
-            
-            // Populate columns dynamically based on extraction config
-            PopulateDynamicColumns(output, output_idx, node_value, global_state.extraction_config);
-        }
-        
-        global_state.current_file_row_index += rows_to_emit;
-        output_count += rows_to_emit;
+        // Use flat projection to populate individual columns
+        UnifiedASTBackend::ProjectToTable(*global_state.current_file_result, output, global_state.current_file_row_index, output_index);
     }
     
-    output.SetCardinality(output_count);
+    output.SetCardinality(output_index);
 }
 
 // PARALLEL PROCESSING without batching - let DuckDB handle task distribution
@@ -668,14 +637,14 @@ static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadAST
         global_state.parallel_processing_complete = true;
     }
     
-    // Now just stream the results
-    idx_t output_count = 0;
+    // Now just stream the results using flat projection
+    idx_t output_index = 0;
     
-    // Use hierarchical structure with ASTNode::ToValue()
-    // Columns: node_id, type, source, structure, context, peek
+    // Use flat projection for individual columns
+    // Columns: node_id, type, name, file_path, language, start_line, start_column, end_line, end_column, parent_id, depth, sibling_index, children_count, descendant_count, peek, semantic_type, flags
 
     // Stream results from all completed parsing
-    while (output_count < STANDARD_VECTOR_SIZE && 
+    while (output_index < STANDARD_VECTOR_SIZE && 
            global_state.current_batch_result_index < global_state.current_batch_results.size()) {
         
         const auto& current_result = global_state.current_batch_results[global_state.current_batch_result_index];
@@ -687,29 +656,10 @@ static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadAST
             continue;
         }
         
-        // Calculate how many rows to emit from this result
-        const idx_t rows_available = current_result.nodes.size() - global_state.current_batch_row_index;
-        const idx_t rows_to_emit = std::min(STANDARD_VECTOR_SIZE - output_count, rows_available);
+        // Use flat projection to populate individual columns
+        UnifiedASTBackend::ProjectToTable(current_result, output, global_state.current_batch_row_index, output_index);
         
-        // Copy rows using hierarchical structure
-        for (idx_t i = 0; i < rows_to_emit; i++) {
-            const auto& node = current_result.nodes[global_state.current_batch_row_index + i];
-            const idx_t output_idx = output_count + i;
-            
-            // Update node with source information from result
-            ASTNode updated_node = node;
-            updated_node.source.file_path = current_result.source.file_path;
-            updated_node.source.language = current_result.source.language;
-            
-            // Use ASTNode::ToValue() for proper hierarchical serialization
-            Value node_value = updated_node.ToValue();
-            
-            // Populate columns dynamically based on extraction config
-            PopulateDynamicColumns(output, output_idx, node_value, global_state.extraction_config);
-        }
-        
-        global_state.current_batch_row_index += rows_to_emit;
-        output_count += rows_to_emit;
+        global_state.current_batch_row_index++;
     }
     
     // Mark as exhausted when all results have been streamed
@@ -717,7 +667,7 @@ static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadAST
         global_state.files_exhausted = true;
     }
     
-    output.SetCardinality(output_count);
+    output.SetCardinality(output_index);
 }
 
 //==============================================================================

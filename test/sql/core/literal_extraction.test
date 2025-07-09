@@ -8,9 +8,9 @@ require sitting_duck
 # =============================================
 
 query II
-SELECT context.name, type FROM parse_ast('const x = 42; const y = 3.14;', 'javascript')
-WHERE type = 'number' AND context.name IS NOT NULL
-ORDER BY context.name;
+SELECT name, type FROM parse_ast('const x = 42; const y = 3.14;', 'javascript')
+WHERE type = 'number' AND name IS NOT NULL
+ORDER BY name;
 ----
 3.14	number
 42	number
@@ -19,9 +19,9 @@ ORDER BY context.name;
 # =============================================
 
 query II
-SELECT context.name, type FROM parse_ast('const msg = "hello"; const name = "world";', 'javascript')
-WHERE type = 'string' AND context.name IS NOT NULL
-ORDER BY context.name;
+SELECT name, type FROM parse_ast('const msg = "hello"; const name = "world";', 'javascript')
+WHERE type = 'string' AND name IS NOT NULL
+ORDER BY name;
 ----
 "hello"	string
 "world"	string
@@ -30,12 +30,12 @@ ORDER BY context.name;
 # ==================================
 
 query II
-SELECT context.name, type FROM parse_ast('x = 42
+SELECT name, type FROM parse_ast('x = 42
 y = "hello"
 z = True
 w = None', 'python')
-WHERE type IN ('integer', 'string', 'true', 'none') AND context.name IS NOT NULL
-ORDER BY type, context.name;
+WHERE type IN ('integer', 'string', 'true', 'none') AND name IS NOT NULL
+ORDER BY type, name;
 ----
 42	integer
 None	none
@@ -46,11 +46,11 @@ True	true
 # ==============================
 
 query II
-SELECT context.name, type FROM parse_ast('var x = 42
+SELECT name, type FROM parse_ast('var x = 42
 var y = "hello"
 var z = 3.14', 'go')
-WHERE type IN ('int_literal', 'interpreted_string_literal', 'float_literal') AND context.name IS NOT NULL
-ORDER BY context.name;
+WHERE type IN ('int_literal', 'interpreted_string_literal', 'float_literal') AND name IS NOT NULL
+ORDER BY name;
 ----
 "hello"	interpreted_string_literal
 3.14	float_literal
@@ -60,13 +60,13 @@ ORDER BY context.name;
 # ================================
 
 query II
-SELECT context.name, type FROM parse_ast('x = 42
+SELECT name, type FROM parse_ast('x = 42
 y = "hello"
 z = :symbol
 w = true
 v = nil', 'ruby')
-WHERE type IN ('integer', 'string', 'simple_symbol', 'true', 'nil') AND context.name IS NOT NULL
-ORDER BY type, context.name;
+WHERE type IN ('integer', 'string', 'simple_symbol', 'true', 'nil') AND name IS NOT NULL
+ORDER BY type, name;
 ----
 42	integer
 nil	nil
@@ -79,9 +79,9 @@ true	true
 # ===============================
 
 query II
-SELECT context.name, type FROM parse_ast('SELECT * FROM users WHERE id = 42 AND name = ''John'';', 'sql')
-WHERE type IN ('literal', 'number_literal', 'string_literal') AND context.name IS NOT NULL
-ORDER BY context.name;
+SELECT name, type FROM parse_ast('SELECT * FROM users WHERE id = 42 AND name = ''John'';', 'sql')
+WHERE type IN ('literal', 'number_literal', 'string_literal') AND name IS NOT NULL
+ORDER BY name;
 ----
 'John'	literal
 42	literal
@@ -90,12 +90,12 @@ ORDER BY context.name;
 # ===============================
 
 query II
-SELECT context.name, type FROM parse_ast('int x = 42; 
+SELECT name, type FROM parse_ast('int x = 42; 
 string msg = "hello";
 bool flag = true;
 void* ptr = nullptr;', 'cpp')
-WHERE type IN ('number_literal', 'string_literal', 'true', 'false', 'nullptr') AND context.name IS NOT NULL
-ORDER BY context.name;
+WHERE type IN ('number_literal', 'string_literal', 'true', 'false', 'nullptr') AND name IS NOT NULL
+ORDER BY name;
 ----
 "hello"	string_literal
 42	number_literal
@@ -106,13 +106,13 @@ true	true
 # ======================================
 
 query II
-SELECT context.name, type FROM parse_ast('const timeout: number = 5000;
+SELECT name, type FROM parse_ast('const timeout: number = 5000;
 const message: string = "Error";
 const isValid: boolean = false;', 'typescript')
 WHERE type IN ('number', 'string', 'true', 'false') 
-  AND context.name IS NOT NULL
-  AND context.name NOT IN ('number', 'string', 'boolean') -- Exclude type names
-ORDER BY context.name;
+  AND name IS NOT NULL
+  AND name NOT IN ('number', 'string', 'boolean') -- Exclude type names
+ORDER BY name;
 ----
 "Error"	string
 5000	number
@@ -123,7 +123,7 @@ false	false
 
 query I
 SELECT COUNT(*) FROM parse_ast('const timeout = 5000; const retries = 3;', 'javascript')
-WHERE context.name = '5000';
+WHERE name = '5000';
 ----
 1
 
@@ -132,6 +132,6 @@ WHERE context.name = '5000';
 
 query I
 SELECT COUNT(*) FROM parse_ast('const msg = `Hello ${name}!`;', 'javascript')
-WHERE type = 'template_string' AND context.name = '`Hello ${name}!`';
+WHERE type = 'template_string' AND name = '`Hello ${name}!`';
 ----
 1
