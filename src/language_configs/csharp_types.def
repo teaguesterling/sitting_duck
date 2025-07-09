@@ -1,0 +1,70 @@
+// C# language node type definitions
+// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+// TODO: Complete after examining tree-sitter parse results
+
+// Program structure
+DEF_TYPE("compilation_unit", DEFINITION_MODULE, NONE, NONE, 0x01)
+DEF_TYPE("namespace_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0x01)
+
+// Using statements
+DEF_TYPE("using_directive", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
+
+// Function definitions
+DEF_TYPE("method_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
+DEF_TYPE("constructor_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
+DEF_TYPE("destructor_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
+DEF_TYPE("operator_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
+
+// Class and structure definitions
+DEF_TYPE("class_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("struct_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("interface_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("enum_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("record_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
+
+// Variable and property declarations
+DEF_TYPE("field_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("property_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("variable_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("parameter", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+
+// Function calls and expressions
+DEF_TYPE("invocation_expression", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("object_creation_expression", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+
+// Control flow
+DEF_TYPE("if_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("switch_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("foreach_statement", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("do_statement", FLOW_LOOP, NONE, NONE, 0)
+
+// Jump statements
+DEF_TYPE("break_statement", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("continue_statement", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("return_statement", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("throw_statement", ERROR_THROW, NONE, NONE, 0)
+
+// Error handling
+DEF_TYPE("try_statement", ERROR_TRY, NONE, NONE, 0)
+DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
+DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
+
+// Async/await
+DEF_TYPE("await_expression", FLOW_SYNC, NONE, NONE, 0)
+
+// Identifiers and literals
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("integer_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("real_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("character_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+// Comments
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0x08)
+
+// Error handling
+DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)

@@ -1,0 +1,64 @@
+// Scala language node type definitions
+// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+// TODO: Complete after examining tree-sitter parse results
+
+// Program structure
+DEF_TYPE("compilation_unit", DEFINITION_MODULE, NONE, NONE, 0x01)
+DEF_TYPE("package_clause", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
+
+// Import statements
+DEF_TYPE("import_declaration", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
+
+// Function definitions
+DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
+DEF_TYPE("function_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
+
+// Class and object definitions
+DEF_TYPE("class_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("object_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("trait_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("case_class_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
+
+// Variable declarations
+DEF_TYPE("val_definition", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("var_definition", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("val_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("var_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+// Function calls and expressions
+DEF_TYPE("call_expression", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("application_expression", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+
+// Control flow
+DEF_TYPE("if_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("match_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("for_expression", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("while_expression", FLOW_LOOP, NONE, NONE, 0)
+
+// Jump statements
+DEF_TYPE("return_expression", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("throw_expression", ERROR_THROW, NONE, NONE, 0)
+
+// Error handling
+DEF_TYPE("try_expression", ERROR_TRY, NONE, NONE, 0)
+DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
+DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
+
+// Lambdas and anonymous functions
+DEF_TYPE("lambda_expression", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
+DEF_TYPE("anonymous_function", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
+
+// Identifiers and literals
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("integer_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("floating_point_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("character_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+// Comments
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0x08)
+
+// Error handling
+DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
