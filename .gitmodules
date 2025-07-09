@@ -72,18 +72,3 @@
 [submodule "grammars/tree-sitter-c-sharp"]
 	path = grammars/tree-sitter-c-sharp
 	url = https://github.com/tree-sitter/tree-sitter-c-sharp
-[submodule "grammars/tree-sitter-scala"]
-	path = grammars/tree-sitter-scala
-	url = https://github.com/tree-sitter/tree-sitter-scala
-[submodule "grammars/tree-sitter-julia"]
-	path = grammars/tree-sitter-julia
-	url = https://github.com/tree-sitter/tree-sitter-julia
-[submodule "grammars/tree-sitter-zig"]
-	path = grammars/tree-sitter-zig
-	url = https://github.com/tree-sitter-grammars/tree-sitter-zig
-[submodule "grammars/tree-sitter-fsharp"]
-	path = grammars/tree-sitter-fsharp
-	url = https://github.com/ionide/tree-sitter-fsharp
-[submodule "grammars/tree-sitter-haskell"]
-	path = grammars/tree-sitter-haskell
-	url = https://github.com/tree-sitter/tree-sitter-haskell
