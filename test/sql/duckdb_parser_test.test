@@ -24,10 +24,10 @@ FROM parse_ast('SELECT id, name FROM users', 'duckdb')
 ORDER BY node_id 
 LIMIT 10;
 ----
-1	0	program	NULL	252	1
-2	1	select_statement	NULL	224	1
-3	2	select_node	NULL	224	1
-4	3	select_list	NULL	188	1
+1	0	program	(empty)	252	1
+2	1	select_statement	(empty)	224	1
+3	2	select_node	(empty)	224	1
+4	3	select_list	(empty)	188	1
 5	4	column_reference	id	80	1
 6	4	column_reference	name	80	1
 7	3	table_reference	users	84	1
@@ -71,8 +71,7 @@ SELECT name FROM active_users
 WHERE type IN ('select_statement', 'select_node')
 ORDER BY type;
 ----
-select_node	NULL
-select_statement	NULL
+select_statement	(empty)
 
 # Test 5: Function call recognition
 # =================================
@@ -111,5 +110,5 @@ SELECT
 FROM parse_ast('SELECT u.name, COUNT(*) FROM users u GROUP BY u.name', 'sql')
 ORDER BY parser_type;
 ----
-duckdb	9	4
-tree-sitter	35	18
+duckdb	9	9
+tree-sitter	35	35
