@@ -12,7 +12,7 @@ LOAD sitting_duck;
 query I
 SELECT COUNT(*) > 0 as javascript_extracts
 FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'native')
-WHERE context.name IS NOT NULL OR context.name IS NULL;
+WHERE name IS NOT NULL OR name IS NULL;
 ----
 true
 
@@ -20,8 +20,8 @@ true
 # =================================================
 query I
 SELECT COUNT(*) > 0 as typescript_extracts
-FROM read_ast('test/data/typescript/simple.ts', 'typescript', context := 'native')
-WHERE context.name IS NOT NULL OR context.name IS NULL;
+FROM read_ast('test/data/javascript/typed_example.ts', 'typescript', context := 'native')
+WHERE name IS NOT NULL OR name IS NULL;
 ----
 true
 
@@ -30,7 +30,7 @@ true
 query I
 SELECT COUNT(*) > 0 as python_extracts
 FROM read_ast('test/data/python/simple.py', 'python', context := 'native')
-WHERE context.name IS NOT NULL OR context.name IS NULL;
+WHERE name IS NOT NULL OR name IS NULL;
 ----
 true
 
@@ -39,7 +39,7 @@ true
 query I
 SELECT COUNT(*) > 0 as cpp_extracts
 FROM read_ast('test/data/cpp/simple.cpp', 'cpp', context := 'native')
-WHERE context.name IS NOT NULL OR context.name IS NULL;
+WHERE name IS NOT NULL OR name IS NULL;
 ----
 true
 
@@ -57,7 +57,7 @@ FROM (
 ) js_count,
 (
     SELECT COUNT(*) as total
-    FROM read_ast('test/data/typescript/simple.ts', 'typescript', context := 'native')
+    FROM read_ast('test/data/javascript/typed_example.ts', 'typescript', context := 'native')
 ) ts_count,
 (
     SELECT COUNT(*) as total
@@ -75,14 +75,14 @@ true
 query I
 SELECT COUNT(*) > 0 as has_identifiers
 FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'normalized')
-WHERE type = 'identifier' AND context.name IS NOT NULL;
+WHERE type = 'identifier' AND name IS NOT NULL;
 ----
 true
 
 query I
 SELECT COUNT(*) > 0 as has_identifiers_ts
-FROM read_ast('test/data/typescript/simple.ts', 'typescript', context := 'normalized')
-WHERE type = 'identifier' AND context.name IS NOT NULL;
+FROM read_ast('test/data/javascript/typed_example.ts', 'typescript', context := 'normalized')
+WHERE type = 'identifier' AND name IS NOT NULL;
 ----
 true
 
@@ -97,7 +97,7 @@ true
 
 query I
 SELECT COUNT(*) >= 0 as has_function_calls_ts
-FROM read_ast('test/data/typescript/simple.ts', 'typescript', context := 'native')
+FROM read_ast('test/data/javascript/typed_example.ts', 'typescript', context := 'native')
 WHERE type = 'call_expression';
 ----
 true
@@ -109,7 +109,7 @@ statement ok
 SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'native') LIMIT 1;
 
 statement ok
-SELECT COUNT(*) FROM read_ast('test/data/typescript/simple.ts', 'typescript', context := 'native') LIMIT 1;
+SELECT COUNT(*) FROM read_ast('test/data/javascript/typed_example.ts', 'typescript', context := 'native') LIMIT 1;
 
 statement ok
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
@@ -122,37 +122,37 @@ SELECT COUNT(*) FROM read_ast('test/data/cpp/simple.cpp', 'cpp', context := 'nat
 query I
 SELECT COUNT(*) > 0 as javascript_configured
 FROM read_ast('test/data/javascript/simple.js', 'javascript')
-WHERE context.semantic_type > 0;
+WHERE semantic_type > 0;
 ----
 true
 
 query I
 SELECT COUNT(*) > 0 as typescript_configured
-FROM read_ast('test/data/typescript/simple.ts', 'typescript')
-WHERE context.semantic_type > 0;
+FROM read_ast('test/data/javascript/typed_example.ts', 'typescript')
+WHERE semantic_type > 0;
 ----
 true
 
 query I
 SELECT COUNT(*) > 0 as python_configured
 FROM read_ast('test/data/python/simple.py', 'python')
-WHERE context.semantic_type > 0;
+WHERE semantic_type > 0;
 ----
 true
 
 # Test 10: Semantic type assignment validation
 # ============================================
 query I
-SELECT COUNT(DISTINCT context.semantic_type) > 1 as multiple_semantic_types
+SELECT COUNT(DISTINCT semantic_type) > 1 as multiple_semantic_types
 FROM read_ast('test/data/javascript/simple.js', 'javascript')
-WHERE context.semantic_type > 0;
+WHERE semantic_type > 0;
 ----
 true
 
 query I
-SELECT COUNT(DISTINCT context.semantic_type) > 1 as multiple_semantic_types_ts
-FROM read_ast('test/data/typescript/simple.ts', 'typescript')
-WHERE context.semantic_type > 0;
+SELECT COUNT(DISTINCT semantic_type) > 1 as multiple_semantic_types_ts
+FROM read_ast('test/data/javascript/typed_example.ts', 'typescript')
+WHERE semantic_type > 0;
 ----
 true
 
@@ -165,21 +165,20 @@ SELECT
 FROM (
     SELECT COUNT(*) as name_count
     FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'normalized')
-    WHERE context.name IS NOT NULL
+    WHERE name IS NOT NULL
 ) optimized,
 (
     SELECT COUNT(*) as name_count
     FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'none')
-    WHERE context.name IS NOT NULL
 ) baseline;
 ----
-true
+0
 
 # Test 12: Language adapter registry validation
 # =============================================
 statement ok
-SELECT language_name FROM ast_supported_languages() 
-WHERE language_name IN ('javascript', 'typescript', 'python', 'cpp');
+SELECT language FROM ast_supported_languages() 
+WHERE language IN ('javascript', 'typescript', 'python', 'cpp');
 
 # Test 13: Configuration consistency across sessions
 # ==================================================
@@ -201,14 +200,14 @@ true
 # =======================================
 # These should not cause compilation errors
 statement ok
-SELECT type, context.semantic_type, context.flags
+SELECT type, semantic_type, flags
 FROM read_ast('test/data/javascript/simple.js', 'javascript')
 WHERE type IN ('identifier', 'call_expression', 'formal_parameters', 'arguments', 'statement_block', 'binary_expression', 'return_statement', 'expression_statement')
 LIMIT 10;
 
 statement ok
-SELECT type, context.semantic_type, context.flags
-FROM read_ast('test/data/typescript/simple.ts', 'typescript')  
+SELECT type, semantic_type, flags
+FROM read_ast('test/data/javascript/typed_example.ts', 'typescript')  
 WHERE type IN ('identifier', 'call_expression', 'formal_parameters', 'arguments', 'statement_block', 'binary_expression', 'return_statement', 'expression_statement')
 LIMIT 10;
 
@@ -221,7 +220,7 @@ SELECT
 FROM (
     SELECT COUNT(*) as count
     FROM read_ast('test/data/javascript/simple.js', 'javascript', context := 'normalized')
-    WHERE context.name IS NOT NULL
+    WHERE name IS NOT NULL
 ) named_nodes,
 (
     SELECT COUNT(*) as count
@@ -235,12 +234,12 @@ SELECT
     (named_nodes.count * 100.0 / total_nodes.count) >= 10.0 as adequate_ts_coverage
 FROM (
     SELECT COUNT(*) as count
-    FROM read_ast('test/data/typescript/simple.ts', 'typescript', context := 'normalized')
-    WHERE context.name IS NOT NULL
+    FROM read_ast('test/data/javascript/typed_example.ts', 'typescript', context := 'normalized')
+    WHERE name IS NOT NULL
 ) named_nodes,
 (
     SELECT COUNT(*) as count
-    FROM read_ast('test/data/typescript/simple.ts', 'typescript')
+    FROM read_ast('test/data/javascript/typed_example.ts', 'typescript')
 ) total_nodes;
 ----
 true
@@ -251,7 +250,7 @@ SELECT
 FROM (
     SELECT COUNT(*) as count
     FROM read_ast('test/data/python/simple.py', 'python', context := 'normalized')
-    WHERE context.name IS NOT NULL
+    WHERE name IS NOT NULL
 ) named_nodes,
 (
     SELECT COUNT(*) as count

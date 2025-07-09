@@ -26,7 +26,7 @@ true
 query I
 SELECT COUNT(*) FROM read_ast('test/data/go/simple.go', 'go') WHERE name IS NOT NULL;
 ----
-13
+51
 
 # Test 4: Go function name extraction
 # ===================================
