@@ -1,6 +1,7 @@
 #pragma once
 
 #include "native_context_extraction.hpp"
+#include "function_call_extractor.hpp"
 #include <tree_sitter/api.h>
 
 namespace duckdb {
@@ -316,6 +317,14 @@ private:
             }
         }
         return "";
+    }
+};
+
+// Specialization for FUNCTION_CALL (R function calls)
+template<>
+struct RNativeExtractor<NativeExtractionStrategy::FUNCTION_CALL> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        return UnifiedFunctionCallExtractor<RLanguageTag>::Extract(node, content);
     }
 };
 

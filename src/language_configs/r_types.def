@@ -30,7 +30,7 @@ DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
 
 // Function calls and expressions
-DEF_TYPE("call", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("call", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, FUNCTION_CALL, 0)
 DEF_TYPE("binary_operator", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 DEF_TYPE("unary_operator", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 

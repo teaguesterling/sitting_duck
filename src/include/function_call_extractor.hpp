@@ -51,70 +51,104 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
         "argument_list", "argument_list",
         {"identifier", "field_expression"},
         {",", "(", ")", ";"},
-        {}  // No additional call types
+        {},  // No additional call types
+        {}   // No named parameter types for C
     }},
     {"cpp", {
         "call_expression", "new_expression", "delete_expression",
         "argument_list", "argument_list",
         {"identifier", "qualified_identifier", "field_expression", "type_identifier"},
         {",", "(", ")", ";"},
-        {}  // No additional call types
+        {},  // No additional call types
+        {}   // No named parameter types for C++
     }},
     {"javascript", {
         "call_expression", "new_expression", nullptr,
         "arguments", "arguments", 
         {"identifier", "member_expression", "property_identifier"},
         {",", "(", ")", ";"},
-        {}  // No additional call types
+        {},  // No additional call types
+        {}   // No named parameter types for JavaScript
     }},
     {"typescript", {
         "call_expression", "new_expression", nullptr,
         "arguments", "arguments",
         {"identifier", "member_expression", "property_identifier"},
         {",", "(", ")", ";"},
-        {}  // No additional call types
+        {},  // No additional call types
+        {}   // No named parameter types for TypeScript
     }},
     {"python", {
         "call", "call", nullptr,
         "argument_list", "argument_list",
         {"identifier", "attribute", "subscript"},
         {",", "(", ")", ";"},
-        {}  // No additional call types
+        {},  // No additional call types
+        {"keyword_argument"}  // Named parameter types for Python
     }},
     {"go", {
         "call_expression", "composite_literal", nullptr,
         "argument_list", "literal_value",
         {"identifier", "selector_expression", "type_identifier"},
         {",", "(", ")", ";", "{", "}"},
-        {}  // No additional call types
+        {},  // No additional call types
+        {}   // No named parameter types for Go
     }},
     {"rust", {
         "call_expression", "struct_expression", nullptr,
         "arguments", "field_initializer_list", 
         {"identifier", "scoped_identifier", "field_identifier"},
         {",", "(", ")", ";", "{", "}", "!"},
-        {"method_call_expression", "macro_invocation"}  // Additional call types for Rust
+        {"method_call_expression", "macro_invocation"},  // Additional call types for Rust
+        {}   // No named parameter types for Rust (uses struct syntax)
     }},
     {"java", {
         "method_invocation", "object_creation_expression", nullptr,
         "argument_list", "argument_list",
         {"identifier", "scoped_identifier", "field_access"},
         {",", "(", ")", ";"},
-        {}  // No additional call types for Java
+        {},  // No additional call types for Java
+        {}   // No named parameter types for Java
     }},
     {"php", {
         "function_call_expression", "object_creation_expression", nullptr,
         "arguments", "arguments",
         {"name", "variable_name", "member_access_expression"},
         {",", "(", ")", ";"},
-        {"member_call_expression", "scoped_call_expression"}  // Additional call types for PHP
+        {"member_call_expression", "scoped_call_expression"},  // Additional call types for PHP
+        {"argument_name"}   // Named parameter types for PHP 8+
     }},
     {"ruby", {
         "call", nullptr, nullptr,
         "argument_list", "argument_list",
         {"identifier", "constant", "scope_resolution"},
         {",", "(", ")", ";"},
-        {"method_call", "chained_call"}  // Additional call types for Ruby
+        {"method_call", "chained_call"},  // Additional call types for Ruby
+        {"pair", "keyword_parameter"}   // Named parameter types for Ruby (keyword arguments)
+    }},
+    {"swift", {
+        "call_expression", "init_expression", nullptr,
+        "argument_list", "call_suffix",
+        {"identifier", "navigation_expression", "self_expression"},
+        {",", "(", ")", ";", ":"},
+        {"postfix_expression", "try_expression"},  // Additional call types for Swift
+        {"labeled_argument"}  // Named parameter types for Swift
+    }},
+    {"r", {
+        "call", nullptr, nullptr,
+        "arguments", "arguments",
+        {"identifier", "namespace_get", "namespace_get_internal"},
+        {",", "(", ")", ";"},
+        {},  // No additional call types for R
+        {}   // No named parameter types for R (uses positional arguments)
+    }},
+    {"kotlin", {
+        "call_expression", "constructor_invocation", nullptr,
+        "value_arguments", "value_arguments",
+        {"simple_identifier", "navigation_expression", "super_expression"},
+        {",", "(", ")", ";"},
+        {"postfix_expression", "callable_reference"},  // Additional call types for Kotlin
+        {"value_argument"}  // Named parameter types for Kotlin
     }}
 };
 
@@ -271,16 +305,62 @@ private:
             
             ParameterInfo arg;
             
-            // Extract argument text as the "type" field (represents argument value)
-            string arg_text = ExtractNodeText(child, content);
-            if (!arg_text.empty()) {
-                arg.type = arg_text;
-                arg.name = "";  // Arguments don't have names in calls
+            // Check if this is a named parameter (keyword argument)
+            bool is_named_param = false;
+            for (const char* named_type : types.named_parameter_types) {
+                if (strcmp(child_type, named_type) == 0) {
+                    is_named_param = true;
+                    break;
+                }
+            }
+            
+            if (is_named_param) {
+                // Extract named parameter (key=value pattern)
+                arg = ExtractNamedArgument(child, content);
+            } else {
+                // Extract positional argument
+                string arg_text = ExtractNodeText(child, content);
+                if (!arg_text.empty()) {
+                    arg.type = arg_text;  // Value/expression
+                    arg.name = "";        // No name for positional args
+                }
+            }
+            
+            if (!arg.type.empty() || !arg.name.empty()) {
                 arguments.push_back(arg);
             }
         }
         
         return arguments;
+    }
+    
+    static ParameterInfo ExtractNamedArgument(TSNode named_arg_node, const string& content) {
+        ParameterInfo param;
+        
+        uint32_t child_count = ts_node_child_count(named_arg_node);
+        
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(named_arg_node, i);
+            const char* child_type = ts_node_type(child);
+            
+            // Skip assignment operators
+            if (strcmp(child_type, "=") == 0 || strcmp(child_type, ":") == 0) {
+                continue;
+            }
+            
+            string node_text = ExtractNodeText(child, content);
+            if (node_text.empty()) continue;
+            
+            if (param.name.empty()) {
+                // First non-operator node is usually the parameter name
+                param.name = node_text;
+            } else if (param.type.empty()) {
+                // Second non-operator node is usually the value
+                param.type = node_text;
+            }
+        }
+        
+        return param;
     }
     
     static string ExtractNodeText(TSNode node, const string& content) {
@@ -334,6 +414,18 @@ struct PHPLanguageTag {
 
 struct RubyLanguageTag {
     static string GetLanguageName() { return "ruby"; }
+};
+
+struct SwiftLanguageTag {
+    static string GetLanguageName() { return "swift"; }
+};
+
+struct RLanguageTag {
+    static string GetLanguageName() { return "r"; }
+};
+
+struct KotlinLanguageTag {
+    static string GetLanguageName() { return "kotlin"; }
 };
 
 } // namespace duckdb

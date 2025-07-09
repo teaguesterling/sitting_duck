@@ -50,8 +50,8 @@ DEF_TYPE("return_statement", FLOW_JUMP, NONE, NONE, 0)
 DEF_TYPE("throw_statement", ERROR_THROW, NONE, NONE, 0)
 
 // Expressions
-DEF_TYPE("call_expression", COMPUTATION_CALL, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("postfix_expression", COMPUTATION_CALL, NONE, NONE, 0)
+DEF_TYPE("call_expression", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("postfix_expression", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_CALL, 0)
 DEF_TYPE("binary_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
 DEF_TYPE("unary_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
 DEF_TYPE("ternary_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
@@ -93,7 +93,7 @@ DEF_TYPE("await_expression", FLOW_SYNC, NONE, NONE, 0)
 DEF_TYPE("async_keyword", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Error handling
-DEF_TYPE("try_expression", ERROR_TRY, NONE, NONE, 0)
+DEF_TYPE("try_expression", ERROR_TRY, FIND_IDENTIFIER, FUNCTION_CALL, 0)
 DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
 
 // Closures and lambdas

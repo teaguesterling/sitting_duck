@@ -1,6 +1,7 @@
 #pragma once
 
 #include "native_context_extraction.hpp"
+#include "function_call_extractor.hpp"
 #include <tree_sitter/api.h>
 
 namespace duckdb {
@@ -496,6 +497,14 @@ public:
         modifiers.insert(modifiers.end(), regular_modifiers.begin(), regular_modifiers.end());
         
         return modifiers;
+    }
+};
+
+// Specialization for FUNCTION_CALL (Swift function calls)
+template<>
+struct SwiftNativeExtractor<NativeExtractionStrategy::FUNCTION_CALL> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        return UnifiedFunctionCallExtractor<SwiftLanguageTag>::Extract(node, content);
     }
 };
 
