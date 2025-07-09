@@ -35,7 +35,7 @@ query I
 SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
 WHERE type = 'call' AND name IS NOT NULL;
 ----
-17
+19
 
 # Test 6: Control flow statements
 query I

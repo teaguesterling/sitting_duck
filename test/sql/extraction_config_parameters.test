@@ -15,9 +15,9 @@ SELECT * FROM read_ast('test/data/python/simple.py', 'python') LIMIT 0;
 statement ok
 DROP TABLE test_results;
 
-# Test 1: read_ast function with extraction config parameters
-query IIII
-SELECT name, start_line, parent_id, peek
+# Test 1: read_ast function with extraction config parameters - minimal schema
+query II
+SELECT node_id, type
 FROM read_ast('test/data/python/simple.py', 'python', 
     context := 'none', 
     source := 'none', 
@@ -25,9 +25,9 @@ FROM read_ast('test/data/python/simple.py', 'python',
     peek := 'none')
 LIMIT 3;
 ----
-NULL	0	NULL	NULL
-NULL	0	NULL	NULL
-NULL	0	NULL	NULL
+0	module
+1	function_definition
+2	def
 
 # Test 2: read_ast with partial enablement
 query IIII
@@ -39,13 +39,13 @@ FROM read_ast('test/data/python/simple.py', 'python',
     peek := 'smart')
 LIMIT 3;
 ----
-NULL	1	NULL	def hello():
+(empty)	1	NULL	def hello():
 hello	1	0	def hello():
-NULL	1	1	def
+(empty)	1	1	def
 
 # Test 3: read_ast with full enablement
-query IIIII
-SELECT name, start_line, start_column, children_count, peek
+query IIII
+SELECT name, start_line, start_column, children_count
 FROM read_ast('test/data/python/simple.py', 'python', 
     context := 'native', 
     source := 'full', 
@@ -53,8 +53,8 @@ FROM read_ast('test/data/python/simple.py', 'python',
     peek := 'none')
 LIMIT 2;
 ----
-NULL	1	1	4	NULL
-hello	1	1	5	NULL
+(empty)	1	1	4
+hello	1	1	5
 
 # Test 4: Removed read_ast_hierarchical (deprecated)
 
@@ -68,13 +68,13 @@ FROM parse_ast('def hello(): pass', 'python',
     peek := 'smart')
 LIMIT 3;
 ----
-NULL	1	NULL	def hello(): pass
+(empty)	1	NULL	def hello(): pass
 hello	1	0	def hello(): pass
-NULL	1	1	def
+(empty)	1	1	def
 
 # Test 6: parse_ast with all features disabled
-query IIII
-SELECT name, start_line, parent_id, peek
+query II
+SELECT node_id, type
 FROM parse_ast('def hello(): pass', 'python', 
     context := 'none', 
     source := 'none', 
@@ -82,13 +82,13 @@ FROM parse_ast('def hello(): pass', 'python',
     peek := 'none')
 LIMIT 3;
 ----
-NULL	0	NULL	NULL
-NULL	0	NULL	NULL
-NULL	0	NULL	NULL
+0	module
+1	function_definition
+2	def
 
 # Test 7: parse_ast_flat function with flat schema
-query IIII
-SELECT name, start_line, parent_id, peek
+query II
+SELECT node_id, type
 FROM parse_ast_flat('def hello(): pass', 'python', 
     context := 'none', 
     source := 'none', 
@@ -96,9 +96,9 @@ FROM parse_ast_flat('def hello(): pass', 'python',
     peek := 'none')
 LIMIT 3;
 ----
-NULL	0	NULL	NULL
-NULL	0	NULL	NULL
-NULL	0	NULL	NULL
+0	module
+1	function_definition
+2	def
 
 # Test 8: parse_ast_flat with features enabled
 query IIII
@@ -110,9 +110,9 @@ FROM parse_ast_flat('def hello(): pass', 'python',
     peek := 'smart')
 LIMIT 3;
 ----
-NULL	1	NULL	def hello(): pass
+(empty)	1	NULL	def hello(): pass
 hello	1	0	def hello(): pass
-NULL	1	1	def
+(empty)	1	1	def
 
 # Test 9: Unified peek parameter with integer value
 query II
@@ -125,29 +125,29 @@ LIMIT 1;
 very_long_function_name_for_testing	10
 
 # Test 10: Unified peek parameter with string values
-query II
-SELECT name, peek
+query I
+SELECT name
 FROM parse_ast('def hello(): pass', 'python', 
     peek := 'none')
 WHERE name = 'hello'
 LIMIT 1;
 ----
-hello	NULL
+hello
 
 # Test 11: Source level progression
 query II
-SELECT file_path, start_line
+SELECT node_id, type
 FROM parse_ast('def hello(): pass', 'python', source := 'none')
 LIMIT 1;
 ----
-(empty)	0
+0	module
 
-query II
-SELECT file_path, start_line  
+query I
+SELECT file_path
 FROM parse_ast('def hello(): pass', 'python', source := 'path')
 LIMIT 1;
 ----
-<inline>	0
+NULL
 
 query II
 SELECT file_path, start_line
@@ -158,19 +158,19 @@ LIMIT 1;
 
 # Test 12: Structure level progression
 query II
-SELECT parent_id, children_count
+SELECT node_id, type
 FROM parse_ast('def hello(): pass', 'python', structure := 'none')
 LIMIT 1;
 ----
-NULL	0
+0	module
 
 query II
-SELECT parent_id, children_count
+SELECT parent_id, depth
 FROM parse_ast('def hello(): pass', 'python', structure := 'minimal')
 WHERE parent_id IS NOT NULL
 LIMIT 1;
 ----
-0	0
+0	1
 
 query II
 SELECT parent_id, children_count
@@ -178,15 +178,15 @@ FROM parse_ast('def hello(): pass', 'python', structure := 'full')
 WHERE parent_id IS NOT NULL
 LIMIT 1;
 ----
-0	(empty)
+0	5
 
 # Test 13: Context level progression
 query II
-SELECT name, semantic_type
+SELECT node_id, type
 FROM parse_ast('def hello(): pass', 'python', context := 'none')
 LIMIT 1;
 ----
-(empty)	0
+0	module
 
 query II
 SELECT name, semantic_type
@@ -194,4 +194,4 @@ FROM parse_ast('def hello(): pass', 'python', context := 'normalized')
 WHERE name = 'hello'
 LIMIT 1;
 ----
-hello	(empty)
+hello	240

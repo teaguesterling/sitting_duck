@@ -103,7 +103,7 @@ FROM read_ast(['test/data/python/simple.p?'], ignore_errors := true);
 
 # Multiple patterns with overlapping matches
 query I
-SELECT COUNT(DISTINCT source.file_path) >= 1 as deduplication_works
+SELECT COUNT(DISTINCT file_path) >= 1 as deduplication_works
 FROM read_ast(['test/data/python/*.py', 'test/data/python/simple.py'], ignore_errors := true);
 ----
 1
@@ -135,9 +135,9 @@ FROM read_ast([
 # Results should be sorted by file path for consistent ordering
 statement ok
 CREATE TABLE sorted_results AS
-SELECT source.file_path 
+SELECT file_path 
 FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], ignore_errors := true)
-ORDER BY source.file_path;
+ORDER BY file_path;
 
 query I
 SELECT COUNT(*) > 0 as has_sorted_results FROM sorted_results;
@@ -174,8 +174,8 @@ query I
 SELECT COUNT(*) > 0 as window_function_integration
 FROM (
     SELECT 
-        source.file_path,
-        ROW_NUMBER() OVER (PARTITION BY source.language ORDER BY source.file_path) as rn
+        file_path,
+        ROW_NUMBER() OVER (PARTITION BY language ORDER BY file_path) as rn
     FROM read_ast(['test/data/python/*.py', 'test/data/javascript/*.js'], ignore_errors := true)
 ) WHERE rn = 1;
 ----
