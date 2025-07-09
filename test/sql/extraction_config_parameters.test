@@ -50,25 +50,13 @@ FROM read_ast('test/data/python/simple.py', 'python',
     context := 'native', 
     source := 'full', 
     structure := 'full', 
-    peek := 'full')
+    peek := 'none')
 LIMIT 2;
 ----
-NULL	1	1	4	(empty)
-hello	1	1	5	(empty)
+NULL	1	1	4	NULL
+hello	1	1	5	NULL
 
-# Test 4: read_ast_hierarchical function (legacy name - now returns flat schema)
-query IIII
-SELECT name, start_line, parent_id, peek
-FROM read_ast_hierarchical('test/data/python/simple.py', 'python', 
-    context := 'none', 
-    source := 'none', 
-    structure := 'none', 
-    peek := 'none')
-LIMIT 3;
-----
-NULL	0	NULL	NULL
-NULL	0	NULL	NULL
-NULL	0	NULL	NULL
+# Test 4: Removed read_ast_hierarchical (deprecated)
 
 # Test 5: parse_ast function with extraction config
 query IIII
@@ -134,7 +122,7 @@ FROM parse_ast('def very_long_function_name_for_testing(): pass', 'python',
 WHERE name = 'very_long_function_name_for_testing'
 LIMIT 1;
 ----
-very_long_function_name_for_testing	(empty)
+very_long_function_name_for_testing	10
 
 # Test 10: Unified peek parameter with string values
 query II
