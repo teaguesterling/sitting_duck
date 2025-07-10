@@ -1,6 +1,7 @@
 # Custom distribution workflow using pre-built Docker images with Node.js
 name: Custom Extension Distribution Pipeline
 on:
+  workflow_call:
   workflow_dispatch:
   push:
     branches: [main]
