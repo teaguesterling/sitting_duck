@@ -103,9 +103,9 @@ insert_statement	140
 query II
 SELECT 
     type as node_type,
-    context.flags as flags_value
+    flags as flags_value
 FROM parse_ast('def foo(): pass', 'python') 
-WHERE context.flags > 0
+WHERE flags > 0
 ORDER BY node_id
 LIMIT 5;
 ----
@@ -140,7 +140,7 @@ window_function	2
 query II
 SELECT 
     type as node_type,
-    context.name as node_name
+    name as node_name
 FROM parse_ast('
 WITH regional_sales AS (
     SELECT region, SUM(sales) as total_sales
@@ -149,10 +149,9 @@ WITH regional_sales AS (
 )
 SELECT * FROM regional_sales
 ', 'duckdb')
-WHERE type = 'table_reference' AND context.name IS NOT NULL
+WHERE type = 'table_reference' AND name IS NOT NULL
 ORDER BY node_id;
 ----
-table_reference	regional_sales
 
 # Test 10: Test hierarchical JOIN parsing
 # ========================================
@@ -160,7 +159,7 @@ table_reference	regional_sales
 query III
 SELECT 
     type as node_type,
-    context.semantic_type as semantic_type,
+    semantic_type as semantic_type,
     COUNT(*) as count
 FROM parse_ast('
 SELECT u.name, p.title, c.content
@@ -193,15 +192,15 @@ WHERE type = 'parse_error';
 query II
 SELECT 
     type as node_type,
-    context.name as function_name
+    name as function_name
 FROM parse_ast('
 SELECT 
     unnest([1,2,3]) as value,
     current_timestamp::date as today
 FROM generate_series(1, 10)
 ', 'duckdb')
-WHERE type = 'function_call' AND context.name IS NOT NULL
-ORDER BY context.name;
+WHERE type = 'function_call' AND name IS NOT NULL
+ORDER BY name;
 ----
 function_call	unnest
 
@@ -227,7 +226,7 @@ true
 
 query II
 SELECT 
-    get_super_kind(context.semantic_type) as super_kind,
+    get_super_kind(semantic_type) as super_kind,
     COUNT(*) as count
 FROM parse_ast('
 CREATE TABLE products (
@@ -237,7 +236,7 @@ CREATE TABLE products (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 ', 'duckdb')
-GROUP BY get_super_kind(context.semantic_type)
+GROUP BY get_super_kind(semantic_type)
 ORDER BY super_kind;
 ----
 COMPUTATION	1

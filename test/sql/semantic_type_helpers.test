@@ -175,6 +175,7 @@ ORDER BY node_id;
 ----
 hello	DEFINITION_FUNCTION
 MyClass	DEFINITION_CLASS
+method	DEFINITION_FUNCTION
 
 query II
 SELECT name, semantic_type_to_string(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT)
@@ -182,7 +183,6 @@ FROM test_ast
 WHERE is_call(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT)
 ORDER BY node_id;
 ----
-method	COMPUTATION_CALL
 print	COMPUTATION_CALL
 
 # Test all searchable types are valid

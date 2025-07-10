@@ -201,11 +201,11 @@ module	true
 query III
 SELECT 
     type as node_type,
-    name as name,
-    descendant_count as descendant_count
+    context.name as name,
+    structure.descendant_count as descendant_count
 FROM read_ast_hierarchical('test/data/python/simple.py', 'python') 
-WHERE descendant_count > 3
-ORDER BY descendant_count DESC
+WHERE structure.descendant_count > 3
+ORDER BY structure.descendant_count DESC
 LIMIT 2;
 ----
 module	NULL	109
@@ -216,8 +216,8 @@ class_definition	MyClass	45
 
 statement ok
 SELECT 
-    file_path,
-    semantic_type
+    source.file_path,
+    context.semantic_type
 FROM read_ast_hierarchical('test/data/python/syntax_error.py', 'python', ignore_errors := true) 
 WHERE type = 'ERROR'
 LIMIT 1;
@@ -241,11 +241,11 @@ function_definition	true
 query III
 SELECT 
     type as node_type,
-    name as name,
-    start_line as line
+    context.name as name,
+    source.start_line as line
 FROM read_ast_hierarchical('test/data/sql/example.sql', 'sql') 
-WHERE name IS NOT NULL
-ORDER BY start_column
+WHERE context.name IS NOT NULL
+ORDER BY source.start_column
 LIMIT 3;
 ----
 keyword_select	SELECT	2
