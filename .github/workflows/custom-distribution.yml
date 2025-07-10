@@ -1,0 +1,117 @@
+# Custom distribution workflow using pre-built Docker images with Node.js
+name: Custom Extension Distribution Pipeline
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' && github.sha || '' }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/duckdb-extension
+
+jobs:
+  generate_matrix:
+    name: Generate Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      linux_matrix: ${{ steps.set-matrix.outputs.linux_matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'true'
+      
+      - name: Set up matrix
+        id: set-matrix
+        run: |
+          # Simplified matrix for our custom build
+          echo 'linux_matrix={
+            "include": [
+              {
+                "duckdb_arch": "linux_amd64",
+                "runner": "ubuntu-24.04",
+                "vcpkg_target_triplet": "x64-linux-release",
+                "vcpkg_host_triplet": "x64-linux-release"
+              },
+              {
+                "duckdb_arch": "linux_arm64", 
+                "runner": "ubuntu-24.04-arm",
+                "vcpkg_target_triplet": "arm64-linux-release",
+                "vcpkg_host_triplet": "arm64-linux-release"
+              },
+              {
+                "duckdb_arch": "linux_amd64_musl",
+                "runner": "ubuntu-24.04",
+                "vcpkg_target_triplet": "x64-linux-release", 
+                "vcpkg_host_triplet": "x64-linux-release"
+              }
+            ]
+          }' >> $GITHUB_OUTPUT
+
+  linux:
+    name: Linux
+    runs-on: ${{ matrix.runner }}
+    needs: generate_matrix
+    if: ${{ needs.generate_matrix.outputs.linux_matrix != '{}' && needs.generate_matrix.outputs.linux_matrix != '' }}
+    strategy:
+      matrix: ${{ fromJson(needs.generate_matrix.outputs.linux_matrix) }}
+    env:
+      VCPKG_TOOLCHAIN_PATH: /vcpkg/scripts/buildsystems/vcpkg.cmake
+      VCPKG_TARGET_TRIPLET: ${{ matrix.vcpkg_target_triplet }}
+      CC: ccache gcc
+      CXX: ccache g++
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: 'true'
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2.13
+        with:
+          key: ${{ github.job }}-${{ matrix.duckdb_arch }}
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build extension (using custom Docker image)
+        run: |
+          docker run --rm \
+            -v $(pwd):/duckdb_build_dir \
+            -v ${{ env.CCACHE_DIR }}:/ccache_dir \
+            -e CCACHE_DIR=/ccache_dir \
+            -e VCPKG_TOOLCHAIN_PATH=/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -e VCPKG_TARGET_TRIPLET=${{ matrix.vcpkg_target_triplet }} \
+            -e CC="ccache gcc" \
+            -e CXX="ccache g++" \
+            --workdir /duckdb_build_dir \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-${{ matrix.duckdb_arch }} \
+            bash -c "
+              set -e
+              echo 'Node.js version:' && node --version
+              echo 'npm version:' && npm --version  
+              echo 'tree-sitter version:' && tree-sitter --version
+              echo 'Starting build...'
+              make configure
+              make debug
+              make test
+            "
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.duckdb_arch }}-extensions
+          path: |
+            build/debug/*.duckdb_extension
+            build/debug/extension/*/*.duckdb_extension

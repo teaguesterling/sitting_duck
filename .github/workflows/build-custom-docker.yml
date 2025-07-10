@@ -1,0 +1,69 @@
+name: Build Custom Docker Images
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'docker/custom/**'
+      - '.github/workflows/build-custom-docker.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/duckdb-extension
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        arch: [linux_amd64, linux_arm64, linux_amd64_musl]
+        include:
+          - arch: linux_amd64
+            platform: linux/amd64
+          - arch: linux_arm64
+            platform: linux/arm64
+          - arch: linux_amd64_musl
+            platform: linux/amd64
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch,suffix=-${{ matrix.arch }}
+            type=ref,event=pr,suffix=-${{ matrix.arch }}
+            type=sha,suffix=-${{ matrix.arch }}
+            type=raw,value=latest,suffix=-${{ matrix.arch }},enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/custom/Dockerfile.${{ matrix.arch }}
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            vcpkg_url=https://github.com/microsoft/vcpkg.git
+            vcpkg_commit=ce613c41372b23b1f51333815feb3edd87ef8a8b
+            extra_toolchains=;rust;
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
