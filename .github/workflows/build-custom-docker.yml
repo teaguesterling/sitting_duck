@@ -29,6 +29,13 @@ jobs:
           - arch: linux_amd64_musl
             platform: linux/amd64
     steps:
+      - name: Debug Docker job start
+        run: |
+          echo "Docker build job started for arch: ${{ matrix.arch }}"
+          echo "Platform: ${{ matrix.platform }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          
       - name: Checkout repository
         uses: actions/checkout@v4
 
