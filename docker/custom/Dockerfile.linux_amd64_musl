@@ -21,6 +21,8 @@ RUN apk add --no-cache \
 # Install the AWS cli (use pip version for Alpine/musl compatibility)
 RUN pip3 --version
 RUN pip3 install --break-system-packages awscli || pip3 install --user awscli
+# Add user bin to PATH if awscli was installed with --user
+ENV PATH="/root/.local/bin:${PATH}"
 RUN aws --version
 
 # Node.js and npm are already installed via apk above
