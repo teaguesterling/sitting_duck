@@ -47,13 +47,39 @@ jobs:
               echo 'tree-sitter version:' && tree-sitter --version
               echo 'Rust version:' && rustc --version
               echo 'Starting build...'
+              
+              # Build debug version for testing
+              make debug
+              
+              # Run tests
+              echo 'Running tests...'
+              make test
+              
+              # Build release version
+              echo 'Building release version...'
               make release
+              
+              # Copy artifacts to expected locations
+              mkdir -p /workspace/build/extension_artifacts
+              cp build/release/*.duckdb_extension /workspace/build/extension_artifacts/ || true
+              cp build/release/extension/*/*.duckdb_extension /workspace/build/extension_artifacts/ || true
+              
+              echo 'Build completed successfully'
             "
 
-      - name: Upload artifacts
+      - name: Deploy
         uses: actions/upload-artifact@v4
         with:
-          name: linux-${{ matrix.duckdb_arch }}-extensions
+          name: ${{ matrix.duckdb_arch }}-extensions
           path: |
-            build/release/*.duckdb_extension
-            build/release/extension/*/*.duckdb_extension
+            build/extension_artifacts/*.duckdb_extension
+          if-no-files-found: error
+
+      - name: Deploy test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.duckdb_arch }}-test-results
+          path: |
+            build/debug/test/unittest
+          if-no-files-found: ignore
