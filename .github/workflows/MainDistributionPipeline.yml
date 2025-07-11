@@ -24,7 +24,7 @@ jobs:
     name: Build extension binaries (custom Docker)
     uses: ./.github/workflows/custom-distribution.yml
     needs: build-docker-images
-    if: always() && (needs.build-docker-images.result == 'success' || needs.build-docker-images.result == 'skipped')
+    if: needs.build-docker-images.result == 'success'
     permissions:
       contents: read
       packages: read
