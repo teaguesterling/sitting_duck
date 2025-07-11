@@ -14,21 +14,23 @@ RUN apk add --no-cache \
     build-base \
     python3 \
     py3-pip \
-    gcompat
+    gcompat \
+    nodejs \
+    npm
 
 # Install the AWS cli (use pip version for Alpine/musl compatibility)
 RUN pip3 --version
 RUN pip3 install --break-system-packages awscli || pip3 install --user awscli
 RUN aws --version
 
-# Install Node.js and npm
-RUN apk add --no-cache nodejs npm
+# Node.js and npm are already installed via apk above
 RUN node --version && npm --version
 
 # Install Rust and Cargo for building tree-sitter CLI from source
 RUN apk add --no-cache rust cargo
 
 # Build tree-sitter CLI from source (compatible with musl)
+ENV PATH="/root/.cargo/bin:${PATH}"
 RUN cargo install tree-sitter-cli --locked
 RUN tree-sitter --version
 
