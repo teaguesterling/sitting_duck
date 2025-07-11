@@ -1,0 +1,379 @@
+# name: test/sql/multi_file_edge_cases.test
+# description: Comprehensive tests for multi-file processing edge cases and segfault prevention
+# group: [sitting_duck_critical]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# REGRESSION TESTS: Segfault Prevention
+# =============================================================================
+# These tests specifically target the segfault issues identified during
+# Agent J's investigation in July 2024.
+
+# Test 1: Two-file processing (should work after column indexing fix)
+# ===================================================================
+query I
+SELECT COUNT(*) > 0 as two_files_work
+FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto');
+----
+1
+
+# Test 2: Two-file processing with file breakdown
+# ==============================================
+query II
+SELECT 
+    COUNT(DISTINCT file_path) as unique_files,
+    COUNT(*) as total_nodes
+FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto');
+----
+2	457
+
+# Test 3: Three-file processing (identified segfault case)
+# =======================================================
+query I
+SELECT COUNT(*) > 0 as three_files_work
+FROM read_ast([
+    'test/data/python/simple.py', 
+    'test/data/javascript/simple.js',
+    'test/data/cpp/simple.cpp'
+], 'auto');
+----
+1
+
+# Test 4: Four-file processing (stress test)
+# ==========================================
+query I
+SELECT COUNT(*) > 0 as four_files_work
+FROM read_ast([
+    'test/data/python/simple.py', 
+    'test/data/javascript/simple.js',
+    'test/data/cpp/simple.cpp',
+    'test/data/go/simple.go'
+], 'auto');
+----
+1
+
+# Test 5: Five-file processing (extended stress test)
+# ==================================================
+query I
+SELECT COUNT(*) > 0 as five_files_work
+FROM read_ast([
+    'test/data/python/simple.py', 
+    'test/data/javascript/simple.js',
+    'test/data/cpp/simple.cpp',
+    'test/data/go/simple.go',
+    'test/data/ruby/simple.rb'
+], 'auto');
+----
+1
+
+# Test 6: Small glob pattern (identified segfault case)
+# ====================================================
+query I
+SELECT COUNT(*) > 0 as small_glob_works
+FROM read_ast('test/data/python/*.py', 'python');
+----
+1
+
+# Test 7: Multi-directory glob pattern
+# ====================================
+query I
+SELECT COUNT(*) > 0 as multi_dir_glob_works
+FROM read_ast('test/data/*/*.py', 'python');
+----
+1
+
+# Test 8: Mixed specific files and glob patterns
+# ==============================================
+query I
+SELECT COUNT(*) > 0 as mixed_patterns_work
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/javascript/*.js'
+], 'auto');
+----
+1
+
+# =============================================================================
+# MEMORY SAFETY TESTS: Column Indexing Verification
+# =============================================================================
+# These tests verify the column indexing fix holds under various conditions
+
+# Test 9: Multi-file with all extraction levels
+# =============================================
+query I
+SELECT COUNT(*) > 0 as full_extraction_works
+FROM read_ast([
+    'test/data/python/simple.py', 
+    'test/data/javascript/simple.js'
+], 'auto',
+    context := 'native',
+    source := 'full', 
+    structure := 'full',
+    peek := 'full');
+----
+1
+
+# Test 10: Multi-file with minimal extraction
+# ===========================================
+query I
+SELECT COUNT(*) > 0 as minimal_extraction_works
+FROM read_ast([
+    'test/data/python/simple.py', 
+    'test/data/javascript/simple.js'
+], 'auto',
+    context := 'none',
+    source := 'none',
+    structure := 'none', 
+    peek := 'none');
+----
+1
+
+# Test 11: Multi-file semantic type consistency
+# ============================================
+query I
+SELECT COUNT(DISTINCT semantic_type) > 5 as has_semantic_diversity
+FROM read_ast([
+    'test/data/python/simple.py', 
+    'test/data/javascript/simple.js',
+    'test/data/cpp/simple.cpp'
+], 'auto', context := 'native');
+----
+1
+
+# Test 12: Multi-file parent-child relationships intact
+# ====================================================
+query I
+SELECT COUNT(*) > 0 as parent_child_intact
+FROM read_ast([
+    'test/data/python/simple.py', 
+    'test/data/javascript/simple.js'
+], 'auto', structure := 'full')
+WHERE parent_id IS NOT NULL;
+----
+1
+
+# =============================================================================
+# PERFORMANCE AND SCALABILITY TESTS
+# =============================================================================
+
+# Test 13: Large file count processing
+# ====================================
+query I
+SELECT COUNT(DISTINCT file_path) >= 5 as processes_many_files
+FROM read_ast([
+    'test/data/python/*.py',
+    'test/data/javascript/*.js',
+    'test/data/function_calls/*.py'
+], 'auto');
+----
+1
+
+# Test 14: Mixed language processing consistency
+# =============================================
+query I
+SELECT COUNT(DISTINCT language) >= 3 as has_multiple_languages
+FROM read_ast([
+    'test/data/python/*.py',
+    'test/data/javascript/*.js', 
+    'test/data/cpp/*.cpp',
+    'test/data/go/*.go'
+], 'auto');
+----
+1
+
+# Test 15: Result aggregation correctness
+# ======================================
+query I
+SELECT 
+    (individual_sum = combined_total) as aggregation_correct
+FROM (
+    SELECT 
+        (SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python')) +
+        (SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript')) as individual_sum,
+        (SELECT COUNT(*) FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto')) as combined_total
+);
+----
+1
+
+# =============================================================================
+# ERROR HANDLING AND EDGE CASES
+# =============================================================================
+
+# Test 16: Empty array handling
+# =============================
+statement error
+SELECT * FROM read_ast([]);
+----
+Binder Error: File pattern list cannot be empty
+
+# Test 17: NULL in array handling  
+# ===============================
+statement error
+SELECT * FROM read_ast(['test/data/python/simple.py', NULL]);
+----
+Binder Error: File pattern list cannot contain NULL values
+
+# Test 18: Non-existent files with ignore_errors=true
+# ===================================================
+query I
+SELECT COUNT(*) > 0 as processes_with_missing_files
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/nonexistent/missing.py'
+], 'auto', ignore_errors := true);
+----
+1
+
+# Test 19: Mixed valid and invalid files with ignore_errors=true
+# =============================================================
+query I
+SELECT COUNT(DISTINCT file_path) = 2 as filters_invalid_files
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/javascript/simple.js',
+    'test/data/nonexistent/missing.py'
+], 'auto', ignore_errors := true);
+----
+1
+
+# =============================================================================
+# STRESS TESTS: Multiple Consecutive Operations
+# =============================================================================
+
+# Test 20: Repeated multi-file operations (memory leak detection)
+# ==============================================================
+statement ok
+SELECT COUNT(*) FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto') LIMIT 1;
+
+statement ok  
+SELECT COUNT(*) FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto') LIMIT 1;
+
+# Test 21: Alternating single and multi-file operations
+# =====================================================
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript') LIMIT 1;
+
+statement ok
+SELECT COUNT(*) FROM read_ast(['test/data/cpp/simple.cpp', 'test/data/go/simple.go'], 'auto') LIMIT 1;
+
+# =============================================================================
+# FUTURE-PROOFING TESTS
+# =============================================================================
+
+# Test 22: Large-scale codebase simulation (when fixed)
+# =====================================================
+# NOTE: This test is designed to pass once the remaining segfault issues are resolved
+# Currently may fail but should be monitored for future fixes
+query I
+SELECT COUNT(*) > 100 as large_scale_works
+FROM read_ast('test/data/**/*.py', 'python')
+LIMIT 1;
+----
+1
+
+# Test 23: Complex nested directory patterns
+# ==========================================
+query I
+SELECT COUNT(DISTINCT file_path) > 0 as nested_patterns_work
+FROM read_ast('test/data/*/*.py', 'python');
+----
+1
+
+# Test 24: Maximum file array size test (reasonable limit)
+# =======================================================
+query I
+SELECT COUNT(DISTINCT file_path) >= 10 as handles_many_files
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/python/comments.py', 
+    'test/data/python/decorators.py',
+    'test/data/python/test_classes.py',
+    'test/data/python/deep_nesting.py',
+    'test/data/function_calls/test_python_calls.py',
+    'test/data/javascript/simple.js',
+    'test/data/javascript/count_test.js',
+    'test/data/cpp/simple.cpp',
+    'test/data/go/simple.go',
+    'test/data/ruby/simple.rb'
+], 'auto');
+----
+1
+
+# =============================================================================
+# COLUMN INDEXING REGRESSION PROTECTION
+# =============================================================================
+
+# Test 25: All column types present in multi-file results
+# =======================================================
+query I
+SELECT 
+    (COUNT(DISTINCT node_id) > 0 AND
+     COUNT(DISTINCT type) > 0 AND
+     COUNT(DISTINCT file_path) > 1 AND
+     COUNT(DISTINCT language) > 1) as all_columns_populated
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/javascript/simple.js'
+], 'auto', context := 'native', source := 'full', structure := 'full');
+----
+1
+
+# Test 26: Parent-child relationships preserved across files
+# =========================================================
+query I
+SELECT COUNT(*) > 0 as relationships_preserved
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/javascript/simple.js'  
+], 'auto', structure := 'full')
+WHERE parent_id IS NOT NULL AND depth > 0;
+----
+1
+
+# Test 27: Peek content available across files
+# ============================================
+query I
+SELECT COUNT(*) > 0 as peek_content_available
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/javascript/simple.js'
+], 'auto', peek := 'smart')
+WHERE peek IS NOT NULL AND LENGTH(peek) > 0;
+----
+1
+
+# =============================================================================
+# DOCUMENTATION AND MONITORING
+# =============================================================================
+
+# Test 28: Multi-file processing metadata verification
+# ===================================================
+query III
+SELECT 
+    language,
+    COUNT(*) as node_count,
+    COUNT(DISTINCT file_path) as file_count
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/javascript/simple.js',
+    'test/data/cpp/simple.cpp'
+], 'auto')
+GROUP BY language
+ORDER BY language;
+----
+cpp	498	1
+javascript	347	1
+python	110	1
