@@ -2,7 +2,20 @@
 name: Custom Linux Distribution
 on:
   workflow_call:
-  workflow_dispatch:
+    inputs:
+      duckdb_version:
+        required: true
+        type: string
+      ci_tools_version:
+        required: true
+        type: string
+      extension_name:
+        required: true
+        type: string
+      extra_toolchains:
+        required: false
+        type: string
+        default: ""
 
 env:
   REGISTRY: ghcr.io
@@ -27,6 +40,13 @@ jobs:
           fetch-depth: 0
           submodules: 'true'
 
+      - name: Checkout Extension CI tools
+        uses: actions/checkout@v4
+        with:
+          repository: duckdb/extension-ci-tools
+          ref: ${{ inputs.ci_tools_version }}
+          path: extension-ci-tools
+
       - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
@@ -35,10 +55,18 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build extension using custom Docker image
+        env:
+          DUCKDB_VERSION: ${{ inputs.duckdb_version }}
+          EXTENSION_NAME: ${{ inputs.extension_name }}
+          VCPKG_TARGET_TRIPLET: ${{ matrix.vcpkg_target_triplet }}
         run: |
           docker run --rm \
             -v $(pwd):/workspace \
+            -v $(pwd)/extension-ci-tools:/workspace/extension-ci-tools \
             --workdir /workspace \
+            -e DUCKDB_VERSION="${DUCKDB_VERSION}" \
+            -e EXTENSION_NAME="${EXTENSION_NAME}" \
+            -e VCPKG_TARGET_TRIPLET="${VCPKG_TARGET_TRIPLET}" \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-${{ matrix.duckdb_arch }} \
             bash -c "
               set -e
@@ -46,23 +74,32 @@ jobs:
               echo 'npm version:' && npm --version  
               echo 'tree-sitter version:' && tree-sitter --version
               echo 'Rust version:' && rustc --version
-              echo 'Starting build...'
               
-              # Build debug version for testing
-              make debug
+              # Checkout specific DuckDB version
+              cd duckdb
+              git fetch --tags
+              git checkout \${DUCKDB_VERSION}
+              cd ..
               
-              # Run tests
+              # Setup vcpkg
+              echo 'Setting up vcpkg...'
+              export VCPKG_TOOLCHAIN_PATH=\$(pwd)/duckdb/scripts/vcpkg_bootstrap.sh
+              
+              # Configure build
+              echo 'Configuring build...'
+              make configure
+              
+              # Build extension
+              echo 'Building extension...'
+              make release
+              
+              # Run tests on all architectures (matching macOS behavior)
               echo 'Running tests...'
               make test
               
-              # Build release version
-              echo 'Building release version...'
-              make release
-              
-              # Copy artifacts to expected locations
+              # Copy artifacts with standard naming
               mkdir -p /workspace/build/extension_artifacts
-              cp build/release/*.duckdb_extension /workspace/build/extension_artifacts/ || true
-              cp build/release/extension/*/*.duckdb_extension /workspace/build/extension_artifacts/ || true
+              find build/release -name '*.duckdb_extension' -exec cp {} /workspace/build/extension_artifacts/ \;
               
               echo 'Build completed successfully'
             "
@@ -70,7 +107,7 @@ jobs:
       - name: Deploy
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.duckdb_arch }}-extensions
+          name: ${{ inputs.extension_name }}-${{ inputs.duckdb_version }}-extension-${{ matrix.duckdb_arch }}
           path: |
             build/extension_artifacts/*.duckdb_extension
           if-no-files-found: error
@@ -79,7 +116,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.duckdb_arch }}-test-results
+          name: ${{ inputs.extension_name }}-${{ inputs.duckdb_version }}-test-results-${{ matrix.duckdb_arch }}
           path: |
             build/debug/test/unittest
+            build/release/test/unittest
           if-no-files-found: ignore

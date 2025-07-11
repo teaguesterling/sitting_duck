@@ -24,6 +24,11 @@ jobs:
     needs: build-docker-images
     if: needs.build-docker-images.result == 'success'
     uses: ./.github/workflows/custom-distribution.yml
+    with:
+      duckdb_version: main
+      ci_tools_version: main
+      extension_name: sitting_duck
+      extra_toolchains: rust
     permissions:
       contents: read
       packages: read
