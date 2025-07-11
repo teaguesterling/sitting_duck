@@ -13,7 +13,8 @@ RUN apk add --no-cache \
     bash \
     build-base \
     python3 \
-    py3-pip
+    py3-pip \
+    gcompat
 
 # Install the AWS cli (use pip version for Alpine/musl compatibility)
 RUN pip3 --version
@@ -24,9 +25,11 @@ RUN aws --version
 RUN apk add --no-cache nodejs npm
 RUN node --version && npm --version
 
-# Install tree-sitter CLI globally
-RUN npm install -g tree-sitter-cli
-RUN tree-sitter --version
+# Install tree-sitter CLI globally (with verbose output for debugging)
+RUN npm install -g tree-sitter-cli --verbose
+RUN which tree-sitter || echo "tree-sitter not found in PATH"
+RUN ls -la /usr/local/bin/ | grep tree || echo "tree-sitter not in /usr/local/bin"
+RUN tree-sitter --version || echo "tree-sitter command failed"
 
 # Setup VCPKG in a mounted volume TODO: figure out how to cache this
 ARG vcpkg_url
