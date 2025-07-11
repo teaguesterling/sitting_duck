@@ -28,8 +28,12 @@ RUN aws --version
 RUN curl -fsSL https://nodejs.org/dist/v20.11.0/node-v20.11.0-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1
 RUN node --version && npm --version
 
-# Install tree-sitter CLI globally
-RUN npm install -g tree-sitter-cli
+# Install Rust and Cargo for building tree-sitter CLI from source
+RUN yum install -y rust cargo
+
+# Build tree-sitter CLI from source (more reliable than npm version)
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN cargo install tree-sitter-cli --locked
 RUN tree-sitter --version
 
 # Setup VCPKG in a mounted volume TODO: figure out how to cache this
