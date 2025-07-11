@@ -29,7 +29,10 @@ RUN node --version && npm --version
 RUN npm install -g tree-sitter-cli --verbose
 RUN which tree-sitter || echo "tree-sitter not found in PATH"
 RUN ls -la /usr/local/bin/ | grep tree || echo "tree-sitter not in /usr/local/bin"
-RUN tree-sitter --version || echo "tree-sitter command failed"
+RUN ls -la /usr/local/lib/node_modules/tree-sitter-cli/bin/ || echo "tree-sitter bin dir not found"
+RUN /usr/local/lib/node_modules/tree-sitter-cli/bin/tree-sitter --version || echo "direct tree-sitter call failed"
+RUN ln -sf /usr/local/lib/node_modules/tree-sitter-cli/bin/tree-sitter /usr/local/bin/tree-sitter || echo "symlink failed"
+RUN tree-sitter --version || echo "tree-sitter command still failed"
 
 # Setup VCPKG in a mounted volume TODO: figure out how to cache this
 ARG vcpkg_url
