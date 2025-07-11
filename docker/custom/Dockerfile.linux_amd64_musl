@@ -15,10 +15,8 @@ RUN apk add --no-cache \
     python3 \
     py3-pip
 
-# Install the AWS cli
-RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.22.35.zip" -o "awscliv2.zip"
-RUN unzip -q awscliv2.zip
-RUN ./aws/install
+# Install the AWS cli (use pip version for Alpine/musl compatibility)
+RUN pip3 install awscli==1.32.70
 RUN aws --version
 
 # Install Node.js and npm
