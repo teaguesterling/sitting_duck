@@ -15,7 +15,7 @@ jobs:
   build-docker-images:
     name: Build Custom Docker Images
     uses: ./.github/workflows/build-custom-docker.yml
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       packages: write
