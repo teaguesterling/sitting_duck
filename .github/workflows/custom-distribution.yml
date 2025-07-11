@@ -27,22 +27,7 @@ jobs:
         id: set-matrix
         run: |
           # Simplified matrix for our custom build
-          echo 'linux_matrix={
-            "include": [
-              {
-                "duckdb_arch": "linux_amd64",
-                "runner": "ubuntu-24.04",
-                "vcpkg_target_triplet": "x64-linux-release",
-                "vcpkg_host_triplet": "x64-linux-release"
-              },
-              {
-                "duckdb_arch": "linux_amd64_musl",
-                "runner": "ubuntu-24.04",
-                "vcpkg_target_triplet": "x64-linux-release", 
-                "vcpkg_host_triplet": "x64-linux-release"
-              }
-            ]
-          }' >> $GITHUB_OUTPUT
+          echo 'linux_matrix={"include":[{"duckdb_arch":"linux_amd64","runner":"ubuntu-24.04","vcpkg_target_triplet":"x64-linux-release","vcpkg_host_triplet":"x64-linux-release"},{"duckdb_arch":"linux_amd64_musl","runner":"ubuntu-24.04","vcpkg_target_triplet":"x64-linux-release","vcpkg_host_triplet":"x64-linux-release"}]}' >> $GITHUB_OUTPUT
 
   linux:
     name: Linux
