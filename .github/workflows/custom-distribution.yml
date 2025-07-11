@@ -63,9 +63,12 @@ jobs:
 
       - name: Build extension (using custom Docker image)
         run: |
+          # Create ccache directory if it doesn't exist
+          mkdir -p ~/.ccache
+          
           docker run --rm \
             -v $(pwd):/duckdb_build_dir \
-            -v ${{ env.CCACHE_DIR }}:/ccache_dir \
+            -v ~/.ccache:/ccache_dir \
             -e CCACHE_DIR=/ccache_dir \
             -e VCPKG_TOOLCHAIN_PATH=/vcpkg/scripts/buildsystems/vcpkg.cmake \
             -e VCPKG_TARGET_TRIPLET=${{ matrix.vcpkg_target_triplet }} \

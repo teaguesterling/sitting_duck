@@ -30,13 +30,12 @@ jobs:
       packages: read
 
   # Keep fallback to standard pipeline for non-Linux platforms
-  # Temporarily disabled to focus on Linux builds
-  # duckdb-fallback-build:
-  #   name: Build extension binaries (fallback)
-  #   uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
-  #   with:
-  #     duckdb_version: main
-  #     ci_tools_version: main
-  #     extension_name: sitting_duck
-  #     extra_toolchains: rust
-  #     exclude_archs: "linux_amd64;linux_arm64;linux_amd64_musl"
+  duckdb-fallback-build:
+    name: Build extension binaries (fallback)
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
+    with:
+      duckdb_version: main
+      ci_tools_version: main
+      extension_name: sitting_duck
+      extra_toolchains: rust
+      exclude_archs: "linux_amd64;linux_arm64;linux_amd64_musl"
