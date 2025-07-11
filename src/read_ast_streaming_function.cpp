@@ -656,10 +656,16 @@ static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadAST
             continue;
         }
         
-        // Use flat projection to populate individual columns
+        // AGENT J FIX: Call ProjectToDynamicTable once per result, let it process multiple nodes
+        // This function will process nodes starting from current_batch_row_index and increment output_index
         UnifiedASTBackend::ProjectToDynamicTable(current_result, output, global_state.current_batch_row_index, output_index, global_state.extraction_config);
         
-        global_state.current_batch_row_index++;
+        // AGENT J FIX: Don't increment manually - ProjectToDynamicTable handles row advancement
+        // If ProjectToDynamicTable processed all remaining nodes, move to next result
+        if (global_state.current_batch_row_index >= current_result.nodes.size()) {
+            global_state.current_batch_result_index++;
+            global_state.current_batch_row_index = 0;
+        }
     }
     
     // Mark as exhausted when all results have been streamed

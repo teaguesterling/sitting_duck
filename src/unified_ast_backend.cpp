@@ -717,8 +717,6 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
     
     // Source columns based on config.source (AGENT J FIX: Track indices)
     idx_t file_path_col = 0, language_col = 0, start_line_col = 0, end_line_col = 0, start_column_col = 0, end_column_col = 0;
-    string_t* file_path_vec = nullptr;
-    string_t* language_vec = nullptr;
     uint32_t* start_line_vec = nullptr;
     uint32_t* end_line_vec = nullptr;
     uint32_t* start_column_vec = nullptr;
@@ -727,8 +725,7 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
     if (config.source != SourceLevel::NONE) {
         file_path_col = col_idx++;
         language_col = col_idx++;
-        file_path_vec = FlatVector::GetData<string_t>(output.data[file_path_col]);
-        language_vec = FlatVector::GetData<string_t>(output.data[language_col]);
+        // AGENT J FIX: Don't get FlatVector pointers for file_path and language - they'll be constant vectors
         
         if (config.source >= SourceLevel::LINES_ONLY) {
             start_line_col = col_idx++;
@@ -784,39 +781,45 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
         peek_validity = &FlatVector::Validity(output.data[peek_col]);
     }
     
+    // AGENT J FIX: Set constant vectors for file_path and language (once per result, not per node)
+    if (config.source != SourceLevel::NONE && current_row == 0) {
+        // Set file_path and language as constant vectors for the entire result
+        if (result.source.file_path != "<inline>") {
+            Value file_path_value(result.source.file_path);
+            output.data[file_path_col].Reference(file_path_value);
+        }
+        
+        Value language_value(result.source.language);
+        output.data[language_col].Reference(language_value);
+    }
+    
     // Process nodes
     for (idx_t i = current_row; i < result.nodes.size() && count < chunk_size; i++) {
         const auto& node = result.nodes[i];
         
         // Core columns (always present) - USE TRACKED INDICES (AGENT J FIX)
         node_id_vec[output_index + count] = node.node_id;
-        type_vec[output_index + count] = StringVector::AddString(output.data[type_col], node.type.raw);
+        // AGENT J FIX: Defensive copy to prevent tree-sitter memory corruption
+        std::string safe_type = node.type.raw;
+        type_vec[output_index + count] = StringVector::AddString(output.data[type_col], safe_type);
         
         // Context columns
         if (config.context != ContextLevel::NONE) {
             if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
-                semantic_type_vec[output_index + count] = node.semantic_type;
-                flags_vec[output_index + count] = node.universal_flags;
+                semantic_type_vec[output_index + count] = node.context.normalized.semantic_type;
+                flags_vec[output_index + count] = node.context.normalized.universal_flags;
             }
             if (config.context >= ContextLevel::NORMALIZED) {
-                // USE TRACKED INDEX (AGENT J FIX) 
-                name_vec[output_index + count] = StringVector::AddString(output.data[name_col], node.name.raw);
+                // AGENT J FIX: Defensive copy to prevent tree-sitter memory corruption
+                std::string safe_name = node.context.name;
+                name_vec[output_index + count] = StringVector::AddString(output.data[name_col], safe_name);
             }
         }
         
         // Source columns - USE TRACKED INDICES (AGENT J FIX)
         if (config.source != SourceLevel::NONE) {
-            if (result.source.file_path == "<inline>") {
-                // For parse_ast, set file_path to NULL when source='none'
-                if (config.source == SourceLevel::PATH) {
-                    FlatVector::SetNull(output.data[file_path_col], output_index + count, true);
-                } else {
-                    file_path_vec[output_index + count] = StringVector::AddString(output.data[file_path_col], result.source.file_path);
-                }
-            } else {
-                file_path_vec[output_index + count] = StringVector::AddString(output.data[file_path_col], result.source.file_path);
-            }
-            language_vec[output_index + count] = StringVector::AddString(output.data[language_col], result.source.language);
+            // AGENT J FIX: file_path and language are now set as constant vectors above
+            // Only handle per-node location data here
             
             if (config.source >= SourceLevel::LINES_ONLY) {
                 start_line_vec[output_index + count] = node.file_position.start_line;
@@ -852,7 +855,9 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
             if (node.peek.empty()) {
                 peek_validity->SetInvalid(output_index + count);
             } else {
-                peek_vec[output_index + count] = StringVector::AddString(output.data[peek_col], node.peek);
+                // AGENT J FIX: Defensive copy to prevent tree-sitter memory corruption
+                std::string safe_peek = node.peek;
+                peek_vec[output_index + count] = StringVector::AddString(output.data[peek_col], safe_peek);
             }
         }
         
