@@ -3,13 +3,9 @@ name: Custom Extension Distribution Pipeline
 on:
   workflow_call:
   workflow_dispatch:
-  push:
-    branches: [main]
-  pull_request:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.head_ref || '' }}-${{ github.base_ref || '' }}-${{ github.ref != 'refs/heads/main' && github.sha || '' }}
-  cancel-in-progress: true
+# No concurrency control needed for called workflows - 
+# concurrency is controlled by the calling workflow
 
 env:
   REGISTRY: ghcr.io
