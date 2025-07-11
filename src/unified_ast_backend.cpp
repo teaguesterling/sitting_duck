@@ -688,26 +688,35 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
     idx_t count = 0;
     idx_t col_idx = 0;
     
-    // Get vectors for core columns (always present)
-    auto* node_id_vec = FlatVector::GetData<int64_t>(output.data[col_idx++]);
-    auto* type_vec = FlatVector::GetData<string_t>(output.data[col_idx++]);
+    // Track column indices for consistent access (AGENT J FIX)
+    idx_t node_id_col = col_idx++;
+    idx_t type_col = col_idx++;
     
-    // Context columns based on config.context
+    // Get vectors for core columns (always present)
+    auto* node_id_vec = FlatVector::GetData<int64_t>(output.data[node_id_col]);
+    auto* type_vec = FlatVector::GetData<string_t>(output.data[type_col]);
+    
+    // Context columns based on config.context (AGENT J FIX: Track indices)
+    idx_t semantic_type_col = 0, flags_col = 0, name_col = 0;
     uint8_t* semantic_type_vec = nullptr;
     uint8_t* flags_vec = nullptr;
     string_t* name_vec = nullptr;
     
     if (config.context != ContextLevel::NONE) {
         if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
-            semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[col_idx++]);
-            flags_vec = FlatVector::GetData<uint8_t>(output.data[col_idx++]);
+            semantic_type_col = col_idx++;
+            flags_col = col_idx++;
+            semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[semantic_type_col]);
+            flags_vec = FlatVector::GetData<uint8_t>(output.data[flags_col]);
         }
         if (config.context >= ContextLevel::NORMALIZED) {
-            name_vec = FlatVector::GetData<string_t>(output.data[col_idx++]);
+            name_col = col_idx++;
+            name_vec = FlatVector::GetData<string_t>(output.data[name_col]);
         }
     }
     
-    // Source columns based on config.source
+    // Source columns based on config.source (AGENT J FIX: Track indices)
+    idx_t file_path_col = 0, language_col = 0, start_line_col = 0, end_line_col = 0, start_column_col = 0, end_column_col = 0;
     string_t* file_path_vec = nullptr;
     string_t* language_vec = nullptr;
     uint32_t* start_line_vec = nullptr;
@@ -716,21 +725,28 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
     uint32_t* end_column_vec = nullptr;
     
     if (config.source != SourceLevel::NONE) {
-        file_path_vec = FlatVector::GetData<string_t>(output.data[col_idx++]);
-        language_vec = FlatVector::GetData<string_t>(output.data[col_idx++]);
+        file_path_col = col_idx++;
+        language_col = col_idx++;
+        file_path_vec = FlatVector::GetData<string_t>(output.data[file_path_col]);
+        language_vec = FlatVector::GetData<string_t>(output.data[language_col]);
         
         if (config.source >= SourceLevel::LINES_ONLY) {
-            start_line_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
-            end_line_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
+            start_line_col = col_idx++;
+            end_line_col = col_idx++;
+            start_line_vec = FlatVector::GetData<uint32_t>(output.data[start_line_col]);
+            end_line_vec = FlatVector::GetData<uint32_t>(output.data[end_line_col]);
         }
         
         if (config.source >= SourceLevel::FULL) {
-            start_column_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
-            end_column_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
+            start_column_col = col_idx++;
+            end_column_col = col_idx++;
+            start_column_vec = FlatVector::GetData<uint32_t>(output.data[start_column_col]);
+            end_column_vec = FlatVector::GetData<uint32_t>(output.data[end_column_col]);
         }
     }
     
-    // Structure columns based on config.structure
+    // Structure columns based on config.structure (AGENT J FIX: Track indices)
+    idx_t parent_id_col = 0, depth_col = 0, sibling_index_col = 0, children_count_col = 0, descendant_count_col = 0;
     int64_t* parent_id_vec = nullptr;
     uint32_t* depth_vec = nullptr;
     uint32_t* sibling_index_vec = nullptr;
@@ -740,34 +756,41 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
     
     if (config.structure != StructureLevel::NONE) {
         if (config.structure >= StructureLevel::MINIMAL) {
-            parent_id_vec = FlatVector::GetData<int64_t>(output.data[col_idx]);
-            parent_validity = &FlatVector::Validity(output.data[col_idx++]);
-            depth_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
+            parent_id_col = col_idx++;
+            depth_col = col_idx++;
+            parent_id_vec = FlatVector::GetData<int64_t>(output.data[parent_id_col]);
+            parent_validity = &FlatVector::Validity(output.data[parent_id_col]);
+            depth_vec = FlatVector::GetData<uint32_t>(output.data[depth_col]);
         }
         
         if (config.structure >= StructureLevel::FULL) {
-            sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
-            children_count_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
-            descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[col_idx++]);
+            sibling_index_col = col_idx++;
+            children_count_col = col_idx++;
+            descendant_count_col = col_idx++;
+            sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[sibling_index_col]);
+            children_count_vec = FlatVector::GetData<uint32_t>(output.data[children_count_col]);
+            descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[descendant_count_col]);
         }
     }
     
-    // Peek column based on config.peek
+    // Peek column based on config.peek (AGENT J FIX: Track index)
+    idx_t peek_col = 0;
     string_t* peek_vec = nullptr;
     ValidityMask* peek_validity = nullptr;
     
     if (config.peek != PeekLevel::NONE) {
-        peek_vec = FlatVector::GetData<string_t>(output.data[col_idx]);
-        peek_validity = &FlatVector::Validity(output.data[col_idx++]);
+        peek_col = col_idx++;
+        peek_vec = FlatVector::GetData<string_t>(output.data[peek_col]);
+        peek_validity = &FlatVector::Validity(output.data[peek_col]);
     }
     
     // Process nodes
     for (idx_t i = current_row; i < result.nodes.size() && count < chunk_size; i++) {
         const auto& node = result.nodes[i];
         
-        // Core columns (always present)
+        // Core columns (always present) - USE TRACKED INDICES (AGENT J FIX)
         node_id_vec[output_index + count] = node.node_id;
-        type_vec[output_index + count] = StringVector::AddString(output.data[1], node.type.raw);
+        type_vec[output_index + count] = StringVector::AddString(output.data[type_col], node.type.raw);
         
         // Context columns
         if (config.context != ContextLevel::NONE) {
@@ -776,27 +799,13 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
                 flags_vec[output_index + count] = node.universal_flags;
             }
             if (config.context >= ContextLevel::NORMALIZED) {
-                // Find the name column index
-                idx_t name_col = 2; // Start after node_id and type
-                if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
-                    name_col += 2; // Skip semantic_type and flags
-                }
+                // USE TRACKED INDEX (AGENT J FIX) 
                 name_vec[output_index + count] = StringVector::AddString(output.data[name_col], node.name.raw);
             }
         }
         
-        // Source columns
+        // Source columns - USE TRACKED INDICES (AGENT J FIX)
         if (config.source != SourceLevel::NONE) {
-            // Calculate file_path and language column indices
-            idx_t file_path_col = 2; // Start after node_id and type
-            if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
-                file_path_col += 2; // Skip semantic_type and flags
-            }
-            if (config.context >= ContextLevel::NORMALIZED) {
-                file_path_col += 1; // Skip name
-            }
-            idx_t language_col = file_path_col + 1;
-            
             if (result.source.file_path == "<inline>") {
                 // For parse_ast, set file_path to NULL when source='none'
                 if (config.source == SourceLevel::PATH) {
@@ -838,11 +847,8 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
             }
         }
         
-        // Peek column
+        // Peek column - USE TRACKED INDEX (AGENT J FIX)
         if (config.peek != PeekLevel::NONE) {
-            // Calculate peek column index (last column)
-            idx_t peek_col = output.ColumnCount() - 1;
-            
             if (node.peek.empty()) {
                 peek_validity->SetInvalid(output_index + count);
             } else {
