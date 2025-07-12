@@ -152,6 +152,11 @@ public:
     // Conversion helpers
     static void ProjectToTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index);
     static void ProjectToDynamicTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index, const ExtractionConfig& config);
+    
+    // PHASE 1: Safe minimal projection (node_id, type only) - DIRECT FIELD ACCESS
+    static void SafeProjectMinimal(const vector<ASTNode>& nodes, DataChunk& output, 
+                                  idx_t& current_row, idx_t& output_index);
+    
     static Value CreateASTStruct(const ASTResult& result);
     static Value CreateASTStructValue(const ASTResult& result); // For scalar functions
     
