@@ -85,7 +85,7 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
             
             // Basic information - use node_index as node_id
             ast_node.node_id = entry.node_index;
-            ast_node.type.raw = ts_node_type(entry.node);
+            ast_node.type.raw = string(ts_node_type(entry.node));
             
             // Position information -> NEW STRUCTURED FIELDS
             // Only populate source location fields based on config.source level

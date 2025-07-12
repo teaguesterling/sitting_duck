@@ -109,8 +109,7 @@ ExtractionConfig ParseExtractionConfig(const string& context_str,
     } else if (context_lower == "native") {
         config.context = ContextLevel::NATIVE;
     } else {
-        // Default to normalized for invalid input
-        config.context = ContextLevel::NORMALIZED;
+        throw InvalidInputException("Invalid context parameter '%s'. Valid values are: 'none', 'node_types_only', 'normalized', 'native'", context_str);
     }
     
     // Parse source level
@@ -126,8 +125,7 @@ ExtractionConfig ParseExtractionConfig(const string& context_str,
     } else if (source_lower == "full") {
         config.source = SourceLevel::FULL;
     } else {
-        // Default to lines for invalid input
-        config.source = SourceLevel::LINES;
+        throw InvalidInputException("Invalid source parameter '%s'. Valid values are: 'none', 'path', 'lines_only', 'lines', 'full'", source_str);
     }
     
     // Parse structure level
@@ -139,8 +137,7 @@ ExtractionConfig ParseExtractionConfig(const string& context_str,
     } else if (structure_lower == "full") {
         config.structure = StructureLevel::FULL;
     } else {
-        // Default to full for invalid input
-        config.structure = StructureLevel::FULL;
+        throw InvalidInputException("Invalid structure parameter '%s'. Valid values are: 'none', 'minimal', 'full'", structure_str);
     }
     
     // Parse peek level  
@@ -162,12 +159,10 @@ ExtractionConfig ParseExtractionConfig(const string& context_str,
                 config.peek = PeekLevel::CUSTOM;
                 config.peek_size = size;
             } else {
-                // Default to smart for negative values
-                config.peek = PeekLevel::SMART;
+                throw InvalidInputException("Invalid peek size '%s'. Numeric peek size must be non-negative", peek_str);
             }
         } catch (...) {
-            // Default to smart for invalid input
-            config.peek = PeekLevel::SMART;
+            throw InvalidInputException("Invalid peek parameter '%s'. Valid values are: 'none', 'smart', 'full', or a numeric size", peek_str);
         }
     }
     
@@ -452,6 +447,13 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
         if (config.context >= ContextLevel::NORMALIZED) {
             schema.push_back(LogicalType::VARCHAR);   // name
         }
+        if (config.context >= ContextLevel::NATIVE) {
+            schema.push_back(LogicalType::VARCHAR);                     // signature_type
+            schema.push_back(LogicalType::LIST(LogicalType::VARCHAR));  // parameters (array of strings)
+            schema.push_back(LogicalType::LIST(LogicalType::VARCHAR));  // modifiers (array of strings)  
+            schema.push_back(LogicalType::VARCHAR);                     // annotations
+            schema.push_back(LogicalType::VARCHAR);                     // qualified_name
+        }
     }
     
     // Conditionally include source fields
@@ -507,6 +509,13 @@ vector<string> UnifiedASTBackend::GetFlatDynamicTableColumnNames(const Extractio
         }
         if (config.context >= ContextLevel::NORMALIZED) {
             names.push_back("name");
+        }
+        if (config.context >= ContextLevel::NATIVE) {
+            names.push_back("signature_type");
+            names.push_back("parameters");
+            names.push_back("modifiers");
+            names.push_back("annotations");
+            names.push_back("qualified_name");
         }
     }
     
@@ -635,12 +644,16 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult& result, DataChunk& outpu
         
         // Basic fields
         node_id_vec[output_index + count] = node.node_id;
-        type_vec[output_index + count] = StringVector::AddString(output.data[1], node.type.raw);
+        // AGENT J FIX: Ensure string is properly copied to avoid dangling pointers
+        string type_copy = string(node.type.raw.c_str());
+        type_vec[output_index + count] = StringVector::AddString(output.data[1], type_copy);
         
         if (node.name.raw.empty()) {
             name_validity.SetInvalid(output_index + count);
         } else {
-            name_vec[output_index + count] = StringVector::AddString(output.data[2], node.name.raw);
+            // AGENT J FIX: Ensure string is properly copied to avoid dangling pointers
+            string name_copy = string(node.name.raw.c_str());
+            name_vec[output_index + count] = StringVector::AddString(output.data[2], name_copy);
         }
         
         // Now that we process each file separately, each result has the correct file_path
@@ -715,8 +728,28 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
         }
     }
     
+    // Native context columns based on config.context
+    idx_t signature_type_col = 0, parameters_col = 0, modifiers_col = 0, annotations_col = 0, qualified_name_col = 0;
+    string_t* signature_type_vec = nullptr;
+    string_t* annotations_vec = nullptr;
+    string_t* qualified_name_vec = nullptr;
+    
+    if (config.context >= ContextLevel::NATIVE) {
+        signature_type_col = col_idx++;
+        parameters_col = col_idx++;
+        modifiers_col = col_idx++;
+        annotations_col = col_idx++;
+        qualified_name_col = col_idx++;
+        signature_type_vec = FlatVector::GetData<string_t>(output.data[signature_type_col]);
+        annotations_vec = FlatVector::GetData<string_t>(output.data[annotations_col]);
+        qualified_name_vec = FlatVector::GetData<string_t>(output.data[qualified_name_col]);
+        // Note: parameters and modifiers columns are LIST types, handled separately
+    }
+    
     // Source columns based on config.source (AGENT J FIX: Track indices)
     idx_t file_path_col = 0, language_col = 0, start_line_col = 0, end_line_col = 0, start_column_col = 0, end_column_col = 0;
+    string_t* file_path_vec = nullptr;
+    string_t* language_vec = nullptr;
     uint32_t* start_line_vec = nullptr;
     uint32_t* end_line_vec = nullptr;
     uint32_t* start_column_vec = nullptr;
@@ -725,7 +758,8 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
     if (config.source != SourceLevel::NONE) {
         file_path_col = col_idx++;
         language_col = col_idx++;
-        // AGENT J FIX: Don't get FlatVector pointers for file_path and language - they'll be constant vectors
+        file_path_vec = FlatVector::GetData<string_t>(output.data[file_path_col]);
+        language_vec = FlatVector::GetData<string_t>(output.data[language_col]);
         
         if (config.source >= SourceLevel::LINES_ONLY) {
             start_line_col = col_idx++;
@@ -781,17 +815,8 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
         peek_validity = &FlatVector::Validity(output.data[peek_col]);
     }
     
-    // AGENT J FIX: Set constant vectors for file_path and language (once per result, not per node)
-    if (config.source != SourceLevel::NONE && current_row == 0) {
-        // Set file_path and language as constant vectors for the entire result
-        if (result.source.file_path != "<inline>") {
-            Value file_path_value(result.source.file_path);
-            output.data[file_path_col].Reference(file_path_value);
-        }
-        
-        Value language_value(result.source.language);
-        output.data[language_col].Reference(language_value);
-    }
+    // Handle file_path and language per row (not as constant vectors)
+    // Constant vectors don't work with multi-file scenarios where different rows have different values
     
     // Process nodes
     for (idx_t i = current_row; i < result.nodes.size() && count < chunk_size; i++) {
@@ -799,9 +824,7 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
         
         // Core columns (always present) - USE TRACKED INDICES (AGENT J FIX)
         node_id_vec[output_index + count] = node.node_id;
-        // AGENT J FIX: Defensive copy to prevent tree-sitter memory corruption
-        std::string safe_type = node.type.raw;
-        type_vec[output_index + count] = StringVector::AddString(output.data[type_col], safe_type);
+        type_vec[output_index + count] = StringVector::AddString(output.data[type_col], node.type.raw);
         
         // Context columns
         if (config.context != ContextLevel::NONE) {
@@ -810,16 +833,39 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
                 flags_vec[output_index + count] = node.context.normalized.universal_flags;
             }
             if (config.context >= ContextLevel::NORMALIZED) {
-                // AGENT J FIX: Defensive copy to prevent tree-sitter memory corruption
-                std::string safe_name = node.context.name;
-                name_vec[output_index + count] = StringVector::AddString(output.data[name_col], safe_name);
+                // AGENT J FIX: Ensure string is properly copied to avoid dangling pointers
+                string name_copy = string(node.context.name.c_str());
+                name_vec[output_index + count] = StringVector::AddString(output.data[name_col], name_copy);
+            }
+            if (config.context >= ContextLevel::NATIVE) {
+                signature_type_vec[output_index + count] = StringVector::AddString(output.data[signature_type_col], node.context.native.signature_type);
+                
+                // Create list of parameter names for parameters column
+                vector<Value> parameter_values;
+                for (const auto& param : node.context.native.parameters) {
+                    parameter_values.push_back(Value(param.name));
+                }
+                Value parameters_list = Value::LIST(LogicalType::VARCHAR, parameter_values);
+                ListVector::PushBack(output.data[parameters_col], parameters_list);
+                
+                // Create list of modifiers for modifiers column  
+                vector<Value> modifier_values;
+                for (const auto& modifier : node.context.native.modifiers) {
+                    modifier_values.push_back(Value(modifier));
+                }
+                Value modifiers_list = Value::LIST(LogicalType::VARCHAR, modifier_values);
+                ListVector::PushBack(output.data[modifiers_col], modifiers_list);
+                
+                annotations_vec[output_index + count] = StringVector::AddString(output.data[annotations_col], node.context.native.annotations);
+                qualified_name_vec[output_index + count] = StringVector::AddString(output.data[qualified_name_col], node.context.native.qualified_name);
             }
         }
         
-        // Source columns - USE TRACKED INDICES (AGENT J FIX)
+        // Source columns - set per row including file_path and language
         if (config.source != SourceLevel::NONE) {
-            // AGENT J FIX: file_path and language are now set as constant vectors above
-            // Only handle per-node location data here
+            // Set file_path and language per row (multi-file scenarios need different values per row)
+            file_path_vec[output_index + count] = StringVector::AddString(output.data[file_path_col], result.source.file_path);
+            language_vec[output_index + count] = StringVector::AddString(output.data[language_col], result.source.language);
             
             if (config.source >= SourceLevel::LINES_ONLY) {
                 start_line_vec[output_index + count] = node.file_position.start_line;
@@ -855,9 +901,7 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
             if (node.peek.empty()) {
                 peek_validity->SetInvalid(output_index + count);
             } else {
-                // AGENT J FIX: Defensive copy to prevent tree-sitter memory corruption
-                std::string safe_peek = node.peek;
-                peek_vec[output_index + count] = StringVector::AddString(output.data[peek_col], safe_peek);
+                peek_vec[output_index + count] = StringVector::AddString(output.data[peek_col], node.peek);
             }
         }
         
@@ -963,7 +1007,9 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult& result, Data
         
         // Core identity
         node_id_vec[row_idx] = node.node_id;
-        type_vec[row_idx] = StringVector::AddString(output.data[1], node.type.raw);
+        // AGENT J FIX: Ensure string is properly copied to avoid dangling pointers
+        string type_copy = string(node.type.raw.c_str());
+        type_vec[row_idx] = StringVector::AddString(output.data[1], type_copy);
         
         // Create source STRUCT (use legacy fields for now)
         child_list_t<Value> source_values;

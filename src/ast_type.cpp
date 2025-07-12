@@ -225,7 +225,7 @@ void ASTType::ParseFile(const string &source_code, TSParser *parser) {
             // Create node
             ASTNode ast_node;
             ast_node.node_id = node_counter++;
-            ast_node.type.raw = ts_node_type(entry.node);
+            ast_node.type.raw = string(ts_node_type(entry.node));
             ast_node.tree_position.parent_index = entry.parent_id;
             ast_node.tree_position.node_depth = entry.depth;
             ast_node.tree_position.sibling_index = entry.sibling_index;
