@@ -29,11 +29,11 @@ Value ASTNode::ToValue() const {
     
     // Tree structure struct
     child_list_t<Value> structure_values;
-    structure_values.emplace_back("parent_id", structure.parent_id < 0 ? Value(LogicalType::BIGINT) : Value::BIGINT(structure.parent_id));
-    structure_values.emplace_back("depth", Value::UINTEGER(structure.depth));
-    structure_values.emplace_back("sibling_index", Value::UINTEGER(structure.sibling_index));
-    structure_values.emplace_back("children_count", Value::UINTEGER(structure.children_count));
-    structure_values.emplace_back("descendant_count", Value::UINTEGER(structure.descendant_count));
+    structure_values.emplace_back("parent_id", parent_id < 0 ? Value(LogicalType::BIGINT) : Value::BIGINT(parent_id));
+    structure_values.emplace_back("depth", Value::UINTEGER(depth));
+    structure_values.emplace_back("sibling_index", Value::UINTEGER(sibling_index));
+    structure_values.emplace_back("children_count", Value::UINTEGER(children_count));
+    structure_values.emplace_back("descendant_count", Value::UINTEGER(descendant_count));
     struct_values.emplace_back("structure", Value::STRUCT(move(structure_values)));
     
     // Context struct with native context
@@ -125,23 +125,23 @@ ASTNode ASTNode::FromValue(const Value &value) {
     
     // File position struct
     auto &file_pos_struct = StructValue::GetChildren(struct_value[3]);
-    node.file_position.start_line = file_pos_struct[0].GetValue<int64_t>();
-    node.file_position.end_line = file_pos_struct[1].GetValue<int64_t>();
-    node.file_position.start_column = file_pos_struct[2].GetValue<uint16_t>();
-    node.file_position.end_column = file_pos_struct[3].GetValue<uint16_t>();
+    node.start_line = file_pos_struct[0].GetValue<int64_t>();
+    node.end_line = file_pos_struct[1].GetValue<int64_t>();
+    node.start_column = file_pos_struct[2].GetValue<uint16_t>();
+    node.end_column = file_pos_struct[3].GetValue<uint16_t>();
     
     // Tree position struct
     auto &tree_pos_struct = StructValue::GetChildren(struct_value[4]);
-    node.tree_position.node_index = tree_pos_struct[0].GetValue<int64_t>();
-    node.tree_position.parent_index = tree_pos_struct[1].IsNull() ? -1 : tree_pos_struct[1].GetValue<int64_t>();
-    node.tree_position.sibling_index = tree_pos_struct[2].GetValue<uint32_t>();
-    node.tree_position.node_depth = tree_pos_struct[3].GetValue<uint8_t>();
+    node.node_index = tree_pos_struct[0].GetValue<int64_t>();
+    node.parent_index = tree_pos_struct[1].IsNull() ? -1 : tree_pos_struct[1].GetValue<int64_t>();
+    node.legacy_sibling_index = tree_pos_struct[2].GetValue<uint32_t>();
+    node.node_depth = tree_pos_struct[3].GetValue<uint8_t>();
     
     // Subtree info struct
     auto &subtree_struct = StructValue::GetChildren(struct_value[5]);
-    node.subtree.tree_depth = subtree_struct[0].GetValue<uint8_t>();
-    node.subtree.children_count = subtree_struct[1].GetValue<uint16_t>();
-    node.subtree.descendant_count = subtree_struct[2].GetValue<uint16_t>();
+    node.tree_depth = subtree_struct[0].GetValue<uint8_t>();
+    node.legacy_children_count = subtree_struct[1].GetValue<uint16_t>();
+    node.legacy_descendant_count = subtree_struct[2].GetValue<uint16_t>();
     
     // Content preview
     node.peek = struct_value[6].GetValue<string>();
@@ -226,17 +226,17 @@ void ASTType::ParseFile(const string &source_code, TSParser *parser) {
             ASTNode ast_node;
             ast_node.node_id = node_counter++;
             ast_node.type.raw = string(ts_node_type(entry.node));
-            ast_node.tree_position.parent_index = entry.parent_id;
-            ast_node.tree_position.node_depth = entry.depth;
-            ast_node.tree_position.sibling_index = entry.sibling_index;
+            ast_node.parent_index = entry.parent_id;
+            ast_node.node_depth = entry.depth;
+            ast_node.legacy_sibling_index = entry.sibling_index;
             
             // Extract position
             TSPoint start = ts_node_start_point(entry.node);
             TSPoint end = ts_node_end_point(entry.node);
-            ast_node.file_position.start_line = start.row + 1;
-            ast_node.file_position.start_column = start.column + 1;
-            ast_node.file_position.end_line = end.row + 1;
-            ast_node.file_position.end_column = end.column + 1;
+            ast_node.start_line = start.row + 1;
+            ast_node.start_column = start.column + 1;
+            ast_node.end_line = end.row + 1;
+            ast_node.end_column = end.column + 1;
             
             // Extract name using language adapter
             auto& registry = LanguageAdapterRegistry::GetInstance();
@@ -253,8 +253,8 @@ void ASTType::ParseFile(const string &source_code, TSParser *parser) {
             
             // Set children_count directly
             uint32_t child_count = ts_node_child_count(entry.node);
-            ast_node.subtree.children_count = child_count;
-            ast_node.subtree.descendant_count = 0; // Will be calculated in second pass
+            ast_node.legacy_children_count = child_count;
+            ast_node.legacy_descendant_count = 0; // Will be calculated in second pass
             
             nodes.push_back(ast_node);
             
@@ -273,12 +273,12 @@ void ASTType::ParseFile(const string &source_code, TSParser *parser) {
             int64_t current_node_id = nodes[entry.node_index].node_id;
             
             for (const auto &node : nodes) {
-                if (node.tree_position.parent_index == current_node_id) {
-                    descendant_count += 1 + node.subtree.descendant_count;
+                if (node.parent_index == current_node_id) {
+                    descendant_count += 1 + node.legacy_descendant_count;
                 }
             }
             
-            nodes[entry.node_index].subtree.descendant_count = descendant_count;
+            nodes[entry.node_index].legacy_descendant_count = descendant_count;
         }
     }
     
@@ -293,8 +293,8 @@ void ASTType::BuildIndexes() {
         const auto &node = nodes[i];
         node_id_to_index[node.node_id] = i;
         
-        if (node.tree_position.parent_index >= 0) {
-            parent_to_children[node.tree_position.parent_index].push_back(i);
+        if (node.parent_index >= 0) {
+            parent_to_children[node.parent_index].push_back(i);
         }
     }
 }
@@ -332,8 +332,8 @@ unique_ptr<ASTNode> ASTType::GetParent(int64_t node_id) const {
     auto it = node_id_to_index.find(node_id);
     if (it != node_id_to_index.end()) {
         const auto &node = nodes[it->second];
-        if (node.tree_position.parent_index >= 0) {
-            return GetNodeById(node.tree_position.parent_index);
+        if (node.parent_index >= 0) {
+            return GetNodeById(node.parent_index);
         }
     }
     return nullptr;
@@ -342,7 +342,7 @@ unique_ptr<ASTNode> ASTType::GetParent(int64_t node_id) const {
 int32_t ASTType::MaxDepth() const {
     int32_t max_depth = 0;
     for (const auto &node : nodes) {
-        max_depth = std::max(max_depth, static_cast<int32_t>(node.tree_position.node_depth));
+        max_depth = std::max(max_depth, static_cast<int32_t>(node.node_depth));
     }
     return max_depth;
 }
@@ -367,12 +367,12 @@ string ASTType::ToJSON() const {
         if (!node.name.raw.empty()) {
             json << "\"name\":\"" << StringUtil::Replace(node.name.raw, "\"", "\\\"") << "\",";
         }
-        json << "\"start_line\":" << node.file_position.start_line << ",";
-        json << "\"end_line\":" << node.file_position.end_line << ",";
-        if (node.tree_position.parent_index >= 0) {
-            json << "\"parent_id\":" << node.tree_position.parent_index << ",";
+        json << "\"start_line\":" << node.start_line << ",";
+        json << "\"end_line\":" << node.end_line << ",";
+        if (node.parent_index >= 0) {
+            json << "\"parent_id\":" << node.parent_index << ",";
         }
-        json << "\"depth\":" << static_cast<int32_t>(node.tree_position.node_depth);
+        json << "\"depth\":" << static_cast<int32_t>(node.node_depth);
         json << "}";
     }
     

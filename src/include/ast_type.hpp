@@ -170,34 +170,37 @@ struct ASTNameInfo {
     string qualified;  // Fully qualified name (e.g., "MyClass.myMethod")
 };
 
-struct ASTFilePosition {
-    int64_t start_line = 0;
-    int64_t end_line = 0;
-    uint16_t start_column = 0;
-    uint16_t end_column = 0;
-};
-
-struct ASTTreePosition {
-    int64_t node_index = 0;     // Position in depth-first traversal
-    int64_t parent_index = -1;  // Parent's position (-1 for root)
-    uint32_t sibling_index = 0; // Position among siblings
-    uint8_t node_depth = 0;     // Depth from root
-};
-
-struct ASTSubtreeInfo {
-    uint8_t tree_depth = 0;     // Max depth of subtree rooted here
-    uint16_t children_count = 0;
-    uint16_t descendant_count = 0;
-};
-
 struct ASTNode {
     // Core Semantic Identity
     uint64_t node_id = 0;  // Unique identifier for this node
     
-    // PHASE 1: Organized grouped fields (NEW STRUCTURE)
-    // These will replace the legacy fields below in future phases
+    // FLATTENED STRUCTURE: Direct fields instead of nested structs
+    // Tree structure fields (flat)
+    int64_t parent_id = -1;          // Parent node ID
+    uint32_t depth = 0;              // Depth from root
+    uint32_t sibling_index = 0;      // Position among siblings
+    uint32_t children_count = 0;     // Number of direct children
+    uint32_t descendant_count = 0;   // Total descendants (DFS count)
+    
+    // Legacy tree fields (flat) - kept separate for future use
+    int64_t node_index = 0;          // Position in depth-first traversal
+    int64_t parent_index = -1;       // Parent's position (-1 for root)
+    uint32_t legacy_sibling_index = 0; // Position among siblings (legacy)
+    uint8_t node_depth = 0;          // Depth from root (legacy)
+    
+    // Legacy file position fields (flat)
+    int64_t start_line = 0;
+    int64_t end_line = 0;
+    uint16_t start_column = 0;
+    uint16_t end_column = 0;
+    
+    // Legacy subtree fields (flat)
+    uint8_t tree_depth = 0;          // Max depth of subtree rooted here
+    uint16_t legacy_children_count = 0;   // Number of children (legacy)
+    uint16_t legacy_descendant_count = 0; // Total descendants (legacy)
+    
+    // REMAINING GROUPED FIELDS (TO BE FLATTENED IN LATER STEPS)
     SourceLocation source;      // Source location information
-    TreeStructure structure;    // Tree structure information  
     ContextInfo context;        // Semantic context information
     string peek;               // Content preview
     
@@ -205,9 +208,6 @@ struct ASTNode {
     // These remain for now to avoid breaking existing code
     ASTTypeInfo type;
     ASTNameInfo name;
-    ASTFilePosition file_position;
-    ASTTreePosition tree_position;
-    ASTSubtreeInfo subtree;
     
     // Legacy taxonomy fields (BACKWARD COMPATIBILITY)
     uint8_t semantic_type = 0;    // 8-bit encoding: [ss kk tt ll] where:
@@ -232,21 +232,21 @@ struct ASTNode {
     // PHASE 1 TRANSITION: Make legacy fields computed properties
     // These provide backward compatibility by referencing structured fields
     void UpdateComputedLegacyFields() {
-        // Legacy file position references structured source
-        file_position.start_line = static_cast<int64_t>(source.start_line);
-        file_position.end_line = static_cast<int64_t>(source.end_line);
-        file_position.start_column = static_cast<uint16_t>(source.start_column);
-        file_position.end_column = static_cast<uint16_t>(source.end_column);
+        // Copy from source fields to flat legacy file position fields
+        start_line = static_cast<int64_t>(source.start_line);
+        end_line = static_cast<int64_t>(source.end_line);
+        start_column = static_cast<uint16_t>(source.start_column);
+        end_column = static_cast<uint16_t>(source.end_column);
         
-        // Legacy tree position references structured tree
-        tree_position.parent_index = structure.parent_id;
-        tree_position.node_depth = static_cast<uint8_t>(structure.depth);
-        tree_position.sibling_index = structure.sibling_index;
-        tree_position.node_index = static_cast<int64_t>(node_id);
+        // Copy from structure fields to flat legacy tree fields
+        parent_index = parent_id;
+        node_depth = static_cast<uint8_t>(depth);
+        legacy_sibling_index = sibling_index;
+        node_index = static_cast<int64_t>(node_id);
         
-        // Legacy subtree info references structured tree
-        subtree.children_count = static_cast<uint16_t>(structure.children_count);
-        subtree.descendant_count = static_cast<uint16_t>(structure.descendant_count);
+        // Copy from structure fields to flat legacy subtree fields
+        legacy_children_count = static_cast<uint16_t>(children_count);
+        legacy_descendant_count = static_cast<uint16_t>(descendant_count);
         
         // Legacy name and semantic info references structured context
         name.raw = context.name;

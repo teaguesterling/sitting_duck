@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="unittest" errors="0" failures="0" tests="0" hostname="tbd" time="0.000" timestamp="2025-07-11T00:48:13Z">
+    <properties>
+      <property name="filters" value="/mnt/aux-data/teague/Projects/duck_hunt/test/*"/>
+    </properties>
+    <system-out/>
+    <system-err/>
+  </testsuite>
+</testsuites>

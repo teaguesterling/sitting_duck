@@ -39,11 +39,16 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
     result.source.language = language;
     auto start_time = std::chrono::system_clock::now();
     
+    // === TREE-SITTER MEMORY PHASE BEGIN ===
     // Parse the content using the adapter's smart pointer wrapper
     TSTreePtr tree = adapter->ParseContent(content);
     if (!tree) {
         throw InternalException("Failed to parse content");
     }
+    
+    // MEMORY SAFETY: All TSNode objects are lightweight references into tree-sitter memory.
+    // ALL extracted VALUES must be immediately copied when stored in ASTNode fields.
+    // NO TSNode references should escape this function scope.
     
     // Process tree into ASTNodes using DFS ordering with O(1) descendant counting
     TSNode root = ts_tree_root_node(tree.get());
@@ -85,7 +90,10 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
             
             // Basic information - use node_index as node_id
             ast_node.node_id = entry.node_index;
-            ast_node.type.raw = string(ts_node_type(entry.node));
+            
+            // MEMORY SAFETY: Explicit copy of tree-sitter string data
+            const char* ts_type = ts_node_type(entry.node);  // Points to tree-sitter memory
+            ast_node.type.raw = string(ts_type);  // COPY to owned std::string
             
             // Position information -> NEW STRUCTURED FIELDS
             // Only populate source location fields based on config.source level
@@ -120,29 +128,29 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
                 ast_node.source.end_column = 0;
             }
             
-            // Tree structure -> NEW STRUCTURED FIELDS
+            // Tree structure -> FLATTENED FIELDS
             // Only populate structure fields based on config.structure level
             if (config.structure >= StructureLevel::MINIMAL) {
-                ast_node.structure.parent_id = entry.parent_id;
-                ast_node.structure.depth = entry.depth;
-                ast_node.structure.sibling_index = entry.sibling_index;
+                ast_node.parent_id = entry.parent_id;
+                ast_node.depth = entry.depth;
+                ast_node.sibling_index = entry.sibling_index;
                 
                 // Child/descendant counts only available at FULL level
                 if (config.structure >= StructureLevel::FULL) {
                     uint32_t child_count = ts_node_child_count(entry.node);
-                    ast_node.structure.children_count = child_count;
-                    ast_node.structure.descendant_count = 0; // Will be calculated on second visit
+                    ast_node.children_count = child_count;
+                    ast_node.descendant_count = 0; // Will be calculated on second visit
                 } else {
-                    ast_node.structure.children_count = 0;
-                    ast_node.structure.descendant_count = 0;
+                    ast_node.children_count = 0;
+                    ast_node.descendant_count = 0;
                 }
             } else {
                 // No structure info
-                ast_node.structure.parent_id = -1;
-                ast_node.structure.depth = 0;
-                ast_node.structure.sibling_index = 0;
-                ast_node.structure.children_count = 0;
-                ast_node.structure.descendant_count = 0;
+                ast_node.parent_id = -1;
+                ast_node.depth = 0;
+                ast_node.sibling_index = 0;
+                ast_node.children_count = 0;
+                ast_node.descendant_count = 0;
             }
             
             // Store child_count for later use regardless of structure level
@@ -158,10 +166,11 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
             }
             
             // Extract source text (peek) with configurable size and mode
-            uint32_t start_byte = ts_node_start_byte(entry.node);
-            uint32_t end_byte = ts_node_end_byte(entry.node);
+            uint32_t start_byte = ts_node_start_byte(entry.node);  // By-value copy ✅
+            uint32_t end_byte = ts_node_end_byte(entry.node);      // By-value copy ✅
             if (start_byte < content.size() && end_byte <= content.size() && end_byte > start_byte) {
-                string source_text = content.substr(start_byte, end_byte - start_byte);
+                // MEMORY SAFETY: Create owned copy of source text slice
+                string source_text = content.substr(start_byte, end_byte - start_byte);  // COPY ✅
                 
                 // Apply peek configuration and sanitize UTF-8
                 if (config.peek == PeekLevel::NONE || config.peek_size == 0) {
@@ -211,7 +220,7 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
             result.nodes.push_back(ast_node);
             
             // Add children to stack in reverse order for correct processing
-            int64_t current_id = ast_node.tree_position.node_index;
+            int64_t current_id = ast_node.node_index;
             for (int32_t i = child_count - 1; i >= 0; i--) {
                 TSNode child = ts_node_child(entry.node, i);
                 stack.push_back({child, current_id, entry.depth + 1, static_cast<uint32_t>(i), false, 0});
@@ -226,7 +235,7 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
             // Only update if structure level allows it
             if (config.structure >= StructureLevel::FULL) {
                 int32_t descendant_count = result.nodes.size() - entry.node_index - 1;
-                result.nodes[entry.node_index].structure.descendant_count = descendant_count;
+                result.nodes[entry.node_index].descendant_count = descendant_count;
             }
             
             // Update legacy fields after descendant count change
@@ -236,7 +245,10 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
         }
     }
     
-    // Smart pointer automatically cleans up the tree
+    // === TREE-SITTER MEMORY PHASE END ===
+    // Smart pointer automatically cleans up tree-sitter memory here.
+    // After this point, all TSNode references become INVALID.
+    // ASTResult must contain only OWNED, RAII-managed data.
     
     // Set metadata
     result.parse_time = start_time;

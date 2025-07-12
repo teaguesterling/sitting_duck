@@ -186,8 +186,8 @@ ASTResult DuckDBAdapter::ConvertStatementsToAST(const vector<unique_ptr<SQLState
             auto stmt_nodes = ConvertStatement(*stmt, node_counter);
             for (auto& node : stmt_nodes) {
                 // Set parent to program node
-                if (node.structure.parent_id == -1) {
-                    node.structure.parent_id = 1; // program node (id=1)
+                if (node.parent_id == -1) {
+                    node.parent_id = 1; // program node (id=1)
                     node.UpdateComputedLegacyFields();
                 }
                 nodes.push_back(node);
@@ -278,9 +278,9 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectStatement(const SelectStatement& stm
                 
                 // Set parent for all query nodes
                 for (auto& node : query_nodes) {
-                    if (node.structure.parent_id == -1) {
-                        node.structure.parent_id = select_node_id;
-                        node.structure.depth = 2;
+                    if (node.parent_id == -1) {
+                        node.parent_id = select_node_id;
+                        node.depth = 2;
                         node.UpdateComputedLegacyFields();
                     }
                     nodes.push_back(node);
@@ -331,9 +331,9 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectNode(const SelectNode& node, uint32_
             try {
                 auto expr_nodes = ConvertExpression(*expr, node_counter);
                 for (auto& en : expr_nodes) {
-                    if (en.structure.parent_id == -1) {
-                        en.structure.parent_id = list_node.node_id;
-                        en.structure.depth = 4;
+                    if (en.parent_id == -1) {
+                        en.parent_id = list_node.node_id;
+                        en.depth = 4;
                         en.UpdateComputedLegacyFields();
                     }
                     nodes.push_back(en);
@@ -353,9 +353,9 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectNode(const SelectNode& node, uint32_
         try {
             auto from_nodes = ConvertTableRef(*node.from_table, node_counter);
             for (auto& fn : from_nodes) {
-                if (fn.structure.parent_id == -1) {
-                    fn.structure.parent_id = select_node_id;
-                    fn.structure.depth = 3;
+                if (fn.parent_id == -1) {
+                    fn.parent_id = select_node_id;
+                    fn.depth = 3;
                     fn.UpdateComputedLegacyFields();
                 }
                 nodes.push_back(fn);
@@ -379,9 +379,9 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectNode(const SelectNode& node, uint32_
         try {
             auto expr_nodes = ConvertExpression(*node.where_clause, node_counter);
             for (auto& en : expr_nodes) {
-                if (en.structure.parent_id == -1) {
-                    en.structure.parent_id = where_node.node_id;
-                    en.structure.depth = 4;
+                if (en.parent_id == -1) {
+                    en.parent_id = where_node.node_id;
+                    en.depth = 4;
                     en.UpdateComputedLegacyFields();
                 }
                 nodes.push_back(en);
@@ -407,9 +407,9 @@ vector<ASTNode> DuckDBAdapter::ConvertSelectNode(const SelectNode& node, uint32_
             if (expr) {
                 auto group_expr_nodes = ConvertExpression(*expr, node_counter);
                 for (auto& gen : group_expr_nodes) {
-                    if (gen.structure.parent_id == -1) {
-                        gen.structure.parent_id = group_by_node.node_id;
-                        gen.structure.depth = 4;
+                    if (gen.parent_id == -1) {
+                        gen.parent_id = group_by_node.node_id;
+                        gen.depth = 4;
                         gen.UpdateComputedLegacyFields();
                     }
                     nodes.push_back(gen);
@@ -543,8 +543,8 @@ vector<ASTNode> DuckDBAdapter::HandleFunction(const ParsedExpression& expr, uint
             }
             auto arg_nodes = ConvertExpression(*arg, node_counter);
             for (auto& an : arg_nodes) {
-                if (an.structure.parent_id == -1) {
-                    an.structure.parent_id = node.node_id;
+                if (an.parent_id == -1) {
+                    an.parent_id = node.node_id;
                     an.UpdateComputedLegacyFields();
                 }
                 nodes.push_back(an);
@@ -568,8 +568,8 @@ vector<ASTNode> DuckDBAdapter::HandleComparison(const ParsedExpression& expr, ui
     if (comp_expr.left) {
         auto left_nodes = ConvertExpression(*comp_expr.left, node_counter);
         for (auto& ln : left_nodes) {
-            if (ln.structure.parent_id == -1) {
-                ln.structure.parent_id = comp_node.node_id;
+            if (ln.parent_id == -1) {
+                ln.parent_id = comp_node.node_id;
                 ln.UpdateComputedLegacyFields();
             }
             nodes.push_back(ln);
@@ -578,8 +578,8 @@ vector<ASTNode> DuckDBAdapter::HandleComparison(const ParsedExpression& expr, ui
     if (comp_expr.right) {
         auto right_nodes = ConvertExpression(*comp_expr.right, node_counter);
         for (auto& rn : right_nodes) {
-            if (rn.structure.parent_id == -1) {
-                rn.structure.parent_id = comp_node.node_id;
+            if (rn.parent_id == -1) {
+                rn.parent_id = comp_node.node_id;
                 rn.UpdateComputedLegacyFields();
             }
             nodes.push_back(rn);
@@ -603,8 +603,8 @@ vector<ASTNode> DuckDBAdapter::HandleConjunction(const ParsedExpression& expr, u
         if (!child) continue;
         auto child_nodes = ConvertExpression(*child, node_counter);
         for (auto& cn : child_nodes) {
-            if (cn.structure.parent_id == -1) {
-                cn.structure.parent_id = conj_node.node_id;
+            if (cn.parent_id == -1) {
+                cn.parent_id = conj_node.node_id;
                 cn.UpdateComputedLegacyFields();
             }
             nodes.push_back(cn);
@@ -752,15 +752,15 @@ vector<ASTNode> DuckDBAdapter::ConvertTableRef(const TableRef& table_ref, uint32
             }
             
             for (auto& ln : left_nodes) {
-                if (ln.structure.parent_id == -1) {
-                    ln.structure.parent_id = node.node_id;
+                if (ln.parent_id == -1) {
+                    ln.parent_id = node.node_id;
                     ln.UpdateComputedLegacyFields();
                 }
                 nodes.push_back(ln);
             }
             for (auto& rn : right_nodes) {
-                if (rn.structure.parent_id == -1) {
-                    rn.structure.parent_id = node.node_id;
+                if (rn.parent_id == -1) {
+                    rn.parent_id = node.node_id;
                     rn.UpdateComputedLegacyFields();
                 }
                 nodes.push_back(rn);
@@ -806,11 +806,11 @@ ASTNode DuckDBAdapter::CreateASTNode(const string& type, const string& name, con
     node.source.end_column = 1;
     
     // Tree structure
-    node.structure.parent_id = parent_id;
-    node.structure.depth = depth;
-    node.structure.sibling_index = 0;
-    node.structure.children_count = 0;
-    node.structure.descendant_count = 0;
+    node.parent_id = parent_id;
+    node.depth = depth;
+    node.sibling_index = 0;
+    node.children_count = 0;
+    node.descendant_count = 0;
     
     // Content preview
     node.peek = value;
@@ -842,7 +842,7 @@ void DuckDBAdapter::UpdateDescendantCounts(vector<ASTNode>& nodes) const {
     std::iota(indices.begin(), indices.end(), 0);
     
     std::sort(indices.begin(), indices.end(), [&nodes](size_t a, size_t b) {
-        return nodes[a].tree_position.node_depth > nodes[b].tree_position.node_depth;
+        return nodes[a].node_depth > nodes[b].node_depth;
     });
     
     // Process nodes in depth order (deepest first)
@@ -852,11 +852,11 @@ void DuckDBAdapter::UpdateDescendantCounts(vector<ASTNode>& nodes) const {
         
         // Count direct children and their descendants
         for (const auto& other : nodes) {
-            if (other.structure.parent_id == static_cast<int64_t>(node.node_id)) {
-                count += 1 + other.structure.descendant_count;
+            if (other.parent_id == static_cast<int64_t>(node.node_id)) {
+                count += 1 + other.descendant_count;
             }
         }
-        node.structure.descendant_count = count;
+        node.descendant_count = count;
         
         // Update legacy fields after descendant count change
         node.UpdateComputedLegacyFields();
@@ -866,7 +866,7 @@ void DuckDBAdapter::UpdateDescendantCounts(vector<ASTNode>& nodes) const {
 uint32_t DuckDBAdapter::CalculateMaxDepth(const vector<ASTNode>& nodes) const {
     uint32_t max_depth = 0;
     for (const auto& node : nodes) {
-        max_depth = std::max(max_depth, static_cast<uint32_t>(node.tree_position.node_depth));
+        max_depth = std::max(max_depth, static_cast<uint32_t>(node.node_depth));
     }
     return max_depth;
 }

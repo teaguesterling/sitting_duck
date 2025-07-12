@@ -659,21 +659,21 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult& result, DataChunk& outpu
         // Now that we process each file separately, each result has the correct file_path
         file_path_vec[output_index + count] = StringVector::AddString(output.data[3], result.source.file_path);
         language_vec[output_index + count] = StringVector::AddString(output.data[4], result.source.language);
-        start_line_vec[output_index + count] = node.file_position.start_line;
-        start_column_vec[output_index + count] = node.file_position.start_column;
-        end_line_vec[output_index + count] = node.file_position.end_line;
-        end_column_vec[output_index + count] = node.file_position.end_column;
+        start_line_vec[output_index + count] = node.start_line;
+        start_column_vec[output_index + count] = node.start_column;
+        end_line_vec[output_index + count] = node.end_line;
+        end_column_vec[output_index + count] = node.end_column;
         
-        if (node.tree_position.parent_index < 0) {
+        if (node.parent_index < 0) {
             parent_validity.SetInvalid(output_index + count);
         } else {
-            parent_id_vec[output_index + count] = node.tree_position.parent_index;
+            parent_id_vec[output_index + count] = node.parent_index;
         }
         
-        depth_vec[output_index + count] = node.tree_position.node_depth;
-        sibling_index_vec[output_index + count] = node.tree_position.sibling_index;
-        children_count_vec[output_index + count] = node.subtree.children_count;
-        descendant_count_vec[output_index + count] = node.subtree.descendant_count;
+        depth_vec[output_index + count] = node.node_depth;
+        sibling_index_vec[output_index + count] = node.legacy_sibling_index;
+        children_count_vec[output_index + count] = node.legacy_children_count;
+        descendant_count_vec[output_index + count] = node.legacy_descendant_count;
         if (node.peek.empty()) {
             peek_validity.SetInvalid(output_index + count);
         } else {
@@ -868,31 +868,31 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
             language_vec[output_index + count] = StringVector::AddString(output.data[language_col], result.source.language);
             
             if (config.source >= SourceLevel::LINES_ONLY) {
-                start_line_vec[output_index + count] = node.file_position.start_line;
-                end_line_vec[output_index + count] = node.file_position.end_line;
+                start_line_vec[output_index + count] = node.start_line;
+                end_line_vec[output_index + count] = node.end_line;
             }
             
             if (config.source >= SourceLevel::FULL) {
-                start_column_vec[output_index + count] = node.file_position.start_column;
-                end_column_vec[output_index + count] = node.file_position.end_column;
+                start_column_vec[output_index + count] = node.start_column;
+                end_column_vec[output_index + count] = node.end_column;
             }
         }
         
         // Structure columns
         if (config.structure != StructureLevel::NONE) {
             if (config.structure >= StructureLevel::MINIMAL) {
-                if (node.tree_position.parent_index < 0) {
+                if (node.parent_index < 0) {
                     parent_validity->SetInvalid(output_index + count);
                 } else {
-                    parent_id_vec[output_index + count] = node.tree_position.parent_index;
+                    parent_id_vec[output_index + count] = node.parent_index;
                 }
-                depth_vec[output_index + count] = node.tree_position.node_depth;
+                depth_vec[output_index + count] = node.node_depth;
             }
             
             if (config.structure >= StructureLevel::FULL) {
-                sibling_index_vec[output_index + count] = node.tree_position.sibling_index;
-                children_count_vec[output_index + count] = node.subtree.children_count;
-                descendant_count_vec[output_index + count] = node.subtree.descendant_count;
+                sibling_index_vec[output_index + count] = node.legacy_sibling_index;
+                children_count_vec[output_index + count] = node.legacy_children_count;
+                descendant_count_vec[output_index + count] = node.legacy_descendant_count;
             }
         }
         
@@ -928,16 +928,16 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult& result) {
         node_children.push_back(make_pair("node_id", Value::BIGINT(node.node_id)));
         node_children.push_back(make_pair("type", Value(node.type.raw)));
         node_children.push_back(make_pair("name", Value(node.name.raw)));
-        node_children.push_back(make_pair("start_line", Value::UINTEGER(node.file_position.start_line)));
-        node_children.push_back(make_pair("end_line", Value::UINTEGER(node.file_position.end_line)));
-        node_children.push_back(make_pair("start_column", Value::UINTEGER(node.file_position.start_column)));
-        node_children.push_back(make_pair("end_column", Value::UINTEGER(node.file_position.end_column)));
-        node_children.push_back(make_pair("parent_id", node.tree_position.parent_index >= 0 ? 
-                                         Value::BIGINT(node.tree_position.parent_index) : Value()));
-        node_children.push_back(make_pair("depth", Value::UINTEGER(node.tree_position.node_depth)));
-        node_children.push_back(make_pair("sibling_index", Value::UINTEGER(node.tree_position.sibling_index)));
-        node_children.push_back(make_pair("children_count", Value::UINTEGER(node.subtree.children_count)));
-        node_children.push_back(make_pair("descendant_count", Value::UINTEGER(node.subtree.descendant_count)));
+        node_children.push_back(make_pair("start_line", Value::UINTEGER(node.start_line)));
+        node_children.push_back(make_pair("end_line", Value::UINTEGER(node.end_line)));
+        node_children.push_back(make_pair("start_column", Value::UINTEGER(node.start_column)));
+        node_children.push_back(make_pair("end_column", Value::UINTEGER(node.end_column)));
+        node_children.push_back(make_pair("parent_id", node.parent_index >= 0 ? 
+                                         Value::BIGINT(node.parent_index) : Value()));
+        node_children.push_back(make_pair("depth", Value::UINTEGER(node.node_depth)));
+        node_children.push_back(make_pair("sibling_index", Value::UINTEGER(node.legacy_sibling_index)));
+        node_children.push_back(make_pair("children_count", Value::UINTEGER(node.legacy_children_count)));
+        node_children.push_back(make_pair("descendant_count", Value::UINTEGER(node.legacy_descendant_count)));
         node_children.push_back(make_pair("peek", Value(node.peek)));
         // Semantic type fields
         node_children.push_back(make_pair("semantic_type", Value::UTINYINT(node.semantic_type)));
@@ -1015,24 +1015,24 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult& result, Data
         child_list_t<Value> source_values;
         source_values.push_back(make_pair("file_path", Value(result.source.file_path)));
         source_values.push_back(make_pair("language", Value(result.source.language)));
-        source_values.push_back(make_pair("start_line", Value::UINTEGER(node.file_position.start_line)));
-        source_values.push_back(make_pair("start_column", Value::UINTEGER(node.file_position.start_column)));
-        source_values.push_back(make_pair("end_line", Value::UINTEGER(node.file_position.end_line)));
-        source_values.push_back(make_pair("end_column", Value::UINTEGER(node.file_position.end_column)));
+        source_values.push_back(make_pair("start_line", Value::UINTEGER(node.start_line)));
+        source_values.push_back(make_pair("start_column", Value::UINTEGER(node.start_column)));
+        source_values.push_back(make_pair("end_line", Value::UINTEGER(node.end_line)));
+        source_values.push_back(make_pair("end_column", Value::UINTEGER(node.end_column)));
         Value source_struct = Value::STRUCT(source_values);
         FlatVector::GetData<Value>(source_vector)[row_idx] = source_struct;
         
         // Create structure STRUCT (use legacy fields for now)
         child_list_t<Value> structure_values;
-        if (node.tree_position.parent_index < 0) {
+        if (node.parent_index < 0) {
             structure_values.push_back(make_pair("parent_id", Value()));  // NULL
         } else {
-            structure_values.push_back(make_pair("parent_id", Value::BIGINT(node.tree_position.parent_index)));
+            structure_values.push_back(make_pair("parent_id", Value::BIGINT(node.parent_index)));
         }
-        structure_values.push_back(make_pair("depth", Value::UINTEGER(node.tree_position.node_depth)));
-        structure_values.push_back(make_pair("sibling_index", Value::UINTEGER(node.tree_position.sibling_index)));
-        structure_values.push_back(make_pair("children_count", Value::UINTEGER(node.subtree.children_count)));
-        structure_values.push_back(make_pair("descendant_count", Value::UINTEGER(node.subtree.descendant_count)));
+        structure_values.push_back(make_pair("depth", Value::UINTEGER(node.node_depth)));
+        structure_values.push_back(make_pair("sibling_index", Value::UINTEGER(node.legacy_sibling_index)));
+        structure_values.push_back(make_pair("children_count", Value::UINTEGER(node.legacy_children_count)));
+        structure_values.push_back(make_pair("descendant_count", Value::UINTEGER(node.legacy_descendant_count)));
         Value structure_struct = Value::STRUCT(structure_values);
         FlatVector::GetData<Value>(structure_vector)[row_idx] = structure_struct;
         
@@ -1138,18 +1138,18 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
         // Source fields - ensure proper string copies
         row_data.file_path = std::string(source_info.file_path);
         row_data.language = std::string(source_info.language);
-        row_data.start_line = node.file_position.start_line;
-        row_data.start_column = node.file_position.start_column;
-        row_data.end_line = node.file_position.end_line;
-        row_data.end_column = node.file_position.end_column;
+        row_data.start_line = node.start_line;
+        row_data.start_column = node.start_column;
+        row_data.end_line = node.end_line;
+        row_data.end_column = node.end_column;
         
         // Structure fields
-        row_data.has_parent = (node.tree_position.parent_index >= 0);
-        row_data.parent_id = node.tree_position.parent_index;
-        row_data.depth = node.tree_position.node_depth;
-        row_data.sibling_index = node.tree_position.sibling_index;
-        row_data.children_count = node.subtree.children_count;
-        row_data.descendant_count = node.subtree.descendant_count;
+        row_data.has_parent = (node.parent_index >= 0);
+        row_data.parent_id = node.parent_index;
+        row_data.depth = node.node_depth;
+        row_data.sibling_index = node.legacy_sibling_index;
+        row_data.children_count = node.legacy_children_count;
+        row_data.descendant_count = node.legacy_descendant_count;
         
         // Context fields - ensure proper string copies
         row_data.has_name = !node.context.name.empty();
@@ -1330,20 +1330,20 @@ Value UnifiedASTBackend::CreateHierarchicalASTStruct(const ASTResult& result) {
         child_list_t<Value> source_children;
         source_children.push_back(make_pair("file_path", Value(result.source.file_path)));
         source_children.push_back(make_pair("language", Value(result.source.language)));
-        source_children.push_back(make_pair("start_line", Value::UINTEGER(node.file_position.start_line)));
-        source_children.push_back(make_pair("start_column", Value::UINTEGER(node.file_position.start_column)));
-        source_children.push_back(make_pair("end_line", Value::UINTEGER(node.file_position.end_line)));
-        source_children.push_back(make_pair("end_column", Value::UINTEGER(node.file_position.end_column)));
+        source_children.push_back(make_pair("start_line", Value::UINTEGER(node.start_line)));
+        source_children.push_back(make_pair("start_column", Value::UINTEGER(node.start_column)));
+        source_children.push_back(make_pair("end_line", Value::UINTEGER(node.end_line)));
+        source_children.push_back(make_pair("end_column", Value::UINTEGER(node.end_column)));
         Value source_value = Value::STRUCT(source_children);
         
         // Tree Structure struct - use legacy fields for now
         child_list_t<Value> structure_children;
-        structure_children.push_back(make_pair("parent_id", node.tree_position.parent_index >= 0 ? 
-                                             Value::BIGINT(node.tree_position.parent_index) : Value()));
-        structure_children.push_back(make_pair("depth", Value::UINTEGER(node.tree_position.node_depth)));
-        structure_children.push_back(make_pair("sibling_index", Value::UINTEGER(node.tree_position.sibling_index)));
-        structure_children.push_back(make_pair("children_count", Value::UINTEGER(node.subtree.children_count)));
-        structure_children.push_back(make_pair("descendant_count", Value::UINTEGER(node.subtree.descendant_count)));
+        structure_children.push_back(make_pair("parent_id", node.parent_index >= 0 ? 
+                                             Value::BIGINT(node.parent_index) : Value()));
+        structure_children.push_back(make_pair("depth", Value::UINTEGER(node.node_depth)));
+        structure_children.push_back(make_pair("sibling_index", Value::UINTEGER(node.legacy_sibling_index)));
+        structure_children.push_back(make_pair("children_count", Value::UINTEGER(node.legacy_children_count)));
+        structure_children.push_back(make_pair("descendant_count", Value::UINTEGER(node.legacy_descendant_count)));
         Value structure_value = Value::STRUCT(structure_children);
         
         // Context Information struct (semantic information only)
