@@ -157,6 +157,11 @@ public:
     static void SafeProjectMinimal(const vector<ASTNode>& nodes, DataChunk& output, 
                                   idx_t& current_row, idx_t& output_index);
     
+    // PHASE 2: Safe projection with structure fields - DIRECT FIELD ACCESS
+    static void SafeProjectWithStructure(const vector<ASTNode>& nodes, DataChunk& output, 
+                                        idx_t& current_row, idx_t& output_index, 
+                                        const ExtractionConfig& config);
+    
     static Value CreateASTStruct(const ASTResult& result);
     static Value CreateASTStructValue(const ASTResult& result); // For scalar functions
     

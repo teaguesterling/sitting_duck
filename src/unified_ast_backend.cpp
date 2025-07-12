@@ -709,6 +709,16 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
         return;
     }
     
+    // PHASE 2: Route to safe structure projection when possible
+    if (config.context == ContextLevel::NONE && 
+        config.source == SourceLevel::NONE && 
+        config.structure != StructureLevel::NONE && 
+        config.peek == PeekLevel::NONE) {
+        // Use safe structure projection - adds integer fields only
+        SafeProjectWithStructure(result.nodes, output, current_row, output_index, config);
+        return;
+    }
+    
     // AGENT J TACTICAL FIX: Reset vector state to prevent multi-file memory corruption
     for (idx_t i = 0; i < output.ColumnCount(); i++) {
         ResetStructVectorState(output.data[i]);
@@ -993,6 +1003,130 @@ void UnifiedASTBackend::SafeProjectMinimal(const vector<ASTNode>& nodes, DataChu
         
         // Safe string assignment with proper heap management
         type_data[output_index + count] = StringVector::AddString(type_vector, safe_type);
+        
+        count++;
+        current_row++; // Advance input node position
+    }
+    
+    // Update output tracking
+    output_index += count;
+}
+
+//==============================================================================
+// PHASE 2: Safe Projection with Structure Fields - MEMORY CORRUPTION FIX
+//==============================================================================
+
+void UnifiedASTBackend::SafeProjectWithStructure(const vector<ASTNode>& nodes, DataChunk& output, 
+                                                idx_t& current_row, idx_t& output_index, 
+                                                const ExtractionConfig& config) {
+    // SAFETY: Explicit bounds checking and direct field access for structure fields
+    // NO ToValue() conversion, NO complex vector manipulation
+    // Handle: node_id, type + structure fields (parent_id, depth, sibling_index, children_count, descendant_count)
+    
+    static const idx_t MAX_SAFE_BATCH_SIZE = STANDARD_VECTOR_SIZE - 16; // Safety margin
+    static const size_t MAX_STRING_LENGTH = 32768; // 32KB limit per string
+    
+    if (current_row >= nodes.size()) {
+        return; // No more nodes to process
+    }
+    
+    // Calculate expected column count based on config
+    idx_t expected_cols = 2; // node_id, type (always present)
+    if (config.structure >= StructureLevel::MINIMAL) {
+        expected_cols += 2; // parent_id, depth
+    }
+    if (config.structure >= StructureLevel::FULL) {
+        expected_cols += 3; // sibling_index, children_count, descendant_count
+    }
+    
+    if (output.ColumnCount() != expected_cols) {
+        throw InternalException("SafeProjectWithStructure column count mismatch: expected " + 
+                              to_string(expected_cols) + ", got " + to_string(output.ColumnCount()));
+    }
+    
+    // Get base columns (always present)
+    auto* node_id_data = FlatVector::GetData<int64_t>(output.data[0]);
+    auto* type_data = FlatVector::GetData<string_t>(output.data[1]);
+    
+    // Structure field pointers (conditional)
+    int64_t* parent_id_data = nullptr;
+    uint32_t* depth_data = nullptr;
+    uint32_t* sibling_index_data = nullptr;
+    uint32_t* children_count_data = nullptr;
+    uint32_t* descendant_count_data = nullptr;
+    ValidityMask* parent_id_validity = nullptr;
+    
+    idx_t col_idx = 2; // Start after node_id, type
+    
+    if (config.structure >= StructureLevel::MINIMAL) {
+        // Validate types
+        if (output.data[col_idx].GetType().id() != LogicalTypeId::BIGINT) {
+            throw InternalException("parent_id column must be BIGINT");
+        }
+        if (output.data[col_idx + 1].GetType().id() != LogicalTypeId::UINTEGER) {
+            throw InternalException("depth column must be UINTEGER");
+        }
+        
+        parent_id_data = FlatVector::GetData<int64_t>(output.data[col_idx]);
+        parent_id_validity = &FlatVector::Validity(output.data[col_idx]);
+        depth_data = FlatVector::GetData<uint32_t>(output.data[col_idx + 1]);
+        col_idx += 2;
+    }
+    
+    if (config.structure >= StructureLevel::FULL) {
+        // Validate types  
+        if (output.data[col_idx].GetType().id() != LogicalTypeId::UINTEGER ||
+            output.data[col_idx + 1].GetType().id() != LogicalTypeId::UINTEGER ||
+            output.data[col_idx + 2].GetType().id() != LogicalTypeId::UINTEGER) {
+            throw InternalException("structure FULL columns must be UINTEGER");
+        }
+        
+        sibling_index_data = FlatVector::GetData<uint32_t>(output.data[col_idx]);
+        children_count_data = FlatVector::GetData<uint32_t>(output.data[col_idx + 1]);
+        descendant_count_data = FlatVector::GetData<uint32_t>(output.data[col_idx + 2]);
+        col_idx += 3;
+    }
+    
+    // Process nodes with strict bounds checking
+    idx_t count = 0;
+    const idx_t chunk_size = STANDARD_VECTOR_SIZE;
+    
+    for (idx_t i = current_row; i < nodes.size() && count < chunk_size; i++) {
+        const auto& node = nodes[i];
+        
+        // Verify output bounds before assignment
+        if (output_index + count >= chunk_size) {
+            break; // Safety exit - output chunk full
+        }
+        
+        // Base columns: node_id, type (DIRECT FIELD ACCESS)
+        node_id_data[output_index + count] = static_cast<int64_t>(node.node_id);
+        
+        string safe_type = node.type_raw;
+        if (safe_type.length() > MAX_STRING_LENGTH) {
+            safe_type = safe_type.substr(0, MAX_STRING_LENGTH);
+        }
+        type_data[output_index + count] = StringVector::AddString(output.data[1], safe_type);
+        
+        // Structure fields (DIRECT FIELD ACCESS - using legacy fields for compatibility)
+        if (config.structure >= StructureLevel::MINIMAL) {
+            // parent_id: use -1 for root nodes, set validity accordingly
+            if (node.parent_index >= 0) {
+                parent_id_data[output_index + count] = node.parent_index;
+            } else {
+                parent_id_validity->SetInvalid(output_index + count);
+            }
+            
+            // depth: direct field access
+            depth_data[output_index + count] = static_cast<uint32_t>(node.node_depth);
+        }
+        
+        if (config.structure >= StructureLevel::FULL) {
+            // Direct field access for structure full fields
+            sibling_index_data[output_index + count] = node.legacy_sibling_index;
+            children_count_data[output_index + count] = static_cast<uint32_t>(node.legacy_children_count);
+            descendant_count_data[output_index + count] = static_cast<uint32_t>(node.legacy_descendant_count);
+        }
         
         count++;
         current_row++; // Advance input node position
