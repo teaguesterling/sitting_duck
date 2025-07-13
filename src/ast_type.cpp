@@ -11,45 +11,38 @@ Value ASTNode::ToValue() const {
     
     child_list_t<Value> struct_values;
     
-    // Core Semantic Identity
+    // FLAT STRUCTURE: All fields as direct struct members (no nesting except native)
     struct_values.emplace_back("node_id", Value::UBIGINT(node_id));
+    struct_values.emplace_back("type", Value(type_raw));
     
-    // HIERARCHICAL STRUCTURE: Raw type (simplified)
-    struct_values.emplace_back("type", Value(type.raw));
+    // Flat source fields
+    struct_values.emplace_back("file_path", file_path.empty() ? Value(LogicalType::VARCHAR) : Value(file_path));
+    struct_values.emplace_back("language", language.empty() ? Value(LogicalType::VARCHAR) : Value(language));
+    struct_values.emplace_back("start_line", Value::UINTEGER(source_start_line));
+    struct_values.emplace_back("start_column", Value::UINTEGER(source_start_column));
+    struct_values.emplace_back("end_line", Value::UINTEGER(source_end_line));
+    struct_values.emplace_back("end_column", Value::UINTEGER(source_end_column));
     
-    // Source location struct
-    child_list_t<Value> source_values;
-    source_values.emplace_back("file_path", source.file_path.empty() ? Value(LogicalType::VARCHAR) : Value(source.file_path));
-    source_values.emplace_back("language", source.language.empty() ? Value(LogicalType::VARCHAR) : Value(source.language));
-    source_values.emplace_back("start_line", Value::UINTEGER(source.start_line));
-    source_values.emplace_back("start_column", Value::UINTEGER(source.start_column));
-    source_values.emplace_back("end_line", Value::UINTEGER(source.end_line));
-    source_values.emplace_back("end_column", Value::UINTEGER(source.end_column));
-    struct_values.emplace_back("source", Value::STRUCT(move(source_values)));
+    // Flat structure fields
+    struct_values.emplace_back("parent_id", parent_id < 0 ? Value(LogicalType::BIGINT) : Value::BIGINT(parent_id));
+    struct_values.emplace_back("depth", Value::UINTEGER(depth));
+    struct_values.emplace_back("sibling_index", Value::UINTEGER(sibling_index));
+    struct_values.emplace_back("children_count", Value::UINTEGER(children_count));
+    struct_values.emplace_back("descendant_count", Value::UINTEGER(descendant_count));
     
-    // Tree structure struct
-    child_list_t<Value> structure_values;
-    structure_values.emplace_back("parent_id", parent_id < 0 ? Value(LogicalType::BIGINT) : Value::BIGINT(parent_id));
-    structure_values.emplace_back("depth", Value::UINTEGER(depth));
-    structure_values.emplace_back("sibling_index", Value::UINTEGER(sibling_index));
-    structure_values.emplace_back("children_count", Value::UINTEGER(children_count));
-    structure_values.emplace_back("descendant_count", Value::UINTEGER(descendant_count));
-    struct_values.emplace_back("structure", Value::STRUCT(move(structure_values)));
-    
-    // Context struct with native context
-    child_list_t<Value> context_values;
-    context_values.emplace_back("name", context.name.empty() ? Value(LogicalType::VARCHAR) : Value(context.name));
-    context_values.emplace_back("semantic_type", Value::UTINYINT(context.normalized.semantic_type));
-    context_values.emplace_back("flags", Value::UTINYINT(context.normalized.universal_flags));
+    // Flat context fields
+    struct_values.emplace_back("name", name_raw.empty() ? Value(LogicalType::VARCHAR) : Value(name_raw));
+    struct_values.emplace_back("semantic_type", Value::UTINYINT(semantic_type));
+    struct_values.emplace_back("flags", Value::UTINYINT(universal_flags));
     
     // Native context struct - properly serialize if available
-    if (context.native_extraction_attempted && !context.native.signature_type.empty()) {
+    if (native_extraction_attempted && !native.signature_type.empty()) {
         child_list_t<Value> native_values;
-        native_values.emplace_back("signature_type", Value(context.native.signature_type));
+        native_values.emplace_back("signature_type", Value(native.signature_type));
         
         // Create parameters list - simplified for now to avoid memory issues
         vector<Value> parameter_values;
-        for (const auto& param : context.native.parameters) {
+        for (const auto& param : native.parameters) {
             child_list_t<Value> param_struct;
             param_struct.emplace_back("name", Value(param.name));
             param_struct.emplace_back("type", Value(param.type));
@@ -70,15 +63,15 @@ Value ASTNode::ToValue() const {
         
         // Create modifiers list
         vector<Value> modifier_values;
-        for (const auto& modifier : context.native.modifiers) {
+        for (const auto& modifier : native.modifiers) {
             modifier_values.push_back(Value(modifier));
         }
         native_values.emplace_back("modifiers", Value::LIST(LogicalType::VARCHAR, modifier_values));
         
-        native_values.emplace_back("qualified_name", Value(context.native.qualified_name));
-        native_values.emplace_back("annotations", Value(context.native.annotations));
+        native_values.emplace_back("qualified_name", Value(native.qualified_name));
+        native_values.emplace_back("annotations", Value(native.annotations));
         
-        context_values.emplace_back("native", Value::STRUCT(native_values));
+        struct_values.emplace_back("native", Value::STRUCT(native_values));
     } else {
         // No native context available - use NULL struct
         child_list_t<LogicalType> native_schema;
@@ -94,11 +87,10 @@ Value ASTNode::ToValue() const {
         native_schema.push_back(make_pair("modifiers", LogicalType::LIST(LogicalType::VARCHAR)));
         native_schema.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
         native_schema.push_back(make_pair("annotations", LogicalType::VARCHAR));
-        context_values.emplace_back("native", Value(LogicalType::STRUCT(native_schema)));
+        struct_values.emplace_back("native", Value(LogicalType::STRUCT(native_schema)));
     }
-    struct_values.emplace_back("context", Value::STRUCT(move(context_values)));
     
-    // Content preview
+    // Content preview (flat field)
     struct_values.emplace_back("peek", Value(peek));
     
     return Value::STRUCT(move(struct_values));
@@ -114,14 +106,14 @@ ASTNode ASTNode::FromValue(const Value &value) {
     
     // Type struct
     auto &type_struct = StructValue::GetChildren(struct_value[1]);
-    node.type.raw = type_struct[0].GetValue<string>();
-    node.type.normalized = type_struct[1].GetValue<string>();
-    node.type.kind = type_struct[2].GetValue<string>();
+    node.type_raw = type_struct[0].GetValue<string>();
+    node.type_normalized = type_struct[1].GetValue<string>();
+    node.type_kind = type_struct[2].GetValue<string>();
     
     // Name struct
     auto &name_struct = StructValue::GetChildren(struct_value[2]);
-    node.name.raw = name_struct[0].IsNull() ? "" : name_struct[0].GetValue<string>();
-    node.name.qualified = name_struct[1].IsNull() ? "" : name_struct[1].GetValue<string>();
+    node.name_raw = name_struct[0].IsNull() ? "" : name_struct[0].GetValue<string>();
+    node.name_qualified = name_struct[1].IsNull() ? "" : name_struct[1].GetValue<string>();
     
     // File position struct
     auto &file_pos_struct = StructValue::GetChildren(struct_value[3]);
@@ -225,7 +217,7 @@ void ASTType::ParseFile(const string &source_code, TSParser *parser) {
             // Create node
             ASTNode ast_node;
             ast_node.node_id = node_counter++;
-            ast_node.type.raw = string(ts_node_type(entry.node));
+            ast_node.type_raw = string(ts_node_type(entry.node));
             ast_node.parent_index = entry.parent_id;
             ast_node.node_depth = entry.depth;
             ast_node.legacy_sibling_index = entry.sibling_index;
@@ -241,7 +233,7 @@ void ASTType::ParseFile(const string &source_code, TSParser *parser) {
             // Extract name using language adapter
             auto& registry = LanguageAdapterRegistry::GetInstance();
             const LanguageAdapter* adapter = registry.GetAdapter(language);
-            ast_node.name.raw = adapter ? adapter->ExtractNodeName(entry.node, source_code) : "";
+            ast_node.name_raw = adapter ? adapter->ExtractNodeName(entry.node, source_code) : "";
             
             // Extract source text
             uint32_t start_byte = ts_node_start_byte(entry.node);
@@ -302,7 +294,7 @@ void ASTType::BuildIndexes() {
 vector<ASTNode> ASTType::FindNodes(const string &type) const {
     vector<ASTNode> result;
     for (const auto &node : nodes) {
-        if (node.type.raw == type) {
+        if (node.type_raw == type) {
             result.push_back(node);
         }
     }
@@ -363,9 +355,9 @@ string ASTType::ToJSON() const {
         
         json << "{";
         json << "\"node_id\":" << node.node_id << ",";
-        json << "\"type\":\"" << node.type.raw << "\",";
-        if (!node.name.raw.empty()) {
-            json << "\"name\":\"" << StringUtil::Replace(node.name.raw, "\"", "\\\"") << "\",";
+        json << "\"type\":\"" << node.type_raw << "\",";
+        if (!node.name_raw.empty()) {
+            json << "\"name\":\"" << StringUtil::Replace(node.name_raw, "\"", "\\\"") << "\",";
         }
         json << "\"start_line\":" << node.start_line << ",";
         json << "\"end_line\":" << node.end_line << ",";

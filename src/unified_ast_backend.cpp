@@ -605,10 +605,7 @@ LogicalType UnifiedASTBackend::GetHierarchicalStructSchema() {
 }
 
 void UnifiedASTBackend::ProjectToTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index) {
-    // AGENT J TACTICAL FIX: Reset vector state to prevent multi-file memory corruption
-    for (idx_t i = 0; i < output.ColumnCount(); i++) {
-        ResetStructVectorState(output.data[i]);
-    }
+    // DuckDB automatically handles vector reset via VectorCache system - no manual reset needed
     
     // Verify output chunk has correct number of columns (17 with language, removed arity_bin)
     if (output.ColumnCount() != 17) {
@@ -648,81 +645,84 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult& result, DataChunk& outpu
         const auto& node = result.nodes[i];
         
         // Basic fields
-        node_id_vec[output_index + count] = node.node_id;
+        node_id_vec[count] = node.node_id;
         // AGENT J FIX: Ensure string is properly copied to avoid dangling pointers
         string type_copy = string(node.type_raw.c_str());
-        type_vec[output_index + count] = StringVector::AddString(output.data[1], type_copy);
+        type_vec[count] = StringVector::AddString(output.data[1], type_copy);
         
         if (node.name_raw.empty()) {
-            name_validity.SetInvalid(output_index + count);
+            name_validity.SetInvalid(count);
         } else {
             // AGENT J FIX: Ensure string is properly copied to avoid dangling pointers
             string name_copy = string(node.name_raw.c_str());
-            name_vec[output_index + count] = StringVector::AddString(output.data[2], name_copy);
+            name_vec[count] = StringVector::AddString(output.data[2], name_copy);
         }
         
         // Now that we process each file separately, each result has the correct file_path
-        file_path_vec[output_index + count] = StringVector::AddString(output.data[3], result.source.file_path);
-        language_vec[output_index + count] = StringVector::AddString(output.data[4], result.source.language);
-        start_line_vec[output_index + count] = node.start_line;
-        start_column_vec[output_index + count] = node.start_column;
-        end_line_vec[output_index + count] = node.end_line;
-        end_column_vec[output_index + count] = node.end_column;
+        file_path_vec[count] = StringVector::AddString(output.data[3], result.source.file_path);
+        language_vec[count] = StringVector::AddString(output.data[4], result.source.language);
+        start_line_vec[count] = node.start_line;
+        start_column_vec[count] = node.start_column;
+        end_line_vec[count] = node.end_line;
+        end_column_vec[count] = node.end_column;
         
         if (node.parent_index < 0) {
-            parent_validity.SetInvalid(output_index + count);
+            parent_validity.SetInvalid(count);
         } else {
-            parent_id_vec[output_index + count] = node.parent_index;
+            parent_id_vec[count] = node.parent_index;
         }
         
-        depth_vec[output_index + count] = node.node_depth;
-        sibling_index_vec[output_index + count] = node.legacy_sibling_index;
-        children_count_vec[output_index + count] = node.legacy_children_count;
-        descendant_count_vec[output_index + count] = node.legacy_descendant_count;
+        depth_vec[count] = node.node_depth;
+        sibling_index_vec[count] = node.legacy_sibling_index;
+        children_count_vec[count] = node.legacy_children_count;
+        descendant_count_vec[count] = node.legacy_descendant_count;
         if (node.peek.empty()) {
-            peek_validity.SetInvalid(output_index + count);
+            peek_validity.SetInvalid(count);
         } else {
-            peek_vec[output_index + count] = StringVector::AddString(output.data[14], node.peek);
+            peek_vec[count] = StringVector::AddString(output.data[14], node.peek);
         }
         
         // Semantic type fields
-        semantic_type_vec[output_index + count] = node.semantic_type;
-        flags_vec[output_index + count] = node.universal_flags;
+        semantic_type_vec[count] = node.semantic_type;
+        flags_vec[count] = node.universal_flags;
         
         count++;
         current_row++;  // Track which row we're on
     }
     
-    output_index += count;
+    output_index = count;
 }
 
 void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk& output, idx_t& current_row, idx_t& output_index, const ExtractionConfig& config) {
     
-    // PHASE 1: Route to safe minimal projection when possible
-    if (config.context == ContextLevel::NONE && 
-        config.source == SourceLevel::NONE && 
-        config.structure == StructureLevel::NONE && 
-        config.peek == PeekLevel::NONE &&
-        output.ColumnCount() == 2) {
-        // Use safe minimal projection - no memory corruption risk
-        SafeProjectMinimal(result.nodes, output, current_row, output_index);
-        return;
-    }
+    //==============================================================================
+    // CRITICAL WARNING TO FUTURE DEVELOPERS: DuckDB Table Function Indexing
+    //==============================================================================
+    // 
+    // This function uses a NON-STANDARD pattern that differs from DuckDB conventions:
+    // 
+    // STANDARD DuckDB Pattern:
+    //   - Table functions write directly to output[0], output[1], output[2], ...
+    //   - Use local count variable: output.data[col].SetValue(count++, value)
+    //   - Call output.SetCardinality(count) at end
+    //   - No output_index parameter needed
+    // 
+    // OUR Pattern (for streaming/multi-file scenarios):
+    //   - output_index is used as a "return value" to indicate rows written
+    //   - Always write to indices [0, 1, 2, ...] in current chunk
+    //   - Set output_index = count at end to return row count
+    //   - Calling function uses output_index for SetCardinality()
+    // 
+    // CRITICAL BUG HISTORY:
+    //   - Originally used count for indexing -> BUFFER OVERFLOW
+    //   - This caused memory corruption in repeated queries
+    //   - Node IDs became NULL, strings became binary garbage
+    //   - Root cause: Writing beyond vector boundaries
+    // 
+    // CORRECT INDEXING: Use count directly (start from 0), set output_index = count at end
+    //==============================================================================
     
-    // PHASE 2: Route to safe structure projection when possible
-    if (config.context == ContextLevel::NONE && 
-        config.source == SourceLevel::NONE && 
-        config.structure != StructureLevel::NONE && 
-        config.peek == PeekLevel::NONE) {
-        // Use safe structure projection - adds integer fields only
-        SafeProjectWithStructure(result.nodes, output, current_row, output_index, config);
-        return;
-    }
-    
-    // AGENT J TACTICAL FIX: Reset vector state to prevent multi-file memory corruption
-    for (idx_t i = 0; i < output.ColumnCount(); i++) {
-        ResetStructVectorState(output.data[i]);
-    }
+    // DuckDB automatically handles vector reset via VectorCache system - no manual reset needed
     
     // Dynamic projection based on ExtractionConfig
     if (output.ColumnCount() == 0) {
@@ -855,22 +855,22 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
         const auto& node = result.nodes[i];
         
         // Core columns (always present) - USE TRACKED INDICES (AGENT J FIX)
-        node_id_vec[output_index + count] = node.node_id;
-        type_vec[output_index + count] = StringVector::AddString(output.data[type_col], node.type_raw);
+        node_id_vec[count] = node.node_id;
+        type_vec[count] = StringVector::AddString(output.data[type_col], node.type_raw);
         
         // Context columns
         if (config.context != ContextLevel::NONE) {
             if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
-                semantic_type_vec[output_index + count] = node.semantic_type;
-                flags_vec[output_index + count] = node.universal_flags;
+                semantic_type_vec[count] = node.semantic_type;
+                flags_vec[count] = node.universal_flags;
             }
             if (config.context >= ContextLevel::NORMALIZED) {
                 // AGENT J FIX: Ensure string is properly copied to avoid dangling pointers
                 string name_copy = string(node.name_raw.c_str());
-                name_vec[output_index + count] = StringVector::AddString(output.data[name_col], name_copy);
+                name_vec[count] = StringVector::AddString(output.data[name_col], name_copy);
             }
             if (config.context >= ContextLevel::NATIVE) {
-                signature_type_vec[output_index + count] = StringVector::AddString(output.data[signature_type_col], node.native.signature_type);
+                signature_type_vec[count] = StringVector::AddString(output.data[signature_type_col], node.native.signature_type);
                 
                 // Create list of parameter names for parameters column
                 vector<Value> parameter_values;
@@ -888,25 +888,25 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
                 Value modifiers_list = Value::LIST(LogicalType::VARCHAR, modifier_values);
                 ListVector::PushBack(output.data[modifiers_col], modifiers_list);
                 
-                annotations_vec[output_index + count] = StringVector::AddString(output.data[annotations_col], node.native.annotations);
-                qualified_name_vec[output_index + count] = StringVector::AddString(output.data[qualified_name_col], node.native.qualified_name);
+                annotations_vec[count] = StringVector::AddString(output.data[annotations_col], node.native.annotations);
+                qualified_name_vec[count] = StringVector::AddString(output.data[qualified_name_col], node.native.qualified_name);
             }
         }
         
         // Source columns - set per row including file_path and language
         if (config.source != SourceLevel::NONE) {
             // Set file_path and language per row (multi-file scenarios need different values per row)
-            file_path_vec[output_index + count] = StringVector::AddString(output.data[file_path_col], result.source.file_path);
-            language_vec[output_index + count] = StringVector::AddString(output.data[language_col], result.source.language);
+            file_path_vec[count] = StringVector::AddString(output.data[file_path_col], result.source.file_path);
+            language_vec[count] = StringVector::AddString(output.data[language_col], result.source.language);
             
             if (config.source >= SourceLevel::LINES_ONLY) {
-                start_line_vec[output_index + count] = node.start_line;
-                end_line_vec[output_index + count] = node.end_line;
+                start_line_vec[count] = node.start_line;
+                end_line_vec[count] = node.end_line;
             }
             
             if (config.source >= SourceLevel::FULL) {
-                start_column_vec[output_index + count] = node.start_column;
-                end_column_vec[output_index + count] = node.end_column;
+                start_column_vec[count] = node.start_column;
+                end_column_vec[count] = node.end_column;
             }
         }
         
@@ -914,26 +914,26 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
         if (config.structure != StructureLevel::NONE) {
             if (config.structure >= StructureLevel::MINIMAL) {
                 if (node.parent_index < 0) {
-                    parent_validity->SetInvalid(output_index + count);
+                    parent_validity->SetInvalid(count);
                 } else {
-                    parent_id_vec[output_index + count] = node.parent_index;
+                    parent_id_vec[count] = node.parent_index;
                 }
-                depth_vec[output_index + count] = node.node_depth;
+                depth_vec[count] = node.node_depth;
             }
             
             if (config.structure >= StructureLevel::FULL) {
-                sibling_index_vec[output_index + count] = node.legacy_sibling_index;
-                children_count_vec[output_index + count] = node.legacy_children_count;
-                descendant_count_vec[output_index + count] = node.legacy_descendant_count;
+                sibling_index_vec[count] = node.legacy_sibling_index;
+                children_count_vec[count] = node.legacy_children_count;
+                descendant_count_vec[count] = node.legacy_descendant_count;
             }
         }
         
         // Peek column - USE TRACKED INDEX (AGENT J FIX)
         if (config.peek != PeekLevel::NONE) {
             if (node.peek.empty()) {
-                peek_validity->SetInvalid(output_index + count);
+                peek_validity->SetInvalid(count);
             } else {
-                peek_vec[output_index + count] = StringVector::AddString(output.data[peek_col], node.peek);
+                peek_vec[count] = StringVector::AddString(output.data[peek_col], node.peek);
             }
         }
         
@@ -941,200 +941,9 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
         current_row++;
     }
     
-    output_index += count;
+    output_index = count;
 }
 
-//==============================================================================
-// PHASE 1: Safe Minimal Projection - MEMORY CORRUPTION FIX
-//==============================================================================
-
-void UnifiedASTBackend::SafeProjectMinimal(const vector<ASTNode>& nodes, DataChunk& output, 
-                                          idx_t& current_row, idx_t& output_index) {
-    // SAFETY: Explicit bounds checking and direct field access
-    // NO ToValue() conversion, NO complex vector manipulation
-    // ONLY node_id and type columns (2 columns total)
-    
-    static const idx_t MAX_SAFE_BATCH_SIZE = STANDARD_VECTOR_SIZE - 16; // Safety margin
-    static const size_t MAX_STRING_LENGTH = 32768; // 32KB limit per string
-    
-    // Validate output structure
-    if (output.ColumnCount() != 2) {
-        throw InternalException("SafeProjectMinimal expects exactly 2 columns (node_id, type)");
-    }
-    
-    if (current_row >= nodes.size()) {
-        return; // No more nodes to process
-    }
-    
-    // Get vector data with explicit type checking
-    auto& node_id_vector = output.data[0];
-    auto& type_vector = output.data[1];
-    
-    if (node_id_vector.GetType().id() != LogicalTypeId::BIGINT) {
-        throw InternalException("Column 0 must be BIGINT for node_id");
-    }
-    if (type_vector.GetType().id() != LogicalTypeId::VARCHAR) {
-        throw InternalException("Column 1 must be VARCHAR for type");
-    }
-    
-    auto* node_id_data = FlatVector::GetData<int64_t>(node_id_vector);
-    auto* type_data = FlatVector::GetData<string_t>(type_vector);
-    
-    // Process nodes with strict bounds checking
-    idx_t count = 0;
-    const idx_t chunk_size = STANDARD_VECTOR_SIZE;
-    
-    for (idx_t i = current_row; i < nodes.size() && count < chunk_size; i++) {
-        const auto& node = nodes[i];
-        
-        // Verify output bounds before assignment
-        if (output_index + count >= chunk_size) {
-            break; // Safety exit - output chunk full
-        }
-        
-        // DIRECT FIELD ACCESS: node_id (using direct field, not ToValue())
-        node_id_data[output_index + count] = static_cast<int64_t>(node.node_id);
-        
-        // DIRECT FIELD ACCESS: type with length safety
-        string safe_type = node.type_raw;
-        if (safe_type.length() > MAX_STRING_LENGTH) {
-            safe_type = safe_type.substr(0, MAX_STRING_LENGTH);
-        }
-        
-        // Safe string assignment with proper heap management
-        type_data[output_index + count] = StringVector::AddString(type_vector, safe_type);
-        
-        count++;
-        current_row++; // Advance input node position
-    }
-    
-    // Update output tracking
-    output_index += count;
-}
-
-//==============================================================================
-// PHASE 2: Safe Projection with Structure Fields - MEMORY CORRUPTION FIX
-//==============================================================================
-
-void UnifiedASTBackend::SafeProjectWithStructure(const vector<ASTNode>& nodes, DataChunk& output, 
-                                                idx_t& current_row, idx_t& output_index, 
-                                                const ExtractionConfig& config) {
-    // SAFETY: Explicit bounds checking and direct field access for structure fields
-    // NO ToValue() conversion, NO complex vector manipulation
-    // Handle: node_id, type + structure fields (parent_id, depth, sibling_index, children_count, descendant_count)
-    
-    static const idx_t MAX_SAFE_BATCH_SIZE = STANDARD_VECTOR_SIZE - 16; // Safety margin
-    static const size_t MAX_STRING_LENGTH = 32768; // 32KB limit per string
-    
-    if (current_row >= nodes.size()) {
-        return; // No more nodes to process
-    }
-    
-    // Calculate expected column count based on config
-    idx_t expected_cols = 2; // node_id, type (always present)
-    if (config.structure >= StructureLevel::MINIMAL) {
-        expected_cols += 2; // parent_id, depth
-    }
-    if (config.structure >= StructureLevel::FULL) {
-        expected_cols += 3; // sibling_index, children_count, descendant_count
-    }
-    
-    if (output.ColumnCount() != expected_cols) {
-        throw InternalException("SafeProjectWithStructure column count mismatch: expected " + 
-                              to_string(expected_cols) + ", got " + to_string(output.ColumnCount()));
-    }
-    
-    // Get base columns (always present)
-    auto* node_id_data = FlatVector::GetData<int64_t>(output.data[0]);
-    auto* type_data = FlatVector::GetData<string_t>(output.data[1]);
-    
-    // Structure field pointers (conditional)
-    int64_t* parent_id_data = nullptr;
-    uint32_t* depth_data = nullptr;
-    uint32_t* sibling_index_data = nullptr;
-    uint32_t* children_count_data = nullptr;
-    uint32_t* descendant_count_data = nullptr;
-    ValidityMask* parent_id_validity = nullptr;
-    
-    idx_t col_idx = 2; // Start after node_id, type
-    
-    if (config.structure >= StructureLevel::MINIMAL) {
-        // Validate types
-        if (output.data[col_idx].GetType().id() != LogicalTypeId::BIGINT) {
-            throw InternalException("parent_id column must be BIGINT");
-        }
-        if (output.data[col_idx + 1].GetType().id() != LogicalTypeId::UINTEGER) {
-            throw InternalException("depth column must be UINTEGER");
-        }
-        
-        parent_id_data = FlatVector::GetData<int64_t>(output.data[col_idx]);
-        parent_id_validity = &FlatVector::Validity(output.data[col_idx]);
-        depth_data = FlatVector::GetData<uint32_t>(output.data[col_idx + 1]);
-        col_idx += 2;
-    }
-    
-    if (config.structure >= StructureLevel::FULL) {
-        // Validate types  
-        if (output.data[col_idx].GetType().id() != LogicalTypeId::UINTEGER ||
-            output.data[col_idx + 1].GetType().id() != LogicalTypeId::UINTEGER ||
-            output.data[col_idx + 2].GetType().id() != LogicalTypeId::UINTEGER) {
-            throw InternalException("structure FULL columns must be UINTEGER");
-        }
-        
-        sibling_index_data = FlatVector::GetData<uint32_t>(output.data[col_idx]);
-        children_count_data = FlatVector::GetData<uint32_t>(output.data[col_idx + 1]);
-        descendant_count_data = FlatVector::GetData<uint32_t>(output.data[col_idx + 2]);
-        col_idx += 3;
-    }
-    
-    // Process nodes with strict bounds checking
-    idx_t count = 0;
-    const idx_t chunk_size = STANDARD_VECTOR_SIZE;
-    
-    for (idx_t i = current_row; i < nodes.size() && count < chunk_size; i++) {
-        const auto& node = nodes[i];
-        
-        // Verify output bounds before assignment
-        if (output_index + count >= chunk_size) {
-            break; // Safety exit - output chunk full
-        }
-        
-        // Base columns: node_id, type (DIRECT FIELD ACCESS)
-        node_id_data[output_index + count] = static_cast<int64_t>(node.node_id);
-        
-        string safe_type = node.type_raw;
-        if (safe_type.length() > MAX_STRING_LENGTH) {
-            safe_type = safe_type.substr(0, MAX_STRING_LENGTH);
-        }
-        type_data[output_index + count] = StringVector::AddString(output.data[1], safe_type);
-        
-        // Structure fields (DIRECT FIELD ACCESS - using legacy fields for compatibility)
-        if (config.structure >= StructureLevel::MINIMAL) {
-            // parent_id: use -1 for root nodes, set validity accordingly
-            if (node.parent_index >= 0) {
-                parent_id_data[output_index + count] = node.parent_index;
-            } else {
-                parent_id_validity->SetInvalid(output_index + count);
-            }
-            
-            // depth: direct field access
-            depth_data[output_index + count] = static_cast<uint32_t>(node.node_depth);
-        }
-        
-        if (config.structure >= StructureLevel::FULL) {
-            // Direct field access for structure full fields
-            sibling_index_data[output_index + count] = node.legacy_sibling_index;
-            children_count_data[output_index + count] = static_cast<uint32_t>(node.legacy_children_count);
-            descendant_count_data[output_index + count] = static_cast<uint32_t>(node.legacy_descendant_count);
-        }
-        
-        count++;
-        current_row++; // Advance input node position
-    }
-    
-    // Update output tracking
-    output_index += count;
-}
 
 Value UnifiedASTBackend::CreateASTStruct(const ASTResult& result) {
     // Create source struct
@@ -1227,7 +1036,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult& result, Data
     // Process rows using NEW STRUCTURED FIELDS and create STRUCT values
     for (idx_t i = current_row; i < result.nodes.size() && count < max_count; i++) {
         const auto& node = result.nodes[i];
-        idx_t row_idx = output_index + count;
+        idx_t row_idx = count;
         
         // Core identity
         node_id_vec[row_idx] = node.node_id;
@@ -1284,7 +1093,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult& result, Data
         current_row++;
     }
     
-    output_index += count;
+    output_index = count;
 }
 
 void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode>& nodes, DataChunk& output, 

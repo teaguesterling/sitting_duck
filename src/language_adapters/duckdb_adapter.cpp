@@ -715,7 +715,7 @@ vector<ASTNode> DuckDBAdapter::HandleIncompleteExpression(const ParsedExpression
                              node_counter++, -1, 0);
                              
     // Add flag to indicate this was incomplete parsing
-    node.context.normalized.universal_flags |= 1; // INCOMPLETE_PARSING_FLAG
+    node.universal_flags |= 1; // INCOMPLETE_PARSING_FLAG
     
     return {node};
 }
@@ -789,21 +789,21 @@ ASTNode DuckDBAdapter::CreateASTNode(const string& type, const string& name, con
     
     // Basic information
     node.node_id = node_id;
-    node.type.raw = type;
-    node.type.normalized = type;
+    node.type_raw = type;
+    node.type_normalized = type;
     
     // STRUCTURED FIELDS (Primary data)
     // Context information
-    node.context.name = name;
-    node.context.normalized.semantic_type = semantic_type;
-    node.context.normalized.universal_flags = 0;
-    node.context.normalized.arity_bin = 0;
+    node.name_raw = name;
+    node.semantic_type = semantic_type;
+    node.universal_flags = 0;
+    node.arity_bin = 0;
     
     // Source location (placeholder values for now)
-    node.source.start_line = 1;
-    node.source.end_line = 1;
-    node.source.start_column = 1;
-    node.source.end_column = 1;
+    node.source_start_line = 1;
+    node.source_end_line = 1;
+    node.source_start_column = 1;
+    node.source_end_column = 1;
     
     // Tree structure
     node.parent_id = parent_id;

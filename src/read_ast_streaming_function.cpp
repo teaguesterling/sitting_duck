@@ -18,7 +18,7 @@ namespace duckdb {
 static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output);
 static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadASTStreamingGlobalState &global_state, DataChunk &output);
 static void ProcessBatchOfFiles(ClientContext &context, ReadASTStreamingGlobalState &global_state, const vector<string> &batch_files);
-static void PopulateDynamicColumns(DataChunk &output, idx_t output_idx, const Value &node_value, const ExtractionConfig &config);
+static void PopulateDynamicColumns(DataChunk &output, idx_t output_idx, const ASTNode &node, const ExtractionConfig &config);
 
 // Bind function for flat streaming two-argument version (explicit language)
 static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &context, TableFunctionBindInput &input,
@@ -345,30 +345,112 @@ static unique_ptr<GlobalTableFunctionState> ReadASTStreamingInit(ClientContext &
 }
 
 // Streaming execution function with parallel batch processing
-// Helper function to populate columns dynamically based on ExtractionConfig
-static void PopulateDynamicColumns(DataChunk &output, idx_t output_idx, const Value &node_value, const ExtractionConfig &config) {
-    auto &struct_children = StructValue::GetChildren(node_value);
+// Helper function to populate columns dynamically based on ExtractionConfig - DIRECT FIELD ACCESS
+static void PopulateDynamicColumns(DataChunk &output, idx_t output_idx, const ASTNode &node, const ExtractionConfig &config) {
     idx_t column_idx = 0;
     
+    // DIRECT FIELD ACCESS: No Value struct conversion, no hardcoded indices
+    
     // Always include core columns
-    output.SetValue(column_idx++, output_idx, struct_children[0]);  // node_id
-    output.SetValue(column_idx++, output_idx, struct_children[1]);  // type
+    output.SetValue(column_idx++, output_idx, Value::UBIGINT(node.node_id));
+    output.SetValue(column_idx++, output_idx, Value(node.type_raw));
     
     // Conditionally include columns based on config
     if (config.source != SourceLevel::NONE) {
-        output.SetValue(column_idx++, output_idx, struct_children[2]);  // source
+        if (config.source >= SourceLevel::PATH) {
+            output.SetValue(column_idx++, output_idx, node.file_path.empty() ? Value(LogicalType::VARCHAR) : Value(node.file_path));
+            output.SetValue(column_idx++, output_idx, node.language.empty() ? Value(LogicalType::VARCHAR) : Value(node.language));
+        }
+        if (config.source >= SourceLevel::LINES_ONLY) {
+            output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.source_start_line));
+            output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.source_end_line));
+        }
+        if (config.source >= SourceLevel::FULL) {
+            output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.source_start_column));
+            output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.source_end_column));
+        }
     }
     
     if (config.structure != StructureLevel::NONE) {
-        output.SetValue(column_idx++, output_idx, struct_children[3]);  // structure
+        if (config.structure >= StructureLevel::MINIMAL) {
+            output.SetValue(column_idx++, output_idx, node.parent_id < 0 ? Value(LogicalType::BIGINT) : Value::BIGINT(node.parent_id));
+            output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.depth));
+            output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.sibling_index));
+        }
+        if (config.structure >= StructureLevel::FULL) {
+            output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.children_count));
+            output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.descendant_count));
+        }
     }
     
     if (config.context != ContextLevel::NONE) {
-        output.SetValue(column_idx++, output_idx, struct_children[4]);  // context
+        if (config.context >= ContextLevel::NORMALIZED) {
+            output.SetValue(column_idx++, output_idx, node.name_raw.empty() ? Value(LogicalType::VARCHAR) : Value(node.name_raw));
+        }
+        if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
+            output.SetValue(column_idx++, output_idx, Value::UTINYINT(node.semantic_type));
+            output.SetValue(column_idx++, output_idx, Value::UTINYINT(node.universal_flags));
+        }
+        if (config.context >= ContextLevel::NATIVE) {
+            // Only create native Value struct if extraction was attempted and data exists
+            if (node.native_extraction_attempted && !node.native.signature_type.empty()) {
+                child_list_t<Value> native_values;
+                native_values.emplace_back("signature_type", Value(node.native.signature_type));
+                
+                // Create parameters list
+                vector<Value> parameter_values;
+                for (const auto& param : node.native.parameters) {
+                    child_list_t<Value> param_struct;
+                    param_struct.emplace_back("name", Value(param.name));
+                    param_struct.emplace_back("type", Value(param.type));
+                    param_struct.emplace_back("default_value", Value(param.default_value));
+                    param_struct.emplace_back("is_optional", Value::BOOLEAN(param.is_optional));
+                    param_struct.emplace_back("is_variadic", Value::BOOLEAN(param.is_variadic));
+                    param_struct.emplace_back("annotations", Value(param.annotations));
+                    parameter_values.push_back(Value::STRUCT(param_struct));
+                }
+                native_values.emplace_back("parameters", Value::LIST(LogicalType::STRUCT({
+                    {"name", LogicalType::VARCHAR},
+                    {"type", LogicalType::VARCHAR},
+                    {"default_value", LogicalType::VARCHAR},
+                    {"is_optional", LogicalType::BOOLEAN},
+                    {"is_variadic", LogicalType::BOOLEAN},
+                    {"annotations", LogicalType::VARCHAR}
+                }), parameter_values));
+                
+                // Create modifiers list
+                vector<Value> modifier_values;
+                for (const auto& modifier : node.native.modifiers) {
+                    modifier_values.push_back(Value(modifier));
+                }
+                native_values.emplace_back("modifiers", Value::LIST(LogicalType::VARCHAR, modifier_values));
+                
+                native_values.emplace_back("qualified_name", Value(node.native.qualified_name));
+                native_values.emplace_back("annotations", Value(node.native.annotations));
+                
+                output.SetValue(column_idx++, output_idx, Value::STRUCT(native_values));
+            } else {
+                // No native context available - use NULL struct
+                child_list_t<LogicalType> native_schema;
+                native_schema.push_back(make_pair("signature_type", LogicalType::VARCHAR));
+                native_schema.push_back(make_pair("parameters", LogicalType::LIST(LogicalType::STRUCT({
+                    {"name", LogicalType::VARCHAR},
+                    {"type", LogicalType::VARCHAR},
+                    {"default_value", LogicalType::VARCHAR},
+                    {"is_optional", LogicalType::BOOLEAN},
+                    {"is_variadic", LogicalType::BOOLEAN},
+                    {"annotations", LogicalType::VARCHAR}
+                }))));
+                native_schema.push_back(make_pair("modifiers", LogicalType::LIST(LogicalType::VARCHAR)));
+                native_schema.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
+                native_schema.push_back(make_pair("annotations", LogicalType::VARCHAR));
+                output.SetValue(column_idx++, output_idx, Value(LogicalType::STRUCT(native_schema)));
+            }
+        }
     }
     
     if (config.peek != PeekLevel::NONE) {
-        output.SetValue(column_idx++, output_idx, struct_children[5]);  // peek
+        output.SetValue(column_idx++, output_idx, Value(node.peek));
     }
 }
 

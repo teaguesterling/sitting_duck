@@ -93,39 +93,39 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
             
             // MEMORY SAFETY: Explicit copy of tree-sitter string data
             const char* ts_type = ts_node_type(entry.node);  // Points to tree-sitter memory
-            ast_node.type.raw = string(ts_type);  // COPY to owned std::string
+            ast_node.type_raw = string(ts_type);  // COPY to owned std::string
             
             // Position information -> NEW STRUCTURED FIELDS
             // Only populate source location fields based on config.source level
             if (config.source >= SourceLevel::PATH) {
                 // File path and language available at PATH level and above
-                ast_node.source.file_path = file_path;
-                ast_node.source.language = language;
+                ast_node.file_path = file_path;
+                ast_node.language = language;
             } else {
-                ast_node.source.file_path = "";
-                ast_node.source.language = "";
+                ast_node.file_path = "";
+                ast_node.language = "";
             }
             
             if (config.source >= SourceLevel::LINES_ONLY) {
                 TSPoint start = ts_node_start_point(entry.node);
                 TSPoint end = ts_node_end_point(entry.node);
-                ast_node.source.start_line = start.row + 1;
-                ast_node.source.end_line = end.row + 1;
+                ast_node.source_start_line = start.row + 1;
+                ast_node.source_end_line = end.row + 1;
                 
                 // Column information only available at FULL level
                 if (config.source >= SourceLevel::FULL) {
-                    ast_node.source.start_column = start.column + 1;
-                    ast_node.source.end_column = end.column + 1;
+                    ast_node.source_start_column = start.column + 1;
+                    ast_node.source_end_column = end.column + 1;
                 } else {
-                    ast_node.source.start_column = 0;
-                    ast_node.source.end_column = 0;
+                    ast_node.source_start_column = 0;
+                    ast_node.source_end_column = 0;
                 }
             } else {
                 // No line/column info
-                ast_node.source.start_line = 0;
-                ast_node.source.end_line = 0;
-                ast_node.source.start_column = 0;
-                ast_node.source.end_column = 0;
+                ast_node.source_start_line = 0;
+                ast_node.source_end_line = 0;
+                ast_node.source_start_column = 0;
+                ast_node.source_end_column = 0;
             }
             
             // Tree structure -> FLATTENED FIELDS
@@ -160,9 +160,9 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
             // Only populate context fields based on config.context level
             if (config.context >= ContextLevel::NORMALIZED) {
                 string raw_name = adapter->ExtractNodeName(entry.node, content);
-                ast_node.context.name = SanitizeUTF8(raw_name);
+                ast_node.name_raw = SanitizeUTF8(raw_name);
             } else {
-                ast_node.context.name = "";
+                ast_node.name_raw = "";
             }
             
             // Extract source text (peek) with configurable size and mode
@@ -206,12 +206,12 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType* adapte
             if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
                 PopulateSemanticFieldsTemplated(ast_node, adapter, entry.node, content, node_configs, config);
             } else {
-                // No context info - set minimal defaults
-                ast_node.context.normalized.semantic_type = 0;
-                ast_node.context.normalized.universal_flags = 0;
-                ast_node.context.normalized.arity_bin = 0;
-                ast_node.type.normalized = "";
-                ast_node.context.native_extraction_attempted = false;
+                // No context info - set minimal defaults (use flat fields)
+                ast_node.semantic_type = 0;
+                ast_node.universal_flags = 0;
+                ast_node.arity_bin = 0;
+                ast_node.type_normalized = "";
+                ast_node.native_extraction_attempted = false;
             }
             
             // Update legacy fields for backward compatibility
@@ -263,22 +263,22 @@ template<typename AdapterType>
 void PopulateSemanticFieldsTemplated(ASTNode& node, const AdapterType* adapter, TSNode ts_node, const string& content, 
                                     const unordered_map<string, NodeConfig>& node_configs, const ExtractionConfig& config) {
     // Direct hash lookup - no virtual calls!
-    auto config_it = node_configs.find(node.type.raw);
+    auto config_it = node_configs.find(node.type_raw);
     const NodeConfig* node_config = (config_it != node_configs.end()) ? &config_it->second : nullptr;
     
     if (node_config) {
         // STRUCTURED FIELDS: Set semantic info in context
-        node.context.normalized.semantic_type = node_config->semantic_type;
-        node.context.normalized.universal_flags = node_config->flags;
+        node.semantic_type = node_config->semantic_type;
+        node.universal_flags = node_config->flags;
         
         // Handle IS_KEYWORD_IF_LEAF: only apply IS_KEYWORD flag if node has no children
         if (node_config->flags & ASTNodeFlags::IS_KEYWORD_IF_LEAF) {
             // Remove the conditional flag
-            node.context.normalized.universal_flags &= ~ASTNodeFlags::IS_KEYWORD_IF_LEAF;
+            node.universal_flags &= ~ASTNodeFlags::IS_KEYWORD_IF_LEAF;
             
             // Only add IS_KEYWORD if this is a leaf node (no children)
             if (ts_node_child_count(ts_node) == 0) {
-                node.context.normalized.universal_flags |= ASTNodeFlags::IS_KEYWORD;
+                node.universal_flags |= ASTNodeFlags::IS_KEYWORD;
             }
         }
         
@@ -287,33 +287,33 @@ void PopulateSemanticFieldsTemplated(ASTNode& node, const AdapterType* adapter, 
         if (config.context >= ContextLevel::NATIVE && node_config->native_strategy != NativeExtractionStrategy::NONE) {
             try {
                 // Extract native context using compile-time template dispatch with error handling
-                node.context.native = ExtractNativeContextTemplated<AdapterType>(ts_node, content, node_config->native_strategy);
+                node.native = ExtractNativeContextTemplated<AdapterType>(ts_node, content, node_config->native_strategy);
                 
                 // Always mark as attempted if we get this far, and set to true if we got any data
-                node.context.native_extraction_attempted = true;
+                node.native_extraction_attempted = true;
             } catch (const std::exception& e) {
                 // Log error but don't fail the entire parsing operation
-                node.context.native_extraction_attempted = false;
+                node.native_extraction_attempted = false;
             } catch (...) {
                 // Catch any other errors
-                node.context.native_extraction_attempted = false;
+                node.native_extraction_attempted = false;
             }
         } else {
             // Explicitly mark that no extraction was attempted
-            node.context.native_extraction_attempted = false;
+            node.native_extraction_attempted = false;
         }
     } else {
         // Fallback: use PARSER_CONSTRUCT for unknown types
-        node.context.normalized.semantic_type = SemanticTypes::PARSER_CONSTRUCT;
-        node.context.normalized.universal_flags = 0;
-        node.context.native_extraction_attempted = false;
+        node.semantic_type = SemanticTypes::PARSER_CONSTRUCT;
+        node.universal_flags = 0;
+        node.native_extraction_attempted = false;
     }
     
     // Set normalized type for display/compatibility
-    node.type.normalized = SemanticTypes::GetSemanticTypeName(node.context.normalized.semantic_type);
+    node.type_normalized = SemanticTypes::GetSemanticTypeName(node.semantic_type);
     
     // Calculate arity binning
-    node.context.normalized.arity_bin = ASTNode::BinArityFibonacci(ts_node_child_count(ts_node));
+    node.arity_bin = ASTNode::BinArityFibonacci(ts_node_child_count(ts_node));
 }
 
 // Legacy template version for backward compatibility

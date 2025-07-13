@@ -199,15 +199,29 @@ struct ASTNode {
     uint16_t legacy_children_count = 0;   // Number of children (legacy)
     uint16_t legacy_descendant_count = 0; // Total descendants (legacy)
     
-    // REMAINING GROUPED FIELDS (TO BE FLATTENED IN LATER STEPS)
-    SourceLocation source;      // Source location information
-    ContextInfo context;        // Semantic context information
-    string peek;               // Content preview
+    // FULLY FLATTENED FIELDS (no nested structs except native context)
     
-    // Legacy grouped information (BACKWARD COMPATIBILITY)
-    // These remain for now to avoid breaking existing code
-    ASTTypeInfo type;
-    ASTNameInfo name;
+    // Source location fields (flattened from SourceLocation)
+    string file_path;           // Source file path
+    string language;            // Programming language
+    uint32_t source_start_line = 0;     // Starting line number
+    uint32_t source_end_line = 0;       // Ending line number
+    uint32_t source_start_column = 0;   // Starting column
+    uint32_t source_end_column = 0;     // Ending column
+    
+    // Context fields (flattened from ContextInfo, except native)
+    string name_raw;            // Raw node name/identifier
+    string name_qualified;      // Fully qualified name
+    bool native_extraction_attempted = false; // Track native extraction attempts
+    NativeContext native;       // ONLY remaining nested struct - language-specific data
+    
+    // Type fields (flattened from ASTTypeInfo)
+    string type_raw;            // Raw parser type name
+    string type_normalized;     // Normalized type name
+    string type_kind;           // Type kind name
+    
+    // Content preview
+    string peek;               // Source code snippet
     
     // Legacy taxonomy fields (BACKWARD COMPATIBILITY)
     uint8_t semantic_type = 0;    // 8-bit encoding: [ss kk tt ll] where:
@@ -229,14 +243,14 @@ struct ASTNode {
         super_type = (semantic_type & 0x0C) >> 2; // Extract bits 2-3
     }
     
-    // PHASE 1 TRANSITION: Make legacy fields computed properties
-    // These provide backward compatibility by referencing structured fields
+    // FULLY FLAT TRANSITION: Make legacy fields computed properties
+    // These provide backward compatibility by referencing flat fields
     void UpdateComputedLegacyFields() {
-        // Copy from source fields to flat legacy file position fields
-        start_line = static_cast<int64_t>(source.start_line);
-        end_line = static_cast<int64_t>(source.end_line);
-        start_column = static_cast<uint16_t>(source.start_column);
-        end_column = static_cast<uint16_t>(source.end_column);
+        // Copy from flat source fields to legacy file position fields
+        start_line = static_cast<int64_t>(source_start_line);
+        end_line = static_cast<int64_t>(source_end_line);
+        start_column = static_cast<uint16_t>(source_start_column);
+        end_column = static_cast<uint16_t>(source_end_column);
         
         // Copy from structure fields to flat legacy tree fields
         parent_index = parent_id;
@@ -248,12 +262,9 @@ struct ASTNode {
         legacy_children_count = static_cast<uint16_t>(children_count);
         legacy_descendant_count = static_cast<uint16_t>(descendant_count);
         
-        // Legacy name and semantic info references structured context
-        name.raw = context.name;
-        name.qualified = context.name; // TODO: Implement qualified name logic
-        semantic_type = context.normalized.semantic_type;
-        universal_flags = context.normalized.universal_flags;
-        arity_bin = context.normalized.arity_bin;
+        // Legacy name and semantic info references flat fields
+        // Note: These legacy fields will be removed in a future version
+        // (semantic_type, universal_flags, arity_bin are already flat - no copying needed)
         
         // Update computed taxonomy fields from semantic_type
         UpdateLegacyFields();
