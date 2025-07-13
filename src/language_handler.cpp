@@ -252,12 +252,13 @@ void PythonLanguageHandler::ParseFile(const string &content, vector<ASTNode> &no
         // Extract name and value
         ast_node.name.raw = ExtractNodeName(entry.node, content);
         
-        // Extract source text (peek)
+        // Extract source text (optimized single substr)
         uint32_t start_byte = ts_node_start_byte(entry.node);
         uint32_t end_byte = ts_node_end_byte(entry.node);
         if (start_byte < content.size() && end_byte <= content.size()) {
-            string source_text = content.substr(start_byte, end_byte - start_byte);
-            ast_node.peek = source_text.length() > 120 ? source_text.substr(0, 120) : source_text;
+            uint32_t node_length = end_byte - start_byte;
+            uint32_t peek_length = std::min(node_length, 120u);
+            ast_node.peek = content.substr(start_byte, peek_length);
         }
         
         // Apply taxonomy
