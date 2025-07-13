@@ -3,11 +3,11 @@ cmake  -DEXTENSION_STATIC_BUILD=1 -DDUCKDB_EXTENSION_CONFIGS='/mnt/aux-data/teag
 -- Running vcpkg install
 warning: Embedding `vcpkg-configuration` in a manifest file is an EXPERIMENTAL feature.
 All requested packages are currently installed.
-All requested installations completed successfully in: 41.8 us
+All requested installations completed successfully in: 41.2 us
 -- Running vcpkg install - done
 -- git hash fd3fa59072, version v1.3.3-dev1067, extension folder fd3fa59072
 -- Extensions will be deployed to: /mnt/aux-data/teague/Projects/duckdb_ast/build/release/repository
--- Load extension 'sitting_duck' from '/mnt/aux-data/teague/Projects/duckdb_ast' @ 73ad68c
+-- Load extension 'sitting_duck' from '/mnt/aux-data/teague/Projects/duckdb_ast' @ 4954da6
 -- Load extension 'core_functions' from '/mnt/aux-data/teague/Projects/duckdb_ast/duckdb/extensions' @ fd3fa59072
 -- Load extension 'parquet' from '/mnt/aux-data/teague/Projects/duckdb_ast/duckdb/extensions' @ fd3fa59072
 -- Load extension 'jemalloc' from '/mnt/aux-data/teague/Projects/duckdb_ast/duckdb/extensions' @ fd3fa59072
@@ -357,3 +357,97 @@ gmake[1]: Entering directory '/mnt/aux-data/teague/Projects/duckdb_ast/build/rel
 [ 73%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/sitting_duck_extension.cpp.o
 [ 73%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapter.cpp.o
 [ 73%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapter_registry_init.cpp.o
+[ 74%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/python_adapter.cpp.o
+[ 74%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/javascript_adapter.cpp.o
+[ 74%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/cpp_adapter.cpp.o
+[ 74%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/typescript_adapter.cpp.o
+[ 74%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/sql_adapter.cpp.o
+[ 74%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/duckdb_adapter.cpp.o
+[ 74%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/go_adapter.cpp.o
+[ 74%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/ruby_adapter.cpp.o
+[ 75%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/markdown_adapter.cpp.o
+[ 75%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/java_adapter.cpp.o
+[ 75%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/php_adapter.cpp.o
+[ 75%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/rust_adapter.cpp.o
+[ 75%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/html_adapter.cpp.o
+[ 75%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/css_adapter.cpp.o
+[ 75%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/c_adapter.cpp.o
+[ 76%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/json_adapter.cpp.o
+[ 76%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/bash_adapter.cpp.o
+[ 76%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/swift_adapter.cpp.o
+[ 76%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/r_adapter.cpp.o
+[ 76%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/language_adapters/kotlin_adapter.cpp.o
+[ 76%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/read_ast_streaming_function.cpp.o
+[ 76%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/ast_sql_macros.cpp.o
+[ 77%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/parse_ast_function.cpp.o
+[ 77%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/unified_ast_backend.cpp.o
+[ 77%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/ast_parsing_task.cpp.o
+[ 77%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/ast_type.cpp.o
+[ 77%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/semantic_types.cpp.o
+[ 77%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/semantic_type_functions.cpp.o
+[ 77%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/ast_file_utils.cpp.o
+[ 78%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/ast_supported_languages_function.cpp.o
+[ 78%] Building CXX object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/src/native_context_extraction.cpp.o
+[ 78%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-python/src/parser.c.o
+[ 78%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-python/src/scanner.c.o
+[ 78%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-javascript/src/parser.c.o
+[ 78%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-javascript/src/scanner.c.o
+[ 78%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-cpp/src/parser.c.o
+[ 78%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-cpp/src/scanner.c.o
+[ 79%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-typescript/typescript/src/parser.c.o
+[ 79%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-typescript/typescript/src/scanner.c.o
+[ 79%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-sql/src/parser.c.o
+[ 79%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-sql/src/scanner.c.o
+[ 79%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-go/src/parser.c.o
+[ 79%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-ruby/src/parser.c.o
+[ 79%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-ruby/src/scanner.c.o
+[ 80%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-markdown/tree-sitter-markdown/src/parser.c.o
+[ 80%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-markdown/tree-sitter-markdown/src/scanner.c.o
+[ 80%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-java/src/parser.c.o
+[ 80%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-php/php/src/parser.c.o
+[ 80%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-php/php/src/scanner.c.o
+[ 80%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-html/src/parser.c.o
+[ 80%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-html/src/scanner.c.o
+[ 81%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-css/src/parser.c.o
+[ 81%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-css/src/scanner.c.o
+[ 81%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-c/src/parser.c.o
+[ 81%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-rust/src/parser.c.o
+[ 81%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-rust/src/scanner.c.o
+[ 81%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-json/src/parser.c.o
+[ 81%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-bash/src/parser.c.o
+[ 82%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-bash/src/scanner.c.o
+[ 82%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-swift/src/parser.c.o
+[ 82%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-swift/src/scanner.c.o
+[ 82%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-r/src/parser.c.o
+[ 82%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-r/src/scanner.c.o
+[ 82%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-kotlin/src/parser.c.o
+[ 82%] Building C object extension/sitting_duck/CMakeFiles/sitting_duck_loadable_extension.dir/grammars/tree-sitter-kotlin/src/scanner.c.o
+[ 83%] Linking CXX shared library sitting_duck.duckdb_extension
+[ 86%] Built target sitting_duck_loadable_extension
+[ 87%] Linking CXX shared library core_functions.duckdb_extension
+[ 87%] Built target core_functions_loadable_extension
+[ 87%] Linking CXX shared library parquet.duckdb_extension
+[ 94%] Built target parquet_loadable_extension
+[ 94%] Linking CXX shared library loadable_extension_demo.duckdb_extension
+[ 94%] Built target loadable_extension_demo_loadable_extension
+[ 94%] repository
+[ 94%] Built target duckdb_local_extension_repo
+[ 94%] Linking CXX shared library libduckdb.so
+[ 94%] Built target duckdb
+[ 94%] Built target sqlite3_api_wrapper_sqlite3
+[ 94%] Built target sqlite3_udf_api
+[ 95%] Built target sqlite3_api_wrapper_static
+[ 95%] Linking CXX shared library libsqlite3_api_wrapper.so
+[ 95%] Built target sqlite3_api_wrapper
+[ 95%] Linking CXX executable test_sqlite3_api_wrapper
+[ 95%] Built target test_sqlite3_api_wrapper
+[ 96%] Built target duckdb_linenoise
+[ 96%] Linking CXX executable ../../duckdb
+[ 97%] Built target shell
+[ 98%] Built target test_helpers
+[ 98%] Built target test_sqlite
+[ 98%] Built target test_persistence
+[ 99%] Linking CXX executable unittest
+[ 99%] Built target unittest
+[100%] Built target imdb
+gmake[1]: Leaving directory '/mnt/aux-data/teague/Projects/duckdb_ast/build/release'
