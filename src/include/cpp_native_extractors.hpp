@@ -101,6 +101,26 @@ struct CppNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
                 if (start < content.length() && end <= content.length() && end > start) {
                     param.name = content.substr(start, end - start);
                 }
+            } else if (strcmp(child_type, "reference_declarator") == 0 ||
+                       strcmp(child_type, "pointer_declarator") == 0 ||
+                       strcmp(child_type, "array_declarator") == 0 ||
+                       strcmp(child_type, "function_declarator") == 0) {
+                // C++ declarators - look for nested identifier
+                uint32_t declarator_child_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < declarator_child_count && j < 100; j++) {
+                    TSNode declarator_child = ts_node_child(child, j);
+                    if (!ts_node_is_null(declarator_child)) {
+                        const char* declarator_child_type = ts_node_type(declarator_child);
+                        if (declarator_child_type && strcmp(declarator_child_type, "identifier") == 0) {
+                            uint32_t start = ts_node_start_byte(declarator_child);
+                            uint32_t end = ts_node_end_byte(declarator_child);
+                            if (start < content.length() && end <= content.length() && end > start) {
+                                param.name = content.substr(start, end - start);
+                                break; // Found identifier, stop looking
+                            }
+                        }
+                    }
+                }
             } else if (strcmp(child_type, "default_parameter_declaration") == 0) {
                 // Parameter with default value
                 param.is_optional = true;
