@@ -42,34 +42,47 @@ struct GoNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
     
 private:
     static string ExtractGoReturnType(TSNode node, const string& content) {
-        // Look for return type after parameter list
+        // In Go, return types come AFTER the parameter list
+        // Structure: func name(params) returnType { }
+        //         or func name(params) (multipleReturns) { }
         uint32_t child_count = ts_node_child_count(node);
+        bool found_input_params = false;
+        
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
             
-            // Go return types can be single types or parameter lists for multiple returns
-            if (strcmp(child_type, "type_identifier") == 0 ||
-                strcmp(child_type, "primitive_type") == 0 ||
-                strcmp(child_type, "pointer_type") == 0 ||
-                strcmp(child_type, "slice_type") == 0 ||
-                strcmp(child_type, "array_type") == 0 ||
-                strcmp(child_type, "map_type") == 0 ||
-                strcmp(child_type, "channel_type") == 0 ||
-                strcmp(child_type, "interface_type") == 0 ||
-                strcmp(child_type, "struct_type") == 0) {
-                // Single return type
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    return content.substr(start, end - start);
-                }
-            } else if (strcmp(child_type, "parameter_list") == 0) {
-                // Multiple return types: (int, error)
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    return content.substr(start, end - start);
+            // Skip until we find the first parameter_list (input parameters)
+            if (!found_input_params && strcmp(child_type, "parameter_list") == 0) {
+                found_input_params = true;
+                continue; // This is the input parameters, keep looking for return type
+            }
+            
+            // After input parameter list, look for return types
+            if (found_input_params) {
+                if (strcmp(child_type, "type_identifier") == 0 ||
+                    strcmp(child_type, "primitive_type") == 0 ||
+                    strcmp(child_type, "pointer_type") == 0 ||
+                    strcmp(child_type, "slice_type") == 0 ||
+                    strcmp(child_type, "array_type") == 0 ||
+                    strcmp(child_type, "map_type") == 0 ||
+                    strcmp(child_type, "channel_type") == 0 ||
+                    strcmp(child_type, "interface_type") == 0 ||
+                    strcmp(child_type, "struct_type") == 0 ||
+                    strcmp(child_type, "qualified_type") == 0) {
+                    // Single return type
+                    uint32_t start = ts_node_start_byte(child);
+                    uint32_t end = ts_node_end_byte(child);
+                    if (start < content.length() && end <= content.length() && end > start) {
+                        return content.substr(start, end - start);
+                    }
+                } else if (strcmp(child_type, "parameter_list") == 0) {
+                    // Multiple return types: (int, error) - this is a second parameter_list for returns
+                    uint32_t start = ts_node_start_byte(child);
+                    uint32_t end = ts_node_end_byte(child);
+                    if (start < content.length() && end <= content.length() && end > start) {
+                        return content.substr(start, end - start);
+                    }
                 }
             }
         }
@@ -79,15 +92,57 @@ private:
     static vector<ParameterInfo> ExtractGoParameters(TSNode node, const string& content) {
         vector<ParameterInfo> params;
         
-        // Find parameter_list node  
+        // In Go functions, we need to extract parameters carefully:
+        // - func name(params) returnType
+        // - func (receiver) name(params) returnType  
+        // - func name(params) (multipleReturns)
+        // We should ONLY extract input parameters, not return types
+        
         uint32_t child_count = ts_node_child_count(node);
+        bool found_identifier = false;
+        bool extracted_receiver = false;
+        
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
             
+            // Track when we see the function identifier
+            if (strcmp(child_type, "identifier") == 0) {
+                found_identifier = true;
+                continue;
+            }
+            
             if (strcmp(child_type, "parameter_list") == 0) {
-                params = ExtractGoParametersDirect(child, content);
-                break;
+                if (!found_identifier && !extracted_receiver) {
+                    // This parameter_list comes before the identifier, so it's a receiver
+                    auto receiver_params = ExtractGoParametersDirect(child, content);
+                    for (auto& param : receiver_params) {
+                        param.name = "(" + param.name + " " + param.type + ")"; // Format as receiver
+                        param.type = "receiver";
+                        params.push_back(param);
+                    }
+                    extracted_receiver = true;
+                } else if (found_identifier) {
+                    // This parameter_list comes after the identifier
+                    // Check if this is input parameters or return parameters
+                    // If there are more parameter_lists after this one, this is input params
+                    bool has_more_param_lists = false;
+                    for (uint32_t j = i + 1; j < child_count; j++) {
+                        TSNode future_child = ts_node_child(node, j);
+                        if (strcmp(ts_node_type(future_child), "parameter_list") == 0) {
+                            has_more_param_lists = true;
+                            break;
+                        }
+                    }
+                    
+                    // This is input parameters (either first param list after identifier,
+                    // or the only param list after identifier)
+                    auto input_params = ExtractGoParametersDirect(child, content);
+                    for (const auto& param : input_params) {
+                        params.push_back(param);
+                    }
+                    break; // Stop after extracting input parameters
+                }
             }
         }
         
@@ -103,41 +158,45 @@ private:
             TSNode child = ts_node_child(params_node, i);
             const char* child_type = ts_node_type(child);
             
-            ParameterInfo param;
-            bool is_valid_param = false;
-            
             if (strcmp(child_type, "parameter_declaration") == 0) {
                 // Standard parameter: name Type or just Type
-                param = ExtractGoParameterDeclaration(child, content);
-                is_valid_param = !param.type.empty(); // Go requires type
+                // In Go, this might be grouped: param1, param2 int
+                auto grouped_params = ExtractGoParameterDeclaration(child, content);
+                if (!grouped_params.empty()) {
+                    for (const auto& param : grouped_params) {
+                        parameters.push_back(param);
+                    }
+                }
             } else if (strcmp(child_type, "variadic_parameter") == 0) {
                 // Variadic parameter: ...Type
-                param = ExtractGoVariadicParameter(child, content);
-                is_valid_param = !param.type.empty();
-            }
-            
-            if (is_valid_param) {
-                parameters.push_back(param);
+                ParameterInfo param = ExtractGoVariadicParameter(child, content);
+                if (!param.type.empty()) {
+                    parameters.push_back(param);
+                }
             }
         }
         
         return parameters;
     }
     
-    static ParameterInfo ExtractGoParameterDeclaration(TSNode node, const string& content) {
-        ParameterInfo param;
+    static vector<ParameterInfo> ExtractGoParameterDeclaration(TSNode node, const string& content) {
+        vector<ParameterInfo> params;
+        vector<string> param_names;
+        string param_type;
+        
         uint32_t child_count = ts_node_child_count(node);
         
+        // First pass: collect all identifiers (parameter names) and find the type
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
             
             if (strcmp(child_type, "identifier") == 0) {
-                // Parameter name (optional in Go)
+                // Parameter name
                 uint32_t start = ts_node_start_byte(child);
                 uint32_t end = ts_node_end_byte(child);
                 if (start < content.length() && end <= content.length()) {
-                    param.name = content.substr(start, end - start);
+                    param_names.push_back(content.substr(start, end - start));
                 }
             } else if (strcmp(child_type, "type_identifier") == 0 ||
                        strcmp(child_type, "primitive_type") == 0 ||
@@ -152,17 +211,32 @@ private:
                 uint32_t start = ts_node_start_byte(child);
                 uint32_t end = ts_node_end_byte(child);
                 if (start < content.length() && end <= content.length()) {
-                    param.type = content.substr(start, end - start);
+                    param_type = content.substr(start, end - start);
                 }
             }
         }
         
-        // If no name was found, generate one based on position
-        if (param.name.empty() && !param.type.empty()) {
-            param.name = "arg"; // Go allows unnamed parameters
+        // Create one ParameterInfo for each name with the shared type
+        if (!param_type.empty()) {
+            if (param_names.empty()) {
+                // No names provided, only create unnamed parameter if we actually have a type
+                // But don't create spurious parameters
+                ParameterInfo param;
+                param.type = param_type;
+                param.name = ""; // Empty name for unnamed parameters
+                params.push_back(param);
+            } else {
+                // Create one parameter for each name
+                for (const string& name : param_names) {
+                    ParameterInfo param;
+                    param.name = name;
+                    param.type = param_type;
+                    params.push_back(param);
+                }
+            }
         }
         
-        return param;
+        return params;
     }
     
     static ParameterInfo ExtractGoVariadicParameter(TSNode node, const string& content) {
