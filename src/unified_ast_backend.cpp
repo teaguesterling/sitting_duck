@@ -885,21 +885,45 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
                         signature_type_validity->SetInvalid(count);
                     }
                     
-                    // Create list of parameter names for parameters column
-                    vector<Value> parameter_values;
-                    for (const auto& param : node.native.parameters) {
-                        parameter_values.push_back(Value(param.name));
-                    }
-                    Value parameters_list = Value::LIST(LogicalType::VARCHAR, parameter_values);
-                    ListVector::PushBack(output.data[parameters_col], parameters_list);
+                    // FIXED: Use proper ListVector indexing instead of PushBack accumulation
+                    // Get list data pointers and use indexed assignment like string vectors
+                    auto list_data = FlatVector::GetData<list_entry_t>(output.data[parameters_col]);
+                    auto &param_child = ListVector::GetEntry(output.data[parameters_col]);
+                    auto param_child_data = FlatVector::GetData<string_t>(param_child);
                     
-                    // Create list of modifiers for modifiers column  
-                    vector<Value> modifier_values;
-                    for (const auto& modifier : node.native.modifiers) {
-                        modifier_values.push_back(Value(modifier));
+                    // Set list entry for parameters at current index
+                    list_data[count].offset = ListVector::GetListSize(output.data[parameters_col]);
+                    list_data[count].length = node.native.parameters.size();
+                    
+                    // Add parameter strings to child vector if any exist
+                    for (size_t i = 0; i < node.native.parameters.size(); i++) {
+                        idx_t child_idx = list_data[count].offset + i;
+                        if (child_idx >= ListVector::GetListCapacity(output.data[parameters_col])) {
+                            ListVector::Reserve(output.data[parameters_col], (child_idx + 1) * 2);
+                            // Re-get pointers after potential reallocation
+                            param_child_data = FlatVector::GetData<string_t>(ListVector::GetEntry(output.data[parameters_col]));
+                        }
+                        param_child_data[child_idx] = StringVector::AddString(param_child, node.native.parameters[i].name);
                     }
-                    Value modifiers_list = Value::LIST(LogicalType::VARCHAR, modifier_values);
-                    ListVector::PushBack(output.data[modifiers_col], modifiers_list);
+                    ListVector::SetListSize(output.data[parameters_col], list_data[count].offset + list_data[count].length);
+                    
+                    // Same for modifiers
+                    auto modifiers_list_data = FlatVector::GetData<list_entry_t>(output.data[modifiers_col]);
+                    auto &modifiers_child = ListVector::GetEntry(output.data[modifiers_col]);
+                    auto modifiers_child_data = FlatVector::GetData<string_t>(modifiers_child);
+                    
+                    modifiers_list_data[count].offset = ListVector::GetListSize(output.data[modifiers_col]);
+                    modifiers_list_data[count].length = node.native.modifiers.size();
+                    
+                    for (size_t i = 0; i < node.native.modifiers.size(); i++) {
+                        idx_t child_idx = modifiers_list_data[count].offset + i;
+                        if (child_idx >= ListVector::GetListCapacity(output.data[modifiers_col])) {
+                            ListVector::Reserve(output.data[modifiers_col], (child_idx + 1) * 2);
+                            modifiers_child_data = FlatVector::GetData<string_t>(ListVector::GetEntry(output.data[modifiers_col]));
+                        }
+                        modifiers_child_data[child_idx] = StringVector::AddString(modifiers_child, node.native.modifiers[i]);
+                    }
+                    ListVector::SetListSize(output.data[modifiers_col], modifiers_list_data[count].offset + modifiers_list_data[count].length);
                     
                     // annotations: set NULL if empty, otherwise set value
                     if (!node.native.annotations.empty()) {
@@ -920,12 +944,16 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
                     annotations_validity->SetInvalid(count);
                     qualified_name_validity->SetInvalid(count);
                     
-                    // For LIST types, we still need to push empty lists to maintain vector consistency
-                    Value empty_parameters_list = Value::LIST(LogicalType::VARCHAR, vector<Value>());
-                    ListVector::PushBack(output.data[parameters_col], empty_parameters_list);
+                    // For LIST types, create empty lists with proper indexing
+                    auto list_data = FlatVector::GetData<list_entry_t>(output.data[parameters_col]);
+                    auto modifiers_list_data = FlatVector::GetData<list_entry_t>(output.data[modifiers_col]);
                     
-                    Value empty_modifiers_list = Value::LIST(LogicalType::VARCHAR, vector<Value>());
-                    ListVector::PushBack(output.data[modifiers_col], empty_modifiers_list);
+                    // Set empty list entries for both parameters and modifiers
+                    list_data[count].offset = ListVector::GetListSize(output.data[parameters_col]);
+                    list_data[count].length = 0; // Empty list
+                    
+                    modifiers_list_data[count].offset = ListVector::GetListSize(output.data[modifiers_col]);
+                    modifiers_list_data[count].length = 0; // Empty list
                 }
             }
         }
