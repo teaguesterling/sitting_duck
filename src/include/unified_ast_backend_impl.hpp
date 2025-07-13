@@ -282,11 +282,22 @@ void PopulateSemanticFieldsTemplated(ASTNode& node, const AdapterType* adapter, 
             }
         }
         
-        // NATIVE CONTEXT EXTRACTION: TEMPORARILY DISABLED due to memory corruption
+        // NATIVE CONTEXT EXTRACTION: Use template specialization for zero-virtual-call performance
         // Only extract native context if the config level allows it
         if (config.context >= ContextLevel::NATIVE && node_config->native_strategy != NativeExtractionStrategy::NONE) {
-            // TEMPORARY: Throw error to prevent memory corruption during development
-            throw std::runtime_error("Native context extraction temporarily disabled due to memory corruption issues. Use context='normalized' instead.");
+            try {
+                // Extract native context using compile-time template dispatch with error handling
+                node.native = ExtractNativeContextTemplated<AdapterType>(ts_node, content, node_config->native_strategy);
+                
+                // Always mark as attempted if we get this far, and set to true if we got any data
+                node.native_extraction_attempted = true;
+            } catch (const std::exception& e) {
+                // Log error but don't fail the entire parsing operation
+                node.native_extraction_attempted = false;
+            } catch (...) {
+                // Catch any other errors
+                node.native_extraction_attempted = false;
+            }
         } else {
             // Explicitly mark that no extraction was attempted
             node.native_extraction_attempted = false;

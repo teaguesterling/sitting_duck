@@ -765,6 +765,9 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
     string_t* signature_type_vec = nullptr;
     string_t* annotations_vec = nullptr;
     string_t* qualified_name_vec = nullptr;
+    ValidityMask* signature_type_validity = nullptr;
+    ValidityMask* annotations_validity = nullptr;
+    ValidityMask* qualified_name_validity = nullptr;
     
     if (config.context >= ContextLevel::NATIVE) {
         signature_type_col = col_idx++;
@@ -775,6 +778,9 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
         signature_type_vec = FlatVector::GetData<string_t>(output.data[signature_type_col]);
         annotations_vec = FlatVector::GetData<string_t>(output.data[annotations_col]);
         qualified_name_vec = FlatVector::GetData<string_t>(output.data[qualified_name_col]);
+        signature_type_validity = &FlatVector::Validity(output.data[signature_type_col]);
+        annotations_validity = &FlatVector::Validity(output.data[annotations_col]);
+        qualified_name_validity = &FlatVector::Validity(output.data[qualified_name_col]);
         // Note: parameters and modifiers columns are LIST types, handled separately
     }
     
@@ -870,26 +876,57 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
                 name_vec[count] = StringVector::AddString(output.data[name_col], name_copy);
             }
             if (config.context >= ContextLevel::NATIVE) {
-                signature_type_vec[count] = StringVector::AddString(output.data[signature_type_col], node.native.signature_type);
-                
-                // Create list of parameter names for parameters column
-                vector<Value> parameter_values;
-                for (const auto& param : node.native.parameters) {
-                    parameter_values.push_back(Value(param.name));
+                // Check if native extraction was attempted and has meaningful data
+                if (node.native_extraction_attempted) {
+                    // signature_type: set NULL if empty, otherwise set value
+                    if (!node.native.signature_type.empty()) {
+                        signature_type_vec[count] = StringVector::AddString(output.data[signature_type_col], node.native.signature_type);
+                    } else {
+                        signature_type_validity->SetInvalid(count);
+                    }
+                    
+                    // Create list of parameter names for parameters column
+                    vector<Value> parameter_values;
+                    for (const auto& param : node.native.parameters) {
+                        parameter_values.push_back(Value(param.name));
+                    }
+                    Value parameters_list = Value::LIST(LogicalType::VARCHAR, parameter_values);
+                    ListVector::PushBack(output.data[parameters_col], parameters_list);
+                    
+                    // Create list of modifiers for modifiers column  
+                    vector<Value> modifier_values;
+                    for (const auto& modifier : node.native.modifiers) {
+                        modifier_values.push_back(Value(modifier));
+                    }
+                    Value modifiers_list = Value::LIST(LogicalType::VARCHAR, modifier_values);
+                    ListVector::PushBack(output.data[modifiers_col], modifiers_list);
+                    
+                    // annotations: set NULL if empty, otherwise set value
+                    if (!node.native.annotations.empty()) {
+                        annotations_vec[count] = StringVector::AddString(output.data[annotations_col], node.native.annotations);
+                    } else {
+                        annotations_validity->SetInvalid(count);
+                    }
+                    
+                    // qualified_name: set NULL if empty, otherwise set value
+                    if (!node.native.qualified_name.empty()) {
+                        qualified_name_vec[count] = StringVector::AddString(output.data[qualified_name_col], node.native.qualified_name);
+                    } else {
+                        qualified_name_validity->SetInvalid(count);
+                    }
+                } else {
+                    // No native extraction attempted - set all native fields to NULL
+                    signature_type_validity->SetInvalid(count);
+                    annotations_validity->SetInvalid(count);
+                    qualified_name_validity->SetInvalid(count);
+                    
+                    // For LIST types, we still need to push empty lists to maintain vector consistency
+                    Value empty_parameters_list = Value::LIST(LogicalType::VARCHAR, vector<Value>());
+                    ListVector::PushBack(output.data[parameters_col], empty_parameters_list);
+                    
+                    Value empty_modifiers_list = Value::LIST(LogicalType::VARCHAR, vector<Value>());
+                    ListVector::PushBack(output.data[modifiers_col], empty_modifiers_list);
                 }
-                Value parameters_list = Value::LIST(LogicalType::VARCHAR, parameter_values);
-                ListVector::PushBack(output.data[parameters_col], parameters_list);
-                
-                // Create list of modifiers for modifiers column  
-                vector<Value> modifier_values;
-                for (const auto& modifier : node.native.modifiers) {
-                    modifier_values.push_back(Value(modifier));
-                }
-                Value modifiers_list = Value::LIST(LogicalType::VARCHAR, modifier_values);
-                ListVector::PushBack(output.data[modifiers_col], modifiers_list);
-                
-                annotations_vec[count] = StringVector::AddString(output.data[annotations_col], node.native.annotations);
-                qualified_name_vec[count] = StringVector::AddString(output.data[qualified_name_col], node.native.qualified_name);
             }
         }
         
