@@ -43,24 +43,17 @@ private:
         // Structure: [modifiers] returnType methodName(params) { }
         uint32_t child_count = ts_node_child_count(node);
         
-        // Look for return type node - should come before identifier (method name)
-        bool found_identifier = false;
+        // Look for return type node (can be anywhere in the method declaration)
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
             
-            // Track if we've seen the method name identifier
-            if (strcmp(child_type, "identifier") == 0) {
-                found_identifier = true;
-                continue;
-            }
-            
-            // Look for return type before the identifier (method name)
-            if (!found_identifier && (strcmp(child_type, "type_identifier") == 0 ||
+            // Look for any return type (primitive types like int, or reference types like String)
+            if (strcmp(child_type, "type_identifier") == 0 ||
                 strcmp(child_type, "primitive_type") == 0 ||
                 strcmp(child_type, "generic_type") == 0 ||
                 strcmp(child_type, "array_type") == 0 ||
-                strcmp(child_type, "void_type") == 0)) {
+                strcmp(child_type, "void_type") == 0) {
                 uint32_t start = ts_node_start_byte(child);
                 uint32_t end = ts_node_end_byte(child);
                 if (start < content.length() && end <= content.length() && end > start) {
@@ -73,24 +66,17 @@ private:
         TSNode parent = ts_node_parent(node);
         if (!ts_node_is_null(parent)) {
             uint32_t parent_count = ts_node_child_count(parent);
-            found_identifier = false;
             
             for (uint32_t i = 0; i < parent_count && i < 20; i++) { // Limit search
                 TSNode child = ts_node_child(parent, i);
                 const char* child_type = ts_node_type(child);
                 
-                // Track if we've seen an identifier
-                if (strcmp(child_type, "identifier") == 0) {
-                    found_identifier = true;
-                    continue;
-                }
-                
-                // Look for return type before identifier
-                if (!found_identifier && (strcmp(child_type, "type_identifier") == 0 ||
+                // Look for any return type in parent
+                if (strcmp(child_type, "type_identifier") == 0 ||
                     strcmp(child_type, "primitive_type") == 0 ||
                     strcmp(child_type, "generic_type") == 0 ||
                     strcmp(child_type, "array_type") == 0 ||
-                    strcmp(child_type, "void_type") == 0)) {
+                    strcmp(child_type, "void_type") == 0) {
                     uint32_t start = ts_node_start_byte(child);
                     uint32_t end = ts_node_end_byte(child);
                     if (start < content.length() && end <= content.length() && end > start) {
