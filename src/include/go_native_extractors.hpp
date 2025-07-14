@@ -43,23 +43,23 @@ struct GoNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 private:
     static string ExtractGoReturnType(TSNode node, const string& content) {
         // In Go, return types come AFTER the parameter list
-        // Structure: func name(params) returnType { }
-        //         or func name(params) (multipleReturns) { }
+        // For methods: func (receiver) name(params) returnType { }
+        // For functions: func name(params) returnType { }
         uint32_t child_count = ts_node_child_count(node);
-        bool found_input_params = false;
+        int param_lists_seen = 0;
         
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
             
-            // Skip until we find the first parameter_list (input parameters)
-            if (!found_input_params && strcmp(child_type, "parameter_list") == 0) {
-                found_input_params = true;
-                continue; // This is the input parameters, keep looking for return type
+            // Count parameter lists we've seen
+            if (strcmp(child_type, "parameter_list") == 0) {
+                param_lists_seen++;
+                continue; // Keep looking for return type after parameter lists
             }
             
-            // After input parameter list, look for return types
-            if (found_input_params) {
+            // After we've seen parameter list(s), look for return types
+            if (param_lists_seen > 0) {
                 if (strcmp(child_type, "type_identifier") == 0 ||
                     strcmp(child_type, "primitive_type") == 0 ||
                     strcmp(child_type, "pointer_type") == 0 ||
@@ -77,7 +77,7 @@ private:
                         return content.substr(start, end - start);
                     }
                 } else if (strcmp(child_type, "parameter_list") == 0) {
-                    // Multiple return types: (int, error) - this is a second parameter_list for returns
+                    // Multiple return types: (int, error) - this is a parameter_list for returns
                     uint32_t start = ts_node_start_byte(child);
                     uint32_t end = ts_node_end_byte(child);
                     if (start < content.length() && end <= content.length() && end > start) {
@@ -96,11 +96,11 @@ private:
         // - func name(params) returnType
         // - func (receiver) name(params) returnType  
         // - func name(params) (multipleReturns)
-        // We should ONLY extract input parameters, not return types
+        // We should extract receiver + input parameters, but not return types
         
         uint32_t child_count = ts_node_child_count(node);
         bool found_identifier = false;
-        bool extracted_receiver = false;
+        int param_list_count = 0;
         
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
@@ -113,35 +113,31 @@ private:
             }
             
             if (strcmp(child_type, "parameter_list") == 0) {
-                if (!found_identifier && !extracted_receiver) {
+                param_list_count++;
+                
+                if (!found_identifier) {
                     // This parameter_list comes before the identifier, so it's a receiver
                     auto receiver_params = ExtractGoParametersDirect(child, content);
                     for (auto& param : receiver_params) {
-                        param.name = "(" + param.name + " " + param.type + ")"; // Format as receiver
+                        // Keep receiver info but mark it clearly
+                        param.name = param.name + " " + param.type; // "r *Receiver"
                         param.type = "receiver";
                         params.push_back(param);
                     }
-                    extracted_receiver = true;
-                } else if (found_identifier) {
-                    // This parameter_list comes after the identifier
-                    // Check if this is input parameters or return parameters
-                    // If there are more parameter_lists after this one, this is input params
-                    bool has_more_param_lists = false;
-                    for (uint32_t j = i + 1; j < child_count; j++) {
-                        TSNode future_child = ts_node_child(node, j);
-                        if (strcmp(ts_node_type(future_child), "parameter_list") == 0) {
-                            has_more_param_lists = true;
-                            break;
-                        }
-                    }
-                    
-                    // This is input parameters (either first param list after identifier,
-                    // or the only param list after identifier)
+                } else if (found_identifier && param_list_count == 1) {
+                    // This is the first parameter_list after identifier - it's input parameters
+                    // (not return parameters which would be later)
                     auto input_params = ExtractGoParametersDirect(child, content);
                     for (const auto& param : input_params) {
                         params.push_back(param);
                     }
-                    break; // Stop after extracting input parameters
+                } else if (found_identifier && param_list_count == 2) {
+                    // For methods: first param_list was receiver, this is input parameters
+                    auto input_params = ExtractGoParametersDirect(child, content);
+                    for (const auto& param : input_params) {
+                        params.push_back(param);
+                    }
+                    break; // Stop here - any further parameter_lists are return types
                 }
             }
         }
