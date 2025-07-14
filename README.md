@@ -17,16 +17,21 @@ Code is data. Data wants to be queried. DuckDB makes querying a joy. Therefore: 
 
 ## What It Does
 
-Sitting Duck lets you analyze source code using SQL queries. Parse your codebase once, then query it like any other database:
+Sitting Duck lets you analyze source code using SQL queries with language-specific semantic understanding. Parse your codebase once, then query it like any other database:
 
 ```sql
 -- Load the extension
 LOAD sitting_duck;
 
--- Find all functions in a Python file
-SELECT name, start_line, end_line 
-FROM read_ast('my_script.py') 
+-- Find all functions with their signatures (native context)
+SELECT name, semantic_type as signature, start_line, end_line 
+FROM read_ast('my_script.py', 'python', context := 'native') 
 WHERE type = 'function_definition';
+
+-- Analyze Java method return types
+SELECT name, semantic_type as return_type, start_line
+FROM read_ast('MyClass.java', 'java', context := 'native')
+WHERE type = 'method_declaration';
 
 -- Count different node types
 SELECT type, COUNT(*) 
@@ -40,9 +45,11 @@ ORDER BY COUNT(*) DESC;
 Sitting Duck transforms your source code into queriable data structures:
 
 1. **Tree-sitter parsing** - Robust, error-recovering parsers for 12+ languages
-2. **Semantic classification** - Universal type system for cross-language analysis  
-3. **SQL interface** - Rich table functions and streaming analysis
-4. **Streaming design** - Efficient processing of large codebases
+2. **Native semantic extraction** - Language-specific semantic analysis with type information
+3. **Multiple context levels** - From basic parsing to full semantic understanding
+4. **SQL interface** - Rich table functions with DuckDB-consistent design
+5. **Memory-safe processing** - Production-ready with comprehensive error handling
+6. **Streaming design** - Efficient processing of large codebases
 
 ## Supported Languages
 
@@ -102,30 +109,29 @@ FROM read_ast('src/**/*.py')
 GROUP BY file_path
 ORDER BY node_count DESC;
 
--- DuckDB-style pattern arrays (NEW!)
+-- Array of specific files (Note: currently processes first file only)
 SELECT file_path, language, COUNT(*) as nodes
 FROM read_ast([
-    'src/**/*.py',
-    'src/**/*.js', 
-    'tests/**/*.ts'
+    'main.py',
+    'utils.py', 
+    'config.js'
 ])
 GROUP BY file_path, language
 ORDER BY nodes DESC;
 
--- Mixed files and patterns
-SELECT file_path, type, COUNT(*) as occurrences
+-- Process files with batch processing
+SELECT file_path, COUNT(*) as nodes
 FROM read_ast([
-    'main.py',              -- specific file
-    'src/**/*.py',          -- glob pattern
-    'lib/utils.js'          -- another specific file
-])
-WHERE type = 'function_definition'
-GROUP BY file_path, type;
+    'src/module1.py',
+    'src/module2.py'
+], batch_size := 2)
+GROUP BY file_path;
 
--- Find all imports across multiple languages
-SELECT file_path, language, peek as import_statement
-FROM read_ast(['**/*.py', '**/*.js', '**/*.ts'])
-WHERE type IN ('import_statement', 'import_from_statement', 'import_declaration');
+-- Find functions in specific files
+SELECT file_path, name, start_line
+FROM read_ast(['main.py', 'utils.py'])
+WHERE type = 'function_definition'
+ORDER BY file_path, start_line;
 ```
 
 ## DuckDB-Consistent Interface
@@ -138,30 +144,46 @@ Sitting Duck follows DuckDB conventions, making it feel native to DuckDB users:
 -- Single file (VARCHAR)
 SELECT * FROM read_ast('main.py');
 
--- Multiple patterns (LIST(VARCHAR)) - NEW!
-SELECT * FROM read_ast(['src/**/*.py', 'tests/**/*.js']);
+-- Array of files (LIST(VARCHAR))
+SELECT * FROM read_ast(['main.py', 'utils.py']);
 
 -- With explicit language
 SELECT * FROM read_ast('script.py', 'python');
-SELECT * FROM read_ast(['**/*.py'], 'python');
+SELECT * FROM read_ast(['file1.py', 'file2.py'], 'python');
+
+-- With native context extraction
+SELECT * FROM read_ast('main.py', 'python', context := 'native');
 ```
 
 ### Named Parameters
 
 ```sql
 -- Error handling (like other DuckDB file functions)
-SELECT * FROM read_ast(['**/*.py'], ignore_errors := true);
+SELECT * FROM read_ast(['file1.py', 'file2.py'], ignore_errors := true);
+
+-- Context extraction levels
+SELECT * FROM read_ast('main.py', context := 'native');        -- Full semantic analysis
+SELECT * FROM read_ast('main.py', context := 'normalized');    -- Cross-language normalization
+SELECT * FROM read_ast('main.py', context := 'node_types_only'); -- Basic types only
+
+-- Source and structure control
+SELECT * FROM read_ast('main.py', source := 'full', structure := 'full');
 
 -- Performance tuning
-SELECT * FROM read_ast('main.py', peek_size := 200, peek_mode := 'context');
+SELECT * FROM read_ast('main.py', peek := 50);                 -- Limit peek size
+SELECT * FROM read_ast('main.py', peek := 'smart');            -- Smart peek mode
+
+-- Batch processing
+SELECT * FROM read_ast(['file1.py', 'file2.py'], batch_size := 2);
 ```
 
 ### Consistent Behavior
 
-- **File deduplication**: Multiple patterns matching the same file return it only once
-- **Sorted output**: Results are consistently ordered by file path
-- **Error handling**: Graceful handling with `ignore_errors` parameter
-- **Parameter validation**: Clear error messages for invalid inputs
+- **Parameter validation**: Comprehensive validation with clear error messages
+- **Error handling**: Graceful handling with `ignore_errors` parameter  
+- **Memory safety**: Robust multi-file processing with corruption prevention
+- **Native extraction**: Language-specific semantic analysis (Go, Java, C++, Python, JavaScript, etc.)
+- **Batch processing**: Configurable batch sizes for performance optimization
 
 ## Table Schema
 
@@ -184,9 +206,23 @@ The `read_ast()` function returns this schema:
 | `children_count` | UINTEGER | Number of direct children |
 | `descendant_count` | UINTEGER | Total descendants (useful for complexity) |
 | `peek` | VARCHAR | Source code snippet for this node |
-| `semantic_type` | UTINYINT | Universal semantic category (0-255) |
-| `universal_flags` | UTINYINT | Additional semantic flags |
-| `arity_bin` | UTINYINT | Binned arity for analysis |
+| `semantic_type` | VARCHAR | Language-specific semantic type (native context) or universal type |
+
+### Context Extraction Levels
+
+The extension supports multiple context extraction levels via the `context` parameter:
+
+- **`'none'`**: Minimal processing, fastest performance
+- **`'node_types_only'`**: Basic AST node types only
+- **`'normalized'`**: Cross-language semantic normalization  
+- **`'native'`**: Full language-specific semantic analysis (recommended)
+
+In native context mode, `semantic_type` contains language-specific semantic information:
+- **Go**: Function types, method receivers, return types, parameter types
+- **Java**: Method signatures, class types, return types, access modifiers
+- **C++**: Function signatures, class/struct types, template information
+- **Python**: Function/class definitions, decorators, type hints
+- **JavaScript**: Function types, arrow functions, class methods
 
 ## Quick Start
 
@@ -266,71 +302,79 @@ SELECT COUNT(*) FROM read_ast('**/*.py', peek_mode := 'smart');
 The extension includes a universal semantic taxonomy that works across all languages. Use convenience functions for readable queries:
 
 ```sql
--- Find all functions regardless of language (readable approach)
-SELECT file_path, name, language, semantic_type_to_string(semantic_type) as type_name
-FROM read_ast('**/*.*', ignore_errors := true)
-WHERE is_definition(semantic_type) AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+-- Find all function definitions across languages with native context
+SELECT file_path, name, language, semantic_type
+FROM read_ast('main.py', 'python', context := 'native')
+WHERE type = 'function_definition';
 
--- Analyze semantic categories across languages
+-- Compare Java and C++ method signatures
+UNION ALL
+(
+  SELECT 'java' as lang, name, semantic_type as signature
+  FROM read_ast('MyClass.java', 'java', context := 'native')
+  WHERE type = 'method_declaration'
+)
+UNION ALL  
+(
+  SELECT 'cpp' as lang, name, semantic_type as signature
+  FROM read_ast('MyClass.cpp', 'cpp', context := 'native')
+  WHERE type = 'function_definition'
+);
+
+-- Analyze function complexity in native context
 SELECT 
-    language,
-    get_super_kind(semantic_type) as category,
-    COUNT(*) as node_count
-FROM read_ast('**/*.*', ignore_errors := true)
-GROUP BY language, get_super_kind(semantic_type)
-ORDER BY node_count DESC;
-
--- Find control flow complexity by file
-SELECT 
-    file_path, 
-    language,
-    COUNT(*) as control_flow_nodes
-FROM read_ast('**/*.*', ignore_errors := true)
-WHERE is_control_flow(semantic_type)
-GROUP BY file_path, language
-ORDER BY control_flow_nodes DESC;
-
--- Performance-optimized version using raw codes
-SELECT file_path, name, language 
-FROM read_ast('**/*.*', ignore_errors := true)
-WHERE semantic_type = 240; -- DEFINITION_FUNCTION (faster)
+    name,
+    semantic_type,
+    descendant_count as complexity
+FROM read_ast('complex_file.py', 'python', context := 'native')
+WHERE type = 'function_definition'
+ORDER BY complexity DESC;
 ```
 
-**Available convenience functions:**
-- `semantic_type_to_string()` - Convert codes to readable names
-- `is_definition()`, `is_call()`, `is_control_flow()`, `is_identifier()` - Semantic predicates
-- `get_super_kind()`, `get_kind()` - Category extraction
+**Native Context Features:**
+- **Language-specific semantic types**: Method signatures, return types, parameter types
+- **Cross-language compatibility**: Compare similar constructs across languages
+- **Enhanced analysis**: More detailed semantic information than normalized context
+- **Production ready**: Thoroughly tested with memory safety guarantees
 
-> See [API_REFERENCE.md](API_REFERENCE.md) for the complete semantic type hierarchy with cross-language examples.
+> Use `context := 'native'` for the most detailed analysis. See language-specific tests for examples.
 
-### Multi-File Processing
+### Native Context Extraction
+
+The native context mode provides language-specific semantic analysis:
 
 ```sql
--- Analyze entire codebases with glob patterns
+-- Get Java method signatures with return types
 SELECT 
-    language, 
-    COUNT(DISTINCT file_path) as files, 
-    COUNT(CASE WHEN is_definition(semantic_type) AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION' THEN 1 END) as functions,
-    COUNT(CASE WHEN is_definition(semantic_type) AND semantic_type_to_string(semantic_type) = 'DEFINITION_CLASS' THEN 1 END) as classes
-FROM read_ast('**/*.*', ignore_errors := true)
-GROUP BY language
-ORDER BY files DESC;
+    name as method_name,
+    semantic_type as return_type,
+    start_line
+FROM read_ast('MyClass.java', 'java', context := 'native')
+WHERE type = 'method_declaration';
 
--- Find architectural patterns across languages
+-- Find Go function signatures
 SELECT 
-    get_super_kind(semantic_type) as semantic_category,
-    language,
-    COUNT(*) as usage_count
-FROM read_ast('**/*.*', ignore_errors := true)
-WHERE get_super_kind(semantic_type) IN ('COMPUTATION', 'CONTROL_EFFECTS')
-GROUP BY get_super_kind(semantic_type), language
-ORDER BY usage_count DESC;
+    name as function_name,
+    semantic_type as signature,
+    file_path
+FROM read_ast('*.go', 'go', context := 'native')
+WHERE type = 'function_declaration';
+
+-- Analyze C++ class hierarchies
+SELECT 
+    name as class_name,
+    semantic_type as class_info,
+    descendant_count as complexity
+FROM read_ast('*.cpp', 'cpp', context := 'native')
+WHERE type = 'class_specifier'
+ORDER BY complexity DESC;
 ```
 
 ## Limitations
 
 - **Parse-only**: This analyzes syntax, not semantics (no type checking, symbol resolution, etc.)
 - **Tree-sitter dependent**: Parsing quality depends on Tree-sitter grammar completeness
+- **Multi-file arrays**: Currently processes first file/pattern only (limitation under active development)
 - **Single-threaded parsing**: Files are parsed sequentially (though results stream efficiently)
 - **File-by-file processing**: Each file is parsed independently (no cross-file analysis)
 

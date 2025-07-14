@@ -33,13 +33,17 @@ SELECT COUNT(*) FROM parse_ast('def hello(): pass', 'python', context := 'normal
 statement ok
 SELECT COUNT(*) FROM parse_ast('def hello(): pass', 'python', context := 'native') LIMIT 1;
 
-# Test 2: Invalid context parameters should fail
-# ==============================================
-statement ok
+# Test 2: Invalid context parameters should fail (improved validation)
+# =====================================================================
+statement error
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'invalid');
+----
+Invalid context parameter 'invalid'. Valid values are: 'none', 'node_types_only', 'normalized', 'native'
 
-statement ok
+statement error
 SELECT COUNT(*) FROM parse_ast('def hello(): pass', 'python', context := 'wrong');
+----
+Invalid context parameter 'wrong'. Valid values are: 'none', 'node_types_only', 'normalized', 'native'
 
 statement ok
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'NONE');
@@ -49,8 +53,10 @@ SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context :=
 statement ok
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', source := 'none') LIMIT 1;
 
-statement ok
+statement error
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', source := 'input_only') LIMIT 1;
+----
+Invalid source parameter 'input_only'. Valid values are: 'none', 'path', 'lines_only', 'lines', 'full'
 
 statement ok
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', source := 'lines') LIMIT 1;
@@ -59,8 +65,10 @@ statement ok
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', source := 'full') LIMIT 1;
 
 # Invalid source parameters
-statement ok
+statement error
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', source := 'invalid');
+----
+Invalid source parameter 'invalid'. Valid values are: 'none', 'path', 'lines_only', 'lines', 'full'
 
 # Test 4: Structure parameter validation
 # ======================================
@@ -74,8 +82,10 @@ statement ok
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', structure := 'full') LIMIT 1;
 
 # Invalid structure parameters
-statement ok
+statement error
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', structure := 'invalid');
+----
+Invalid structure parameter 'invalid'. Valid values are: 'none', 'minimal', 'full'
 
 # Test 5: Peek parameter validation - string values
 # =================================================
@@ -142,11 +152,13 @@ true
 
 # Test 9: Legacy parameter compatibility
 # =====================================
-statement ok
+statement error
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', 
     ignore_errors := false,
     peek_size := 120,
     peek_mode := 'auto') LIMIT 1;
+----
+Invalid peek parameter 'auto'. Valid values are: 'none', 'smart', 'full', or a numeric size
 
 statement ok
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', 

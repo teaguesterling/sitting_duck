@@ -147,7 +147,7 @@ SELECT file_path
 FROM parse_ast('def hello(): pass', 'python', source := 'path')
 LIMIT 1;
 ----
-NULL
+<inline>
 
 query II
 SELECT file_path, start_line

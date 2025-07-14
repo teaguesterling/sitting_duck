@@ -62,16 +62,22 @@ SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context :=
 statement ok
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'native') LIMIT 1;
 
-# Test 5: Invalid context parameter handling
-# ==========================================
-statement ok
+# Test 5: Invalid context parameter handling - should now properly validate
+# ========================================================================
+statement error
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 'invalid');
+----
+Invalid context parameter 'invalid'. Valid values are: 'none', 'node_types_only', 'normalized', 'native'
 
-statement ok
+statement error
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := '');
+----
+Invalid context parameter ''. Valid values are: 'none', 'node_types_only', 'normalized', 'native'
 
-statement ok
+statement error
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', context := 123);
+----
+Invalid context parameter '123'. Valid values are: 'none', 'node_types_only', 'normalized', 'native'
 
 # Test 6: Large file processing without memory issues
 # ===================================================
