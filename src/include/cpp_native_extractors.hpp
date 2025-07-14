@@ -101,6 +101,26 @@ struct CppNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
                 if (start < content.length() && end <= content.length() && end > start) {
                     param.name = content.substr(start, end - start);
                 }
+            } else if (strcmp(child_type, "reference_declarator") == 0 ||
+                       strcmp(child_type, "pointer_declarator") == 0 ||
+                       strcmp(child_type, "array_declarator") == 0 ||
+                       strcmp(child_type, "function_declarator") == 0) {
+                // C++ declarators - look for nested identifier
+                uint32_t declarator_child_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < declarator_child_count && j < 100; j++) {
+                    TSNode declarator_child = ts_node_child(child, j);
+                    if (!ts_node_is_null(declarator_child)) {
+                        const char* declarator_child_type = ts_node_type(declarator_child);
+                        if (declarator_child_type && strcmp(declarator_child_type, "identifier") == 0) {
+                            uint32_t start = ts_node_start_byte(declarator_child);
+                            uint32_t end = ts_node_end_byte(declarator_child);
+                            if (start < content.length() && end <= content.length() && end > start) {
+                                param.name = content.substr(start, end - start);
+                                break; // Found identifier, stop looking
+                            }
+                        }
+                    }
+                }
             } else if (strcmp(child_type, "default_parameter_declaration") == 0) {
                 // Parameter with default value
                 param.is_optional = true;
@@ -200,20 +220,33 @@ private:
             }
         }
         
-        // If no explicit return type found, check if this is a constructor
+        // If no explicit return type found, check if this is a constructor or destructor
         if (!function_name.empty()) {
-            // Check if function name matches containing class name (constructor)
-            string class_name = ExtractContainingClassName(node, content);
-            if (!class_name.empty() && function_name == class_name) {
-                return class_name; // Constructor returns instance of the class
-            }
-            
-            // Check for destructor
+            // Check for destructor (starts with ~)
             if (function_name.length() > 1 && function_name[0] == '~') {
                 return "void"; // Destructors return void
             }
+            
+            // For qualified names like "ClassName::MethodName", extract just the method name
+            string method_name = function_name;
+            string class_prefix;
+            size_t scope_pos = function_name.find("::");
+            if (scope_pos != string::npos) {
+                class_prefix = function_name.substr(0, scope_pos);
+                method_name = function_name.substr(scope_pos + 2);
+                
+                // Only treat as constructor if MethodName == ClassName
+                // E.g., "ASTType::ASTType" is a constructor, but "CatalogSet::EntryLookup" is not
+                if (method_name == class_prefix) {
+                    return class_prefix; // Constructor returns instance of the class
+                }
+            }
+            // For unqualified names, be very conservative - many are legitimately constructors
+            // Don't try to detect class context as it's unreliable
         }
         
+        // If we can't determine the return type, return empty string (will show as NULL)
+        // This is better than guessing wrong
         return "";
     }
     
@@ -389,41 +422,47 @@ private:
     static vector<string> ExtractCppModifiers(TSNode node, const string& content) {
         vector<string> modifiers;
         
-        // Check for function specifiers and qualifiers
-        TSNode parent = ts_node_parent(node);
-        if (!ts_node_is_null(parent)) {
-            uint32_t parent_count = ts_node_child_count(parent);
-            for (uint32_t i = 0; i < parent_count; i++) {
-                TSNode sibling = ts_node_child(parent, i);
-                const char* sibling_type = ts_node_type(sibling);
-                
-                if (strcmp(sibling_type, "storage_class_specifier") == 0 ||
-                    strcmp(sibling_type, "type_qualifier") == 0 ||
-                    strcmp(sibling_type, "function_specifier") == 0) {
-                    uint32_t start = ts_node_start_byte(sibling);
-                    uint32_t end = ts_node_end_byte(sibling);
-                    if (start < content.length() && end <= content.length()) {
-                        modifiers.push_back(content.substr(start, end - start));
-                    }
-                }
-            }
-        }
-        
-        // Check for trailing specifiers (const, noexcept, etc.)
+        // C++ function modifiers appear as siblings to the function_declarator within function_definition
+        // Look for modifier siblings in the current node's children
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
-            const char* child_type = ts_node_type(child);
+            if (ts_node_is_null(child)) continue;
             
-            if (strcmp(child_type, "trailing_return_type") == 0 ||
-                strcmp(child_type, "noexcept") == 0 ||
-                strcmp(child_type, "const") == 0 ||
-                strcmp(child_type, "override") == 0 ||
-                strcmp(child_type, "final") == 0) {
+            const char* child_type = ts_node_type(child);
+            if (!child_type) continue;
+            
+            // Function specifiers and qualifiers that appear before function_declarator
+            if (strcmp(child_type, "storage_class_specifier") == 0 ||
+                strcmp(child_type, "type_qualifier") == 0 ||
+                strcmp(child_type, "function_specifier") == 0 ||
+                strcmp(child_type, "virtual_specifier") == 0 ||
+                strcmp(child_type, "explicit_function_specifier") == 0) {
                 uint32_t start = ts_node_start_byte(child);
                 uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
+                if (start < content.length() && end <= content.length() && end > start) {
                     modifiers.push_back(content.substr(start, end - start));
+                }
+            } else if (strcmp(child_type, "function_declarator") == 0) {
+                // Look for trailing modifiers in the function_declarator
+                uint32_t declarator_child_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < declarator_child_count; j++) {
+                    TSNode declarator_child = ts_node_child(child, j);
+                    if (ts_node_is_null(declarator_child)) continue;
+                    
+                    const char* declarator_child_type = ts_node_type(declarator_child);
+                    if (!declarator_child_type) continue;
+                    
+                    if (strcmp(declarator_child_type, "type_qualifier") == 0 ||
+                        strcmp(declarator_child_type, "noexcept") == 0 ||
+                        strcmp(declarator_child_type, "override") == 0 ||
+                        strcmp(declarator_child_type, "final") == 0) {
+                        uint32_t start = ts_node_start_byte(declarator_child);
+                        uint32_t end = ts_node_end_byte(declarator_child);
+                        if (start < content.length() && end <= content.length() && end > start) {
+                            modifiers.push_back(content.substr(start, end - start));
+                        }
+                    }
                 }
             }
         }
