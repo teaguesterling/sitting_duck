@@ -40,7 +40,9 @@ struct JavaNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 private:
     static string ExtractJavaReturnType(TSNode node, const string& content) {
         // In Java, return type comes before method name
+        // Structure: [modifiers] returnType methodName(params) { }
         uint32_t child_count = ts_node_child_count(node);
+        
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
@@ -52,11 +54,34 @@ private:
                 strcmp(child_type, "void_type") == 0) {
                 uint32_t start = ts_node_start_byte(child);
                 uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
+                if (start < content.length() && end <= content.length() && end > start) {
                     return content.substr(start, end - start);
                 }
             }
         }
+        
+        // Check if we need to look in parent for return type (method_declaration vs method_header)
+        TSNode parent = ts_node_parent(node);
+        if (!ts_node_is_null(parent)) {
+            uint32_t parent_count = ts_node_child_count(parent);
+            for (uint32_t i = 0; i < parent_count; i++) {
+                TSNode child = ts_node_child(parent, i);
+                const char* child_type = ts_node_type(child);
+                
+                if (strcmp(child_type, "type_identifier") == 0 ||
+                    strcmp(child_type, "primitive_type") == 0 ||
+                    strcmp(child_type, "generic_type") == 0 ||
+                    strcmp(child_type, "array_type") == 0 ||
+                    strcmp(child_type, "void_type") == 0) {
+                    uint32_t start = ts_node_start_byte(child);
+                    uint32_t end = ts_node_end_byte(child);
+                    if (start < content.length() && end <= content.length() && end > start) {
+                        return content.substr(start, end - start);
+                    }
+                }
+            }
+        }
+        
         return "";
     }
     
@@ -180,31 +205,61 @@ private:
     static vector<string> ExtractJavaModifiers(TSNode node, const string& content) {
         vector<string> modifiers;
         
-        // Check for method modifiers (they appear before the method)
-        TSNode parent = ts_node_parent(node);
-        if (!ts_node_is_null(parent)) {
-            uint32_t parent_count = ts_node_child_count(parent);
-            for (uint32_t i = 0; i < parent_count; i++) {
-                TSNode sibling = ts_node_child(parent, i);
-                const char* sibling_type = ts_node_type(sibling);
-                
-                if (strcmp(sibling_type, "modifiers") == 0) {
-                    // Extract individual modifiers
-                    uint32_t mod_count = ts_node_child_count(sibling);
-                    for (uint32_t j = 0; j < mod_count; j++) {
-                        TSNode modifier = ts_node_child(sibling, j);
-                        uint32_t start = ts_node_start_byte(modifier);
-                        uint32_t end = ts_node_end_byte(modifier);
-                        if (start < content.length() && end <= content.length()) {
+        // First check within the node itself for modifiers
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (strcmp(child_type, "modifiers") == 0) {
+                // Extract individual modifiers
+                uint32_t mod_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < mod_count; j++) {
+                    TSNode modifier = ts_node_child(child, j);
+                    const char* modifier_type = ts_node_type(modifier);
+                    uint32_t start = ts_node_start_byte(modifier);
+                    uint32_t end = ts_node_end_byte(modifier);
+                    if (start < content.length() && end <= content.length() && end > start) {
+                        modifiers.push_back(content.substr(start, end - start));
+                    }
+                }
+            } else if (strcmp(child_type, "annotation") == 0) {
+                // Java annotations
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                if (start < content.length() && end <= content.length() && end > start) {
+                    modifiers.push_back(content.substr(start, end - start));
+                }
+            }
+        }
+        
+        // If no modifiers found, check parent (but avoid ts_node_parent() reliability issues)
+        if (modifiers.empty()) {
+            TSNode parent = ts_node_parent(node);
+            if (!ts_node_is_null(parent)) {
+                uint32_t parent_count = ts_node_child_count(parent);
+                for (uint32_t i = 0; i < parent_count && i < 10; i++) { // Limit search
+                    TSNode sibling = ts_node_child(parent, i);
+                    const char* sibling_type = ts_node_type(sibling);
+                    
+                    if (strcmp(sibling_type, "modifiers") == 0) {
+                        // Extract individual modifiers
+                        uint32_t mod_count = ts_node_child_count(sibling);
+                        for (uint32_t j = 0; j < mod_count && j < 20; j++) { // Limit search
+                            TSNode modifier = ts_node_child(sibling, j);
+                            uint32_t start = ts_node_start_byte(modifier);
+                            uint32_t end = ts_node_end_byte(modifier);
+                            if (start < content.length() && end <= content.length() && end > start) {
+                                modifiers.push_back(content.substr(start, end - start));
+                            }
+                        }
+                    } else if (strcmp(sibling_type, "annotation") == 0) {
+                        // Java annotations
+                        uint32_t start = ts_node_start_byte(sibling);
+                        uint32_t end = ts_node_end_byte(sibling);
+                        if (start < content.length() && end <= content.length() && end > start) {
                             modifiers.push_back(content.substr(start, end - start));
                         }
-                    }
-                } else if (strcmp(sibling_type, "annotation") == 0) {
-                    // Java annotations
-                    uint32_t start = ts_node_start_byte(sibling);
-                    uint32_t end = ts_node_end_byte(sibling);
-                    if (start < content.length() && end <= content.length()) {
-                        modifiers.push_back(content.substr(start, end - start));
                     }
                 }
             }
