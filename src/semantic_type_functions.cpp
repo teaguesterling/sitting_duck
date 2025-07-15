@@ -1,4 +1,5 @@
 #include "duckdb.hpp"
+#include "duckdb/main/extension_util.hpp"
 #include "include/semantic_types.hpp"
 
 namespace duckdb {
@@ -261,64 +262,64 @@ static void GetSearchableTypesFunction(DataChunk &args, ExpressionState &state, 
     ListVector::SetListSize(list_vector, offset);
 }
 
-void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
+void RegisterSemanticTypeFunctions(DatabaseInstance &instance) {
     
     // Register semantic_type_to_string(semantic_type) -> VARCHAR
     ScalarFunction semantic_type_to_string_func("semantic_type_to_string", 
         {LogicalType::UTINYINT}, LogicalType::VARCHAR, SemanticTypeToStringFunction);
-    loader.RegisterFunction(semantic_type_to_string_func);
+    ExtensionUtil::RegisterFunction(instance, semantic_type_to_string_func);
     
     // Register get_super_kind(semantic_type) -> VARCHAR
     ScalarFunction get_super_kind_func("get_super_kind",
         {LogicalType::UTINYINT}, LogicalType::VARCHAR, GetSuperKindFunction);
-    loader.RegisterFunction(get_super_kind_func);
+    ExtensionUtil::RegisterFunction(instance, get_super_kind_func);
     
     // Register get_kind(semantic_type) -> VARCHAR
     ScalarFunction get_kind_func("get_kind",
         {LogicalType::UTINYINT}, LogicalType::VARCHAR, GetKindFunction);
-    loader.RegisterFunction(get_kind_func);
+    ExtensionUtil::RegisterFunction(instance, get_kind_func);
     
     // Register is_semantic_type(semantic_type, pattern) -> BOOLEAN
     ScalarFunction is_semantic_type_func("is_semantic_type",
         {LogicalType::UTINYINT, LogicalType::VARCHAR}, LogicalType::BOOLEAN, IsSemanticTypeFunction);
-    loader.RegisterFunction(is_semantic_type_func);
+    ExtensionUtil::RegisterFunction(instance, is_semantic_type_func);
     
     // Register semantic_type_code(name) -> UTINYINT
     ScalarFunction semantic_type_code_func("semantic_type_code",
         {LogicalType::VARCHAR}, LogicalType::UTINYINT, SemanticTypeCodeFunction);
-    loader.RegisterFunction(semantic_type_code_func);
+    ExtensionUtil::RegisterFunction(instance, semantic_type_code_func);
     
     // Register predicate functions
     ScalarFunction is_definition_func("is_definition",
         {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsDefinitionFunction);
-    loader.RegisterFunction(is_definition_func);
+    ExtensionUtil::RegisterFunction(instance, is_definition_func);
     
     ScalarFunction is_call_func("is_call",
         {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsCallFunction);
-    loader.RegisterFunction(is_call_func);
+    ExtensionUtil::RegisterFunction(instance, is_call_func);
     
     ScalarFunction is_control_flow_func("is_control_flow",
         {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsControlFlowFunction);
-    loader.RegisterFunction(is_control_flow_func);
+    ExtensionUtil::RegisterFunction(instance, is_control_flow_func);
     
     ScalarFunction is_identifier_func("is_identifier",
         {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsIdentifierFunction);
-    loader.RegisterFunction(is_identifier_func);
+    ExtensionUtil::RegisterFunction(instance, is_identifier_func);
     
     // Register get_searchable_types() -> LIST<UTINYINT>
     ScalarFunction get_searchable_types_func("get_searchable_types",
         {}, LogicalType::LIST(LogicalType::UTINYINT), GetSearchableTypesFunction);
-    loader.RegisterFunction(get_searchable_types_func);
+    ExtensionUtil::RegisterFunction(instance, get_searchable_types_func);
     
     // Register kind_code(name) -> UTINYINT
     ScalarFunction kind_code_func("kind_code",
         {LogicalType::VARCHAR}, LogicalType::UTINYINT, KindCodeFunction);
-    loader.RegisterFunction(kind_code_func);
+    ExtensionUtil::RegisterFunction(instance, kind_code_func);
     
     // Register is_kind(semantic_type, kind_name) -> BOOLEAN
     ScalarFunction is_kind_func("is_kind",
         {LogicalType::UTINYINT, LogicalType::VARCHAR}, LogicalType::BOOLEAN, IsKindFunction);
-    loader.RegisterFunction(is_kind_func);
+    ExtensionUtil::RegisterFunction(instance, is_kind_func);
 }
 
 } // namespace duckdb

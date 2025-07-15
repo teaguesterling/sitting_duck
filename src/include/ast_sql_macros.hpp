@@ -4,6 +4,6 @@
 
 namespace duckdb {
 
-void RegisterASTSQLMacros(ExtensionLoader &loader);
+void RegisterASTSQLMacros(DatabaseInstance &instance);
 
 } // namespace duckdb

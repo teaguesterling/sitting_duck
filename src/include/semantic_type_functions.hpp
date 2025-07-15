@@ -5,6 +5,6 @@
 namespace duckdb {
 
 // Register semantic type utility functions
-void RegisterSemanticTypeFunctions(ExtensionLoader &loader);
+void RegisterSemanticTypeFunctions(DatabaseInstance &instance);
 
 } // namespace duckdb

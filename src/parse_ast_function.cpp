@@ -2,6 +2,7 @@
 #include "unified_ast_backend.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/function/table_function.hpp"
+#include "duckdb/main/extension_util.hpp"
 
 namespace duckdb {
 
@@ -161,7 +162,7 @@ static void ParseASTHierarchicalExecute(ClientContext &context, TableFunctionInp
     output.SetCardinality(output_index);
 }
 
-void ParseASTFunction::Register(ExtensionLoader &loader) {
+void ParseASTFunction::Register(DatabaseInstance &instance) {
     // Register parse_ast(code, language) -> TABLE with flat schema (default)
     TableFunction parse_ast_func("parse_ast", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
                                  ParseASTExecute, ParseASTBind);
@@ -173,7 +174,7 @@ void ParseASTFunction::Register(ExtensionLoader &loader) {
     parse_ast_func.named_parameters["structure"] = LogicalType::VARCHAR;
     parse_ast_func.named_parameters["peek"] = LogicalType::ANY;  // Can be INTEGER or VARCHAR
     
-    loader.RegisterFunction(parse_ast_func);
+    ExtensionUtil::RegisterFunction(instance, parse_ast_func);
     
     // Register parse_ast_flat(code, language) -> TABLE with flat schema (alias)
     TableFunction parse_ast_flat_func("parse_ast_flat", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
@@ -186,7 +187,7 @@ void ParseASTFunction::Register(ExtensionLoader &loader) {
     parse_ast_flat_func.named_parameters["structure"] = LogicalType::VARCHAR;
     parse_ast_flat_func.named_parameters["peek"] = LogicalType::ANY;  // Can be INTEGER or VARCHAR
     
-    loader.RegisterFunction(parse_ast_flat_func);
+    ExtensionUtil::RegisterFunction(instance, parse_ast_flat_func);
     
     // Register parse_ast_hierarchical(code, language) -> TABLE with hierarchical schema (legacy)
     TableFunction parse_ast_hierarchical_func("parse_ast_hierarchical", {LogicalType::VARCHAR, LogicalType::VARCHAR}, 
@@ -199,7 +200,7 @@ void ParseASTFunction::Register(ExtensionLoader &loader) {
     parse_ast_hierarchical_func.named_parameters["structure"] = LogicalType::VARCHAR;
     parse_ast_hierarchical_func.named_parameters["peek"] = LogicalType::ANY;  // Can be INTEGER or VARCHAR
     
-    loader.RegisterFunction(parse_ast_hierarchical_func);
+    ExtensionUtil::RegisterFunction(instance, parse_ast_hierarchical_func);
 }
 
 } // namespace duckdb

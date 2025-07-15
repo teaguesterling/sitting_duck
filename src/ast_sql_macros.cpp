@@ -47,9 +47,9 @@ static vector<string> SplitSQLStatements(const string &sql) {
     return statements;
 }
 
-void RegisterASTSQLMacros(ExtensionLoader &loader) {
+void RegisterASTSQLMacros(DatabaseInstance &instance) {
     // Get a connection to execute SQL
-    auto conn = make_uniq<Connection>(loader.GetDatabaseInstance());
+    auto conn = make_uniq<Connection>(instance);
     
     int total_statements = 0;
     int successful_statements = 0;

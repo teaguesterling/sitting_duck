@@ -1,4 +1,5 @@
 #include "duckdb.hpp"
+#include "duckdb/main/extension_util.hpp"
 #include "language_adapter.hpp"
 
 namespace duckdb {
@@ -33,9 +34,9 @@ static void SupportedLanguagesFunction(ClientContext &context, TableFunctionInpu
     output.SetCardinality(count);
 }
 
-void RegisterASTSupportedLanguagesFunction(ExtensionLoader &loader) {
+void RegisterASTSupportedLanguagesFunction(DatabaseInstance &instance) {
     TableFunction function("ast_supported_languages", {}, SupportedLanguagesFunction, SupportedLanguagesBind, SupportedLanguagesInit);
-    loader.RegisterFunction(function);
+    ExtensionUtil::RegisterFunction(instance, function);
 }
 
 } // namespace duckdb

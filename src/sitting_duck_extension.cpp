@@ -13,47 +13,47 @@
 namespace duckdb {
 
 // Forward declaration of registration functions
-void RegisterReadASTFunction(ExtensionLoader &loader);           // Streaming-based implementation
-// void RegisterReadASTStreamingFunction(ExtensionLoader &loader);  // Removed - redundant
-// void RegisterReadASTObjectsHybridFunction(ExtensionLoader &loader); // Removed - unused
-void RegisterASTSQLMacros(ExtensionLoader &loader);
-// void RegisterDuckDBASTShortNamesFunction(ExtensionLoader &loader); // Removed
-void RegisterASTSupportedLanguagesFunction(ExtensionLoader &loader);
+void RegisterReadASTFunction(DatabaseInstance &instance);           // Streaming-based implementation
+// void RegisterReadASTStreamingFunction(DatabaseInstance &instance);  // Removed - redundant
+// void RegisterReadASTObjectsHybridFunction(DatabaseInstance &instance); // Removed - unused
+void RegisterASTSQLMacros(DatabaseInstance &instance);
+// void RegisterDuckDBASTShortNamesFunction(DatabaseInstance &instance); // Removed
+void RegisterASTSupportedLanguagesFunction(DatabaseInstance &instance);
 // Temporarily disabled:
-// void RegisterASTObjectsFunction(ExtensionLoader &loader);
-// void RegisterASTHelperFunctions(ExtensionLoader &loader);
+// void RegisterASTObjectsFunction(DatabaseInstance &instance);
+// void RegisterASTHelperFunctions(DatabaseInstance &instance);
 
-static void LoadInternal(ExtensionLoader &loader) {
+static void LoadInternal(DatabaseInstance &instance) {
 	// Register the read_ast table function (streaming-based)
-	RegisterReadASTFunction(loader);
+	RegisterReadASTFunction(instance);
 	
-	// RegisterReadASTStreamingFunction(loader); // Removed - redundant with read_ast
+	// RegisterReadASTStreamingFunction(instance); // Removed - redundant with read_ast
 	
-	// RegisterReadASTObjectsHybridFunction(loader); // Removed - unused by CLI/queries
+	// RegisterReadASTObjectsHybridFunction(instance); // Removed - unused by CLI/queries
 	
 	// Register the parse_ast scalar function
-	ParseASTFunction::Register(loader);
+	ParseASTFunction::Register(instance);
 	
 	// Register SQL macros for natural AST querying
-	RegisterASTSQLMacros(loader);
+	RegisterASTSQLMacros(instance);
 	
-	// RegisterDuckDBASTShortNamesFunction(loader); // Removed - short names not needed
+	// RegisterDuckDBASTShortNamesFunction(instance); // Removed - short names not needed
 	
 	// Register semantic type utility functions
-	RegisterSemanticTypeFunctions(loader);
+	RegisterSemanticTypeFunctions(instance);
 	
 	// Register supported languages function
-	RegisterASTSupportedLanguagesFunction(loader);
+	RegisterASTSupportedLanguagesFunction(instance);
 	
 	// Short names system removed for simplicity
 	
 	// TODO: Re-enable once we fix the issues
 	// Register AST helper functions  
-	// RegisterASTHelperFunctions(loader);
+	// RegisterASTHelperFunctions(instance);
 }
 
-void SittingDuckExtension::Load(ExtensionLoader &loader) {
-	LoadInternal(loader);
+void SittingDuckExtension::Load(DuckDB &db) {
+	LoadInternal(*db.instance);
 }
 
 string SittingDuckExtension::Name() {
@@ -72,12 +72,12 @@ string SittingDuckExtension::Version() const {
 
 extern "C" {
 
-DUCKDB_EXTENSION_API void sitting_duck_duckdb_cpp_init(duckdb::DatabaseInstance &db) {
+DUCKDB_EXTENSION_API void sitting_duck_init(duckdb::DatabaseInstance &db) {
 	duckdb::DuckDB db_wrapper(db);
-	db_wrapper.LoadStaticExtension<duckdb::SittingDuckExtension>();
+	db_wrapper.LoadExtension<duckdb::SittingDuckExtension>();
 }
 
-DUCKDB_EXTENSION_API const char *sitting_duck_duckdb_cpp_version() {
+DUCKDB_EXTENSION_API const char *sitting_duck_version() {
 	return duckdb::DuckDB::LibraryVersion();
 }
 
