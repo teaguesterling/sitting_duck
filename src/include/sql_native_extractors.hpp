@@ -482,6 +482,33 @@ struct SQLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
         
         return content.substr(start, end - start);
     }
+    
+    static string DetermineSelectType(TSNode node, const string& content) {
+        // Analyze SELECT statement to determine its type/complexity
+        string node_text = ExtractNodeText(node, content);
+        
+        // Check for complex query patterns
+        if (node_text.find("GROUP BY") != string::npos) {
+            return "SELECT_AGGREGATE";
+        } else if (node_text.find("JOIN") != string::npos) {
+            return "SELECT_JOIN";
+        } else if (node_text.find("WINDOW") != string::npos || 
+                   node_text.find("OVER") != string::npos) {
+            return "SELECT_WINDOW";
+        } else if (node_text.find("UNION") != string::npos) {
+            return "SELECT_UNION";
+        } else if (node_text.find("WITH") != string::npos) {
+            return "SELECT_CTE";
+        } else if (node_text.find("COUNT(") != string::npos || 
+                   node_text.find("SUM(") != string::npos ||
+                   node_text.find("AVG(") != string::npos ||
+                   node_text.find("MAX(") != string::npos ||
+                   node_text.find("MIN(") != string::npos) {
+            return "SELECT_FUNCTION";
+        } else {
+            return "SELECT_SIMPLE";
+        }
+    }
 };
 
 //==============================================================================
@@ -718,33 +745,6 @@ struct SQLNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
         }
         
         return constraints;
-    }
-    
-    static string DetermineSelectType(TSNode node, const string& content) {
-        // Analyze SELECT statement to determine its type/complexity
-        string node_text = ExtractNodeText(node, content);
-        
-        // Check for complex query patterns
-        if (node_text.find("GROUP BY") != string::npos) {
-            return "SELECT_AGGREGATE";
-        } else if (node_text.find("JOIN") != string::npos) {
-            return "SELECT_JOIN";
-        } else if (node_text.find("WINDOW") != string::npos || 
-                   node_text.find("OVER") != string::npos) {
-            return "SELECT_WINDOW";
-        } else if (node_text.find("UNION") != string::npos) {
-            return "SELECT_UNION";
-        } else if (node_text.find("WITH") != string::npos) {
-            return "SELECT_CTE";
-        } else if (node_text.find("COUNT(") != string::npos || 
-                   node_text.find("SUM(") != string::npos ||
-                   node_text.find("AVG(") != string::npos ||
-                   node_text.find("MAX(") != string::npos ||
-                   node_text.find("MIN(") != string::npos) {
-            return "SELECT_FUNCTION";
-        } else {
-            return "SELECT_SIMPLE";
-        }
     }
 };
 
