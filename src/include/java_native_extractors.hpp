@@ -278,16 +278,99 @@ template<>
 struct JavaNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
-        context.signature_type = "class";
         
-        // Extract class modifiers, extends, and implements
-        auto modifiers = ExtractJavaClassModifiers(node, content);
-        context.modifiers = modifiers;
+        try {
+            string node_type = ts_node_type(node);
+            
+            if (node_type == "class_declaration") {
+                context.signature_type = ExtractClassType(node, content);
+                context.modifiers = ExtractJavaClassModifiers(node, content);
+            } else if (node_type == "interface_declaration") {
+                context.signature_type = ExtractInterfaceType(node, content);
+                context.modifiers = ExtractInterfaceModifiers(node, content);
+            } else if (node_type == "enum_declaration") {
+                context.signature_type = ExtractEnumType(node, content);
+                context.modifiers = ExtractEnumModifiers(node, content);
+            } else if (node_type == "annotation_type_declaration") {
+                context.signature_type = ExtractAnnotationType(node, content);
+                context.modifiers = ExtractAnnotationModifiers(node, content);
+            } else {
+                // Default class extraction
+                context.signature_type = "class";
+                context.modifiers = ExtractJavaClassModifiers(node, content);
+            }
+        } catch (...) {
+            context.signature_type = "class";
+            context.modifiers.clear();
+        }
         
         return context;
     }
     
 private:
+    static string ExtractClassType(TSNode node, const string& content) {
+        // Check for abstract class
+        vector<string> modifiers = ExtractJavaClassModifiers(node, content);
+        for (const string& mod : modifiers) {
+            if (mod == "abstract") {
+                return "abstract_class";
+            }
+        }
+        return "class";
+    }
+    
+    static string ExtractInterfaceType(TSNode node, const string& content) {
+        // Check for functional interface or marker interface
+        vector<string> modifiers = ExtractInterfaceModifiers(node, content);
+        for (const string& mod : modifiers) {
+            if (mod.find("@FunctionalInterface") != string::npos) {
+                return "functional_interface";
+            }
+        }
+        
+        // Check if interface has methods (not a marker interface)
+        if (HasMethods(node, content)) {
+            return "interface";
+        } else {
+            return "marker_interface";
+        }
+    }
+    
+    static string ExtractEnumType(TSNode node, const string& content) {
+        // Check if enum has methods or just constants
+        if (HasMethods(node, content)) {
+            return "enum_with_methods";
+        } else {
+            return "enum";
+        }
+    }
+    
+    static string ExtractAnnotationType(TSNode node, const string& content) {
+        return "annotation";
+    }
+    
+    static bool HasMethods(TSNode node, const string& content) {
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "class_body" || child_type == "interface_body" || child_type == "enum_body") {
+                uint32_t body_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < body_count; j++) {
+                    TSNode body_child = ts_node_child(child, j);
+                    string body_child_type = ts_node_type(body_child);
+                    
+                    if (body_child_type == "method_declaration" || 
+                        body_child_type == "constructor_declaration") {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+    
     static vector<string> ExtractJavaClassModifiers(TSNode node, const string& content) {
         vector<string> modifiers;
         
@@ -333,6 +416,126 @@ private:
         
         return modifiers;
     }
+    
+    static vector<string> ExtractInterfaceModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("interface");
+        
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "modifiers") {
+                // Extract interface modifiers (public, etc.)
+                uint32_t mod_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < mod_count; j++) {
+                    TSNode modifier = ts_node_child(child, j);
+                    string modifier_text = ExtractNodeText(modifier, content);
+                    if (!modifier_text.empty()) {
+                        modifiers.push_back(modifier_text);
+                    }
+                }
+            } else if (child_type == "extends_interfaces") {
+                // Interface extends other interfaces
+                string extends_text = ExtractNodeText(child, content);
+                if (!extends_text.empty()) {
+                    modifiers.push_back(extends_text);
+                }
+            } else if (child_type == "annotation") {
+                // Interface annotations
+                string annotation_text = ExtractNodeText(child, content);
+                if (!annotation_text.empty()) {
+                    modifiers.push_back(annotation_text);
+                }
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static vector<string> ExtractEnumModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("enum");
+        
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "modifiers") {
+                // Extract enum modifiers (public, etc.)
+                uint32_t mod_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < mod_count; j++) {
+                    TSNode modifier = ts_node_child(child, j);
+                    string modifier_text = ExtractNodeText(modifier, content);
+                    if (!modifier_text.empty()) {
+                        modifiers.push_back(modifier_text);
+                    }
+                }
+            } else if (child_type == "super_interfaces") {
+                // Enum implements interfaces
+                string implements_text = ExtractNodeText(child, content);
+                if (!implements_text.empty()) {
+                    modifiers.push_back(implements_text);
+                }
+            } else if (child_type == "annotation") {
+                // Enum annotations
+                string annotation_text = ExtractNodeText(child, content);
+                if (!annotation_text.empty()) {
+                    modifiers.push_back(annotation_text);
+                }
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static vector<string> ExtractAnnotationModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("annotation_type");
+        
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "modifiers") {
+                // Extract annotation modifiers (public, etc.)
+                uint32_t mod_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < mod_count; j++) {
+                    TSNode modifier = ts_node_child(child, j);
+                    string modifier_text = ExtractNodeText(modifier, content);
+                    if (!modifier_text.empty()) {
+                        modifiers.push_back(modifier_text);
+                    }
+                }
+            } else if (child_type == "annotation") {
+                // Meta-annotations
+                string annotation_text = ExtractNodeText(child, content);
+                if (!annotation_text.empty()) {
+                    modifiers.push_back(annotation_text);
+                }
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractNodeText(TSNode node, const string& content) {
+        if (ts_node_is_null(node)) {
+            return "";
+        }
+        
+        uint32_t start = ts_node_start_byte(node);
+        uint32_t end = ts_node_end_byte(node);
+        
+        if (start < content.length() && end <= content.length() && end > start) {
+            return content.substr(start, end - start);
+        }
+        
+        return "";
+    }
 };
 
 // Reuse CLASS_WITH_METHODS for CLASS_WITH_INHERITANCE
@@ -349,12 +552,51 @@ struct JavaNativeExtractor<NativeExtractionStrategy::VARIABLE_WITH_TYPE> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
         
-        // Extract Java variable type
-        context.signature_type = ExtractJavaVariableType(node, content);
-        
-        // Extract field modifiers
-        auto modifiers = ExtractJavaVariableModifiers(node, content);
-        context.modifiers = modifiers;
+        try {
+            string node_type = ts_node_type(node);
+            
+            if (node_type == "variable_declarator" || node_type == "field_declaration") {
+                context.signature_type = ExtractJavaVariableType(node, content);
+                context.modifiers = ExtractJavaVariableModifiers(node, content);
+            } else if (node_type == "identifier") {
+                context.signature_type = ExtractJavaIdentifierType(node, content);
+                context.modifiers = ExtractJavaIdentifierModifiers(node, content);
+            } else if (node_type == "type_identifier") {
+                context.signature_type = ExtractJavaTypeIdentifierInfo(node, content);
+                context.modifiers.push_back("type_reference");
+            } else if (node_type == "primitive_type") {
+                context.signature_type = ExtractNodeText(node, content);
+                context.modifiers.push_back("primitive");
+            } else if (node_type == "generic_type") {
+                context.signature_type = ExtractNodeText(node, content);
+                context.modifiers.push_back("generic");
+            } else if (node_type == "array_type") {
+                context.signature_type = ExtractNodeText(node, content);
+                context.modifiers.push_back("array");
+            } else if (node_type == "formal_parameter") {
+                context.signature_type = ExtractJavaParameterType(node, content);
+                context.modifiers = ExtractJavaParameterModifiers(node, content);
+            } else if (node_type == "modifiers") {
+                context.signature_type = "modifiers";
+                context.modifiers = ExtractModifiersList(node, content);
+            } else if (node_type == "field_access") {
+                context.signature_type = ExtractFieldAccessType(node, content);
+                context.modifiers = ExtractFieldAccessModifiers(node, content);
+            } else if (node_type == "array_access") {
+                context.signature_type = ExtractArrayAccessType(node, content);
+                context.modifiers = ExtractArrayAccessModifiers(node, content);
+            } else if (node_type == "method_invocation") {
+                context.signature_type = ExtractMethodInvocationType(node, content);
+                context.modifiers = ExtractMethodInvocationModifiers(node, content);
+            } else {
+                // Generic Java variable/type extraction
+                context.signature_type = ExtractJavaVariableType(node, content);
+                context.modifiers = ExtractJavaVariableModifiers(node, content);
+            }
+        } catch (...) {
+            context.signature_type = "";
+            context.modifiers.clear();
+        }
         
         return context;
     }
@@ -417,6 +659,237 @@ private:
         
         return modifiers;
     }
+    
+    static string ExtractJavaIdentifierType(TSNode node, const string& content) {
+        // For identifiers, check parent context to infer type
+        TSNode parent = ts_node_parent(node);
+        if (!ts_node_is_null(parent)) {
+            string parent_type = ts_node_type(parent);
+            
+            if (parent_type == "variable_declarator") {
+                return ExtractJavaVariableType(parent, content);
+            } else if (parent_type == "formal_parameter") {
+                return ExtractJavaParameterType(parent, content);
+            } else if (parent_type == "field_declaration") {
+                return ExtractJavaVariableType(parent, content);
+            } else if (parent_type == "method_invocation") {
+                return "method_call";
+            } else if (parent_type == "field_access") {
+                return "field_access";
+            }
+        }
+        
+        return "identifier";
+    }
+    
+    static vector<string> ExtractJavaIdentifierModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        
+        // Check if this identifier is in a specific context
+        TSNode parent = ts_node_parent(node);
+        if (!ts_node_is_null(parent)) {
+            string parent_type = ts_node_type(parent);
+            modifiers.push_back("in_" + parent_type);
+            
+            // Check for additional context modifiers
+            if (parent_type == "method_invocation") {
+                modifiers.push_back("method_call");
+            } else if (parent_type == "field_access") {
+                modifiers.push_back("field_access");
+            } else if (parent_type == "variable_declarator") {
+                modifiers.push_back("variable_name");
+            } else if (parent_type == "class_declaration") {
+                modifiers.push_back("class_name");
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractJavaTypeIdentifierInfo(TSNode node, const string& content) {
+        // Extract the actual type name
+        uint32_t start = ts_node_start_byte(node);
+        uint32_t end = ts_node_end_byte(node);
+        
+        if (start < content.length() && end <= content.length() && end > start) {
+            return content.substr(start, end - start);
+        }
+        
+        return "type";
+    }
+    
+    static string ExtractJavaParameterType(TSNode node, const string& content) {
+        // Look for type in formal parameter
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (strcmp(child_type, "type_identifier") == 0 ||
+                strcmp(child_type, "primitive_type") == 0 ||
+                strcmp(child_type, "generic_type") == 0 ||
+                strcmp(child_type, "array_type") == 0) {
+                return ExtractNodeText(child, content);
+            }
+        }
+        
+        return "parameter";
+    }
+    
+    static vector<string> ExtractJavaParameterModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("method_parameter");
+        
+        // Check for parameter modifiers (final, annotations)
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "modifiers") {
+                vector<string> param_mods = ExtractModifiersList(child, content);
+                modifiers.insert(modifiers.end(), param_mods.begin(), param_mods.end());
+            } else if (child_type == "annotation") {
+                modifiers.push_back("annotated");
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static vector<string> ExtractModifiersList(TSNode modifiers_node, const string& content) {
+        vector<string> modifiers;
+        
+        uint32_t child_count = ts_node_child_count(modifiers_node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(modifiers_node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "public" || child_type == "private" || child_type == "protected" ||
+                child_type == "static" || child_type == "final" || child_type == "abstract" ||
+                child_type == "synchronized" || child_type == "volatile" || child_type == "transient") {
+                modifiers.push_back(child_type);
+            } else {
+                // Extract text for other modifiers
+                string modifier_text = ExtractNodeText(child, content);
+                if (!modifier_text.empty()) {
+                    modifiers.push_back(modifier_text);
+                }
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractFieldAccessType(TSNode node, const string& content) {
+        // For field access expressions like obj.field
+        return "field_access";
+    }
+    
+    static vector<string> ExtractFieldAccessModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("field_access");
+        
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (i == 0) {
+                modifiers.push_back("object_" + child_type);
+            } else if (child_type == "identifier") {
+                modifiers.push_back("field_name");
+            }
+        }
+        
+        // Check if it's a static field access (ClassName.field)
+        if (child_count >= 2) {
+            TSNode first_child = ts_node_child(node, 0);
+            string first_type = ts_node_type(first_child);
+            
+            if (first_type == "type_identifier") {
+                modifiers.push_back("static_field");
+            } else {
+                modifiers.push_back("instance_field");
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractArrayAccessType(TSNode node, const string& content) {
+        // For array access expressions like arr[index]
+        return "array_access";
+    }
+    
+    static vector<string> ExtractArrayAccessModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("array_access");
+        modifiers.push_back("subscript_operation");
+        
+        // Analyze the index expression
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "decimal_integer_literal") {
+                modifiers.push_back("constant_index");
+            } else if (child_type == "identifier") {
+                modifiers.push_back("variable_index");
+            } else if (child_type == "method_invocation") {
+                modifiers.push_back("computed_index");
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractMethodInvocationType(TSNode node, const string& content) {
+        // For method invocations like obj.method() - when captured as variable context
+        return "method_reference";
+    }
+    
+    static vector<string> ExtractMethodInvocationModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("method_invocation");
+        
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (i == 0) {
+                if (child_type == "type_identifier") {
+                    modifiers.push_back("static_method");
+                } else {
+                    modifiers.push_back("instance_method");
+                }
+                modifiers.push_back("object_" + child_type);
+            } else if (child_type == "identifier") {
+                modifiers.push_back("method_name");
+            } else if (child_type == "argument_list") {
+                modifiers.push_back("has_arguments");
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractNodeText(TSNode node, const string& content) {
+        if (ts_node_is_null(node)) {
+            return "";
+        }
+        
+        uint32_t start = ts_node_start_byte(node);
+        uint32_t end = ts_node_end_byte(node);
+        
+        if (start < content.length() && end <= content.length() && end > start) {
+            return content.substr(start, end - start);
+        }
+        
+        return "";
+    }
 };
 
 // Specialization for FUNCTION_CALL (Java method invocations and object creation)
@@ -424,6 +897,196 @@ template<>
 struct JavaNativeExtractor<NativeExtractionStrategy::FUNCTION_CALL> {
     static NativeContext Extract(TSNode node, const string& content) {
         return UnifiedFunctionCallExtractor<JavaLanguageTag>::Extract(node, content);
+    }
+};
+
+// Specialization for FUNCTION_WITH_DECORATORS (Java methods with annotations)
+template<>
+struct JavaNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_DECORATORS> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        NativeContext context;
+        
+        try {
+            string node_type = ts_node_type(node);
+            
+            if (node_type == "method_declaration" || node_type == "constructor_declaration") {
+                // Start with basic function extraction
+                context = JavaNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
+                
+                // Add annotations and advanced modifiers
+                vector<string> annotations = ExtractJavaAnnotations(node, content);
+                vector<string> advanced_modifiers = ExtractJavaAdvancedModifiers(node, content);
+                
+                // Combine existing modifiers with annotations and advanced modifiers
+                context.modifiers.insert(context.modifiers.end(), annotations.begin(), annotations.end());
+                context.modifiers.insert(context.modifiers.end(), advanced_modifiers.begin(), advanced_modifiers.end());
+                
+                // Enhance signature type with annotation info
+                if (!annotations.empty()) {
+                    context.signature_type = "annotated_" + context.signature_type;
+                }
+            } else {
+                // Fallback to basic function extraction
+                context = JavaNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
+            }
+        } catch (...) {
+            context.signature_type = "";
+            context.parameters.clear();
+            context.modifiers.clear();
+        }
+        
+        return context;
+    }
+    
+private:
+    static vector<string> ExtractJavaAnnotations(TSNode node, const string& content) {
+        vector<string> annotations;
+        
+        // Check parent and siblings for annotations
+        TSNode parent = ts_node_parent(node);
+        if (!ts_node_is_null(parent)) {
+            uint32_t parent_count = ts_node_child_count(parent);
+            for (uint32_t i = 0; i < parent_count; i++) {
+                TSNode sibling = ts_node_child(parent, i);
+                string sibling_type = ts_node_type(sibling);
+                
+                if (sibling_type == "annotation") {
+                    string annotation_text = ExtractNodeText(sibling, content);
+                    if (!annotation_text.empty()) {
+                        annotations.push_back(annotation_text);
+                    }
+                } else if (sibling_type == "marker_annotation") {
+                    string annotation_text = ExtractNodeText(sibling, content);
+                    if (!annotation_text.empty()) {
+                        annotations.push_back(annotation_text);
+                    }
+                }
+            }
+        }
+        
+        // Check within the node itself
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "annotation" || child_type == "marker_annotation") {
+                string annotation_text = ExtractNodeText(child, content);
+                if (!annotation_text.empty()) {
+                    annotations.push_back(annotation_text);
+                }
+            }
+        }
+        
+        return annotations;
+    }
+    
+    static vector<string> ExtractJavaAdvancedModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "modifiers") {
+                // Extract individual Java modifiers
+                uint32_t mod_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < mod_count; j++) {
+                    TSNode modifier = ts_node_child(child, j);
+                    string modifier_type = ts_node_type(modifier);
+                    
+                    if (modifier_type == "synchronized") {
+                        modifiers.push_back("synchronized");
+                    } else if (modifier_type == "native") {
+                        modifiers.push_back("native");
+                    } else if (modifier_type == "strictfp") {
+                        modifiers.push_back("strictfp");
+                    } else if (modifier_type == "transient") {
+                        modifiers.push_back("transient");
+                    } else if (modifier_type == "volatile") {
+                        modifiers.push_back("volatile");
+                    } else {
+                        // Extract text for other modifiers
+                        string modifier_text = ExtractNodeText(modifier, content);
+                        if (!modifier_text.empty()) {
+                            modifiers.push_back(modifier_text);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Check for generic type parameters
+        bool has_generics = false;
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "type_parameters") {
+                has_generics = true;
+                modifiers.push_back("generic");
+                break;
+            }
+        }
+        
+        // Check for throws clause
+        bool has_throws = false;
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "throws") {
+                has_throws = true;
+                modifiers.push_back("throws_exceptions");
+                
+                // Extract the exception types
+                string throws_text = ExtractNodeText(child, content);
+                if (!throws_text.empty()) {
+                    modifiers.push_back(throws_text);
+                }
+                break;
+            }
+        }
+        
+        // Check for varargs parameters
+        bool has_varargs = false;
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "formal_parameters") {
+                uint32_t param_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < param_count; j++) {
+                    TSNode param = ts_node_child(child, j);
+                    string param_type = ts_node_type(param);
+                    
+                    if (param_type == "spread_parameter") {
+                        has_varargs = true;
+                        modifiers.push_back("varargs");
+                        break;
+                    }
+                }
+                if (has_varargs) break;
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractNodeText(TSNode node, const string& content) {
+        if (ts_node_is_null(node)) {
+            return "";
+        }
+        
+        uint32_t start = ts_node_start_byte(node);
+        uint32_t end = ts_node_end_byte(node);
+        
+        if (start < content.length() && end <= content.length() && end > start) {
+            return content.substr(start, end - start);
+        }
+        
+        return "";
     }
 };
 
