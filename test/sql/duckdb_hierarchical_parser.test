@@ -152,6 +152,7 @@ SELECT * FROM regional_sales
 WHERE type = 'table_reference' AND name IS NOT NULL
 ORDER BY node_id;
 ----
+table_reference	regional_sales
 
 # Test 10: Test hierarchical JOIN parsing
 # ========================================

@@ -71,6 +71,7 @@ SELECT name FROM active_users
 WHERE type IN ('select_statement', 'select_node')
 ORDER BY type;
 ----
+select_node	(empty)
 select_statement	(empty)
 
 # Test 5: Function call recognition

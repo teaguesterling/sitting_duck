@@ -67,6 +67,7 @@ SELECT * FROM employee_hierarchy ORDER BY level, name
 WHERE type IN ('select_statement', 'select_node')
 ORDER BY type, name;
 ----
+select_node	(empty)
 select_statement	(empty)
 
 # Test 4: Array operations and function calls
