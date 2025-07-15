@@ -27,8 +27,8 @@ struct RubyNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
         
-        // Ruby methods don't have explicit return types (dynamic typing)
-        context.signature_type = ""; 
+        // Infer return type from method body patterns
+        context.signature_type = InferRubyReturnType(node, content); 
         
         // Extract method parameters 
         context.parameters = ExtractRubyParameters(node, content);
@@ -241,6 +241,59 @@ public:
         // But we can check if the method is within a class and look for visibility declarations
         
         return modifiers; // Ruby methods don't have explicit modifiers in the signature
+    }
+    
+    static string InferRubyReturnType(TSNode node, const string& content) {
+        // Basic return type inference for Ruby methods
+        uint32_t child_count = ts_node_child_count(node);
+        bool has_string_return = false;
+        bool has_boolean_return = false;
+        bool has_numeric_return = false;
+        bool has_instance_var = false;
+        
+        // Check method body for return patterns
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            uint32_t start = ts_node_start_byte(child);
+            uint32_t end = ts_node_end_byte(child);
+            
+            if (start < content.length() && end <= content.length()) {
+                string child_text = content.substr(start, end - start);
+                
+                // Check for common Ruby return patterns
+                if (child_text.find("\"") != string::npos || 
+                    child_text.find("'") != string::npos) {
+                    has_string_return = true;
+                } else if (child_text.find("true") != string::npos || 
+                           child_text.find("false") != string::npos) {
+                    has_boolean_return = true;
+                } else if (child_text.find("@") != string::npos) {
+                    has_instance_var = true;
+                } else if (child_text.find(".to_i") != string::npos || 
+                           child_text.find(".length") != string::npos ||
+                           child_text.find(".count") != string::npos) {
+                    has_numeric_return = true;
+                }
+            }
+        }
+        
+        // Determine return type based on patterns
+        if (has_string_return) return "String";
+        if (has_boolean_return) return "Boolean"; 
+        if (has_numeric_return) return "Integer";
+        if (has_instance_var) return "Object";
+        
+        // Check for special Ruby method names
+        uint32_t node_start = ts_node_start_byte(node);
+        uint32_t node_end = ts_node_end_byte(node);
+        if (node_start < content.length() && node_end <= content.length()) {
+            string method_text = content.substr(node_start, node_end - node_start);
+            if (method_text.find("initialize") != string::npos) {
+                return "self";
+            }
+        }
+        
+        return "Object"; // Default Ruby return type
     }
 };
 
