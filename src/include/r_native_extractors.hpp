@@ -29,8 +29,8 @@ struct RNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
         
         try {
             // R functions don't have explicit return type annotations
-            // Default to empty string (becomes NULL in output)
-            context.signature_type = "";
+            // Infer basic return type from function body patterns
+            context.signature_type = InferRReturnType(node, content);
             
             // Extract function parameters
             context.parameters = ExtractRParameters(node, content);
@@ -238,6 +238,56 @@ private:
         }
         
         return "";
+    }
+    
+    static string InferRReturnType(TSNode node, const string& content) {
+        // Basic return type inference for R functions
+        // Look for return statements and common patterns
+        
+        uint32_t child_count = ts_node_child_count(node);
+        bool has_return = false;
+        bool has_logical = false;
+        bool has_numeric = false;
+        bool has_character = false;
+        
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (child_type && strcmp(child_type, "call") == 0) {
+                // Check for return() calls
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                if (start < content.length() && end <= content.length()) {
+                    string call_text = content.substr(start, end - start);
+                    if (call_text.find("return(") != string::npos) {
+                        has_return = true;
+                        
+                        // Basic pattern matching for return types
+                        if (call_text.find("TRUE") != string::npos || 
+                            call_text.find("FALSE") != string::npos) {
+                            has_logical = true;
+                        } else if (call_text.find("\"") != string::npos || 
+                                   call_text.find("paste") != string::npos) {
+                            has_character = true;
+                        } else if (call_text.find("sum(") != string::npos || 
+                                   call_text.find("mean(") != string::npos ||
+                                   call_text.find("length(") != string::npos) {
+                            has_numeric = true;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Return inferred type based on patterns found
+        if (has_logical) return "logical";
+        if (has_character) return "character";  
+        if (has_numeric) return "numeric";
+        if (has_return) return "any";
+        
+        // Default for R functions
+        return "any";
     }
 };
 

@@ -27,9 +27,8 @@ struct BashNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
         NativeContext context;
         
         try {
-            // Bash functions don't have explicit return type annotations
-            // Default to empty string (becomes NULL in output)
-            context.signature_type = "";
+            // Infer return type from function body patterns and exit codes
+            context.signature_type = InferBashReturnType(node, content);
             
             // Extract function parameters (Bash functions use positional parameters)
             context.parameters = ExtractBashParameters(node, content);
@@ -323,6 +322,51 @@ private:
         }
         
         return "";
+    }
+    
+    static string InferBashReturnType(TSNode node, const string& content) {
+        // Infer return type from Bash function patterns
+        uint32_t child_count = ts_node_child_count(node);
+        bool has_echo = false;
+        bool has_return = false;
+        bool has_exit = false;
+        bool has_command_substitution = false;
+        bool has_assignment = false;
+        
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            uint32_t start = ts_node_start_byte(child);
+            uint32_t end = ts_node_end_byte(child);
+            
+            if (start < content.length() && end <= content.length()) {
+                string child_text = content.substr(start, end - start);
+                
+                // Check for common Bash output patterns
+                if (child_text.find("echo") != string::npos || 
+                    child_text.find("printf") != string::npos) {
+                    has_echo = true;
+                } else if (child_text.find("return") != string::npos) {
+                    has_return = true;
+                } else if (child_text.find("exit") != string::npos) {
+                    has_exit = true;
+                } else if (child_text.find("$(") != string::npos || 
+                           child_text.find("`") != string::npos) {
+                    has_command_substitution = true;
+                } else if (child_text.find("=") != string::npos && 
+                           child_text.find("local") == string::npos) {
+                    has_assignment = true;
+                }
+            }
+        }
+        
+        // Determine return type based on patterns
+        if (has_echo) return "string";           // Functions that echo output
+        if (has_return) return "exit_code";      // Functions that return exit codes
+        if (has_exit) return "exit_code";        // Functions that exit with codes
+        if (has_command_substitution) return "command_output"; // Functions with command substitution
+        if (has_assignment) return "side_effect"; // Functions with side effects
+        
+        return "exit_code"; // Default Bash function return type
     }
 };
 

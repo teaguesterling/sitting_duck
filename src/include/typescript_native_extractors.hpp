@@ -356,11 +356,37 @@ template<>
 struct TypeScriptNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
-        context.signature_type = "class";
         
-        // Extract class modifiers, extends, and implements
-        auto modifiers = ExtractTypeScriptClassModifiers(node, content);
-        context.modifiers = modifiers;
+        try {
+            string node_type = ts_node_type(node);
+            
+            if (node_type == "class_declaration") {
+                context.signature_type = "class";
+                context.modifiers = ExtractTypeScriptClassModifiers(node, content);
+            } else if (node_type == "interface_declaration") {
+                context.signature_type = "interface";
+                context.modifiers = ExtractInterfaceModifiers(node, content);
+            } else if (node_type == "enum_declaration") {
+                context.signature_type = "enum";
+                context.modifiers = ExtractEnumModifiers(node, content);
+            } else if (node_type == "type_alias_declaration") {
+                context.signature_type = ExtractTypeAliasType(node, content);
+                context.modifiers = ExtractTypeAliasModifiers(node, content);
+            } else if (node_type == "module_declaration") {
+                context.signature_type = "module";
+                context.modifiers = ExtractModuleModifiers(node, content);
+            } else if (node_type == "namespace_declaration") {
+                context.signature_type = "namespace";
+                context.modifiers = ExtractNamespaceModifiers(node, content);
+            } else {
+                // Generic class-like structure
+                context.signature_type = "class";
+                context.modifiers = ExtractTypeScriptClassModifiers(node, content);
+            }
+        } catch (...) {
+            context.signature_type = "";
+            context.modifiers.clear();
+        }
         
         return context;
     }
@@ -399,6 +425,131 @@ public:
         }
         return "";
     }
+    
+    static vector<string> ExtractInterfaceModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("interface");
+        
+        // Check for export, declare modifiers
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (strcmp(child_type, "export") == 0 ||
+                strcmp(child_type, "declare") == 0) {
+                modifiers.push_back(child_type);
+            } else if (strcmp(child_type, "extends_clause") == 0) {
+                modifiers.push_back("extends");
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static vector<string> ExtractEnumModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("enum");
+        
+        // Check for const enum, export enum
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (strcmp(child_type, "const") == 0) {
+                modifiers.push_back("const_enum");
+            } else if (strcmp(child_type, "export") == 0) {
+                modifiers.push_back("export");
+            } else if (strcmp(child_type, "declare") == 0) {
+                modifiers.push_back("declare");
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractTypeAliasType(TSNode node, const string& content) {
+        // Look for the type being aliased
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (strcmp(child_type, "union_type") == 0) {
+                return "union_type";
+            } else if (strcmp(child_type, "intersection_type") == 0) {
+                return "intersection_type";
+            } else if (strcmp(child_type, "object_type") == 0) {
+                return "object_type";
+            } else if (strcmp(child_type, "array_type") == 0) {
+                return "array_type";
+            } else if (strcmp(child_type, "function_type") == 0) {
+                return "function_type";
+            }
+        }
+        
+        return "type_alias";
+    }
+    
+    static vector<string> ExtractTypeAliasModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("type_definition");
+        
+        // Check for export, declare
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (strcmp(child_type, "export") == 0 ||
+                strcmp(child_type, "declare") == 0) {
+                modifiers.push_back(child_type);
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static vector<string> ExtractModuleModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("module");
+        
+        // Check for ambient modules
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (strcmp(child_type, "declare") == 0) {
+                modifiers.push_back("ambient");
+            } else if (strcmp(child_type, "export") == 0) {
+                modifiers.push_back("export");
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static vector<string> ExtractNamespaceModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("namespace");
+        
+        // Check for export namespace
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+            
+            if (strcmp(child_type, "export") == 0) {
+                modifiers.push_back("export");
+            } else if (strcmp(child_type, "declare") == 0) {
+                modifiers.push_back("declare");
+            }
+        }
+        
+        return modifiers;
+    }
 };
 
 // Reuse CLASS_WITH_METHODS for CLASS_WITH_INHERITANCE
@@ -415,12 +566,48 @@ struct TypeScriptNativeExtractor<NativeExtractionStrategy::VARIABLE_WITH_TYPE> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
         
-        // Extract TypeScript variable type annotation
-        context.signature_type = ExtractVariableType(node, content);
-        
-        // Extract declaration modifiers (const, let, readonly, etc.)
-        auto modifiers = ExtractVariableModifiers(node, content);
-        context.modifiers = modifiers;
+        try {
+            string node_type = ts_node_type(node);
+            
+            if (node_type == "variable_declarator") {
+                context.signature_type = ExtractVariableType(node, content);
+                context.modifiers = ExtractVariableModifiers(node, content);
+            } else if (node_type == "type_annotation") {
+                context.signature_type = ExtractTypeFromAnnotation(node, content);
+                context.modifiers.push_back("type_annotation");
+            } else if (node_type == "identifier") {
+                context.signature_type = ExtractIdentifierType(node, content);
+                context.modifiers = ExtractIdentifierModifiers(node, content);
+            } else if (node_type == "property_identifier") {
+                context.signature_type = ExtractPropertyType(node, content);
+                context.modifiers.push_back("property");
+            } else if (node_type == "type_identifier") {
+                context.signature_type = ExtractTypeIdentifierInfo(node, content);
+                context.modifiers.push_back("type_reference");
+            } else if (node_type == "property_signature") {
+                context.signature_type = ExtractPropertySignatureType(node, content);
+                context.modifiers = ExtractPropertySignatureModifiers(node, content);
+            } else if (node_type == "field_declaration") {
+                context.signature_type = ExtractFieldType(node, content);
+                context.modifiers = ExtractFieldModifiers(node, content);
+            } else if (node_type == "member_expression") {
+                context.signature_type = ExtractMemberExpressionType(node, content);
+                context.modifiers = ExtractMemberExpressionModifiers(node, content);
+            } else if (node_type == "subscript_expression") {
+                context.signature_type = ExtractSubscriptType(node, content);
+                context.modifiers = ExtractSubscriptModifiers(node, content);
+            } else if (node_type == "computed_property_name") {
+                context.signature_type = ExtractComputedPropertyType(node, content);
+                context.modifiers = ExtractComputedPropertyModifiers(node, content);
+            } else {
+                // Generic variable/type extraction
+                context.signature_type = ExtractVariableType(node, content);
+                context.modifiers = ExtractVariableModifiers(node, content);
+            }
+        } catch (...) {
+            context.signature_type = "";
+            context.modifiers.clear();
+        }
         
         return context;
     }
@@ -467,6 +654,259 @@ public:
                         }
                     }
                 }
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractTypeFromAnnotation(TSNode annotation_node, const string& content) {
+        // Reuse the existing method from FUNCTION_WITH_PARAMS
+        return TypeScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractTypeFromAnnotation(annotation_node, content);
+    }
+    
+    static string ExtractIdentifierType(TSNode node, const string& content) {
+        // For identifiers, check parent context to infer type
+        TSNode parent = ts_node_parent(node);
+        if (!ts_node_is_null(parent)) {
+            string parent_type = ts_node_type(parent);
+            
+            if (parent_type == "variable_declarator") {
+                return ExtractVariableType(parent, content);
+            } else if (parent_type == "type_annotation") {
+                return ExtractTypeFromAnnotation(parent, content);
+            } else if (parent_type == "property_signature") {
+                return ExtractPropertySignatureType(parent, content);
+            } else if (parent_type == "parameter") {
+                // Check if this is a typed parameter
+                uint32_t parent_count = ts_node_child_count(parent);
+                for (uint32_t i = 0; i < parent_count; i++) {
+                    TSNode child = ts_node_child(parent, i);
+                    if (strcmp(ts_node_type(child), "type_annotation") == 0) {
+                        return ExtractTypeFromAnnotation(child, content);
+                    }
+                }
+            }
+        }
+        
+        return "identifier";
+    }
+    
+    static vector<string> ExtractIdentifierModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        
+        // Check if this identifier is in a specific context
+        TSNode parent = ts_node_parent(node);
+        if (!ts_node_is_null(parent)) {
+            string parent_type = ts_node_type(parent);
+            modifiers.push_back("in_" + parent_type);
+            
+            // Check for additional context modifiers
+            if (parent_type == "member_expression") {
+                modifiers.push_back("member_access");
+            } else if (parent_type == "call_expression") {
+                modifiers.push_back("function_call");
+            } else if (parent_type == "variable_declarator") {
+                modifiers.push_back("variable_name");
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractPropertyType(TSNode node, const string& content) {
+        // For property identifiers, check parent for type context
+        TSNode parent = ts_node_parent(node);
+        if (!ts_node_is_null(parent)) {
+            string parent_type = ts_node_type(parent);
+            
+            if (parent_type == "member_expression") {
+                return "property_access";
+            } else if (parent_type == "property_signature") {
+                return ExtractPropertySignatureType(parent, content);
+            } else if (parent_type == "field_declaration") {
+                return ExtractFieldType(parent, content);
+            }
+        }
+        
+        return "property";
+    }
+    
+    static string ExtractTypeIdentifierInfo(TSNode node, const string& content) {
+        // Extract the actual type name
+        uint32_t start = ts_node_start_byte(node);
+        uint32_t end = ts_node_end_byte(node);
+        
+        if (start < content.length() && end <= content.length() && end > start) {
+            return content.substr(start, end - start);
+        }
+        
+        return "type";
+    }
+    
+    static string ExtractPropertySignatureType(TSNode node, const string& content) {
+        // Look for type annotation in property signature
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            if (strcmp(ts_node_type(child), "type_annotation") == 0) {
+                return ExtractTypeFromAnnotation(child, content);
+            }
+        }
+        
+        return "property_signature";
+    }
+    
+    static vector<string> ExtractPropertySignatureModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("interface_property");
+        
+        // Check for optional modifier
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            if (strcmp(ts_node_type(child), "?") == 0) {
+                modifiers.push_back("optional");
+                break;
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractFieldType(TSNode node, const string& content) {
+        // Look for type annotation in field declaration
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            if (strcmp(ts_node_type(child), "type_annotation") == 0) {
+                return ExtractTypeFromAnnotation(child, content);
+            }
+        }
+        
+        return "field";
+    }
+    
+    static vector<string> ExtractFieldModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("class_field");
+        
+        // Check for access modifiers
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "accessibility_modifier") {
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+                if (start < content.length() && end <= content.length()) {
+                    modifiers.push_back(content.substr(start, end - start));
+                }
+            } else if (child_type == "readonly") {
+                modifiers.push_back("readonly");
+            } else if (child_type == "static") {
+                modifiers.push_back("static");
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractMemberExpressionType(TSNode node, const string& content) {
+        // For member expressions like obj.property or obj[property]
+        uint32_t child_count = ts_node_child_count(node);
+        
+        string object_type = "";
+        string property_type = "";
+        
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (i == 0) {
+                // First child is the object
+                object_type = child_type;
+            } else if (child_type == "property_identifier" || child_type == "identifier") {
+                // Property being accessed
+                property_type = child_type;
+            }
+        }
+        
+        return "member_access";
+    }
+    
+    static vector<string> ExtractMemberExpressionModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("member_expression");
+        
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (i == 0) {
+                modifiers.push_back("object_" + child_type);
+            } else if (child_type == "property_identifier") {
+                modifiers.push_back("property_access");
+            } else if (child_type == "identifier") {
+                modifiers.push_back("dynamic_property");
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractSubscriptType(TSNode node, const string& content) {
+        // For subscript expressions like arr[index]
+        return "subscript_access";
+    }
+    
+    static vector<string> ExtractSubscriptModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("subscript_expression");
+        modifiers.push_back("computed_access");
+        
+        // Check if it's array-like or object-like access
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "number_literal") {
+                modifiers.push_back("numeric_index");
+            } else if (child_type == "string_literal") {
+                modifiers.push_back("string_index");
+            } else if (child_type == "identifier") {
+                modifiers.push_back("variable_index");
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractComputedPropertyType(TSNode node, const string& content) {
+        // For computed property names like [key]: value
+        return "computed_property";
+    }
+    
+    static vector<string> ExtractComputedPropertyModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        modifiers.push_back("computed_property_name");
+        modifiers.push_back("dynamic_key");
+        
+        // Analyze the computed expression
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "string_literal") {
+                modifiers.push_back("string_computed");
+            } else if (child_type == "template_string") {
+                modifiers.push_back("template_computed");
+            } else if (child_type == "identifier") {
+                modifiers.push_back("variable_computed");
             }
         }
         
@@ -614,6 +1054,165 @@ private:
         }
         
         return arguments;
+    }
+};
+
+// Specialization for FUNCTION_WITH_DECORATORS
+template<>
+struct TypeScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_DECORATORS> {
+    static NativeContext Extract(TSNode node, const string& content) {
+        NativeContext context;
+        
+        try {
+            string node_type = ts_node_type(node);
+            
+            if (node_type == "function_declaration" || node_type == "method_definition" || 
+                node_type == "method_signature" || node_type == "arrow_function") {
+                // Start with basic function extraction
+                context = TypeScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
+                
+                // Add decorators and advanced modifiers
+                vector<string> decorators = ExtractTSDecorators(node, content);
+                vector<string> advanced_modifiers = ExtractTSAdvancedModifiers(node, content);
+                
+                // Combine existing modifiers with decorators and advanced modifiers
+                context.modifiers.insert(context.modifiers.end(), decorators.begin(), decorators.end());
+                context.modifiers.insert(context.modifiers.end(), advanced_modifiers.begin(), advanced_modifiers.end());
+                
+                // Enhance signature type with decorator info
+                if (!decorators.empty()) {
+                    context.signature_type = "decorated_" + context.signature_type;
+                }
+            } else {
+                // Fallback to basic function extraction
+                context = TypeScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
+            }
+        } catch (...) {
+            context.signature_type = "";
+            context.parameters.clear();
+            context.modifiers.clear();
+        }
+        
+        return context;
+    }
+    
+private:
+    static vector<string> ExtractTSDecorators(TSNode node, const string& content) {
+        vector<string> decorators;
+        
+        // Check parent and siblings for decorators
+        TSNode parent = ts_node_parent(node);
+        if (!ts_node_is_null(parent)) {
+            uint32_t parent_count = ts_node_child_count(parent);
+            for (uint32_t i = 0; i < parent_count; i++) {
+                TSNode sibling = ts_node_child(parent, i);
+                string sibling_type = ts_node_type(sibling);
+                
+                if (sibling_type == "decorator") {
+                    string decorator_text = ExtractNodeText(sibling, content);
+                    if (!decorator_text.empty()) {
+                        decorators.push_back(decorator_text);
+                    }
+                }
+            }
+        }
+        
+        // Check within the node itself
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "decorator") {
+                string decorator_text = ExtractNodeText(child, content);
+                if (!decorator_text.empty()) {
+                    decorators.push_back(decorator_text);
+                }
+            }
+        }
+        
+        return decorators;
+    }
+    
+    static vector<string> ExtractTSAdvancedModifiers(TSNode node, const string& content) {
+        vector<string> modifiers;
+        
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            // Extract TypeScript-specific modifiers
+            if (child_type == "accessibility_modifier") {
+                // public, private, protected
+                string modifier_text = ExtractNodeText(child, content);
+                if (!modifier_text.empty()) {
+                    modifiers.push_back(modifier_text);
+                }
+            } else if (child_type == "readonly") {
+                modifiers.push_back("readonly");
+            } else if (child_type == "static") {
+                modifiers.push_back("static");
+            } else if (child_type == "abstract") {
+                modifiers.push_back("abstract");
+            } else if (child_type == "async") {
+                modifiers.push_back("async");
+            } else if (child_type == "override") {
+                modifiers.push_back("override");
+            }
+        }
+        
+        // Check for generic type parameters
+        bool has_generics = false;
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "type_parameters") {
+                has_generics = true;
+                modifiers.push_back("generic");
+                break;
+            }
+        }
+        
+        // Check for optional parameters
+        bool has_optional = false;
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            string child_type = ts_node_type(child);
+            
+            if (child_type == "formal_parameters") {
+                uint32_t param_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < param_count; j++) {
+                    TSNode param = ts_node_child(child, j);
+                    string param_type = ts_node_type(param);
+                    
+                    if (param_type == "optional_parameter") {
+                        has_optional = true;
+                        modifiers.push_back("has_optional_params");
+                        break;
+                    }
+                }
+                if (has_optional) break;
+            }
+        }
+        
+        return modifiers;
+    }
+    
+    static string ExtractNodeText(TSNode node, const string& content) {
+        if (ts_node_is_null(node)) {
+            return "";
+        }
+        
+        uint32_t start = ts_node_start_byte(node);
+        uint32_t end = ts_node_end_byte(node);
+        
+        if (start < content.length() && end <= content.length() && end > start) {
+            return content.substr(start, end - start);
+        }
+        
+        return "";
     }
 };
 
