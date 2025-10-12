@@ -4,7 +4,9 @@
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/main/extension_helper.hpp"
+// #include "read_ast_objects_hybrid.hpp" // Removed
 #include "ast_sql_macros.hpp"
+// #include "short_names_function.hpp" // Removed
 #include "parse_ast_function.hpp"
 #include "semantic_type_functions.hpp"
 
