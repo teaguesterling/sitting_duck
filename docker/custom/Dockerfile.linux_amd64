@@ -11,11 +11,11 @@ RUN yum install -y kernel-headers
 RUN yum install -y jq
 
 # We need a recent CMake
-RUN mkdir /cmake_4_02 && \
-    cd /cmake_4_02 && \
-    wget https://github.com/Kitware/CMake/releases/download/v4.0.2/cmake-4.0.2-linux-x86_64.sh && \
-    chmod +x cmake-4.0.2-linux-x86_64.sh  && \
-    ./cmake-4.0.2-linux-x86_64.sh --skip-license --prefix=/usr/local && \
+RUN mkdir /cmake_4_12 && \
+    cd /cmake_4_12 && \
+    wget https://github.com/Kitware/CMake/releases/download/v4.1.2/cmake-4.1.2-linux-x86_64.sh && \
+    chmod +x cmake-4.1.2-linux-x86_64.sh  && \
+    ./cmake-4.1.2-linux-x86_64.sh --skip-license --prefix=/usr/local && \
     cmake --version
 
 # Install the AWS cli, since the packaged version is too old
@@ -24,8 +24,8 @@ RUN unzip -q awscliv2.zip
 RUN ./aws/install
 RUN aws --version
 
-# Install Node.js and npm
-RUN curl -fsSL https://nodejs.org/dist/v20.11.0/node-v20.11.0-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1
+# Install Node.js and npm (Node.js 22 LTS)
+RUN curl -fsSL https://nodejs.org/dist/v22.11.0/node-v22.11.0-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1
 RUN node --version && npm --version
 
 # Install Rust and Cargo for building tree-sitter CLI from source

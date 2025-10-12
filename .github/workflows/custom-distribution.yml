@@ -24,14 +24,19 @@ env:
 jobs:
   linux:
     name: Linux (${{ matrix.duckdb_arch }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on }}
     strategy:
       matrix:
         include:
           - duckdb_arch: linux_amd64
             vcpkg_target_triplet: x64-linux-release
+            runs_on: ubuntu-latest
           - duckdb_arch: linux_amd64_musl
             vcpkg_target_triplet: x64-linux-release
+            runs_on: ubuntu-latest
+          - duckdb_arch: linux_arm64
+            vcpkg_target_triplet: arm64-linux-release
+            runs_on: ubuntu-24.04-arm
 
     steps:
       - name: Checkout

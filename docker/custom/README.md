@@ -6,9 +6,10 @@ This directory contains custom Docker images that extend the standard DuckDB ext
 
 The custom Docker images are based on the same base images used by DuckDB's extension-ci-tools but include:
 
-- **Node.js v20.11.0** - JavaScript runtime
-- **npm** - Node.js package manager  
+- **Node.js v22.11.0 LTS** - JavaScript runtime
+- **npm** - Node.js package manager
 - **tree-sitter-cli** - Tree-sitter grammar compilation tool
+- **CMake 4.1.2** - Build system generator
 
 ## Architecture Support
 
@@ -51,13 +52,13 @@ The custom distribution workflow (`.github/workflows/custom-distribution.yml`) u
 
 All images include the standard DuckDB extension build environment plus:
 
-- CMake 4.0.2+
+- CMake 4.1.2
 - Ninja build system
 - ccache for compilation caching
 - AWS CLI for artifact uploads
 - Git configuration for mounted volumes
 - VCPKG package manager
-- **Node.js and npm** (added by us)
+- **Node.js v22 LTS and npm** (added by us)
 - **tree-sitter CLI** (added by us)
 
 ### Conditional Toolchains
@@ -87,4 +88,4 @@ echo $GITHUB_TOKEN | docker login ghcr.io -u $GITHUB_USERNAME --password-stdin
 Trigger the build workflow manually or check that the images were built successfully in GitHub Actions.
 
 ### Node.js/npm Issues
-The images use Node.js v20.11.0 LTS. If you need a different version, modify the Dockerfiles and rebuild.
+The images use Node.js v22.11.0 LTS (Active LTS). If you need a different version, modify the Dockerfiles and rebuild.
