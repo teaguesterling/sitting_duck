@@ -20,12 +20,14 @@ jobs:
       packages: write
     strategy:
       matrix:
-        arch: [linux_amd64, linux_amd64_musl]
+        arch: [linux_amd64, linux_amd64_musl, linux_arm64]
         include:
           - arch: linux_amd64
             platform: linux/amd64
           - arch: linux_amd64_musl
             platform: linux/amd64
+          - arch: linux_arm64
+            platform: linux/arm64
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
