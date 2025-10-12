@@ -1,5 +1,5 @@
 #
-# This workflow builds custom Docker images first, then uses the standard DuckDB extension distribution
+# This workflow calls the main distribution pipeline from DuckDB to build, test and (optionally) release the extension
 #
 name: Main Extension Distribution Pipeline
 on:
@@ -12,33 +12,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-docker-images:
-    name: Build Custom Docker Images
-    uses: ./.github/workflows/build-custom-docker.yml
-    permissions:
-      contents: read
-      packages: write
-
-  linux-builds:
-    name: Build Linux extension binaries (custom Docker)
-    needs: build-docker-images
-    if: needs.build-docker-images.result == 'success'
-    uses: ./.github/workflows/custom-distribution.yml
-    with:
-      duckdb_version: main
-      ci_tools_version: main
-      extension_name: sitting_duck
-      extra_toolchains: rust
-    permissions:
-      contents: read
-      packages: read
-
-  other-builds:
-    name: Build extension binaries (non-Linux)
+  duckdb-next-build:
+    name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
     with:
       duckdb_version: main
       ci_tools_version: main
       extension_name: sitting_duck
       extra_toolchains: rust
-      exclude_archs: "linux_amd64;linux_arm64;linux_amd64_musl"
+
+  duckdb-stable-build:
+    name: Build extension binaries
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.4.1
+    with:
+      duckdb_version: v1.4.1
+      ci_tools_version: v1.4.1
+      extension_name: sitting_duck
+      extra_toolchains: rust
