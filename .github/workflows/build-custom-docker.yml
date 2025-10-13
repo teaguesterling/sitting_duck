@@ -51,7 +51,7 @@ jobs:
             type=ref,event=branch,suffix=-${{ matrix.arch }}
             type=ref,event=pr,suffix=-${{ matrix.arch }}
             type=sha,suffix=-${{ matrix.arch }}
-            type=raw,value=latest,suffix=-${{ matrix.arch }},enable={{is_default_branch}}
+            type=raw,value=latest,suffix=-${{ matrix.arch }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
