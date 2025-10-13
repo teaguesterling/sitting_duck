@@ -89,12 +89,8 @@ jobs:
               # Setup vcpkg
               echo 'Setting up vcpkg...'
               export VCPKG_TOOLCHAIN_PATH=\$(pwd)/duckdb/scripts/vcpkg_bootstrap.sh
-              
-              # Configure build
-              echo 'Configuring build...'
-              make configure
-              
-              # Build extension
+
+              # Build extension (configuration happens automatically via make dependencies)
               echo 'Building extension...'
               make release
               
