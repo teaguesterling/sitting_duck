@@ -72,7 +72,7 @@ jobs:
             -e DUCKDB_VERSION="${DUCKDB_VERSION}" \
             -e EXTENSION_NAME="${EXTENSION_NAME}" \
             -e VCPKG_TARGET_TRIPLET="${VCPKG_TARGET_TRIPLET}" \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-${{ matrix.duckdb_arch }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-${{ matrix.duckdb_arch }} \
             bash -c "
               set -e
               echo 'Node.js version:' && node --version
