@@ -29,10 +29,12 @@ RUN curl -fsSL https://nodejs.org/dist/v22.11.0/node-v22.11.0-linux-x64.tar.xz |
 RUN node --version && npm --version
 
 # Install Rust and Cargo for building tree-sitter CLI from source
-RUN yum install -y rust cargo
+# Also install clang/libclang for bindgen (required by tree-sitter-cli's rquickjs-sys dependency)
+RUN yum install -y rust cargo clang clang-devel llvm-devel
 
 # Build tree-sitter CLI from source (more reliable than npm version)
 ENV PATH="/root/.cargo/bin:${PATH}"
+ENV LIBCLANG_PATH="/usr/lib64"
 RUN cargo install tree-sitter-cli --locked
 RUN tree-sitter --version
 
