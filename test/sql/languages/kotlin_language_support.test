@@ -1,0 +1,139 @@
+# name: test/sql/languages/kotlin_language_support.test
+# description: Test Kotlin language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: Kotlin language is supported
+# ====================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'kotlin';
+----
+kotlin
+
+# Test 2: Kotlin file extension auto-detection
+# ============================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/kotlin/simple.kt');
+----
+true
+
+# Test 3: Explicit Kotlin language specification
+# ==============================================
+
+query I
+SELECT COUNT(*) > 100 as has_many_nodes FROM read_ast('test/data/kotlin/simple.kt', 'kotlin');
+----
+true
+
+# Test 4: Kotlin function declarations
+# ===================================
+
+query I
+SELECT COUNT(*) >= 5 as has_functions FROM read_ast('test/data/kotlin/simple.kt', 'kotlin')
+WHERE type = 'function_declaration';
+----
+true
+
+# Test 5: Kotlin class declarations
+# =================================
+
+query I
+SELECT COUNT(*) >= 3 as has_classes FROM read_ast('test/data/kotlin/simple.kt', 'kotlin')
+WHERE type = 'class_declaration';
+----
+true
+
+# Test 6: Kotlin property declarations
+# ====================================
+
+query I
+SELECT COUNT(*) >= 10 as has_properties FROM read_ast('test/data/kotlin/simple.kt', 'kotlin')
+WHERE type = 'property_declaration';
+----
+true
+
+# Test 7: Kotlin call expressions
+# ===============================
+
+query I
+SELECT COUNT(*) >= 10 as has_calls FROM read_ast('test/data/kotlin/simple.kt', 'kotlin')
+WHERE type = 'call_expression';
+----
+true
+
+# Test 8: Kotlin semantic types for declarations
+# ==============================================
+
+query I
+SELECT COUNT(DISTINCT semantic_type) >= 3 as has_semantic_types
+FROM read_ast('test/data/kotlin/simple.kt', 'kotlin')
+WHERE type IN ('function_declaration', 'class_declaration', 'property_declaration');
+----
+true
+
+# Test 9: Kotlin tree structure validation
+# ========================================
+
+query I
+SELECT MAX(depth) >= 5 AND COUNT(*) > 100 as has_valid_tree
+FROM read_ast('test/data/kotlin/simple.kt', 'kotlin');
+----
+true
+
+# Test 10: Kotlin identifier extraction
+# =====================================
+
+query I
+SELECT COUNT(*) >= 30 as has_identifiers FROM read_ast('test/data/kotlin/simple.kt', 'kotlin')
+WHERE type = 'simple_identifier' AND name IS NOT NULL;
+----
+true
+
+# Test 11: Kotlin lambda expressions
+# ==================================
+
+query I
+SELECT COUNT(*) >= 2 as has_lambdas FROM read_ast('test/data/kotlin/simple.kt', 'kotlin')
+WHERE type = 'lambda_literal';
+----
+true
+
+# Test 12: Kotlin when expression (pattern matching)
+# =================================================
+
+query I
+SELECT COUNT(*) >= 1 as has_when FROM read_ast('test/data/kotlin/simple.kt', 'kotlin')
+WHERE type = 'when_expression';
+----
+true
+
+# Test 13: Kotlin companion object
+# ================================
+
+query I
+SELECT COUNT(*) >= 1 as has_companion FROM read_ast('test/data/kotlin/simple.kt', 'kotlin')
+WHERE type = 'companion_object';
+----
+true
+
+# Test 14: Kotlin string literals
+# ================================
+
+query I
+SELECT COUNT(*) >= 5 as has_strings FROM read_ast('test/data/kotlin/simple.kt', 'kotlin')
+WHERE type = 'string_literal';
+----
+true
+
+# Test 15: Kotlin parse_ast function test
+# =======================================
+
+query I
+SELECT COUNT(*) > 0 as parses_inline
+FROM parse_ast('fun hello() = println("Hello")', 'kotlin')
+WHERE type = 'function_declaration';
+----
+true

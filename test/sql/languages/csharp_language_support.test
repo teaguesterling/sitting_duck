@@ -1,0 +1,213 @@
+# name: test/sql/languages/csharp_language_support.test
+# description: Test C# language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: C# language is supported
+# ================================
+
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'csharp';
+----
+csharp
+
+# Test 2: C# file extension auto-detection
+# =========================================
+
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/csharp/simple.cs');
+----
+true
+
+# Test 3: Explicit C# language specification
+# ==========================================
+
+query I
+SELECT COUNT(*) > 100 as has_many_nodes FROM read_ast('test/data/csharp/simple.cs', 'csharp');
+----
+true
+
+# Test 4: C# class declarations
+# =============================
+
+query I
+SELECT COUNT(*) >= 3 as has_classes FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'class_declaration';
+----
+true
+
+# Test 5: C# method declarations
+# ==============================
+
+query I
+SELECT COUNT(*) >= 5 as has_methods FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'method_declaration';
+----
+true
+
+# Test 6: C# interface declaration
+# ================================
+
+query I
+SELECT COUNT(*) >= 1 as has_interface FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'interface_declaration';
+----
+true
+
+# Test 7: C# property declarations
+# ================================
+
+query I
+SELECT COUNT(*) >= 3 as has_properties FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'property_declaration';
+----
+true
+
+# Test 8: C# using directives (imports)
+# =====================================
+
+query I
+SELECT COUNT(*) >= 4 as has_usings FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'using_directive';
+----
+true
+
+# Test 9: C# namespace declaration
+# ================================
+
+query I
+SELECT COUNT(*) >= 1 as has_namespace FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'namespace_declaration';
+----
+true
+
+# Test 10: C# enum declaration
+# ===========================
+
+query I
+SELECT COUNT(*) >= 1 as has_enum FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'enum_declaration';
+----
+true
+
+# Test 11: C# struct declaration
+# ==============================
+
+query I
+SELECT COUNT(*) >= 1 as has_struct FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'struct_declaration';
+----
+true
+
+# Test 12: C# record declaration
+# ==============================
+
+query I
+SELECT COUNT(*) >= 1 as has_record FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'record_declaration';
+----
+true
+
+# Test 13: C# semantic types for key constructs
+# =============================================
+
+query I
+SELECT COUNT(DISTINCT semantic_type) >= 2 as has_semantic_types
+FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type IN ('class_declaration', 'method_declaration', 'property_declaration');
+----
+true
+
+# Test 14: C# tree structure validation
+# =====================================
+
+query I
+SELECT MAX(depth) >= 5 AND COUNT(*) > 200 as has_valid_tree
+FROM read_ast('test/data/csharp/simple.cs', 'csharp');
+----
+true
+
+# Test 15: C# identifier extraction
+# =================================
+
+query I
+SELECT COUNT(*) >= 50 as has_identifiers FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'identifier' AND name IS NOT NULL;
+----
+true
+
+# Test 16: C# constructor declarations
+# ===================================
+
+query I
+SELECT COUNT(*) >= 2 as has_constructors FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'constructor_declaration';
+----
+true
+
+# Test 17: C# invocation expressions (method calls)
+# =================================================
+
+query I
+SELECT COUNT(*) >= 5 as has_invocations FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'invocation_expression';
+----
+true
+
+# Test 18: C# parse_ast function test
+# ===================================
+
+query I
+SELECT COUNT(*) > 0 as parses_inline
+FROM parse_ast('class Hello { void World() { } }', 'csharp')
+WHERE type = 'class_declaration';
+----
+true
+
+# Test 19: C# async/await support
+# ==============================
+
+query I
+SELECT COUNT(*) >= 1 as has_await FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'await_expression';
+----
+true
+
+# Test 20: C# switch expression (pattern matching)
+# ================================================
+
+query I
+SELECT COUNT(*) >= 1 as has_switch FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'switch_expression';
+----
+true
+
+# Test 21: C# LINQ method chain parsing
+# =====================================
+
+query I
+SELECT COUNT(*) >= 1 as has_linq_where
+FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'identifier' AND name = 'Where';
+----
+true
+
+# Test 22: C# LINQ lambda expressions
+# ===================================
+
+query I
+SELECT COUNT(*) >= 1 as has_lambdas FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'lambda_expression';
+----
+true
+
+# Test 23: C# LINQ extension method calls
+# =======================================
+
+query I
+SELECT COUNT(*) >= 1 as has_linq_methods
+FROM read_ast('test/data/csharp/simple.cs', 'csharp')
+WHERE type = 'identifier' AND name IN ('Where', 'ToList', 'FirstOrDefault');
+----
+true

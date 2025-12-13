@@ -38,6 +38,8 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
     RegisterLanguageFactory("r", []() { return make_uniq<RAdapter>(); });
     // Kotlin enabled - JVM ecosystem and Android development support
     RegisterLanguageFactory("kotlin", []() { return make_uniq<KotlinAdapter>(); });
+    // C# enabled - .NET ecosystem support
+    RegisterLanguageFactory("csharp", []() { return make_uniq<CSharpAdapter>(); });
 }
 
 // Phase 2: Template-based parsing with zero virtual calls - NEW ExtractionConfig version
@@ -133,7 +135,11 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, 
         KotlinAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
-    
+    if (normalized_language == "csharp") {
+        CSharpAdapter adapter;  // Fresh instance - no static state persistence
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+
     // Fallback for unsupported languages
     throw InvalidInputException("Unsupported language: " + language);
 }
@@ -230,7 +236,11 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, 
         KotlinAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
-    
+    if (normalized_language == "csharp") {
+        CSharpAdapter adapter;  // Fresh instance - no static state persistence
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
+    }
+
     // Fallback for unsupported languages
     throw InvalidInputException("Unsupported language: " + language);
 }

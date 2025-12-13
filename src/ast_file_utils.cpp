@@ -30,7 +30,9 @@ static const std::unordered_map<string, string> EXTENSION_TO_LANGUAGE = {
     // {"yaml", "yaml"}, {"yml", "yaml"},
     {"sh", "bash"}, {"bash", "bash"}, {"zsh", "bash"},
     {"swift", "swift"},
-    {"r", "r"}, {"R", "r"}
+    {"r", "r"}, {"R", "r"},
+    {"kt", "kotlin"}, {"kts", "kotlin"},
+    {"cs", "csharp"}
 };
 
 // Static mapping of languages to their supported extensions
@@ -54,7 +56,9 @@ static const std::unordered_map<string, vector<string>> LANGUAGE_TO_EXTENSIONS =
     // {"yaml", {"yaml", "yml"}},
     {"bash", {"sh", "bash", "zsh"}},
     {"swift", {"swift"}},
-    {"r", {"r", "R"}}
+    {"r", {"r", "R"}},
+    {"kotlin", {"kt", "kts"}},
+    {"csharp", {"cs"}}
 };
 
 vector<string> ASTFileUtils::GetFiles(ClientContext &context, const Value &path_value, 

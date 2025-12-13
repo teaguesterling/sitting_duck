@@ -77,6 +77,7 @@ class PHPAdapter;
 class RubyAdapter;
 class SwiftAdapter;
 class KotlinAdapter;
+class CSharpAdapter;
 class RAdapter;
 class BashAdapter;
 class SQLAdapter;
