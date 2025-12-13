@@ -55,9 +55,7 @@ WITH RECURSIVE employee_hierarchy AS (
     SELECT id, name, manager_id, 1 as level
     FROM employees
     WHERE manager_id IS NULL
-
     UNION ALL
-
     SELECT e.id, e.name, e.manager_id, eh.level + 1
     FROM employees e
     JOIN employee_hierarchy eh ON e.manager_id = eh.id
