@@ -167,6 +167,17 @@ generate_parser() {
         log_info "  -> Copied tree_sitter headers"
     fi
 
+    # Handle grammars with shared directories (e.g., TypeScript's common/ directory)
+    # The scanner.c may include relative paths like "../../common/scanner.h"
+    local parent_grammar_dir="$(dirname "$grammar_path")"
+    if [ -d "$parent_grammar_dir/common" ]; then
+        local common_output="$OUTPUT_DIR/$(dirname "$grammar_subdir")/common"
+        mkdir -p "$common_output"
+        # Copy common files, excluding .orig backup files from patching
+        find "$parent_grammar_dir/common" -maxdepth 1 -type f ! -name "*.orig" -exec cp {} "$common_output/" \;
+        log_info "  -> Copied common/ shared directory"
+    fi
+
     cd "$ROOT_DIR"
 }
 
@@ -301,6 +312,13 @@ main() {
     done
 
     log_info "Manifest written to $OUTPUT_DIR/MANIFEST"
+
+    # Clean up any .orig backup files from patching that may have been copied
+    local orig_count=$(find "$OUTPUT_DIR" -name "*.orig" -type f | wc -l)
+    if [ "$orig_count" -gt 0 ]; then
+        find "$OUTPUT_DIR" -name "*.orig" -type f -delete
+        log_info "Cleaned up $orig_count .orig backup files"
+    fi
 }
 
 main "$@"
