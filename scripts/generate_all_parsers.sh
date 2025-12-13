@@ -160,6 +160,14 @@ generate_parser() {
         log_info "  -> Copied scanner.c"
     fi
 
+    # Copy any additional .h files from src/ (e.g., tag.h for HTML)
+    # These are grammar-specific headers included by scanner.c
+    local header_count=$(find "src" -maxdepth 1 -name "*.h" -type f 2>/dev/null | wc -l)
+    if [ "$header_count" -gt 0 ]; then
+        find "src" -maxdepth 1 -name "*.h" -type f -exec cp {} "$output_path/" \;
+        log_info "  -> Copied $header_count header file(s)"
+    fi
+
     # Copy tree_sitter directory if it exists (contains alloc.h, array.h, parser.h)
     if [ -d "src/tree_sitter" ]; then
         mkdir -p "$output_path/tree_sitter"
