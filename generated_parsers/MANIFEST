@@ -1,0 +1,24 @@
+# Generated parsers manifest
+# Generated on: 2025-12-13T14:08:03-08:00
+# tree-sitter version: tree-sitter 0.26.0
+
+c:tree-sitter-c
+cpp:tree-sitter-cpp
+javascript:tree-sitter-javascript
+typescript:tree-sitter-typescript/typescript
+python:tree-sitter-python
+sql:tree-sitter-sql
+go:tree-sitter-go
+ruby:tree-sitter-ruby
+markdown:tree-sitter-markdown/tree-sitter-markdown
+java:tree-sitter-java
+php:tree-sitter-php/php
+html:tree-sitter-html
+css:tree-sitter-css
+rust:tree-sitter-rust
+json:tree-sitter-json
+bash:tree-sitter-bash
+swift:tree-sitter-swift
+r:tree-sitter-r
+kotlin:tree-sitter-kotlin
+csharp:tree-sitter-c-sharp

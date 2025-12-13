@@ -8,9 +8,35 @@ set(TARGET_NAME sitting_duck)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build tree-sitter as static library" FORCE)
 add_subdirectory(third_party/tree-sitter/lib)
 
-# Build tree-sitter CLI if Cargo is available
+#############################
+# Pre-generated Parser Support
+#############################
+# This allows building without tree-sitter CLI, Node.js, or Cargo by using
+# pre-generated parser files stored in generated_parsers/ directory.
+# Run `make generate-parsers` to regenerate them locally.
+
+option(USE_PREGENERATED_PARSERS "Use pre-generated parser files from generated_parsers/ instead of generating at build time" ON)
+
+# Check if pre-generated parsers exist (use tree-sitter-c/src/parser.c as canary)
+set(PREGENERATED_PARSERS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generated_parsers")
+set(PREGENERATED_CANARY "${PREGENERATED_PARSERS_DIR}/tree-sitter-c/src/parser.c")
+
+if(USE_PREGENERATED_PARSERS AND EXISTS "${PREGENERATED_CANARY}")
+    set(USING_PREGENERATED_PARSERS TRUE)
+    set(PARSER_SOURCE_DIR "${PREGENERATED_PARSERS_DIR}")
+    message(STATUS "Using pre-generated parsers from ${PREGENERATED_PARSERS_DIR}")
+else()
+    set(USING_PREGENERATED_PARSERS FALSE)
+    set(PARSER_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/grammars")
+    if(USE_PREGENERATED_PARSERS)
+        message(STATUS "Pre-generated parsers not found at ${PREGENERATED_CANARY}")
+        message(STATUS "Will attempt to generate parsers at build time (requires tree-sitter CLI)")
+    endif()
+endif()
+
+# Build tree-sitter CLI and generate parsers only if NOT using pre-generated parsers
 find_program(CARGO_EXECUTABLE cargo)
-if(CARGO_EXECUTABLE)
+if(NOT USING_PREGENERATED_PARSERS AND CARGO_EXECUTABLE)
     set(TREE_SITTER_CLI "${CMAKE_CURRENT_SOURCE_DIR}/third_party/tree-sitter/target/release/tree-sitter")
     add_custom_command(
         OUTPUT ${TREE_SITTER_CLI}
@@ -161,9 +187,17 @@ if(CARGO_EXECUTABLE)
         list(LENGTH ALL_GENERATED_PARSERS PARSER_COUNT)
         message(STATUS "Generated parser target created with ${PARSER_COUNT} files")
     endif()
-    
-else()
-    message(WARNING "Cargo not found - tree-sitter CLI will not be built and parsers will not be auto-generated")
+
+elseif(NOT USING_PREGENERATED_PARSERS)
+    # Pre-generated parsers not found and we can't generate them
+    if(NOT CARGO_EXECUTABLE)
+        message(FATAL_ERROR
+            "Cannot build: Pre-generated parsers not found and Cargo is not available to generate them.\n"
+            "Either:\n"
+            "  1. Run 'make generate-parsers' on a machine with tree-sitter CLI and Node.js, then commit the generated_parsers/ directory\n"
+            "  2. Install Cargo (https://rustup.rs) to build tree-sitter CLI and generate parsers at build time\n"
+            "Expected pre-generated parsers at: ${PREGENERATED_CANARY}")
+    endif()
 endif()
 
 # Add tree-sitter to the DuckDB export set
@@ -215,7 +249,14 @@ file(COPY "${TREE_SITTER_SRC_DIR}/alloc.h" DESTINATION "${BUILD_TREE_SITTER_HEAD
 # Add build include directory to include path
 include_directories("${BUILD_TREE_SITTER_INCLUDE}")
 
-set(EXTENSION_SOURCES 
+# If using pre-generated parsers, also add include path for their tree_sitter headers
+if(USING_PREGENERATED_PARSERS)
+    # Each grammar's src/tree_sitter/ directory contains the headers it needs
+    # We also copy a unified tree_sitter/ directory to the generated_parsers root
+    include_directories("${PREGENERATED_PARSERS_DIR}")
+endif()
+
+set(EXTENSION_SOURCES
     src/sitting_duck_extension.cpp
     src/language_adapter.cpp
     src/language_adapter_registry_init.cpp
@@ -253,42 +294,43 @@ set(EXTENSION_SOURCES
     src/ast_file_utils.cpp
     src/ast_supported_languages_function.cpp
     src/native_context_extraction.cpp
-    grammars/tree-sitter-python/src/parser.c
-    grammars/tree-sitter-python/src/scanner.c
-    grammars/tree-sitter-javascript/src/parser.c
-    grammars/tree-sitter-javascript/src/scanner.c
-    grammars/tree-sitter-cpp/src/parser.c
-    grammars/tree-sitter-cpp/src/scanner.c
-    grammars/tree-sitter-typescript/typescript/src/parser.c
-    grammars/tree-sitter-typescript/typescript/src/scanner.c
-    grammars/tree-sitter-sql/src/parser.c
-    grammars/tree-sitter-sql/src/scanner.c
-    grammars/tree-sitter-go/src/parser.c
-    grammars/tree-sitter-ruby/src/parser.c
-    grammars/tree-sitter-ruby/src/scanner.c
-    grammars/tree-sitter-markdown/tree-sitter-markdown/src/parser.c
-    grammars/tree-sitter-markdown/tree-sitter-markdown/src/scanner.c
-    grammars/tree-sitter-java/src/parser.c
-    grammars/tree-sitter-php/php/src/parser.c
-    grammars/tree-sitter-php/php/src/scanner.c
-    grammars/tree-sitter-html/src/parser.c
-    grammars/tree-sitter-html/src/scanner.c
-    grammars/tree-sitter-css/src/parser.c
-    grammars/tree-sitter-css/src/scanner.c
-    grammars/tree-sitter-c/src/parser.c
-    grammars/tree-sitter-rust/src/parser.c
-    grammars/tree-sitter-rust/src/scanner.c
-    grammars/tree-sitter-json/src/parser.c
-    grammars/tree-sitter-bash/src/parser.c
-    grammars/tree-sitter-bash/src/scanner.c
-    grammars/tree-sitter-swift/src/parser.c
-    grammars/tree-sitter-swift/src/scanner.c
-    grammars/tree-sitter-r/src/parser.c
-    grammars/tree-sitter-r/src/scanner.c
-    grammars/tree-sitter-kotlin/src/parser.c
-    grammars/tree-sitter-kotlin/src/scanner.c
-    grammars/tree-sitter-c-sharp/src/parser.c
-    grammars/tree-sitter-c-sharp/src/scanner.c
+    # Parser source files - from PARSER_SOURCE_DIR (either generated_parsers/ or grammars/)
+    ${PARSER_SOURCE_DIR}/tree-sitter-python/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-python/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-javascript/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-javascript/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-cpp/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-cpp/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-typescript/typescript/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-typescript/typescript/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-sql/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-sql/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-go/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-ruby/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-ruby/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-markdown/tree-sitter-markdown/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-markdown/tree-sitter-markdown/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-java/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-php/php/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-php/php/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-html/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-html/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-css/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-css/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-c/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-rust/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-rust/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-json/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-bash/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-bash/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-swift/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-swift/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-r/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-r/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-kotlin/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-kotlin/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-c-sharp/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-c-sharp/src/scanner.c
     )
     # Removed unused files:
     # src/ast_parser.cpp (replaced by unified_ast_backend.cpp)
