@@ -213,6 +213,7 @@ GRAMMARS=(
     "kotlin:tree-sitter-kotlin:true"
     "csharp:tree-sitter-c-sharp:true"
     "lua:tree-sitter-lua:true"
+    "hcl:tree-sitter-hcl:true"
 )
 
 # Patches to apply (grammar_name:patch_name)

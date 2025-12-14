@@ -1,0 +1,106 @@
+# name: test/sql/languages/hcl_language_support.test
+# description: Test HCL (HashiCorp Configuration Language) parsing support
+# group: [languages]
+
+require sitting_duck
+
+# Test basic HCL block parsing (Terraform resource)
+query II
+SELECT type, name FROM parse_ast(E'resource "aws_instance" "web" {\n  ami = "ami-12345"\n}', 'hcl')
+WHERE type = 'block'
+ORDER BY name;
+----
+block	aws_instance.web
+
+# Test attribute parsing
+query II
+SELECT type, name FROM parse_ast(E'variable "region" {\n  default = "us-west-2"\n}', 'hcl')
+WHERE type = 'attribute'
+ORDER BY name;
+----
+attribute	default
+
+# Test function call extraction
+query II
+SELECT type, name FROM parse_ast(E'locals {\n  x = upper(var.env)\n  y = lower(var.name)\n}', 'hcl')
+WHERE type = 'function_call'
+ORDER BY name;
+----
+function_call	lower
+function_call	upper
+
+# Test variable references
+query I
+SELECT COUNT(*) FROM parse_ast(E'resource "aws_instance" "ex" {\n  ami = var.ami_id\n}', 'hcl')
+WHERE type = 'variable_expr';
+----
+1
+
+# Test multiple block types (blocks without labels return empty name)
+query II
+SELECT type, name FROM parse_ast(E'provider "aws" {}\ndata "aws_ami" "ubuntu" {}', 'hcl')
+WHERE type = 'block'
+ORDER BY name;
+----
+block	aws
+block	aws_ami.ubuntu
+
+# Test nested blocks
+query I
+SELECT COUNT(*) FROM parse_ast(E'resource "aws_sg" "main" {\n  ingress {}\n  egress {}\n}', 'hcl')
+WHERE type = 'block';
+----
+3
+
+# Test for expression (list comprehension)
+query I
+SELECT type FROM parse_ast(E'locals {\n  ids = [for i in items : i.id]\n}', 'hcl')
+WHERE type = 'for_tuple_expr';
+----
+for_tuple_expr
+
+# Test conditional expression
+query I
+SELECT type FROM parse_ast(E'locals {\n  env = var.prod ? "prod" : "dev"\n}', 'hcl')
+WHERE type = 'conditional';
+----
+conditional
+
+# Test comments are parsed
+query I
+SELECT type FROM parse_ast(E'# comment\nvariable "name" {}', 'hcl')
+WHERE type = 'comment';
+----
+comment
+
+# Test tuple (array) literals
+query I
+SELECT type FROM parse_ast(E'locals {\n  ports = [80, 443]\n}', 'hcl')
+WHERE type = 'tuple';
+----
+tuple
+
+# Test object literals
+query I
+SELECT type FROM parse_ast(E'locals {\n  tags = { Name = "web" }\n}', 'hcl')
+WHERE type = 'object';
+----
+object
+
+# Test HCL appears in supported languages
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'hcl';
+----
+hcl
+
+# Test terraform alias works
+query I
+SELECT COUNT(*) > 0 FROM parse_ast('variable "test" {}', 'terraform');
+----
+true
+
+# Test tf alias works
+query I
+SELECT COUNT(*) > 0 FROM parse_ast('variable "test" {}', 'tf');
+----
+true

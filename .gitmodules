@@ -75,3 +75,6 @@
 [submodule "grammars/tree-sitter-lua"]
 	path = grammars/tree-sitter-lua
 	url = https://github.com/tree-sitter-grammars/tree-sitter-lua.git
+[submodule "grammars/tree-sitter-hcl"]
+	path = grammars/tree-sitter-hcl
+	url = https://github.com/tree-sitter-grammars/tree-sitter-hcl.git

@@ -181,6 +181,7 @@ if(NOT USING_PREGENERATED_PARSERS AND CARGO_EXECUTABLE)
     generate_parser("tree-sitter-kotlin" "tree-sitter-kotlin/src/parser.c" "tree-sitter-kotlin/src/scanner.c")
     generate_parser("tree-sitter-c-sharp" "tree-sitter-c-sharp/src/parser.c" "tree-sitter-c-sharp/src/scanner.c")
     generate_parser("tree-sitter-lua" "tree-sitter-lua/src/parser.c" "tree-sitter-lua/src/scanner.c")
+    generate_parser("tree-sitter-hcl" "tree-sitter-hcl/src/parser.c" "tree-sitter-hcl/src/scanner.c")
 
     # Create a target for all generated parsers
     if(ALL_GENERATED_PARSERS)
@@ -283,6 +284,7 @@ set(EXTENSION_SOURCES
     src/language_adapters/kotlin_adapter.cpp
     src/language_adapters/csharp_adapter.cpp
     src/language_adapters/lua_adapter.cpp
+    src/language_adapters/hcl_adapter.cpp
     src/read_ast_streaming_function.cpp
     # src/read_ast_objects_hybrid.cpp (removed - objects API not used)
     src/ast_sql_macros.cpp
@@ -335,6 +337,8 @@ set(EXTENSION_SOURCES
     ${PARSER_SOURCE_DIR}/tree-sitter-c-sharp/src/scanner.c
     ${PARSER_SOURCE_DIR}/tree-sitter-lua/src/parser.c
     ${PARSER_SOURCE_DIR}/tree-sitter-lua/src/scanner.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-hcl/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-hcl/src/scanner.c
     )
     # Removed unused files:
     # src/ast_parser.cpp (replaced by unified_ast_backend.cpp)
