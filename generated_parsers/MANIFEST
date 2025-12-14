@@ -1,5 +1,5 @@
 # Generated parsers manifest
-# Generated on: 2025-12-14T10:15:22-08:00
+# Generated on: 2025-12-14T14:12:45-08:00
 # tree-sitter version: tree-sitter 0.26.0
 
 c:tree-sitter-c
@@ -27,3 +27,4 @@ hcl:tree-sitter-hcl
 graphql:tree-sitter-graphql
 toml:tree-sitter-toml
 zig:tree-sitter-zig
+dart:tree-sitter-dart

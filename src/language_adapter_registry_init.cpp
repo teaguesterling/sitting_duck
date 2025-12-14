@@ -50,6 +50,8 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
     RegisterLanguageFactory("toml", []() { return make_uniq<TOMLAdapter>(); });
     // Zig enabled - modern systems programming language
     RegisterLanguageFactory("zig", []() { return make_uniq<ZigAdapter>(); });
+    // Dart enabled - client-optimized language with sound null safety
+    RegisterLanguageFactory("dart", []() { return make_uniq<DartAdapter>(); });
 }
 
 // Phase 2: Template-based parsing with zero virtual calls - NEW ExtractionConfig version
@@ -167,6 +169,10 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, 
     }
     if (normalized_language == "zig") {
         ZigAdapter adapter;  // Fresh instance - no static state persistence
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "dart") {
+        DartAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
 
@@ -288,6 +294,10 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, 
     }
     if (normalized_language == "zig") {
         ZigAdapter adapter;  // Fresh instance - no static state persistence
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
+    }
+    if (normalized_language == "dart") {
+        DartAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
 

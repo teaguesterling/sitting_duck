@@ -1,0 +1,180 @@
+# name: test/sql/languages/dart_language_support.test
+# description: Test Dart language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: Language is supported
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'dart';
+----
+dart
+
+# Test 2: File extension auto-detection (.dart)
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/dart/sample.dart');
+----
+true
+
+# Test 3: Program structure (top-level)
+query I
+SELECT type FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'program' LIMIT 1;
+----
+program
+
+# Test 4: Class definitions
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'class_definition';
+----
+5
+
+# Test 5: Function signatures
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'function_signature';
+----
+10
+
+# Test 6: Enum declarations
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'enum_declaration';
+----
+1
+
+# Test 7: Mixin declarations
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'mixin_declaration';
+----
+1
+
+# Test 8: Extension declarations
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'extension_declaration';
+----
+1
+
+# Test 9: Type aliases
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'type_alias';
+----
+1
+
+# Test 10: Import specifications
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'import_specification';
+----
+2
+
+# Test 11: Constructor signatures
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'constructor_signature';
+----
+3
+
+# Test 12: Getter signatures
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'getter_signature';
+----
+6
+
+# Test 13: Annotations
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'annotation';
+----
+3
+
+# Test 14: If statements
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'if_statement';
+----
+4
+
+# Test 15: For statements
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'for_statement';
+----
+3
+
+# Test 16: While statements
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'while_statement';
+----
+2
+
+# Test 17: Try statements
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'try_statement';
+----
+1
+
+# Test 18: Return statements
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'return_statement';
+----
+6
+
+# Test 19: Await expressions
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'await_expression';
+----
+2
+
+# Test 20: Comments (regular and documentation)
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type IN ('comment', 'documentation_comment');
+----
+36
+
+# Test 21: String literals
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'string_literal';
+----
+23
+
+# Test 22: Identifiers
+query I
+SELECT COUNT(*) > 100 FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'identifier';
+----
+true
+
+# Test 23: parse_ast works with Dart
+query I
+SELECT COUNT(*) > 0 FROM (
+    SELECT * FROM parse_ast(E'void main() {\n  print(\"Hello\");\n}', 'dart')
+);
+----
+true
+
+# Test 24: Switch expressions (Dart 3 feature)
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'switch_expression';
+----
+2
+
+# Test 25: Assertion statements
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'assert_statement';
+----
+1
+
