@@ -72,12 +72,11 @@ string SittingDuckExtension::Version() const {
 
 extern "C" {
 
-DUCKDB_EXTENSION_API void sitting_duck_duckdb_cpp_init(duckdb::DatabaseInstance &db) {
-	duckdb::DuckDB db_wrapper(db);
-	db_wrapper.LoadStaticExtension<duckdb::SittingDuckExtension>();
+DUCKDB_CPP_EXTENSION_ENTRY(sitting_duck, loader) {
+	duckdb::LoadInternal(loader);
 }
 
-DUCKDB_EXTENSION_API const char *sitting_duck_duckdb_cpp_version() {
+DUCKDB_EXTENSION_API const char *sitting_duck_version() {
 	return duckdb::DuckDB::LibraryVersion();
 }
 
