@@ -1,0 +1,98 @@
+# name: test/sql/languages/lua_language_support.test
+# description: Test Lua language parsing support
+# group: [languages]
+
+require sitting_duck
+
+# Test basic Lua parsing
+query II
+SELECT type, name FROM parse_ast('function hello() print("world") end', 'lua')
+WHERE type IN ('function_declaration', 'identifier')
+ORDER BY name;
+----
+identifier	hello
+function_declaration	hello
+identifier	print
+
+# Test local function
+query II
+SELECT type, name FROM parse_ast('local function greet(name) return "Hello, " .. name end', 'lua')
+WHERE type IN ('local_function_declaration', 'identifier', 'parameters')
+ORDER BY type, name;
+----
+identifier	greet
+identifier	name
+identifier	name
+local_function_declaration	greet
+parameters	NULL
+
+# Test table constructor
+query I
+SELECT type FROM parse_ast('local t = {x = 1, y = 2, "hello"}', 'lua')
+WHERE type = 'table_constructor';
+----
+table_constructor
+
+# Test control flow
+query I
+SELECT COUNT(*) FROM parse_ast('
+for i = 1, 10 do
+    if i % 2 == 0 then
+        print(i)
+    end
+end
+', 'lua')
+WHERE type IN ('for_statement', 'if_statement');
+----
+2
+
+# Test while loop
+query I
+SELECT type FROM parse_ast('while x > 0 do x = x - 1 end', 'lua')
+WHERE type = 'while_statement';
+----
+while_statement
+
+# Test repeat-until loop
+query I
+SELECT type FROM parse_ast('repeat x = x + 1 until x > 10', 'lua')
+WHERE type = 'repeat_statement';
+----
+repeat_statement
+
+# Test function call extraction
+query II
+SELECT type, name FROM parse_ast('print("hello") io.write("world")', 'lua')
+WHERE type = 'function_call'
+ORDER BY name;
+----
+function_call	io
+function_call	print
+
+# Test method call (colon syntax)
+query I
+SELECT COUNT(*) FROM parse_ast('obj:method(arg1, arg2)', 'lua')
+WHERE type = 'function_call';
+----
+1
+
+# Test anonymous function
+query I
+SELECT type FROM parse_ast('local f = function(x) return x * 2 end', 'lua')
+WHERE type = 'function_definition';
+----
+function_definition
+
+# Test comments are parsed
+query I
+SELECT type FROM parse_ast('-- this is a comment
+x = 1', 'lua')
+WHERE type = 'comment';
+----
+comment
+
+# Test Lua appears in supported languages
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'lua';
+----
+lua

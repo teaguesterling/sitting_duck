@@ -40,6 +40,8 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
     RegisterLanguageFactory("kotlin", []() { return make_uniq<KotlinAdapter>(); });
     // C# enabled - .NET ecosystem support
     RegisterLanguageFactory("csharp", []() { return make_uniq<CSharpAdapter>(); });
+    // Lua enabled - game scripting, embedded systems, Neovim plugins
+    RegisterLanguageFactory("lua", []() { return make_uniq<LuaAdapter>(); });
 }
 
 // Phase 2: Template-based parsing with zero virtual calls - NEW ExtractionConfig version
@@ -137,6 +139,10 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, 
     }
     if (normalized_language == "csharp") {
         CSharpAdapter adapter;  // Fresh instance - no static state persistence
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "lua") {
+        LuaAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
 
@@ -238,6 +244,10 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, 
     }
     if (normalized_language == "csharp") {
         CSharpAdapter adapter;  // Fresh instance - no static state persistence
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
+    }
+    if (normalized_language == "lua") {
+        LuaAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
 

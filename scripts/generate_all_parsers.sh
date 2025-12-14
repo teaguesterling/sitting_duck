@@ -212,6 +212,7 @@ GRAMMARS=(
     "r:tree-sitter-r:true"
     "kotlin:tree-sitter-kotlin:true"
     "csharp:tree-sitter-c-sharp:true"
+    "lua:tree-sitter-lua:true"
 )
 
 # Patches to apply (grammar_name:patch_name)
