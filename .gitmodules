@@ -87,3 +87,6 @@
 [submodule "grammars/tree-sitter-zig"]
 	path = grammars/tree-sitter-zig
 	url = https://github.com/tree-sitter-grammars/tree-sitter-zig.git
+[submodule "grammars/tree-sitter-dart"]
+	path = grammars/tree-sitter-dart
+	url = git@github.com:UserNobody14/tree-sitter-dart.git

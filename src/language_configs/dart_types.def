@@ -1,0 +1,279 @@
+// Dart programming language node type definitions
+// Client-optimized language with sound null safety and async support
+// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+
+// Document structure
+DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, 0x01)
+
+// Class and type definitions
+DEF_TYPE("class_definition", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("class_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("enum_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("enum_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("enum_constant", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("mixin_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("extension_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("extension_type_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("extension_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("type_alias", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+
+// Function and method definitions
+DEF_TYPE("function_signature", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("function_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("function_expression", DEFINITION_FUNCTION, NONE, NONE, 0)
+DEF_TYPE("function_expression_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("lambda_expression", DEFINITION_FUNCTION, NONE, NONE, 0)
+DEF_TYPE("method_signature", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("getter_signature", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("setter_signature", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("operator_signature", DEFINITION_FUNCTION, NONE, NONE, 0)
+DEF_TYPE("local_function_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+
+// Constructor definitions
+DEF_TYPE("constructor_signature", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("constant_constructor_signature", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("factory_constructor_signature", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("redirecting_factory_constructor_signature", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("constructor_invocation", COMPUTATION_CALL, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("constructor_param", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("constructor_tearoff", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+// Parameters
+DEF_TYPE("formal_parameter", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("formal_parameter_list", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("optional_formal_parameters", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("super_formal_parameter", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+
+// Variable declarations
+DEF_TYPE("variable_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("local_variable_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("initialized_variable_definition", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("initialized_identifier", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("initialized_identifier_list", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("static_final_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("static_final_declaration_list", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("pattern_variable_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+
+// Import/export
+DEF_TYPE("import_or_export", EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE("import_specification", EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE("library_import", EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE("library_export", EXTERNAL_EXPORT, NONE, NONE, 0)
+DEF_TYPE("library_name", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("part_directive", EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE("part_of_directive", EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE("uri", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("configurable_uri", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("combinator", EXTERNAL_IMPORT, NONE, NONE, 0)
+
+// Expressions
+DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+DEF_TYPE("assignment_expression_without_cascade", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+DEF_TYPE("assignable_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
+DEF_TYPE("conditional_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("if_null_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("logical_or_expression", OPERATOR_LOGICAL, NONE, NONE, 0)
+DEF_TYPE("logical_and_expression", OPERATOR_LOGICAL, NONE, NONE, 0)
+DEF_TYPE("equality_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
+DEF_TYPE("relational_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
+DEF_TYPE("bitwise_or_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("bitwise_xor_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("bitwise_and_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("shift_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("additive_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("multiplicative_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("postfix_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("type_cast_expression", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("type_test_expression", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("new_expression", COMPUTATION_CALL, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("const_object_expression", COMPUTATION_CALL, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("parenthesized_expression", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("expression_statement", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+// Function calls and selectors
+DEF_TYPE("arguments", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("argument", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("argument_part", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("named_argument", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("selector", COMPUTATION_ACCESS, NONE, NONE, 0)
+DEF_TYPE("cascade_section", COMPUTATION_ACCESS, NONE, NONE, 0)
+DEF_TYPE("cascade_selector", COMPUTATION_ACCESS, NONE, NONE, 0)
+DEF_TYPE("index_selector", COMPUTATION_ACCESS, NONE, NONE, 0)
+DEF_TYPE("unconditional_assignable_selector", COMPUTATION_ACCESS, NONE, NONE, 0)
+DEF_TYPE("conditional_assignable_selector", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+// Control flow
+DEF_TYPE("if_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("if_element", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("for_element", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("for_loop_parts", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("do_statement", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("switch_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("switch_block", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("switch_statement_case", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("switch_statement_default", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("switch_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("switch_expression_case", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("break_statement", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("continue_statement", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("return_statement", FLOW_JUMP, NONE, NONE, 0)
+
+// Error handling
+DEF_TYPE("try_statement", ERROR_TRY, NONE, NONE, 0)
+DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
+DEF_TYPE("catch_parameters", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
+DEF_TYPE("throw_expression", ERROR_THROW, NONE, NONE, 0)
+DEF_TYPE("throw_expression_without_cascade", ERROR_THROW, NONE, NONE, 0)
+DEF_TYPE("rethrow_expression", ERROR_THROW, NONE, NONE, 0)
+
+// Async/await
+DEF_TYPE("await_expression", FLOW_SYNC, NONE, NONE, 0)
+DEF_TYPE("yield_statement", FLOW_SYNC, NONE, NONE, 0)
+DEF_TYPE("yield_each_statement", FLOW_SYNC, NONE, NONE, 0)
+
+// Blocks
+DEF_TYPE("block", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+// Pattern matching
+DEF_TYPE("constant_pattern", LITERAL_STRUCTURED, NONE, NONE, 0)
+DEF_TYPE("variable_pattern", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("list_pattern", LITERAL_STRUCTURED, NONE, NONE, 0)
+DEF_TYPE("map_pattern", LITERAL_STRUCTURED, NONE, NONE, 0)
+DEF_TYPE("record_pattern", LITERAL_STRUCTURED, NONE, NONE, 0)
+DEF_TYPE("object_pattern", LITERAL_STRUCTURED, NONE, NONE, 0)
+DEF_TYPE("cast_pattern", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("null_check_pattern", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("null_assert_pattern", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("rest_pattern", LITERAL_STRUCTURED, NONE, NONE, 0)
+DEF_TYPE("pattern_assignment", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+// Types
+DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+DEF_TYPE("type_arguments", TYPE_GENERIC, NONE, NONE, 0)
+DEF_TYPE("type_parameters", TYPE_GENERIC, NONE, NONE, 0)
+DEF_TYPE("type_parameter", TYPE_GENERIC, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("type_bound", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("type_alias", TYPE_REFERENCE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("type_test", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("type_cast", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("void_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+DEF_TYPE("function_type", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("record_type", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("record_type_field", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("record_type_named_field", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("nullable_type", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("inferred_type", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+DEF_TYPE("typed_identifier", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("parameter_type_list", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("normal_parameter_type", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("optional_parameter_types", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("optional_positional_parameter_types", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("named_parameter_types", ORGANIZATION_LIST, NONE, NONE, 0)
+
+// Inheritance
+DEF_TYPE("superclass", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("mixins", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("mixin_application", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("mixin_application_class", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("interfaces", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("representation_declaration", TYPE_REFERENCE, NONE, NONE, 0)
+
+// Initializers
+DEF_TYPE("initializers", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("initializer_list_entry", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("field_initializer", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("redirection", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+// Assertions
+DEF_TYPE("assert_statement", ERROR_THROW, NONE, NONE, 0)
+DEF_TYPE("assertion", ERROR_THROW, NONE, NONE, 0)
+DEF_TYPE("assertion_arguments", ORGANIZATION_LIST, NONE, NONE, 0)
+
+// Literals
+DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("decimal_integer_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("hex_integer_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("decimal_floating_point_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("symbol_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("template_substitution", LITERAL_STRING, NONE, NONE, 0)
+
+// Collections
+DEF_TYPE("list_literal", LITERAL_STRUCTURED, NONE, NONE, 0)
+DEF_TYPE("set_or_map_literal", LITERAL_STRUCTURED, NONE, NONE, 0)
+DEF_TYPE("record_literal", LITERAL_STRUCTURED, NONE, NONE, 0)
+DEF_TYPE("record_field", DEFINITION_VARIABLE, NONE, NONE, 0)
+DEF_TYPE("pair", DEFINITION_VARIABLE, NONE, NONE, 0)
+DEF_TYPE("spread_element", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+// Identifiers
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("identifier_list", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("identifier_dollar_escaped", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("dotted_identifier_list", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("scoped_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("qualified", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+// Annotations and metadata
+DEF_TYPE("annotation", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("label", NAME_IDENTIFIER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("script_tag", METADATA_DIRECTIVE, NONE, NONE, 0)
+
+// Comments
+DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
+DEF_TYPE("documentation_comment", METADATA_COMMENT, NONE, NONE, 0)
+
+// Operators
+DEF_TYPE("equality_operator", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+DEF_TYPE("relational_operator", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+DEF_TYPE("additive_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("multiplicative_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("shift_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("bitwise_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("logical_or_operator", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("logical_and_operator", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("prefix_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("postfix_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("increment_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("minus_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("negation_operator", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("tilde_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("binary_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("as_operator", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+DEF_TYPE("is_operator", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+
+// Builtin keywords
+DEF_TYPE("const_builtin", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("final_builtin", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("break_builtin", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("assert_builtin", ERROR_THROW, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("case_builtin", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("rethrow_builtin", ERROR_THROW, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("part_of_builtin", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Modifiers
+DEF_TYPE("abstract", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("base", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("sealed", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("interface", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("mixin", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Special keywords
+DEF_TYPE("this", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("super", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// URI and configuration
+DEF_TYPE("uri_test", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("configuration_uri", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("configuration_uri_condition", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+// Error handling
+DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)

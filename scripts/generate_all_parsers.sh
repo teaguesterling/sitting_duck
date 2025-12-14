@@ -217,6 +217,7 @@ GRAMMARS=(
     "graphql:tree-sitter-graphql:false"
     "toml:tree-sitter-toml:true"
     "zig:tree-sitter-zig:false"
+    "dart:tree-sitter-dart:true"
 )
 
 # Patches to apply (grammar_name:patch_name)
