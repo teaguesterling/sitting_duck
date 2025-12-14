@@ -550,6 +550,26 @@ private:
     static const unordered_map<string, NodeConfig> node_configs;
 };
 
+// TOML adapter - configuration file format
+class TOMLAdapter : public LanguageAdapter {
+public:
+    string GetLanguageName() const override;
+    vector<string> GetAliases() const override;
+    string GetNormalizedType(const string &node_type) const override;
+    string ExtractNodeName(TSNode node, const string &content) const override;
+    string ExtractNodeValue(TSNode node, const string &content) const override;
+    bool IsPublicNode(TSNode node, const string &content) const override;
+    ParsingFunction GetParsingFunction() const override;
+    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
+protected:
+    void InitializeParser() const override;
+    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+
+private:
+    static const unordered_map<string, NodeConfig> node_configs;
+    string ExtractKeyText(TSNode key_node, const string &content) const;
+};
+
 // Language adapter registry
 class LanguageAdapterRegistry {
 public:

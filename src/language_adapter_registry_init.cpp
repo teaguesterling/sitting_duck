@@ -46,6 +46,8 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
     RegisterLanguageFactory("hcl", []() { return make_uniq<HCLAdapter>(); });
     // GraphQL enabled - schema and query language
     RegisterLanguageFactory("graphql", []() { return make_uniq<GraphQLAdapter>(); });
+    // TOML enabled - configuration file format (Cargo.toml, pyproject.toml, etc.)
+    RegisterLanguageFactory("toml", []() { return make_uniq<TOMLAdapter>(); });
 }
 
 // Phase 2: Template-based parsing with zero virtual calls - NEW ExtractionConfig version
@@ -155,6 +157,10 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, 
     }
     if (normalized_language == "graphql") {
         GraphQLAdapter adapter;  // Fresh instance - no static state persistence
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "toml") {
+        TOMLAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
 
@@ -268,6 +274,10 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, 
     }
     if (normalized_language == "graphql") {
         GraphQLAdapter adapter;  // Fresh instance - no static state persistence
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
+    }
+    if (normalized_language == "toml") {
+        TOMLAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
 

@@ -183,6 +183,7 @@ if(NOT USING_PREGENERATED_PARSERS AND CARGO_EXECUTABLE)
     generate_parser("tree-sitter-lua" "tree-sitter-lua/src/parser.c" "tree-sitter-lua/src/scanner.c")
     generate_parser("tree-sitter-hcl" "tree-sitter-hcl/src/parser.c" "tree-sitter-hcl/src/scanner.c")
     generate_parser("tree-sitter-graphql" "tree-sitter-graphql/src/parser.c" "")
+    generate_parser("tree-sitter-toml" "tree-sitter-toml/src/parser.c" "tree-sitter-toml/src/scanner.c")
 
     # Create a target for all generated parsers
     if(ALL_GENERATED_PARSERS)
@@ -287,6 +288,7 @@ set(EXTENSION_SOURCES
     src/language_adapters/lua_adapter.cpp
     src/language_adapters/hcl_adapter.cpp
     src/language_adapters/graphql_adapter.cpp
+    src/language_adapters/toml_adapter.cpp
     src/read_ast_streaming_function.cpp
     # src/read_ast_objects_hybrid.cpp (removed - objects API not used)
     src/ast_sql_macros.cpp
@@ -342,6 +344,8 @@ set(EXTENSION_SOURCES
     ${PARSER_SOURCE_DIR}/tree-sitter-hcl/src/parser.c
     ${PARSER_SOURCE_DIR}/tree-sitter-hcl/src/scanner.c
     ${PARSER_SOURCE_DIR}/tree-sitter-graphql/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-toml/src/parser.c
+    ${PARSER_SOURCE_DIR}/tree-sitter-toml/src/scanner.c
     )
     # Removed unused files:
     # src/ast_parser.cpp (replaced by unified_ast_backend.cpp)

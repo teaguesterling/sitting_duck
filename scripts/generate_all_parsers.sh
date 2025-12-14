@@ -215,6 +215,7 @@ GRAMMARS=(
     "lua:tree-sitter-lua:true"
     "hcl:tree-sitter-hcl:true"
     "graphql:tree-sitter-graphql:false"
+    "toml:tree-sitter-toml:true"
 )
 
 # Patches to apply (grammar_name:patch_name)

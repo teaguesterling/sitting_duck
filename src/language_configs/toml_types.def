@@ -1,0 +1,60 @@
+// TOML (Tom's Obvious Minimal Language) node type definitions
+// Used by Cargo.toml, pyproject.toml, Hugo, etc.
+// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+
+// Document structure
+DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, 0x01)
+
+// Table definitions [section]
+DEF_TYPE("table", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("table_array_element", DEFINITION_CLASS, CUSTOM, NONE, 0)
+
+// Key-value pairs
+DEF_TYPE("pair", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
+
+// Key types
+DEF_TYPE("bare_key", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("quoted_key", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("dotted_key", NAME_IDENTIFIER, CUSTOM, NONE, 0)
+
+// Inline table { key = value }
+DEF_TYPE("inline_table", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+// Array [ values ]
+DEF_TYPE("array", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+// Literal values
+DEF_TYPE("string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("integer", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("float", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("boolean", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+// Date/time types
+DEF_TYPE("local_date", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("local_time", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("local_date_time", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("offset_date_time", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+// String content
+DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+// Comments
+DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
+
+// Punctuation
+DEF_TYPE("{", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+DEF_TYPE("}", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+DEF_TYPE("[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+DEF_TYPE("]", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+DEF_TYPE("[[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+DEF_TYPE("]]", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+DEF_TYPE("=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+DEF_TYPE(",", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+DEF_TYPE(".", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+DEF_TYPE("\"", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+DEF_TYPE("'", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+DEF_TYPE("\"\"\"", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+DEF_TYPE("'''", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+// Error handling
+DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)

@@ -1,0 +1,172 @@
+# name: test/sql/toml_language_support.test
+# description: Test TOML language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: Language is supported
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'toml';
+----
+toml
+
+# Test 2: File extension auto-detection (.toml)
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/toml/sample.toml');
+----
+true
+
+# Test 3: Document structure
+query I
+SELECT type FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'document' LIMIT 1;
+----
+document
+
+# Test 4: Table detection ([section])
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'table';
+----
+9
+
+# Test 5: Table names extraction
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'table' AND name IS NOT NULL AND name != '';
+----
+9
+
+# Test 6: Table array element detection ([[products]])
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'table_array_element';
+----
+2
+
+# Test 7: Key-value pairs detection
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'pair';
+----
+33
+
+# Test 8: Bare key detection
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'bare_key';
+----
+49
+
+# Test 9: String literals
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'string';
+----
+23
+
+# Test 10: Integer literals
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'integer';
+----
+6
+
+# Test 11: Boolean literals
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'boolean';
+----
+2
+
+# Test 12: Float literals
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'float';
+----
+3
+
+# Test 13: Arrays
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'array';
+----
+5
+
+# Test 14: Inline tables
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'inline_table';
+----
+2
+
+# Test 15: Comments
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'comment';
+----
+4
+
+# Test 16: Date/time values
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'offset_date_time';
+----
+1
+
+# Test 17: Dotted keys
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'dotted_key';
+----
+6
+
+# Test 18: Quoted keys
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'quoted_key';
+----
+1
+
+# Test 19: Semantic types - definitions
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE semantic_type_to_string(semantic_type) LIKE 'DEFINITION_%';
+----
+45
+
+# Test 20: Semantic types - literals
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE semantic_type_to_string(semantic_type) LIKE 'LITERAL_%';
+----
+42
+
+# Test 21: parse_ast works with TOML
+query I
+SELECT COUNT(*) > 0 FROM (
+    SELECT * FROM parse_ast(E'[package]\nname = "test"\nversion = "1.0"', 'toml')
+);
+----
+true
+
+# Test 22: Verify specific table names
+query I
+SELECT name FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'table' AND name = 'owner';
+----
+owner
+
+# Test 23: Verify dotted table names
+query I
+SELECT name FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'table' AND name = 'servers.alpha';
+----
+servers.alpha
+
+# Test 24: Verify pair names extraction
+query I
+SELECT COUNT(*) FROM read_ast('test/data/toml/sample.toml')
+WHERE type = 'pair' AND name IS NOT NULL AND name != '';
+----
+33

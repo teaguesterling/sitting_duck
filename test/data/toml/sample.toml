@@ -1,0 +1,61 @@
+# This is a TOML document
+# Used for testing TOML parsing in sitting_duck
+
+title = "TOML Example"
+version = "1.0.0"
+
+[owner]
+name = "Tom Preston-Werner"
+dob = 1979-05-27T07:32:00-08:00
+
+[database]
+enabled = true
+ports = [ 8000, 8001, 8002 ]
+data = [ ["delta", "phi"], [3.14] ]
+temp_targets = { cpu = 79.5, case = 72.0 }
+
+[servers]
+
+[servers.alpha]
+ip = "10.0.0.1"
+role = "frontend"
+
+[servers.beta]
+ip = "10.0.0.2"
+role = "backend"
+
+[[products]]
+name = "Hammer"
+sku = 738594937
+
+[[products]]
+name = "Nail"
+sku = 284758393
+color = "gray"
+
+[package]
+name = "sitting_duck"
+version = "1.0.0"
+edition = "2021"
+
+[package.metadata]
+description = "AST extension for DuckDB"
+license = "MIT"
+
+[dependencies]
+duckdb = { version = "1.0", features = ["json"] }
+
+[build]
+target = "release"
+optimization_level = 3
+
+# Multi-line strings
+description = """
+This is a multi-line
+string value for testing
+TOML parsing."""
+
+# Dotted keys
+physical.color = "orange"
+physical.shape = "round"
+site."google.com" = true
