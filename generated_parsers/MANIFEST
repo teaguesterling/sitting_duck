@@ -1,5 +1,5 @@
 # Generated parsers manifest
-# Generated on: 2025-12-13T16:38:58-08:00
+# Generated on: 2025-12-13T20:55:12-08:00
 # tree-sitter version: tree-sitter 0.26.0
 
 c:tree-sitter-c
@@ -23,3 +23,5 @@ r:tree-sitter-r
 kotlin:tree-sitter-kotlin
 csharp:tree-sitter-c-sharp
 lua:tree-sitter-lua
+hcl:tree-sitter-hcl
+graphql:tree-sitter-graphql

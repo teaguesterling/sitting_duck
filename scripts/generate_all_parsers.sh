@@ -214,6 +214,7 @@ GRAMMARS=(
     "csharp:tree-sitter-c-sharp:true"
     "lua:tree-sitter-lua:true"
     "hcl:tree-sitter-hcl:true"
+    "graphql:tree-sitter-graphql:false"
 )
 
 # Patches to apply (grammar_name:patch_name)

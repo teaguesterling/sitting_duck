@@ -78,3 +78,6 @@
 [submodule "grammars/tree-sitter-hcl"]
 	path = grammars/tree-sitter-hcl
 	url = https://github.com/tree-sitter-grammars/tree-sitter-hcl.git
+[submodule "grammars/tree-sitter-graphql"]
+	path = grammars/tree-sitter-graphql
+	url = https://github.com/bkegley/tree-sitter-graphql.git

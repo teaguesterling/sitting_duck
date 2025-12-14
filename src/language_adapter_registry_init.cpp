@@ -44,6 +44,8 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
     RegisterLanguageFactory("lua", []() { return make_uniq<LuaAdapter>(); });
     // HCL enabled - Terraform, Vault, Nomad, Waypoint configuration
     RegisterLanguageFactory("hcl", []() { return make_uniq<HCLAdapter>(); });
+    // GraphQL enabled - schema and query language
+    RegisterLanguageFactory("graphql", []() { return make_uniq<GraphQLAdapter>(); });
 }
 
 // Phase 2: Template-based parsing with zero virtual calls - NEW ExtractionConfig version
@@ -149,6 +151,10 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, 
     }
     if (normalized_language == "hcl") {
         HCLAdapter adapter;  // Fresh instance - no static state persistence
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
+    }
+    if (normalized_language == "graphql") {
+        GraphQLAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
     }
 
@@ -258,6 +264,10 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string& content, 
     }
     if (normalized_language == "hcl") {
         HCLAdapter adapter;  // Fresh instance - no static state persistence
+        return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
+    }
+    if (normalized_language == "graphql") {
+        GraphQLAdapter adapter;  // Fresh instance - no static state persistence
         return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size, peek_mode);
     }
 

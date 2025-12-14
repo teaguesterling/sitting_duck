@@ -1,0 +1,189 @@
+# name: test/sql/languages/graphql_language_support.test
+# description: Test GraphQL schema and query language parsing support
+# group: [languages]
+
+require sitting_duck
+
+# Test basic type definition
+query II
+SELECT type, name FROM parse_ast(E'type User {\n  id: ID!\n  name: String\n}', 'graphql')
+WHERE type = 'object_type_definition'
+ORDER BY name;
+----
+object_type_definition	User
+
+# Test interface definition
+query II
+SELECT type, name FROM parse_ast(E'interface Node {\n  id: ID!\n}', 'graphql')
+WHERE type = 'interface_type_definition'
+ORDER BY name;
+----
+interface_type_definition	Node
+
+# Test enum definition
+query II
+SELECT type, name FROM parse_ast(E'enum Status {\n  ACTIVE\n  INACTIVE\n}', 'graphql')
+WHERE type = 'enum_type_definition'
+ORDER BY name;
+----
+enum_type_definition	Status
+
+# Test input type definition
+query II
+SELECT type, name FROM parse_ast(E'input CreateUserInput {\n  name: String!\n}', 'graphql')
+WHERE type = 'input_object_type_definition'
+ORDER BY name;
+----
+input_object_type_definition	CreateUserInput
+
+# Test union definition
+query II
+SELECT type, name FROM parse_ast(E'union SearchResult = User | Post', 'graphql')
+WHERE type = 'union_type_definition'
+ORDER BY name;
+----
+union_type_definition	SearchResult
+
+# Test scalar definition
+query II
+SELECT type, name FROM parse_ast('scalar DateTime', 'graphql')
+WHERE type = 'scalar_type_definition'
+ORDER BY name;
+----
+scalar_type_definition	DateTime
+
+# Test query operation with name
+query II
+SELECT type, name FROM parse_ast(E'query GetUser {\n  user {\n    id\n  }\n}', 'graphql')
+WHERE type = 'operation_definition'
+ORDER BY name;
+----
+operation_definition	GetUser
+
+# Test mutation operation
+query II
+SELECT type, name FROM parse_ast(E'mutation CreateUser($input: CreateUserInput!) {\n  createUser(input: $input) {\n    id\n  }\n}', 'graphql')
+WHERE type = 'operation_definition'
+ORDER BY name;
+----
+operation_definition	CreateUser
+
+# Test fragment definition
+query II
+SELECT type, name FROM parse_ast(E'fragment UserFields on User {\n  id\n  name\n}', 'graphql')
+WHERE type = 'fragment_definition'
+ORDER BY name;
+----
+fragment_definition	UserFields
+
+# Test field definitions
+query I
+SELECT COUNT(*) FROM parse_ast(E'type User {\n  id: ID!\n  name: String\n  email: String!\n}', 'graphql')
+WHERE type = 'field_definition';
+----
+3
+
+# Test directive definition
+query II
+SELECT type, name FROM parse_ast(E'directive @deprecated(reason: String) on FIELD_DEFINITION', 'graphql')
+WHERE type = 'directive_definition'
+ORDER BY name;
+----
+directive_definition	deprecated
+
+# Test directive usage
+query I
+SELECT COUNT(*) FROM parse_ast(E'type User {\n  oldField: String @deprecated\n}', 'graphql')
+WHERE type = 'directive';
+----
+1
+
+# Test variable definitions
+query I
+SELECT COUNT(*) FROM parse_ast(E'query GetUsers($first: Int!, $after: String) {\n  users(first: $first, after: $after) {\n    id\n  }\n}', 'graphql')
+WHERE type = 'variable_definition';
+----
+2
+
+# Test argument extraction
+query I
+SELECT COUNT(*) FROM parse_ast(E'query {\n  user(id: "123") {\n    name\n  }\n}', 'graphql')
+WHERE type = 'argument';
+----
+1
+
+# Test fragment spread
+query I
+SELECT COUNT(*) FROM parse_ast(E'query {\n  user {\n    ...UserFields\n  }\n}', 'graphql')
+WHERE type = 'fragment_spread';
+----
+1
+
+# Test inline fragment
+query I
+SELECT COUNT(*) FROM parse_ast(E'query {\n  search {\n    ... on User {\n      name\n    }\n  }\n}', 'graphql')
+WHERE type = 'inline_fragment';
+----
+1
+
+# Test field selection (in queries)
+query I
+SELECT COUNT(*) FROM parse_ast(E'query {\n  user {\n    id\n    name\n    email\n  }\n}', 'graphql')
+WHERE type = 'field';
+----
+4
+
+# Test description (documentation) parsing
+query I
+SELECT type FROM parse_ast(E'"""User type"""\ntype User { id: ID! }', 'graphql')
+WHERE type = 'description';
+----
+description
+
+# Test comments
+query I
+SELECT type FROM parse_ast(E'# Comment\ntype User { id: ID! }', 'graphql')
+WHERE type = 'comment';
+----
+comment
+
+# Test enum values
+query I
+SELECT COUNT(*) FROM parse_ast(E'enum Status {\n  ACTIVE\n  INACTIVE\n  PENDING\n}', 'graphql')
+WHERE type = 'enum_value_definition';
+----
+3
+
+# Test implements interfaces
+query I
+SELECT type FROM parse_ast(E'type User implements Node {\n  id: ID!\n}', 'graphql')
+WHERE type = 'implements_interfaces';
+----
+implements_interfaces
+
+# Test schema definition
+query I
+SELECT type FROM parse_ast(E'schema {\n  query: Query\n  mutation: Mutation\n}', 'graphql')
+WHERE type = 'schema_definition';
+----
+schema_definition
+
+# Test type extension
+query II
+SELECT type, name FROM parse_ast(E'extend type User {\n  email: String\n}', 'graphql')
+WHERE type = 'object_type_extension'
+ORDER BY name;
+----
+object_type_extension	User
+
+# Test GraphQL appears in supported languages
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'graphql';
+----
+graphql
+
+# Test gql alias works
+query I
+SELECT COUNT(*) > 0 FROM parse_ast('type User { id: ID! }', 'gql');
+----
+true
