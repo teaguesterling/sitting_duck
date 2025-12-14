@@ -36,7 +36,8 @@ static const std::unordered_map<string, string> EXTENSION_TO_LANGUAGE = {
     {"lua", "lua"},
     {"hcl", "hcl"}, {"tf", "hcl"}, {"tfvars", "hcl"},
     {"graphql", "graphql"}, {"gql", "graphql"},
-    {"toml", "toml"}
+    {"toml", "toml"},
+    {"zig", "zig"}
 };
 
 // Static mapping of languages to their supported extensions
@@ -66,7 +67,8 @@ static const std::unordered_map<string, vector<string>> LANGUAGE_TO_EXTENSIONS =
     {"lua", {"lua"}},
     {"hcl", {"hcl", "tf", "tfvars"}},
     {"graphql", {"graphql", "gql"}},
-    {"toml", {"toml"}}
+    {"toml", {"toml"}},
+    {"zig", {"zig"}}
 };
 
 vector<string> ASTFileUtils::GetFiles(ClientContext &context, const Value &path_value, 

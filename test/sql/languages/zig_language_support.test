@@ -1,0 +1,173 @@
+# name: test/sql/languages/zig_language_support.test
+# description: Test Zig language support functionality
+# group: [sitting_duck]
+
+require sitting_duck
+
+# Test 1: Language is supported
+query I
+SELECT language FROM ast_supported_languages() WHERE language = 'zig';
+----
+zig
+
+# Test 2: File extension auto-detection (.zig)
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/zig/sample.zig');
+----
+true
+
+# Test 3: Source file structure
+query I
+SELECT type FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'source_file' LIMIT 1;
+----
+source_file
+
+# Test 4: Function declarations
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'function_declaration';
+----
+7
+
+# Test 5: Struct declarations
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'struct_declaration';
+----
+2
+
+# Test 6: Enum declarations
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'enum_declaration';
+----
+1
+
+# Test 7: Union declarations
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'union_declaration';
+----
+1
+
+# Test 8: Variable declarations (const and var)
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'variable_declaration';
+----
+31
+
+# Test 9: Test declarations
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'test_declaration';
+----
+2
+
+# Test 10: Control flow - if statements
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'if_statement';
+----
+3
+
+# Test 11: Control flow - while statements
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'while_statement';
+----
+1
+
+# Test 12: Control flow - for statements
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'for_statement';
+----
+1
+
+# Test 13: Switch expressions
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'switch_expression';
+----
+2
+
+# Test 14: Builtin functions (@import, @sizeOf, etc.)
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'builtin_function';
+----
+3
+
+# Test 15: Identifiers
+query I
+SELECT COUNT(*) > 50 FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'identifier';
+----
+true
+
+# Test 16: String literals
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'string';
+----
+4
+
+# Test 17: Integer literals
+query I
+SELECT COUNT(*) > 10 FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'integer';
+----
+true
+
+# Test 18: Comments
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'comment';
+----
+18
+
+# Test 19: Return expressions
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'return_expression';
+----
+4
+
+# Test 20: Defer statements
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'defer_statement';
+----
+1
+
+# Test 21: Try expressions
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'try_expression';
+----
+3
+
+# Test 22: parse_ast works with Zig
+query I
+SELECT COUNT(*) > 0 FROM (
+    SELECT * FROM parse_ast(E'const x: i32 = 42;\npub fn main() void {}', 'zig')
+);
+----
+true
+
+# Test 23: Error set declarations
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'error_set_declaration';
+----
+1
+
+# Test 24: Comptime statements
+query I
+SELECT COUNT(*) FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'comptime_statement';
+----
+1
+
