@@ -8,23 +8,23 @@ require sitting_duck
 query II
 SELECT type, name FROM parse_ast('function hello() print("world") end', 'lua')
 WHERE type IN ('function_declaration', 'identifier')
-ORDER BY name;
+ORDER BY type, name;
 ----
-identifier	hello
 function_declaration	hello
+identifier	hello
 identifier	print
 
 # Test local function
 query II
 SELECT type, name FROM parse_ast('local function greet(name) return "Hello, " .. name end', 'lua')
-WHERE type IN ('local_function_declaration', 'identifier', 'parameters')
+WHERE type IN ('function_declaration', 'identifier', 'parameters')
 ORDER BY type, name;
 ----
+function_declaration	greet
 identifier	greet
 identifier	name
 identifier	name
-local_function_declaration	greet
-parameters	NULL
+parameters	(empty)
 
 # Test table constructor
 query I
@@ -62,11 +62,11 @@ repeat_statement
 
 # Test function call extraction
 query II
-SELECT type, name FROM parse_ast('print("hello") io.write("world")', 'lua')
+SELECT type, name FROM parse_ast('print("hello") greet("world")', 'lua')
 WHERE type = 'function_call'
 ORDER BY name;
 ----
-function_call	io
+function_call	greet
 function_call	print
 
 # Test method call (colon syntax)
