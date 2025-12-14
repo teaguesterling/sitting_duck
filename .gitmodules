@@ -72,3 +72,6 @@
 [submodule "grammars/tree-sitter-c-sharp"]
 	path = grammars/tree-sitter-c-sharp
 	url = https://github.com/tree-sitter/tree-sitter-c-sharp
+[submodule "grammars/tree-sitter-hcl"]
+	path = grammars/tree-sitter-hcl
+	url = https://github.com/tree-sitter-grammars/tree-sitter-hcl.git
