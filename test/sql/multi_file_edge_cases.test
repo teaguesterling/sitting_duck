@@ -24,12 +24,12 @@ FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 
 # Test 2: Two-file processing with file breakdown
 # ==============================================
 query II
-SELECT 
+SELECT
     COUNT(DISTINCT file_path) as unique_files,
     COUNT(*) as total_nodes
 FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto');
 ----
-1	110
+2	419
 
 # Test 3: Three-file processing (identified segfault case)
 # =======================================================
@@ -162,9 +162,9 @@ WHERE parent_id IS NOT NULL;
 
 # Test 13: Large file count processing
 # ====================================
-# NOTE: Currently limited to first pattern only - this is a known limitation
+# All patterns should be processed
 query I
-SELECT COUNT(DISTINCT file_path) >= 1 as processes_files
+SELECT COUNT(DISTINCT file_path) = 12 as processes_all_files
 FROM read_ast([
     'test/data/python/*.py',
     'test/data/javascript/*.js',
@@ -175,12 +175,12 @@ FROM read_ast([
 
 # Test 14: Mixed language processing consistency
 # =============================================
-# NOTE: Currently limited to first pattern only - this is a known limitation
+# All 4 languages should be detected and processed
 query I
-SELECT COUNT(DISTINCT language) >= 1 as has_languages
+SELECT COUNT(DISTINCT language) = 4 as has_all_languages
 FROM read_ast([
     'test/data/python/*.py',
-    'test/data/javascript/*.js', 
+    'test/data/javascript/*.js',
     'test/data/cpp/*.cpp',
     'test/data/go/*.go'
 ], 'auto');
@@ -189,12 +189,12 @@ FROM read_ast([
 
 # Test 15: Result aggregation correctness
 # ======================================
-# NOTE: Currently limited to first file only - combined total only includes first file
+# Combined total should be greater than individual files (both files now processed)
 query I
-SELECT 
-    (individual_first_file = combined_total) as first_file_matches
+SELECT
+    (combined_total > individual_first_file) as combines_both_files
 FROM (
-    SELECT 
+    SELECT
         (SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python')) as individual_first_file,
         (SELECT COUNT(*) FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto')) as combined_total
 );
@@ -232,9 +232,9 @@ FROM read_ast([
 
 # Test 19: Mixed valid and invalid files with ignore_errors=true
 # =============================================================
-# NOTE: Currently limited to first file only - this is a known limitation
+# Both valid files should be processed, missing file skipped
 query I
-SELECT COUNT(DISTINCT file_path) = 1 as processes_first_file
+SELECT COUNT(DISTINCT file_path) = 2 as processes_both_valid_files
 FROM read_ast([
     'test/data/python/simple.py',
     'test/data/javascript/simple.js',
@@ -297,12 +297,12 @@ FROM read_ast('test/data/*/*.py', 'python');
 
 # Test 24: Maximum file array size test (reasonable limit)
 # =======================================================
-# NOTE: Currently limited to first file only - this is a known limitation
+# All 11 files should be processed
 query I
-SELECT COUNT(DISTINCT file_path) >= 1 as handles_first_file
+SELECT COUNT(DISTINCT file_path) = 11 as handles_all_files
 FROM read_ast([
     'test/data/python/simple.py',
-    'test/data/python/comments.py', 
+    'test/data/python/comments.py',
     'test/data/python/decorators.py',
     'test/data/python/test_classes.py',
     'test/data/python/deep_nesting.py',
@@ -322,13 +322,13 @@ FROM read_ast([
 
 # Test 25: All column types present in multi-file results
 # =======================================================
-# NOTE: Currently limited to first file only - this is a known limitation
+# Both files should have all columns populated
 query I
-SELECT 
+SELECT
     (COUNT(DISTINCT node_id) > 0 AND
      COUNT(DISTINCT type) > 0 AND
-     COUNT(DISTINCT file_path) >= 1 AND
-     COUNT(DISTINCT language) >= 1) as core_columns_populated
+     COUNT(DISTINCT file_path) = 2 AND
+     COUNT(DISTINCT language) = 2) as core_columns_populated
 FROM read_ast([
     'test/data/python/simple.py',
     'test/data/javascript/simple.js'
@@ -366,9 +366,9 @@ WHERE peek IS NOT NULL AND LENGTH(peek) > 0;
 
 # Test 28: Multi-file processing metadata verification
 # ===================================================
-# NOTE: Currently limited to first file only - this is a known limitation
+# All files and languages should be present
 query III
-SELECT 
+SELECT
     language,
     COUNT(*) as node_count,
     COUNT(DISTINCT file_path) as file_count
@@ -380,4 +380,6 @@ FROM read_ast([
 GROUP BY language
 ORDER BY language;
 ----
+cpp	498	1
+javascript	309	1
 python	110	1

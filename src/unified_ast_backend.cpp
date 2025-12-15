@@ -730,7 +730,12 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
     }
     
     const idx_t chunk_size = STANDARD_VECTOR_SIZE;
-    idx_t count = 0;
+    // CRITICAL FIX: Start writing at output_index position, not 0!
+    // This prevents multi-file scenarios from overwriting previous files' data.
+    // When files A (50 nodes) and B (30 nodes) both fit in one chunk:
+    //   - File A writes to positions 0-49
+    //   - File B should write to positions 50-79, NOT 0-29
+    idx_t count = output_index;
     idx_t col_idx = 0;
     
     // Track column indices for consistent access (AGENT J FIX)

@@ -24,19 +24,18 @@ FROM read_ast(['test/data/javascript/simple.js', 'test/data/javascript/count_tes
 # Test 2: Batch vs Individual Processing Equivalence
 # =================================================
 
-# Test that batch processing produces same total node count as individual processing
-# NOTE: Currently limited to first file only - this is a known limitation
+# Test that batch processing produces same total node count as sum of individual files
 query I
 WITH batch_result AS (
     SELECT COUNT(*) as batch_count
     FROM read_ast(['test/data/javascript/simple.js', 'test/data/javascript/count_test.js'], 'javascript', batch_size := 2)
 ),
-individual_result AS (
-    SELECT COUNT(*) as individual_count
-    FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := 1)
+individual_sum AS (
+    SELECT (SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript')) +
+           (SELECT COUNT(*) FROM read_ast('test/data/javascript/count_test.js', 'javascript')) as individual_count
 )
 SELECT batch_count = individual_count as counts_match
-FROM batch_result, individual_result
+FROM batch_result, individual_sum
 ----
 1
 
@@ -69,13 +68,12 @@ test/data/javascript/simple.js	javascript
 # Test 5: Multiple Files in Batch
 # ===============================
 
-# Test batch processing with multiple files
-# NOTE: Currently limited to first file only - this is a known limitation
+# Test batch processing with multiple files - both should be processed
 query I
 SELECT COUNT(DISTINCT file_path) as unique_files
 FROM read_ast(['test/data/javascript/simple.js', 'test/data/javascript/count_test.js'], 'javascript', batch_size := 2)
 ----
-1
+2
 
 # Test 6: Large Batch Size Handling
 # =================================
@@ -108,11 +106,10 @@ FROM read_ast(['test/data/javascript/simple.js'], 'javascript', batch_size := 2)
 # Test 8: Auto-detect Language with Batching
 # ==========================================
 
-# Test batch processing with auto-detect language
-# NOTE: Currently limited to first file only - this is a known limitation
+# Test batch processing with auto-detect language - both files processed
 query I
 SELECT COUNT(DISTINCT language) as language_count
 FROM read_ast(['test/data/python/simple.py', 'test/data/javascript/simple.js'], 'auto', batch_size := 2)
 WHERE language IN ('python', 'javascript')
 ----
-1
+2

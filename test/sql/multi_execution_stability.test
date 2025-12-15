@@ -150,21 +150,21 @@ SELECT COUNT(*) as large_file_exec_1
 FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
 LIMIT 1;
 ----
-19309
+19314
 
 query I
 SELECT COUNT(*) as large_file_exec_2
 FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
 LIMIT 1;
 ----
-19309
+19314
 
 query I
 SELECT COUNT(*) as large_file_exec_3
 FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
 LIMIT 1;
 ----
-19309
+19314
 
 # Test 7: Mixed extraction config stability
 # =========================================
