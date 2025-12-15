@@ -13,9 +13,9 @@ DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, 
 DEF_TYPE("repeat_statement", FLOW_LOOP | SemanticRefinements::Loop::INFINITE, NONE, NONE, 0)
 
 // Jump statements
-DEF_TYPE("return", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("break", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("next", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("return", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("break", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("next", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Keywords
 DEF_TYPE("if", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -31,8 +31,8 @@ DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAM
 
 // Function calls and expressions
 DEF_TYPE("call", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, FUNCTION_CALL, 0)
-DEF_TYPE("binary_operator", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("unary_operator", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("binary_operator", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+DEF_TYPE("unary_operator", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
 
 // Data access operations
 DEF_TYPE("subset", COMPUTATION_ACCESS, NONE, NONE, 0)
@@ -41,7 +41,7 @@ DEF_TYPE("extract_operator", COMPUTATION_ACCESS, NONE, NONE, 0)
 DEF_TYPE("namespace_operator", COMPUTATION_ACCESS, NONE, NONE, 0)
 
 // Literals - R has many special constants
-DEF_TYPE("string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 DEF_TYPE("integer", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
 DEF_TYPE("float", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
 DEF_TYPE("complex", LITERAL_NUMBER | SemanticRefinements::Number::COMPLEX, NODE_TEXT, NONE, 0)
@@ -87,12 +87,12 @@ DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
 
 // Operators - R has many assignment operators
-DEF_TYPE("<-", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("<<-", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("->", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("->>", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE(":=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+DEF_TYPE("<-", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+DEF_TYPE("<<-", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+DEF_TYPE("->", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+DEF_TYPE("->>", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+DEF_TYPE("=", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+DEF_TYPE(":=", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
 
 // Arithmetic operators
 DEF_TYPE("+", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)

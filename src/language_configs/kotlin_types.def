@@ -11,12 +11,12 @@ DEF_TYPE("secondary_constructor", DEFINITION_FUNCTION | SemanticRefinements::Fun
 DEF_TYPE("constructor_invocation", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_CALL, 0)
 
 // Class and object definitions
-DEF_TYPE("class_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
-DEF_TYPE("object_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
-DEF_TYPE("interface_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
-DEF_TYPE("enum_class_body", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("companion_object", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("anonymous_initializer", DEFINITION_FUNCTION, NONE, NONE, 0)
+DEF_TYPE("class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+DEF_TYPE("object_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+DEF_TYPE("interface_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+DEF_TYPE("enum_class_body", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("companion_object", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("anonymous_initializer", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, NONE, NONE, 0)
 
 // Variable declarations with mutability refinements
 DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
@@ -45,8 +45,8 @@ DEF_TYPE("hex_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, N
 DEF_TYPE("bin_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
 DEF_TYPE("real_literal", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
 DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("character_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("character_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
 // Structured literals with refinements
@@ -55,23 +55,23 @@ DEF_TYPE("array_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::
 DEF_TYPE("list_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
 
 // Control flow
-DEF_TYPE("if_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("when_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("when_condition", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("if_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+DEF_TYPE("when_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+DEF_TYPE("when_condition", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 DEF_TYPE("try_expression", ERROR_TRY, NONE, NONE, 0)
 DEF_TYPE("catch_block", ERROR_CATCH, NONE, NONE, 0)
 DEF_TYPE("finally_block", ERROR_FINALLY, NONE, NONE, 0)
 
 // Loop constructs
-DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("while_statement", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("do_while_statement", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("do_while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
 
 // Jump statements
-DEF_TYPE("return_expression", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("return_expression", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
 DEF_TYPE("throw_expression", ERROR_THROW, NONE, NONE, 0)
-DEF_TYPE("break_expression", FLOW_JUMP, NONE, NONE, 0)
-DEF_TYPE("continue_expression", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("break_expression", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
+DEF_TYPE("continue_expression", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
 
 // Async/coroutine constructs
 DEF_TYPE("suspend_modifier", FLOW_SYNC, NONE, NONE, 0)
@@ -79,8 +79,8 @@ DEF_TYPE("suspend_modifier", FLOW_SYNC, NONE, NONE, 0)
 // Module and import
 DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, 0)
 DEF_TYPE("package_header", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("import_header", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("import_list", EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE("import_header", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("import_list", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0)
 
 // Type system
 DEF_TYPE("type_alias", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
@@ -91,17 +91,17 @@ DEF_TYPE("function_type", TYPE_COMPOSITE, NONE, NONE, 0)
 DEF_TYPE("parenthesized_type", TYPE_REFERENCE, NONE, NONE, 0)
 
 // Operators with refinements
-DEF_TYPE("assignment", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("additive_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("multiplicative_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("assignment", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+DEF_TYPE("additive_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+DEF_TYPE("multiplicative_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
 DEF_TYPE("comparison_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE("equality_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE("conjunction_expression", OPERATOR_LOGICAL, NONE, NONE, 0)
 DEF_TYPE("disjunction_expression", OPERATOR_LOGICAL, NONE, NONE, 0)
-DEF_TYPE("range_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("infix_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("prefix_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("postfix_expression", OPERATOR_ARITHMETIC, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("range_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+DEF_TYPE("infix_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+DEF_TYPE("prefix_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+DEF_TYPE("postfix_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, FIND_IDENTIFIER, FUNCTION_CALL, 0)
 DEF_TYPE("as_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE("is_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE("in_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
@@ -186,16 +186,16 @@ DEF_TYPE("where", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD
 DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Structure and organization
-DEF_TYPE("class_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
-DEF_TYPE("block", ORGANIZATION_BLOCK, NONE, NONE, 0)
-DEF_TYPE("lambda_literal", ORGANIZATION_BLOCK, NONE, NONE, 0)
-DEF_TYPE("function_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
-DEF_TYPE("when_entry", ORGANIZATION_BLOCK, NONE, NONE, 0)
-DEF_TYPE("parameter_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("value_parameter_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("argument_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("type_parameter_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("type_arguments", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("class_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+DEF_TYPE("lambda_literal", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+DEF_TYPE("function_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+DEF_TYPE("when_entry", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+DEF_TYPE("parameter_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("value_parameter_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("argument_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("type_parameter_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("type_arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
 // Punctuation and delimiters
 DEF_TYPE("(", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
