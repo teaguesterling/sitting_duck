@@ -90,3 +90,6 @@
 [submodule "grammars/tree-sitter-dart"]
 	path = grammars/tree-sitter-dart
 	url = git@github.com:UserNobody14/tree-sitter-dart.git
+[submodule "third_party/rosettacode-acmeism"]
+	path = third_party/rosettacode-acmeism
+	url = https://github.com/acmeism/RosettaCodeData
