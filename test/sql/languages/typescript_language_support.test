@@ -71,6 +71,11 @@ WHERE type = 'type_annotation';
 
 # Test 8: TypeScript semantic types
 # =================================
+# Note: semantic_type values include refinements:
+# - function_declaration: 240 = DEFINITION_FUNCTION | REGULAR
+# - class_declaration: 248 = DEFINITION_CLASS
+# - interface_declaration: 249 = DEFINITION_CLASS | ABSTRACT (interfaces are abstract by nature)
+# - call_expression: 208 = COMPUTATION_CALL | FUNCTION
 
 query III
 SELECT type, semantic_type, COUNT(*) as count
@@ -82,7 +87,7 @@ ORDER BY type;
 call_expression	208	12
 class_declaration	248	1
 function_declaration	240	5
-interface_declaration	248	3
+interface_declaration	249	3
 
 # Test 9: TypeScript tree structure validation
 # ============================================
