@@ -3,31 +3,31 @@
 
 // Program structure
 DEF_TYPE("chunk", DEFINITION_MODULE, NONE, NONE, 0)
-DEF_TYPE("block", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 // Function definitions
-DEF_TYPE("function_declaration", DEFINITION_FUNCTION, CUSTOM, FUNCTION_WITH_PARAMS, 0)
-DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
-DEF_TYPE("local_function_declaration", DEFINITION_FUNCTION, CUSTOM, FUNCTION_WITH_PARAMS, 0)
-DEF_TYPE("parameters", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("return_statement", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, 0)
+DEF_TYPE("local_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
 
 // Function calls
-DEF_TYPE("function_call", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_CALL, 0)
-DEF_TYPE("arguments", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("method_index_expression", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("function_call", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("method_index_expression", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_IDENTIFIER, FUNCTION_CALL, 0)
 
-// Variable declarations
-DEF_TYPE("variable_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("local_variable_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("assignment_statement", OPERATOR_ASSIGNMENT, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("variable_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("expression_list", ORGANIZATION_LIST, NONE, NONE, 0)
+// Variable declarations (Lua vars are mutable by default)
+DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("local_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("assignment_statement", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("variable_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("expression_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
 // Table/class-like structures (Lua uses tables for OOP)
 DEF_TYPE("table_constructor", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
 DEF_TYPE("field", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("field_list", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("field_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
 // Identifiers and references
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
@@ -36,33 +36,33 @@ DEF_TYPE("bracket_index_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 
 // Literals
 DEF_TYPE("number", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
-DEF_TYPE("string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("nil", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("vararg_expression", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
 // Control flow - conditionals
-DEF_TYPE("if_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("elseif_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("else_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+DEF_TYPE("elseif_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+DEF_TYPE("else_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
 
 // Control flow - loops
 DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("for_generic_clause", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("for_numeric_clause", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("while_statement", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("repeat_statement", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("do_statement", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("for_generic_clause", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+DEF_TYPE("for_numeric_clause", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("repeat_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("do_statement", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 // Jump statements
-DEF_TYPE("break_statement", FLOW_JUMP, NONE, NONE, 0)
-DEF_TYPE("goto_statement", FLOW_JUMP, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
+DEF_TYPE("goto_statement", FLOW_JUMP | SemanticRefinements::Jump::GOTO, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("label_statement", NAME_IDENTIFIER, FIND_IDENTIFIER, NONE, 0)
 
 // Binary expressions
-DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
 DEF_TYPE("parenthesized_expression", ORGANIZATION_BLOCK, NONE, NONE, 0)
 
 // Comments
