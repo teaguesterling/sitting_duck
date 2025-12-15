@@ -274,7 +274,7 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
             return ExtractNameFromDeclarator(node, content);
         case ExtractionStrategy::FIND_ASSIGNMENT_TARGET: {
             // Universal pattern: find identifier in parent assignment
-            // Handles: R (name <- func), JS (const name = func), C++ (auto name = lambda), etc.
+            // Handles: R (name <- func), JS (const name = func), C++ (auto name = lambda), Python (x = lambda), etc.
             TSNode parent = ts_node_parent(node);
             if (!ts_node_is_null(parent)) {
                 string parent_type = ts_node_type(parent);
@@ -282,8 +282,10 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
                 if (parent_type == "binary_operator" ||           // R: name <- function
                     parent_type == "variable_declarator" ||       // JS/TS: const name = function
                     parent_type == "init_declarator" ||           // C++: auto name = lambda
+                    parent_type == "assignment" ||                // Python: x = lambda
+                    parent_type == "named_expression" ||          // Python: (x := lambda)
                     parent_type.find("declarator") != string::npos) { // Other declarator patterns
-                    
+
                     // Look for the first child which should be the identifier
                     TSNode first_child = ts_node_child(parent, 0);
                     if (!ts_node_is_null(first_child)) {
