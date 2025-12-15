@@ -4,34 +4,34 @@
 // Source file and modules
 DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, 0x01)
 DEF_TYPE("mod_item", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("use_declaration", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0x01)
-DEF_TYPE("extern_crate_declaration", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("use_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, 0x01)
+DEF_TYPE("extern_crate_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, FIND_IDENTIFIER, NONE, 0x01)
 DEF_TYPE("crate", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Function definitions
-DEF_TYPE("function_item", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
-DEF_TYPE("closure_expression", DEFINITION_FUNCTION, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, 0)
-DEF_TYPE("function_signature_item", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
+DEF_TYPE("function_item", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
+DEF_TYPE("closure_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, 0)
+DEF_TYPE("function_signature_item", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
 
 // Type definitions
-DEF_TYPE("struct_item", DEFINITION_CLASS, CUSTOM, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("enum_item", DEFINITION_CLASS, CUSTOM, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("union_item", DEFINITION_CLASS, CUSTOM, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("trait_item", DEFINITION_CLASS, CUSTOM, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("type_item", DEFINITION_CLASS, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("struct_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("enum_item", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, CUSTOM, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("union_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("trait_item", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, CUSTOM, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("type_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
 
 // Implementation blocks
-DEF_TYPE("impl_item", DEFINITION_CLASS, CUSTOM, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("associated_type", DEFINITION_CLASS, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("impl_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("associated_type", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
 
-// Variable declarations
-DEF_TYPE("let_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
-DEF_TYPE("const_item", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
-DEF_TYPE("static_item", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+// Variable declarations (Rust defaults to immutable)
+DEF_TYPE("let_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("const_item", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("static_item", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
 
 // Function calls and expressions
-DEF_TYPE("call_expression", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_CALL, 0)
-DEF_TYPE("method_call_expression", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("method_call_expression", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_IDENTIFIER, FUNCTION_CALL, 0)
 DEF_TYPE("field_expression", COMPUTATION_ACCESS, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("index_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 
@@ -43,25 +43,25 @@ DEF_TYPE("scoped_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE("scoped_type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
 
 // Literals
-DEF_TYPE("integer_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
-DEF_TYPE("float_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
-DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("raw_string_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("char_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("integer_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
+DEF_TYPE("float_literal", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
+DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("raw_string_literal", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
+DEF_TYPE("char_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("array_expression", LITERAL_STRUCTURED, NONE, NONE, 0)
-DEF_TYPE("tuple_expression", LITERAL_STRUCTURED, NONE, NONE, 0)
-DEF_TYPE("struct_expression", LITERAL_STRUCTURED, NONE, NONE, 0)
+DEF_TYPE("array_expression", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+DEF_TYPE("tuple_expression", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+DEF_TYPE("struct_expression", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
 
 // Control flow
-DEF_TYPE("if_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("match_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("while_expression", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("for_expression", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("loop_expression", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("break_expression", FLOW_JUMP, NONE, NONE, 0)
-DEF_TYPE("continue_expression", FLOW_JUMP, NONE, NONE, 0)
-DEF_TYPE("return_expression", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("if_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+DEF_TYPE("match_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+DEF_TYPE("while_expression", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("for_expression", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+DEF_TYPE("loop_expression", FLOW_LOOP | SemanticRefinements::Loop::INFINITE, NONE, NONE, 0)
+DEF_TYPE("break_expression", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
+DEF_TYPE("continue_expression", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
+DEF_TYPE("return_expression", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
 
 // Pattern matching
 DEF_TYPE("match_arm", FLOW_CONDITIONAL, NONE, NONE, 0)
@@ -90,21 +90,21 @@ DEF_TYPE("lifetime_parameter", TYPE_GENERIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("where_clause", TYPE_GENERIC, NONE, NONE, 0)
 
 // Operators and expressions
-DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("compound_assignment_expr", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("range_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+DEF_TYPE("compound_assignment_expr", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::COMPOUND, NONE, NONE, 0)
+DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+DEF_TYPE("range_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::RANGE, NONE, NONE, 0)
 
 // Blocks and statements
 DEF_TYPE("block", ORGANIZATION_BLOCK, NONE, NONE, 0)
 DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
-DEF_TYPE("macro_invocation", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("macro_invocation", COMPUTATION_CALL | SemanticRefinements::Call::MACRO, FIND_IDENTIFIER, FUNCTION_CALL, 0)
 
 // Attributes and macros
 DEF_TYPE("attribute_item", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("inner_attribute_item", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("macro_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("macro_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0x01)
 
 // Unsafe and async
 DEF_TYPE("unsafe_block", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_UNSAFE)
@@ -217,20 +217,20 @@ DEF_TYPE("|", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("_", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 
 // Additional Rust constructs
-DEF_TYPE("parameter", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("parameters", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("arguments", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 DEF_TYPE("type_arguments", TYPE_GENERIC, NONE, NONE, 0)
-DEF_TYPE("field_declaration_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("field_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("enum_variant_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("enum_variant", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("use_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("use_as_clause", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("use_wildcard", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
+DEF_TYPE("field_declaration_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("enum_variant_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("enum_variant", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("use_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("use_as_clause", EXTERNAL_IMPORT | SemanticRefinements::Import::SELECTIVE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("use_wildcard", EXTERNAL_IMPORT | SemanticRefinements::Import::WILDCARD, NODE_TEXT, NONE, 0)
 
-// Closure and function types  
-DEF_TYPE("closure_parameters", ORGANIZATION_LIST, NONE, NONE, 0)
+// Closure and function types
+DEF_TYPE("closure_parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 DEF_TYPE("higher_ranked_trait_bound", TYPE_GENERIC, NONE, NONE, 0)
 
 // Error handling
