@@ -14,3 +14,7 @@ __pycache__
 test.parquet
 node_modules/
 package-lock.json
+
+# IDE tools
+/.lq/
+/.mcp.json
