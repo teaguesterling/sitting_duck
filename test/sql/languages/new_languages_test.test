@@ -1,5 +1,5 @@
 # Test new language support (Markdown, Java, HTML, CSS, C)
-# Note: PHP support disabled due to scanner dependency on tree-sitter internals
+# Note: PHP support is now enabled (scanner dependency resolved)
 
 require sitting_duck
 

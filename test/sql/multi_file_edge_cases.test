@@ -276,10 +276,9 @@ SELECT COUNT(*) FROM read_ast(['test/data/cpp/simple.cpp', 'test/data/go/simple.
 # FUTURE-PROOFING TESTS
 # =============================================================================
 
-# Test 22: Large-scale codebase simulation (when fixed)
-# =====================================================
-# NOTE: This test is designed to pass once the remaining segfault issues are resolved
-# Currently may fail but should be monitored for future fixes
+# Test 22: Large-scale codebase simulation
+# =========================================
+# Fixed in v1.1.0 - multi-file overwrite bug resolved
 query I
 SELECT COUNT(*) > 100 as large_scale_works
 FROM read_ast('test/data/**/*.py', 'python')
