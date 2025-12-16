@@ -168,7 +168,7 @@ DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variabl
 DEF_TYPE("slice_type", TYPE_COMPOSITE, NONE, NONE, 0)
 DEF_TYPE("dec_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
 DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("type_conversion_expression", COMPUTATION_CALL, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("type_conversion_expression", COMPUTATION_CALL, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 DEF_TYPE("label_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE("import_spec_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 DEF_TYPE("interface", TYPE_COMPOSITE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)

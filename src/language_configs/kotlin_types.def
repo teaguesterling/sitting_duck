@@ -8,7 +8,7 @@ DEF_TYPE("annotated_lambda", DEFINITION_FUNCTION | SemanticRefinements::Function
 DEF_TYPE("lambda_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
 DEF_TYPE("primary_constructor", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NONE, NONE, 0)
 DEF_TYPE("secondary_constructor", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NONE, NONE, 0)
-DEF_TYPE("constructor_invocation", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("constructor_invocation", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 
 // Class and object definitions
 DEF_TYPE("class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
@@ -27,7 +27,7 @@ DEF_TYPE("class_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable:
 DEF_TYPE("lambda_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
 
 // Function calls and expressions with refinements
-DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 DEF_TYPE("navigation_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 DEF_TYPE("indexing_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 DEF_TYPE("this_expression", NAME_SCOPED, NODE_TEXT, NONE, 0)

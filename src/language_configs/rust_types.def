@@ -99,7 +99,7 @@ DEF_TYPE("range_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmet
 // Blocks and statements
 DEF_TYPE("block", ORGANIZATION_BLOCK, NONE, NONE, 0)
 DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
-DEF_TYPE("macro_invocation", COMPUTATION_CALL | SemanticRefinements::Call::MACRO, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("macro_invocation", COMPUTATION_CALL | SemanticRefinements::Call::MACRO, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 
 // Attributes and macros
 DEF_TYPE("attribute_item", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
