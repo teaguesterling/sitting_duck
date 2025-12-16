@@ -1,0 +1,148 @@
+# name: test/sql/multi_file_overwrite_regression.test
+# description: Regression test for multi-file overwrite bug (fixed in commit 02e75b5)
+# group: [sitting_duck_critical]
+
+# =============================================================================
+# REGRESSION TEST: Multi-File Overwrite Bug
+# =============================================================================
+#
+# BUG DESCRIPTION:
+# When processing multiple files that fit within a single output chunk (2048 rows),
+# each file's data was written starting at index 0, overwriting previous files.
+# Only the last file's data would be returned.
+#
+# ROOT CAUSE:
+# In ProjectToDynamicTable(), the counter started at 0 instead of output_index:
+#   idx_t count = 0;  // BUG
+#   idx_t count = output_index;  // FIX
+#
+# SYMPTOMS:
+# - read_ast(['file1.py', 'file2.py']) returned only file2's data
+# - With 2468 rosettacode Python files, only 24 were returned
+# - COUNT(DISTINCT file_path) returned 1 instead of actual file count
+#
+# =============================================================================
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: Basic multi-file count
+# ==============================
+# Three files should return three distinct file paths
+query I
+SELECT COUNT(DISTINCT file_path) as file_count
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/javascript/simple.js',
+    'test/data/go/simple.go'
+], 'auto');
+----
+3
+
+# Test 2: Individual vs Combined totals match
+# ===========================================
+# The sum of individual file node counts should equal the combined count
+query I
+WITH
+    individual AS (
+        SELECT
+            (SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python')) +
+            (SELECT COUNT(*) FROM read_ast('test/data/javascript/simple.js', 'javascript')) +
+            (SELECT COUNT(*) FROM read_ast('test/data/go/simple.go', 'go')) as individual_total
+    ),
+    combined AS (
+        SELECT COUNT(*) as combined_total
+        FROM read_ast([
+            'test/data/python/simple.py',
+            'test/data/javascript/simple.js',
+            'test/data/go/simple.go'
+        ], 'auto')
+    )
+SELECT individual_total = combined_total as totals_match
+FROM individual, combined;
+----
+1
+
+# Test 3: All languages detected
+# ==============================
+# Each file's language should be correctly detected
+query I
+SELECT COUNT(DISTINCT language) as language_count
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/javascript/simple.js',
+    'test/data/go/simple.go'
+], 'auto');
+----
+3
+
+# Test 4: Per-file breakdown
+# ==========================
+# Each file should have its own distinct node count
+query III
+SELECT
+    language,
+    COUNT(*) as node_count,
+    COUNT(DISTINCT file_path) as file_count
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/javascript/simple.js',
+    'test/data/go/simple.go'
+], 'auto')
+GROUP BY language
+ORDER BY language;
+----
+go	51	1
+javascript	309	1
+python	110	1
+
+# Test 5: Two small files (original bug case)
+# ===========================================
+# Even two small files should both appear
+query II
+SELECT
+    COUNT(DISTINCT file_path) as file_count,
+    COUNT(*) as total_nodes
+FROM read_ast([
+    'test/data/python/simple.py',
+    'test/data/javascript/simple.js'
+], 'auto');
+----
+2	419
+
+# Test 6: File order independence
+# ===============================
+# Reversing file order should produce same results
+query II
+SELECT
+    COUNT(DISTINCT file_path) as file_count,
+    COUNT(*) as total_nodes
+FROM read_ast([
+    'test/data/javascript/simple.js',
+    'test/data/python/simple.py'
+], 'auto');
+----
+2	419
+
+# Test 7: Glob pattern returns all matching files
+# ===============================================
+# A glob should return multiple files, not just one
+query I
+SELECT COUNT(DISTINCT file_path) >= 2 as multiple_files
+FROM read_ast('test/data/python/*.py', 'python');
+----
+1
+
+# Test 8: Mixed glob and explicit files
+# =====================================
+# Both the explicit file and glob matches should appear
+query I
+SELECT COUNT(DISTINCT file_path) >= 3 as has_multiple_files
+FROM read_ast([
+    'test/data/go/simple.go',
+    'test/data/python/*.py'
+], 'auto');
+----
+1
