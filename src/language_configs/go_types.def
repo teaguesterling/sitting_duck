@@ -26,7 +26,7 @@ DEF_TYPE("const_spec", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMU
 DEF_TYPE("short_var_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
 
 // Expressions and references with refinements
-DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 DEF_TYPE("selector_expression", COMPUTATION_ACCESS, FIND_PROPERTY, NONE, 0)
 DEF_TYPE("index_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 DEF_TYPE("slice_expression", COMPUTATION_ACCESS, NONE, NONE, 0)

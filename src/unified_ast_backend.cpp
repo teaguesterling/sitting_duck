@@ -901,6 +901,8 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
                     list_data[count].length = node.native.parameters.size();
                     
                     // Add parameter strings to child vector if any exist
+                    // For function definitions: use .name (parameter name)
+                    // For call arguments: use .type (argument value) when .name is empty
                     for (size_t i = 0; i < node.native.parameters.size(); i++) {
                         idx_t child_idx = list_data[count].offset + i;
                         if (child_idx >= ListVector::GetListCapacity(output.data[parameters_col])) {
@@ -908,7 +910,11 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
                             // Re-get pointers after potential reallocation
                             param_child_data = FlatVector::GetData<string_t>(ListVector::GetEntry(output.data[parameters_col]));
                         }
-                        param_child_data[child_idx] = StringVector::AddString(param_child, node.native.parameters[i].name);
+                        // Use name if available, otherwise fall back to type (for positional call args)
+                        const string& param_value = !node.native.parameters[i].name.empty()
+                            ? node.native.parameters[i].name
+                            : node.native.parameters[i].type;
+                        param_child_data[child_idx] = StringVector::AddString(param_child, param_value);
                     }
                     ListVector::SetListSize(output.data[parameters_col], list_data[count].offset + list_data[count].length);
                     

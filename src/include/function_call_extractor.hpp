@@ -203,92 +203,86 @@ public:
 private:
     static NativeContext ExtractCallExpression(TSNode node, const string& content, const FunctionCallNodeTypes& types) {
         NativeContext context;
-        
+        // Note: signature_type is left empty for calls - we don't know return types without static analysis
+        // The full call expression (obj.method) goes in qualified_name instead
+
         uint32_t child_count = ts_node_child_count(node);
-        
+
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
-            
-            // Extract function name from first matching child
-            if (i == 0 && context.signature_type.empty()) {
+
+            // Extract qualified call target from first matching child -> qualified_name
+            if (i == 0 && context.qualified_name.empty()) {
                 for (const char* name_type : types.function_name_types) {
                     if (strcmp(child_type, name_type) == 0) {
-                        context.signature_type = ExtractNodeText(child, content);
+                        context.qualified_name = ExtractNodeText(child, content);
                         break;
                     }
                 }
             }
-            
+
             // Extract arguments from arguments container
-            if (strcmp(child_type, types.arguments) == 0 || 
+            if (strcmp(child_type, types.arguments) == 0 ||
                 strcmp(child_type, types.argument_list) == 0) {
                 context.parameters = ExtractCallArguments(child, content, types);
             }
         }
-        
-        if (context.signature_type.empty()) {
-            context.signature_type = "function_call";  // Fallback
-        }
-        
+
+        // No fallback for qualified_name - empty is fine if we couldn't extract it
+
         return context;
     }
     
     static NativeContext ExtractNewExpression(TSNode node, const string& content, const FunctionCallNodeTypes& types) {
         NativeContext context;
-        
+        // For constructor calls, qualified_name holds the class being instantiated
+
         uint32_t child_count = ts_node_child_count(node);
-        
+
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
-            
-            // Skip "new" keyword, look for class identifier
-            if (context.signature_type.empty()) {
+
+            // Skip "new" keyword, look for class identifier -> qualified_name
+            if (context.qualified_name.empty()) {
                 for (const char* name_type : types.function_name_types) {
                     if (strcmp(child_type, name_type) == 0) {
-                        context.signature_type = ExtractNodeText(child, content);
+                        context.qualified_name = ExtractNodeText(child, content);
                         break;
                     }
                 }
             }
-            
+
             // Extract constructor arguments
-            if (strcmp(child_type, types.arguments) == 0 || 
+            if (strcmp(child_type, types.arguments) == 0 ||
                 strcmp(child_type, types.argument_list) == 0) {
                 context.parameters = ExtractCallArguments(child, content, types);
             }
         }
-        
-        if (context.signature_type.empty()) {
-            context.signature_type = "constructor_call";  // Fallback
-        }
-        
+
         return context;
     }
-    
+
     static NativeContext ExtractDeleteExpression(TSNode node, const string& content, const FunctionCallNodeTypes& types) {
         NativeContext context;
-        
+        // For delete expressions, qualified_name holds the target
+
         uint32_t child_count = ts_node_child_count(node);
-        
+
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
-            
-            // Skip "delete" keyword, look for object identifier  
+
+            // Skip "delete" keyword, look for object identifier -> qualified_name
             for (const char* name_type : types.function_name_types) {
                 if (strcmp(child_type, name_type) == 0) {
-                    context.signature_type = ExtractNodeText(child, content);
+                    context.qualified_name = ExtractNodeText(child, content);
                     break;
                 }
             }
         }
-        
-        if (context.signature_type.empty()) {
-            context.signature_type = "delete_call";  // Fallback
-        }
-        
+
         return context;
     }
     

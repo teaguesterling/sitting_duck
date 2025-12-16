@@ -1,0 +1,177 @@
+# name: test/sql/native_extraction/python_extraction.test
+# description: Comprehensive native extraction tests for Python
+# group: [native_extraction]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Python Native Extraction Model Tests
+# =============================================================================
+#
+# Updated extraction model:
+#   - name: The identifier (function name, method name, class name)
+#   - qualified_name: Full path (for calls: obj.method, for others: module.class.method)
+#   - signature_type: Type info (return type for functions, class kind, NULL for calls)
+#   - parameters: Related entities (param names for functions, arg values for calls)
+#   - modifiers: Keywords/flags (access, inheritance type, mutability)
+# =============================================================================
+
+# =============================================================================
+# DEFINITION_FUNCTION - Function/Method Definitions
+# =============================================================================
+
+# Test: Function names are extracted correctly
+query IT
+SELECT name, type FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'function_definition' AND name IS NOT NULL
+ORDER BY start_line;
+----
+hello	function_definition
+__init__	function_definition
+add	function_definition
+main	function_definition
+
+# Test: Function parameters are extracted (including self for methods)
+query IT
+SELECT name, parameters FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'function_definition' AND name IS NOT NULL
+ORDER BY start_line;
+----
+hello	[]
+__init__	[self]
+add	[self, x, y]
+main	[]
+
+# Test: Python untyped functions have NULL signature_type (no return annotation)
+query IT
+SELECT name, signature_type FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'function_definition' AND name IS NOT NULL
+ORDER BY start_line;
+----
+hello	NULL
+__init__	NULL
+add	NULL
+main	NULL
+
+# =============================================================================
+# DEFINITION_CLASS - Class Definitions
+# =============================================================================
+
+# Test: Class name and kind are extracted
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'class_definition' AND name IS NOT NULL;
+----
+MyClass	class	[has_dunder_methods]
+
+# =============================================================================
+# COMPUTATION_CALL - Function/Method Calls
+# =============================================================================
+#
+# Updated model:
+#   - name: The method/function identifier (e.g., "print", "method")
+#   - qualified_name: Full call expression (e.g., "obj.method")
+#   - signature_type: NULL (no return type info)
+#   - parameters: Actual argument values
+
+# Test: Simple function calls have both name and qualified_name
+query ITT
+SELECT name, qualified_name, peek FROM read_ast('test/data/python/simple.py', context := 'native', peek := 40)
+WHERE type = 'call' AND name IS NOT NULL AND length(name) > 0
+ORDER BY start_line;
+----
+print	print	print("Hello, World!")
+MyClass	MyClass	MyClass()
+hello	hello	hello()
+main	main	main()
+
+# Test: signature_type is NULL for calls
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'call' AND signature_type IS NOT NULL;
+----
+0
+
+# Test: Call parameters now contain actual argument values (including quotes for strings)
+query IT
+SELECT name, parameters FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'call' AND name = 'print';
+----
+print	['"Hello, World!"']
+
+# Test: Calls without arguments have empty array
+query IT
+SELECT name, parameters FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'call' AND name = 'hello';
+----
+hello	[]
+
+# =============================================================================
+# DEFINITION_VARIABLE - Variable Assignments
+# =============================================================================
+
+# Test: Assignment extracts variable name and inferred type
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'assignment' AND name IS NOT NULL AND length(name) > 0
+ORDER BY start_line;
+----
+obj	MyClass	[assignment]
+
+# =============================================================================
+# Semantic Type Validation
+# =============================================================================
+
+# Test: Functions have DEFINITION_FUNCTION semantic type
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'function_definition'
+  AND name IS NOT NULL
+  AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+4
+
+# Test: Classes have DEFINITION_CLASS semantic type
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'class_definition'
+  AND name IS NOT NULL
+  AND semantic_type_to_string(semantic_type) = 'DEFINITION_CLASS';
+----
+1
+
+# Test: Calls have COMPUTATION_CALL semantic type
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'call'
+  AND semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL';
+----
+4
+
+# =============================================================================
+# Query Pattern Tests
+# =============================================================================
+
+# Test: Find functions with multiple parameters
+query IT
+SELECT name, parameters FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'function_definition'
+  AND name IS NOT NULL
+  AND array_length(parameters) > 1
+ORDER BY name;
+----
+add	[self, x, y]
+
+# Test: Find method definitions (functions with 'self' parameter)
+query IT
+SELECT name, parameters FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'function_definition'
+  AND name IS NOT NULL
+  AND list_contains(parameters, 'self')
+ORDER BY name;
+----
+__init__	[self]
+add	[self, x, y]
