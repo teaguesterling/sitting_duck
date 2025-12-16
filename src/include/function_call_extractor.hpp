@@ -149,6 +149,14 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
         {",", "(", ")", ";"},
         {"postfix_expression", "callable_reference"},  // Additional call types for Kotlin
         {"value_argument"}  // Named parameter types for Kotlin
+    }},
+    {"dart", {
+        "selector", "new_expression", nullptr,
+        "arguments", "argument_part",
+        {"identifier", "type_identifier", "qualified"},
+        {",", "(", ")", ";", ".", "?.", "!"},
+        {"cascade_section"},  // Additional call types for Dart (cascade notation)
+        {"named_argument"}  // Named parameter types for Dart
     }}
 };
 
@@ -426,6 +434,10 @@ struct RLanguageTag {
 
 struct KotlinLanguageTag {
     static string GetLanguageName() { return "kotlin"; }
+};
+
+struct DartLanguageTag {
+    static string GetLanguageName() { return "dart"; }
 };
 
 } // namespace duckdb
