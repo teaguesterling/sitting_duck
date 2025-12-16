@@ -450,22 +450,36 @@ ORDER BY control_flow_nodes DESC;
 
 ## Language Support
 
-Currently supports **12 programming languages** with full semantic analysis:
+Currently supports **27 programming languages** with full semantic analysis:
 
-| Language | Extensions | Tree-sitter Grammar |
-|----------|------------|-------------------|
-| **Python** | `.py` | tree-sitter-python |
-| **JavaScript** | `.js`, `.jsx` | tree-sitter-javascript |
-| **TypeScript** | `.ts`, `.tsx` | tree-sitter-typescript |
-| **C** | `.c`, `.h` | tree-sitter-c |
-| **C++** | `.cpp`, `.hpp`, `.cc`, `.cxx`, `.h` | tree-sitter-cpp |
-| **Java** | `.java` | tree-sitter-java |
-| **Go** | `.go` | tree-sitter-go |
-| **Ruby** | `.rb` | tree-sitter-ruby |
-| **SQL** | `.sql` | tree-sitter-sql |
-| **CSS** | `.css` | tree-sitter-css |
-| **HTML** | `.html`, `.htm` | tree-sitter-html |
-| **Markdown** | `.md`, `.markdown` | tree-sitter-markdown |
+| Category | Languages | Extensions |
+|----------|-----------|------------|
+| **Web** | JavaScript | `.js`, `.jsx` |
+| | TypeScript | `.ts`, `.tsx` |
+| | HTML | `.html`, `.htm` |
+| | CSS | `.css` |
+| **Systems** | C | `.c`, `.h` |
+| | C++ | `.cpp`, `.hpp`, `.cc`, `.cxx` |
+| | Go | `.go` |
+| | Rust | `.rs` |
+| | Zig | `.zig` |
+| **Scripting** | Python | `.py` |
+| | Ruby | `.rb` |
+| | PHP | `.php` |
+| | Lua | `.lua` |
+| | R | `.r`, `.R` |
+| | Bash | `.sh`, `.bash` |
+| **Enterprise** | Java | `.java` |
+| | C# | `.cs` |
+| | Kotlin | `.kt`, `.kts` |
+| | Swift | `.swift` |
+| **Mobile** | Dart | `.dart` |
+| **Infrastructure** | HCL (Terraform) | `.hcl`, `.tf`, `.tfvars` |
+| | JSON | `.json` |
+| | TOML | `.toml` |
+| | GraphQL | `.graphql`, `.gql` |
+| **Documentation** | SQL | `.sql` |
+| | Markdown | `.md`, `.markdown` |
 
 ### Language Detection
 
