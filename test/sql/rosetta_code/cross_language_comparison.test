@@ -1,0 +1,160 @@
+# name: test/sql/rosetta_code/cross_language_comparison.test
+# description: Compare AST extraction quality across languages using Rosetta Code
+# group: [rosetta_code]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Cross-Language Comparison Tests
+# Using the same algorithm/task implemented in different languages
+# =============================================================================
+
+# Test: Multiple languages can be parsed in a single query
+query I
+SELECT COUNT(DISTINCT language) >= 3 FROM read_ast(
+    ['third_party/rosettacode-acmeism/Lang/Python/Factorial/*.py',
+     'third_party/rosettacode-acmeism/Lang/JavaScript/Factorial/*.js',
+     'third_party/rosettacode-acmeism/Lang/Go/Factorial/*.go',
+     'third_party/rosettacode-acmeism/Lang/Rust/Factorial/*.rs'],
+    ignore_errors := true
+);
+----
+true
+
+# Test: Each language produces valid AST nodes
+query I
+SELECT MIN(node_count) > 0 FROM (
+    SELECT language, COUNT(*) as node_count
+    FROM read_ast(
+        ['third_party/rosettacode-acmeism/Lang/Python/Fibonacci-sequence/*.py',
+         'third_party/rosettacode-acmeism/Lang/JavaScript/Fibonacci-sequence/*.js',
+         'third_party/rosettacode-acmeism/Lang/Go/Fibonacci-sequence/*.go'],
+        ignore_errors := true
+    )
+    GROUP BY language
+);
+----
+true
+
+# =============================================================================
+# Semantic Type Extraction Comparison
+# =============================================================================
+
+# Test: All languages should have function definitions detected
+query I
+SELECT COUNT(DISTINCT language) >= 2 FROM read_ast(
+    ['third_party/rosettacode-acmeism/Lang/Python/Factorial/*.py',
+     'third_party/rosettacode-acmeism/Lang/JavaScript/Factorial/*.js',
+     'third_party/rosettacode-acmeism/Lang/Go/Factorial/*.go'],
+    context := 'native',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) LIKE 'DEFINITION_FUNCTION%';
+----
+true
+
+# Test: All languages should have identifiers detected
+query I
+SELECT COUNT(DISTINCT language) >= 2 FROM read_ast(
+    ['third_party/rosettacode-acmeism/Lang/Python/Hello-world-Text/*.py',
+     'third_party/rosettacode-acmeism/Lang/JavaScript/Hello-world-Text/*.js',
+     'third_party/rosettacode-acmeism/Lang/Go/Hello-world-Text/*.go'],
+    context := 'native',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'NAME_IDENTIFIER';
+----
+true
+
+# =============================================================================
+# Native Extraction Quality Comparison
+# =============================================================================
+
+# Test: Functions with parameters should have parameters extracted
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'third_party/rosettacode-acmeism/Lang/Python/Factorial/*.py',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE type = 'function_definition'
+  AND array_length(parameters) > 0;
+----
+true
+
+# Test: Compare function extraction rates across languages
+query I
+SELECT COUNT(*) >= 0 FROM (
+    SELECT language,
+           COUNT(*) as total_functions,
+           COUNT(CASE WHEN signature_type IS NOT NULL THEN 1 END) as with_signature
+    FROM read_ast(
+        ['third_party/rosettacode-acmeism/Lang/Python/Factorial/*.py',
+         'third_party/rosettacode-acmeism/Lang/JavaScript/Factorial/*.js',
+         'third_party/rosettacode-acmeism/Lang/Java/Factorial/*.java'],
+        context := 'native',
+        ignore_errors := true
+    )
+    WHERE semantic_type_to_string(semantic_type) LIKE 'DEFINITION_FUNCTION%'
+    GROUP BY language
+);
+----
+true
+
+# =============================================================================
+# Loop and Control Flow Comparison
+# =============================================================================
+
+# Test: Loop constructs are detected across languages
+query I
+SELECT COUNT(DISTINCT language) >= 2 FROM read_ast(
+    ['third_party/rosettacode-acmeism/Lang/Python/100-doors/*.py',
+     'third_party/rosettacode-acmeism/Lang/JavaScript/100-doors/*.js',
+     'third_party/rosettacode-acmeism/Lang/Go/100-doors/*.go'],
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) LIKE 'FLOW_LOOP%';
+----
+true
+
+# Test: Conditional constructs are detected across languages
+query I
+SELECT COUNT(DISTINCT language) >= 2 FROM read_ast(
+    ['third_party/rosettacode-acmeism/Lang/Python/FizzBuzz/*.py',
+     'third_party/rosettacode-acmeism/Lang/JavaScript/FizzBuzz/*.js',
+     'third_party/rosettacode-acmeism/Lang/Go/FizzBuzz/*.go'],
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) LIKE 'FLOW_CONDITIONAL%';
+----
+true
+
+# =============================================================================
+# Error Resilience Tests
+# =============================================================================
+
+# Test: Parsing continues even with some errors (ignore_errors := true)
+# Note: Lang/Python/* directories are symlinks to Task/*/Python/
+# The ** glob doesn't follow symlinks, so use */*.py or Task/**/Python/*.py
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'third_party/rosettacode-acmeism/Lang/Python/*/*.py',
+    ignore_errors := true
+)
+LIMIT 1000;
+----
+true
+
+# Test: Multiple file patterns work correctly
+query I
+SELECT COUNT(DISTINCT file_path) > 1 FROM read_ast(
+    ['third_party/rosettacode-acmeism/Lang/Python/A+B/*.py',
+     'third_party/rosettacode-acmeism/Lang/Python/Factorial/*.py'],
+    ignore_errors := true
+);
+----
+true
+

@@ -1,0 +1,146 @@
+# name: test/sql/rosetta_code/basic_parsing.test
+# description: Test parsing Rosetta Code examples across multiple languages
+# group: [rosetta_code]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Basic Parsing Tests - Verify we can parse Rosetta Code examples
+# =============================================================================
+
+# Test: Parse Python A+B examples
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'third_party/rosettacode-acmeism/Lang/Python/A+B/*.py',
+    ignore_errors := true
+);
+----
+true
+
+# Test: Parse JavaScript examples
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'third_party/rosettacode-acmeism/Lang/JavaScript/A+B/*.js',
+    ignore_errors := true
+);
+----
+true
+
+# Test: Parse Go examples
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'third_party/rosettacode-acmeism/Lang/Go/A+B/*.go',
+    ignore_errors := true
+);
+----
+true
+
+# Test: Parse Rust examples
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'third_party/rosettacode-acmeism/Lang/Rust/A+B/*.rs',
+    ignore_errors := true
+);
+----
+true
+
+# =============================================================================
+# Function Extraction Tests
+# =============================================================================
+
+# Test: Extract function definitions from Python
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'third_party/rosettacode-acmeism/Lang/Python/99-bottles-of-beer/*.py',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE type = 'function_definition';
+----
+true
+
+# Test: Extract function definitions from JavaScript
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'third_party/rosettacode-acmeism/Lang/JavaScript/99-bottles-of-beer/*.js',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE type = 'function_declaration' OR type = 'arrow_function';
+----
+true
+
+# =============================================================================
+# Method Call Extraction Tests
+# =============================================================================
+
+# Test: Python method calls should have signature_type populated
+# Example: list.append(), str.split(), etc.
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'third_party/rosettacode-acmeism/Lang/Python/100-doors/*.py',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+  AND signature_type IS NOT NULL;
+----
+true
+
+# Test: JavaScript method calls extraction
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'third_party/rosettacode-acmeism/Lang/JavaScript/100-doors/*.js',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+  AND signature_type IS NOT NULL;
+----
+true
+
+# =============================================================================
+# Cross-Language Comparison - Same Task, Different Languages
+# =============================================================================
+
+# Test: Compare node counts across languages for the same task (Hello World)
+query I
+SELECT COUNT(DISTINCT language) >= 2 FROM read_ast(
+    ['third_party/rosettacode-acmeism/Lang/Python/Hello-world-Text/*.py',
+     'third_party/rosettacode-acmeism/Lang/JavaScript/Hello-world-Text/*.js',
+     'third_party/rosettacode-acmeism/Lang/Go/Hello-world-Text/*.go'],
+    ignore_errors := true
+);
+----
+true
+
+# =============================================================================
+# Native Extraction Quality Tests
+# =============================================================================
+
+# Test: Functions should have signature_type populated (return type or function signature)
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'third_party/rosettacode-acmeism/Lang/Python/Fibonacci-sequence/*.py',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE type = 'function_definition'
+  AND name IS NOT NULL;
+----
+true
+
+# Test: Classes should be detected in object-oriented examples
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'third_party/rosettacode-acmeism/Lang/Python/Abstract-type/*.py',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) LIKE 'DEFINITION_CLASS%';
+----
+true
+

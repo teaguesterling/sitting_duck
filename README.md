@@ -2,6 +2,27 @@
 
 **Sitting Duck** is a DuckDB extension that makes Abstract Syntax Trees (ASTs) from source code files quack like data - enabling powerful SQL-based analysis across multiple programming languages.
 
+## CLI Quick Start
+```
+$ duckdb -ascii -noheader -s "SELECT peek FROM read_ast('src/**/*.cpp', peek='full') WHERE semantic_type_to_string(semantic_type)='DEFINITION_FUNCTION' AND name='FindChildByTypeNode';"
+
+TSNode LanguageAdapter::FindChildByTypeNode(TSNode node, const string &child_type) const {
+    uint32_t child_count = ts_node_child_count(node);
+    for (uint32_t i = 0; i < child_count; i++) {
+        TSNode child = ts_node_child(node, i);
+        const char* type = ts_node_type(child);
+        if (child_type == type) {
+            return child;
+        }
+    }
+    return {0}; // Return null node
+}
+
+real    0m0.112s
+user    0m0.303s
+sys     0m0.103s
+
+```
 ## Why "Sitting Duck"?
 
 The name reflects the project's philosophy and technology stack:
@@ -270,17 +291,135 @@ ORDER BY usage_count DESC;
 ### Class Hierarchy
 ```sql
 -- Find all classes and their methods
-SELECT 
+SELECT
     c.name as class_name,
     c.file_path,
     m.name as method_name,
     m.start_line
 FROM read_ast('**/*.py') c
 JOIN read_ast('**/*.py') m ON m.parent_id = c.node_id
-WHERE c.type = 'class_definition' 
+WHERE c.type = 'class_definition'
   AND m.type = 'function_definition'
 ORDER BY c.name, m.start_line;
 ```
+
+## Code Search Examples
+
+### Find a Function Definition by Name
+
+```bash
+# Find a specific function and display its full source
+duckdb -ascii -noheader -s "
+SELECT peek
+FROM read_ast('src/**/*.cpp', context := 'native', peek := 'full')
+WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION'
+  AND name = 'FindChildByTypeNode';"
+```
+
+### Find All Calls to a Function
+
+```bash
+# Find all places where ts_node_type() is called
+duckdb -csv -noheader -s "
+SELECT file_path, start_line, peek
+FROM read_ast('src/**/*.cpp', context := 'native', peek := 60)
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+  AND name = 'ts_node_type';"
+```
+
+### Find Method Calls (Object.method pattern)
+
+For method calls like `obj.method()`, the `name` field is empty but `signature_type` contains the full call expression:
+
+```sql
+-- Find all calls to .empty() method (any object)
+SELECT file_path, start_line, signature_type, peek
+FROM read_ast('src/**/*.cpp', context := 'native', peek := 60)
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+  AND (
+    signature_type LIKE '%.empty'   -- dot notation: obj.empty()
+    OR signature_type LIKE '%->empty' -- arrow notation: ptr->empty()
+  );
+```
+
+### Find a Method Within a Class (Python)
+
+```sql
+-- Find MyClass.my_method definition
+WITH class_blocks AS (
+    SELECT c.name as class_name, b.node_id as block_id
+    FROM read_ast('myfile.py', context := 'native') c
+    JOIN read_ast('myfile.py', context := 'native') b
+        ON b.parent_id = c.node_id AND b.type = 'block'
+    WHERE c.type = 'class_definition'
+)
+SELECT
+    cb.class_name || '.' || m.name as qualified_name,
+    m.signature_type as return_type,
+    m.parameters,
+    m.start_line,
+    m.peek
+FROM class_blocks cb
+JOIN read_ast('myfile.py', context := 'native', peek := 80) m
+    ON m.parent_id = cb.block_id
+WHERE m.type = 'function_definition'
+  AND cb.class_name = 'MyClass'
+  AND m.name = 'my_method';
+```
+
+### Cross-Language Function Comparison
+
+```sql
+-- Compare how factorial is implemented across languages
+SELECT
+    language,
+    name,
+    signature_type as return_type,
+    parameters,
+    modifiers
+FROM read_ast([
+    'examples/factorial.py',
+    'examples/factorial.rs',
+    'examples/factorial.go',
+    'examples/factorial.java'
+], context := 'native', ignore_errors := true)
+WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION'
+  AND name LIKE '%factorial%'
+ORDER BY language;
+```
+
+## Native Extraction Fields
+
+When using `context := 'native'`, the following fields provide semantic information:
+
+| Field | Description | Example Values |
+|-------|-------------|----------------|
+| `name` | Identifier name | `factorial`, `MyClass`, `count` |
+| `signature_type` | Type info (return type, class kind) | `int`, `void`, `class`, `trait` |
+| `parameters` | Parameter names (functions) | `['n', 'acc']`, `['self', 'x']` |
+| `modifiers` | Access/declaration modifiers | `['public', 'static']`, `['abstract']` |
+
+### Extraction by Semantic Type
+
+| Semantic Type | name | signature_type | parameters | modifiers |
+|---------------|------|----------------|------------|-----------|
+| `DEFINITION_FUNCTION` | function name | return type | param names | access modifiers |
+| `DEFINITION_CLASS` | class name | `class`/`interface`/`trait` | [] | inheritance info |
+| `COMPUTATION_CALL` | func name OR empty* | full call expr | [] | [] |
+| `DEFINITION_VARIABLE` | variable name | variable type | [] | `const`/`let`/`var` |
+
+*For method calls like `obj.method()`, `name` is empty but `signature_type` contains `obj.method`
+
+### Cross-Language Support
+
+| Language | Functions | Classes | Method Calls | Variables |
+|----------|-----------|---------|--------------|-----------|
+| Java | return type, params, modifiers | class/interface, inheritance | full signature | type |
+| Rust | return type, params | trait/struct/enum | full signature | type, mut |
+| Go | return type, params | struct/interface | package.func | type |
+| C++ | return type, params | limited | full signature | type |
+| Python | params only | class kind, inheritance | full signature | - |
+| JavaScript | params | class | full signature | const/let/var |
 
 ## Performance Notes
 
