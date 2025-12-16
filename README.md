@@ -57,13 +57,14 @@ Currently supports **27 languages** via Tree-sitter parsers with full semantic a
 
 | Category | Languages |
 |----------|-----------|
-| **Web** | JavaScript, TypeScript, HTML, CSS |
+| **Web** | JavaScript, TypeScript, CSS |
 | **Systems** | C, C++, Go, Rust, Zig |
 | **Scripting** | Python, Ruby, PHP, Lua, R, Bash |
 | **Enterprise** | Java, C#, Kotlin, Swift |
 | **Mobile** | Dart |
-| **Infrastructure** | HCL (Terraform), JSON, TOML, GraphQL |
-| **Documentation** | SQL, Markdown |
+| **Infrastructure** | HCL (Terraform) |
+| **Documents** | HTML, Markdown, TOML |
+| **Data** | SQL, GraphQL, JSON |
 
 All languages include semantic type extraction with refinements (Function::LAMBDA, Variable::MUTABLE, etc.).
 
