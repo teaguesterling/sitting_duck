@@ -44,7 +44,7 @@ ORDER BY COUNT(*) DESC;
 
 Sitting Duck transforms your source code into queriable data structures:
 
-1. **Tree-sitter parsing** - Robust, error-recovering parsers for 12+ languages
+1. **Tree-sitter parsing** - Robust, error-recovering parsers for 27 languages
 2. **Native semantic extraction** - Language-specific semantic analysis with type information
 3. **Multiple context levels** - From basic parsing to full semantic understanding
 4. **SQL interface** - Rich table functions with DuckDB-consistent design
@@ -53,15 +53,19 @@ Sitting Duck transforms your source code into queriable data structures:
 
 ## Supported Languages
 
-Currently supports **12 languages** via Tree-sitter parsers with full semantic analysis:
+Currently supports **27 languages** via Tree-sitter parsers with full semantic analysis:
 
-- **Web**: JavaScript, TypeScript, HTML, CSS
-- **Systems**: C, C++, Go, Rust (via grammar)
-- **Scripting**: Python, Ruby  
-- **Enterprise**: Java
-- **Other**: SQL, Markdown
+| Category | Languages |
+|----------|-----------|
+| **Web** | JavaScript, TypeScript, HTML, CSS |
+| **Systems** | C, C++, Go, Rust, Zig |
+| **Scripting** | Python, Ruby, PHP, Lua, R, Bash |
+| **Enterprise** | Java, C#, Kotlin, Swift |
+| **Mobile** | Dart |
+| **Infrastructure** | HCL (Terraform), JSON, TOML, GraphQL |
+| **Documentation** | SQL, Markdown |
 
-*Note: Language support is actively expanding. See our language test coverage for the latest status.*
+All languages include semantic type extraction with refinements (Function::LAMBDA, Variable::MUTABLE, etc.).
 
 ## Installation
 
@@ -109,7 +113,7 @@ FROM read_ast('src/**/*.py')
 GROUP BY file_path
 ORDER BY node_count DESC;
 
--- Array of specific files (Note: currently processes first file only)
+-- Array of specific files
 SELECT file_path, language, COUNT(*) as nodes
 FROM read_ast([
     'main.py',
@@ -374,7 +378,6 @@ ORDER BY complexity DESC;
 
 - **Parse-only**: This analyzes syntax, not semantics (no type checking, symbol resolution, etc.)
 - **Tree-sitter dependent**: Parsing quality depends on Tree-sitter grammar completeness
-- **Multi-file arrays**: Currently processes first file/pattern only (limitation under active development)
 - **Single-threaded parsing**: Files are parsed sequentially (though results stream efficiently)
 - **File-by-file processing**: Each file is parsed independently (no cross-file analysis)
 
