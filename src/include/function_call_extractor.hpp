@@ -434,4 +434,8 @@ struct DartLanguageTag {
     static string GetLanguageName() { return "dart"; }
 };
 
+struct CSharpLanguageTag {
+    static string GetLanguageName() { return "csharp"; }
+};
+
 } // namespace duckdb

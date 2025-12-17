@@ -259,11 +259,13 @@ template<>
 struct KotlinNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
-        
+
         // Determine if this is a class, interface, object, or enum
         const char* node_type = ts_node_type(node);
+        bool has_extends = false;
+
         if (strcmp(node_type, "class_declaration") == 0) {
-            context.signature_type = "class";
+            context.signature_type = ExtractClassType(node, content);
         } else if (strcmp(node_type, "interface_declaration") == 0) {
             context.signature_type = "interface";
         } else if (strcmp(node_type, "object_declaration") == 0) {
@@ -273,51 +275,165 @@ struct KotlinNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
         } else {
             context.signature_type = "type";
         }
-        
-        // Extract inheritance and implementation information
-        auto modifiers = ExtractKotlinClassModifiers(node, content);
-        context.modifiers = modifiers;
-        
+
+        // Extract parent types into parameters
+        context.parameters = ExtractParentTypes(node, content, has_extends);
+        context.modifiers = ExtractKotlinClassModifiers(node, content, has_extends);
+
         return context;
     }
-    
+
 public:
-    static vector<string> ExtractKotlinClassModifiers(TSNode node, const string& content) {
-        vector<string> modifiers;
-        
+    static string ExtractClassType(TSNode node, const string& content) {
+        // Check for data class, sealed class, abstract class, etc.
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
-            
-            if (strcmp(child_type, "delegation_specifiers") == 0) {
-                // : SuperClass(), Interface1, Interface2
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    modifiers.push_back("inherits " + content.substr(start, end - start));
+
+            if (strcmp(child_type, "modifiers") == 0) {
+                uint32_t mod_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < mod_count; j++) {
+                    TSNode modifier = ts_node_child(child, j);
+                    const char* mod_type = ts_node_type(modifier);
+
+                    if (strcmp(mod_type, "class_modifier") == 0) {
+                        string mod = ExtractNodeText(modifier, content);
+                        if (mod == "data") return "data_class";
+                        if (mod == "sealed") return "sealed_class";
+                        if (mod == "inner") return "inner_class";
+                        if (mod == "enum") return "enum";
+                    } else if (strcmp(mod_type, "inheritance_modifier") == 0) {
+                        string mod = ExtractNodeText(modifier, content);
+                        if (mod == "abstract") return "abstract_class";
+                        if (mod == "open") return "open_class";
+                    }
                 }
-            } else if (strcmp(child_type, "modifiers") == 0) {
+            }
+        }
+        return "class";
+    }
+
+    // Extract parent types from delegation_specifiers into parameters
+    static vector<ParameterInfo> ExtractParentTypes(TSNode node, const string& content,
+                                                     bool& has_extends) {
+        vector<ParameterInfo> parents;
+        has_extends = false;
+
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+
+            if (strcmp(child_type, "delegation_specifiers") == 0) {
+                has_extends = true;
+                // Extract each delegation_specifier
+                uint32_t spec_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < spec_count; j++) {
+                    TSNode specifier = ts_node_child(child, j);
+                    const char* spec_type = ts_node_type(specifier);
+
+                    // Skip punctuation
+                    if (strcmp(spec_type, ",") == 0 || strcmp(spec_type, ":") == 0) {
+                        continue;
+                    }
+
+                    // Extract type from delegation_specifier or user_type
+                    string type_name = ExtractTypeName(specifier, content);
+                    if (!type_name.empty()) {
+                        parents.push_back({type_name, ""});
+                    }
+                }
+                break;
+            }
+        }
+
+        return parents;
+    }
+
+    static string ExtractTypeName(TSNode node, const string& content) {
+        const char* node_type = ts_node_type(node);
+
+        // Direct type identifiers
+        if (strcmp(node_type, "user_type") == 0 ||
+            strcmp(node_type, "simple_identifier") == 0) {
+            return ExtractNodeText(node, content);
+        }
+
+        // Look for type inside node (e.g., delegation_specifier contains user_type)
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+
+            if (strcmp(child_type, "user_type") == 0 ||
+                strcmp(child_type, "simple_identifier") == 0) {
+                return ExtractNodeText(child, content);
+            } else if (strcmp(child_type, "constructor_invocation") == 0) {
+                // class Foo : Bar() - Bar is inside constructor_invocation
+                uint32_t constr_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < constr_count; j++) {
+                    TSNode constr_child = ts_node_child(child, j);
+                    const char* constr_type = ts_node_type(constr_child);
+                    if (strcmp(constr_type, "user_type") == 0 ||
+                        strcmp(constr_type, "simple_identifier") == 0) {
+                        return ExtractNodeText(constr_child, content);
+                    }
+                }
+            }
+        }
+
+        return "";
+    }
+
+    static vector<string> ExtractKotlinClassModifiers(TSNode node, const string& content,
+                                                       bool has_extends) {
+        vector<string> modifiers;
+
+        // Add extends keyword if class has parent types
+        if (has_extends) {
+            modifiers.push_back("extends");
+        }
+
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+
+            if (strcmp(child_type, "modifiers") == 0) {
                 // Extract class modifiers
                 uint32_t mod_count = ts_node_child_count(child);
                 for (uint32_t j = 0; j < mod_count; j++) {
                     TSNode modifier = ts_node_child(child, j);
                     const char* mod_type = ts_node_type(modifier);
-                    
+
                     if (strcmp(mod_type, "visibility_modifier") == 0 ||
                         strcmp(mod_type, "class_modifier") == 0 ||
-                        strcmp(mod_type, "member_modifier") == 0) {
-                        uint32_t start = ts_node_start_byte(modifier);
-                        uint32_t end = ts_node_end_byte(modifier);
-                        if (start < content.length() && end <= content.length()) {
-                            modifiers.push_back(content.substr(start, end - start));
+                        strcmp(mod_type, "member_modifier") == 0 ||
+                        strcmp(mod_type, "inheritance_modifier") == 0) {
+                        string mod = ExtractNodeText(modifier, content);
+                        if (!mod.empty()) {
+                            modifiers.push_back(mod);
                         }
                     }
                 }
             }
         }
-        
+
         return modifiers;
+    }
+
+    static string ExtractNodeText(TSNode node, const string& content) {
+        if (ts_node_is_null(node)) return "";
+
+        uint32_t start = ts_node_start_byte(node);
+        uint32_t end = ts_node_end_byte(node);
+
+        if (start < content.length() && end <= content.length() && end > start) {
+            return content.substr(start, end - start);
+        }
+
+        return "";
     }
 };
 
