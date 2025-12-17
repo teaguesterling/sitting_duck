@@ -286,49 +286,144 @@ template<>
 struct PHPNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
-        context.signature_type = "class";
-        
-        // Extract class modifiers and inheritance
-        auto modifiers = ExtractPHPClassModifiers(node, content);
-        context.modifiers = modifiers;
-        
+
+        // Determine class type
+        const char* node_type = ts_node_type(node);
+        if (strcmp(node_type, "interface_declaration") == 0) {
+            context.signature_type = "interface";
+        } else if (strcmp(node_type, "trait_declaration") == 0) {
+            context.signature_type = "trait";
+        } else if (strcmp(node_type, "enum_declaration") == 0) {
+            context.signature_type = "enum";
+        } else {
+            context.signature_type = ExtractClassType(node, content);
+        }
+
+        // Extract parent types into parameters
+        bool has_extends = false;
+        bool has_implements = false;
+        context.parameters = ExtractParentTypes(node, content, has_extends, has_implements);
+        context.modifiers = ExtractPHPClassModifiers(node, content, has_extends, has_implements);
+
         return context;
     }
-    
+
 public:
-    static vector<string> ExtractPHPClassModifiers(TSNode node, const string& content) {
-        vector<string> modifiers;
-        
+    static string ExtractClassType(TSNode node, const string& content) {
+        // Check for abstract or final class
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
-            
-            if (strcmp(child_type, "class_interface_clause") == 0) {
-                // implements clause
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    modifiers.push_back("implements " + content.substr(start, end - start));
+
+            if (strcmp(child_type, "abstract_modifier") == 0) {
+                return "abstract_class";
+            } else if (strcmp(child_type, "final_modifier") == 0) {
+                return "final_class";
+            } else if (strcmp(child_type, "readonly_modifier") == 0) {
+                return "readonly_class";
+            }
+        }
+        return "class";
+    }
+
+    // Extract parent types from base_clause (extends) and class_interface_clause (implements)
+    static vector<ParameterInfo> ExtractParentTypes(TSNode node, const string& content,
+                                                     bool& has_extends, bool& has_implements) {
+        vector<ParameterInfo> parents;
+        has_extends = false;
+        has_implements = false;
+
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+
+            if (strcmp(child_type, "base_clause") == 0) {
+                // extends clause - extract parent class
+                has_extends = true;
+                uint32_t base_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < base_count; j++) {
+                    TSNode base_child = ts_node_child(child, j);
+                    const char* base_type = ts_node_type(base_child);
+
+                    if (strcmp(base_type, "name") == 0 ||
+                        strcmp(base_type, "qualified_name") == 0) {
+                        string type_name = ExtractNodeText(base_child, content);
+                        if (!type_name.empty()) {
+                            parents.push_back({type_name, ""});
+                        }
+                    }
                 }
-            } else if (strcmp(child_type, "base_clause") == 0) {
-                // extends clause
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    modifiers.push_back("extends " + content.substr(start, end - start));
-                }
-            } else if (strcmp(child_type, "abstract_modifier") == 0 ||
-                       strcmp(child_type, "final_modifier") == 0) {
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    modifiers.push_back(content.substr(start, end - start));
+            } else if (strcmp(child_type, "class_interface_clause") == 0) {
+                // implements clause - extract interfaces
+                has_implements = true;
+                uint32_t impl_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < impl_count; j++) {
+                    TSNode impl_child = ts_node_child(child, j);
+                    const char* impl_type = ts_node_type(impl_child);
+
+                    // Skip "implements" keyword and punctuation
+                    if (strcmp(impl_type, "implements") == 0 ||
+                        strcmp(impl_type, ",") == 0) {
+                        continue;
+                    }
+
+                    if (strcmp(impl_type, "name") == 0 ||
+                        strcmp(impl_type, "qualified_name") == 0) {
+                        string type_name = ExtractNodeText(impl_child, content);
+                        if (!type_name.empty()) {
+                            parents.push_back({type_name, ""});
+                        }
+                    }
                 }
             }
         }
-        
+
+        return parents;
+    }
+
+    static vector<string> ExtractPHPClassModifiers(TSNode node, const string& content,
+                                                    bool has_extends, bool has_implements) {
+        vector<string> modifiers;
+
+        // Add inheritance keywords
+        if (has_extends) {
+            modifiers.push_back("extends");
+        }
+        if (has_implements) {
+            modifiers.push_back("implements");
+        }
+
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+
+            if (strcmp(child_type, "abstract_modifier") == 0 ||
+                strcmp(child_type, "final_modifier") == 0 ||
+                strcmp(child_type, "readonly_modifier") == 0) {
+                string mod = ExtractNodeText(child, content);
+                if (!mod.empty()) {
+                    modifiers.push_back(mod);
+                }
+            }
+        }
+
         return modifiers;
+    }
+
+    static string ExtractNodeText(TSNode node, const string& content) {
+        if (ts_node_is_null(node)) return "";
+
+        uint32_t start = ts_node_start_byte(node);
+        uint32_t end = ts_node_end_byte(node);
+
+        if (start < content.length() && end <= content.length() && end > start) {
+            return content.substr(start, end - start);
+        }
+
+        return "";
     }
 };
 

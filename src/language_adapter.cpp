@@ -259,10 +259,19 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
             return "";
         }
         case ExtractionStrategy::FIND_IDENTIFIER: {
-            // Try identifier first, then qualified_identifier for languages like C++
+            // Try common identifier node types across languages
             string result = FindChildByType(node, content, "identifier");
             if (result.empty()) {
-                result = FindChildByType(node, content, "qualified_identifier");
+                result = FindChildByType(node, content, "qualified_identifier");  // C++
+            }
+            if (result.empty()) {
+                result = FindChildByType(node, content, "name");  // PHP
+            }
+            if (result.empty()) {
+                result = FindChildByType(node, content, "simple_identifier");  // Swift, Kotlin
+            }
+            if (result.empty()) {
+                result = FindChildByType(node, content, "type_identifier");  // Swift types
             }
             return result;
         }

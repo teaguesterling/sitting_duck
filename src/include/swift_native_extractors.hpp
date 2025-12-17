@@ -317,62 +317,156 @@ template<>
 struct SwiftNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
-        
-        // Determine if this is a class, struct, protocol, or enum
+
+        // Determine the actual type by looking at keyword children
+        // Swift grammar uses class_declaration for all type declarations
         const char* node_type = ts_node_type(node);
-        if (strcmp(node_type, "class_declaration") == 0) {
-            context.signature_type = "class";
-        } else if (strcmp(node_type, "struct_declaration") == 0) {
-            context.signature_type = "struct";
-        } else if (strcmp(node_type, "protocol_declaration") == 0) {
-            context.signature_type = "protocol";
-        } else if (strcmp(node_type, "enum_declaration") == 0) {
-            context.signature_type = "enum";
-        } else {
-            context.signature_type = "type";
+        context.signature_type = "type";  // Default
+
+        if (strcmp(node_type, "class_declaration") == 0 ||
+            strcmp(node_type, "protocol_declaration") == 0) {
+            // Look for keyword child to determine actual type
+            uint32_t child_count = ts_node_child_count(node);
+            for (uint32_t i = 0; i < child_count; i++) {
+                TSNode child = ts_node_child(node, i);
+                const char* child_type = ts_node_type(child);
+
+                if (strcmp(child_type, "class") == 0) {
+                    context.signature_type = "class";
+                    break;
+                } else if (strcmp(child_type, "struct") == 0) {
+                    context.signature_type = "struct";
+                    break;
+                } else if (strcmp(child_type, "protocol") == 0) {
+                    context.signature_type = "protocol";
+                    break;
+                } else if (strcmp(child_type, "enum") == 0) {
+                    context.signature_type = "enum";
+                    break;
+                } else if (strcmp(child_type, "actor") == 0) {
+                    context.signature_type = "actor";
+                    break;
+                }
+            }
         }
-        
-        // Extract inheritance and conformance information
-        auto modifiers = ExtractSwiftTypeModifiers(node, content);
-        context.modifiers = modifiers;
-        
+
+        // Extract parent types into parameters
+        bool has_inheritance = false;
+        context.parameters = ExtractParentTypes(node, content, has_inheritance);
+        context.modifiers = ExtractSwiftTypeModifiers(node, content, has_inheritance);
+
         return context;
     }
-    
+
 public:
-    static vector<string> ExtractSwiftTypeModifiers(TSNode node, const string& content) {
-        vector<string> modifiers;
-        
+    // Extract parent types from type_inheritance_clause or inheritance_specifier
+    static vector<ParameterInfo> ExtractParentTypes(TSNode node, const string& content,
+                                                     bool& has_inheritance) {
+        vector<ParameterInfo> parents;
+        has_inheritance = false;
+
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
-            
-            if (strcmp(child_type, "type_inheritance_clause") == 0) {
+
+            // Check for type_inheritance_clause (classes) or inheritance_specifier (protocols)
+            if (strcmp(child_type, "type_inheritance_clause") == 0 ||
+                strcmp(child_type, "inheritance_specifier") == 0) {
+                has_inheritance = true;
                 // : SuperClass, Protocol1, Protocol2
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    modifiers.push_back("inherits " + content.substr(start, end - start));
+                uint32_t inherit_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < inherit_count; j++) {
+                    TSNode inherit_child = ts_node_child(child, j);
+                    const char* inherit_type = ts_node_type(inherit_child);
+
+                    // Skip punctuation (: and ,)
+                    if (strcmp(inherit_type, ":") == 0 ||
+                        strcmp(inherit_type, ",") == 0) {
+                        continue;
+                    }
+
+                    if (strcmp(inherit_type, "type_identifier") == 0 ||
+                        strcmp(inherit_type, "identifier") == 0) {
+                        string type_name = ExtractNodeText(inherit_child, content);
+                        if (!type_name.empty()) {
+                            parents.push_back({type_name, ""});
+                        }
+                    } else if (strcmp(inherit_type, "user_type") == 0 ||
+                               strcmp(inherit_type, "generic_type") == 0) {
+                        // Complex type - extract the identifier from within
+                        string type_name = ExtractTypeName(inherit_child, content);
+                        if (!type_name.empty()) {
+                            parents.push_back({type_name, ""});
+                        }
+                    }
                 }
-            } else if (strcmp(child_type, "access_level_modifier") == 0 ||
-                       strcmp(child_type, "member_modifier") == 0) {
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    modifiers.push_back(content.substr(start, end - start));
+                // Don't break - there might be multiple inheritance_specifier nodes
+            }
+        }
+
+        return parents;
+    }
+
+    static string ExtractTypeName(TSNode node, const string& content) {
+        // For complex types, try to get the full text
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+
+            if (strcmp(child_type, "type_identifier") == 0 ||
+                strcmp(child_type, "identifier") == 0) {
+                return ExtractNodeText(child, content);
+            }
+        }
+        // Fallback: get the whole node text
+        return ExtractNodeText(node, content);
+    }
+
+    static vector<string> ExtractSwiftTypeModifiers(TSNode node, const string& content,
+                                                     bool has_inheritance) {
+        vector<string> modifiers;
+
+        // Add extends keyword if type has inheritance
+        if (has_inheritance) {
+            modifiers.push_back("extends");
+        }
+
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+
+            if (strcmp(child_type, "access_level_modifier") == 0 ||
+                strcmp(child_type, "member_modifier") == 0) {
+                string mod = ExtractNodeText(child, content);
+                if (!mod.empty()) {
+                    modifiers.push_back(mod);
                 }
             } else if (strcmp(child_type, "attribute") == 0) {
                 // @objc, @available, etc.
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    modifiers.push_back(content.substr(start, end - start));
+                string attr = ExtractNodeText(child, content);
+                if (!attr.empty()) {
+                    modifiers.push_back(attr);
                 }
             }
         }
-        
+
         return modifiers;
+    }
+
+    static string ExtractNodeText(TSNode node, const string& content) {
+        if (ts_node_is_null(node)) return "";
+
+        uint32_t start = ts_node_start_byte(node);
+        uint32_t end = ts_node_end_byte(node);
+
+        if (start < content.length() && end <= content.length() && end > start) {
+            return content.substr(start, end - start);
+        }
+
+        return "";
     }
 };
 

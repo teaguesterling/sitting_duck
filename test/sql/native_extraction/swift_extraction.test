@@ -1,0 +1,109 @@
+# name: test/sql/native_extraction/swift_extraction.test
+# description: Comprehensive native extraction tests for Swift
+# group: [native_extraction]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Swift Native Extraction Model Tests
+# =============================================================================
+#
+# Updated extraction model:
+#   - name: The identifier (class name, struct name, protocol name)
+#   - signature_type: Type info (class, struct, protocol, enum, actor)
+#   - parameters: Parent types (superclass, protocol conformances)
+#   - modifiers: Keywords (extends, public, final, etc.)
+# =============================================================================
+
+# =============================================================================
+# PROTOCOL_DECLARATION - Protocol Declarations
+# =============================================================================
+
+# Test: Simple protocol with no inheritance
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
+WHERE type = 'protocol_declaration' AND name = 'Runnable';
+----
+Runnable	protocol	[]	[]
+
+# Test: Protocol extending another protocol
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
+WHERE type = 'protocol_declaration' AND name = 'Runner';
+----
+Runner	[Runnable]	[extends]
+
+# Test: Protocol with multiple inheritance
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
+WHERE type = 'protocol_declaration' AND name = 'Athlete';
+----
+Athlete	[Runner, CustomStringConvertible]	[extends]
+
+# =============================================================================
+# CLASS_DECLARATION - Class Declarations with Inheritance
+# =============================================================================
+
+# Test: Base class with no inheritance
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
+WHERE type = 'class_declaration' AND name = 'Animal';
+----
+Animal	class	[]	[]
+
+# Test: Class extending another class
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
+WHERE type = 'class_declaration' AND name = 'Dog';
+----
+Dog	class	[Animal]	[extends]
+
+# Test: Class with superclass and protocol conformance
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
+WHERE type = 'class_declaration' AND name = 'Pet';
+----
+Pet	[Dog, Runnable]	[extends]
+
+# Test: Class with multiple protocol conformances
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
+WHERE type = 'class_declaration' AND name = 'ServiceAnimal';
+----
+ServiceAnimal	[Dog, Runnable, CustomStringConvertible]	[extends]
+
+# Test: Final class
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
+WHERE type = 'class_declaration' AND name = 'Bulldog';
+----
+Bulldog	class	[Dog]	[extends]
+
+# =============================================================================
+# STRUCT_DECLARATION - Struct Declarations
+# Note: Swift grammar uses class_declaration for all type declarations,
+# but signature_type correctly identifies the actual type (struct/enum/etc)
+# =============================================================================
+
+# Test: Struct with protocol conformances
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
+WHERE type = 'class_declaration' AND name = 'Point';
+----
+Point	struct	[Equatable, Hashable]	[extends]
+
+# =============================================================================
+# ENUM_DECLARATION - Enum Declarations
+# Note: Swift grammar uses class_declaration for all type declarations
+# =============================================================================
+
+# Test: Enum with raw value and protocol conformance
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
+WHERE type = 'class_declaration' AND name = 'DogBreed';
+----
+DogBreed	[String, CaseIterable]	[extends]
+
