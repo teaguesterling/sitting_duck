@@ -67,6 +67,17 @@ WHERE type = 'class_definition' AND name IS NOT NULL;
 ----
 MyClass	class	[has_dunder_methods]
 
+# Test: Class inheritance - parent classes go in parameters, "extends" keyword in modifiers
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/python/inheritance.py', context := 'native')
+WHERE type = 'class_definition' AND name IS NOT NULL
+ORDER BY start_line;
+----
+Animal	class	[]	[has_dunder_methods]
+Dog	class	[Animal]	[extends, has_dunder_methods]
+Cat	class	[Animal]	[extends, has_dunder_methods]
+Pet	class	[Dog, Cat]	[extends, has_dunder_methods]
+
 # =============================================================================
 # COMPUTATION_CALL - Function/Method Calls
 # =============================================================================
