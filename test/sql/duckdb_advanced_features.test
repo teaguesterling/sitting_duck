@@ -113,7 +113,7 @@ function_call	struct_extract
 # Test 6: Advanced JOIN types and conditions
 # ==========================================
 
-query III
+query ITI
 SELECT type, semantic_type, COUNT(*) as count
 FROM parse_ast('
 SELECT *
@@ -127,8 +127,8 @@ WHERE type IN ('join', 'table_reference')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-join	228	3
-table_reference	84	4
+join	TRANSFORM_ITERATION	3
+table_reference	NAME_QUALIFIED	4
 
 # Test 7: Query optimization hints and pragmas
 # ============================================

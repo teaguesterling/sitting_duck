@@ -2,6 +2,7 @@
 #include "unified_ast_backend_impl.hpp"
 #include "language_adapter.hpp"
 #include "semantic_types.hpp"
+#include "semantic_type_logical_type.hpp"
 #include "ast_file_utils.hpp"
 #include "ast_parsing_task.hpp"
 #include "duckdb/common/exception.hpp"
@@ -441,8 +442,8 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
     // Conditionally include context fields
     if (config.context != ContextLevel::NONE) {
         if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
-            schema.push_back(LogicalType::UTINYINT);  // semantic_type
-            schema.push_back(LogicalType::UTINYINT);  // flags
+            schema.push_back(SemanticTypeLogicalType());  // semantic_type (custom type with VARCHAR cast)
+            schema.push_back(LogicalType::UTINYINT);      // flags
         }
         if (config.context >= ContextLevel::NORMALIZED) {
             schema.push_back(LogicalType::VARCHAR);   // name

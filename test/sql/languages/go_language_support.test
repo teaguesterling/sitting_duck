@@ -53,16 +53,16 @@ main	package_identifier
 # Test 6: Go semantic types
 # =========================
 
-query III
+query ITI
 SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/go/simple.go')
 WHERE type IN ('function_declaration', 'package_identifier', 'import_spec')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-function_declaration	240	2
-import_spec	48	1
-package_identifier	80	1
+function_declaration	DEFINITION_FUNCTION	2
+import_spec	EXTERNAL_IMPORT	1
+package_identifier	NAME_IDENTIFIER	1
 
 # Test 7: Go tree structure validation
 # ====================================

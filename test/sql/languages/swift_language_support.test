@@ -75,21 +75,21 @@ WHERE type = 'protocol_declaration';
 
 # Test 9: Swift semantic types for key constructs
 # ===============================================
-# Note: semantic_type values include refinements:
-# - class_declaration: 248 = DEFINITION_CLASS | REGULAR
-# - function_declaration: 240 = DEFINITION_FUNCTION | REGULAR
-# - property_declaration: 247 = DEFINITION_VARIABLE | FIELD
+# Note: semantic_type values include refinements that map to base types:
+# - class_declaration: DEFINITION_CLASS
+# - function_declaration: DEFINITION_FUNCTION
+# - property_declaration: DEFINITION_VARIABLE (with FIELD refinement)
 
-query III
+query ITI
 SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/swift/simple.swift', 'swift')
 WHERE type IN ('function_declaration', 'class_declaration', 'property_declaration')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-class_declaration	248	14
-function_declaration	240	26
-property_declaration	247	75
+class_declaration	DEFINITION_CLASS	14
+function_declaration	DEFINITION_FUNCTION	26
+property_declaration	DEFINITION_VARIABLE	75
 
 # Test 10: Swift tree structure validation (platform-tolerant)
 # ==============================================================

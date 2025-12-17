@@ -58,25 +58,25 @@ use super::*;	use_declaration
 
 # Test 6: Rust semantic types
 # ===========================
-# Note: semantic_type values include refinements:
-# - function_item: 240 = DEFINITION_FUNCTION | REGULAR
-# - struct_item: 248 = DEFINITION_CLASS | REGULAR
-# - impl_item: 248 = DEFINITION_CLASS | REGULAR
-# - trait_item: 249 = DEFINITION_CLASS | ABSTRACT (traits are abstract by nature)
-# - enum_item: 251 = DEFINITION_CLASS | ENUM
+# Note: semantic_type values include refinements that map to base types:
+# - function_item: DEFINITION_FUNCTION
+# - struct_item: DEFINITION_CLASS
+# - impl_item: DEFINITION_CLASS
+# - trait_item: DEFINITION_CLASS (with ABSTRACT refinement)
+# - enum_item: DEFINITION_CLASS (with ENUM refinement)
 
-query III
+query ITI
 SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/rust/simple.rs')
 WHERE type IN ('struct_item', 'function_item', 'enum_item', 'trait_item', 'impl_item')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-enum_item	251	1
-function_item	240	7
-impl_item	248	2
-struct_item	248	1
-trait_item	249	1
+enum_item	DEFINITION_CLASS	1
+function_item	DEFINITION_FUNCTION	7
+impl_item	DEFINITION_CLASS	2
+struct_item	DEFINITION_CLASS	1
+trait_item	DEFINITION_CLASS	1
 
 # Test 7: Rust enum and trait detection
 # =====================================

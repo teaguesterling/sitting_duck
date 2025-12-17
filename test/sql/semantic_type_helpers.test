@@ -167,10 +167,11 @@ class MyClass:
 ', 'python');
 
 # Test filtering with predicate functions
+# Note: semantic_type is now SEMANTIC_TYPE (displays as string, but needs cast to UTINYINT for arithmetic)
 query II
-SELECT name, semantic_type_to_string(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT)
+SELECT name, semantic_type
 FROM test_ast
-WHERE is_definition(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT) AND name IS NOT NULL AND LENGTH(name) > 0
+WHERE is_definition(semantic_type::UTINYINT) AND name IS NOT NULL AND LENGTH(name) > 0
 ORDER BY node_id;
 ----
 hello	DEFINITION_FUNCTION
@@ -178,9 +179,9 @@ MyClass	DEFINITION_CLASS
 method	DEFINITION_FUNCTION
 
 query II
-SELECT name, semantic_type_to_string(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT)
+SELECT name, semantic_type
 FROM test_ast
-WHERE is_call(CASE WHEN semantic_type < 0 THEN (256 + semantic_type) ELSE semantic_type END::UTINYINT)
+WHERE is_call(semantic_type::UTINYINT)
 ORDER BY node_id;
 ----
 print	COMPUTATION_CALL

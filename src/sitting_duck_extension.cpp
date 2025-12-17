@@ -9,6 +9,7 @@
 // #include "short_names_function.hpp" // Removed
 #include "parse_ast_function.hpp"
 #include "semantic_type_functions.hpp"
+#include "semantic_type_logical_type.hpp"
 
 namespace duckdb {
 
@@ -24,13 +25,16 @@ void RegisterASTSupportedLanguagesFunction(ExtensionLoader &loader);
 // void RegisterASTHelperFunctions(ExtensionLoader &loader);
 
 static void LoadInternal(ExtensionLoader &loader) {
+	// Register SEMANTIC_TYPE logical type and its cast functions (must be first)
+	RegisterSemanticTypeLogicalType(loader);
+
 	// Register the read_ast table function (streaming-based)
 	RegisterReadASTFunction(loader);
-	
+
 	// RegisterReadASTStreamingFunction(loader); // Removed - redundant with read_ast
-	
+
 	// RegisterReadASTObjectsHybridFunction(loader); // Removed - unused by CLI/queries
-	
+
 	// Register the parse_ast scalar function
 	ParseASTFunction::Register(loader);
 
