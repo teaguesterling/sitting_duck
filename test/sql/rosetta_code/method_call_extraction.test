@@ -74,7 +74,7 @@ true
 # Test: Python calls have qualified_name populated
 query I
 SELECT COUNT(*) >= 0 FROM read_ast(
-    'third_party/rosettacode-acmeism/Lang/Python/100-doors/*.py',
+    'test/data/rosetta/Lang/Python/100-doors/*.py',
     context := 'native',
     ignore_errors := true
 )

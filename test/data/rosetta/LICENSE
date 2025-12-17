@@ -1,0 +1,33 @@
+Rosetta Code Test Data
+======================
+
+This directory contains code examples from Rosetta Code (https://rosettacode.org)
+used for testing the sitting_duck AST parsing extension.
+
+LICENSE
+-------
+This content is licensed under the GNU Free Documentation License (GFDL) 1.2.
+See: https://www.gnu.org/licenses/old-licenses/fdl-1.2.html
+
+ATTRIBUTION
+-----------
+Source: https://github.com/acmeism/RosettaCodeData
+Original: https://rosettacode.org
+
+The code examples in this directory were contributed by many authors to
+Rosetta Code. Each file represents the work of one or more contributors
+to the Rosetta Code project.
+
+For the full list of contributors to any specific example, please visit:
+https://rosettacode.org/wiki/<Task_Name>
+
+USAGE
+-----
+This subset was extracted for use in automated testing. The full dataset
+is available at https://github.com/acmeism/RosettaCodeData
+
+DISCLAIMER
+----------
+These code samples are provided "as-is" for testing purposes. Some examples
+may contain syntax errors or be incomplete, as they represent the state of
+contributions to Rosetta Code at the time of extraction.
