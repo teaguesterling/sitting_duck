@@ -4,7 +4,7 @@
 
 ## CLI Quick Start
 ```
-$ duckdb -ascii -noheader -s "SELECT peek FROM read_ast('src/**/*.cpp', peek='full') WHERE semantic_type_to_string(semantic_type)='DEFINITION_FUNCTION' AND name='FindChildByTypeNode';"
+$ duckdb -ascii -noheader -s "SELECT peek FROM read_ast('src/**/*.cpp', peek='full') WHERE is_function_definition(semantic_type) AND name='FindChildByTypeNode';"
 
 TSNode LanguageAdapter::FindChildByTypeNode(TSNode node, const string &child_type) const {
     uint32_t child_count = ts_node_child_count(node);
@@ -312,7 +312,7 @@ ORDER BY c.name, m.start_line;
 duckdb -ascii -noheader -s "
 SELECT peek
 FROM read_ast('src/**/*.cpp', context := 'native', peek := 'full')
-WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION'
+WHERE is_function_definition(semantic_type)
   AND name = 'FindChildByTypeNode';"
 ```
 
@@ -323,7 +323,7 @@ WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION'
 duckdb -csv -noheader -s "
 SELECT file_path, start_line, peek
 FROM read_ast('src/**/*.cpp', context := 'native', peek := 60)
-WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+WHERE is_function_call(semantic_type)
   AND name = 'ts_node_type';"
 ```
 
@@ -335,7 +335,7 @@ For method calls like `obj.method()`, the `name` field is empty but `signature_t
 -- Find all calls to .empty() method (any object)
 SELECT file_path, start_line, signature_type, peek
 FROM read_ast('src/**/*.cpp', context := 'native', peek := 60)
-WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+WHERE is_function_call(semantic_type)
   AND (
     signature_type LIKE '%.empty'   -- dot notation: obj.empty()
     OR signature_type LIKE '%->empty' -- arrow notation: ptr->empty()
@@ -383,7 +383,7 @@ FROM read_ast([
     'examples/factorial.go',
     'examples/factorial.java'
 ], context := 'native', ignore_errors := true)
-WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION'
+WHERE is_function_definition(semantic_type)
   AND name LIKE '%factorial%'
 ORDER BY language;
 ```
@@ -437,6 +437,47 @@ SELECT COUNT(*) FROM read_ast('**/*.py', peek_mode := 'compact');
 
 -- Complete: full source text (slower)
 SELECT COUNT(*) FROM read_ast('**/*.py', peek_mode := 'smart');
+```
+
+## Utility Functions
+
+### Semantic Type Predicates
+
+Cleaner filtering with predicate macros:
+
+```sql
+-- Find all function definitions
+SELECT * FROM read_ast('file.py')
+WHERE is_function_definition(semantic_type);
+
+-- Find all class definitions
+SELECT * FROM read_ast('file.py')
+WHERE is_class_definition(semantic_type);
+
+-- Find all function calls
+SELECT * FROM read_ast('file.py')
+WHERE is_function_call(semantic_type);
+```
+
+Available predicates: `is_function_definition`, `is_class_definition`, `is_variable_definition`, `is_function_call`, `is_member_access`, `is_string_literal`, `is_number_literal`, `is_conditional`, `is_loop`, `is_jump`, `is_assignment`, and more.
+
+### File Line Utilities
+
+Extract specific lines from files:
+
+```sql
+-- Get lines 10-25 from a file
+SELECT * FROM read_lines_range('file.py', 10, 25);
+
+-- Get context around line 50 (5 lines before and after)
+SELECT * FROM read_lines_context('file.py', 50, 5);
+
+-- Extract source code for a function
+SELECT
+    name,
+    ast_get_source(file_path, start_line, end_line) AS source
+FROM read_ast('file.py')
+WHERE is_function_definition(semantic_type);
 ```
 
 ## Advanced Features

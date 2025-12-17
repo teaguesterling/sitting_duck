@@ -33,17 +33,15 @@ static void LoadInternal(ExtensionLoader &loader) {
 	
 	// Register the parse_ast scalar function
 	ParseASTFunction::Register(loader);
-	
-	// Register SQL macros for natural AST querying
-	RegisterASTSQLMacros(loader);
-	
-	// RegisterDuckDBASTShortNamesFunction(loader); // Removed - short names not needed
-	
-	// Register semantic type utility functions
+
+	// Register semantic type utility functions (must be before SQL macros that depend on them)
 	RegisterSemanticTypeFunctions(loader);
-	
+
 	// Register supported languages function
 	RegisterASTSupportedLanguagesFunction(loader);
+
+	// Register SQL macros for natural AST querying (depends on functions above)
+	RegisterASTSQLMacros(loader);
 	
 	// Short names system removed for simplicity
 	
