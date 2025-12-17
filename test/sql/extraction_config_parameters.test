@@ -188,10 +188,10 @@ LIMIT 1;
 ----
 0	module
 
-query II
+query IT
 SELECT name, semantic_type
 FROM parse_ast('def hello(): pass', 'python', context := 'normalized')
 WHERE name = 'hello'
 LIMIT 1;
 ----
-hello	240
+hello	DEFINITION_FUNCTION

@@ -155,6 +155,84 @@ SELECT is_identifier(80);   -- true
 SELECT is_identifier(84);   -- true
 ```
 
+## Specific Type Predicates
+
+Convenience macros for common semantic type checks:
+
+### Definition Predicates
+
+```sql
+-- Check for function definitions
+SELECT * FROM read_ast('file.py') WHERE is_function_definition(semantic_type);
+
+-- Check for class definitions
+SELECT * FROM read_ast('file.py') WHERE is_class_definition(semantic_type);
+
+-- Check for variable definitions
+SELECT * FROM read_ast('file.py') WHERE is_variable_definition(semantic_type);
+
+-- Check for module definitions
+SELECT * FROM read_ast('file.py') WHERE is_module_definition(semantic_type);
+
+-- Check for type definitions (typedef, type alias)
+SELECT * FROM read_ast('file.py') WHERE is_type_definition(semantic_type);
+```
+
+### Computation Predicates
+
+```sql
+-- Check for function/method calls
+SELECT * FROM read_ast('file.py') WHERE is_function_call(semantic_type);
+
+-- Check for member/property access
+SELECT * FROM read_ast('file.py') WHERE is_member_access(semantic_type);
+```
+
+### Literal Predicates
+
+```sql
+-- Check for string literals
+SELECT * FROM read_ast('file.py') WHERE is_string_literal(semantic_type);
+
+-- Check for number literals
+SELECT * FROM read_ast('file.py') WHERE is_number_literal(semantic_type);
+
+-- Check for boolean literals
+SELECT * FROM read_ast('file.py') WHERE is_boolean_literal(semantic_type);
+
+-- Check for any literal
+SELECT * FROM read_ast('file.py') WHERE is_literal(semantic_type);
+```
+
+### Control Flow Predicates
+
+```sql
+-- Check for conditionals (if/switch/match)
+SELECT * FROM read_ast('file.py') WHERE is_conditional(semantic_type);
+
+-- Check for loops (for/while/do)
+SELECT * FROM read_ast('file.py') WHERE is_loop(semantic_type);
+
+-- Check for jumps (return/break/continue/throw)
+SELECT * FROM read_ast('file.py') WHERE is_jump(semantic_type);
+```
+
+### Operator Predicates
+
+```sql
+-- Check for assignments
+SELECT * FROM read_ast('file.py') WHERE is_assignment(semantic_type);
+
+-- Check for comparisons
+SELECT * FROM read_ast('file.py') WHERE is_comparison(semantic_type);
+
+-- Check for arithmetic operations
+SELECT * FROM read_ast('file.py') WHERE is_arithmetic(semantic_type);
+
+-- Check for logical operations (and/or/not)
+SELECT * FROM read_ast('file.py') WHERE is_logical(semantic_type);
+```
+
 ## Filtering Patterns
 
 ### By Exact Type

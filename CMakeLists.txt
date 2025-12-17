@@ -303,6 +303,7 @@ set(EXTENSION_SOURCES
     src/ast_type.cpp
     src/semantic_types.cpp
     src/semantic_type_functions.cpp
+    src/semantic_type_logical_type.cpp
     src/ast_file_utils.cpp
     src/ast_supported_languages_function.cpp
     src/native_context_extraction.cpp

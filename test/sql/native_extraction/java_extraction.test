@@ -1,0 +1,96 @@
+# name: test/sql/native_extraction/java_extraction.test
+# description: Comprehensive native extraction tests for Java
+# group: [native_extraction]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Java Native Extraction Model Tests
+# =============================================================================
+#
+# Updated extraction model:
+#   - name: The identifier (function name, method name, class name)
+#   - qualified_name: Full path (for calls: obj.method, for others: module.class.method)
+#   - signature_type: Type info (return type for functions, class kind, NULL for calls)
+#   - parameters: Related entities (param names for functions, parent types for classes)
+#   - modifiers: Keywords/flags (access, inheritance type, extends/implements keywords)
+# =============================================================================
+
+# =============================================================================
+# DEFINITION_CLASS - Class Declarations with Inheritance
+# =============================================================================
+
+# Test: Abstract base class with no inheritance - abstract modifier present
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
+WHERE type = 'class_declaration' AND name = 'Animal';
+----
+Animal	abstract_class	[]	[abstract]
+
+# Test: Class with single extends - parent in parameters, "extends" in modifiers
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
+WHERE type = 'class_declaration' AND name = 'Dog';
+----
+Dog	class	[Animal]	[extends]
+
+# Test: Class with extends and implements - both parents in parameters
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
+WHERE type = 'class_declaration' AND name = 'Pet';
+----
+Pet	[Dog, Serializable]	[extends, implements]
+
+# Test: Class with extends and multiple implements
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
+WHERE type = 'class_declaration' AND name = 'ServiceAnimal';
+----
+ServiceAnimal	[Dog, Runnable, Serializable]	[extends, implements]
+
+# =============================================================================
+# DEFINITION_INTERFACE - Interface Declarations
+# =============================================================================
+
+# Test: Simple interface with no extends
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
+WHERE type = 'interface_declaration' AND name = 'Runnable';
+----
+Runnable	interface	[]	[interface]
+
+# Test: Interface extending another interface
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
+WHERE type = 'interface_declaration' AND name = 'Runner';
+----
+Runner	[Runnable]	[interface, extends]
+
+# Test: Interface extending multiple interfaces
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
+WHERE type = 'interface_declaration' AND name = 'Athlete';
+----
+Athlete	[Runner, Serializable]	[interface, extends]
+
+# Test: Functional interface with annotation
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
+WHERE type = 'interface_declaration' AND name = 'SoundMaker';
+----
+SoundMaker	functional_interface	[]	[interface, @FunctionalInterface]
+
+# =============================================================================
+# DEFINITION_ENUM - Enum Declarations
+# =============================================================================
+
+# Test: Enum implementing an interface
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
+WHERE type = 'enum_declaration' AND name = 'DogBreed';
+----
+DogBreed	[Serializable]	[enum, implements]
+

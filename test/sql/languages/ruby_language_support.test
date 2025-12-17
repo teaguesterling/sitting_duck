@@ -55,18 +55,18 @@ Person	constant
 # Test 6: Ruby semantic types
 # ===========================
 
-query III
+query ITI
 SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/ruby/simple.rb')
 WHERE type IN ('method', 'singleton_method', 'class', 'call', 'assignment')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-assignment	244	2
-call	208	4
-class	248	2
-method	240	3
-singleton_method	240	1
+assignment	DEFINITION_VARIABLE	2
+call	COMPUTATION_CALL	4
+class	DEFINITION_CLASS	2
+method	DEFINITION_FUNCTION	3
+singleton_method	DEFINITION_FUNCTION	1
 
 # Test 7: Ruby tree structure validation
 # ======================================

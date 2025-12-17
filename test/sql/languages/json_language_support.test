@@ -76,31 +76,31 @@ WHERE type = 'number';
 # Test 9: JSON boolean and null values
 # ====================================
 
-query III
+query IIT
 SELECT type, COUNT(*) as count, semantic_type
 FROM read_ast('test/data/json/simple.json', 'json')
 WHERE type IN ('true', 'false', 'null')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-false	2	72
-null	3	72
-true	4	72
+false	2	LITERAL_ATOMIC
+null	3	LITERAL_ATOMIC
+true	4	LITERAL_ATOMIC
 
 # Test 10: JSON semantic types
 # ============================
 
-query III
+query ITI
 SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/json/simple.json', 'json')
 WHERE type IN ('object', 'array', 'pair', 'string')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-array	76	4
-object	76	11
-pair	96	39
-string	68	55
+array	LITERAL_STRUCTURED	4
+object	LITERAL_STRUCTURED	11
+pair	PATTERN_DESTRUCTURE	39
+string	LITERAL_STRING	55
 
 # Test 11: JSON tree structure validation
 # =======================================

@@ -62,17 +62,17 @@ WHERE type = 'call';
 # Test 7: Python semantic types
 # =============================
 
-query III
+query ITI
 SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/python/simple.py')
 WHERE type IN ('function_definition', 'class_definition', 'call', 'assignment')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-assignment	244	2
-call	208	4
-class_definition	248	1
-function_definition	240	4
+assignment	DEFINITION_VARIABLE	2
+call	COMPUTATION_CALL	4
+class_definition	DEFINITION_CLASS	1
+function_definition	DEFINITION_FUNCTION	4
 
 # Test 8: Python tree structure validation
 # ========================================

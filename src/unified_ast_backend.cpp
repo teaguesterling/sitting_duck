@@ -2,6 +2,7 @@
 #include "unified_ast_backend_impl.hpp"
 #include "language_adapter.hpp"
 #include "semantic_types.hpp"
+#include "semantic_type_logical_type.hpp"
 #include "ast_file_utils.hpp"
 #include "ast_parsing_task.hpp"
 #include "duckdb/common/exception.hpp"
@@ -441,8 +442,8 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
     // Conditionally include context fields
     if (config.context != ContextLevel::NONE) {
         if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
-            schema.push_back(LogicalType::UTINYINT);  // semantic_type
-            schema.push_back(LogicalType::UTINYINT);  // flags
+            schema.push_back(SemanticTypeLogicalType());  // semantic_type (custom type with VARCHAR cast)
+            schema.push_back(LogicalType::UTINYINT);      // flags
         }
         if (config.context >= ContextLevel::NORMALIZED) {
             schema.push_back(LogicalType::VARCHAR);   // name
@@ -901,6 +902,8 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
                     list_data[count].length = node.native.parameters.size();
                     
                     // Add parameter strings to child vector if any exist
+                    // For function definitions: use .name (parameter name)
+                    // For call arguments: use .type (argument value) when .name is empty
                     for (size_t i = 0; i < node.native.parameters.size(); i++) {
                         idx_t child_idx = list_data[count].offset + i;
                         if (child_idx >= ListVector::GetListCapacity(output.data[parameters_col])) {
@@ -908,7 +911,11 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
                             // Re-get pointers after potential reallocation
                             param_child_data = FlatVector::GetData<string_t>(ListVector::GetEntry(output.data[parameters_col]));
                         }
-                        param_child_data[child_idx] = StringVector::AddString(param_child, node.native.parameters[i].name);
+                        // Use name if available, otherwise fall back to type (for positional call args)
+                        const string& param_value = !node.native.parameters[i].name.empty()
+                            ? node.native.parameters[i].name
+                            : node.native.parameters[i].type;
+                        param_child_data[child_idx] = StringVector::AddString(param_child, param_value);
                     }
                     ListVector::SetListSize(output.data[parameters_col], list_data[count].offset + list_data[count].length);
                     

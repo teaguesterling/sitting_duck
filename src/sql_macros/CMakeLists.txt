@@ -1,14 +1,8 @@
 # SQL Macro files to embed
+# These are loaded at extension startup and provide convenience functions
 set(SQL_MACRO_FILES
-    01_core_primitives.sql
-    02_ast_get.sql
-    03_ast_find.sql
-    04_ast_to.sql
-    05_taxonomy.sql
-    06_tree_helpers.sql
-    07_monad_tree_helpers.sql
-    08_semantic_types.sql
-    09_semantic_type_codes.sql
+    semantic_predicates.sql
+    file_utilities.sql
 )
 
 # Generate header file with embedded SQL

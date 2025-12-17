@@ -13,9 +13,9 @@ DEF_TYPE("parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::CO
 DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
 
 // Function calls
-DEF_TYPE("function_call", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("function_call", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 DEF_TYPE("arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE("method_index_expression", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("method_index_expression", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 
 // Variable declarations (Lua vars are mutable by default)
 DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)

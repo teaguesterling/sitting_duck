@@ -52,13 +52,10 @@ def generate_chain_methods(sql_files, sql_dir):
 
 def generate_header(sql_dir, output_file):
     """Generate C++ header with embedded SQL macros."""
-    
+
     sql_files = [
-        '01_core_primitives.sql',
-        '02_ast_get.sql',
-        '03_ast_find.sql',
-        '04_ast_to.sql',
-        '05_taxonomy.sql'
+        'semantic_predicates.sql',
+        'file_utilities.sql',
     ]
     
     # Chain methods (short names) removed for simplicity

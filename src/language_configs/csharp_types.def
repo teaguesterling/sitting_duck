@@ -29,8 +29,8 @@ DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Vari
 DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
 
 // Function calls and expressions
-DEF_TYPE("invocation_expression", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_IDENTIFIER, FUNCTION_CALL, 0)
-DEF_TYPE("object_creation_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("invocation_expression", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+DEF_TYPE("object_creation_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 
 // Control flow
 DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)

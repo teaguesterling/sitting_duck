@@ -68,16 +68,16 @@ WHERE type = 'literal';
 # Test 8: SQL semantic types
 # ==========================
 
-query III
+query ITI
 SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/sql/example.sql')
 WHERE type IN ('identifier', 'literal', 'comment')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-comment	32	3
-identifier	80	34
-literal	72	7
+comment	METADATA_COMMENT	3
+identifier	NAME_IDENTIFIER	34
+literal	LITERAL_ATOMIC	7
 
 # Test 9: SQL tree structure validation
 # =====================================

@@ -69,17 +69,17 @@ WHERE type = 'call_expression';
 # Test 8: JavaScript semantic types
 # =================================
 
-query III
+query ITI
 SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/javascript/simple.js')
 WHERE type IN ('function_declaration', 'class_declaration', 'call_expression', 'lexical_declaration')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-call_expression	208	6
-class_declaration	248	1
-function_declaration	240	2
-lexical_declaration	244	7
+call_expression	COMPUTATION_CALL	6
+class_declaration	DEFINITION_CLASS	1
+function_declaration	DEFINITION_FUNCTION	2
+lexical_declaration	DEFINITION_VARIABLE	7
 
 # Test 9: JavaScript tree structure validation
 # ============================================

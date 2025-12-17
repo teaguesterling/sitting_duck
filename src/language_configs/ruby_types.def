@@ -17,9 +17,9 @@ DEF_TYPE("multiple_assignment", DEFINITION_VARIABLE | SemanticRefinements::Varia
 DEF_TYPE("constant", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, NODE_TEXT, NONE, 0)
 
 // Expressions and calls with refinements
-DEF_TYPE("call", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_IDENTIFIER, FUNCTION_CALL, 0)
-DEF_TYPE("method_call", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_IDENTIFIER, FUNCTION_CALL, 0)
-DEF_TYPE("chained_call", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("call", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+DEF_TYPE("method_call", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+DEF_TYPE("chained_call", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 DEF_TYPE("element_reference", COMPUTATION_ACCESS, NONE, NONE, 0)
 
 // Identifiers and names

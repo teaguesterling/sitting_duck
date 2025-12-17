@@ -259,10 +259,19 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
             return "";
         }
         case ExtractionStrategy::FIND_IDENTIFIER: {
-            // Try identifier first, then qualified_identifier for languages like C++
+            // Try common identifier node types across languages
             string result = FindChildByType(node, content, "identifier");
             if (result.empty()) {
-                result = FindChildByType(node, content, "qualified_identifier");
+                result = FindChildByType(node, content, "qualified_identifier");  // C++
+            }
+            if (result.empty()) {
+                result = FindChildByType(node, content, "name");  // PHP
+            }
+            if (result.empty()) {
+                result = FindChildByType(node, content, "simple_identifier");  // Swift, Kotlin
+            }
+            if (result.empty()) {
+                result = FindChildByType(node, content, "type_identifier");  // Swift types
             }
             return result;
         }
@@ -297,6 +306,57 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
                 }
             }
             return "";
+        }
+        case ExtractionStrategy::FIND_CALL_TARGET: {
+            // Extract method/function name from call expressions
+            // Handles: simple calls (print), method calls (obj.method), qualified calls (pkg.func)
+            if (ts_node_child_count(node) == 0) {
+                return "";
+            }
+
+            TSNode first_child = ts_node_child(node, 0);
+            if (ts_node_is_null(first_child)) {
+                return "";
+            }
+
+            string first_child_type = ts_node_type(first_child);
+
+            // Simple function call: first child is identifier
+            if (first_child_type == "identifier") {
+                return ExtractNodeText(first_child, content);
+            }
+
+            // Method/member call patterns: find the rightmost identifier (method name)
+            // Python: attribute (obj.method), JS/TS: member_expression, C++: field_expression
+            // Go: selector_expression, Rust: field_expression, Java: field_access
+            if (first_child_type == "attribute" ||
+                first_child_type == "member_expression" ||
+                first_child_type == "field_expression" ||
+                first_child_type == "selector_expression" ||
+                first_child_type == "field_access" ||
+                first_child_type == "scoped_identifier" ||
+                first_child_type == "qualified_identifier") {
+
+                // Find the last identifier child (the method/function name)
+                uint32_t child_count = ts_node_child_count(first_child);
+                for (int i = child_count - 1; i >= 0; i--) {
+                    TSNode child = ts_node_child(first_child, i);
+                    string child_type = ts_node_type(child);
+
+                    if (child_type == "identifier" ||
+                        child_type == "property_identifier" ||
+                        child_type == "field_identifier" ||
+                        child_type == "simple_identifier") {
+                        return ExtractNodeText(child, content);
+                    }
+                }
+
+                // Fallback: return the full expression text
+                return ExtractNodeText(first_child, content);
+            }
+
+            // Other patterns (subscript calls, etc.): try to find any identifier
+            return FindChildByType(node, content, "identifier");
         }
         case ExtractionStrategy::CUSTOM:
             // Will be overridden by specific language adapters

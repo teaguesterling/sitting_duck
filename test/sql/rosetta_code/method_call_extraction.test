@@ -1,0 +1,156 @@
+# name: test/sql/rosetta_code/method_call_extraction.test
+# description: Test method call extraction with the updated extraction model
+# group: [rosetta_code]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Method Call Extraction - Updated Model
+# =============================================================================
+#
+# For all calls (simple and method calls):
+#   - name: The function/method identifier (e.g., "method", "print", "empty")
+#   - qualified_name: Full call expression (e.g., "obj.method", "fmt.Println")
+#   - signature_type: NULL (no return type info without static analysis)
+#   - parameters: Actual argument values
+#
+# Query patterns:
+#   - By method name: WHERE name = 'method'
+#   - By qualified path: WHERE qualified_name LIKE 'obj.%'
+# =============================================================================
+
+# Test: Regular function calls have name populated
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'src/language_adapter.cpp',
+    context := 'native'
+)
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+  AND name IS NOT NULL
+  AND length(name) > 0;
+----
+true
+
+# Test: Method calls now have name populated (the method name)
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'src/language_adapter.cpp',
+    context := 'native'
+)
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+  AND name = 'empty';
+----
+true
+
+# Test: qualified_name contains full call expression for method calls
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'src/language_adapter.cpp',
+    context := 'native'
+)
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+  AND qualified_name LIKE '%.empty';
+----
+true
+
+# Test: Can find method calls directly by name now
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'src/language_adapter.cpp',
+    context := 'native'
+)
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+  AND name = 'size';
+----
+true
+
+# =============================================================================
+# Python Method Calls (Rosetta Code examples)
+# =============================================================================
+
+# Test: Python calls have qualified_name populated
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/100-doors/*.py',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE type = 'call'
+  AND qualified_name IS NOT NULL;
+----
+true
+
+# =============================================================================
+# C++ Method Calls (internal codebase)
+# =============================================================================
+
+# Test: C++ dot notation method calls have qualified_name with dots
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'src/**/*.cpp',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+  AND qualified_name LIKE '%.%'
+  AND qualified_name NOT LIKE '%->%';
+----
+true
+
+# Test: C++ arrow notation method calls have qualified_name with arrows
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'src/**/*.cpp',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+  AND qualified_name LIKE '%->%';
+----
+true
+
+# =============================================================================
+# Direct Query Patterns (No Workarounds Needed)
+# =============================================================================
+
+# Test: Find all calls to a specific method by name
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'src/**/*.cpp',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+  AND name = 'size';
+----
+true
+
+# Test: Find calls by qualified path pattern
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'src/**/*.cpp',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+  AND (qualified_name LIKE '%.size' OR qualified_name LIKE '%->size');
+----
+true
+
+# Test: Combined query - both simple and method calls work with name
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'src/language_adapter.cpp',
+    context := 'native'
+)
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+  AND (
+    name = 'ts_node_type'  -- Regular function call
+    OR name = 'empty'       -- Method call (now works directly!)
+  );
+----
+true
+

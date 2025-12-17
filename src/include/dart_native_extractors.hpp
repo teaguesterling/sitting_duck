@@ -220,9 +220,13 @@ inline vector<string> ExtractDartModifiers(TSNode node, const string& content) {
     return modifiers;
 }
 
-// Extract class modifiers and inheritance info
-inline vector<string> ExtractDartClassModifiers(TSNode node, const string& content) {
-    vector<string> modifiers;
+// Extract parent types from Dart class inheritance clauses
+inline vector<ParameterInfo> ExtractDartParentTypes(TSNode node, const string& content,
+                                                     bool& has_extends, bool& has_implements, bool& has_with) {
+    vector<ParameterInfo> parents;
+    has_extends = false;
+    has_implements = false;
+    has_with = false;
 
     uint32_t child_count = ts_node_child_count(node);
     for (uint32_t i = 0; i < child_count; i++) {
@@ -230,29 +234,122 @@ inline vector<string> ExtractDartClassModifiers(TSNode node, const string& conte
         const char* child_type = ts_node_type(child);
 
         if (strcmp(child_type, "superclass") == 0) {
-            // extends clause
-            string super_text = ExtractNodeText(child, content);
-            if (!super_text.empty()) {
-                modifiers.push_back("extends " + super_text);
+            // extends clause - extract parent class
+            // Note: "mixins" (with clause) is INSIDE superclass in tree-sitter Dart grammar
+            has_extends = true;
+            uint32_t super_count = ts_node_child_count(child);
+            for (uint32_t j = 0; j < super_count; j++) {
+                TSNode super_child = ts_node_child(child, j);
+                const char* super_type = ts_node_type(super_child);
+
+                // Skip "extends" keyword
+                if (strcmp(super_type, "extends") == 0) continue;
+
+                if (strcmp(super_type, "type_identifier") == 0 ||
+                    strcmp(super_type, "identifier") == 0) {
+                    string type_name = ExtractNodeText(super_child, content);
+                    if (!type_name.empty()) {
+                        parents.push_back({type_name, ""});
+                    }
+                } else if (strcmp(super_type, "mixins") == 0) {
+                    // with clause - extract mixins (nested inside superclass)
+                    has_with = true;
+                    uint32_t mixin_count = ts_node_child_count(super_child);
+                    for (uint32_t k = 0; k < mixin_count; k++) {
+                        TSNode mixin_child = ts_node_child(super_child, k);
+                        const char* mixin_type = ts_node_type(mixin_child);
+
+                        // Skip "with" keyword and punctuation
+                        if (strcmp(mixin_type, "with") == 0 ||
+                            strcmp(mixin_type, ",") == 0) continue;
+
+                        if (strcmp(mixin_type, "type_identifier") == 0 ||
+                            strcmp(mixin_type, "identifier") == 0) {
+                            string type_name = ExtractNodeText(mixin_child, content);
+                            if (!type_name.empty()) {
+                                parents.push_back({type_name, ""});
+                            }
+                        }
+                    }
+                }
             }
         } else if (strcmp(child_type, "interfaces") == 0) {
-            // implements clause
-            string impl_text = ExtractNodeText(child, content);
-            if (!impl_text.empty()) {
-                modifiers.push_back(impl_text);
+            // implements clause - extract interfaces
+            has_implements = true;
+            uint32_t impl_count = ts_node_child_count(child);
+            for (uint32_t j = 0; j < impl_count; j++) {
+                TSNode impl_child = ts_node_child(child, j);
+                const char* impl_type = ts_node_type(impl_child);
+
+                // Skip "implements" keyword and punctuation
+                if (strcmp(impl_type, "implements") == 0 ||
+                    strcmp(impl_type, ",") == 0) continue;
+
+                if (strcmp(impl_type, "type_identifier") == 0 ||
+                    strcmp(impl_type, "identifier") == 0) {
+                    string type_name = ExtractNodeText(impl_child, content);
+                    if (!type_name.empty()) {
+                        parents.push_back({type_name, ""});
+                    }
+                }
             }
         } else if (strcmp(child_type, "mixins") == 0) {
-            // with clause for mixins
-            string mixin_text = ExtractNodeText(child, content);
-            if (!mixin_text.empty()) {
-                modifiers.push_back(mixin_text);
+            // with clause - extract mixins
+            has_with = true;
+            uint32_t mixin_count = ts_node_child_count(child);
+            for (uint32_t j = 0; j < mixin_count; j++) {
+                TSNode mixin_child = ts_node_child(child, j);
+                const char* mixin_type = ts_node_type(mixin_child);
+
+                // Skip "with" keyword and punctuation
+                if (strcmp(mixin_type, "with") == 0 ||
+                    strcmp(mixin_type, ",") == 0) continue;
+
+                if (strcmp(mixin_type, "type_identifier") == 0 ||
+                    strcmp(mixin_type, "identifier") == 0) {
+                    string type_name = ExtractNodeText(mixin_child, content);
+                    if (!type_name.empty()) {
+                        parents.push_back({type_name, ""});
+                    }
+                }
             }
-        } else if (strcmp(child_type, "abstract") == 0 ||
-                   strcmp(child_type, "base") == 0 ||
-                   strcmp(child_type, "sealed") == 0 ||
-                   strcmp(child_type, "interface") == 0 ||
-                   strcmp(child_type, "mixin") == 0 ||
-                   strcmp(child_type, "final") == 0) {
+        }
+    }
+
+    return parents;
+}
+
+// Extract class modifiers (excluding inheritance which goes in parameters now)
+// is_mixin_declaration: true if this is a mixin_declaration node (to avoid adding "mixin" as a modifier)
+inline vector<string> ExtractDartClassModifiers(TSNode node, const string& content,
+                                                 bool has_extends, bool has_implements, bool has_with,
+                                                 bool is_mixin_declaration = false) {
+    vector<string> modifiers;
+
+    // Add inheritance keywords
+    if (has_extends) {
+        modifiers.push_back("extends");
+    }
+    if (has_implements) {
+        modifiers.push_back("implements");
+    }
+    if (has_with) {
+        modifiers.push_back("with");
+    }
+
+    uint32_t child_count = ts_node_child_count(node);
+    for (uint32_t i = 0; i < child_count; i++) {
+        TSNode child = ts_node_child(node, i);
+        const char* child_type = ts_node_type(child);
+
+        if (strcmp(child_type, "abstract") == 0 ||
+            strcmp(child_type, "base") == 0 ||
+            strcmp(child_type, "sealed") == 0 ||
+            strcmp(child_type, "interface") == 0 ||
+            strcmp(child_type, "final") == 0) {
+            modifiers.push_back(child_type);
+        } else if (strcmp(child_type, "mixin") == 0 && !is_mixin_declaration) {
+            // Only add "mixin" as modifier for "mixin class" declarations, not for mixin_declaration
             modifiers.push_back(child_type);
         } else if (strcmp(child_type, "annotation") == 0) {
             string ann_text = ExtractNodeText(child, content);
@@ -370,28 +467,24 @@ struct DartNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
 
         // Determine class type
         if (strcmp(node_type, "class_definition") == 0) {
-            // Check for sealed, abstract, etc.
+            // Check for sealed, abstract, etc. - modifiers are direct children
             context.signature_type = "class";
 
-            // Look for class modifiers
-            TSNode parent = ts_node_parent(node);
-            if (!ts_node_is_null(parent)) {
-                uint32_t parent_count = ts_node_child_count(parent);
-                for (uint32_t i = 0; i < parent_count; i++) {
-                    TSNode sibling = ts_node_child(parent, i);
-                    const char* sibling_type = ts_node_type(sibling);
+            uint32_t child_count = ts_node_child_count(node);
+            for (uint32_t i = 0; i < child_count; i++) {
+                TSNode child = ts_node_child(node, i);
+                const char* child_type = ts_node_type(child);
 
-                    if (strcmp(sibling_type, "abstract") == 0) {
-                        context.signature_type = "abstract_class";
-                    } else if (strcmp(sibling_type, "sealed") == 0) {
-                        context.signature_type = "sealed_class";
-                    } else if (strcmp(sibling_type, "base") == 0) {
-                        context.signature_type = "base_class";
-                    } else if (strcmp(sibling_type, "interface") == 0) {
-                        context.signature_type = "interface_class";
-                    } else if (strcmp(sibling_type, "final") == 0) {
-                        context.signature_type = "final_class";
-                    }
+                if (strcmp(child_type, "abstract") == 0) {
+                    context.signature_type = "abstract_class";
+                } else if (strcmp(child_type, "sealed") == 0) {
+                    context.signature_type = "sealed_class";
+                } else if (strcmp(child_type, "base") == 0) {
+                    context.signature_type = "base_class";
+                } else if (strcmp(child_type, "interface") == 0) {
+                    context.signature_type = "interface_class";
+                } else if (strcmp(child_type, "final") == 0) {
+                    context.signature_type = "final_class";
                 }
             }
         } else if (strcmp(node_type, "enum_declaration") == 0) {
@@ -410,8 +503,13 @@ struct DartNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
             context.signature_type = "type";
         }
 
-        // Extract inheritance and modifiers
-        context.modifiers = dart_helpers::ExtractDartClassModifiers(node, content);
+        // Extract parent types into parameters
+        bool has_extends = false;
+        bool has_implements = false;
+        bool has_with = false;
+        bool is_mixin_declaration = (strcmp(node_type, "mixin_declaration") == 0);
+        context.parameters = dart_helpers::ExtractDartParentTypes(node, content, has_extends, has_implements, has_with);
+        context.modifiers = dart_helpers::ExtractDartClassModifiers(node, content, has_extends, has_implements, has_with, is_mixin_declaration);
 
         return context;
     }

@@ -74,18 +74,18 @@ WHERE type = 'template_declaration';
 # Test 8: C++ semantic types
 # ==========================
 
-query III
+query ITI
 SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/cpp/simple.cpp')
 WHERE type IN ('class_specifier', 'function_definition', 'namespace_definition', 'template_declaration', 'call_expression')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-call_expression	208	7
-class_specifier	248	2
-function_definition	240	11
-namespace_definition	252	1
-template_declaration	104	2
+call_expression	COMPUTATION_CALL	7
+class_specifier	DEFINITION_CLASS	2
+function_definition	DEFINITION_FUNCTION	11
+namespace_definition	DEFINITION_MODULE	1
+template_declaration	PATTERN_TEMPLATE	2
 
 # Test 9: C++ tree structure validation
 # =====================================

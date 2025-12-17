@@ -34,7 +34,7 @@ DEF_TYPE("constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Fun
 DEF_TYPE("constant_constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
 DEF_TYPE("factory_constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
 DEF_TYPE("redirecting_factory_constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
-DEF_TYPE("constructor_invocation", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("constructor_invocation", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 DEF_TYPE("constructor_param", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("constructor_tearoff", COMPUTATION_ACCESS, NONE, NONE, 0)
 
@@ -87,8 +87,8 @@ DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmet
 DEF_TYPE("postfix_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
 DEF_TYPE("type_cast_expression", TYPE_REFERENCE, NONE, NONE, 0)
 DEF_TYPE("type_test_expression", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_CALL, 0)
-DEF_TYPE("const_object_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+DEF_TYPE("const_object_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 DEF_TYPE("parenthesized_expression", ORGANIZATION_BLOCK, NONE, NONE, 0)
 DEF_TYPE("expression_statement", ORGANIZATION_BLOCK, NONE, NONE, 0)
 

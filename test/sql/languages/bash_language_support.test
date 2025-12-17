@@ -65,24 +65,24 @@ WHERE type IN ('if_statement', 'for_statement', 'while_statement', 'case_stateme
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-case_statement	2	144
-for_statement	3	148
-if_statement	13	144
-while_statement	2	148
+case_statement	2	FLOW_CONDITIONAL
+for_statement	3	FLOW_LOOP
+if_statement	13	FLOW_CONDITIONAL
+while_statement	2	FLOW_LOOP
 
 # Test 8: Bash semantic types for key constructs
 # ==============================================
 
-query III
+query ITI
 SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/bash/simple.sh', 'bash')
 WHERE type IN ('function_definition', 'variable_assignment', 'command_substitution')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-command_substitution	208	10
-function_definition	240	5
-variable_assignment	244	28
+command_substitution	COMPUTATION_CALL	10
+function_definition	DEFINITION_FUNCTION	5
+variable_assignment	DEFINITION_VARIABLE	28
 
 # Test 9: Bash tree structure validation
 # ======================================

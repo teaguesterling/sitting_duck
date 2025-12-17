@@ -63,16 +63,16 @@ use Exception;	namespace_use_declaration
 # Test 6: PHP semantic types
 # ==========================
 
-query III
+query ITI
 SELECT type, semantic_type, COUNT(*) as count
 FROM read_ast('test/data/php/test.php')
 WHERE type IN ('class_declaration', 'function_definition', 'namespace_definition')
 GROUP BY type, semantic_type
 ORDER BY type;
 ----
-class_declaration	248	2
-function_definition	240	2
-namespace_definition	252	1
+class_declaration	DEFINITION_CLASS	2
+function_definition	DEFINITION_FUNCTION	2
+namespace_definition	DEFINITION_MODULE	1
 
 # Test 7: PHP interface detection
 # ===============================

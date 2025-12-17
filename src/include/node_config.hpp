@@ -11,12 +11,13 @@ enum class ExtractionStrategy : uint8_t {
     NONE = 0,                   // No extraction needed
     NODE_TEXT = 1,              // Extract the node's own text content
     FIRST_CHILD = 2,            // Extract text from first child
-    FIND_IDENTIFIER = 3,        // Find first child of type "identifier" 
+    FIND_IDENTIFIER = 3,        // Find first child of type "identifier"
     FIND_PROPERTY = 4,          // Find first child of type "property_identifier"
     FIND_ASSIGNMENT_TARGET = 5, // Find identifier in parent assignment (universal pattern)
     FIND_QUALIFIED_IDENTIFIER = 6, // Find qualified/scoped identifiers and extract just the name part
     FIND_IN_DECLARATOR = 7,     // Find identifiers inside declarator nodes (universal pattern)
-    CUSTOM = 8                  // Language-specific custom logic
+    FIND_CALL_TARGET = 8,       // Find method/function name from call (handles obj.method patterns)
+    CUSTOM = 9                  // Language-specific custom logic
 };
 
 // Native context extraction strategies - pattern-based approach

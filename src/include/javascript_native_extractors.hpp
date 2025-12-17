@@ -224,45 +224,90 @@ struct JavaScriptNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
         context.signature_type = "class";
-        
-        // Extract extends clause if present
-        auto base_classes = ExtractJavaScriptBaseClasses(node, content);
-        if (!base_classes.empty()) {
-            context.modifiers = base_classes;
-        }
-        
+
+        bool has_extends = false;
+        context.parameters = ExtractClassParents(node, content, has_extends);
+        context.modifiers = ExtractClassModifiers(node, content, has_extends);
+
         return context;
     }
-    
+
 public:
-    static vector<string> ExtractJavaScriptBaseClasses(TSNode node, const string& content) {
-        vector<string> base_classes;
-        
+    // Extract parent types from class_heritage into parameters
+    static vector<ParameterInfo> ExtractClassParents(TSNode node, const string& content,
+                                                      bool& has_extends) {
+        vector<ParameterInfo> parents;
+        has_extends = false;
+
         // Find class_heritage (extends clause)
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
-            
+
             if (strcmp(child_type, "class_heritage") == 0) {
+                has_extends = true;
                 // Extract identifier from extends clause
                 uint32_t heritage_count = ts_node_child_count(child);
                 for (uint32_t j = 0; j < heritage_count; j++) {
                     TSNode heritage_child = ts_node_child(child, j);
-                    if (strcmp(ts_node_type(heritage_child), "identifier") == 0) {
-                        uint32_t start = ts_node_start_byte(heritage_child);
-                        uint32_t end = ts_node_end_byte(heritage_child);
-                        if (start < content.length() && end <= content.length()) {
-                            string base_class = content.substr(start, end - start);
-                            base_classes.push_back("extends " + base_class);
+                    const char* heritage_type = ts_node_type(heritage_child);
+
+                    // Skip "extends" keyword
+                    if (strcmp(heritage_type, "extends") == 0) {
+                        continue;
+                    }
+
+                    if (strcmp(heritage_type, "identifier") == 0 ||
+                        strcmp(heritage_type, "member_expression") == 0) {
+                        string type_name = ExtractNodeText(heritage_child, content);
+                        if (!type_name.empty()) {
+                            parents.push_back({type_name, ""});
                         }
                     }
                 }
                 break;
             }
         }
-        
-        return base_classes;
+
+        return parents;
+    }
+
+    // Extract class modifiers with "extends" keyword if applicable
+    static vector<string> ExtractClassModifiers(TSNode node, const string& content,
+                                                 bool has_extends) {
+        vector<string> modifiers;
+
+        // Add extends keyword if class extends another class
+        if (has_extends) {
+            modifiers.push_back("extends");
+        }
+
+        // Check for export modifier
+        TSNode parent = ts_node_parent(node);
+        if (!ts_node_is_null(parent)) {
+            const char* parent_type = ts_node_type(parent);
+            if (strcmp(parent_type, "export_statement") == 0) {
+                modifiers.push_back("export");
+            }
+        }
+
+        return modifiers;
+    }
+
+    static string ExtractNodeText(TSNode node, const string& content) {
+        if (ts_node_is_null(node)) {
+            return "";
+        }
+
+        uint32_t start = ts_node_start_byte(node);
+        uint32_t end = ts_node_end_byte(node);
+
+        if (start < content.length() && end <= content.length() && end > start) {
+            return content.substr(start, end - start);
+        }
+
+        return "";
     }
 };
 

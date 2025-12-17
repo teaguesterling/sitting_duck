@@ -257,26 +257,35 @@ template<>
 struct PythonNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
-        
+
         try {
             string node_type = ts_node_type(node);
-            
+
             if (node_type == "class_definition") {
                 context.signature_type = ExtractClassType(node, content);
-                context.modifiers = ExtractPythonClassModifiers(node, content);
+                context.parameters = ExtractBaseClassesAsParameters(node, content);
+                context.modifiers = ExtractPythonClassModifiers(node, content, !context.parameters.empty());
             } else if (node_type == "decorated_definition") {
                 context.signature_type = ExtractDecoratedClassType(node, content);
-                context.modifiers = ExtractDecoratedClassModifiers(node, content);
+                context.parameters = ExtractDecoratedBaseClassesAsParameters(node, content);
+                context.modifiers = ExtractDecoratedClassModifiers(node, content, !context.parameters.empty());
             } else {
                 // Default class extraction
                 context.signature_type = "class";
-                context.modifiers = ExtractPythonBaseClasses(node, content);
+                vector<string> base_classes = ExtractPythonBaseClasses(node, content);
+                for (const string& base : base_classes) {
+                    context.parameters.push_back({base, ""});
+                }
+                if (!context.parameters.empty()) {
+                    context.modifiers.push_back("extends");
+                }
             }
         } catch (...) {
             context.signature_type = "class";
             context.modifiers.clear();
+            context.parameters.clear();
         }
-        
+
         return context;
     }
     
@@ -341,61 +350,82 @@ private:
         return "decorated_class";
     }
     
-    static vector<string> ExtractPythonClassModifiers(TSNode node, const string& content) {
-        vector<string> modifiers;
-        
-        // Extract base classes
+    // Extract base classes as ParameterInfo objects (parent classes go in parameters)
+    static vector<ParameterInfo> ExtractBaseClassesAsParameters(TSNode node, const string& content) {
+        vector<ParameterInfo> params;
         vector<string> base_classes = ExtractPythonBaseClasses(node, content);
         for (const string& base : base_classes) {
-            modifiers.push_back("extends_" + base);
+            params.push_back({base, ""});  // name = class name, type = empty
         }
-        
+        return params;
+    }
+
+    // Extract base classes from decorated class definition
+    static vector<ParameterInfo> ExtractDecoratedBaseClassesAsParameters(TSNode node, const string& content) {
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            if (strcmp(ts_node_type(child), "class_definition") == 0) {
+                return ExtractBaseClassesAsParameters(child, content);
+            }
+        }
+        return {};
+    }
+
+    static vector<string> ExtractPythonClassModifiers(TSNode node, const string& content, bool has_parents = false) {
+        vector<string> modifiers;
+
+        // Add "extends" keyword if class has parent classes (parents are in parameters now)
+        if (has_parents) {
+            modifiers.push_back("extends");
+        }
+
         // Check for special method patterns
         if (HasAbstractMethods(node, content)) {
             modifiers.push_back("abstract");
         }
-        
+
         if (HasClassMethods(node, content)) {
             modifiers.push_back("has_classmethods");
         }
-        
+
         if (HasStaticMethods(node, content)) {
             modifiers.push_back("has_staticmethods");
         }
-        
+
         if (HasProperties(node, content)) {
             modifiers.push_back("has_properties");
         }
-        
+
         if (HasDunderMethods(node, content)) {
             modifiers.push_back("has_dunder_methods");
         }
-        
+
         return modifiers;
     }
-    
-    static vector<string> ExtractDecoratedClassModifiers(TSNode node, const string& content) {
+
+    static vector<string> ExtractDecoratedClassModifiers(TSNode node, const string& content, bool has_parents = false) {
         vector<string> modifiers;
-        
+
         // Extract decorators
         vector<string> decorators = ExtractClassDecorators(node, content);
         for (const string& decorator : decorators) {
             modifiers.push_back(decorator);
         }
-        
+
         // Get base class modifiers from the inner class definition
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
-            
+
             if (strcmp(child_type, "class_definition") == 0) {
-                vector<string> class_modifiers = ExtractPythonClassModifiers(child, content);
+                vector<string> class_modifiers = ExtractPythonClassModifiers(child, content, has_parents);
                 modifiers.insert(modifiers.end(), class_modifiers.begin(), class_modifiers.end());
                 break;
             }
         }
-        
+
         return modifiers;
     }
     

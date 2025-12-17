@@ -36,22 +36,22 @@ type
 # Test 3: Basic SELECT parsing with flat schema using parse_ast
 # ==============================================================
 
-query II
-SELECT 
+query IT
+SELECT
     type as node_type,
     semantic_type
-FROM parse_ast('SELECT user_id, COUNT(*) as total FROM orders GROUP BY user_id', 'duckdb') 
+FROM parse_ast('SELECT user_id, COUNT(*) as total FROM orders GROUP BY user_id', 'duckdb')
 ORDER BY node_id
 LIMIT 8;
 ----
-program	252
-select_statement	224
-select_node	224
-select_list	188
-column_reference	80
-function_call	208
-table_reference	84
-group_by_clause	236
+program	DEFINITION_MODULE
+select_statement	TRANSFORM_QUERY
+select_node	TRANSFORM_QUERY
+select_list	ORGANIZATION_CONTAINER
+column_reference	NAME_IDENTIFIER
+function_call	COMPUTATION_CALL
+table_reference	NAME_QUALIFIED
+group_by_clause	TRANSFORM_AGGREGATION
 
 # Test 4: Test flat schema field access - names
 # ==============================================
@@ -86,16 +86,16 @@ table_reference	1
 # Test 6: Test context semantic_type access
 # ==========================================
 
-query II
-SELECT 
+query IT
+SELECT
     type as node_type,
     semantic_type as semantic_type
-FROM parse_ast('INSERT INTO users (name, email) VALUES (''John'', ''john@example.com'')', 'duckdb') 
-WHERE semantic_type IN (140, 252)
+FROM parse_ast('INSERT INTO users (name, email) VALUES (''John'', ''john@example.com'')', 'duckdb')
+WHERE semantic_type IN ('EXECUTION_MUTATION', 'DEFINITION_MODULE')
 ORDER BY node_id;
 ----
-program	252
-insert_statement	140
+program	DEFINITION_MODULE
+insert_statement	EXECUTION_MUTATION
 
 # Test 7: Test context flags access
 # ==================================
@@ -154,8 +154,8 @@ WHERE type = 'table_reference';
 # Test 10: Test hierarchical JOIN parsing
 # ========================================
 
-query III
-SELECT 
+query ITI
+SELECT
     type as node_type,
     semantic_type as semantic_type,
     COUNT(*) as count
@@ -170,9 +170,9 @@ GROUP BY type, semantic_type
 HAVING COUNT(*) > 1
 ORDER BY count DESC, type;
 ----
-column_reference	80	4
-table_reference	84	3
-join	228	2
+column_reference	NAME_IDENTIFIER	4
+table_reference	NAME_QUALIFIED	3
+join	TRANSFORM_ITERATION	2
 
 # Test 11: Test hierarchical error handling
 # ==========================================

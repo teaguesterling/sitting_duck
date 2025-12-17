@@ -37,8 +37,8 @@ DEF_TYPE("boolean_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
 DEF_TYPE("void_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
 
 // Expressions and calls
-DEF_TYPE("method_invocation", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_IDENTIFIER, FUNCTION_CALL, 0)
-DEF_TYPE("object_creation_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+DEF_TYPE("method_invocation", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+DEF_TYPE("object_creation_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 DEF_TYPE("field_access", COMPUTATION_ACCESS, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("array_access", COMPUTATION_ACCESS, NONE, NONE, 0)
 DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)

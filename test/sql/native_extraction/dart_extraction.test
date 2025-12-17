@@ -1,0 +1,106 @@
+# name: test/sql/native_extraction/dart_extraction.test
+# description: Comprehensive native extraction tests for Dart
+# group: [native_extraction]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Dart Native Extraction Model Tests
+# =============================================================================
+#
+# Updated extraction model:
+#   - name: The identifier (class name, mixin name, etc.)
+#   - signature_type: Type info (class, abstract_class, mixin, enum, extension)
+#   - parameters: Parent types (extended class, implemented interfaces, mixed-in mixins)
+#   - modifiers: Keywords (extends, implements, with, abstract, sealed, etc.)
+# =============================================================================
+
+# =============================================================================
+# CLASS_DEFINITION - Class Declarations with Inheritance
+# =============================================================================
+
+# Test: Abstract base class with no inheritance
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
+WHERE type = 'class_definition' AND name = 'Animal';
+----
+Animal	abstract_class	[]	[abstract]
+
+# Test: Class extending another class
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
+WHERE type = 'class_definition' AND name = 'Dog';
+----
+Dog	class	[Animal]	[extends]
+
+# Test: Class with extends and implements
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
+WHERE type = 'class_definition' AND name = 'Pet';
+----
+Pet	[Dog, Runnable]	[extends, implements]
+
+# Test: Class with extends, implements, and with (mixin)
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
+WHERE type = 'class_definition' AND name = 'ServiceAnimal';
+----
+ServiceAnimal	[Dog, Loggable, Runnable]	[extends, implements, with]
+
+# Test: Sealed class
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
+WHERE type = 'class_definition' AND name = 'Shape';
+----
+Shape	sealed_class	[]	[sealed]
+
+# Test: Class extending sealed class
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
+WHERE type = 'class_definition' AND name = 'Circle';
+----
+Circle	[Shape]	[extends]
+
+# =============================================================================
+# MIXIN_DECLARATION - Mixin Declarations
+# =============================================================================
+
+# Test: Simple mixin with no constraints
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
+WHERE type = 'mixin_declaration' AND name = 'Loggable';
+----
+Loggable	mixin	[]	[]
+
+# Test: Mixin with 'on' clause (Runner mixin on Animal)
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
+WHERE type = 'mixin_declaration' AND name = 'Runner';
+----
+Runner	mixin	[]	[]
+
+# =============================================================================
+# ENUM_DECLARATION - Enum Declarations
+# =============================================================================
+
+# Test: Enum with mixin
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
+WHERE type = 'enum_declaration' AND name = 'DogBreed';
+----
+DogBreed	[Loggable]	[with]
+
+# =============================================================================
+# Simple class with no inheritance
+# =============================================================================
+
+# Test: Interface class (abstract class used as interface)
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
+WHERE type = 'class_definition' AND name = 'Runnable';
+----
+Runnable	abstract_class	[]	[abstract]
+
