@@ -471,66 +471,127 @@ private:
     }
 };
 
-// Specialization for CLASS_WITH_METHODS and CLASS_WITH_INHERITANCE 
+// Specialization for CLASS_WITH_METHODS and CLASS_WITH_INHERITANCE
 template<>
 struct CppNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
     static NativeContext Extract(TSNode node, const string& content) {
         NativeContext context;
-        context.signature_type = "class";
-        
-        // Extract class specifiers and inheritance
-        auto modifiers = ExtractCppClassModifiers(node, content);
-        context.modifiers = modifiers;
-        
+
+        bool has_inheritance = false;
+        context.signature_type = ExtractClassType(node, content);
+        context.parameters = ExtractBaseClasses(node, content, has_inheritance);
+        context.modifiers = ExtractCppClassModifiers(node, content, has_inheritance);
+
         return context;
     }
-    
+
 private:
-    static vector<string> ExtractCppClassModifiers(TSNode node, const string& content) {
-        vector<string> modifiers;
-        
+    // Determine class type (class vs struct)
+    static string ExtractClassType(TSNode node, const string& content) {
+        string node_type = ts_node_type(node);
+        if (node_type == "struct_specifier") {
+            return "struct";
+        }
+        return "class";
+    }
+
+    // Extract base classes into parameters
+    static vector<ParameterInfo> ExtractBaseClasses(TSNode node, const string& content,
+                                                     bool& has_inheritance) {
+        vector<ParameterInfo> parents;
+        has_inheritance = false;
+
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
-            
+
             if (strcmp(child_type, "base_class_clause") == 0) {
-                // Extract inheritance information
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    modifiers.push_back(content.substr(start, end - start));
-                }
-            } else if (strcmp(child_type, "class_specifier") == 0 ||
-                       strcmp(child_type, "struct_specifier") == 0) {
-                // Extract class/struct keyword
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    modifiers.push_back(content.substr(start, end - start));
-                }
-            }
-        }
-        
-        // Check for template parameters
-        TSNode parent = ts_node_parent(node);
-        if (!ts_node_is_null(parent)) {
-            uint32_t parent_count = ts_node_child_count(parent);
-            for (uint32_t i = 0; i < parent_count; i++) {
-                TSNode sibling = ts_node_child(parent, i);
-                const char* sibling_type = ts_node_type(sibling);
-                
-                if (strcmp(sibling_type, "template_declaration") == 0) {
-                    uint32_t start = ts_node_start_byte(sibling);
-                    uint32_t end = ts_node_end_byte(sibling);
-                    if (start < content.length() && end <= content.length()) {
-                        modifiers.push_back("template");
+                has_inheritance = true;
+                // Extract each base class from the clause
+                uint32_t base_count = ts_node_child_count(child);
+                for (uint32_t j = 0; j < base_count; j++) {
+                    TSNode base_child = ts_node_child(child, j);
+                    const char* base_type = ts_node_type(base_child);
+
+                    // Skip punctuation and access specifiers
+                    if (strcmp(base_type, ":") == 0 ||
+                        strcmp(base_type, ",") == 0 ||
+                        strcmp(base_type, "access_specifier") == 0 ||
+                        strcmp(base_type, "public") == 0 ||
+                        strcmp(base_type, "protected") == 0 ||
+                        strcmp(base_type, "private") == 0 ||
+                        strcmp(base_type, "virtual") == 0) {
+                        continue;
+                    }
+
+                    // Extract type identifier
+                    if (strcmp(base_type, "type_identifier") == 0 ||
+                        strcmp(base_type, "qualified_identifier") == 0 ||
+                        strcmp(base_type, "template_type") == 0 ||
+                        strcmp(base_type, "dependent_type") == 0) {
+                        string type_name = ExtractNodeText(base_child, content);
+                        if (!type_name.empty()) {
+                            parents.push_back({type_name, ""});
+                        }
                     }
                 }
+                break;
             }
         }
-        
+
+        return parents;
+    }
+
+    static vector<string> ExtractCppClassModifiers(TSNode node, const string& content,
+                                                    bool has_inheritance) {
+        vector<string> modifiers;
+
+        // Add extends keyword if class has base classes
+        if (has_inheritance) {
+            modifiers.push_back("extends");
+        }
+
+        // Check for template
+        TSNode parent = ts_node_parent(node);
+        if (!ts_node_is_null(parent)) {
+            const char* parent_type = ts_node_type(parent);
+            if (strcmp(parent_type, "template_declaration") == 0) {
+                modifiers.push_back("template");
+            }
+        }
+
+        // Check for final specifier
+        uint32_t child_count = ts_node_child_count(node);
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* child_type = ts_node_type(child);
+
+            if (strcmp(child_type, "virtual_specifier") == 0 ||
+                strcmp(child_type, "final") == 0) {
+                string text = ExtractNodeText(child, content);
+                if (text == "final") {
+                    modifiers.push_back("final");
+                }
+            }
+        }
+
         return modifiers;
+    }
+
+    static string ExtractNodeText(TSNode node, const string& content) {
+        if (ts_node_is_null(node)) {
+            return "";
+        }
+
+        uint32_t start = ts_node_start_byte(node);
+        uint32_t end = ts_node_end_byte(node);
+
+        if (start < content.length() && end <= content.length() && end > start) {
+            return content.substr(start, end - start);
+        }
+
+        return "";
     }
 };
 

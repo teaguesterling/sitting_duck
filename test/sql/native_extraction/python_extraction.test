@@ -68,14 +68,16 @@ WHERE type = 'class_definition' AND name IS NOT NULL;
 MyClass	class	[has_dunder_methods]
 
 # Test: Class inheritance - parent classes go in parameters, "extends" keyword in modifiers
+# Note: has_dunder_methods only appears when class directly defines __init__, __str__, etc.
+# Dog and Cat inherit from Animal but only define speak(), so no has_dunder_methods
 query ITTT
 SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/python/inheritance.py', context := 'native')
 WHERE type = 'class_definition' AND name IS NOT NULL
 ORDER BY start_line;
 ----
 Animal	class	[]	[has_dunder_methods]
-Dog	class	[Animal]	[extends, has_dunder_methods]
-Cat	class	[Animal]	[extends, has_dunder_methods]
+Dog	class	[Animal]	[extends]
+Cat	class	[Animal]	[extends]
 Pet	class	[Dog, Cat]	[extends, has_dunder_methods]
 
 # =============================================================================
