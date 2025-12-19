@@ -59,10 +59,13 @@ struct NodeConfig {
 
 // Universal flags for orthogonal node properties
 namespace ASTNodeFlags {
-    constexpr uint8_t IS_KEYWORD = 0x01;         // Reserved language keywords
-    constexpr uint8_t IS_PUBLIC = 0x02;          // Externally visible/accessible
-    constexpr uint8_t IS_UNSAFE = 0x04;          // Unsafe operations
-    constexpr uint8_t IS_KEYWORD_IF_LEAF = 0x08; // Only apply IS_KEYWORD if node has no children
+    constexpr uint8_t IS_CONSTRUCT = 0x01;   // Semantic language construct (not just token/punctuation)
+    constexpr uint8_t IS_EMBODIED = 0x02;    // Has body/implementation (definition vs declaration)
+    // 0x04 - 0x80: Reserved for future use
+
+    // Backward compatibility aliases (deprecated - will be removed)
+    constexpr uint8_t IS_KEYWORD = IS_CONSTRUCT;
+    constexpr uint8_t IS_KEYWORD_IF_LEAF = IS_CONSTRUCT;  // Treat same as IS_CONSTRUCT
 }
 
 // Semantic refinement constants for fine-grained classification

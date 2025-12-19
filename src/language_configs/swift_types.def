@@ -2,33 +2,33 @@
 // Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
 
 // Program structure
-DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, 0x01)
+DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Import statements
 DEF_TYPE("import_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, FIND_IDENTIFIER, NONE, 0)
 
 // Function definitions
-DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, 0x01)
-DEF_TYPE("init_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, CUSTOM, CONSTRUCTOR_DEFINITION, 0x01)
-DEF_TYPE("deinit_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, CUSTOM, NONE, 0x01)
-DEF_TYPE("subscript_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, 0x01)
+DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("init_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, CUSTOM, CONSTRUCTOR_DEFINITION, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("deinit_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, CUSTOM, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("subscript_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
 
 // Class and structure definitions
-DEF_TYPE("class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("struct_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("actor_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("protocol_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("extension_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("struct_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("actor_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("protocol_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("extension_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
 
 // Variable and property declarations
-DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
-DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
 
 // Type definitions
-DEF_TYPE("typealias_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("associatedtype_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("typealias_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("associatedtype_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Control flow
 DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
@@ -110,8 +110,8 @@ DEF_TYPE("visibility_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFla
 DEF_TYPE("mutation_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Comments
-DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0x08)
-DEF_TYPE("multiline_comment", METADATA_COMMENT, NODE_TEXT, NONE, 0x08)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("multiline_comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Operators
 DEF_TYPE("custom_operator", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NODE_TEXT, NONE, 0)

@@ -270,18 +270,7 @@ void PopulateSemanticFieldsTemplated(ASTNode& node, const AdapterType* adapter, 
         // STRUCTURED FIELDS: Set semantic info in context
         node.semantic_type = node_config->semantic_type;
         node.universal_flags = node_config->flags;
-        
-        // Handle IS_KEYWORD_IF_LEAF: only apply IS_KEYWORD flag if node has no children
-        if (node_config->flags & ASTNodeFlags::IS_KEYWORD_IF_LEAF) {
-            // Remove the conditional flag
-            node.universal_flags &= ~ASTNodeFlags::IS_KEYWORD_IF_LEAF;
-            
-            // Only add IS_KEYWORD if this is a leaf node (no children)
-            if (ts_node_child_count(ts_node) == 0) {
-                node.universal_flags |= ASTNodeFlags::IS_KEYWORD;
-            }
-        }
-        
+
         // NATIVE CONTEXT EXTRACTION: Use template specialization for zero-virtual-call performance
         // Only extract native context if the config level allows it
         if (config.context >= ContextLevel::NATIVE && node_config->native_strategy != NativeExtractionStrategy::NONE) {

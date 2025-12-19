@@ -2,8 +2,8 @@
 // Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
 
 // Document structure
-DEF_TYPE("stream", DEFINITION_MODULE, NONE, NONE, 0x01)
-DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, 0x01)
+DEF_TYPE("stream", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Block mappings and sequences
 DEF_TYPE("block_mapping", LITERAL_STRUCTURED, NONE, NONE, 0)
@@ -35,13 +35,13 @@ DEF_TYPE("anchor", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("alias", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)
 
 // Directives
-DEF_TYPE("directive", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0x01)
-DEF_TYPE("yaml_directive", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0x01)
-DEF_TYPE("tag_directive", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0x01)
-DEF_TYPE("reserved_directive", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0x01)
+DEF_TYPE("directive", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("yaml_directive", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("tag_directive", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("reserved_directive", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Comments
-DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0x08)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // String content and escapes
 DEF_TYPE("string_scalar", LITERAL_STRING, NODE_TEXT, NONE, 0)

@@ -2,28 +2,28 @@
 // Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
 
 // Package and imports
-DEF_TYPE("package_clause", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("package_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0x01)
-DEF_TYPE("import_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0x01)
-DEF_TYPE("import_spec", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, 0x01)
+DEF_TYPE("package_clause", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("package_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("import_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("import_spec", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Function declarations and definitions with refinements
-DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
-DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
+DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("func_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
 
 // Type declarations
-DEF_TYPE("type_declaration", EXECUTION_DECLARATION, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
-DEF_TYPE("type_spec", EXECUTION_DECLARATION, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
-DEF_TYPE("struct_type", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, NONE, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("interface_type", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, NONE, CLASS_WITH_METHODS, 0x01)
+DEF_TYPE("type_declaration", EXECUTION_DECLARATION, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("type_spec", EXECUTION_DECLARATION, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("struct_type", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, NONE, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("interface_type", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, NONE, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
 
 // Variable declarations with refinements
-DEF_TYPE("var_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
-DEF_TYPE("var_spec", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
-DEF_TYPE("const_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
-DEF_TYPE("const_spec", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
-DEF_TYPE("short_var_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("var_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("var_spec", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("const_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("const_spec", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("short_var_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Expressions and references with refinements
 DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
@@ -156,9 +156,9 @@ DEF_TYPE("interpreted_string_literal_content", LITERAL_STRING, NONE, NONE, 0)
 DEF_TYPE("expression_case", FLOW_CONDITIONAL, NONE, NONE, 0)
 
 // Comments (mark as syntax to filter out by default)
-DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0x08)
-DEF_TYPE("line_comment", METADATA_COMMENT, NONE, NONE, 0x08)
-DEF_TYPE("block_comment", METADATA_COMMENT, NONE, NONE, 0x08)
+DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("line_comment", METADATA_COMMENT, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("block_comment", METADATA_COMMENT, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Go perfection - remaining 2,505 unclassified nodes
 DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, 0)

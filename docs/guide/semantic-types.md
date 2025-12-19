@@ -203,6 +203,37 @@ Many semantic types include refinements for more specific categorization:
 | `ENUM` | Enumeration |
 | `STRUCT` | Struct type |
 
+## Universal Flags
+
+Each node also has a `flags` field with orthogonal properties:
+
+| Flag | Value | Description |
+|------|-------|-------------|
+| `IS_CONSTRUCT` | 0x01 | Semantic construct (not punctuation) |
+| `IS_EMBODIED` | 0x02 | Has body (definition vs declaration) |
+
+### Using Flag Helpers
+
+```sql
+-- Distinguish definitions from declarations
+SELECT name, type,
+    CASE WHEN is_embodied(flags) THEN 'Definition'
+         ELSE 'Declaration' END as kind
+FROM read_ast('**/*.cpp', ignore_errors := true)
+WHERE semantic_type = 'DEFINITION_FUNCTION'
+  AND name IS NOT NULL;
+
+-- Find only functions with implementations
+SELECT name, file_path
+FROM read_ast('src/**/*.cpp')
+WHERE semantic_type = 'DEFINITION_FUNCTION' AND has_body(flags);
+
+-- Using is_definition() helper for all definition types
+SELECT name, file_path
+FROM read_ast('src/**/*.cpp')
+WHERE is_definition(semantic_type) AND has_body(flags);
+```
+
 ## Filtering Patterns
 
 ### By Super Kind

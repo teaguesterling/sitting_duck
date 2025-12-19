@@ -1,5 +1,6 @@
 #include "duckdb.hpp"
 #include "include/semantic_types.hpp"
+#include "include/node_config.hpp"
 
 namespace duckdb {
 
@@ -229,6 +230,45 @@ static void IsIdentifierFunction(DataChunk &args, ExpressionState &state, Vector
     );
 }
 
+// ============================================================================
+// Flag Helper Functions
+// ============================================================================
+
+// Check if IS_CONSTRUCT flag is set (semantic language construct vs punctuation/token)
+static void IsConstructFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 1);
+
+    auto &flags_vector = args.data[0];
+    auto count = args.size();
+
+    UnaryExecutor::Execute<uint8_t, bool>(
+        flags_vector, result, count,
+        [&](uint8_t flags) {
+            return (flags & ASTNodeFlags::IS_CONSTRUCT) != 0;
+        }
+    );
+}
+
+// Check if IS_EMBODIED flag is set (has body/implementation - definition vs declaration)
+static void IsEmbodiedFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 1);
+
+    auto &flags_vector = args.data[0];
+    auto count = args.size();
+
+    UnaryExecutor::Execute<uint8_t, bool>(
+        flags_vector, result, count,
+        [&](uint8_t flags) {
+            return (flags & ASTNodeFlags::IS_EMBODIED) != 0;
+        }
+    );
+}
+
+// Alias for is_embodied - more intuitive name for "has implementation body"
+static void HasBodyFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    IsEmbodiedFunction(args, state, result);
+}
+
 // Function that returns list of searchable semantic types
 static void GetSearchableTypesFunction(DataChunk &args, ExpressionState &state, Vector &result) {
     D_ASSERT(args.ColumnCount() == 0);
@@ -319,6 +359,28 @@ void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
     ScalarFunction is_kind_func("is_kind",
         {LogicalType::UTINYINT, LogicalType::VARCHAR}, LogicalType::BOOLEAN, IsKindFunction);
     loader.RegisterFunction(is_kind_func);
+
+    // ========================================================================
+    // Flag Helper Functions
+    // ========================================================================
+
+    // Register is_construct(flags) -> BOOLEAN
+    // Returns true if IS_CONSTRUCT flag is set (semantic language construct)
+    ScalarFunction is_construct_func("is_construct",
+        {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsConstructFunction);
+    loader.RegisterFunction(is_construct_func);
+
+    // Register is_embodied(flags) -> BOOLEAN
+    // Returns true if IS_EMBODIED flag is set (has body/implementation)
+    ScalarFunction is_embodied_func("is_embodied",
+        {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsEmbodiedFunction);
+    loader.RegisterFunction(is_embodied_func);
+
+    // Register has_body(flags) -> BOOLEAN
+    // Alias for is_embodied - more intuitive name
+    ScalarFunction has_body_func("has_body",
+        {LogicalType::UTINYINT}, LogicalType::BOOLEAN, HasBodyFunction);
+    loader.RegisterFunction(has_body_func);
 }
 
 } // namespace duckdb

@@ -178,73 +178,143 @@ private:
     static string ExtractCppReturnType(TSNode node, const string& content) {
         // In C++, the return type appears as a direct child before the function_declarator
         // For function_definition nodes, look for type nodes before function_declarator
+
+        const char* node_type = ts_node_type(node);
+
+        // If this IS a function_declarator, we need to look at the parent for return type
+        // This happens when extracting from standalone declarations like:
+        //   void foo();  -- declaration node contains: type + function_declarator
+        if (strcmp(node_type, "function_declarator") == 0) {
+            TSNode parent = ts_node_parent(node);
+            if (!ts_node_is_null(parent)) {
+                string parent_return_type = ExtractReturnTypeFromParent(parent, node, content);
+                if (!parent_return_type.empty()) {
+                    return parent_return_type;
+                }
+            }
+            // Fall through to check for constructor/destructor patterns
+            string function_name = ExtractFunctionName(node, content);
+            return CheckConstructorDestructor(function_name);
+        }
+
         uint32_t child_count = ts_node_child_count(node);
-        
+
         // Debug: Track what we find
         string function_name;
-        
+
         // First pass: find function name and look for explicit return type
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(node, i);
             const char* child_type = ts_node_type(child);
-            
+
             // Stop when we reach the function_declarator - return type comes before it
             if (strcmp(child_type, "function_declarator") == 0) {
                 // Extract function name for constructor detection
                 function_name = ExtractFunctionName(child, content);
                 break;
             }
-            
+
             // Look for various type constructs
-            if (strcmp(child_type, "primitive_type") == 0 ||
-                strcmp(child_type, "type_identifier") == 0 ||
-                strcmp(child_type, "template_type") == 0 ||
-                strcmp(child_type, "qualified_identifier") == 0 ||
-                strcmp(child_type, "pointer_type") == 0 ||
-                strcmp(child_type, "reference_type") == 0 ||
-                strcmp(child_type, "auto") == 0 ||
-                strcmp(child_type, "const") == 0 ||
-                strcmp(child_type, "static") == 0) {
-                
+            if (IsTypeNode(child_type)) {
                 uint32_t start = ts_node_start_byte(child);
                 uint32_t end = ts_node_end_byte(child);
-                
+
                 if (start < content.length() && end <= content.length() && end > start) {
                     string type_text = content.substr(start, end - start);
                     // Skip modifiers like "static", "const" that are not the actual return type
-                    if (type_text != "static" && type_text != "const" && type_text != "inline" && 
-                        type_text != "virtual" && type_text != "extern") {
+                    if (!IsModifierKeyword(type_text)) {
                         return type_text;
                     }
                 }
             }
         }
-        
+
         // If no explicit return type found, check if this is a constructor or destructor
-        if (!function_name.empty()) {
-            // Check for destructor (starts with ~)
-            if (function_name.length() > 1 && function_name[0] == '~') {
-                return "void"; // Destructors return void
+        return CheckConstructorDestructor(function_name);
+    }
+
+    // Check if a node type represents a type construct
+    static bool IsTypeNode(const char* child_type) {
+        return strcmp(child_type, "primitive_type") == 0 ||
+               strcmp(child_type, "type_identifier") == 0 ||
+               strcmp(child_type, "template_type") == 0 ||
+               strcmp(child_type, "qualified_identifier") == 0 ||
+               strcmp(child_type, "pointer_type") == 0 ||
+               strcmp(child_type, "reference_type") == 0 ||
+               strcmp(child_type, "auto") == 0 ||
+               strcmp(child_type, "sized_type_specifier") == 0 ||
+               strcmp(child_type, "decltype") == 0;
+    }
+
+    // Check if a type text is actually a modifier keyword
+    static bool IsModifierKeyword(const string& type_text) {
+        return type_text == "static" || type_text == "const" ||
+               type_text == "inline" || type_text == "virtual" ||
+               type_text == "extern" || type_text == "constexpr" ||
+               type_text == "explicit" || type_text == "friend";
+    }
+
+    // Extract return type from parent node (for function_declarator nodes)
+    static string ExtractReturnTypeFromParent(TSNode parent, TSNode declarator_node, const string& content) {
+        const char* parent_type = ts_node_type(parent);
+
+        // Parent could be: declaration, function_definition, field_declaration, etc.
+        uint32_t child_count = ts_node_child_count(parent);
+
+        for (uint32_t i = 0; i < child_count; i++) {
+            TSNode child = ts_node_child(parent, i);
+
+            // Stop when we reach our function_declarator - type comes before it
+            if (ts_node_eq(child, declarator_node)) {
+                break;
             }
-            
-            // For qualified names like "ClassName::MethodName", extract just the method name
-            string method_name = function_name;
-            string class_prefix;
-            size_t scope_pos = function_name.find("::");
-            if (scope_pos != string::npos) {
-                class_prefix = function_name.substr(0, scope_pos);
-                method_name = function_name.substr(scope_pos + 2);
-                
-                // Only treat as constructor if MethodName == ClassName
-                // E.g., "ASTType::ASTType" is a constructor, but "CatalogSet::EntryLookup" is not
-                if (method_name == class_prefix) {
-                    return class_prefix; // Constructor returns instance of the class
+
+            const char* child_type = ts_node_type(child);
+
+            if (IsTypeNode(child_type)) {
+                uint32_t start = ts_node_start_byte(child);
+                uint32_t end = ts_node_end_byte(child);
+
+                if (start < content.length() && end <= content.length() && end > start) {
+                    string type_text = content.substr(start, end - start);
+                    if (!IsModifierKeyword(type_text)) {
+                        return type_text;
+                    }
                 }
             }
-            // For unqualified names, be very conservative - many are legitimately constructors
-            // Don't try to detect class context as it's unreliable
         }
-        
+
+        return "";
+    }
+
+    // Check if function name indicates constructor/destructor
+    static string CheckConstructorDestructor(const string& function_name) {
+        if (function_name.empty()) {
+            return "";
+        }
+
+        // Check for destructor (starts with ~)
+        if (function_name.length() > 1 && function_name[0] == '~') {
+            return "void"; // Destructors return void
+        }
+
+        // For qualified names like "ClassName::MethodName", extract just the method name
+        string method_name = function_name;
+        string class_prefix;
+        size_t scope_pos = function_name.find("::");
+        if (scope_pos != string::npos) {
+            class_prefix = function_name.substr(0, scope_pos);
+            method_name = function_name.substr(scope_pos + 2);
+
+            // Only treat as constructor if MethodName == ClassName
+            // E.g., "ASTType::ASTType" is a constructor, but "CatalogSet::EntryLookup" is not
+            if (method_name == class_prefix) {
+                return class_prefix; // Constructor returns instance of the class
+            }
+        }
+        // For unqualified names, be very conservative - many are legitimately constructors
+        // Don't try to detect class context as it's unreliable
+
         // If we can't determine the return type, return empty string (will show as NULL)
         // This is better than guessing wrong
         return "";

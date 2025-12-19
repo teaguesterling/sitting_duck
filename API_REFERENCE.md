@@ -50,7 +50,7 @@
 | `descendant_count` | UINTEGER | Total descendants (complexity metric) |
 | `peek` | VARCHAR | Source code snippet for this node |
 | `semantic_type` | UTINYINT | Universal semantic category (0-255) |
-| `universal_flags` | UTINYINT | Additional semantic flags |
+| `flags` | UTINYINT | Universal semantic flags (IS_CONSTRUCT, IS_EMBODIED) |
 | `arity_bin` | UTINYINT | Binned arity for analysis |
 
 **Examples:**
@@ -355,59 +355,88 @@ The 8-bit encoding follows this pattern: `[ss kk tt ll]`
 
 ### Universal Flags
 
-In addition to semantic types, each node has `universal_flags` that capture **orthogonal properties** - characteristics that can apply across multiple semantic types and languages.
+In addition to semantic types, each node has a `flags` field that captures **orthogonal properties** - characteristics that can apply across multiple semantic types and languages.
 
 #### Flag Values
 
 | Flag | Bit | Value | Description | Examples |
 |------|-----|-------|-------------|----------|
-| **IS_KEYWORD** | 0 | 0x01 | Reserved language keywords | `def`, `class`, `if`, `for`, `public`, `const` |
-| **IS_PUBLIC** | 1 | 0x02 | Externally visible/accessible | `public` methods, `export` declarations |
-| **IS_UNSAFE** | 2 | 0x04 | Unsafe operations | Rust `unsafe` blocks, C pointer operations |
-| **RESERVED** | 3 | 0x08 | Reserved for future use | (Available for new orthogonal properties) |
+| **IS_CONSTRUCT** | 0 | 0x01 | Semantic language construct (not just punctuation/token) | `def`, `class`, `if`, keywords, comments |
+| **IS_EMBODIED** | 1 | 0x02 | Has body/implementation (definition vs declaration) | `function_definition` vs `function_declarator` |
+| **RESERVED** | 2-7 | 0x04-0x80 | Reserved for future use | (Available for new orthogonal properties) |
+
+#### Flag Helper Functions
+
+```sql
+-- is_construct(flags) -> BOOLEAN
+-- Returns true if node is a semantic language construct
+SELECT is_construct(flags) FROM read_ast('file.py');
+
+-- is_embodied(flags) -> BOOLEAN
+-- Returns true if node has a body/implementation
+SELECT is_embodied(flags) FROM read_ast('file.cpp');
+
+-- has_body(flags) -> BOOLEAN
+-- Alias for is_embodied - more intuitive name
+SELECT has_body(flags) FROM read_ast('file.cpp');
+```
 
 #### Flag Usage Examples
 
 ```sql
--- Find all language keywords across files
+-- Find all semantic constructs (not punctuation/tokens)
 SELECT DISTINCT type, peek, language
 FROM read_ast('**/*.*', ignore_errors := true)
-WHERE universal_flags & 1 = 1  -- IS_KEYWORD flag
+WHERE is_construct(flags)
 ORDER BY language, type;
 
--- Find public definitions across languages
-SELECT file_path, name, semantic_type_to_string(semantic_type)
-FROM read_ast('**/*.*', ignore_errors := true)
-WHERE (universal_flags & 2) = 2  -- IS_PUBLIC flag
-  AND is_definition(semantic_type)
-ORDER BY file_path;
-
--- Find potentially unsafe operations
-SELECT file_path, type, peek
-FROM read_ast('**/*.{c,cpp,rs}', ignore_errors := true)
-WHERE (universal_flags & 4) = 4  -- IS_UNSAFE flag
+-- Distinguish function definitions from declarations
+SELECT
+    type,
+    name,
+    CASE WHEN is_embodied(flags) THEN 'Definition (has body)'
+         ELSE 'Declaration (no body)' END as node_kind
+FROM read_ast('**/*.cpp', ignore_errors := true)
+WHERE semantic_type = 240  -- DEFINITION_FUNCTION
+  AND name IS NOT NULL
 ORDER BY file_path, start_line;
+
+-- Count definitions vs declarations
+SELECT
+    CASE WHEN has_body(flags) THEN 'definition' ELSE 'declaration' END as kind,
+    COUNT(*) as count
+FROM read_ast('src/**/*.cpp', ignore_errors := true)
+WHERE type IN ('function_definition', 'function_declarator')
+GROUP BY kind;
 ```
 
 #### Combining Semantic Types and Flags
 
 ```sql
--- Find public functions vs private functions
-SELECT 
-    CASE WHEN (universal_flags & 2) = 2 THEN 'public' ELSE 'private' END as visibility,
-    COUNT(*) as count
-FROM read_ast('**/*.java', ignore_errors := true)
-WHERE semantic_type = 240  -- DEFINITION_FUNCTION
-GROUP BY visibility;
+-- Find only function definitions (with implementation), not declarations
+SELECT file_path, name, start_line
+FROM read_ast('**/*.cpp', ignore_errors := true)
+WHERE semantic_type = 'DEFINITION_FUNCTION'
+  AND has_body(flags)               -- Has implementation body
+  AND name IS NOT NULL
+ORDER BY file_path, start_line;
 
--- Find control flow keywords vs user-defined control constructs
-SELECT 
-    CASE WHEN (universal_flags & 1) = 1 THEN 'keyword' ELSE 'user-defined' END as type,
-    semantic_type_to_string(semantic_type) as semantic_name,
+-- Find forward declarations only (no body)
+SELECT file_path, name, type
+FROM read_ast('**/*.{h,hpp}', ignore_errors := true)
+WHERE semantic_type = 'DEFINITION_FUNCTION'
+  AND NOT has_body(flags)           -- Declaration only
+  AND name IS NOT NULL;
+
+-- Analyze definitions vs declarations by file type
+SELECT
+    CASE WHEN file_path LIKE '%.h' OR file_path LIKE '%.hpp' THEN 'header' ELSE 'source' END as file_type,
+    CASE WHEN is_embodied(flags) THEN 'definition' ELSE 'declaration' END as node_kind,
     COUNT(*) as count
-FROM read_ast('**/*.*', ignore_errors := true)
-WHERE is_control_flow(semantic_type)
-GROUP BY type, semantic_type;
+FROM read_ast('**/*.{cpp,hpp,h}', ignore_errors := true)
+WHERE semantic_type = 'DEFINITION_FUNCTION'
+GROUP BY file_type, node_kind
+ORDER BY file_type, node_kind;
 ```
 
 #### Using Semantic Type Convenience Functions

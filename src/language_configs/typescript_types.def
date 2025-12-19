@@ -59,7 +59,7 @@ DEF_TYPE("asserts", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Access modifiers and visibility
 DEF_TYPE("accessibility_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("public", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD | ASTNodeFlags::IS_PUBLIC)
+DEF_TYPE("public", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("private", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("protected", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("readonly", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -234,7 +234,7 @@ DEF_TYPE("augmented_assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefine
 DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
 DEF_TYPE("break", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("named_imports", EXTERNAL_IMPORT | SemanticRefinements::Import::SELECTIVE, NONE, NONE, 0)
-DEF_TYPE("public_field_definition", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_PUBLIC)
+DEF_TYPE("public_field_definition", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("switch", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("switch_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 DEF_TYPE("continue", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)

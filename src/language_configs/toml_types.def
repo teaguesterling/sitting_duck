@@ -3,7 +3,7 @@
 // Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
 
 // Document structure
-DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, 0x01)
+DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Table definitions [section]
 DEF_TYPE("table", DEFINITION_CLASS, CUSTOM, NONE, 0)
