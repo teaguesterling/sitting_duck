@@ -1,14 +1,14 @@
 // Ruby language node type definitions
 // Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
 
-// Module and class definitions
-DEF_TYPE("module", DEFINITION_MODULE, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
-DEF_TYPE("class", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+// Module and class definitions - Ruby modules/classes always have bodies
+DEF_TYPE("module", DEFINITION_MODULE, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("class", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 
-// Method definitions with refinements
-DEF_TYPE("method", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
-DEF_TYPE("singleton_method", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
-DEF_TYPE("alias", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0)
+// Method definitions with refinements - Ruby methods always have bodies
+DEF_TYPE("method", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("singleton_method", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("alias", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Variable and constant definitions with refinements
 DEF_TYPE("assignment", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)

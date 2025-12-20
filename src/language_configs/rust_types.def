@@ -8,10 +8,10 @@ DEF_TYPE("use_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODUL
 DEF_TYPE("extern_crate_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("crate", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Function definitions
-DEF_TYPE("function_item", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
-DEF_TYPE("closure_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, 0)
-DEF_TYPE("function_signature_item", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+// Function definitions - Rust functions always have bodies
+DEF_TYPE("function_item", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("closure_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("function_signature_item", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)  // trait signature - no body
 
 // Type definitions
 DEF_TYPE("struct_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
