@@ -109,7 +109,7 @@ WHERE flags > 0
 ORDER BY node_id
 LIMIT 5;
 ----
-function_definition	3
+function_definition	1
 def	1
 pass	1
 

@@ -1,10 +1,10 @@
 // C++ node type mappings
 // Format: DEF_TYPE(raw_type, semantic_type, name_extraction, value_extraction, flags)
-// Flags: IS_CONSTRUCT = semantic construct, IS_EMBODIED = has body/implementation
+// Flags: IS_CONSTRUCT = semantic construct, IS_DECLARATION_ONLY = forward declaration (no body)
 
 // Function definitions with refinements
-DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_QUALIFIED_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
-DEF_TYPE("function_declarator", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)  // declaration only
+DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_QUALIFIED_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("function_declarator", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)  // forward declaration
 DEF_TYPE("method_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 DEF_TYPE("constructor_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 DEF_TYPE("destructor_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)

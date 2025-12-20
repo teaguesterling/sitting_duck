@@ -249,8 +249,8 @@ static void IsConstructFunction(DataChunk &args, ExpressionState &state, Vector 
     );
 }
 
-// Check if IS_EMBODIED flag is set (has body/implementation - definition vs declaration)
-static void IsEmbodiedFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+// Check if node is a declaration-only (no body/implementation)
+static void IsDeclarationOnlyFunction(DataChunk &args, ExpressionState &state, Vector &result) {
     D_ASSERT(args.ColumnCount() == 1);
 
     auto &flags_vector = args.data[0];
@@ -259,14 +259,30 @@ static void IsEmbodiedFunction(DataChunk &args, ExpressionState &state, Vector &
     UnaryExecutor::Execute<uint8_t, bool>(
         flags_vector, result, count,
         [&](uint8_t flags) {
-            return (flags & ASTNodeFlags::IS_EMBODIED) != 0;
+            return (flags & ASTNodeFlags::IS_DECLARATION_ONLY) != 0;
         }
     );
 }
 
-// Alias for is_embodied - more intuitive name for "has implementation body"
+// Check if node has body/implementation (default true, false only for forward declarations)
 static void HasBodyFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-    IsEmbodiedFunction(args, state, result);
+    D_ASSERT(args.ColumnCount() == 1);
+
+    auto &flags_vector = args.data[0];
+    auto count = args.size();
+
+    UnaryExecutor::Execute<uint8_t, bool>(
+        flags_vector, result, count,
+        [&](uint8_t flags) {
+            // Has body unless explicitly marked as declaration-only
+            return (flags & ASTNodeFlags::IS_DECLARATION_ONLY) == 0;
+        }
+    );
+}
+
+// Alias for has_body - backward compatibility
+static void IsEmbodiedFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    HasBodyFunction(args, state, result);
 }
 
 // Function that returns list of searchable semantic types
@@ -370,17 +386,23 @@ void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
         {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsConstructFunction);
     loader.RegisterFunction(is_construct_func);
 
-    // Register is_embodied(flags) -> BOOLEAN
-    // Returns true if IS_EMBODIED flag is set (has body/implementation)
-    ScalarFunction is_embodied_func("is_embodied",
-        {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsEmbodiedFunction);
-    loader.RegisterFunction(is_embodied_func);
+    // Register is_declaration_only(flags) -> BOOLEAN
+    // Returns true if node is a forward declaration (no body)
+    ScalarFunction is_declaration_only_func("is_declaration_only",
+        {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsDeclarationOnlyFunction);
+    loader.RegisterFunction(is_declaration_only_func);
 
     // Register has_body(flags) -> BOOLEAN
-    // Alias for is_embodied - more intuitive name
+    // Returns true unless IS_DECLARATION_ONLY is set (default: has body)
     ScalarFunction has_body_func("has_body",
         {LogicalType::UTINYINT}, LogicalType::BOOLEAN, HasBodyFunction);
     loader.RegisterFunction(has_body_func);
+
+    // Register is_embodied(flags) -> BOOLEAN
+    // Alias for has_body - backward compatibility
+    ScalarFunction is_embodied_func("is_embodied",
+        {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsEmbodiedFunction);
+    loader.RegisterFunction(is_embodied_func);
 }
 
 } // namespace duckdb

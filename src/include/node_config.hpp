@@ -59,9 +59,13 @@ struct NodeConfig {
 
 // Universal flags for orthogonal node properties
 namespace ASTNodeFlags {
-    constexpr uint8_t IS_CONSTRUCT = 0x01;   // Semantic language construct (not just token/punctuation)
-    constexpr uint8_t IS_EMBODIED = 0x02;    // Has body/implementation (definition vs declaration)
+    constexpr uint8_t IS_CONSTRUCT = 0x01;        // Semantic language construct (not just token/punctuation)
+    constexpr uint8_t IS_DECLARATION_ONLY = 0x02; // Forward declaration without body (exception case)
     // 0x04 - 0x80: Reserved for future use
+
+    // Backward compatibility: IS_EMBODIED = 0x00 makes existing configs no-ops
+    // Default assumption: definitions HAVE bodies; only mark exceptions with IS_DECLARATION_ONLY
+    constexpr uint8_t IS_EMBODIED = 0x00;  // DEPRECATED: no-op for backward compat
 
     // Backward compatibility aliases (deprecated - will be removed)
     constexpr uint8_t IS_KEYWORD = IS_CONSTRUCT;
