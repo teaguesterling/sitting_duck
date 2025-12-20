@@ -8,9 +8,10 @@ DEF_TYPE("import_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MO
 DEF_TYPE("import_spec", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Function declarations and definitions with refinements
-DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
-DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
-DEF_TYPE("func_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
+// Go functions always have bodies (no forward declarations like C/C++)
+DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("func_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
 
 // Type declarations
 DEF_TYPE("type_declaration", EXECUTION_DECLARATION, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)

@@ -1,0 +1,222 @@
+# name: test/sql/rosetta_code/helper_functions.test
+# description: Test AST helper functions against Rosetta Code examples
+# group: [rosetta_code]
+
+require sitting_duck
+
+# =============================================================================
+# Semantic Type Predicates
+# =============================================================================
+
+# is_definition() - should find many definitions across Python files
+query I
+SELECT CASE WHEN COUNT(*) > 10000 THEN 1 ELSE 0 END as has_many_definitions
+FROM read_ast('third_party/rosettacode-acmeism/Task/*/Python/*.py', ignore_errors := true)
+WHERE is_definition(semantic_type);
+----
+1
+
+# is_definition() - should find multiple definition types
+query I
+SELECT CASE WHEN COUNT(DISTINCT semantic_type) >= 4 THEN 1 ELSE 0 END
+FROM read_ast('third_party/rosettacode-acmeism/Task/*/Python/*.py', ignore_errors := true)
+WHERE is_definition(semantic_type);
+----
+1
+
+# is_call() - should find function/method calls
+query I
+SELECT CASE WHEN COUNT(*) > 5000 THEN 1 ELSE 0 END
+FROM read_ast('third_party/rosettacode-acmeism/Task/*/Python/*.py', ignore_errors := true)
+WHERE is_call(semantic_type);
+----
+1
+
+# is_control_flow() - should find if/for/while/return etc
+query I
+SELECT CASE WHEN COUNT(*) > 5000 THEN 1 ELSE 0 END
+FROM read_ast('third_party/rosettacode-acmeism/Task/*/Python/*.py', ignore_errors := true)
+WHERE is_control_flow(semantic_type);
+----
+1
+
+# is_identifier() - should find many variable/function names
+query I
+SELECT CASE WHEN COUNT(*) > 50000 THEN 1 ELSE 0 END
+FROM read_ast('third_party/rosettacode-acmeism/Task/*/Python/*.py', ignore_errors := true)
+WHERE is_identifier(semantic_type);
+----
+1
+
+# =============================================================================
+# Flag Functions
+# =============================================================================
+
+# is_construct() - Go files should have constructs
+query I
+SELECT CASE WHEN COUNT(*) > 1000 THEN 1 ELSE 0 END
+FROM read_ast('third_party/rosettacode-acmeism/Task/*/Go/*.go', ignore_errors := true)
+WHERE is_construct(flags);
+----
+1
+
+# is_embodied() / has_body() - Go function definitions should have bodies
+query I
+SELECT CASE WHEN COUNT(*) > 500 THEN 1 ELSE 0 END
+FROM read_ast('third_party/rosettacode-acmeism/Task/*/Go/*.go', ignore_errors := true)
+WHERE semantic_type = 'DEFINITION_FUNCTION'
+  AND has_body(flags);
+----
+1
+
+# is_embodied and has_body should be equivalent (zero mismatches)
+query I
+SELECT COUNT(*)
+FROM read_ast('third_party/rosettacode-acmeism/Task/*/Python/*.py', ignore_errors := true)
+WHERE is_embodied(flags) != has_body(flags);
+----
+0
+
+# =============================================================================
+# Semantic Type Conversion Functions
+# =============================================================================
+
+# semantic_type_to_string() - should convert correctly
+query T
+SELECT semantic_type_to_string(240);
+----
+DEFINITION_FUNCTION
+
+# semantic_type_code() - should convert back correctly
+query I
+SELECT semantic_type_code('DEFINITION_FUNCTION');
+----
+240
+
+# semantic_type_code for class
+query I
+SELECT semantic_type_code('DEFINITION_CLASS');
+----
+248
+
+# semantic_type_code for call
+query I
+SELECT semantic_type_code('COMPUTATION_CALL');
+----
+208
+
+# =============================================================================
+# Kind Functions
+# =============================================================================
+
+# get_super_kind() - DEFINITION_FUNCTION should be COMPUTATION
+query T
+SELECT get_super_kind(240);
+----
+COMPUTATION
+
+# get_super_kind() - EXTERNAL_IMPORT should be META_EXTERNAL
+query T
+SELECT get_super_kind(48);
+----
+META_EXTERNAL
+
+# get_super_kind() - FLOW_LOOP should be CONTROL_EFFECTS
+query T
+SELECT get_super_kind(148);
+----
+CONTROL_EFFECTS
+
+# get_super_kind() - LITERAL_NUMBER should be DATA_STRUCTURE
+query T
+SELECT get_super_kind(64);
+----
+DATA_STRUCTURE
+
+# get_kind() - should return DEFINITION for function definitions
+query T
+SELECT get_kind(240);
+----
+DEFINITION
+
+# is_kind() - should correctly identify DEFINITION kind
+query I
+SELECT CASE WHEN COUNT(*) > 10000 THEN 1 ELSE 0 END
+FROM read_ast('third_party/rosettacode-acmeism/Task/*/Python/*.py', ignore_errors := true)
+WHERE is_kind(semantic_type::UTINYINT, 'DEFINITION');
+----
+1
+
+# =============================================================================
+# Cross-Language Consistency
+# =============================================================================
+
+# Functions should be found in all languages
+query I
+SELECT CASE WHEN MIN(func_count) > 0 THEN 1 ELSE 0 END
+FROM (
+    SELECT language, COUNT(*) as func_count
+    FROM read_ast([
+        'third_party/rosettacode-acmeism/Task/*/Python/*.py',
+        'third_party/rosettacode-acmeism/Task/*/JavaScript/*.js',
+        'third_party/rosettacode-acmeism/Task/*/Go/*.go'
+    ], ignore_errors := true)
+    WHERE semantic_type = 'DEFINITION_FUNCTION'
+    GROUP BY language
+);
+----
+1
+
+# is_definition should work across all languages
+query I
+SELECT CASE WHEN MIN(def_count) > 0 THEN 1 ELSE 0 END
+FROM (
+    SELECT language, COUNT(*) as def_count
+    FROM read_ast([
+        'third_party/rosettacode-acmeism/Task/*/Python/*.py',
+        'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+        'third_party/rosettacode-acmeism/Task/*/Java/*.java'
+    ], ignore_errors := true)
+    WHERE is_definition(semantic_type)
+    GROUP BY language
+);
+----
+1
+
+# is_control_flow should work across all languages
+query I
+SELECT CASE WHEN MIN(cf_count) > 0 THEN 1 ELSE 0 END
+FROM (
+    SELECT language, COUNT(*) as cf_count
+    FROM read_ast([
+        'third_party/rosettacode-acmeism/Task/*/Python/*.py',
+        'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+        'third_party/rosettacode-acmeism/Task/*/Java/*.java'
+    ], ignore_errors := true)
+    WHERE is_control_flow(semantic_type)
+    GROUP BY language
+);
+----
+1
+
+# =============================================================================
+# Combined Usage: Practical Queries
+# =============================================================================
+
+# Find functions with bodies using combined predicates and flags
+query I
+SELECT CASE WHEN COUNT(*) > 5000 THEN 1 ELSE 0 END
+FROM read_ast('third_party/rosettacode-acmeism/Task/*/Python/*.py', ignore_errors := true)
+WHERE is_definition(semantic_type)
+  AND semantic_type = 'DEFINITION_FUNCTION'
+  AND name IS NOT NULL;
+----
+1
+
+# Count by super_kind should cover all major categories
+query I
+SELECT COUNT(DISTINCT get_super_kind(semantic_type::UTINYINT))
+FROM read_ast('third_party/rosettacode-acmeism/Task/*/Python/*.py', ignore_errors := true)
+WHERE semantic_type IS NOT NULL;
+----
+4
