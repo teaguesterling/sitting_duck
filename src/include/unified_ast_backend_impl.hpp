@@ -21,6 +21,7 @@ static bool HasBodyChild(TSNode node) {
         "function_body",            // Dart, some languages
         "body",                     // Generic
         "body_statement",           // Ruby
+        "braced_expression",        // R
         "constructor_body",         // Java constructors
         nullptr
     };
