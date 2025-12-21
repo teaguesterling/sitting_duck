@@ -3,7 +3,7 @@
 // Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
 
 // Document structure
-DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, 0x01)
+DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Function definitions
 DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0)

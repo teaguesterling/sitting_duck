@@ -113,7 +113,7 @@ bool LuaAdapter::IsPublicNode(TSNode node, const string &content) const {
     const NodeConfig* config = GetNodeConfig(node_type_str);
 
     if (config) {
-        return config->flags & ASTNodeFlags::IS_PUBLIC;
+        return false; // IS_PUBLIC not yet implemented
     }
 
     // In Lua, there's no built-in public/private - everything is public by default

@@ -2,14 +2,14 @@
 // Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
 
 // Program structure
-DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, 0x01)
+DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Function definitions
-DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
+DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
 
 // Variable declarations and assignments
-DEF_TYPE("variable_assignment", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
-DEF_TYPE("declaration_command", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("variable_assignment", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("declaration_command", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("unset_command", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
 
 // Commands and execution
@@ -57,7 +57,7 @@ DEF_TYPE("heredoc_redirect", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
 DEF_TYPE("herestring_redirect", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
 
 // Comments
-DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0x08)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Special constructs
 DEF_TYPE("subshell", ORGANIZATION_BLOCK, NONE, NONE, 0)

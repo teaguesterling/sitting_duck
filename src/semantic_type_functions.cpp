@@ -1,5 +1,6 @@
 #include "duckdb.hpp"
 #include "include/semantic_types.hpp"
+#include "include/node_config.hpp"
 
 namespace duckdb {
 
@@ -229,6 +230,78 @@ static void IsIdentifierFunction(DataChunk &args, ExpressionState &state, Vector
     );
 }
 
+// ============================================================================
+// Flag Helper Functions
+// ============================================================================
+
+// Check if node is a syntax-only token (keyword, punctuation) vs semantic construct
+static void IsSyntaxOnlyFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 1);
+
+    auto &flags_vector = args.data[0];
+    auto count = args.size();
+
+    UnaryExecutor::Execute<uint8_t, bool>(
+        flags_vector, result, count,
+        [&](uint8_t flags) {
+            return (flags & ASTNodeFlags::IS_SYNTAX_ONLY) != 0;
+        }
+    );
+}
+
+// Check if node is a semantic construct (NOT a syntax-only token)
+// This is the inverse of is_syntax_only - returns true for meaningful code constructs
+static void IsConstructFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 1);
+
+    auto &flags_vector = args.data[0];
+    auto count = args.size();
+
+    UnaryExecutor::Execute<uint8_t, bool>(
+        flags_vector, result, count,
+        [&](uint8_t flags) {
+            // A node is a construct if it's NOT syntax-only
+            return (flags & ASTNodeFlags::IS_SYNTAX_ONLY) == 0;
+        }
+    );
+}
+
+// Check if node is a declaration-only (no body/implementation)
+static void IsDeclarationOnlyFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 1);
+
+    auto &flags_vector = args.data[0];
+    auto count = args.size();
+
+    UnaryExecutor::Execute<uint8_t, bool>(
+        flags_vector, result, count,
+        [&](uint8_t flags) {
+            return (flags & ASTNodeFlags::IS_DECLARATION_ONLY) != 0;
+        }
+    );
+}
+
+// Check if node has body/implementation (default true, false only for forward declarations)
+static void HasBodyFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 1);
+
+    auto &flags_vector = args.data[0];
+    auto count = args.size();
+
+    UnaryExecutor::Execute<uint8_t, bool>(
+        flags_vector, result, count,
+        [&](uint8_t flags) {
+            // Has body unless explicitly marked as declaration-only
+            return (flags & ASTNodeFlags::IS_DECLARATION_ONLY) == 0;
+        }
+    );
+}
+
+// Alias for has_body - backward compatibility
+static void IsEmbodiedFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    HasBodyFunction(args, state, result);
+}
+
 // Function that returns list of searchable semantic types
 static void GetSearchableTypesFunction(DataChunk &args, ExpressionState &state, Vector &result) {
     D_ASSERT(args.ColumnCount() == 0);
@@ -319,6 +392,40 @@ void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
     ScalarFunction is_kind_func("is_kind",
         {LogicalType::UTINYINT, LogicalType::VARCHAR}, LogicalType::BOOLEAN, IsKindFunction);
     loader.RegisterFunction(is_kind_func);
+
+    // ========================================================================
+    // Flag Helper Functions
+    // ========================================================================
+
+    // Register is_syntax_only(flags) -> BOOLEAN
+    // Returns true if node is a pure syntax token (keyword, punctuation)
+    ScalarFunction is_syntax_only_func("is_syntax_only",
+        {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsSyntaxOnlyFunction);
+    loader.RegisterFunction(is_syntax_only_func);
+
+    // Register is_construct(flags) -> BOOLEAN
+    // Returns true if node is a semantic construct (NOT syntax-only)
+    ScalarFunction is_construct_func("is_construct",
+        {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsConstructFunction);
+    loader.RegisterFunction(is_construct_func);
+
+    // Register is_declaration_only(flags) -> BOOLEAN
+    // Returns true if node is a forward declaration (no body)
+    ScalarFunction is_declaration_only_func("is_declaration_only",
+        {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsDeclarationOnlyFunction);
+    loader.RegisterFunction(is_declaration_only_func);
+
+    // Register has_body(flags) -> BOOLEAN
+    // Returns true unless IS_DECLARATION_ONLY is set (default: has body)
+    ScalarFunction has_body_func("has_body",
+        {LogicalType::UTINYINT}, LogicalType::BOOLEAN, HasBodyFunction);
+    loader.RegisterFunction(has_body_func);
+
+    // Register is_embodied(flags) -> BOOLEAN
+    // Alias for has_body - backward compatibility
+    ScalarFunction is_embodied_func("is_embodied",
+        {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsEmbodiedFunction);
+    loader.RegisterFunction(is_embodied_func);
 }
 
 } // namespace duckdb

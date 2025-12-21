@@ -64,17 +64,6 @@ void UnifiedASTBackend::PopulateSemanticFields(ASTNode& node, const LanguageAdap
         // STRUCTURED FIELDS: Set semantic info in context
         node.semantic_type = config->semantic_type;
         node.universal_flags = config->flags;
-        
-        // Handle IS_KEYWORD_IF_LEAF: only apply IS_KEYWORD flag if node has no children
-        if (config->flags & ASTNodeFlags::IS_KEYWORD_IF_LEAF) {
-            // Remove the conditional flag
-            node.universal_flags &= ~ASTNodeFlags::IS_KEYWORD_IF_LEAF;
-            
-            // Only add IS_KEYWORD if this is a leaf node (no children)
-            if (ts_node_child_count(ts_node) == 0) {
-                node.universal_flags |= ASTNodeFlags::IS_KEYWORD;
-            }
-        }
     } else {
         // Fallback: use PARSER_CONSTRUCT for unknown types
         node.semantic_type = SemanticTypes::PARSER_CONSTRUCT;

@@ -2,8 +2,8 @@
 // Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
 // Use bitwise OR to combine semantic types with refinements: DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA
 
-// Function definitions and declarations
-DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_ASSIGNMENT_TARGET, FUNCTION_WITH_PARAMS, 0)
+// Function definitions and declarations - R functions always have bodies
+DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_ASSIGNMENT_TARGET, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 DEF_TYPE("function", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Control flow statements

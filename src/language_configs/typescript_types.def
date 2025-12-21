@@ -11,12 +11,12 @@
 
 // Type system constructs
 DEF_TYPE("type_alias_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("interface_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
-DEF_TYPE("property_signature", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
-DEF_TYPE("construct_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NONE, CONSTRUCTOR_DEFINITION, 0)
-DEF_TYPE("call_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, NONE, FUNCTION_WITH_PARAMS, 0)
-DEF_TYPE("index_signature", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, NONE, NONE, 0)
+DEF_TYPE("interface_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("property_signature", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
+DEF_TYPE("method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
+DEF_TYPE("construct_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NONE, CONSTRUCTOR_DEFINITION, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
+DEF_TYPE("call_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, NONE, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
+DEF_TYPE("index_signature", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
 
 // Type annotations and references
 DEF_TYPE("type_annotation", TYPE_REFERENCE, NONE, VARIABLE_WITH_TYPE, 0)
@@ -59,7 +59,7 @@ DEF_TYPE("asserts", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Access modifiers and visibility
 DEF_TYPE("accessibility_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("public", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD | ASTNodeFlags::IS_PUBLIC)
+DEF_TYPE("public", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("private", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("protected", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("readonly", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -90,8 +90,8 @@ DEF_TYPE("satisfies_expression", TYPE_REFERENCE, NONE, NONE, 0)
 DEF_TYPE("type_predicate", TYPE_REFERENCE, NONE, NONE, 0)
 
 // Class-specific TypeScript constructs
-DEF_TYPE("abstract_class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
-DEF_TYPE("abstract_method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("abstract_class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("abstract_method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
 DEF_TYPE("override_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("parameter_property", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
 
@@ -174,7 +174,7 @@ DEF_TYPE("regex_flags", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("extends_type_clause", TYPE_REFERENCE, NONE, NONE, 0)
 DEF_TYPE("flow_maybe_type", TYPE_REFERENCE, NONE, NONE, 0)
 DEF_TYPE("lookup_type", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("function_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("function_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
 DEF_TYPE("of", OPERATOR_COMPARISON, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("index_type_query", TYPE_REFERENCE, NONE, NONE, 0)
 DEF_TYPE("type_query", TYPE_REFERENCE, NONE, NONE, 0)
@@ -234,7 +234,7 @@ DEF_TYPE("augmented_assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefine
 DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
 DEF_TYPE("break", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("named_imports", EXTERNAL_IMPORT | SemanticRefinements::Import::SELECTIVE, NONE, NONE, 0)
-DEF_TYPE("public_field_definition", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_PUBLIC)
+DEF_TYPE("public_field_definition", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("switch", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("switch_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 DEF_TYPE("continue", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)

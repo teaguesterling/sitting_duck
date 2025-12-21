@@ -2,32 +2,32 @@
 // Format: DEF_TYPE("raw_type", semantic_type, name_strategy, value_strategy, flags)
 
 // Source file and modules
-DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, 0x01)
-DEF_TYPE("mod_item", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0x01)
-DEF_TYPE("use_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, 0x01)
-DEF_TYPE("extern_crate_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("mod_item", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("use_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("extern_crate_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("crate", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Function definitions
-DEF_TYPE("function_item", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
-DEF_TYPE("closure_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, 0)
-DEF_TYPE("function_signature_item", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0x01)
+// Function definitions - Rust functions always have bodies
+DEF_TYPE("function_item", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("closure_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("function_signature_item", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)  // trait signature - no body
 
 // Type definitions
-DEF_TYPE("struct_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("enum_item", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, CUSTOM, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("union_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("trait_item", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, CUSTOM, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("type_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("struct_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("enum_item", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, CUSTOM, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("union_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("trait_item", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, CUSTOM, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("type_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Implementation blocks
-DEF_TYPE("impl_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, CLASS_WITH_METHODS, 0x01)
-DEF_TYPE("associated_type", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("impl_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("associated_type", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Variable declarations (Rust defaults to immutable)
-DEF_TYPE("let_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
-DEF_TYPE("const_item", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
-DEF_TYPE("static_item", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0x01)
+DEF_TYPE("let_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("const_item", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("static_item", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Function calls and expressions
 DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
@@ -104,20 +104,20 @@ DEF_TYPE("macro_invocation", COMPUTATION_CALL | SemanticRefinements::Call::MACRO
 // Attributes and macros
 DEF_TYPE("attribute_item", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("inner_attribute_item", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("macro_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0x01)
+DEF_TYPE("macro_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Unsafe and async
-DEF_TYPE("unsafe_block", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_UNSAFE)
+DEF_TYPE("unsafe_block", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("async_block", FLOW_SYNC, NONE, NONE, 0)
 DEF_TYPE("await_expression", FLOW_SYNC, NONE, NONE, 0)
 
 // Visibility and modifiers
-DEF_TYPE("visibility_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_PUBLIC)
+DEF_TYPE("visibility_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("mutable_specifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 
 // Comments
-DEF_TYPE("line_comment", METADATA_COMMENT, NODE_TEXT, NONE, 0x08)
-DEF_TYPE("block_comment", METADATA_COMMENT, NODE_TEXT, NONE, 0x08)
+DEF_TYPE("line_comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("block_comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 // Rust keywords
 DEF_TYPE("fn", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -132,7 +132,7 @@ DEF_TYPE("impl", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("type", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("mod", DEFINITION_MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("use", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("pub", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD | ASTNodeFlags::IS_PUBLIC)
+DEF_TYPE("pub", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("if", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("else", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("match", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -144,7 +144,7 @@ DEF_TYPE("continue", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("return", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("async", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("await", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("unsafe", EXECUTION_STATEMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD | ASTNodeFlags::IS_UNSAFE)
+DEF_TYPE("unsafe", EXECUTION_STATEMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("extern", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("where", TYPE_GENERIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("as", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)

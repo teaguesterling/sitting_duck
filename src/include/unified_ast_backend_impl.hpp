@@ -9,6 +9,38 @@
 
 namespace duckdb {
 
+// Helper function to detect if a function/method node has a body child
+// Used for runtime detection of abstract methods in languages like Java where
+// the same node type (method_declaration) is used for both abstract and concrete methods
+static bool HasBodyChild(TSNode node) {
+    // Common body child types across languages
+    static const char* body_types[] = {
+        "block",                    // Java, Python, Go, Rust, C#
+        "compound_statement",       // C, C++, PHP
+        "statement_block",          // JavaScript, TypeScript
+        "function_body",            // Dart, some languages
+        "body",                     // Generic
+        "body_statement",           // Ruby
+        "braced_expression",        // R
+        "constructor_body",         // Java constructors
+        nullptr
+    };
+
+    uint32_t child_count = ts_node_named_child_count(node);
+    for (uint32_t i = 0; i < child_count; i++) {
+        TSNode child = ts_node_named_child(node, i);
+        const char* child_type = ts_node_type(child);
+
+        // Check against known body types
+        for (const char** body_type = body_types; *body_type != nullptr; body_type++) {
+            if (strcmp(child_type, *body_type) == 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 // Helper function to ensure UTF-8 validity using DuckDB's UTF8 processor
 static string SanitizeUTF8(const string& input) {
     if (input.empty()) {
@@ -270,18 +302,21 @@ void PopulateSemanticFieldsTemplated(ASTNode& node, const AdapterType* adapter, 
         // STRUCTURED FIELDS: Set semantic info in context
         node.semantic_type = node_config->semantic_type;
         node.universal_flags = node_config->flags;
-        
-        // Handle IS_KEYWORD_IF_LEAF: only apply IS_KEYWORD flag if node has no children
-        if (node_config->flags & ASTNodeFlags::IS_KEYWORD_IF_LEAF) {
-            // Remove the conditional flag
-            node.universal_flags &= ~ASTNodeFlags::IS_KEYWORD_IF_LEAF;
-            
-            // Only add IS_KEYWORD if this is a leaf node (no children)
-            if (ts_node_child_count(ts_node) == 0) {
-                node.universal_flags |= ASTNodeFlags::IS_KEYWORD;
+
+        // RUNTIME DETECTION: Check if function/method definitions have a body
+        // This handles languages like Java where method_declaration is used for both
+        // concrete methods (with body) and abstract/interface methods (without body)
+        uint8_t base_semantic = node.semantic_type & 0xFC;  // Mask refinement bits
+        if (base_semantic == SemanticTypes::DEFINITION_FUNCTION &&
+            (node.universal_flags & ASTNodeFlags::IS_SYNTAX_ONLY) == 0 &&
+            (node.universal_flags & ASTNodeFlags::IS_DECLARATION_ONLY) == 0) {
+            // This is a function definition (not a keyword token) that's not already marked as declaration-only
+            // Check at runtime if it actually has a body
+            if (!HasBodyChild(ts_node)) {
+                node.universal_flags |= ASTNodeFlags::IS_DECLARATION_ONLY;
             }
         }
-        
+
         // NATIVE CONTEXT EXTRACTION: Use template specialization for zero-virtual-call performance
         // Only extract native context if the config level allows it
         if (config.context >= ContextLevel::NATIVE && node_config->native_strategy != NativeExtractionStrategy::NONE) {

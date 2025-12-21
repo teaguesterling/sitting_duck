@@ -97,14 +97,14 @@ ORDER BY node_id;
 program	DEFINITION_MODULE
 insert_statement	EXECUTION_MUTATION
 
-# Test 7: Test context flags access
-# ==================================
+# Test 7: Test context flags access (IS_SYNTAX_ONLY for keywords)
+# ================================================================
 
 query II
-SELECT 
+SELECT
     type as node_type,
     flags as flags_value
-FROM parse_ast('def foo(): pass', 'python') 
+FROM parse_ast('def foo(): pass', 'python')
 WHERE flags > 0
 ORDER BY node_id
 LIMIT 5;

@@ -319,6 +319,53 @@ Some types include refinements for more specific categorization.
 | `MULTIWAY` | Switch/match |
 | `TERNARY` | Ternary expression |
 
+## Universal Flags
+
+In addition to semantic types, each node has a `flags` field for orthogonal properties.
+
+### Flag Values
+
+| Flag | Value | Description |
+|------|-------|-------------|
+| `IS_CONSTRUCT` | 0x01 | Semantic language construct (not punctuation) |
+| `IS_EMBODIED` | 0x02 | Has body/implementation (definition vs declaration) |
+
+### Flag Helper Functions
+
+```sql
+-- Check if node is a semantic construct
+SELECT is_construct(flags) FROM read_ast('file.py');
+
+-- Check if node has implementation body (definition vs declaration)
+SELECT is_embodied(flags) FROM read_ast('file.cpp');
+SELECT has_body(flags) FROM read_ast('file.cpp');  -- alias
+```
+
+### Distinguishing Definitions from Declarations
+
+```sql
+-- Find only function definitions (with body), not forward declarations
+SELECT name, file_path
+FROM read_ast('**/*.cpp', ignore_errors := true)
+WHERE semantic_type = 'DEFINITION_FUNCTION'
+  AND is_embodied(flags)        -- Has implementation
+  AND name IS NOT NULL;
+
+-- Find forward declarations only
+SELECT name, file_path
+FROM read_ast('**/*.{h,hpp}', ignore_errors := true)
+WHERE semantic_type = 'DEFINITION_FUNCTION'
+  AND NOT has_body(flags)       -- Declaration only
+  AND name IS NOT NULL;
+
+-- Using is_definition() for all definition types (functions, classes, variables)
+SELECT name, semantic_type, file_path
+FROM read_ast('**/*.cpp', ignore_errors := true)
+WHERE is_definition(semantic_type)
+  AND has_body(flags)
+  AND name IS NOT NULL;
+```
+
 ## Cross-Language Examples
 
 ### Functions Across Languages
