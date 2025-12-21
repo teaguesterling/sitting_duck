@@ -97,8 +97,8 @@ ORDER BY node_id;
 program	DEFINITION_MODULE
 insert_statement	EXECUTION_MUTATION
 
-# Test 7: Test context flags access
-# ==================================
+# Test 7: Test context flags access (IS_SYNTAX_ONLY for keywords)
+# ================================================================
 
 query II
 SELECT
@@ -109,7 +109,6 @@ WHERE flags > 0
 ORDER BY node_id
 LIMIT 5;
 ----
-function_definition	1
 def	1
 pass	1
 

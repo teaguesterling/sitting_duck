@@ -234,7 +234,23 @@ static void IsIdentifierFunction(DataChunk &args, ExpressionState &state, Vector
 // Flag Helper Functions
 // ============================================================================
 
-// Check if IS_CONSTRUCT flag is set (semantic language construct vs punctuation/token)
+// Check if node is a syntax-only token (keyword, punctuation) vs semantic construct
+static void IsSyntaxOnlyFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+    D_ASSERT(args.ColumnCount() == 1);
+
+    auto &flags_vector = args.data[0];
+    auto count = args.size();
+
+    UnaryExecutor::Execute<uint8_t, bool>(
+        flags_vector, result, count,
+        [&](uint8_t flags) {
+            return (flags & ASTNodeFlags::IS_SYNTAX_ONLY) != 0;
+        }
+    );
+}
+
+// Check if node is a semantic construct (NOT a syntax-only token)
+// This is the inverse of is_syntax_only - returns true for meaningful code constructs
 static void IsConstructFunction(DataChunk &args, ExpressionState &state, Vector &result) {
     D_ASSERT(args.ColumnCount() == 1);
 
@@ -244,7 +260,8 @@ static void IsConstructFunction(DataChunk &args, ExpressionState &state, Vector 
     UnaryExecutor::Execute<uint8_t, bool>(
         flags_vector, result, count,
         [&](uint8_t flags) {
-            return (flags & ASTNodeFlags::IS_CONSTRUCT) != 0;
+            // A node is a construct if it's NOT syntax-only
+            return (flags & ASTNodeFlags::IS_SYNTAX_ONLY) == 0;
         }
     );
 }
@@ -380,8 +397,14 @@ void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
     // Flag Helper Functions
     // ========================================================================
 
+    // Register is_syntax_only(flags) -> BOOLEAN
+    // Returns true if node is a pure syntax token (keyword, punctuation)
+    ScalarFunction is_syntax_only_func("is_syntax_only",
+        {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsSyntaxOnlyFunction);
+    loader.RegisterFunction(is_syntax_only_func);
+
     // Register is_construct(flags) -> BOOLEAN
-    // Returns true if IS_CONSTRUCT flag is set (semantic language construct)
+    // Returns true if node is a semantic construct (NOT syntax-only)
     ScalarFunction is_construct_func("is_construct",
         {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsConstructFunction);
     loader.RegisterFunction(is_construct_func);

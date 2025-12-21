@@ -58,18 +58,22 @@ struct NodeConfig {
 };
 
 // Universal flags for orthogonal node properties
+// Design principle: Mark EXCEPTIONS, not the common case
 namespace ASTNodeFlags {
-    constexpr uint8_t IS_CONSTRUCT = 0x01;        // Semantic language construct (not just token/punctuation)
+    constexpr uint8_t IS_SYNTAX_ONLY = 0x01;      // Pure syntax token (keyword, punctuation) - not a semantic construct
     constexpr uint8_t IS_DECLARATION_ONLY = 0x02; // Forward declaration without body (exception case)
     // 0x04 - 0x80: Reserved for future use
 
-    // Backward compatibility: IS_EMBODIED = 0x00 makes existing configs no-ops
-    // Default assumption: definitions HAVE bodies; only mark exceptions with IS_DECLARATION_ONLY
-    constexpr uint8_t IS_EMBODIED = 0x00;  // DEPRECATED: no-op for backward compat
+    // Backward compatibility: These are now no-ops (0x00)
+    // Default assumptions:
+    //   - Nodes ARE semantic constructs (not syntax-only)
+    //   - Definitions HAVE bodies (not declaration-only)
+    constexpr uint8_t IS_CONSTRUCT = 0x00;   // DEPRECATED: no-op, semantic construct is now the default
+    constexpr uint8_t IS_EMBODIED = 0x00;    // DEPRECATED: no-op, having a body is now the default
 
-    // Backward compatibility aliases (deprecated - will be removed)
-    constexpr uint8_t IS_KEYWORD = IS_CONSTRUCT;
-    constexpr uint8_t IS_KEYWORD_IF_LEAF = IS_CONSTRUCT;  // Treat same as IS_CONSTRUCT
+    // Keywords and punctuation are syntax-only tokens
+    constexpr uint8_t IS_KEYWORD = IS_SYNTAX_ONLY;
+    constexpr uint8_t IS_KEYWORD_IF_LEAF = IS_SYNTAX_ONLY;
 }
 
 // Semantic refinement constants for fine-grained classification
