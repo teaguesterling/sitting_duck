@@ -16,10 +16,11 @@ static bool HasBodyChild(TSNode node) {
     // Common body child types across languages
     static const char* body_types[] = {
         "block",                    // Java, Python, Go, Rust, C#
-        "compound_statement",       // C, C++
+        "compound_statement",       // C, C++, PHP
         "statement_block",          // JavaScript, TypeScript
-        "function_body",            // Some languages
+        "function_body",            // Dart, some languages
         "body",                     // Generic
+        "body_statement",           // Ruby
         "constructor_body",         // Java constructors
         nullptr
     };

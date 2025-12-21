@@ -17,17 +17,19 @@ DEF_TYPE("extension_type_declaration", DEFINITION_CLASS | SemanticRefinements::C
 DEF_TYPE("extension_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 DEF_TYPE("type_alias", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
 
-// Function and method definitions - Dart functions always have bodies
-DEF_TYPE("function_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+// Function and method definitions
+// Note: In Dart's tree-sitter grammar, signatures and bodies are siblings, not parent-child
+// Signatures are marked IS_DECLARATION_ONLY since they don't contain the body
+DEF_TYPE("function_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
 DEF_TYPE("function_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
-DEF_TYPE("function_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("function_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
 DEF_TYPE("function_expression_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
-DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
-DEF_TYPE("method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
-DEF_TYPE("getter_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
-DEF_TYPE("setter_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
-DEF_TYPE("operator_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, NONE, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
-DEF_TYPE("local_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
+DEF_TYPE("method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+DEF_TYPE("getter_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+DEF_TYPE("setter_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+DEF_TYPE("operator_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, NONE, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+DEF_TYPE("local_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)  // Contains body via lambda_expression
 
 // Constructor definitions
 DEF_TYPE("constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)

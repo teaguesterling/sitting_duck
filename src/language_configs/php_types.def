@@ -19,7 +19,7 @@ DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM
 
 // Function and method definitions - PHP functions always have bodies
 DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
-DEF_TYPE("function", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("function", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)  // keyword token
 DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 DEF_TYPE("constructor_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NODE_TEXT, CONSTRUCTOR_DEFINITION, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 DEF_TYPE("destructor_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
