@@ -249,17 +249,42 @@ The `qualified_name` field is always NULL/empty across all languages.
 
 ## Summary: Extraction Quality by Language
 
-| Language | Functions | Classes | Calls | Variables | Overall |
-|----------|-----------|---------|-------|-----------|---------|
-| **Java** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | Excellent |
-| **Rust** | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐ | Very Good |
-| **Go** | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Very Good |
-| **C++** | ⭐⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐ | Good |
-| **Python** | ⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐ | Good |
-| **JavaScript** | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐ | Good |
-| **Dart** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | Very Good |
-| **Kotlin** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | Very Good |
-| **Lua** | ⭐ | ⭐ | ⭐ | ⭐ | Needs Work |
+| Language | Functions | Classes | Calls | Variables | Body Detection | Overall |
+|----------|-----------|---------|-------|-----------|----------------|---------|
+| **Java** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Excellent |
+| **Rust** | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Very Good |
+| **Go** | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | Very Good |
+| **C++** | ⭐⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Good |
+| **Python** | ⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐ | ⭐⭐⭐ | Good |
+| **JavaScript** | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Good |
+| **TypeScript** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Very Good |
+| **Dart** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐ | Very Good |
+| **Kotlin** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Very Good |
+| **Swift** | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Good |
+| **C#** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Very Good |
+| **PHP** | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐ | ⭐⭐⭐ | Good |
+| **Ruby** | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐ | ⭐⭐⭐ | Good |
+| **R** | ⭐⭐ | ⭐ | ⭐⭐ | ⭐ | ⭐⭐ | Basic |
+| **Lua** | ⭐ | ⭐ | ⭐ | ⭐ | ⭐⭐⭐ | Needs Work |
+| **Bash** | ⭐⭐ | N/A | ⭐⭐ | ⭐ | ⭐⭐⭐ | Basic |
+
+### Body Detection Notes
+
+The **Body Detection** column rates how well we detect function bodies vs declaration-only:
+- ⭐⭐⭐ = Runtime body detection works reliably (>95% accuracy)
+- ⭐⭐ = Body detection works but with limitations (>80% accuracy)
+- ⭐ = Body detection has significant issues
+
+**Implementation Details:**
+- Uses `IS_DECLARATION_ONLY` flag for forward declarations (abstract methods, interface methods, signatures)
+- Uses `IS_SYNTAX_ONLY` flag for pure syntax tokens (keywords, punctuation)
+- Runtime `HasBodyChild()` detection for languages with abstract methods (Java, C#, TypeScript)
+- Body types detected: `block`, `compound_statement`, `statement_block`, `function_body`, `body`, `body_statement`, `braced_expression`, `constructor_body`
+
+**Language-Specific Notes:**
+- **Dart**: Uses sibling structure (signature and body are siblings), requires explicit IS_DECLARATION_ONLY marking
+- **R**: Lambda expressions use `braced_expression` bodies; ~84% detection accuracy
+- **TypeScript**: Interface method signatures marked as IS_DECLARATION_ONLY
 
 ---
 
