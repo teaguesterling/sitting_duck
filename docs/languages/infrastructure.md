@@ -2,6 +2,42 @@
 
 HCL (Terraform), JSON, TOML, and GraphQL support in Sitting Duck.
 
+## Language Nuances
+
+### Extraction Quality Summary
+
+Infrastructure languages are primarily data/configuration formats rather than programming languages, so traditional metrics don't fully apply:
+
+| Language | Structure | Keys/Values | Native Extraction | Overall |
+|----------|-----------|-------------|-------------------|---------|
+| **HCL** | ⭐⭐⭐ | ⭐⭐ | ⭐ | Good for Terraform |
+| **JSON** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | Excellent |
+| **TOML** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | Excellent |
+| **GraphQL** | ⭐⭐⭐ | ⭐⭐ | ⭐ | Good for schemas |
+
+### Implementation Notes
+
+- **HCL Blocks**: Terraform `resource`, `variable`, `module`, `output` blocks are detected as `ORGANIZATION_SECTION`.
+- **JSON/TOML**: Pure data formats with excellent structural parsing; no function/class concepts.
+- **GraphQL Schemas**: Type definitions, fields, and operations are extracted with appropriate semantic types.
+- **GraphQL Fragment Spreads**: Uses `CUSTOM` native extraction strategy for `fragment_spread` nodes.
+
+### Known Limitations
+
+- **HCL Native Extraction**: Limited native extraction - needs specialized extractor for Terraform-specific patterns.
+- **GraphQL Queries**: Query/mutation operations are parsed but argument extraction is basic.
+- **Nested Structures**: Deep JSON/TOML nesting is fully parsed but can produce large ASTs.
+
+### Use Cases
+
+These languages are best used for:
+- **HCL**: Analyzing Terraform configurations, finding resource dependencies, auditing infrastructure
+- **JSON**: Parsing package.json, config files, API responses
+- **TOML**: Analyzing Cargo.toml, pyproject.toml, config files
+- **GraphQL**: Schema analysis, query validation, API documentation
+
+---
+
 ## HCL (Terraform)
 
 **Extensions:** `.hcl`, `.tf`, `.tfvars`

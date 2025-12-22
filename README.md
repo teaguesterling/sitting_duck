@@ -89,6 +89,15 @@ Currently supports **27 languages** via Tree-sitter parsers with full semantic a
 
 All languages include semantic type extraction with refinements (Function::LAMBDA, Variable::MUTABLE, etc.).
 
+**Language Documentation:**
+- [Web Languages](docs/languages/web.md) - JavaScript, TypeScript, HTML, CSS
+- [Systems Languages](docs/languages/systems.md) - C, C++, Go, Rust, Zig
+- [Scripting Languages](docs/languages/scripting.md) - Python, Ruby, PHP, Lua, R, Bash
+- [Enterprise & Mobile](docs/languages/enterprise.md) - Java, C#, Kotlin, Swift, Dart
+- [Infrastructure](docs/languages/infrastructure.md) - HCL, JSON, TOML, GraphQL
+
+Each doc includes extraction quality ratings, implementation notes, and known limitations.
+
 ## Installation
 
 ```bash
@@ -592,6 +601,8 @@ MIT License - see LICENSE file for details.
 For AI agents and advanced usage:
 - **[AI Agent Guide](AI_AGENT_GUIDE.md)** - Comprehensive guide for AI agents using semantic types
 - **[API Reference](API_REFERENCE.md)** - Complete function reference
+- **[Language Guide](docs/languages/overview.md)** - Supported languages with nuances and quality ratings
+- **[Native Extraction Semantics](docs/native_extraction_semantics.md)** - Field semantics across languages
 - **[Adding Languages](docs/ADDING_NEW_LANGUAGES.md)** - How to add new language support
 
 ---

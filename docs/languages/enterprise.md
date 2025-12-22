@@ -1,6 +1,34 @@
-# Enterprise Languages
+# Enterprise & Mobile Languages
 
-Java, C#, Kotlin, and Swift support in Sitting Duck.
+Java, C#, Kotlin, Swift, and Dart support in Sitting Duck.
+
+## Language Nuances
+
+### Extraction Quality Summary
+
+| Language | Functions | Classes | Calls | Variables | Body Detection | Overall |
+|----------|-----------|---------|-------|-----------|----------------|---------|
+| **Java** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Excellent |
+| **C#** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Very Good |
+| **Kotlin** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Very Good |
+| **Swift** | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Good |
+| **Dart** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐ | Very Good |
+
+### Implementation Notes
+
+- **Abstract Method Detection**: Java and C# use runtime body detection to automatically identify abstract methods and interface method declarations. These are marked with `IS_DECLARATION_ONLY` flag.
+- **Return Type Extraction**: Java provides excellent return type extraction including generics (`List<String>`, `Map<K,V>`).
+- **Modifier Extraction**: Java extracts access modifiers (`public`, `private`, `static`, `final`) into the `modifiers` array.
+- **Interface Methods**: Interface method declarations (without bodies) are correctly identified as declaration-only.
+
+### Known Limitations
+
+- **C# Properties**: Property getters/setters are extracted but auto-implemented properties may not show full detail.
+- **Kotlin Extensions**: Extension functions are parsed but the receiver type may not be fully extracted.
+- **Swift Protocols**: Protocol method requirements are detected as declaration-only.
+- **Dart Sibling Structure**: Dart's grammar uses sibling structure for function signatures (signature and body are siblings, not parent-child). Function signatures are explicitly marked with `IS_DECLARATION_ONLY`.
+
+---
 
 ## Java
 
@@ -170,6 +198,66 @@ WHERE type = 'function_declaration'
   AND peek LIKE '%async%';
 ```
 
+---
+
+## Dart
+
+**Extensions:** `.dart`
+**Identifier:** `'dart'`
+
+### Common Node Types
+
+| Type | Semantic Type | Description |
+|------|---------------|-------------|
+| `class_definition` | DEFINITION_CLASS | Classes |
+| `function_signature` | DEFINITION_FUNCTION | Function signatures |
+| `method_signature` | DEFINITION_FUNCTION | Method signatures |
+| `enum_declaration` | DEFINITION_CLASS | Enums |
+| `mixin_declaration` | DEFINITION_CLASS | Mixins |
+
+### Examples
+
+```sql
+-- Find all classes
+SELECT name, start_line
+FROM read_ast('**/*.dart')
+WHERE type = 'class_definition';
+
+-- Find functions
+SELECT name, start_line
+FROM read_ast('**/*.dart')
+WHERE type IN ('function_signature', 'method_signature');
+
+-- Find async functions
+SELECT name, peek
+FROM read_ast('**/*.dart')
+WHERE type = 'function_signature'
+  AND peek LIKE '%async%';
+
+-- Find mixins
+SELECT name
+FROM read_ast('**/*.dart')
+WHERE type = 'mixin_declaration';
+```
+
+### Dart-Specific Notes
+
+Dart uses a sibling structure in its grammar where function signatures and bodies are siblings rather than parent-child:
+
+```dart
+// In Dart's AST:
+// - function_signature: "void myFunc(int x)"
+// - function_body: "{ ... }"
+// These are siblings, not nested
+```
+
+This means:
+- Function signatures are explicitly marked with `IS_DECLARATION_ONLY`
+- Body detection accuracy is ⭐⭐ (requires explicit marking rather than runtime detection)
+- Abstract methods and interface methods work correctly
+
+---
+
 ## Cross-Enterprise Analysis
 
 ```sql
@@ -179,7 +267,7 @@ SELECT
     COUNT(CASE WHEN semantic_type = 240 THEN 1 END) as methods,
     COUNT(CASE WHEN semantic_type = 248 THEN 1 END) as classes,
     COUNT(*) as total_nodes
-FROM read_ast(['**/*.java', '**/*.cs', '**/*.kt', '**/*.swift'], ignore_errors := true)
+FROM read_ast(['**/*.java', '**/*.cs', '**/*.kt', '**/*.swift', '**/*.dart'], ignore_errors := true)
 GROUP BY language
 ORDER BY total_nodes DESC;
 
@@ -188,7 +276,7 @@ SELECT
     language,
     name,
     descendant_count as complexity
-FROM read_ast(['**/*.java', '**/*.cs', '**/*.kt'], ignore_errors := true)
+FROM read_ast(['**/*.java', '**/*.cs', '**/*.kt', '**/*.dart'], ignore_errors := true)
 WHERE semantic_type = 248
   AND name LIKE '%Service%'
 ORDER BY complexity DESC;

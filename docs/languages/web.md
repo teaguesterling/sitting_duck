@@ -2,6 +2,46 @@
 
 JavaScript, TypeScript, HTML, and CSS support in Sitting Duck.
 
+## Language Nuances
+
+### Extraction Quality Summary
+
+| Language | Functions | Classes | Calls | Variables | Body Detection | Overall |
+|----------|-----------|---------|-------|-----------|----------------|---------|
+| **JavaScript** | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Good |
+| **TypeScript** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Very Good |
+| **HTML** | N/A | N/A | N/A | N/A | N/A | Structural |
+| **CSS** | N/A | N/A | N/A | N/A | N/A | Structural |
+
+### Implementation Notes
+
+- **TypeScript Interfaces**: Interface method signatures (`method_signature`, `property_signature`, `call_signature`, `construct_signature`, `index_signature`) are marked with `IS_DECLARATION_ONLY`.
+- **JavaScript Arrow Functions**: Arrow functions are correctly detected as `DEFINITION_FUNCTION` with `Function::LAMBDA` refinement.
+- **TypeScript vs JavaScript**: TypeScript inherits JavaScript patterns but adds type-aware extraction.
+- **Declaration Keywords**: `const`, `let`, `var` are extracted into the `modifiers` array for variable declarations.
+
+### Known Limitations
+
+- **JSX/TSX**: JSX elements are parsed but component detection relies on naming conventions (capitalized names).
+- **JavaScript Types**: No type information available (dynamic typing) - `signature_type` returns `'function'` literal.
+- **TypeScript Generics**: Generic type parameters are parsed but not fully extracted.
+- **CSS Variables**: Custom properties (`--var-name`) are parsed but not semantically distinguished.
+
+### Body Detection Details
+
+| Language | Declaration Types | Notes |
+|----------|-------------------|-------|
+| JavaScript | `method_signature`, `property_signature` | Interface-like patterns in `.d.ts` files |
+| TypeScript | `method_signature`, `property_signature`, `call_signature`, `construct_signature`, `index_signature` | Full interface support with IS_DECLARATION_ONLY |
+
+### HTML/CSS Notes
+
+HTML and CSS are structural languages without functions or classes:
+- **HTML**: Elements, attributes, and text nodes are extracted with semantic types like `ORGANIZATION_SECTION` and `NAME_IDENTIFIER`.
+- **CSS**: Rules, selectors, and declarations are extracted. Selectors are identified as `NAME_IDENTIFIER`.
+
+---
+
 ## JavaScript
 
 **Extensions:** `.js`, `.jsx`

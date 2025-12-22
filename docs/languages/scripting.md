@@ -2,6 +2,48 @@
 
 Python, Ruby, PHP, Lua, R, and Bash support in Sitting Duck.
 
+## Language Nuances
+
+### Extraction Quality Summary
+
+| Language | Functions | Classes | Calls | Variables | Body Detection | Overall |
+|----------|-----------|---------|-------|-----------|----------------|---------|
+| **Python** | ⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐ | ⭐⭐⭐ | Good |
+| **Ruby** | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐ | ⭐⭐⭐ | Good |
+| **PHP** | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐ | ⭐⭐⭐ | Good |
+| **Lua** | ⭐ | ⭐ | ⭐ | ⭐ | ⭐⭐⭐ | Needs Work |
+| **R** | ⭐⭐ | ⭐ | ⭐⭐ | ⭐ | ⭐⭐ | Basic |
+| **Bash** | ⭐⭐ | N/A | ⭐⭐ | ⭐ | ⭐⭐⭐ | Basic |
+
+### Implementation Notes
+
+- **Python Classes**: Excellent class extraction including inheritance detection and abstract class identification (ABC subclasses).
+- **Ruby Bodies**: Uses `body_statement` for method bodies - correctly detects all method implementations.
+- **PHP Keywords**: The `function` keyword is marked as `IS_SYNTAX_ONLY` to avoid counting it as a function definition.
+- **R Lambdas**: Lambda expressions use `braced_expression` bodies with ~84% detection accuracy.
+
+### Known Limitations
+
+- **Python Type Hints**: Type hints are parsed but not fully extracted into `signature_type`.
+- **Ruby Blocks**: Block parameters (`do |x|`) are parsed but parameter extraction is limited.
+- **PHP Closures**: Anonymous functions (`function() use ($var)`) are detected but captured variables not extracted.
+- **Lua Parameters**: Function parameters show as empty array `[]` - needs native extractor implementation.
+- **R Functions**: Dynamic typing means no type information available; variable extraction is minimal.
+- **Bash**: No class support (N/A); function and variable extraction is basic.
+
+### Body Detection Details
+
+| Language | Body Type | Accuracy | Notes |
+|----------|-----------|----------|-------|
+| Python | `block` | ⭐⭐⭐ | Indentation-based blocks work correctly |
+| Ruby | `body_statement` | ⭐⭐⭐ | Fixed in recent update |
+| PHP | `compound_statement` | ⭐⭐⭐ | `function` keyword properly excluded |
+| Lua | `block` | ⭐⭐⭐ | Works correctly |
+| R | `braced_expression` | ⭐⭐ | ~84% accuracy for lambdas |
+| Bash | `compound_statement` | ⭐⭐⭐ | Works correctly |
+
+---
+
 ## Python
 
 **Extensions:** `.py`

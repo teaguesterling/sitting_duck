@@ -87,8 +87,18 @@ SELECT * FROM read_ast('Makefile', 'bash');
 
 ## Language-Specific Details
 
-- [Web Languages](web.md) - JavaScript, TypeScript, HTML, CSS
-- [Systems Languages](systems.md) - C, C++, Go, Rust, Zig
-- [Scripting Languages](scripting.md) - Python, Ruby, PHP, Lua, R, Bash
-- [Enterprise Languages](enterprise.md) - Java, C#, Kotlin, Swift
-- [Infrastructure Languages](infrastructure.md) - HCL, JSON, TOML, GraphQL
+Each category doc includes:
+- **Extraction Quality Ratings** - Star ratings for functions, classes, calls, variables, body detection
+- **Implementation Notes** - How extraction works for each language
+- **Known Limitations** - Current gaps and workarounds
+- **Examples** - SQL queries for common tasks
+
+| Category | Doc | Languages |
+|----------|-----|-----------|
+| Web | [web.md](web.md) | JavaScript, TypeScript, HTML, CSS |
+| Systems | [systems.md](systems.md) | C, C++, Go, Rust, Zig |
+| Scripting | [scripting.md](scripting.md) | Python, Ruby, PHP, Lua, R, Bash |
+| Enterprise & Mobile | [enterprise.md](enterprise.md) | Java, C#, Kotlin, Swift, Dart |
+| Infrastructure | [infrastructure.md](infrastructure.md) | HCL, JSON, TOML, GraphQL |
+
+See also: [Native Extraction Semantics](../native_extraction_semantics.md) for detailed field semantics across languages.

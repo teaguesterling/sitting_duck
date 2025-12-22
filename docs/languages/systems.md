@@ -2,6 +2,42 @@
 
 C, C++, Go, Rust, and Zig support in Sitting Duck.
 
+## Language Nuances
+
+### Extraction Quality Summary
+
+| Language | Functions | Classes | Calls | Variables | Body Detection | Overall |
+|----------|-----------|---------|-------|-----------|----------------|---------|
+| **C** | ⭐⭐ | ⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Basic |
+| **C++** | ⭐⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Good |
+| **Go** | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | Very Good |
+| **Rust** | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Very Good |
+| **Zig** | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Good |
+
+### Implementation Notes
+
+- **C++ Method Calls**: Supports both dot notation (`obj.method()`) and arrow notation (`ptr->method()`). The `qualified_name` field contains the full expression.
+- **Go Package Calls**: Package-qualified calls like `fmt.Println` have empty `name` but full path in `qualified_name`.
+- **Rust Trait Signatures**: Trait method signatures (without bodies) are marked with `IS_DECLARATION_ONLY` via `function_signature_item`.
+- **Return Type Extraction**: Go and Rust provide excellent return type extraction including complex types (`*big.Int`, `Result<T, E>`).
+
+### Known Limitations
+
+- **C++ Templates**: Template declarations are parsed but template parameter extraction is limited.
+- **C++ Classes**: Class extraction is basic (⭐) - inheritance and virtual methods need more work.
+- **C Macros**: Preprocessor macros (`#define`) are captured but macro expansion is not performed.
+- **Zig Comptime**: Comptime blocks are parsed but compile-time evaluation semantics are not captured.
+
+### Body Detection
+
+All systems languages have excellent body detection (⭐⭐⭐):
+- C/C++: `compound_statement` bodies
+- Go: `block` bodies
+- Rust: `block` bodies, `function_signature_item` for trait method signatures
+- Zig: `block` bodies
+
+---
+
 ## C
 
 **Extensions:** `.c`, `.h`
