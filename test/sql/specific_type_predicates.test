@@ -1,0 +1,245 @@
+# name: test/sql/specific_type_predicates.test
+# description: Test specific semantic type predicate functions
+# group: [sitting_duck]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Definition Predicates
+# =============================================================================
+
+# Test is_function_definition
+query I
+SELECT is_function_definition(semantic_type_code('DEFINITION_FUNCTION'));
+----
+true
+
+query I
+SELECT is_function_definition(semantic_type_code('DEFINITION_CLASS'));
+----
+false
+
+# Test is_class_definition
+query I
+SELECT is_class_definition(semantic_type_code('DEFINITION_CLASS'));
+----
+true
+
+query I
+SELECT is_class_definition(semantic_type_code('DEFINITION_FUNCTION'));
+----
+false
+
+# Test is_variable_definition
+query I
+SELECT is_variable_definition(semantic_type_code('DEFINITION_VARIABLE'));
+----
+true
+
+# Test is_module_definition
+query I
+SELECT is_module_definition(semantic_type_code('DEFINITION_MODULE'));
+----
+true
+
+# Test is_type_definition - note: DEFINITION_TYPE doesn't exist yet
+# This predicate exists but returns false for all current types
+query I
+SELECT is_type_definition(semantic_type_code('DEFINITION_CLASS'));
+----
+false
+
+# =============================================================================
+# Computation Predicates
+# =============================================================================
+
+# Test is_function_call
+query I
+SELECT is_function_call(semantic_type_code('COMPUTATION_CALL'));
+----
+true
+
+query I
+SELECT is_function_call(semantic_type_code('DEFINITION_FUNCTION'));
+----
+false
+
+# Test is_member_access
+query I
+SELECT is_member_access(semantic_type_code('COMPUTATION_ACCESS'));
+----
+true
+
+# =============================================================================
+# Literal Predicates
+# =============================================================================
+
+# Test is_string_literal
+query I
+SELECT is_string_literal(68::UTINYINT);  -- LITERAL_STRING = 68
+----
+true
+
+query I
+SELECT is_string_literal(64::UTINYINT);  -- LITERAL_NUMBER = 64
+----
+false
+
+# Test is_number_literal
+query I
+SELECT is_number_literal(64::UTINYINT);  -- LITERAL_NUMBER = 64
+----
+true
+
+# Note: is_boolean_literal exists but LITERAL_BOOLEAN type doesn't exist yet
+# Booleans are typically represented as LITERAL_ATOMIC (72)
+query I
+SELECT is_boolean_literal(72::UTINYINT);  -- LITERAL_ATOMIC, not BOOLEAN
+----
+false
+
+# =============================================================================
+# Control Flow Predicates
+# =============================================================================
+
+# Test is_conditional
+query I
+SELECT is_conditional(semantic_type_code('FLOW_CONDITIONAL'));
+----
+true
+
+# Test is_loop
+query I
+SELECT is_loop(semantic_type_code('FLOW_LOOP'));
+----
+true
+
+# Test is_jump
+query I
+SELECT is_jump(semantic_type_code('FLOW_JUMP'));
+----
+true
+
+# =============================================================================
+# Operator Predicates
+# =============================================================================
+
+# Test is_assignment
+query I
+SELECT is_assignment(semantic_type_code('OPERATOR_ASSIGNMENT'));
+----
+true
+
+# Test is_comparison
+query I
+SELECT is_comparison(semantic_type_code('OPERATOR_COMPARISON'));
+----
+true
+
+# Test is_arithmetic
+query I
+SELECT is_arithmetic(semantic_type_code('OPERATOR_ARITHMETIC'));
+----
+true
+
+# Test is_logical
+query I
+SELECT is_logical(semantic_type_code('OPERATOR_LOGICAL'));
+----
+true
+
+# =============================================================================
+# Integration Tests with Real Code
+# =============================================================================
+
+# Test predicates work with actual parsed code - using simpler example
+statement ok
+CREATE TEMP TABLE test_code AS SELECT * FROM parse_ast('def hello(): pass', 'python');
+
+# is_function_definition finds function_definition nodes
+query I
+SELECT COUNT(*) FROM test_code WHERE is_function_definition(semantic_type) AND type = 'function_definition';
+----
+1
+
+# Test with class
+statement ok
+CREATE TEMP TABLE test_class AS SELECT * FROM parse_ast('class Foo: pass', 'python');
+
+query I
+SELECT COUNT(*) FROM test_class WHERE is_class_definition(semantic_type) AND type = 'class_definition';
+----
+1
+
+# Test with function call
+statement ok
+CREATE TEMP TABLE test_call AS SELECT * FROM parse_ast('print(x)', 'python');
+
+query I
+SELECT COUNT(*) FROM test_call WHERE is_function_call(semantic_type);
+----
+1
+
+# Test with conditional
+statement ok
+CREATE TEMP TABLE test_cond AS SELECT * FROM parse_ast('if True: pass', 'python');
+
+query I
+SELECT COUNT(*) FROM test_cond WHERE is_conditional(semantic_type) AND type = 'if_statement';
+----
+1
+
+# =============================================================================
+# NULL Handling
+# =============================================================================
+
+# Predicates should handle NULL gracefully
+query I
+SELECT is_function_definition(NULL) IS NULL;
+----
+true
+
+query I
+SELECT is_class_definition(NULL) IS NULL;
+----
+true
+
+query I
+SELECT is_string_literal(NULL) IS NULL;
+----
+true
+
+# =============================================================================
+# Verify predicates match category predicates
+# =============================================================================
+
+# is_function_definition should be subset of is_definition
+query I
+SELECT COUNT(*) FROM test_code
+WHERE is_function_definition(semantic_type) AND NOT is_definition(semantic_type);
+----
+0
+
+# is_class_definition should be subset of is_definition
+query I
+SELECT COUNT(*) FROM test_code
+WHERE is_class_definition(semantic_type) AND NOT is_definition(semantic_type);
+----
+0
+
+# is_function_call should be subset of is_call
+query I
+SELECT COUNT(*) FROM test_code
+WHERE is_function_call(semantic_type) AND NOT is_call(semantic_type);
+----
+0
+
+# is_conditional should be subset of is_control_flow
+query I
+SELECT COUNT(*) FROM test_code
+WHERE is_conditional(semantic_type) AND NOT is_control_flow(semantic_type);
+----
+0

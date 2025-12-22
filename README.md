@@ -598,9 +598,14 @@ MIT License - see LICENSE file for details.
 
 ## Documentation
 
-For AI agents and advanced usage:
+### API Reference
+- **[Core Functions](docs/api/core-functions.md)** - `read_ast()`, `parse_ast()`, `ast_supported_languages()`
+- **[Utility Functions](docs/api/utility-functions.md)** - Predicates, file utilities, helper functions
+- **[Semantic Types](docs/api/semantic-types.md)** - Type system and semantic categories
+- **[Output Schema](docs/api/output-schema.md)** - Column definitions and data types
+
+### Guides
 - **[AI Agent Guide](AI_AGENT_GUIDE.md)** - Comprehensive guide for AI agents using semantic types
-- **[API Reference](API_REFERENCE.md)** - Complete function reference
 - **[Language Guide](docs/languages/overview.md)** - Supported languages with nuances and quality ratings
 - **[Native Extraction Semantics](docs/native_extraction_semantics.md)** - Field semantics across languages
 - **[Adding Languages](docs/ADDING_NEW_LANGUAGES.md)** - How to add new language support

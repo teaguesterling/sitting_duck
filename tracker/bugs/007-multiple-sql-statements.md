@@ -1,7 +1,8 @@
 # Bug: SQL Files with Multiple Statements Not Loading
 
-**Status:** Open
+**Status:** Fixed (Stale)
 **Priority:** Critical
+**Resolved:** 2025-12-22 - Functions are now loading correctly (90+ functions available)
 **Discovered:** 2025-05-26
 
 ## Description

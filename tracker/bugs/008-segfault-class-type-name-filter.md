@@ -1,5 +1,8 @@
 # Bug #008: Segfault when filtering class types with name IS NOT NULL
 
+**Status:** Fixed (Stale)
+**Resolved:** 2025-12-22 - No longer reproducible. Bug was specific to old parquet-based indexing approach and old extension name (duckdb_ast). Likely fixed during parser ownership refactor.
+
 ## Summary
 DuckDB AST extension crashes with "INTERNAL Error: Attempted to dereference unique_ptr that is NULL!" when combining specific filter conditions.
 
