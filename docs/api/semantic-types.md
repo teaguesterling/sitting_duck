@@ -6,6 +6,26 @@ Complete reference for the semantic type system.
 
 The semantic type system uses an 8-bit encoding to classify AST nodes into universal categories that work across all 27 supported languages.
 
+### The SEMANTIC_TYPE Column
+
+The `semantic_type` column uses a custom DuckDB logical type called `SEMANTIC_TYPE`:
+
+```sql
+-- Displays as human-readable string
+SELECT semantic_type FROM read_ast('file.py') LIMIT 1;
+-- Returns: DEFINITION_FUNCTION (not 240)
+
+-- Direct string comparison works
+SELECT * FROM read_ast('file.py')
+WHERE semantic_type = 'DEFINITION_FUNCTION';
+
+-- Check the type
+SELECT typeof(semantic_type) FROM read_ast('file.py') LIMIT 1;
+-- Returns: SEMANTIC_TYPE
+```
+
+The type stores values efficiently as UTINYINT internally while displaying as readable strings.
+
 ## Quick Reference
 
 | Code | Name | Description |

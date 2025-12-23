@@ -212,11 +212,19 @@ WHERE type = 'function_definition';
 
 ### `semantic_type`
 
-**Type:** `VARCHAR`
+**Type:** `SEMANTIC_TYPE` (custom logical type)
 
-Universal semantic category.
+Universal semantic category. This is a custom DuckDB type that:
+- **Displays as string** - Shows `DEFINITION_FUNCTION` instead of numeric code
+- **Supports string comparison** - `WHERE semantic_type = 'DEFINITION_FUNCTION'`
+- **Stores efficiently** - Underlying storage is UTINYINT for fast comparisons
 
 ```sql
+-- Direct string comparison (natural syntax)
+SELECT * FROM read_ast('example.py')
+WHERE semantic_type = 'DEFINITION_FUNCTION';
+
+-- Group by semantic type
 SELECT semantic_type, COUNT(*)
 FROM read_ast('example.py')
 GROUP BY semantic_type

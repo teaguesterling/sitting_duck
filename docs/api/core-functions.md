@@ -57,7 +57,7 @@ read_ast(file_patterns LIST(VARCHAR), language VARCHAR) -> TABLE
 | `children_count` | UINTEGER | Direct children count |
 | `descendant_count` | UINTEGER | Total descendants |
 | `peek` | VARCHAR | Source code snippet |
-| `semantic_type` | VARCHAR | Semantic category |
+| `semantic_type` | SEMANTIC_TYPE | Semantic category |
 
 ### Examples
 
