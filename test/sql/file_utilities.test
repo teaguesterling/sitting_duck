@@ -1,0 +1,164 @@
+# name: test/sql/file_utilities.test
+# description: Test file utility macros for reading lines from files
+# group: [sitting_duck]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# read_lines - Read all lines with line numbers
+# =============================================================================
+
+# Basic read_lines returns sequential line numbers starting at 1
+query I
+SELECT line_number FROM read_lines('test/data/python/simple.py') LIMIT 5;
+----
+1
+2
+3
+4
+5
+
+# Line numbers are truly sequential (no gaps or duplicates)
+query I
+SELECT COUNT(*) FROM (
+    SELECT line_number, LAG(line_number) OVER (ORDER BY line_number) as prev
+    FROM read_lines('test/data/python/simple.py')
+) WHERE prev IS NOT NULL AND line_number != prev + 1;
+----
+0
+
+# First line content is correct
+query I
+SELECT line FROM read_lines('test/data/python/simple.py') WHERE line_number = 1;
+----
+def hello():
+
+# Can read entire file
+query I
+SELECT COUNT(*) >= 15 FROM read_lines('test/data/python/simple.py');
+----
+true
+
+# =============================================================================
+# read_lines_range - Read specific line range
+# =============================================================================
+
+# Read single line
+query II
+SELECT line_number, line FROM read_lines_range('test/data/python/simple.py', 1, 1);
+----
+1	def hello():
+
+# Read lines 5-6 from middle of file
+query II
+SELECT line_number, line FROM read_lines_range('test/data/python/simple.py', 5, 6);
+----
+5	class MyClass:
+6	    """A test class"""
+
+# Returns correct count for range
+query I
+SELECT COUNT(*) FROM read_lines_range('test/data/python/simple.py', 5, 10);
+----
+6
+
+# Empty range returns no rows
+query I
+SELECT COUNT(*) FROM read_lines_range('test/data/python/simple.py', 100, 105);
+----
+0
+
+# =============================================================================
+# read_lines_context - Read lines around a center point
+# =============================================================================
+
+# Read 1 line of context around line 5 (lines 4-6)
+query I
+SELECT COUNT(*) FROM read_lines_context('test/data/python/simple.py', 5, 1);
+----
+3
+
+# Context includes center line
+query I
+SELECT COUNT(*) FROM read_lines_context('test/data/python/simple.py', 5, 1)
+WHERE line_number = 5;
+----
+1
+
+# =============================================================================
+# get_lines_text - Get line range as single string
+# =============================================================================
+
+# Get single line as text
+query I
+SELECT get_lines_text('test/data/python/simple.py', 1, 1);
+----
+def hello():
+
+# Get multiple lines - contains newlines
+query I
+SELECT get_lines_text('test/data/python/simple.py', 1, 2) LIKE '%def hello()%Say hello%';
+----
+true
+
+# =============================================================================
+# get_line - Get single line
+# =============================================================================
+
+# Get first line
+query I
+SELECT get_line('test/data/python/simple.py', 1);
+----
+def hello():
+
+# Get line from middle
+query I
+SELECT get_line('test/data/python/simple.py', 5);
+----
+class MyClass:
+
+# =============================================================================
+# ast_get_source - Extract source for AST nodes
+# =============================================================================
+
+# ast_get_source is alias for get_lines_text
+query I
+SELECT ast_get_source('test/data/python/simple.py', 1, 1);
+----
+def hello():
+
+# =============================================================================
+# ast_get_source_numbered - Extract source with line numbers
+# =============================================================================
+
+# Returns source with line numbers prefixed
+query I
+SELECT ast_get_source_numbered('test/data/python/simple.py', 1, 1) LIKE '%1:%def hello()%';
+----
+true
+
+# =============================================================================
+# Integration with read_ast
+# =============================================================================
+
+# Note: read_text (which underlies these macros) doesn't support lateral joins,
+# so we can't use ast_get_source(file_path, start_line, end_line) directly
+# with read_ast results. Instead, use the line numbers to call the function
+# with a literal file path.
+
+# Get line range for a function definition
+query I
+SELECT start_line FROM read_ast('test/data/python/simple.py')
+WHERE type = 'function_definition' AND name = 'hello';
+----
+1
+
+# Then use that info to extract source (with literal path)
+query I
+SELECT ast_get_source('test/data/python/simple.py', 1, 3) LIKE 'def hello()%';
+----
+true
+

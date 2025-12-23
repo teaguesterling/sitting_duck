@@ -10,8 +10,11 @@
 CREATE OR REPLACE MACRO read_lines(file_path) AS TABLE
     SELECT
         ROW_NUMBER() OVER () AS line_number,
-        UNNEST(string_split(content, E'\n')) AS line
-    FROM read_text(file_path);
+        line
+    FROM (
+        SELECT UNNEST(string_split(content, E'\n')) AS line
+        FROM read_text(file_path)
+    );
 
 -- Read specific line range from a file as rows
 -- Returns: line_number (BIGINT), line (VARCHAR)
@@ -19,8 +22,11 @@ CREATE OR REPLACE MACRO read_lines_range(file_path, start_line, end_line) AS TAB
     WITH numbered AS (
         SELECT
             ROW_NUMBER() OVER () AS line_number,
-            UNNEST(string_split(content, E'\n')) AS line
-        FROM read_text(file_path)
+            line
+        FROM (
+            SELECT UNNEST(string_split(content, E'\n')) AS line
+            FROM read_text(file_path)
+        )
     )
     SELECT line_number, line
     FROM numbered
@@ -32,8 +38,11 @@ CREATE OR REPLACE MACRO read_lines_context(file_path, center_line, context_lines
     WITH numbered AS (
         SELECT
             ROW_NUMBER() OVER () AS line_number,
-            UNNEST(string_split(content, E'\n')) AS line
-        FROM read_text(file_path)
+            line
+        FROM (
+            SELECT UNNEST(string_split(content, E'\n')) AS line
+            FROM read_text(file_path)
+        )
     )
     SELECT line_number, line
     FROM numbered

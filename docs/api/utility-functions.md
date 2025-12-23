@@ -224,55 +224,87 @@ WHERE is_construct(flags);
 
 ## File Utility Functions
 
-Functions for reading source code lines.
+Functions for reading source code lines. These are SQL macros that wrap DuckDB's `read_text()` function.
 
-### `read_lines()`
+### Table Functions (return rows)
+
+#### `read_lines(file_path)`
 
 Read all lines from a file as rows with line numbers.
 
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file_path` | VARCHAR | Path to the file |
+
+**Returns:** `line_number` (BIGINT), `line` (VARCHAR)
+
 ```sql
-SELECT * FROM read_lines('file.py');
--- Returns: line_number (BIGINT), line (VARCHAR)
+SELECT * FROM read_lines('file.py') LIMIT 3;
+-- line_number | line
+-- 1           | def hello():
+-- 2           |     print("hi")
+-- 3           |
 ```
 
-### `read_lines_range()`
+#### `read_lines_range(file_path, start_line, end_line)`
 
 Read a specific line range from a file.
 
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file_path` | VARCHAR | Path to the file |
+| `start_line` | BIGINT | First line to read (1-based) |
+| `end_line` | BIGINT | Last line to read (inclusive) |
+
+**Returns:** `line_number` (BIGINT), `line` (VARCHAR)
+
 ```sql
-SELECT * FROM read_lines_range('file.py', 10, 25);
--- Returns lines 10-25
+SELECT * FROM read_lines_range('file.py', 10, 12);
+-- Returns lines 10, 11, 12
 ```
 
-### `read_lines_context()`
+#### `read_lines_context(file_path, center_line, context_lines)`
 
 Read lines around a specific line (context window).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file_path` | VARCHAR | Path to the file |
+| `center_line` | BIGINT | Center line number |
+| `context_lines` | BIGINT | Lines before and after center |
+
+**Returns:** `line_number` (BIGINT), `line` (VARCHAR)
 
 ```sql
 SELECT * FROM read_lines_context('file.py', 50, 5);
 -- Returns lines 45-55 (5 lines before and after line 50)
 ```
 
-### `get_lines_text()`
+### Scalar Functions (return single value)
+
+#### `get_lines_text(file_path, start_line, end_line)`
 
 Get a line range as a single newline-joined string.
 
 ```sql
 SELECT get_lines_text('file.py', 10, 25) AS source;
--- Returns lines 10-25 as a single VARCHAR
+-- Returns lines 10-25 as a single VARCHAR with \n separators
 ```
 
-### `get_line()`
+#### `get_line(file_path, line_num)`
 
 Get a single line from a file.
 
 ```sql
 SELECT get_line('file.py', 42) AS line;
+-- Returns the content of line 42
 ```
 
-### `ast_get_source()`
+### AST Integration Functions
 
-Extract source code for AST nodes using file_path, start_line, end_line.
+#### `ast_get_source(file_path, start_line, end_line)`
+
+Extract source code for AST nodes. Alias for `get_lines_text()`.
 
 ```sql
 -- Get source for all functions
@@ -283,16 +315,17 @@ FROM read_ast('file.py')
 WHERE is_function_definition(semantic_type);
 ```
 
-### `ast_get_source_numbered()`
+#### `ast_get_source_numbered(file_path, start_line, end_line)`
 
-Extract source with line numbers prefixed.
+Extract source with line numbers prefixed (useful for display).
 
 ```sql
-SELECT ast_get_source_numbered('file.py', 10, 20) AS numbered_source;
+SELECT ast_get_source_numbered('file.py', 10, 13) AS numbered_source;
 -- Returns:
 --   10: def my_function():
 --   11:     x = 1
---   ...
+--   12:     y = 2
+--   13:     return x + y
 ```
 
 ---
