@@ -14,8 +14,10 @@ LOAD sitting_duck;
 # Updated extraction model:
 #   - name: The identifier (class name, mixin name, etc.)
 #   - signature_type: Type info (class, abstract_class, mixin, enum, extension)
-#   - parameters: Parent types (extended class, implemented interfaces, mixed-in mixins)
-#   - modifiers: Keywords (extends, implements, with, abstract, sealed, etc.)
+#   - parameters: LIST(STRUCT(name, type)) - parent types with inheritance kind
+#       * name: parent class/interface/mixin name
+#       * type: inheritance kind (extends, implements, with)
+#   - modifiers: Keywords (abstract, sealed, final, etc.) - NO inheritance keywords
 # =============================================================================
 
 # =============================================================================
@@ -34,21 +36,21 @@ query ITTT
 SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
 WHERE type = 'class_definition' AND name = 'Dog';
 ----
-Dog	class	[Animal]	[extends]
+Dog	class	[{'name': Animal, 'type': extends}]	[]
 
 # Test: Class with extends and implements
 query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
 WHERE type = 'class_definition' AND name = 'Pet';
 ----
-Pet	[Dog, Runnable]	[extends, implements]
+Pet	[{'name': Dog, 'type': extends}, {'name': Runnable, 'type': implements}]	[]
 
 # Test: Class with extends, implements, and with (mixin)
 query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
 WHERE type = 'class_definition' AND name = 'ServiceAnimal';
 ----
-ServiceAnimal	[Dog, Loggable, Runnable]	[extends, implements, with]
+ServiceAnimal	[{'name': Dog, 'type': extends}, {'name': Loggable, 'type': with}, {'name': Runnable, 'type': implements}]	[]
 
 # Test: Sealed class
 query ITTT
@@ -62,7 +64,7 @@ query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
 WHERE type = 'class_definition' AND name = 'Circle';
 ----
-Circle	[Shape]	[extends]
+Circle	[{'name': Shape, 'type': extends}]	[]
 
 # =============================================================================
 # MIXIN_DECLARATION - Mixin Declarations
@@ -91,7 +93,7 @@ query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/dart/Inheritance.dart', context := 'native')
 WHERE type = 'enum_declaration' AND name = 'DogBreed';
 ----
-DogBreed	[Loggable]	[with]
+DogBreed	[{'name': Loggable, 'type': with}]	[]
 
 # =============================================================================
 # Simple class with no inheritance

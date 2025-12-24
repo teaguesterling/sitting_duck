@@ -14,8 +14,10 @@ LOAD sitting_duck;
 # Updated extraction model:
 #   - name: The identifier (class name, struct name, protocol name)
 #   - signature_type: Type info (class, struct, protocol, enum, actor)
-#   - parameters: Parent types (superclass, protocol conformances)
-#   - modifiers: Keywords (extends, public, final, etc.)
+#   - parameters: LIST(STRUCT(name, type)) - parent types with inheritance kind
+#       * name: parent class/protocol name
+#       * type: inheritance kind (Swift uses "extends" for all since syntax is unified)
+#   - modifiers: Keywords (public, final, etc.) - NO inheritance keywords
 # =============================================================================
 
 # =============================================================================
@@ -34,14 +36,14 @@ query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
 WHERE type = 'protocol_declaration' AND name = 'Runner';
 ----
-Runner	[Runnable]	[extends]
+Runner	[{'name': Runnable, 'type': extends}]	[]
 
 # Test: Protocol with multiple inheritance
 query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
 WHERE type = 'protocol_declaration' AND name = 'Athlete';
 ----
-Athlete	[Runner, CustomStringConvertible]	[extends]
+Athlete	[{'name': Runner, 'type': extends}, {'name': CustomStringConvertible, 'type': extends}]	[]
 
 # =============================================================================
 # CLASS_DECLARATION - Class Declarations with Inheritance
@@ -59,28 +61,28 @@ query ITTT
 SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
 WHERE type = 'class_declaration' AND name = 'Dog';
 ----
-Dog	class	[Animal]	[extends]
+Dog	class	[{'name': Animal, 'type': extends}]	[]
 
 # Test: Class with superclass and protocol conformance
 query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
 WHERE type = 'class_declaration' AND name = 'Pet';
 ----
-Pet	[Dog, Runnable]	[extends]
+Pet	[{'name': Dog, 'type': extends}, {'name': Runnable, 'type': extends}]	[]
 
 # Test: Class with multiple protocol conformances
 query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
 WHERE type = 'class_declaration' AND name = 'ServiceAnimal';
 ----
-ServiceAnimal	[Dog, Runnable, CustomStringConvertible]	[extends]
+ServiceAnimal	[{'name': Dog, 'type': extends}, {'name': Runnable, 'type': extends}, {'name': CustomStringConvertible, 'type': extends}]	[]
 
 # Test: Final class
 query ITTT
 SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
 WHERE type = 'class_declaration' AND name = 'Bulldog';
 ----
-Bulldog	class	[Dog]	[extends]
+Bulldog	class	[{'name': Dog, 'type': extends}]	[]
 
 # =============================================================================
 # STRUCT_DECLARATION - Struct Declarations
@@ -93,7 +95,7 @@ query ITTT
 SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
 WHERE type = 'class_declaration' AND name = 'Point';
 ----
-Point	struct	[Equatable, Hashable]	[extends]
+Point	struct	[{'name': Equatable, 'type': extends}, {'name': Hashable, 'type': extends}]	[]
 
 # =============================================================================
 # ENUM_DECLARATION - Enum Declarations
@@ -105,5 +107,5 @@ query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/swift/Inheritance.swift', context := 'native')
 WHERE type = 'class_declaration' AND name = 'DogBreed';
 ----
-DogBreed	[String, CaseIterable]	[extends]
+DogBreed	[{'name': String, 'type': extends}, {'name': CaseIterable, 'type': extends}]	[]
 

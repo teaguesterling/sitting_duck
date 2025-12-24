@@ -439,8 +439,12 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
         }
         if (config.context >= ContextLevel::NATIVE) {
             schema.push_back(LogicalType::VARCHAR);                     // signature_type
-            schema.push_back(LogicalType::LIST(LogicalType::VARCHAR));  // parameters (array of strings)
-            schema.push_back(LogicalType::LIST(LogicalType::VARCHAR));  // modifiers (array of strings)  
+            // parameters: LIST of STRUCT with name and type fields
+            schema.push_back(LogicalType::LIST(LogicalType::STRUCT({
+                {"name", LogicalType::VARCHAR},
+                {"type", LogicalType::VARCHAR}
+            })));
+            schema.push_back(LogicalType::LIST(LogicalType::VARCHAR));  // modifiers (array of strings)
             schema.push_back(LogicalType::VARCHAR);                     // annotations
             schema.push_back(LogicalType::VARCHAR);                     // qualified_name
         }
@@ -880,33 +884,19 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult& result, DataChunk
                         signature_type_validity->SetInvalid(count);
                     }
                     
-                    // FIXED: Use proper ListVector indexing instead of PushBack accumulation
-                    // Get list data pointers and use indexed assignment like string vectors
-                    auto list_data = FlatVector::GetData<list_entry_t>(output.data[parameters_col]);
-                    auto &param_child = ListVector::GetEntry(output.data[parameters_col]);
-                    auto param_child_data = FlatVector::GetData<string_t>(param_child);
-                    
-                    // Set list entry for parameters at current index
-                    list_data[count].offset = ListVector::GetListSize(output.data[parameters_col]);
-                    list_data[count].length = node.native.parameters.size();
-                    
-                    // Add parameter strings to child vector if any exist
-                    // For function definitions: use .name (parameter name)
-                    // For call arguments: use .type (argument value) when .name is empty
-                    for (size_t i = 0; i < node.native.parameters.size(); i++) {
-                        idx_t child_idx = list_data[count].offset + i;
-                        if (child_idx >= ListVector::GetListCapacity(output.data[parameters_col])) {
-                            ListVector::Reserve(output.data[parameters_col], (child_idx + 1) * 2);
-                            // Re-get pointers after potential reallocation
-                            param_child_data = FlatVector::GetData<string_t>(ListVector::GetEntry(output.data[parameters_col]));
-                        }
-                        // Use name if available, otherwise fall back to type (for positional call args)
-                        const string& param_value = !node.native.parameters[i].name.empty()
-                            ? node.native.parameters[i].name
-                            : node.native.parameters[i].type;
-                        param_child_data[child_idx] = StringVector::AddString(param_child, param_value);
+                    // Create LIST of STRUCT for parameters
+                    // Each parameter is a STRUCT with {name, type} fields
+                    vector<Value> param_structs;
+                    for (const auto& param : node.native.parameters) {
+                        child_list_t<Value> struct_values;
+                        struct_values.emplace_back("name", Value(param.name));
+                        struct_values.emplace_back("type", Value(param.type));
+                        param_structs.push_back(Value::STRUCT(std::move(struct_values)));
                     }
-                    ListVector::SetListSize(output.data[parameters_col], list_data[count].offset + list_data[count].length);
+                    output.SetValue(parameters_col, count, Value::LIST(LogicalType::STRUCT({
+                        {"name", LogicalType::VARCHAR},
+                        {"type", LogicalType::VARCHAR}
+                    }), std::move(param_structs)));
                     
                     // Same for modifiers
                     auto modifiers_list_data = FlatVector::GetData<list_entry_t>(output.data[modifiers_col]);

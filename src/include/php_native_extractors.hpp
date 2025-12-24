@@ -351,7 +351,7 @@ public:
                         strcmp(base_type, "qualified_name") == 0) {
                         string type_name = ExtractNodeText(base_child, content);
                         if (!type_name.empty()) {
-                            parents.push_back({type_name, ""});
+                            parents.push_back({type_name, "extends"});
                         }
                     }
                 }
@@ -373,7 +373,7 @@ public:
                         strcmp(impl_type, "qualified_name") == 0) {
                         string type_name = ExtractNodeText(impl_child, content);
                         if (!type_name.empty()) {
-                            parents.push_back({type_name, ""});
+                            parents.push_back({type_name, "implements"});
                         }
                     }
                 }
@@ -387,13 +387,7 @@ public:
                                                     bool has_extends, bool has_implements) {
         vector<string> modifiers;
 
-        // Add inheritance keywords
-        if (has_extends) {
-            modifiers.push_back("extends");
-        }
-        if (has_implements) {
-            modifiers.push_back("implements");
-        }
+        // Note: inheritance kind is now in ParameterInfo.type, not in modifiers
 
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {

@@ -281,29 +281,27 @@ struct JavaNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
 
         try {
             string node_type = ts_node_type(node);
-            bool has_extends = false;
-            bool has_implements = false;
 
             if (node_type == "class_declaration") {
                 context.signature_type = ExtractClassType(node, content);
-                context.parameters = ExtractClassParents(node, content, has_extends, has_implements);
-                context.modifiers = ExtractJavaClassModifiers(node, content, has_extends, has_implements);
+                context.parameters = ExtractClassParents(node, content);
+                context.modifiers = ExtractJavaClassModifiers(node, content);
             } else if (node_type == "interface_declaration") {
                 context.signature_type = ExtractInterfaceType(node, content);
-                context.parameters = ExtractInterfaceParents(node, content, has_extends);
-                context.modifiers = ExtractInterfaceModifiers(node, content, has_extends);
+                context.parameters = ExtractInterfaceParents(node, content);
+                context.modifiers = ExtractInterfaceModifiers(node, content);
             } else if (node_type == "enum_declaration") {
                 context.signature_type = ExtractEnumType(node, content);
-                context.parameters = ExtractEnumInterfaces(node, content, has_implements);
-                context.modifiers = ExtractEnumModifiers(node, content, has_implements);
+                context.parameters = ExtractEnumInterfaces(node, content);
+                context.modifiers = ExtractEnumModifiers(node, content);
             } else if (node_type == "annotation_type_declaration") {
                 context.signature_type = ExtractAnnotationType(node, content);
                 context.modifiers = ExtractAnnotationModifiers(node, content);
             } else {
                 // Default class extraction
                 context.signature_type = "class";
-                context.parameters = ExtractClassParents(node, content, has_extends, has_implements);
-                context.modifiers = ExtractJavaClassModifiers(node, content, has_extends, has_implements);
+                context.parameters = ExtractClassParents(node, content);
+                context.modifiers = ExtractJavaClassModifiers(node, content);
             }
         } catch (...) {
             context.signature_type = "class";
@@ -395,12 +393,9 @@ private:
     }
 
     // Extract parent classes/interfaces as ParameterInfo (for classes)
-    // Sets has_extends=true if superclass exists, has_implements=true if interfaces exist
-    static vector<ParameterInfo> ExtractClassParents(TSNode node, const string& content,
-                                                      bool& has_extends, bool& has_implements) {
+    // Each parent has its inheritance kind stored in ParameterInfo.type ("extends" or "implements")
+    static vector<ParameterInfo> ExtractClassParents(TSNode node, const string& content) {
         vector<ParameterInfo> parents;
-        has_extends = false;
-        has_implements = false;
 
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {
@@ -409,12 +404,10 @@ private:
 
             if (strcmp(child_type, "superclass") == 0) {
                 // Extract extended class: "extends ClassName"
-                has_extends = true;
-                ExtractTypeIdentifiers(child, content, parents);
+                ExtractTypeIdentifiers(child, content, parents, "extends");
             } else if (strcmp(child_type, "super_interfaces") == 0) {
                 // Extract implemented interfaces: "implements Interface1, Interface2"
-                has_implements = true;
-                ExtractTypeIdentifiers(child, content, parents);
+                ExtractTypeIdentifiers(child, content, parents, "implements");
             }
         }
 
@@ -422,11 +415,9 @@ private:
     }
 
     // Extract parent interfaces for interface declarations
-    // Sets has_extends=true if extends clause exists
-    static vector<ParameterInfo> ExtractInterfaceParents(TSNode node, const string& content,
-                                                          bool& has_extends) {
+    // Interfaces extend other interfaces, so all parents have type="extends"
+    static vector<ParameterInfo> ExtractInterfaceParents(TSNode node, const string& content) {
         vector<ParameterInfo> parents;
-        has_extends = false;
 
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {
@@ -435,8 +426,7 @@ private:
 
             if (strcmp(child_type, "extends_interfaces") == 0) {
                 // Interface extends other interfaces
-                has_extends = true;
-                ExtractTypeIdentifiers(child, content, parents);
+                ExtractTypeIdentifiers(child, content, parents, "extends");
             }
         }
 
@@ -444,11 +434,9 @@ private:
     }
 
     // Extract implemented interfaces for enum declarations
-    // Sets has_implements=true if implements clause exists
-    static vector<ParameterInfo> ExtractEnumInterfaces(TSNode node, const string& content,
-                                                        bool& has_implements) {
+    // Enums implement interfaces, so all parents have type="implements"
+    static vector<ParameterInfo> ExtractEnumInterfaces(TSNode node, const string& content) {
         vector<ParameterInfo> parents;
-        has_implements = false;
 
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {
@@ -457,8 +445,7 @@ private:
 
             if (strcmp(child_type, "super_interfaces") == 0) {
                 // Enum implements interfaces
-                has_implements = true;
-                ExtractTypeIdentifiers(child, content, parents);
+                ExtractTypeIdentifiers(child, content, parents, "implements");
             }
         }
 
@@ -466,8 +453,10 @@ private:
     }
 
     // Helper to extract type identifiers from inheritance clauses
+    // inheritance_kind: "extends", "implements", etc. - stored in ParameterInfo.type
     static void ExtractTypeIdentifiers(TSNode clause_node, const string& content,
-                                       vector<ParameterInfo>& parents) {
+                                       vector<ParameterInfo>& parents,
+                                       const string& inheritance_kind) {
         uint32_t child_count = ts_node_child_count(clause_node);
         for (uint32_t i = 0; i < child_count; i++) {
             TSNode child = ts_node_child(clause_node, i);
@@ -478,7 +467,7 @@ private:
                 strcmp(child_type, "scoped_type_identifier") == 0) {
                 string type_name = ExtractNodeText(child, content);
                 if (!type_name.empty()) {
-                    parents.push_back({type_name, ""});  // name = type name, type = empty
+                    parents.push_back({type_name, inheritance_kind});
                 }
             } else if (strcmp(child_type, "type_list") == 0) {
                 // Handle type lists (for multiple interfaces)
@@ -492,7 +481,7 @@ private:
                         strcmp(list_child_type, "scoped_type_identifier") == 0) {
                         string type_name = ExtractNodeText(list_child, content);
                         if (!type_name.empty()) {
-                            parents.push_back({type_name, ""});
+                            parents.push_back({type_name, inheritance_kind});
                         }
                     }
                 }
@@ -522,18 +511,10 @@ private:
         return false;
     }
     
-    // Updated signature to take inheritance flags and add extends/implements keywords
-    static vector<string> ExtractJavaClassModifiers(TSNode node, const string& content,
-                                                     bool has_extends, bool has_implements) {
+    // Extract class modifiers (public, abstract, final, etc.)
+    // Note: inheritance keywords (extends/implements) are now in ParameterInfo.type, not here
+    static vector<string> ExtractJavaClassModifiers(TSNode node, const string& content) {
         vector<string> modifiers;
-
-        // Add inheritance keywords first
-        if (has_extends) {
-            modifiers.push_back("extends");
-        }
-        if (has_implements) {
-            modifiers.push_back("implements");
-        }
 
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {
@@ -559,22 +540,16 @@ private:
                     modifiers.push_back(content.substr(start, end - start));
                 }
             }
-            // Note: superclass and super_interfaces are now extracted separately into parameters
         }
 
         return modifiers;
     }
     
-    // Updated signature to take has_extends flag
-    static vector<string> ExtractInterfaceModifiers(TSNode node, const string& content,
-                                                     bool has_extends) {
+    // Extract interface modifiers (public, etc.)
+    // Note: inheritance keywords are now in ParameterInfo.type, not here
+    static vector<string> ExtractInterfaceModifiers(TSNode node, const string& content) {
         vector<string> modifiers;
         modifiers.push_back("interface");
-
-        // Add extends keyword if interface extends other interfaces
-        if (has_extends) {
-            modifiers.push_back("extends");
-        }
 
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {
@@ -598,22 +573,16 @@ private:
                     modifiers.push_back(annotation_text);
                 }
             }
-            // Note: extends_interfaces is now extracted separately into parameters
         }
 
         return modifiers;
     }
-    
-    // Updated signature to take has_implements flag
-    static vector<string> ExtractEnumModifiers(TSNode node, const string& content,
-                                                bool has_implements) {
+
+    // Extract enum modifiers (public, etc.)
+    // Note: inheritance keywords are now in ParameterInfo.type, not here
+    static vector<string> ExtractEnumModifiers(TSNode node, const string& content) {
         vector<string> modifiers;
         modifiers.push_back("enum");
-
-        // Add implements keyword if enum implements interfaces
-        if (has_implements) {
-            modifiers.push_back("implements");
-        }
 
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {
@@ -637,7 +606,6 @@ private:
                     modifiers.push_back(annotation_text);
                 }
             }
-            // Note: super_interfaces is now extracted separately into parameters
         }
 
         return modifiers;

@@ -15,7 +15,10 @@ LOAD sitting_duck;
 #   - name: The identifier (function name, method name, class name)
 #   - qualified_name: Full path (for calls: obj.method, for others: module.class.method)
 #   - signature_type: Type info (return type for functions, class kind, NULL for calls)
-#   - parameters: Related entities (param names for functions, arg values for calls)
+#   - parameters: LIST(STRUCT(name, type)) - meaning varies by context:
+#       * Function params: name=param_name, type=type_annotation
+#       * Call args: name=keyword_name (for kwargs), type=value_expression
+#       * Class inheritance: name=parent_class, type=inheritance_kind
 #   - modifiers: Keywords/flags (access, inheritance type, mutability)
 # =============================================================================
 
@@ -35,14 +38,15 @@ add	function_definition
 main	function_definition
 
 # Test: Function parameters are extracted (including self for methods)
+# Parameters now use STRUCT format: {name: param_name, type: type_annotation}
 query IT
 SELECT name, parameters FROM read_ast('test/data/python/simple.py', context := 'native')
 WHERE type = 'function_definition' AND name IS NOT NULL
 ORDER BY start_line;
 ----
 hello	[]
-__init__	[self]
-add	[self, x, y]
+__init__	[{'name': self, 'type': ''}]
+add	[{'name': self, 'type': ''}, {'name': x, 'type': ''}, {'name': y, 'type': ''}]
 main	[]
 
 # Test: Python untyped functions have NULL signature_type (no return annotation)
@@ -67,7 +71,7 @@ WHERE type = 'class_definition' AND name IS NOT NULL;
 ----
 MyClass	class	[has_dunder_methods]
 
-# Test: Class inheritance - parent classes go in parameters, "extends" keyword in modifiers
+# Test: Class inheritance - parent classes in parameters with type="extends"
 # Note: has_dunder_methods only appears when class directly defines __init__, __str__, etc.
 # Dog and Cat inherit from Animal but only define speak(), so no has_dunder_methods
 query ITTT
@@ -76,9 +80,9 @@ WHERE type = 'class_definition' AND name IS NOT NULL
 ORDER BY start_line;
 ----
 Animal	class	[]	[has_dunder_methods]
-Dog	class	[Animal]	[extends]
-Cat	class	[Animal]	[extends]
-Pet	class	[Dog, Cat]	[extends, has_dunder_methods]
+Dog	class	[{'name': Animal, 'type': extends}]	[]
+Cat	class	[{'name': Animal, 'type': extends}]	[]
+Pet	class	[{'name': Dog, 'type': extends}, {'name': Cat, 'type': extends}]	[has_dunder_methods]
 
 # =============================================================================
 # COMPUTATION_CALL - Function/Method Calls
@@ -88,7 +92,7 @@ Pet	class	[Dog, Cat]	[extends, has_dunder_methods]
 #   - name: The method/function identifier (e.g., "print", "method")
 #   - qualified_name: Full call expression (e.g., "obj.method")
 #   - signature_type: NULL (no return type info)
-#   - parameters: Actual argument values
+#   - parameters: Actual argument values - for positional args: name='', type=value
 
 # Test: Simple function calls have both name and qualified_name
 query ITT
@@ -108,12 +112,13 @@ WHERE type = 'call' AND signature_type IS NOT NULL;
 ----
 0
 
-# Test: Call parameters now contain actual argument values (including quotes for strings)
+# Test: Call parameters contain argument values in STRUCT format
+# For positional args: name is empty, type contains the value expression (including quotes for strings)
 query IT
 SELECT name, parameters FROM read_ast('test/data/python/simple.py', context := 'native')
 WHERE type = 'call' AND name = 'print';
 ----
-print	['"Hello, World!"']
+print	[{'name': '', 'type': '"Hello, World!"'}]
 
 # Test: Calls without arguments have empty array
 query IT
@@ -176,15 +181,18 @@ WHERE type = 'function_definition'
   AND array_length(parameters) > 1
 ORDER BY name;
 ----
-add	[self, x, y]
+add	[{'name': self, 'type': ''}, {'name': x, 'type': ''}, {'name': y, 'type': ''}]
 
 # Test: Find method definitions (functions with 'self' parameter)
+# Use list_transform to extract names from the STRUCT array
 query IT
 SELECT name, parameters FROM read_ast('test/data/python/simple.py', context := 'native')
 WHERE type = 'function_definition'
   AND name IS NOT NULL
-  AND list_contains(parameters, 'self')
+  AND array_length(parameters) > 0
+  AND parameters[1].name = 'self'
 ORDER BY name;
 ----
-__init__	[self]
-add	[self, x, y]
+__init__	[{'name': self, 'type': ''}]
+add	[{'name': self, 'type': ''}, {'name': x, 'type': ''}, {'name': y, 'type': ''}]
+

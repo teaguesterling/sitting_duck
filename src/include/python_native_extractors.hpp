@@ -274,10 +274,7 @@ struct PythonNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
                 context.signature_type = "class";
                 vector<string> base_classes = ExtractPythonBaseClasses(node, content);
                 for (const string& base : base_classes) {
-                    context.parameters.push_back({base, ""});
-                }
-                if (!context.parameters.empty()) {
-                    context.modifiers.push_back("extends");
+                    context.parameters.push_back({base, "extends"});
                 }
             }
         } catch (...) {
@@ -351,11 +348,12 @@ private:
     }
     
     // Extract base classes as ParameterInfo objects (parent classes go in parameters)
+    // Python doesn't distinguish extends/implements, so all parents are "extends"
     static vector<ParameterInfo> ExtractBaseClassesAsParameters(TSNode node, const string& content) {
         vector<ParameterInfo> params;
         vector<string> base_classes = ExtractPythonBaseClasses(node, content);
         for (const string& base : base_classes) {
-            params.push_back({base, ""});  // name = class name, type = empty
+            params.push_back({base, "extends"});  // name = class name, type = inheritance kind
         }
         return params;
     }
@@ -372,13 +370,10 @@ private:
         return {};
     }
 
+    // Extract class modifiers (abstract, has_classmethods, etc.)
+    // Note: inheritance info is now in ParameterInfo.type, not in modifiers
     static vector<string> ExtractPythonClassModifiers(TSNode node, const string& content, bool has_parents = false) {
         vector<string> modifiers;
-
-        // Add "extends" keyword if class has parent classes (parents are in parameters now)
-        if (has_parents) {
-            modifiers.push_back("extends");
-        }
 
         // Check for special method patterns
         if (HasAbstractMethods(node, content)) {

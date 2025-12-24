@@ -390,14 +390,15 @@ public:
                         strcmp(inherit_type, "identifier") == 0) {
                         string type_name = ExtractNodeText(inherit_child, content);
                         if (!type_name.empty()) {
-                            parents.push_back({type_name, ""});
+                            // Swift uses unified inheritance syntax (:) for both class and protocol
+                            parents.push_back({type_name, "extends"});
                         }
                     } else if (strcmp(inherit_type, "user_type") == 0 ||
                                strcmp(inherit_type, "generic_type") == 0) {
                         // Complex type - extract the identifier from within
                         string type_name = ExtractTypeName(inherit_child, content);
                         if (!type_name.empty()) {
-                            parents.push_back({type_name, ""});
+                            parents.push_back({type_name, "extends"});
                         }
                     }
                 }
@@ -428,10 +429,7 @@ public:
                                                      bool has_inheritance) {
         vector<string> modifiers;
 
-        // Add extends keyword if type has inheritance
-        if (has_inheritance) {
-            modifiers.push_back("extends");
-        }
+        // Note: inheritance kind is now in ParameterInfo.type, not in modifiers
 
         uint32_t child_count = ts_node_child_count(node);
         for (uint32_t i = 0; i < child_count; i++) {

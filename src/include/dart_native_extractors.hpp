@@ -249,7 +249,7 @@ inline vector<ParameterInfo> ExtractDartParentTypes(TSNode node, const string& c
                     strcmp(super_type, "identifier") == 0) {
                     string type_name = ExtractNodeText(super_child, content);
                     if (!type_name.empty()) {
-                        parents.push_back({type_name, ""});
+                        parents.push_back({type_name, "extends"});
                     }
                 } else if (strcmp(super_type, "mixins") == 0) {
                     // with clause - extract mixins (nested inside superclass)
@@ -267,7 +267,7 @@ inline vector<ParameterInfo> ExtractDartParentTypes(TSNode node, const string& c
                             strcmp(mixin_type, "identifier") == 0) {
                             string type_name = ExtractNodeText(mixin_child, content);
                             if (!type_name.empty()) {
-                                parents.push_back({type_name, ""});
+                                parents.push_back({type_name, "with"});
                             }
                         }
                     }
@@ -289,7 +289,7 @@ inline vector<ParameterInfo> ExtractDartParentTypes(TSNode node, const string& c
                     strcmp(impl_type, "identifier") == 0) {
                     string type_name = ExtractNodeText(impl_child, content);
                     if (!type_name.empty()) {
-                        parents.push_back({type_name, ""});
+                        parents.push_back({type_name, "implements"});
                     }
                 }
             }
@@ -309,7 +309,7 @@ inline vector<ParameterInfo> ExtractDartParentTypes(TSNode node, const string& c
                     strcmp(mixin_type, "identifier") == 0) {
                     string type_name = ExtractNodeText(mixin_child, content);
                     if (!type_name.empty()) {
-                        parents.push_back({type_name, ""});
+                        parents.push_back({type_name, "with"});
                     }
                 }
             }
@@ -319,23 +319,15 @@ inline vector<ParameterInfo> ExtractDartParentTypes(TSNode node, const string& c
     return parents;
 }
 
-// Extract class modifiers (excluding inheritance which goes in parameters now)
+// Extract class modifiers (inheritance kind is now in ParameterInfo.type, not modifiers)
 // is_mixin_declaration: true if this is a mixin_declaration node (to avoid adding "mixin" as a modifier)
 inline vector<string> ExtractDartClassModifiers(TSNode node, const string& content,
                                                  bool has_extends, bool has_implements, bool has_with,
                                                  bool is_mixin_declaration = false) {
     vector<string> modifiers;
 
-    // Add inheritance keywords
-    if (has_extends) {
-        modifiers.push_back("extends");
-    }
-    if (has_implements) {
-        modifiers.push_back("implements");
-    }
-    if (has_with) {
-        modifiers.push_back("with");
-    }
+    // Note: inheritance keywords (extends, implements, with) are no longer added to modifiers
+    // They are now stored in the ParameterInfo.type field for each parent class/interface/mixin
 
     uint32_t child_count = ts_node_child_count(node);
     for (uint32_t i = 0; i < child_count; i++) {

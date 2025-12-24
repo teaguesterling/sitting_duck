@@ -14,8 +14,10 @@ LOAD sitting_duck;
 # Updated extraction model:
 #   - name: The identifier (class name, interface name, etc.)
 #   - signature_type: Type info (class, abstract_class, interface, trait, enum)
-#   - parameters: Parent types (extended class, implemented interfaces)
-#   - modifiers: Keywords (extends, implements, abstract, final)
+#   - parameters: LIST(STRUCT(name, type)) - parent types with inheritance kind
+#       * name: parent class/interface name
+#       * type: inheritance kind (extends, implements)
+#   - modifiers: Keywords (abstract, final, readonly) - NO inheritance keywords
 # =============================================================================
 
 # =============================================================================
@@ -34,14 +36,14 @@ query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/php/Inheritance.php', context := 'native')
 WHERE type = 'interface_declaration' AND name = 'Runner';
 ----
-Runner	[Runnable]	[extends]
+Runner	[{'name': Runnable, 'type': extends}]	[]
 
 # Test: Interface extending multiple interfaces
 query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/php/Inheritance.php', context := 'native')
 WHERE type = 'interface_declaration' AND name = 'Athlete';
 ----
-Athlete	[Runner, Serializable]	[extends]
+Athlete	[{'name': Runner, 'type': extends}, {'name': Serializable, 'type': extends}]	[]
 
 # =============================================================================
 # CLASS_DECLARATION - Class Declarations with Inheritance
@@ -59,28 +61,28 @@ query ITTT
 SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/php/Inheritance.php', context := 'native')
 WHERE type = 'class_declaration' AND name = 'Dog';
 ----
-Dog	class	[Animal]	[extends]
+Dog	class	[{'name': Animal, 'type': extends}]	[]
 
 # Test: Class with extends and implements
 query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/php/Inheritance.php', context := 'native')
 WHERE type = 'class_declaration' AND name = 'Pet';
 ----
-Pet	[Dog, Serializable]	[extends, implements]
+Pet	[{'name': Dog, 'type': extends}, {'name': Serializable, 'type': implements}]	[]
 
 # Test: Class with extends and multiple implements
 query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/php/Inheritance.php', context := 'native')
 WHERE type = 'class_declaration' AND name = 'ServiceAnimal';
 ----
-ServiceAnimal	[Dog, Runnable, Serializable]	[extends, implements]
+ServiceAnimal	[{'name': Dog, 'type': extends}, {'name': Runnable, 'type': implements}, {'name': Serializable, 'type': implements}]	[]
 
 # Test: Final class
 query ITTT
 SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/php/Inheritance.php', context := 'native')
 WHERE type = 'class_declaration' AND name = 'Bulldog';
 ----
-Bulldog	final_class	[Dog]	[extends, final]
+Bulldog	final_class	[{'name': Dog, 'type': extends}]	[final]
 
 # =============================================================================
 # TRAIT_DECLARATION - Trait Declarations
@@ -102,5 +104,5 @@ query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/php/Inheritance.php', context := 'native')
 WHERE type = 'enum_declaration' AND name = 'DogBreed';
 ----
-DogBreed	[Serializable]	[implements]
+DogBreed	[{'name': Serializable, 'type': implements}]	[]
 

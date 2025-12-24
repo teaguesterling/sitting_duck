@@ -15,8 +15,8 @@ LOAD sitting_duck;
 #   - name: The identifier (function name, method name, class name)
 #   - qualified_name: Full path (for calls: obj.method, for others: module.class.method)
 #   - signature_type: Type info (return type for functions, class kind, NULL for calls)
-#   - parameters: Related entities (param names for functions, parent types for classes)
-#   - modifiers: Keywords/flags (access, inheritance type, extends/implements keywords)
+#   - parameters: LIST(STRUCT(name, type)) - parent classes/interfaces with inheritance kind
+#   - modifiers: Keywords/flags (access modifiers, annotations)
 # =============================================================================
 
 # =============================================================================
@@ -30,26 +30,26 @@ WHERE type = 'class_declaration' AND name = 'Animal';
 ----
 Animal	abstract_class	[]	[abstract]
 
-# Test: Class with single extends - parent in parameters, "extends" in modifiers
+# Test: Class with single extends - parent in parameters with type="extends"
 query ITTT
 SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
 WHERE type = 'class_declaration' AND name = 'Dog';
 ----
-Dog	class	[Animal]	[extends]
+Dog	class	[{'name': Animal, 'type': extends}]	[]
 
-# Test: Class with extends and implements - both parents in parameters
+# Test: Class with extends and implements - both parents in parameters with their inheritance kind
 query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
 WHERE type = 'class_declaration' AND name = 'Pet';
 ----
-Pet	[Dog, Serializable]	[extends, implements]
+Pet	[{'name': Dog, 'type': extends}, {'name': Serializable, 'type': implements}]	[]
 
 # Test: Class with extends and multiple implements
 query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
 WHERE type = 'class_declaration' AND name = 'ServiceAnimal';
 ----
-ServiceAnimal	[Dog, Runnable, Serializable]	[extends, implements]
+ServiceAnimal	[{'name': Dog, 'type': extends}, {'name': Runnable, 'type': implements}, {'name': Serializable, 'type': implements}]	[]
 
 # =============================================================================
 # DEFINITION_INTERFACE - Interface Declarations
@@ -67,14 +67,14 @@ query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
 WHERE type = 'interface_declaration' AND name = 'Runner';
 ----
-Runner	[Runnable]	[interface, extends]
+Runner	[{'name': Runnable, 'type': extends}]	[interface]
 
 # Test: Interface extending multiple interfaces
 query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
 WHERE type = 'interface_declaration' AND name = 'Athlete';
 ----
-Athlete	[Runner, Serializable]	[interface, extends]
+Athlete	[{'name': Runner, 'type': extends}, {'name': Serializable, 'type': extends}]	[interface]
 
 # Test: Functional interface with annotation
 query ITTT
@@ -92,5 +92,5 @@ query ITT
 SELECT name, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
 WHERE type = 'enum_declaration' AND name = 'DogBreed';
 ----
-DogBreed	[Serializable]	[enum, implements]
+DogBreed	[{'name': Serializable, 'type': implements}]	[enum]
 
