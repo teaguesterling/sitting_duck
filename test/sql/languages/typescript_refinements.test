@@ -1,0 +1,329 @@
+# name: test/sql/languages/typescript_refinements.test
+# description: Test TypeScript semantic refinements
+# group: [languages]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# TypeScript Refinement Tests
+# =============================================================================
+#
+# Tests that semantic refinements are correctly applied to TypeScript code.
+# Refinements are 2-bit values in the lower bits of semantic_type that provide
+# finer-grained classification within each semantic category.
+# =============================================================================
+
+# =============================================================================
+# FUNCTION REFINEMENTS
+# =============================================================================
+
+# Test: Regular functions should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'function_declaration' AND name IS NOT NULL
+LIMIT 1;
+----
+function_declaration	DEFINITION_FUNCTION
+
+# Test: Arrow functions should be DEFINITION_FUNCTION (with LAMBDA refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'arrow_function'
+LIMIT 1;
+----
+arrow_function	DEFINITION_FUNCTION
+
+# Test: Method definitions should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'method_definition'
+LIMIT 1;
+----
+method_definition	DEFINITION_FUNCTION
+
+# Test: Function signatures (in interfaces) should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'function_signature'
+LIMIT 1;
+----
+function_signature	DEFINITION_FUNCTION
+
+# =============================================================================
+# VARIABLE REFINEMENTS
+# =============================================================================
+
+# Test: Parameters should be DEFINITION_VARIABLE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'required_parameter'
+LIMIT 1;
+----
+required_parameter	DEFINITION_VARIABLE
+
+# Test: Optional parameters should be DEFINITION_VARIABLE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'optional_parameter'
+LIMIT 1;
+----
+optional_parameter	DEFINITION_VARIABLE
+
+# Test: Class fields should be DEFINITION_VARIABLE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'public_field_definition'
+LIMIT 1;
+----
+public_field_definition	DEFINITION_VARIABLE
+
+# Test: Property signatures (in interfaces) should be DEFINITION_VARIABLE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'property_signature'
+LIMIT 1;
+----
+property_signature	DEFINITION_VARIABLE
+
+# Test: const keyword should be DEFINITION_VARIABLE (immutable)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'const'
+LIMIT 1;
+----
+const	DEFINITION_VARIABLE
+
+# Test: let keyword should be DEFINITION_VARIABLE (mutable)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'let'
+LIMIT 1;
+----
+let	DEFINITION_VARIABLE
+
+# =============================================================================
+# CALL REFINEMENTS
+# =============================================================================
+
+# Test: Call expressions should be COMPUTATION_CALL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'call_expression'
+LIMIT 1;
+----
+call_expression	COMPUTATION_CALL
+
+# Test: New expressions should be COMPUTATION_CALL (constructor refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'new_expression'
+LIMIT 1;
+----
+new_expression	COMPUTATION_CALL
+
+# =============================================================================
+# LITERAL REFINEMENTS
+# =============================================================================
+
+# Test: Number literals should be LITERAL_NUMBER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'number'
+LIMIT 1;
+----
+number	LITERAL_NUMBER
+
+# Test: String literals should be LITERAL_STRING
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'string'
+LIMIT 1;
+----
+string	LITERAL_STRING
+
+# =============================================================================
+# CONTROL FLOW REFINEMENTS
+# =============================================================================
+
+# Test: If statements should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'if_statement'
+LIMIT 1;
+----
+if_statement	FLOW_CONDITIONAL
+
+# Test: Return statements should be FLOW_JUMP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'return_statement'
+LIMIT 1;
+----
+return_statement	FLOW_JUMP
+
+# =============================================================================
+# TYPESCRIPT-SPECIFIC TYPES
+# =============================================================================
+
+# Test: Interfaces should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'interface_declaration'
+LIMIT 1;
+----
+interface_declaration	DEFINITION_CLASS
+
+# Test: Type aliases should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'type_alias_declaration'
+LIMIT 1;
+----
+type_alias_declaration	DEFINITION_CLASS
+
+# Test: Enums should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'enum_declaration'
+LIMIT 1;
+----
+enum_declaration	DEFINITION_CLASS
+
+# Test: Namespaces (internal_module) should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'internal_module'
+LIMIT 1;
+----
+internal_module	DEFINITION_MODULE
+
+# Test: Type annotations should be TYPE_REFERENCE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'type_annotation'
+LIMIT 1;
+----
+type_annotation	TYPE_REFERENCE
+
+# Test: Predefined types (string, number, etc.) should be TYPE_PRIMITIVE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'predefined_type'
+LIMIT 1;
+----
+predefined_type	TYPE_PRIMITIVE
+
+# Test: Union types should be TYPE_COMPOSITE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'union_type'
+LIMIT 1;
+----
+union_type	TYPE_COMPOSITE
+
+# Test: Array types should be TYPE_COMPOSITE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'array_type'
+LIMIT 1;
+----
+array_type	TYPE_COMPOSITE
+
+# Test: Generic types should be TYPE_GENERIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'type_arguments'
+LIMIT 1;
+----
+type_arguments	TYPE_GENERIC
+
+# =============================================================================
+# ASYNC/AWAIT REFINEMENTS
+# =============================================================================
+
+# Test: Await expressions should be FLOW_SYNC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'await_expression'
+LIMIT 1;
+----
+await_expression	FLOW_SYNC
+
+# Test: Async keyword should be FLOW_SYNC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'async'
+LIMIT 1;
+----
+async	FLOW_SYNC
+
+# =============================================================================
+# ACCESS MODIFIERS
+# =============================================================================
+
+# Test: Public modifier should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'public'
+LIMIT 1;
+----
+public	METADATA_ANNOTATION
+
+# Test: Private modifier should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'private'
+LIMIT 1;
+----
+private	METADATA_ANNOTATION
+
+# Test: Protected modifier should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'protected'
+LIMIT 1;
+----
+protected	METADATA_ANNOTATION
+
+# Test: Readonly modifier should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE type = 'readonly'
+LIMIT 1;
+----
+readonly	METADATA_ANNOTATION
+
