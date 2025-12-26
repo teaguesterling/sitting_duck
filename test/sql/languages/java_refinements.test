@@ -1,0 +1,486 @@
+# name: test/sql/languages/java_refinements.test
+# description: Test Java semantic refinements
+# group: [languages]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Java Refinement Tests
+# =============================================================================
+#
+# Tests that semantic refinements are correctly applied to Java code.
+# Refinements are 2-bit values in the lower bits of semantic_type that provide
+# finer-grained classification within each semantic category.
+# =============================================================================
+
+# =============================================================================
+# CLASS REFINEMENTS
+# =============================================================================
+
+# Test: Regular class should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'class_declaration' AND name = 'Test';
+----
+class_declaration	DEFINITION_CLASS
+
+# Test: Inner class should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'class_declaration' AND name = 'InnerClass';
+----
+class_declaration	DEFINITION_CLASS
+
+# Test: Interface should be DEFINITION_CLASS (with ABSTRACT refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'interface_declaration' AND name = 'Processor';
+----
+interface_declaration	DEFINITION_CLASS
+
+# Test: Enum should be DEFINITION_CLASS (with ENUM refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'enum_declaration' AND name = 'Status';
+----
+enum_declaration	DEFINITION_CLASS
+
+# =============================================================================
+# FUNCTION REFINEMENTS
+# =============================================================================
+
+# Test: Regular methods should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'method_declaration' AND name = 'increment';
+----
+method_declaration	DEFINITION_FUNCTION
+
+# Test: Constructor should be DEFINITION_FUNCTION (with CONSTRUCTOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'constructor_declaration'
+LIMIT 1;
+----
+constructor_declaration	DEFINITION_FUNCTION
+
+# Test: Lambda expression should be DEFINITION_FUNCTION (with LAMBDA refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'lambda_expression'
+LIMIT 1;
+----
+lambda_expression	DEFINITION_FUNCTION
+
+# Test: Static main method should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'method_declaration' AND name = 'main';
+----
+method_declaration	DEFINITION_FUNCTION
+
+# =============================================================================
+# VARIABLE REFINEMENTS
+# =============================================================================
+
+# Test: Field declarations should be DEFINITION_VARIABLE (with FIELD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'field_declaration'
+LIMIT 1;
+----
+field_declaration	DEFINITION_VARIABLE
+
+# Test: Local variable declarations should be DEFINITION_VARIABLE (with MUTABLE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'local_variable_declaration'
+LIMIT 1;
+----
+local_variable_declaration	DEFINITION_VARIABLE
+
+# Test: Formal parameters should be DEFINITION_VARIABLE (with PARAMETER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'formal_parameter'
+LIMIT 1;
+----
+formal_parameter	DEFINITION_VARIABLE
+
+# Test: Enum constants should be DEFINITION_VARIABLE (with FIELD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'enum_constant'
+LIMIT 1;
+----
+enum_constant	DEFINITION_VARIABLE
+
+# =============================================================================
+# CALL REFINEMENTS
+# =============================================================================
+
+# Test: Method invocation should be COMPUTATION_CALL (with METHOD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'method_invocation'
+LIMIT 1;
+----
+method_invocation	COMPUTATION_CALL
+
+# Test: Object creation should be COMPUTATION_CALL (with CONSTRUCTOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'object_creation_expression'
+LIMIT 1;
+----
+object_creation_expression	COMPUTATION_CALL
+
+# =============================================================================
+# LITERAL REFINEMENTS
+# =============================================================================
+
+# Test: Integer literals should be LITERAL_NUMBER (with INTEGER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'decimal_integer_literal'
+LIMIT 1;
+----
+decimal_integer_literal	LITERAL_NUMBER
+
+# Test: String literals should be LITERAL_STRING (with LITERAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'string_literal'
+LIMIT 1;
+----
+string_literal	LITERAL_STRING
+
+# Test: null literal should be LITERAL_ATOMIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'null_literal'
+LIMIT 1;
+----
+null_literal	LITERAL_ATOMIC
+
+# =============================================================================
+# CONTROL FLOW REFINEMENTS
+# =============================================================================
+
+# Test: If statements should be FLOW_CONDITIONAL (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'if_statement'
+LIMIT 1;
+----
+if_statement	FLOW_CONDITIONAL
+
+# Test: For statement should be FLOW_LOOP (with COUNTER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'for_statement'
+LIMIT 1;
+----
+for_statement	FLOW_LOOP
+
+# Test: Return statements should be FLOW_JUMP (with RETURN refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'return_statement'
+LIMIT 1;
+----
+return_statement	FLOW_JUMP
+
+# =============================================================================
+# EXCEPTION HANDLING
+# =============================================================================
+
+# Test: Try statement should be ERROR_TRY
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'try_statement'
+LIMIT 1;
+----
+try_statement	ERROR_TRY
+
+# Test: Catch clause should be ERROR_CATCH
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'catch_clause'
+LIMIT 1;
+----
+catch_clause	ERROR_CATCH
+
+# Test: Throw statement should be ERROR_THROW
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'throw_statement'
+LIMIT 1;
+----
+throw_statement	ERROR_THROW
+
+# =============================================================================
+# MODULE AND IMPORT
+# =============================================================================
+
+# Test: Package declaration should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'package_declaration'
+LIMIT 1;
+----
+package_declaration	DEFINITION_MODULE
+
+# Test: Import declaration should be EXTERNAL_IMPORT (with MODULE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'import_declaration'
+LIMIT 1;
+----
+import_declaration	EXTERNAL_IMPORT
+
+# =============================================================================
+# TYPE SYSTEM
+# =============================================================================
+
+# Test: Type identifier should be TYPE_REFERENCE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'type_identifier'
+LIMIT 1;
+----
+type_identifier	TYPE_REFERENCE
+
+# Test: Generic type should be TYPE_GENERIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'generic_type'
+LIMIT 1;
+----
+generic_type	TYPE_GENERIC
+
+# Test: Integral type should be TYPE_PRIMITIVE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'integral_type'
+LIMIT 1;
+----
+integral_type	TYPE_PRIMITIVE
+
+# Test: Void type should be TYPE_PRIMITIVE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'void_type'
+LIMIT 1;
+----
+void_type	TYPE_PRIMITIVE
+
+# =============================================================================
+# OPERATORS
+# =============================================================================
+
+# Test: Binary expression should be OPERATOR_ARITHMETIC (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'binary_expression'
+LIMIT 1;
+----
+binary_expression	OPERATOR_ARITHMETIC
+
+# Test: Update expression should be OPERATOR_ARITHMETIC (with UNARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'update_expression'
+LIMIT 1;
+----
+update_expression	OPERATOR_ARITHMETIC
+
+# Test: Assignment expression should be OPERATOR_ASSIGNMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'assignment_expression'
+LIMIT 1;
+----
+assignment_expression	OPERATOR_ASSIGNMENT
+
+# =============================================================================
+# ANNOTATIONS
+# =============================================================================
+
+# Test: Marker annotation should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'marker_annotation'
+LIMIT 1;
+----
+marker_annotation	METADATA_ANNOTATION
+
+# =============================================================================
+# ACCESS MODIFIERS
+# =============================================================================
+
+# Test: Public keyword should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'public'
+LIMIT 1;
+----
+public	METADATA_ANNOTATION
+
+# Test: Private keyword should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'private'
+LIMIT 1;
+----
+private	METADATA_ANNOTATION
+
+# Test: Protected keyword should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'protected'
+LIMIT 1;
+----
+protected	METADATA_ANNOTATION
+
+# Test: Static keyword should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'static'
+LIMIT 1;
+----
+static	METADATA_ANNOTATION
+
+# Test: Final keyword should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'final'
+LIMIT 1;
+----
+final	METADATA_ANNOTATION
+
+# =============================================================================
+# COMMENTS
+# =============================================================================
+
+# Test: Block comment should be METADATA_COMMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'block_comment'
+LIMIT 1;
+----
+block_comment	METADATA_COMMENT
+
+# =============================================================================
+# STRUCTURAL ELEMENTS
+# =============================================================================
+
+# Test: Argument list should be ORGANIZATION_LIST
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'argument_list'
+LIMIT 1;
+----
+argument_list	ORGANIZATION_LIST
+
+# Test: Formal parameters should be ORGANIZATION_LIST
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'formal_parameters'
+LIMIT 1;
+----
+formal_parameters	ORGANIZATION_LIST
+
+# Test: Block should be ORGANIZATION_BLOCK
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'block'
+LIMIT 1;
+----
+block	ORGANIZATION_BLOCK
+
+# Test: Class body should be ORGANIZATION_BLOCK
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'class_body'
+LIMIT 1;
+----
+class_body	ORGANIZATION_BLOCK
+
+# =============================================================================
+# IDENTIFIERS AND SCOPING
+# =============================================================================
+
+# Test: Identifier should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'identifier'
+LIMIT 1;
+----
+identifier	NAME_IDENTIFIER
+
+# Test: This keyword should be NAME_SCOPED
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'this'
+LIMIT 1;
+----
+this	NAME_SCOPED
+
+# Test: Scoped identifier should be NAME_QUALIFIED
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'scoped_identifier'
+LIMIT 1;
+----
+scoped_identifier	NAME_QUALIFIED
+
