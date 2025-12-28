@@ -1,0 +1,524 @@
+# name: test/sql/languages/go_refinements.test
+# description: Test Go semantic refinements
+# group: [languages]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Go Refinement Tests
+# =============================================================================
+#
+# Tests that semantic refinements are correctly applied to Go code.
+# Refinements are 2-bit values in the lower bits of semantic_type that provide
+# finer-grained classification within each semantic category.
+# =============================================================================
+
+# =============================================================================
+# TYPE DEFINITION REFINEMENTS
+# =============================================================================
+
+# Test: Struct type should be DEFINITION_CLASS (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'struct_type'
+LIMIT 1;
+----
+struct_type	DEFINITION_CLASS
+
+# Test: Interface type should be DEFINITION_CLASS (with ABSTRACT refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'interface_type'
+LIMIT 1;
+----
+interface_type	DEFINITION_CLASS
+
+# Test: struct keyword should be TYPE_COMPOSITE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'struct'
+LIMIT 1;
+----
+struct	TYPE_COMPOSITE
+
+# Test: interface keyword should be TYPE_COMPOSITE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'interface'
+LIMIT 1;
+----
+interface	TYPE_COMPOSITE
+
+# =============================================================================
+# FUNCTION REFINEMENTS
+# =============================================================================
+
+# Test: Function declarations should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'function_declaration'
+LIMIT 1;
+----
+function_declaration	DEFINITION_FUNCTION
+
+# Test: Method declarations should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'method_declaration'
+LIMIT 1;
+----
+method_declaration	DEFINITION_FUNCTION
+
+# Test: Method elements in interface should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'method_elem'
+LIMIT 1;
+----
+method_elem	DEFINITION_FUNCTION
+
+# Test: func keyword should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'func'
+LIMIT 1;
+----
+func	DEFINITION_FUNCTION
+
+# =============================================================================
+# MODULE REFINEMENTS
+# =============================================================================
+
+# Test: Package clause should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'package_clause'
+LIMIT 1;
+----
+package_clause	DEFINITION_MODULE
+
+# Test: Source file should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'source_file'
+LIMIT 1;
+----
+source_file	DEFINITION_MODULE
+
+# Test: package keyword should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'package'
+LIMIT 1;
+----
+package	DEFINITION_MODULE
+
+# =============================================================================
+# VARIABLE REFINEMENTS
+# =============================================================================
+
+# Test: Short var declaration should be DEFINITION_VARIABLE (with MUTABLE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'short_var_declaration'
+LIMIT 1;
+----
+short_var_declaration	DEFINITION_VARIABLE
+
+# Test: Parameter declaration should be DEFINITION_VARIABLE (with PARAMETER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'parameter_declaration'
+LIMIT 1;
+----
+parameter_declaration	DEFINITION_VARIABLE
+
+# Test: Field declaration should be DEFINITION_VARIABLE (with FIELD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'field_declaration'
+LIMIT 1;
+----
+field_declaration	DEFINITION_VARIABLE
+
+# =============================================================================
+# IMPORT REFINEMENTS
+# =============================================================================
+
+# Test: Import declaration should be EXTERNAL_IMPORT (with MODULE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'import_declaration'
+LIMIT 1;
+----
+import_declaration	EXTERNAL_IMPORT
+
+# Test: Import spec should be EXTERNAL_IMPORT (with MODULE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'import_spec'
+LIMIT 1;
+----
+import_spec	EXTERNAL_IMPORT
+
+# Test: import keyword should be EXTERNAL_IMPORT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'import'
+LIMIT 1;
+----
+import	EXTERNAL_IMPORT
+
+# =============================================================================
+# CALL REFINEMENTS
+# =============================================================================
+
+# Test: Call expressions should be COMPUTATION_CALL (with FUNCTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'call_expression'
+LIMIT 1;
+----
+call_expression	COMPUTATION_CALL
+
+# Test: Selector expression should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'selector_expression'
+LIMIT 1;
+----
+selector_expression	COMPUTATION_ACCESS
+
+# =============================================================================
+# LITERAL REFINEMENTS
+# =============================================================================
+
+# Test: Interpreted string literals should be LITERAL_STRING (with LITERAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'interpreted_string_literal'
+LIMIT 1;
+----
+interpreted_string_literal	LITERAL_STRING
+
+# Test: Composite literal should be LITERAL_STRUCTURED (with SEQUENCE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'composite_literal'
+LIMIT 1;
+----
+composite_literal	LITERAL_STRUCTURED
+
+# Test: Literal value should be LITERAL_STRUCTURED
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'literal_value'
+LIMIT 1;
+----
+literal_value	LITERAL_STRUCTURED
+
+# =============================================================================
+# CONTROL FLOW REFINEMENTS (using FizzBuzz for loops/switch)
+# =============================================================================
+
+# Test: For statement should be FLOW_LOOP (with CONDITIONAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = 'for_statement'
+LIMIT 1;
+----
+for_statement	FLOW_LOOP
+
+# Test: For clause should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = 'for_clause'
+LIMIT 1;
+----
+for_clause	FLOW_LOOP
+
+# Test: for keyword should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = 'for'
+LIMIT 1;
+----
+for	FLOW_LOOP
+
+# Test: Expression switch statement should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = 'expression_switch_statement'
+LIMIT 1;
+----
+expression_switch_statement	FLOW_CONDITIONAL
+
+# Test: switch keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = 'switch'
+LIMIT 1;
+----
+switch	FLOW_CONDITIONAL
+
+# Test: case keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = 'case'
+LIMIT 1;
+----
+case	FLOW_CONDITIONAL
+
+# Test: default keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = 'default'
+LIMIT 1;
+----
+default	FLOW_CONDITIONAL
+
+# Test: Expression case should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = 'expression_case'
+LIMIT 1;
+----
+expression_case	FLOW_CONDITIONAL
+
+# Test: Default case should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = 'default_case'
+LIMIT 1;
+----
+default_case	FLOW_CONDITIONAL
+
+# Test: Return statement should be FLOW_JUMP (with RETURN refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'return_statement'
+LIMIT 1;
+----
+return_statement	FLOW_JUMP
+
+# Test: return keyword should be FLOW_JUMP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'return'
+LIMIT 1;
+----
+return	FLOW_JUMP
+
+# =============================================================================
+# OPERATOR REFINEMENTS
+# =============================================================================
+
+# Test: := operator should be OPERATOR_ASSIGNMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = ':='
+LIMIT 1;
+----
+:=	OPERATOR_ASSIGNMENT
+
+# Test: Binary expression should be OPERATOR_ARITHMETIC (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = 'binary_expression'
+LIMIT 1;
+----
+binary_expression	OPERATOR_ARITHMETIC
+
+# Test: == operator should be OPERATOR_COMPARISON
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = '=='
+LIMIT 1;
+----
+==	OPERATOR_COMPARISON
+
+# Test: <= operator should be OPERATOR_COMPARISON
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = '<='
+LIMIT 1;
+----
+<=	OPERATOR_COMPARISON
+
+# Test: % operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = '%'
+LIMIT 1;
+----
+%	OPERATOR_ARITHMETIC
+
+# Test: ++ operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = '++'
+LIMIT 1;
+----
+++	OPERATOR_ARITHMETIC
+
+# =============================================================================
+# TYPE SYSTEM
+# =============================================================================
+
+# Test: Type identifier should be TYPE_REFERENCE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'type_identifier'
+LIMIT 1;
+----
+type_identifier	TYPE_REFERENCE
+
+# =============================================================================
+# STRUCTURAL ELEMENTS
+# =============================================================================
+
+# Test: Block should be ORGANIZATION_BLOCK (with SEQUENTIAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'block'
+LIMIT 1;
+----
+block	ORGANIZATION_BLOCK
+
+# Test: Parameter list should be ORGANIZATION_LIST (with COLLECTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'parameter_list'
+LIMIT 1;
+----
+parameter_list	ORGANIZATION_LIST
+
+# Test: Expression list should be ORGANIZATION_LIST (with COLLECTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'expression_list'
+LIMIT 1;
+----
+expression_list	ORGANIZATION_LIST
+
+# Test: Field declaration list should be ORGANIZATION_LIST (with COLLECTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'field_declaration_list'
+LIMIT 1;
+----
+field_declaration_list	ORGANIZATION_LIST
+
+# =============================================================================
+# IDENTIFIERS
+# =============================================================================
+
+# Test: Identifier should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'identifier'
+LIMIT 1;
+----
+identifier	NAME_IDENTIFIER
+
+# Test: Field identifier should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'field_identifier'
+LIMIT 1;
+----
+field_identifier	NAME_IDENTIFIER
+
+# Test: Package identifier should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'package_identifier'
+LIMIT 1;
+----
+package_identifier	NAME_IDENTIFIER
+
+# =============================================================================
+# STATEMENTS
+# =============================================================================
+
+# Test: Expression statement should be EXECUTION_STATEMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', context := 'native')
+WHERE type = 'expression_statement'
+LIMIT 1;
+----
+expression_statement	EXECUTION_STATEMENT
+
+# Test: Inc statement should be EXECUTION_STATEMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = 'inc_statement'
+LIMIT 1;
+----
+inc_statement	EXECUTION_STATEMENT
+
+# =============================================================================
+# LITERALS
+# =============================================================================
+
+# Test: Int literal should be LITERAL_NUMBER (with INTEGER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rosetta/Lang/Go/FizzBuzz/fizzbuzz-1.go', context := 'native')
+WHERE type = 'int_literal'
+LIMIT 1;
+----
+int_literal	LITERAL_NUMBER
+
