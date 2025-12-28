@@ -1,0 +1,425 @@
+# name: test/sql/languages/rust_refinements.test
+# description: Test Rust semantic refinements
+# group: [languages]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Rust Refinement Tests
+# =============================================================================
+#
+# Tests that semantic refinements are correctly applied to Rust code.
+# Refinements are 2-bit values in the lower bits of semantic_type that provide
+# finer-grained classification within each semantic category.
+# =============================================================================
+
+# =============================================================================
+# CLASS/TYPE REFINEMENTS
+# =============================================================================
+
+# Test: Struct should be DEFINITION_CLASS (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'struct_item'
+LIMIT 1;
+----
+struct_item	DEFINITION_CLASS
+
+# Test: Enum should be DEFINITION_CLASS (with ENUM refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'enum_item'
+LIMIT 1;
+----
+enum_item	DEFINITION_CLASS
+
+# Test: Trait should be DEFINITION_CLASS (with ABSTRACT refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'trait_item'
+LIMIT 1;
+----
+trait_item	DEFINITION_CLASS
+
+# Test: Impl block should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'impl_item'
+LIMIT 1;
+----
+impl_item	DEFINITION_CLASS
+
+# =============================================================================
+# FUNCTION REFINEMENTS
+# =============================================================================
+
+# Test: Regular functions should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'function_item'
+LIMIT 1;
+----
+function_item	DEFINITION_FUNCTION
+
+# Test: fn keyword should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'fn'
+LIMIT 1;
+----
+fn	DEFINITION_FUNCTION
+
+# =============================================================================
+# MODULE REFINEMENTS
+# =============================================================================
+
+# Test: Module should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'mod_item'
+LIMIT 1;
+----
+mod_item	DEFINITION_MODULE
+
+# Test: mod keyword should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'mod'
+LIMIT 1;
+----
+mod	DEFINITION_MODULE
+
+# =============================================================================
+# VARIABLE REFINEMENTS
+# =============================================================================
+
+# Test: Let declaration should be DEFINITION_VARIABLE (with IMMUTABLE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'let_declaration'
+LIMIT 1;
+----
+let_declaration	DEFINITION_VARIABLE
+
+# Test: let keyword should be DEFINITION_VARIABLE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'let'
+LIMIT 1;
+----
+let	DEFINITION_VARIABLE
+
+# Test: Parameters should be DEFINITION_VARIABLE (with PARAMETER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'parameter'
+LIMIT 1;
+----
+parameter	DEFINITION_VARIABLE
+
+# Test: Enum variants should be DEFINITION_VARIABLE (with FIELD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'enum_variant'
+LIMIT 1;
+----
+enum_variant	DEFINITION_VARIABLE
+
+# =============================================================================
+# IMPORT REFINEMENTS
+# =============================================================================
+
+# Test: Use declaration should be EXTERNAL_IMPORT (with MODULE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'use_declaration'
+LIMIT 1;
+----
+use_declaration	EXTERNAL_IMPORT
+
+# Test: use keyword should be EXTERNAL_IMPORT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'use'
+LIMIT 1;
+----
+use	EXTERNAL_IMPORT
+
+# =============================================================================
+# CALL REFINEMENTS
+# =============================================================================
+
+# Test: Call expressions should be COMPUTATION_CALL (with FUNCTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'call_expression'
+LIMIT 1;
+----
+call_expression	COMPUTATION_CALL
+
+# =============================================================================
+# LITERAL REFINEMENTS
+# =============================================================================
+
+# Test: String literals should be LITERAL_STRING (with LITERAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'string_literal'
+LIMIT 1;
+----
+string_literal	LITERAL_STRING
+
+# =============================================================================
+# CONTROL FLOW REFINEMENTS
+# =============================================================================
+
+# Test: If expression should be FLOW_CONDITIONAL (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'if_expression'
+LIMIT 1;
+----
+if_expression	FLOW_CONDITIONAL
+
+# Test: if keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'if'
+LIMIT 1;
+----
+if	FLOW_CONDITIONAL
+
+# Test: else keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'else'
+LIMIT 1;
+----
+else	FLOW_CONDITIONAL
+
+# Test: Return expression should be FLOW_JUMP (with RETURN refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'return_expression'
+LIMIT 1;
+----
+return_expression	FLOW_JUMP
+
+# Test: return keyword should be FLOW_JUMP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'return'
+LIMIT 1;
+----
+return	FLOW_JUMP
+
+# =============================================================================
+# TYPE SYSTEM
+# =============================================================================
+
+# Test: Type identifier should be TYPE_REFERENCE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'type_identifier'
+LIMIT 1;
+----
+type_identifier	TYPE_REFERENCE
+
+# Test: Primitive type should be TYPE_PRIMITIVE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'primitive_type'
+LIMIT 1;
+----
+primitive_type	TYPE_PRIMITIVE
+
+# Test: Reference type should be TYPE_REFERENCE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'reference_type'
+LIMIT 1;
+----
+reference_type	TYPE_REFERENCE
+
+# =============================================================================
+# ANNOTATIONS AND MODIFIERS
+# =============================================================================
+
+# Test: Attribute item should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'attribute_item'
+LIMIT 1;
+----
+attribute_item	METADATA_ANNOTATION
+
+# Test: pub keyword should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'pub'
+LIMIT 1;
+----
+pub	METADATA_ANNOTATION
+
+# Test: Visibility modifier should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'visibility_modifier'
+LIMIT 1;
+----
+visibility_modifier	METADATA_ANNOTATION
+
+# =============================================================================
+# OPERATORS AND ACCESS
+# =============================================================================
+
+# Test: Field expression should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'field_expression'
+LIMIT 1;
+----
+field_expression	COMPUTATION_ACCESS
+
+# Test: :: operator should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = '::'
+LIMIT 1;
+----
+::	COMPUTATION_ACCESS
+
+# Test: -> operator should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = '->'
+LIMIT 1;
+----
+->	COMPUTATION_ACCESS
+
+# Test: . operator should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = '.'
+LIMIT 1;
+----
+.	COMPUTATION_ACCESS
+
+# Test: & operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = '&'
+LIMIT 1;
+----
+&	OPERATOR_ARITHMETIC
+
+# =============================================================================
+# STRUCTURAL ELEMENTS
+# =============================================================================
+
+# Test: Block should be ORGANIZATION_BLOCK
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'block'
+LIMIT 1;
+----
+block	ORGANIZATION_BLOCK
+
+# Test: Parameters should be ORGANIZATION_LIST
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'parameters'
+LIMIT 1;
+----
+parameters	ORGANIZATION_LIST
+
+# Test: Arguments should be ORGANIZATION_LIST
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'arguments'
+LIMIT 1;
+----
+arguments	ORGANIZATION_LIST
+
+# =============================================================================
+# IDENTIFIERS AND SCOPING
+# =============================================================================
+
+# Test: Identifier should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'identifier'
+LIMIT 1;
+----
+identifier	NAME_IDENTIFIER
+
+# Test: Field identifier should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'field_identifier'
+LIMIT 1;
+----
+field_identifier	NAME_IDENTIFIER
+
+# Test: self keyword should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'self'
+LIMIT 1;
+----
+self	NAME_IDENTIFIER
+
+# =============================================================================
+# STATEMENTS
+# =============================================================================
+
+# Test: Expression statement should be EXECUTION_STATEMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/rust/simple.rs', context := 'native')
+WHERE type = 'expression_statement'
+LIMIT 1;
+----
+expression_statement	EXECUTION_STATEMENT
+
