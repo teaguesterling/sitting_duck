@@ -1,150 +1,727 @@
-// R language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
-// Use bitwise OR to combine semantic types with refinements: DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA
+/**
+ * @file r_types.def
+ * @brief R language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter R AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for R language constructs.
+ *
+ * ## R Language Characteristics
+ *
+ * - **Statistical computing**: Designed for data analysis and statistics
+ * - **Vectorized operations**: Operations apply element-wise to vectors
+ * - **Dynamic typing**: Variables have no declared types
+ * - **Functional style**: Functions are first-class, many higher-order functions
+ * - **Formula objects**: `y ~ x` for model specifications
+ * - **NA values**: Explicit handling of missing data
+ * - **Multiple assignment operators**: `<-`, `=`, `->`, `<<-`
+ * - **Pipe operators**: `|>` (native), `%>%` (magrittr)
+ * - **S3/S4/R6 systems**: Multiple object-oriented paradigms
+ * - **REPL-oriented**: Interactive data exploration
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_FUNCTION = 0x04)
+ * - Bits 1-0: Refinement within category (e.g., Function::REGULAR = 0x00)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Function definitions and declarations - R functions always have bodies
+// ============================================================================
+// FUNCTION DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup r_functions Function Definitions
+ * @brief R function declarations
+ *
+ * R function features:
+ * - `name <- function(params) body` - standard definition
+ * - Anonymous: `function(x) x + 1`
+ * - Default arguments: `function(x, y = 1)`
+ * - Variadic: `function(...)`
+ * - All arguments passed by value (copy-on-modify)
+ * @{
+ */
+
+/// @brief Function definition - `name <- function(params) body`
 DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_ASSIGNMENT_TARGET, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Function keyword - `function` keyword
 DEF_TYPE("function", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Control flow statements
+/** @} */ // end r_functions
+
+// ============================================================================
+// CONTROL FLOW
+// ============================================================================
+
+/**
+ * @defgroup r_control Control Flow
+ * @brief Conditionals and branching
+ *
+ * R control flow:
+ * - `if (cond) expr` or `if (cond) expr else expr`
+ * - `ifelse(cond, yes, no)` - vectorized conditional
+ * - `switch(expr, ...)` - multi-way branch
+ * @{
+ */
+
+/// @brief If statement - `if (cond) expr else expr`
 DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/** @} */ // end r_control
+
+// ============================================================================
+// LOOP CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup r_loops Loop Constructs
+ * @brief Iteration mechanisms
+ *
+ * R loops:
+ * - `for (x in seq) body` - for loop
+ * - `while (cond) body` - while loop
+ * - `repeat body` - infinite loop (use break to exit)
+ * - Prefer vectorized operations and `apply` family over loops
+ * @{
+ */
+
+/// @brief For statement - `for (x in seq) body`
 DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+
+/// @brief While statement - `while (cond) body`
 DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Repeat statement - `repeat body` (infinite loop)
 DEF_TYPE("repeat_statement", FLOW_LOOP | SemanticRefinements::Loop::INFINITE, NONE, NONE, 0)
 
-// Jump statements
+/** @} */ // end r_loops
+
+// ============================================================================
+// JUMP STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup r_jumps Jump Statements
+ * @brief Control flow transfer
+ *
+ * R jump statements:
+ * - `return(value)` - exit function with value
+ * - `break` - exit loop
+ * - `next` - skip to next iteration (like continue)
+ * @{
+ */
+
+/// @brief Return statement - `return(value)`
 DEF_TYPE("return", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Break statement - exits loop
 DEF_TYPE("break", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Next statement - skips to next iteration (like continue)
 DEF_TYPE("next", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Keywords
+/** @} */ // end r_jumps
+
+// ============================================================================
+// KEYWORDS
+// ============================================================================
+
+/**
+ * @defgroup r_keywords Keywords
+ * @brief R language keywords
+ * @{
+ */
+
+/// @brief If keyword
 DEF_TYPE("if", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Else keyword
 DEF_TYPE("else", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief For keyword
 DEF_TYPE("for", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief While keyword
 DEF_TYPE("while", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Repeat keyword
 DEF_TYPE("repeat", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief In keyword - used in for loops
 DEF_TYPE("in", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Identifiers and names
+/** @} */ // end r_keywords
+
+// ============================================================================
+// IDENTIFIERS AND PARAMETERS
+// ============================================================================
+
+/**
+ * @defgroup r_identifiers Identifiers and Parameters
+ * @brief Names and function parameters
+ *
+ * R identifier conventions:
+ * - Variable names: `snake_case` or `period.case`
+ * - Function names: same as variables
+ * - Backticks for non-standard names: `` `invalid-name` ``
+ * @{
+ */
+
+/// @brief Identifier - name
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Parameter - function parameter
 DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
 
-// Function calls and expressions
+/** @} */ // end r_identifiers
+
+// ============================================================================
+// FUNCTION CALLS AND EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup r_calls Function Calls and Expressions
+ * @brief Function invocations and operators
+ *
+ * R call syntax:
+ * - `function(args)` - regular call
+ * - `x %op% y` - infix operator (user-defined)
+ * - `package::function()` - namespaced call
+ * - Method dispatch via S3/S4/R6 systems
+ * @{
+ */
+
+/// @brief Call expression - `function(args)`
 DEF_TYPE("call", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Binary operator - `x + y`, `x %*% y`
 DEF_TYPE("binary_operator", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Unary operator - `-x`, `!x`
 DEF_TYPE("unary_operator", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
 
-// Data access operations
+/** @} */ // end r_calls
+
+// ============================================================================
+// DATA ACCESS
+// ============================================================================
+
+/**
+ * @defgroup r_access Data Access
+ * @brief Subsetting and extraction operators
+ *
+ * R access operators:
+ * - `x[i]` - subset (preserves class)
+ * - `x[[i]]` - extract single element
+ * - `x$name` - named element access
+ * - `x@slot` - S4 slot access
+ * - `pkg::name` - namespace access
+ * @{
+ */
+
+/// @brief Subset - `x[i]` preserving class
 DEF_TYPE("subset", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Subset2 - `x[[i]]` extracting element
 DEF_TYPE("subset2", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Extract operator - `x$name`
 DEF_TYPE("extract_operator", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Namespace operator - `pkg::name`
 DEF_TYPE("namespace_operator", COMPUTATION_ACCESS, NONE, NONE, 0)
 
-// Literals - R has many special constants
+/** @} */ // end r_access
+
+// ============================================================================
+// LITERALS
+// ============================================================================
+
+/**
+ * @defgroup r_literals Literals
+ * @brief Numeric, string, and special values
+ *
+ * R literals:
+ * - Integers: `42L` (L suffix required)
+ * - Doubles: `3.14`, `1e10`, `Inf`, `NaN`
+ * - Complex: `1+2i`
+ * - Strings: `"double"` or `'single'`
+ * - Raw: `r"(...)"` (R 4.0+)
+ * @{
+ */
+
+/// @brief String literal
 DEF_TYPE("string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Integer literal - `42L`
 DEF_TYPE("integer", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
+
+/// @brief Float literal - `3.14`
 DEF_TYPE("float", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
+
+/// @brief Complex literal - `1+2i`
 DEF_TYPE("complex", LITERAL_NUMBER | SemanticRefinements::Number::COMPLEX, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean TRUE
 DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean FALSE
 DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
-// R-specific special constants
+/** @} */ // end r_literals
+
+// ============================================================================
+// R SPECIAL CONSTANTS
+// ============================================================================
+
+/**
+ * @defgroup r_specials R Special Constants
+ * @brief NA, NULL, and other special values
+ *
+ * R special values:
+ * - `NULL` - absence of a value
+ * - `NA` - missing value (logical)
+ * - `NA_integer_`, `NA_real_`, `NA_character_`, `NA_complex_` - typed NAs
+ * - `Inf`, `-Inf` - infinity
+ * - `NaN` - not a number
+ * @{
+ */
+
+/// @brief NULL - absence of value
 DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief NA - missing value (logical)
 DEF_TYPE("na", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief NA - missing value (alternate form)
 DEF_TYPE("NA", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief NA_integer_ - typed missing integer
 DEF_TYPE("NA_integer_", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief NA_real_ - typed missing real
 DEF_TYPE("NA_real_", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief NA_character_ - typed missing character
 DEF_TYPE("NA_character_", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief NA_complex_ - typed missing complex
 DEF_TYPE("NA_complex_", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Inf - positive infinity
 DEF_TYPE("inf", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief NaN - not a number
 DEF_TYPE("nan", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
-// R structured literals
+/** @} */ // end r_specials
+
+// ============================================================================
+// STRUCTURED DATA
+// ============================================================================
+
+/**
+ * @defgroup r_structured Structured Data
+ * @brief Vectors, lists, and data frames
+ *
+ * R data structures:
+ * - `c(1, 2, 3)` - vector (atomic)
+ * - `list(a = 1, b = 2)` - heterogeneous list
+ * - `data.frame(...)` - rectangular data
+ * - `matrix(...)` - 2D array
+ * - `array(...)` - N-dimensional array
+ * @{
+ */
+
+/// @brief Vector - atomic vector
 DEF_TYPE("vector", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NONE, 0)
+
+/// @brief List - heterogeneous list
 DEF_TYPE("list", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NONE, 0)
+
+/// @brief Data frame - rectangular data
 DEF_TYPE("data_frame", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NODE_TEXT, NONE, 0)
+
+/// @brief Matrix - 2D array
 DEF_TYPE("matrix", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NONE, 0)
+
+/// @brief Array - N-dimensional array
 DEF_TYPE("array", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NONE, 0)
 
-// Special R constructs
+/** @} */ // end r_structured
+
+// ============================================================================
+// SPECIAL CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup r_special Special Constructs
+ * @brief R-specific language features
+ *
+ * R special constructs:
+ * - `...` - variadic arguments (dots)
+ * - `..1`, `..2` - accessing individual dot arguments
+ * - `%>%`, `%*%` - user-defined infix operators
+ * @{
+ */
+
+/// @brief Dots - variadic arguments `...`
 DEF_TYPE("dots", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
+
+/// @brief Dot-dot-i - `..1`, `..2`, etc.
 DEF_TYPE("dot_dot_i", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
+
+/// @brief Special operator - user-defined infix `%op%`
 DEF_TYPE("special", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, NODE_TEXT, NONE, 0)
 
-// Organizational structures
+/** @} */ // end r_special
+
+// ============================================================================
+// ORGANIZATIONAL STRUCTURES
+// ============================================================================
+
+/**
+ * @defgroup r_organization Organizational Structures
+ * @brief Program and expression structures
+ * @{
+ */
+
+/// @brief Program - root node for R script
 DEF_TYPE("program", ORGANIZATION_CONTAINER | SemanticRefinements::Organization::HIERARCHICAL, NONE, NONE, 0)
+
+/// @brief Braced expression - `{ ... }`
 DEF_TYPE("braced_expression", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Parenthesized expression - `( ... )`
 DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/// @brief Arguments - function call arguments
 DEF_TYPE("arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Parameters - function parameters
 DEF_TYPE("parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Argument - single named argument
 DEF_TYPE("argument", ORGANIZATION_LIST, FIND_IDENTIFIER, NONE, 0)
 
-// String components
+/** @} */ // end r_organization
+
+// ============================================================================
+// STRING COMPONENTS
+// ============================================================================
+
+/**
+ * @defgroup r_string_components String Components
+ * @brief String literal parts
+ * @{
+ */
+
+/// @brief String content - text inside string
 DEF_TYPE("string_content", LITERAL_STRING, NONE, NONE, 0)
+
+/// @brief Escape sequence - `\n`, `\t`, etc.
 DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
 
-// Comments
+/** @} */ // end r_string_components
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup r_comments Comments
+ * @brief Documentation
+ *
+ * R comment style:
+ * - `# comment` - line comment (only comment type in R)
+ * - roxygen2: `#' @param x description`
+ * @{
+ */
+
+/// @brief Comment - `# comment`
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
 
-// Operators - R has many assignment operators
+/** @} */ // end r_comments
+
+// ============================================================================
+// ASSIGNMENT OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup r_assignment Assignment Operators
+ * @brief R's multiple assignment forms
+ *
+ * R assignment operators:
+ * - `<-` - standard assignment (preferred)
+ * - `=` - assignment (often in function calls)
+ * - `->` - rightward assignment
+ * - `<<-` - superassignment (modifies enclosing scope)
+ * - `->>` - rightward superassignment
+ * - `:=` - data.table assignment
+ * @{
+ */
+
+/// @brief Left assignment - `x <- value` (preferred)
 DEF_TYPE("<-", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+
+/// @brief Global assignment - `x <<- value` (modifies enclosing scope)
 DEF_TYPE("<<-", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+
+/// @brief Right assignment - `value -> x`
 DEF_TYPE("->", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+
+/// @brief Right global assignment - `value ->> x`
 DEF_TYPE("->>", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+
+/// @brief Equals assignment - `x = value`
 DEF_TYPE("=", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+
+/// @brief Walrus assignment - `:=` (data.table)
 DEF_TYPE(":=", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
 
-// Arithmetic operators
+/** @} */ // end r_assignment
+
+// ============================================================================
+// ARITHMETIC OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup r_arithmetic Arithmetic Operators
+ * @brief Mathematical operators
+ * @{
+ */
+
+/// @brief Addition - `+`
 DEF_TYPE("+", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Subtraction - `-`
 DEF_TYPE("-", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Multiplication - `*`
 DEF_TYPE("*", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Division - `/`
 DEF_TYPE("/", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Power - `^`
 DEF_TYPE("^", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+
+/// @brief Power (alternate) - `**`
 DEF_TYPE("**", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+
+/// @brief Modulo - `%%`
 DEF_TYPE("%", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 
-// Comparison operators
+/** @} */ // end r_arithmetic
+
+// ============================================================================
+// COMPARISON OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup r_comparison Comparison Operators
+ * @brief Relational operators
+ * @{
+ */
+
+/// @brief Equality - `==`
 DEF_TYPE("==", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/// @brief Inequality - `!=`
 DEF_TYPE("!=", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/// @brief Less than - `<`
 DEF_TYPE("<", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/// @brief Less than or equal - `<=`
 DEF_TYPE("<=", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/// @brief Greater than - `>`
 DEF_TYPE(">", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/// @brief Greater than or equal - `>=`
 DEF_TYPE(">=", OPERATOR_COMPARISON, NONE, NONE, 0)
 
-// Logical operators
+/** @} */ // end r_comparison
+
+// ============================================================================
+// LOGICAL OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup r_logical Logical Operators
+ * @brief Boolean operators
+ *
+ * R logical operators:
+ * - `&` - element-wise AND (vectorized)
+ * - `&&` - short-circuit AND (scalar)
+ * - `|` - element-wise OR (vectorized)
+ * - `||` - short-circuit OR (scalar)
+ * - `!` - NOT
+ * @{
+ */
+
+/// @brief Element-wise AND - `&`
 DEF_TYPE("&", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/// @brief Short-circuit AND - `&&`
 DEF_TYPE("&&", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/// @brief Element-wise OR - `|`
 DEF_TYPE("|", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/// @brief Short-circuit OR - `||`
 DEF_TYPE("||", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/// @brief Logical NOT - `!`
 DEF_TYPE("!", OPERATOR_LOGICAL, NONE, NONE, 0)
 
-// R-specific operators
+/** @} */ // end r_logical
+
+// ============================================================================
+// R-SPECIFIC OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup r_specific R-Specific Operators
+ * @brief Operators unique to R
+ *
+ * R special operators:
+ * - `::` - namespace access
+ * - `:::` - internal namespace access
+ * - `@` - S4 slot access
+ * - `$` - named element access
+ * - `:` - sequence generation
+ * - `|>` - native pipe (R 4.1+)
+ * - `~` - formula operator
+ * - `?` - help operator
+ * @{
+ */
+
+/// @brief Namespace - `pkg::name`
 DEF_TYPE("::", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Internal namespace - `pkg:::name`
 DEF_TYPE(":::", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Slot access - `obj@slot` (S4)
 DEF_TYPE("@", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Element access - `obj$name`
 DEF_TYPE("$", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Sequence operator - `1:10`
 DEF_TYPE(":", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+
+/// @brief Native pipe - `|>` (R 4.1+)
 DEF_TYPE("|>", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+
+/// @brief Formula operator - `y ~ x`
 DEF_TYPE("~", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+
+/// @brief Help operator - `?topic`
 DEF_TYPE("?", METADATA_ANNOTATION, NONE, NONE, 0)
 
-// Delimiters and punctuation  
+/** @} */ // end r_specific
+
+// ============================================================================
+// DELIMITERS AND PUNCTUATION
+// ============================================================================
+
+/**
+ * @defgroup r_delimiters Delimiters and Punctuation
+ * @brief Syntax tokens
+ * @{
+ */
+
+/// @brief Left parenthesis
 DEF_TYPE("(", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Right parenthesis
 DEF_TYPE(")", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Left brace
 DEF_TYPE("{", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Right brace
 DEF_TYPE("}", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Left bracket
 DEF_TYPE("[", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Right bracket
 DEF_TYPE("]", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Double left bracket
 DEF_TYPE("[[", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Double right bracket
 DEF_TYPE("]]", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Comma
 DEF_TYPE("comma", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Single quote
 DEF_TYPE("'", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Double quote
 DEF_TYPE("\"", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Backslash
 DEF_TYPE("\\", PARSER_PUNCTUATION, NONE, NONE, 0)
 
-// R type suffixes
+/** @} */ // end r_delimiters
+
+// ============================================================================
+// TYPE SUFFIXES
+// ============================================================================
+
+/**
+ * @defgroup r_type_suffixes Type Suffixes
+ * @brief Literal type modifiers
+ * @{
+ */
+
+/// @brief Integer suffix - `L`
 DEF_TYPE("L", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
+/// @brief Imaginary suffix - `i`
 DEF_TYPE("i", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
 
-// Error handling
+/** @} */ // end r_type_suffixes
+
+// ============================================================================
+// PARSER ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup r_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end r_parser_errors

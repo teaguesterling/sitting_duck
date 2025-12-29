@@ -1,64 +1,396 @@
-// Julia language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
-// TODO: Complete after examining tree-sitter parse results
+/**
+ * @file julia_types.def
+ * @brief Julia language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter Julia AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for Julia language constructs.
+ *
+ * ## Julia Language Characteristics
+ *
+ * - **Scientific computing**: Designed for numerical/scientific work
+ * - **JIT compilation**: LLVM-based just-in-time compilation
+ * - **Multiple dispatch**: Functions dispatch on all argument types
+ * - **Type system**: Optional typing with parametric polymorphism
+ * - **Metaprogramming**: Powerful macro system with AST access
+ * - **Unicode identifiers**: Greek letters, math symbols as identifiers
+ * - **Array-oriented**: First-class multidimensional arrays
+ * - **Interoperability**: Easy calling of C/Fortran/Python code
+ * - **Abstract types**: Type hierarchy without implementation
+ * - **Coroutines**: Tasks and channels for concurrency
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category (e.g., Class::REGULAR = 0x00)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Program structure
+// ============================================================================
+// PROGRAM STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup julia_program Program Structure
+ * @brief Top-level file and module organization
+ *
+ * Julia file organization:
+ * - Files with `.jl` extension
+ * - Modules organize code: `module Name ... end`
+ * - Packages defined in Project.toml
+ * @{
+ */
+
+/// @brief Source file root - top-level compilation unit
 DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Module definition - `module Name ... end`
 DEF_TYPE("module_definition", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Import statements
+/** @} */ // end julia_program
+
+// ============================================================================
+// IMPORT STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup julia_imports Import Statements
+ * @brief Module import and using declarations
+ *
+ * Julia import features:
+ * - `import Module` - import module (qualified access)
+ * - `import Module: name1, name2` - selective import
+ * - `using Module` - bring all exports into scope
+ * - `using Module: name` - selective using
+ * @{
+ */
+
+/// @brief Import statement - `import Module`
 DEF_TYPE("import_statement", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Using statement - `using Module`
 DEF_TYPE("using_statement", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
 
-// Function definitions
+/** @} */ // end julia_imports
+
+// ============================================================================
+// FUNCTION DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup julia_functions Function Definitions
+ * @brief Julia function and macro declarations
+ *
+ * Julia function features:
+ * - `function name(args) body end` - standard definition
+ * - `name(args) = expr` - short form
+ * - Multiple dispatch: methods for different argument types
+ * - Type annotations: `function add(x::Int, y::Int)::Int`
+ * - Keyword arguments: `function f(x; kwarg=default)`
+ * - Varargs: `function f(args...)`
+ * @{
+ */
+
+/// @brief Function definition - `function name(params) body end`
 DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Short function definition - `f(x) = x + 1`
 DEF_TYPE("short_function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Macro definition - `macro name(args) body end`
 DEF_TYPE("macro_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
 
-// Type definitions
+/** @} */ // end julia_functions
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup julia_types Type Definitions
+ * @brief Julia type declarations
+ *
+ * Julia type system:
+ * - `struct Name fields... end` - immutable composite type
+ * - `mutable struct Name fields... end` - mutable composite type
+ * - `abstract type Name end` - abstract type in hierarchy
+ * - `primitive type Name bits end` - primitive type definition
+ * - Type parameters: `struct Pair{T, S} ... end`
+ * @{
+ */
+
+/// @brief Struct definition - `struct Name ... end`
 DEF_TYPE("struct_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Abstract type definition - `abstract type Name end`
 DEF_TYPE("abstract_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Primitive type definition - `primitive type Name bits end`
 DEF_TYPE("primitive_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
 
-// Variable assignments
+/** @} */ // end julia_types
+
+// ============================================================================
+// VARIABLE DECLARATIONS
+// ============================================================================
+
+/**
+ * @defgroup julia_variables Variable Declarations
+ * @brief Variable assignments and constants
+ *
+ * Julia variable features:
+ * - `x = value` - assignment (creates binding)
+ * - `const NAME = value` - constant binding
+ * - `global x` - declare global variable
+ * - `local x` - declare local variable
+ * - Type annotation: `x::Int = 5`
+ * @{
+ */
+
+/// @brief Assignment - variable binding `x = value`
 DEF_TYPE("assignment", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Const statement - `const NAME = value`
 DEF_TYPE("const_statement", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Global statement - `global x`
 DEF_TYPE("global_statement", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
 
-// Function calls and expressions
+/** @} */ // end julia_variables
+
+// ============================================================================
+// FUNCTION CALLS AND EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup julia_calls Function Calls and Expressions
+ * @brief Function and macro invocations
+ *
+ * Julia call syntax:
+ * - `function(args)` - regular call
+ * - `function.(args)` - broadcast (element-wise)
+ * - `@macro args` - macro invocation
+ * - `obj.method(args)` - method call syntax
+ * @{
+ */
+
+/// @brief Call expression - `function(args)`
 DEF_TYPE("call_expression", COMPUTATION_CALL, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Macro expression - `@macro args`
 DEF_TYPE("macro_expression", COMPUTATION_CALL, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 
-// Control flow
+/** @} */ // end julia_calls
+
+// ============================================================================
+// CONTROL FLOW
+// ============================================================================
+
+/**
+ * @defgroup julia_control Control Flow
+ * @brief Conditionals and branching
+ *
+ * Julia control flow:
+ * - `if cond body elseif cond body else body end`
+ * - Ternary: `cond ? a : b`
+ * - Short-circuit: `a && b`, `a || b`
+ * @{
+ */
+
+/// @brief If statement - `if cond body end`
 DEF_TYPE("if_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief If expression - ternary `cond ? a : b`
 DEF_TYPE("if_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/** @} */ // end julia_control
+
+// ============================================================================
+// LOOP CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup julia_loops Loop Constructs
+ * @brief Iteration mechanisms
+ *
+ * Julia loops:
+ * - `for x in iterable body end` - for loop
+ * - `for x = 1:10 body end` - range iteration
+ * - `while cond body end` - while loop
+ * - Comprehensions: `[f(x) for x in xs]`
+ * @{
+ */
+
+/// @brief For statement - `for x in collection body end`
 DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief While statement - `while cond body end`
 DEF_TYPE("while_statement", FLOW_LOOP, NONE, NONE, 0)
 
-// Jump statements
+/** @} */ // end julia_loops
+
+// ============================================================================
+// JUMP STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup julia_jumps Jump Statements
+ * @brief Control flow transfer
+ * @{
+ */
+
+/// @brief Break statement - exits loop
 DEF_TYPE("break_statement", FLOW_JUMP, NONE, NONE, 0)
+
+/// @brief Continue statement - skips to next iteration
 DEF_TYPE("continue_statement", FLOW_JUMP, NONE, NONE, 0)
+
+/// @brief Return statement - exits function with value
 DEF_TYPE("return_statement", FLOW_JUMP, NONE, NONE, 0)
 
-// Error handling
+/** @} */ // end julia_jumps
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup julia_errors Error Handling
+ * @brief Exception handling constructs
+ *
+ * Julia error handling:
+ * - `try body catch e handler finally cleanup end`
+ * - `throw(exception)` - raise exception
+ * - `error("message")` - raise error
+ * @{
+ */
+
+/// @brief Try statement - exception handling
 DEF_TYPE("try_statement", ERROR_TRY, NONE, NONE, 0)
+
+/// @brief Catch clause - exception handler
 DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
+
+/// @brief Finally clause - cleanup handler
 DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
 
-// Anonymous functions
+/** @} */ // end julia_errors
+
+// ============================================================================
+// ANONYMOUS FUNCTIONS
+// ============================================================================
+
+/**
+ * @defgroup julia_lambdas Anonymous Functions
+ * @brief Lambda expressions
+ *
+ * Julia anonymous function syntax:
+ * - `x -> x + 1` - single argument
+ * - `(x, y) -> x + y` - multiple arguments
+ * - `function(x) body end` - anonymous with body
+ * - `do` blocks: `map(xs) do x ... end`
+ * @{
+ */
+
+/// @brief Function expression - anonymous function
 DEF_TYPE("function_expression", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
+
+/// @brief Do clause - `do x body end` (anonymous function in call)
 DEF_TYPE("do_clause", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
 
-// Identifiers and literals
+/** @} */ // end julia_lambdas
+
+// ============================================================================
+// IDENTIFIERS AND LITERALS
+// ============================================================================
+
+/**
+ * @defgroup julia_literals Identifiers and Literals
+ * @brief Names and literal values
+ *
+ * Julia identifiers:
+ * - Unicode support: `α`, `∑`, `π`
+ * - Convention: lowercase for variables, CamelCase for types
+ *
+ * Julia literals:
+ * - Integers: `42`, `0xFF`, `0b1010`, `1_000_000`
+ * - Floats: `3.14`, `1e10`, `Inf`, `NaN`
+ * - Strings: `"string"`, `"""multiline"""`, `raw"raw"`
+ * - Characters: `'a'`
+ * - Boolean: `true`, `false`
+ * @{
+ */
+
+/// @brief Identifier - name
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Integer literal
 DEF_TYPE("integer_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief Floating-point literal
 DEF_TYPE("float_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief String literal
 DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Character literal - `'a'`
 DEF_TYPE("character_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean literal - `true` or `false`
 DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
-// Comments
+/** @} */ // end julia_literals
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup julia_comments Comments
+ * @brief Documentation and annotation
+ *
+ * Julia comment styles:
+ * - `# line comment`
+ * - `#= block comment =#`
+ * - Docstrings: `"Documented function" function f() end`
+ * @{
+ */
+
+/// @brief Comment
 DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Error handling
+/** @} */ // end julia_comments
+
+// ============================================================================
+// PARSER ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup julia_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end julia_parser_errors

@@ -1,53 +1,326 @@
-// Haskell language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
-// TODO: Complete after examining tree-sitter parse results
+/**
+ * @file haskell_types.def
+ * @brief Haskell language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter Haskell AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for Haskell language constructs.
+ *
+ * ## Haskell Language Characteristics
+ *
+ * - **Pure functional**: No side effects, referential transparency
+ * - **Lazy evaluation**: Expressions evaluated only when needed
+ * - **Strong static typing**: Hindley-Milner type inference
+ * - **Type classes**: Ad-hoc polymorphism (like traits/interfaces)
+ * - **Algebraic data types**: Sum and product types
+ * - **Pattern matching**: Exhaustive matching on constructors
+ * - **Monads**: IO, Maybe, Either for effects and control
+ * - **Higher-order functions**: First-class functions, currying
+ * - **List comprehensions**: Declarative list construction
+ * - **Do notation**: Syntactic sugar for monadic operations
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category (e.g., Class::REGULAR = 0x00)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Program structure
+// ============================================================================
+// PROGRAM STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup haskell_program Program Structure
+ * @brief Top-level file and module organization
+ *
+ * Haskell file organization:
+ * - Each file is a module (or Main for executables)
+ * - `module Name where` at top of file
+ * - Explicit exports: `module Name (export1, export2) where`
+ * @{
+ */
+
+/// @brief Haskell root - top-level compilation unit
 DEF_TYPE("haskell", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Module declaration - `module Name where`
 DEF_TYPE("module", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Import statements
+/** @} */ // end haskell_program
+
+// ============================================================================
+// IMPORT STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup haskell_imports Import Statements
+ * @brief Module import declarations
+ *
+ * Haskell import features:
+ * - `import Module` - import all exports
+ * - `import qualified Module` - require qualified names
+ * - `import Module (x, y)` - selective import
+ * - `import Module hiding (x)` - import all except x
+ * - `import qualified Module as M` - alias
+ * @{
+ */
+
+/// @brief Import declaration - `import Module`
 DEF_TYPE("import", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
 
-// Function definitions
+/** @} */ // end haskell_imports
+
+// ============================================================================
+// FUNCTION DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup haskell_functions Function Definitions
+ * @brief Haskell function declarations
+ *
+ * Haskell function features:
+ * - `name :: Type` - type signature (optional but recommended)
+ * - `name arg1 arg2 = body` - function definition
+ * - Pattern matching: `factorial 0 = 1; factorial n = n * factorial (n-1)`
+ * - Guards: `abs n | n < 0 = -n | otherwise = n`
+ * - Where clauses: local definitions
+ * @{
+ */
+
+/// @brief Function definition - `name args = body`
 DEF_TYPE("function", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Bind pattern - pattern binding `(a, b) = pair`
 DEF_TYPE("bind_pattern", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
 
-// Type definitions
+/** @} */ // end haskell_functions
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup haskell_types Type Definitions
+ * @brief Haskell type declarations
+ *
+ * Haskell type system:
+ * - `data Name = ...` - algebraic data type
+ * - `newtype Name = ...` - single-constructor wrapper (zero cost)
+ * - `type Name = ...` - type alias
+ * - `class Name where` - type class definition
+ * - `instance Class Type where` - type class instance
+ * @{
+ */
+
+/// @brief Data type declaration - `data List a = Nil | Cons a (List a)`
 DEF_TYPE("data_type", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Newtype declaration - `newtype Age = Age Int`
 DEF_TYPE("newtype", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Type alias - `type String = [Char]`
 DEF_TYPE("type_alias", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Class declaration - `class Eq a where (==) :: a -> a -> Bool`
 DEF_TYPE("class_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Instance declaration - `instance Eq Int where ...`
 DEF_TYPE("instance_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
 
-// Function calls and expressions
+/** @} */ // end haskell_types
+
+// ============================================================================
+// FUNCTION CALLS AND EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup haskell_calls Function Calls and Expressions
+ * @brief Function applications
+ *
+ * Haskell application syntax:
+ * - `f x y` - function application (left-associative)
+ * - `x `op` y` - infix operator application
+ * - `($)` - low-precedence application operator
+ * - `(.)` - function composition
+ * @{
+ */
+
+/// @brief Apply expression - function application `f x`
 DEF_TYPE("apply", COMPUTATION_CALL, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Expression - general expression (may be application)
 DEF_TYPE("expression", COMPUTATION_CALL, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 
-// Control flow (pattern matching)
+/** @} */ // end haskell_calls
+
+// ============================================================================
+// CONTROL FLOW
+// ============================================================================
+
+/**
+ * @defgroup haskell_control Control Flow
+ * @brief Conditionals and pattern matching
+ *
+ * Haskell control flow:
+ * - `if cond then a else b` - conditional (always requires else)
+ * - `case expr of pattern -> body` - pattern matching
+ * - Guards: `| cond = expr` - guarded expressions
+ * - No loops (use recursion, map, fold, etc.)
+ * @{
+ */
+
+/// @brief Case expression - `case expr of { pattern -> body }`
 DEF_TYPE("case", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief If expression - `if cond then a else b`
 DEF_TYPE("if", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Guard - `| condition = expression`
 DEF_TYPE("guard", FLOW_CONDITIONAL, NONE, NONE, 0)
 
-// Lambda expressions
+/** @} */ // end haskell_control
+
+// ============================================================================
+// LAMBDA EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup haskell_lambdas Lambda Expressions
+ * @brief Anonymous functions
+ *
+ * Haskell lambda syntax:
+ * - `\x -> x + 1` - single parameter
+ * - `\x y -> x + y` - multiple parameters
+ * - Pattern matching: `\(a, b) -> a + b`
+ * @{
+ */
+
+/// @brief Lambda expression - `\x -> body`
 DEF_TYPE("lambda", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
 
-// Identifiers and literals
+/** @} */ // end haskell_lambdas
+
+// ============================================================================
+// IDENTIFIERS AND LITERALS
+// ============================================================================
+
+/**
+ * @defgroup haskell_literals Identifiers and Literals
+ * @brief Names and literal values
+ *
+ * Haskell naming conventions:
+ * - `variable` - starts with lowercase (values, functions)
+ * - `Constructor` - starts with uppercase (data constructors, types)
+ * - Qualified: `Module.name`, `Module.Constructor`
+ *
+ * Haskell literals:
+ * - Integers: `42`, `0xFF`
+ * - Floats: `3.14`, `1e10`
+ * - Characters: `'a'`, `'\n'`
+ * - Strings: `"string"` (list of Char)
+ * @{
+ */
+
+/// @brief Variable - lowercase identifier (value or function)
 DEF_TYPE("variable", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Constructor - uppercase identifier (data constructor)
 DEF_TYPE("constructor", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Qualified variable - `Module.name`
 DEF_TYPE("qualified_variable", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
+
+/// @brief Qualified constructor - `Module.Constructor`
 DEF_TYPE("qualified_constructor", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
+
+/// @brief Integer literal
 DEF_TYPE("integer", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief Floating-point literal
 DEF_TYPE("float", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief Character literal - `'a'`
 DEF_TYPE("char", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief String literal - `"string"`
 DEF_TYPE("string", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
-// List and tuple literals
+/** @} */ // end haskell_literals
+
+// ============================================================================
+// STRUCTURED LITERALS
+// ============================================================================
+
+/**
+ * @defgroup haskell_structured Structured Literals
+ * @brief Lists and tuples
+ *
+ * Haskell structured types:
+ * - Lists: `[1, 2, 3]`, `[1..10]`, `[x | x <- xs, x > 0]`
+ * - Tuples: `(1, "hello", True)`
+ * @{
+ */
+
+/// @brief List literal - `[1, 2, 3]`
 DEF_TYPE("list", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Tuple literal - `(1, "hello")`
 DEF_TYPE("tuple", LITERAL_STRUCTURED, NONE, NONE, 0)
 
-// Comments
+/** @} */ // end haskell_structured
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup haskell_comments Comments
+ * @brief Documentation and annotation
+ *
+ * Haskell comment styles:
+ * - `-- line comment`
+ * - `{- block comment -}`
+ * - `{-| Haddock documentation -}`
+ * - `-- | Haddock line documentation`
+ * @{
+ */
+
+/// @brief Comment
 DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Error handling
+/** @} */ // end haskell_comments
+
+// ============================================================================
+// PARSER ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup haskell_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end haskell_parser_errors

@@ -1,60 +1,382 @@
-// F# language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
-// TODO: Complete after examining tree-sitter parse results
+/**
+ * @file fsharp_types.def
+ * @brief F# language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter F# AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for F# language constructs.
+ *
+ * ## F# Language Characteristics
+ *
+ * - **Functional-first**: ML-family language emphasizing immutability
+ * - **.NET platform**: Full interoperability with C# and .NET ecosystem
+ * - **Type inference**: Strong static typing with Hindley-Milner inference
+ * - **Pattern matching**: Exhaustive match expressions
+ * - **Discriminated unions**: Algebraic data types
+ * - **Records**: Immutable data structures with structural equality
+ * - **Computation expressions**: Monadic workflows (async, seq, query)
+ * - **Units of measure**: Type-safe dimensional analysis
+ * - **Active patterns**: Extensible pattern matching
+ * - **Pipelining**: `|>` operator for function composition
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category (e.g., Class::REGULAR = 0x00)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Program structure
+// ============================================================================
+// PROGRAM STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup fsharp_program Program Structure
+ * @brief Top-level file and module organization
+ *
+ * F# file organization:
+ * - Files can have module declarations at top
+ * - Namespaces group related modules
+ * - Files without module declaration use filename as module name
+ * @{
+ */
+
+/// @brief File root - top-level compilation unit
 DEF_TYPE("file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Namespace declaration - `namespace Name.Space`
 DEF_TYPE("namespace_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Module declaration - `module ModuleName`
 DEF_TYPE("module_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Import statements
+/** @} */ // end fsharp_program
+
+// ============================================================================
+// IMPORT STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup fsharp_imports Import Statements
+ * @brief Open declarations for namespace access
+ *
+ * F# import features:
+ * - `open Namespace` - brings names into scope
+ * - `open type TypeName` - imports static members (F# 5.0+)
+ * - `#r` directives for assembly references
+ * @{
+ */
+
+/// @brief Open declaration - `open System.Collections`
 DEF_TYPE("open_declaration", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
 
-// Function definitions
+/** @} */ // end fsharp_imports
+
+// ============================================================================
+// FUNCTION DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup fsharp_functions Function Definitions
+ * @brief F# function and method declarations
+ *
+ * F# function features:
+ * - `let name params = body` - value binding
+ * - `let rec` for recursive functions
+ * - Curried parameters: `let add x y = x + y`
+ * - Pattern matching in parameters
+ * - Type annotations: `let add (x: int) (y: int): int = x + y`
+ * @{
+ */
+
+/// @brief Function declaration - `let functionName params = body`
 DEF_TYPE("function_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Method declaration - member in type definition
 DEF_TYPE("method_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
 
-// Type definitions
+/** @} */ // end fsharp_functions
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup fsharp_types Type Definitions
+ * @brief F# type declarations
+ *
+ * F# type system:
+ * - `type Name = ...` - type definition
+ * - Records: `type Person = { Name: string; Age: int }`
+ * - Discriminated unions: `type Option<'a> = Some of 'a | None`
+ * - Classes: `type Person(name, age) = ...`
+ * - Interfaces: `type IComparable = ...`
+ * @{
+ */
+
+/// @brief Type declaration - general type definition
 DEF_TYPE("type_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Record declaration - `type Person = { Name: string }`
 DEF_TYPE("record_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Union declaration - discriminated union `type Option = Some | None`
 DEF_TYPE("union_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
 
-// Variable declarations
+/** @} */ // end fsharp_types
+
+// ============================================================================
+// VARIABLE DECLARATIONS
+// ============================================================================
+
+/**
+ * @defgroup fsharp_variables Variable Declarations
+ * @brief Value bindings
+ *
+ * F# binding features:
+ * - `let x = value` - immutable binding (default)
+ * - `let mutable x = value` - mutable binding
+ * - `use x = disposable` - auto-disposal binding
+ * - Pattern matching in bindings: `let (a, b) = tuple`
+ * @{
+ */
+
+/// @brief Value declaration - `let x = value`
 DEF_TYPE("value_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
 
-// Function calls and expressions
+/** @} */ // end fsharp_variables
+
+// ============================================================================
+// FUNCTION CALLS AND EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup fsharp_calls Function Calls and Expressions
+ * @brief Function applications
+ *
+ * F# call syntax:
+ * - `function arg1 arg2` - curried application
+ * - `obj.Method(args)` - .NET method invocation
+ * - Pipelining: `value |> transform |> process`
+ * @{
+ */
+
+/// @brief Application expression - function application `f x`
 DEF_TYPE("application_expression", COMPUTATION_CALL, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Invoke expression - .NET method call `obj.Method()`
 DEF_TYPE("invoke_expression", COMPUTATION_CALL, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 
-// Control flow
+/** @} */ // end fsharp_calls
+
+// ============================================================================
+// CONTROL FLOW
+// ============================================================================
+
+/**
+ * @defgroup fsharp_control Control Flow
+ * @brief Conditionals and pattern matching
+ *
+ * F# control flow:
+ * - `if cond then expr1 else expr2` - conditional (is an expression)
+ * - `match value with | pattern -> expr` - pattern matching
+ * - Everything is an expression in F#
+ * @{
+ */
+
+/// @brief If expression - `if cond then a else b`
 DEF_TYPE("if_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Match expression - pattern matching
 DEF_TYPE("match_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/** @} */ // end fsharp_control
+
+// ============================================================================
+// LOOP CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup fsharp_loops Loop Constructs
+ * @brief Iteration mechanisms
+ *
+ * F# loops:
+ * - `for x in collection do body` - for-in loop
+ * - `for i = start to end do body` - counting loop
+ * - `while cond do body` - while loop
+ * - Prefer recursion or higher-order functions over loops
+ * @{
+ */
+
+/// @brief For expression - `for x in items do ...`
 DEF_TYPE("for_expression", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief While expression - `while cond do ...`
 DEF_TYPE("while_expression", FLOW_LOOP, NONE, NONE, 0)
 
-// Error handling
+/** @} */ // end fsharp_loops
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup fsharp_errors Error Handling
+ * @brief Exception handling constructs
+ *
+ * F# error handling:
+ * - `try ... with pattern -> handler` - exception handling
+ * - `try ... finally cleanup` - cleanup handling
+ * - Prefer `Result<'T, 'E>` or `Option<'T>` over exceptions
+ * @{
+ */
+
+/// @brief Try expression - exception handling entry
 DEF_TYPE("try_expression", ERROR_TRY, NONE, NONE, 0)
+
+/// @brief With expression - exception handler (`with pattern -> ...`)
 DEF_TYPE("with_expression", ERROR_CATCH, NONE, NONE, 0)
+
+/// @brief Finally expression - cleanup handler
 DEF_TYPE("finally_expression", ERROR_FINALLY, NONE, NONE, 0)
 
-// Async/computation expressions
+/** @} */ // end fsharp_errors
+
+// ============================================================================
+// COMPUTATION EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup fsharp_ce Computation Expressions
+ * @brief Monadic workflows
+ *
+ * F# computation expressions:
+ * - `async { ... }` - asynchronous workflows
+ * - `seq { ... }` - sequence generation
+ * - `query { ... }` - LINQ-style queries
+ * - Custom builders for domain-specific workflows
+ * @{
+ */
+
+/// @brief Computation expression - `builder { ... }`
 DEF_TYPE("ce_expression", FLOW_SYNC, NONE, NONE, 0)
 
-// Lambda expressions
+/** @} */ // end fsharp_ce
+
+// ============================================================================
+// LAMBDA EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup fsharp_lambdas Lambda Expressions
+ * @brief Anonymous functions
+ *
+ * F# lambda syntax:
+ * - `fun x -> x + 1` - lambda expression
+ * - `fun x y -> x + y` - multi-parameter lambda
+ * - Pattern matching in lambdas: `fun (a, b) -> a + b`
+ * @{
+ */
+
+/// @brief Lambda expression - `fun x -> expr`
 DEF_TYPE("lambda_expression", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
+
+/// @brief Anonymous record expression - `{| Field = value |}`
 DEF_TYPE("anon_record_expression", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
 
-// Identifiers and literals
+/** @} */ // end fsharp_lambdas
+
+// ============================================================================
+// IDENTIFIERS AND LITERALS
+// ============================================================================
+
+/**
+ * @defgroup fsharp_literals Identifiers and Literals
+ * @brief Names and literal values
+ *
+ * F# literals:
+ * - Integers: `42`, `0xFF`, `42L` (int64), `42un` (native)
+ * - Floats: `3.14`, `3.14f` (float32), `3.14M` (decimal)
+ * - Strings: `"string"`, `@"verbatim"`, `"""triple"""`, `$"interpolated"`
+ * - Characters: `'a'`
+ * - Boolean: `true`, `false`
+ * - Unit: `()` - similar to void
+ * @{
+ */
+
+/// @brief Identifier - simple name
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Long identifier - qualified name `Module.SubModule.Name`
 DEF_TYPE("long_identifier", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
+
+/// @brief Integer literal
 DEF_TYPE("int", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief Floating-point literal
 DEF_TYPE("float", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief String literal
 DEF_TYPE("string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Character literal - `'a'`
 DEF_TYPE("char", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean literal - `true` or `false`
 DEF_TYPE("bool", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
-// Comments
+/** @} */ // end fsharp_literals
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup fsharp_comments Comments
+ * @brief Documentation and annotation
+ *
+ * F# comment styles:
+ * - `// line comment`
+ * - `(* block comment *)`
+ * - `/// XML doc comment`
+ * @{
+ */
+
+/// @brief Comment
 DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Error handling
+/** @} */ // end fsharp_comments
+
+// ============================================================================
+// PARSER ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup fsharp_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end fsharp_parser_errors
