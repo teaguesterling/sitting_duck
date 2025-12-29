@@ -1,115 +1,529 @@
-// PHP language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file php_types.def
+ * @brief PHP language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter PHP AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for PHP language constructs.
+ *
+ * ## PHP Language Characteristics
+ *
+ * - **Server-side scripting**: Originally designed for web development
+ * - **Dynamic typing**: Variables have no type declarations (type hints optional)
+ * - **OOP support**: Classes, interfaces, traits, abstract classes
+ * - **Namespaces**: `namespace` and `use` for code organization
+ * - **Traits**: Horizontal code reuse (composition over inheritance)
+ * - **Type system**: Union types, intersection types, nullable (PHP 8+)
+ * - **Attributes**: `#[Attribute]` for metadata (PHP 8+)
+ * - **Match expression**: Pattern matching expression (PHP 8+)
+ * - **Arrow functions**: Short closures `fn($x) => $x * 2`
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category (e.g., Class::REGULAR = 0x00)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Program and includes
+// ============================================================================
+// PROGRAM STRUCTURE AND IMPORTS
+// ============================================================================
+
+/**
+ * @defgroup php_program Program Structure and Imports
+ * @brief File structure, namespaces, and includes
+ *
+ * PHP file structure:
+ * - `<?php` opens PHP mode (required for pure PHP files)
+ * - `namespace` declares package for the file
+ * - `use` imports classes/functions/constants
+ * - `require`/`include` includes other PHP files
+ * @{
+ */
+
+/// @brief Program root - represents the entire PHP file
 DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief PHP opening/closing tags - `<?php`, `?>`, `<?=`
 DEF_TYPE("php_tag", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Require - includes file, fatal error if not found
 DEF_TYPE("require_expression", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Require once - includes file only once
 DEF_TYPE("require_once_expression", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Include - includes file, warning if not found
 DEF_TYPE("include_expression", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Include once - includes file only once
 DEF_TYPE("include_once_expression", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Namespace definition - `namespace App\Models;`
 DEF_TYPE("namespace_definition", DEFINITION_MODULE, CUSTOM, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Use declaration - imports classes, functions, or constants
 DEF_TYPE("namespace_use_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Class and interface definitions
+/** @} */ // end php_program
+
+// ============================================================================
+// CLASS AND INTERFACE DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup php_classes Class and Interface Definitions
+ * @brief OOP constructs in PHP
+ *
+ * PHP OOP features:
+ * - Classes with single inheritance
+ * - Interfaces for contracts (can extend multiple interfaces)
+ * - Traits for horizontal code reuse
+ * - Abstract classes (cannot be instantiated)
+ * - Final classes (cannot be extended)
+ * - Enums (PHP 8.1+) with optional backing type
+ * @{
+ */
+
+/// @brief Class declaration - `class Name extends Parent implements Interface`
 DEF_TYPE("class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Interface declaration - `interface Name extends Other`
 DEF_TYPE("interface_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, CUSTOM, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Trait declaration - reusable method collections
 DEF_TYPE("trait_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Enum declaration - `enum Status: string { case Active = 'active'; }`
 DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
 
-// Function and method definitions - PHP functions always have bodies
+/** @} */ // end php_classes
+
+// ============================================================================
+// FUNCTION AND METHOD DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup php_functions Function and Method Definitions
+ * @brief Function declarations in PHP
+ *
+ * PHP function features:
+ * - `function name(Type $param): ReturnType`
+ * - Optional parameters with default values
+ * - Variadic parameters: `...$args`
+ * - Named arguments: `func(name: $value)` (PHP 8+)
+ * - Arrow functions: `fn($x) => $x * 2`
+ * - Anonymous functions (closures) with `use` for captured variables
+ * @{
+ */
+
+/// @brief Function definition - `function name($params) { }`
 DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
-DEF_TYPE("function", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)  // keyword token
+
+/// @brief Function keyword token
+DEF_TYPE("function", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Method declaration - function inside class/trait
 DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Constructor - `__construct()`
 DEF_TYPE("constructor_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NODE_TEXT, CONSTRUCTOR_DEFINITION, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Destructor - `__destruct()`
 DEF_TYPE("destructor_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Anonymous function - `function($x) use ($y) { }`
 DEF_TYPE("anonymous_function_creation_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Arrow function - `fn($x) => $x * 2` (PHP 7.4+)
 DEF_TYPE("arrow_function", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
 
-// Variable and property declarations
+/** @} */ // end php_functions
+
+// ============================================================================
+// VARIABLE AND PROPERTY DECLARATIONS
+// ============================================================================
+
+/**
+ * @defgroup php_variables Variable and Property Declarations
+ * @brief Variables, properties, and constants
+ *
+ * PHP variable characteristics:
+ * - All variables prefixed with `$`
+ * - No explicit declaration needed for local variables
+ * - Properties require visibility modifier
+ * - Constructor property promotion (PHP 8+): `public function __construct(public $name)`
+ * - Readonly properties (PHP 8.1+)
+ * @{
+ */
+
+/// @brief Property declaration - class member variable
 DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Constant declaration - `const NAME = value;`
 DEF_TYPE("const_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Global variable declaration - `global $var;`
 DEF_TYPE("global_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Static variable - `static $var = value;`
 DEF_TYPE("static_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Formal parameters list
 DEF_TYPE("formal_parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Simple parameter - `Type $name`
 DEF_TYPE("simple_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Variadic parameter - `...$args`
 DEF_TYPE("variadic_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Property promotion parameter - `public $name` in constructor
 DEF_TYPE("property_promotion_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
 
-// Types
+/** @} */ // end php_variables
+
+// ============================================================================
+// TYPE SYSTEM
+// ============================================================================
+
+/**
+ * @defgroup php_types Type System
+ * @brief PHP type hints and declarations
+ *
+ * PHP type system (evolved significantly in PHP 7-8):
+ * - Scalar types: `int`, `float`, `string`, `bool`
+ * - Compound: `array`, `object`, `callable`, `iterable`
+ * - Special: `void`, `never`, `mixed`, `null`
+ * - Nullable: `?Type` or `Type|null`
+ * - Union types: `Type1|Type2` (PHP 8+)
+ * - Intersection types: `Type1&Type2` (PHP 8.1+)
+ * @{
+ */
+
+/// @brief Named type reference - class, interface, or built-in type
 DEF_TYPE("named_type", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+
+/// @brief Optional/nullable type - `?Type`
 DEF_TYPE("optional_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/// @brief Union type - `Type1|Type2`
 DEF_TYPE("union_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/// @brief Intersection type - `Type1&Type2`
 DEF_TYPE("intersection_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/// @brief Primitive type - `int`, `string`, `bool`, etc.
 DEF_TYPE("primitive_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
+/// @brief Array type hint - `array`
 DEF_TYPE("array_type", TYPE_COMPOSITE, NODE_TEXT, NONE, 0)
 
-// Expressions and calls
+/** @} */ // end php_types
+
+// ============================================================================
+// EXPRESSIONS AND CALLS
+// ============================================================================
+
+/**
+ * @defgroup php_calls Expressions and Calls
+ * @brief Function/method invocations and expressions
+ *
+ * PHP call types:
+ * - Function call: `function_name($args)`
+ * - Method call: `$obj->method($args)`
+ * - Static call: `ClassName::method($args)`
+ * - Object creation: `new ClassName($args)`
+ * @{
+ */
+
+/// @brief Function call - `function_name($args)`
 DEF_TYPE("function_call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Method call - `$obj->method($args)`
 DEF_TYPE("member_call_expression", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Static call - `Class::method($args)`
 DEF_TYPE("scoped_call_expression", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Object creation - `new ClassName($args)`
 DEF_TYPE("object_creation_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Member access - `$obj->property`
 DEF_TYPE("member_access_expression", COMPUTATION_ACCESS, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Array subscript - `$arr[index]`
 DEF_TYPE("subscript_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Assignment - `$var = value`
 DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+
+/// @brief Augmented assignment - `$var += value`
 DEF_TYPE("augmented_assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::COMPOUND, NONE, NONE, 0)
+
+/// @brief Binary expression - arithmetic, comparison, logical
 DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Unary expression - `!`, `-`, `++`, `--`
 DEF_TYPE("unary_op_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+
+/// @brief Conditional/ternary expression - `$a ? $b : $c`
 DEF_TYPE("conditional_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
+
+/// @brief Match expression - pattern matching (PHP 8+)
 DEF_TYPE("match_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 
-// Identifiers and literals
-DEF_TYPE("name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("variable_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("dynamic_variable_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("integer", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
-DEF_TYPE("float", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
-DEF_TYPE("string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("encapsed_string", LITERAL_STRING | SemanticRefinements::String::TEMPLATE, NODE_TEXT, NONE, 0)
-DEF_TYPE("heredoc", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
-DEF_TYPE("nowdoc", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
-DEF_TYPE("shell_command_expression", LITERAL_STRING | SemanticRefinements::String::TEMPLATE, NODE_TEXT, NONE, 0)
-DEF_TYPE("boolean", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("array_creation_expression", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+/** @} */ // end php_calls
 
-// Control flow
+// ============================================================================
+// IDENTIFIERS AND LITERALS
+// ============================================================================
+
+/**
+ * @defgroup php_identifiers Identifiers and Literals
+ * @brief Names, variables, and literal values
+ * @{
+ */
+
+/**
+ * @name Identifiers
+ * @{
+ */
+/// @brief Name - class, function, or constant name
+DEF_TYPE("name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Variable name - `$varname`
+DEF_TYPE("variable_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Dynamic variable - `$$varname` or `${expr}`
+DEF_TYPE("dynamic_variable_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+/** @} */
+
+/**
+ * @name Numeric Literals
+ * @{
+ */
+/// @brief Integer literal
+DEF_TYPE("integer", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
+
+/// @brief Floating-point literal
+DEF_TYPE("float", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
+/** @} */
+
+/**
+ * @name String Literals
+ * @{
+ */
+/// @brief String literal - single or double quoted
+DEF_TYPE("string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Encapsed string - double quoted with interpolation
+DEF_TYPE("encapsed_string", LITERAL_STRING | SemanticRefinements::String::TEMPLATE, NODE_TEXT, NONE, 0)
+
+/// @brief Heredoc string - `<<<EOF`
+DEF_TYPE("heredoc", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
+
+/// @brief Nowdoc string - `<<<'EOF'` (no interpolation)
+DEF_TYPE("nowdoc", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
+
+/// @brief Shell command - backtick execution
+DEF_TYPE("shell_command_expression", LITERAL_STRING | SemanticRefinements::String::TEMPLATE, NODE_TEXT, NONE, 0)
+/** @} */
+
+/**
+ * @name Other Literals
+ * @{
+ */
+/// @brief Boolean literal - `true` or `false`
+DEF_TYPE("boolean", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Null literal
+DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Array creation - `[1, 2, 3]` or `array(...)`
+DEF_TYPE("array_creation_expression", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+/** @} */
+
+/** @} */ // end php_identifiers
+
+// ============================================================================
+// CONTROL FLOW
+// ============================================================================
+
+/**
+ * @defgroup php_control Control Flow
+ * @brief Conditionals, loops, and jumps
+ *
+ * PHP control structures support alternative syntax for templates:
+ * - `if (...): ... endif;`
+ * - `foreach (...): ... endforeach;`
+ * @{
+ */
+
+/// @brief If statement - `if (...) { } elseif { } else { }`
 DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/// @brief Switch statement - `switch ($x) { case 1: ... }`
 DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/// @brief While loop - `while (...) { }`
 DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Do-while loop - `do { } while (...);`
 DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/// @brief For loop - `for ($i = 0; $i < $n; $i++) { }`
 DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, 0)
+
+/// @brief Foreach loop - `foreach ($arr as $key => $value) { }`
 DEF_TYPE("foreach_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+
+/// @brief Break statement - exits loop or switch
 DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
+
+/// @brief Continue statement - skips to next iteration
 DEF_TYPE("continue_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
+
+/// @brief Return statement - exits function with value
 DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
+
+/// @brief Goto statement - jumps to label
 DEF_TYPE("goto_statement", FLOW_JUMP | SemanticRefinements::Jump::GOTO, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Yield expression - generator yield
 DEF_TYPE("yield_expression", FLOW_SYNC, NONE, NONE, 0)
 
-// Exception handling
+/** @} */ // end php_control
+
+// ============================================================================
+// EXCEPTION HANDLING
+// ============================================================================
+
+/**
+ * @defgroup php_exceptions Exception Handling
+ * @brief Try/catch/finally constructs
+ * @{
+ */
+
+/// @brief Try statement - begins exception handling block
 DEF_TYPE("try_statement", ERROR_TRY, NONE, NONE, 0)
+
+/// @brief Catch clause - handles specific exception types
 DEF_TYPE("catch_clause", ERROR_CATCH, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Finally clause - always executed
 DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
+
+/// @brief Throw expression - raises exception
 DEF_TYPE("throw_expression", ERROR_THROW, NONE, NONE, 0)
 
-// Comments
+/** @} */ // end php_exceptions
+
+// ============================================================================
+// COMMENTS AND METADATA
+// ============================================================================
+
+/**
+ * @defgroup php_metadata Comments and Metadata
+ * @brief Documentation and annotations
+ * @{
+ */
+
+/// @brief Comment - `//`, `/* */`, or `/** */` (PHPDoc)
 DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Attributes (PHP 8+)
+/// @brief Attribute list - `#[Attribute, Another]` (PHP 8+)
 DEF_TYPE("attribute_list", METADATA_ANNOTATION, NONE, NONE, 0)
+
+/// @brief Single attribute - `#[Attribute(...)]`
 DEF_TYPE("attribute", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, 0)
 
-// Special PHP constructs
+/** @} */ // end php_metadata
+
+// ============================================================================
+// SPECIAL PHP CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup php_special Special PHP Constructs
+ * @brief PHP-specific statements and expressions
+ * @{
+ */
+
+/// @brief Echo statement - `echo "text";`
 DEF_TYPE("echo_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
+
+/// @brief Print intrinsic - `print "text"`
 DEF_TYPE("print_intrinsic", EXECUTION_STATEMENT, NONE, NONE, 0)
+
+/// @brief Unset statement - `unset($var)`
 DEF_TYPE("unset_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
+
+/// @brief Declare statement - `declare(strict_types=1)`
 DEF_TYPE("declare_statement", METADATA_DIRECTIVE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Modifiers
+/** @} */ // end php_special
+
+// ============================================================================
+// MODIFIERS
+// ============================================================================
+
+/**
+ * @defgroup php_modifiers Modifiers
+ * @brief Visibility and behavior modifiers
+ *
+ * PHP modifiers:
+ * - Visibility: `public`, `protected`, `private`
+ * - Inheritance: `abstract`, `final`
+ * - Static: `static` for class-level members
+ * - Readonly: `readonly` (PHP 8.1+)
+ * @{
+ */
+
+/// @brief Visibility modifier - `public`, `protected`, `private`
 DEF_TYPE("visibility_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Static modifier - class-level method/property
 DEF_TYPE("static_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Final modifier - prevents override/extension
 DEF_TYPE("final_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Abstract modifier - requires implementation
 DEF_TYPE("abstract_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 
-// Error handling
+/** @} */ // end php_modifiers
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup php_errors Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end php_errors

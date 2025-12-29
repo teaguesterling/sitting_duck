@@ -1,80 +1,404 @@
-// Lua language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, native_strategy, flags)
+/**
+ * @file lua_types.def
+ * @brief Lua language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter Lua AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for Lua language constructs.
+ *
+ * ## Lua Language Characteristics
+ *
+ * - **Lightweight scripting**: Designed for embedding in applications
+ * - **Tables**: Single data structure for arrays, objects, modules
+ * - **First-class functions**: Functions are values, closures supported
+ * - **Coroutines**: Cooperative multitasking via coroutine library
+ * - **Dynamic typing**: All values carry their type at runtime
+ * - **Metatables**: Operator overloading and prototype-based OOP
+ * - **Multiple return values**: Functions can return multiple values
+ * - **Varargs**: `...` for variadic function parameters
+ * - **Lexical scoping**: `local` keyword for local variables
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_FUNCTION = 0x04)
+ * - Bits 1-0: Refinement within category (e.g., Function::REGULAR = 0x00)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Program structure
+// ============================================================================
+// PROGRAM STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup lua_program Program Structure
+ * @brief Top-level script structure
+ *
+ * Lua programs are called "chunks" - a sequence of statements.
+ * A chunk can be stored in a file or a string.
+ * @{
+ */
+
+/// @brief Chunk - root node representing the entire Lua script
 DEF_TYPE("chunk", DEFINITION_MODULE, NONE, NONE, 0)
+
+/// @brief Block - sequence of statements in a scope
 DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
-// Function definitions - Lua functions always have bodies
+/** @} */ // end lua_program
+
+// ============================================================================
+// FUNCTION DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup lua_functions Function Definitions
+ * @brief Lua function declarations
+ *
+ * Lua function syntax:
+ * - Named: `function name(params) ... end`
+ * - Local: `local function name(params) ... end`
+ * - Anonymous: `function(params) ... end`
+ * - Method: `function obj:method(params) ... end` (implicit self)
+ *
+ * Functions in Lua:
+ * - Are first-class values
+ * - Support closures (capture upvalues)
+ * - Can return multiple values
+ * - Support tail-call optimization
+ * @{
+ */
+
+/// @brief Named function declaration - `function name(...) end`
 DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Anonymous function - `function(...) end` as expression
 DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Local function - `local function name(...) end`
 DEF_TYPE("local_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Parameter list - function parameters
 DEF_TYPE("parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Return statement - `return expr, expr, ...`
 DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
 
-// Function calls
+/** @} */ // end lua_functions
+
+// ============================================================================
+// FUNCTION CALLS
+// ============================================================================
+
+/**
+ * @defgroup lua_calls Function Calls
+ * @brief Function and method invocations
+ *
+ * Lua call syntax:
+ * - Function: `func(args)` or `func "string"` or `func {table}`
+ * - Method: `obj:method(args)` (passes obj as first argument)
+ * @{
+ */
+
+/// @brief Function call - `func(args)`
 DEF_TYPE("function_call", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Argument list
 DEF_TYPE("arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Method call - `obj:method(args)`
 DEF_TYPE("method_index_expression", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 
-// Variable declarations (Lua vars are mutable by default)
+/** @} */ // end lua_calls
+
+// ============================================================================
+// VARIABLE DECLARATIONS
+// ============================================================================
+
+/**
+ * @defgroup lua_variables Variable Declarations
+ * @brief Variable creation and assignment
+ *
+ * Lua variable scoping:
+ * - Global by default (no keyword needed)
+ * - `local` for lexically scoped variables
+ * - Multiple assignment: `a, b = 1, 2`
+ * - Destructuring from function returns: `a, b = func()`
+ * @{
+ */
+
+/// @brief Variable declaration (global)
 DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Local variable declaration - `local x = value`
 DEF_TYPE("local_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Assignment statement - `x = value` or `a, b = 1, 2`
 DEF_TYPE("assignment_statement", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Variable list - left side of multiple assignment
 DEF_TYPE("variable_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Expression list - right side of multiple assignment
 DEF_TYPE("expression_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
-// Table/class-like structures (Lua uses tables for OOP)
+/** @} */ // end lua_variables
+
+// ============================================================================
+// TABLE CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup lua_tables Table Constructs
+ * @brief Lua's universal data structure
+ *
+ * Tables in Lua:
+ * - The only data structure (arrays, dictionaries, objects, modules)
+ * - Array syntax: `{1, 2, 3}` (1-indexed)
+ * - Dictionary syntax: `{key = value}` or `{["key"] = value}`
+ * - Mixed: `{"first", key = "value"}`
+ * - Used for OOP via metatables
+ * @{
+ */
+
+/// @brief Table constructor - `{...}`
 DEF_TYPE("table_constructor", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
+
+/// @brief Field in table - `key = value` or `[expr] = value`
 DEF_TYPE("field", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Field list in table constructor
 DEF_TYPE("field_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
-// Identifiers and references
+/** @} */ // end lua_tables
+
+// ============================================================================
+// IDENTIFIERS AND REFERENCES
+// ============================================================================
+
+/**
+ * @defgroup lua_identifiers Identifiers and References
+ * @brief Names and access expressions
+ * @{
+ */
+
+/// @brief Identifier - variable or function name
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Dot index - `table.key` access
 DEF_TYPE("dot_index_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Bracket index - `table[expr]` access
 DEF_TYPE("bracket_index_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 
-// Literals
+/** @} */ // end lua_identifiers
+
+// ============================================================================
+// LITERALS
+// ============================================================================
+
+/**
+ * @defgroup lua_literals Literals
+ * @brief Lua literal values
+ *
+ * Lua has simple literal types:
+ * - Numbers (double precision floats, integers in 5.3+)
+ * - Strings (single/double quoted, long strings `[[...]]`)
+ * - Booleans: `true`, `false`
+ * - Nil: `nil` (absence of value)
+ * @{
+ */
+
+/// @brief Number literal - integers and floats
 DEF_TYPE("number", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief String literal - `"..."`, `'...'`, or `[[...]]`
 DEF_TYPE("string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean true
 DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean false
 DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Nil value - absence of value
 DEF_TYPE("nil", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Vararg expression - `...` for accessing variadic arguments
 DEF_TYPE("vararg_expression", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// Control flow - conditionals
+/** @} */ // end lua_literals
+
+// ============================================================================
+// CONTROL FLOW - CONDITIONALS
+// ============================================================================
+
+/**
+ * @defgroup lua_conditionals Control Flow - Conditionals
+ * @brief Conditional statements
+ *
+ * Lua conditionals:
+ * - `if ... then ... elseif ... then ... else ... end`
+ * - Only `false` and `nil` are falsy; everything else is truthy
+ * @{
+ */
+
+/// @brief If statement - `if ... then ... end`
 DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/// @brief Elseif clause - `elseif ... then ...`
 DEF_TYPE("elseif_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/// @brief Else clause - `else ...`
 DEF_TYPE("else_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
 
-// Control flow - loops
+/** @} */ // end lua_conditionals
+
+// ============================================================================
+// CONTROL FLOW - LOOPS
+// ============================================================================
+
+/**
+ * @defgroup lua_loops Control Flow - Loops
+ * @brief Iteration constructs
+ *
+ * Lua loop types:
+ * - `for i = start, stop, step do ... end` (numeric)
+ * - `for k, v in pairs(t) do ... end` (generic/iterator)
+ * - `while ... do ... end`
+ * - `repeat ... until ...`
+ * @{
+ */
+
+/// @brief For statement container
 DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief Generic for clause - `for k, v in iterator do`
 DEF_TYPE("for_generic_clause", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+
+/// @brief Numeric for clause - `for i = 1, 10, 1 do`
 DEF_TYPE("for_numeric_clause", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, 0)
+
+/// @brief While loop - `while ... do ... end`
 DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Repeat loop - `repeat ... until ...` (do-while equivalent)
 DEF_TYPE("repeat_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Do block - `do ... end` creates a scope
 DEF_TYPE("do_statement", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
-// Jump statements
+/** @} */ // end lua_loops
+
+// ============================================================================
+// JUMP STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup lua_jumps Jump Statements
+ * @brief Control flow transfer
+ *
+ * Lua jump statements:
+ * - `break` - exits innermost loop
+ * - `goto label` - jumps to label (Lua 5.2+)
+ * - `::label::` - label definition
+ * - No `continue` (use goto or restructure)
+ * @{
+ */
+
+/// @brief Break statement - exits loop
 DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
+
+/// @brief Goto statement - jumps to label (Lua 5.2+)
 DEF_TYPE("goto_statement", FLOW_JUMP | SemanticRefinements::Jump::GOTO, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Label statement - `::label::` for goto target
 DEF_TYPE("label_statement", NAME_IDENTIFIER, FIND_IDENTIFIER, NONE, 0)
 
-// Binary expressions
+/** @} */ // end lua_jumps
+
+// ============================================================================
+// EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup lua_expressions Expressions
+ * @brief Operators and expression types
+ * @{
+ */
+
+/// @brief Binary expression - arithmetic, comparison, logical, string concat
 DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Unary expression - `-`, `not`, `#` (length)
 DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+
+/// @brief Parenthesized expression - `(expr)`
 DEF_TYPE("parenthesized_expression", ORGANIZATION_BLOCK, NONE, NONE, 0)
 
-// Comments
+/** @} */ // end lua_expressions
+
+// ============================================================================
+// COMMENTS AND METADATA
+// ============================================================================
+
+/**
+ * @defgroup lua_metadata Comments and Metadata
+ * @brief Documentation and annotations
+ * @{
+ */
+
+/// @brief Comment - `--` or `--[[ multiline ]]`
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
 
-// Empty statement
+/// @brief Empty statement - semicolon (optional in Lua)
 DEF_TYPE("empty_statement", PARSER_SYNTAX, NONE, NONE, 0)
 
-// Attribute (Lua 5.4)
+/// @brief Attribute - `<const>` or `<close>` (Lua 5.4)
 DEF_TYPE("attribute", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, 0)
 
-// Operators
+/** @} */ // end lua_metadata
+
+// ============================================================================
+// OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup lua_operators Operators
+ * @brief Lua operators
+ *
+ * Lua operators:
+ * - Arithmetic: `+`, `-`, `*`, `/`, `//` (floor), `%`, `^` (power)
+ * - Comparison: `==`, `~=`, `<`, `>`, `<=`, `>=`
+ * - Logical: `and`, `or`, `not` (short-circuit evaluation)
+ * - String: `..` (concatenation)
+ * - Length: `#` (table/string length)
+ * - Bitwise (5.3+): `&`, `|`, `~`, `<<`, `>>`
+ * @{
+ */
+
+/**
+ * @name Arithmetic Operators
+ * @{
+ */
 DEF_TYPE("+", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("-", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("*", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
@@ -83,29 +407,58 @@ DEF_TYPE("//", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("%", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("^", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("..", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+/** @} */
 
+/**
+ * @name Comparison Operators
+ * @{
+ */
 DEF_TYPE("==", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 DEF_TYPE("~=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 DEF_TYPE("<", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 DEF_TYPE(">", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 DEF_TYPE("<=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 DEF_TYPE(">=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+/** @} */
 
+/**
+ * @name Logical Operators (Keywords)
+ * @{
+ */
 DEF_TYPE("and", OPERATOR_LOGICAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("or", OPERATOR_LOGICAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("not", OPERATOR_LOGICAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
 
-// Bitwise operators (Lua 5.3+) - mapped to OPERATOR_ARITHMETIC
+/**
+ * @name Bitwise Operators (Lua 5.3+)
+ * @{
+ */
 DEF_TYPE("&", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("|", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("~", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("<<", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE(">>", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+/** @} */
 
-// Assignment
+/// @brief Assignment operator
 DEF_TYPE("=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
 
-// Punctuation
+/// @brief Length operator - `#table` or `#string`
+DEF_TYPE("#", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/** @} */ // end lua_operators
+
+// ============================================================================
+// PUNCTUATION
+// ============================================================================
+
+/**
+ * @defgroup lua_punctuation Punctuation and Delimiters
+ * @brief Syntactic markers
+ * @{
+ */
+
 DEF_TYPE("(", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE(")", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE("[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
@@ -117,9 +470,21 @@ DEF_TYPE(";", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 DEF_TYPE(".", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 DEF_TYPE(":", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("::", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("#", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 
-// Keywords
+/** @} */ // end lua_punctuation
+
+// ============================================================================
+// KEYWORDS
+// ============================================================================
+
+/**
+ * @defgroup lua_keywords Keywords
+ * @brief Lua reserved words
+ *
+ * Lua has 22 reserved keywords. They cannot be used as identifiers.
+ * @{
+ */
+
 DEF_TYPE("break", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("do", ORGANIZATION_BLOCK, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("else", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -137,5 +502,19 @@ DEF_TYPE("then", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("until", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Error handling
+/** @} */ // end lua_keywords
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup lua_errors Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end lua_errors

@@ -1,203 +1,721 @@
-// Kotlin language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file kotlin_types.def
+ * @brief Kotlin language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter Kotlin AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for Kotlin language constructs.
+ *
+ * ## Kotlin Language Characteristics
+ *
+ * - **JVM language**: Interoperable with Java, also targets JS and Native
+ * - **Null safety**: Nullable types (`T?`) vs non-null types (`T`)
+ * - **Data classes**: Automatic equals/hashCode/toString/copy
+ * - **Coroutines**: Lightweight threads via suspend functions
+ * - **Extension functions**: Add methods to existing classes
+ * - **Smart casts**: Automatic casting after type checks
+ * - **Sealed classes**: Restricted class hierarchies
+ * - **Object declarations**: Singleton pattern built-in
+ * - **Companion objects**: Static-like members for classes
+ * - **Properties**: First-class, with getters/setters
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category (e.g., Class::REGULAR = 0x00)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Function definitions with refinements
+// ============================================================================
+// FUNCTION DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup kotlin_functions Function Definitions
+ * @brief Kotlin function and lambda declarations
+ *
+ * Kotlin function features:
+ * - `fun name(params): ReturnType { }` - named functions
+ * - Single-expression: `fun double(x: Int) = x * 2`
+ * - Extension: `fun String.addHello() = "Hello, $this"`
+ * - Infix: `infix fun Int.add(x: Int) = this + x`
+ * - Operator overloading: `operator fun plus(other: T)`
+ * - Suspend functions for coroutines
+ * @{
+ */
+
+/// @brief Function declaration - `fun name(params): Type { }`
 DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, 0)
+
+/// @brief Anonymous function - `fun(params) { }`
 DEF_TYPE("anonymous_function", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
+
+/// @brief Annotated lambda - lambda with annotations
 DEF_TYPE("annotated_lambda", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
+
+/// @brief Lambda literal - `{ params -> body }`
 DEF_TYPE("lambda_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
+
+/// @brief Primary constructor - in class header
 DEF_TYPE("primary_constructor", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NONE, NONE, 0)
+
+/// @brief Secondary constructor - `constructor(params) { }`
 DEF_TYPE("secondary_constructor", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NONE, NONE, 0)
+
+/// @brief Constructor invocation - `ClassName(args)`
 DEF_TYPE("constructor_invocation", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 
-// Class and object definitions
+/** @} */ // end kotlin_functions
+
+// ============================================================================
+// CLASS AND OBJECT DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup kotlin_classes Class and Object Definitions
+ * @brief Kotlin class hierarchy constructs
+ *
+ * Kotlin class types:
+ * - `class` - regular class (final by default)
+ * - `open class` - can be extended
+ * - `abstract class` - cannot be instantiated
+ * - `data class` - automatic equals/hashCode/toString/copy
+ * - `sealed class` - restricted hierarchy
+ * - `enum class` - enumeration
+ * - `interface` - can have default implementations
+ * - `object` - singleton declaration
+ * - `companion object` - static-like members
+ * @{
+ */
+
+/// @brief Class declaration - `class Name(params) : Parent { }`
 DEF_TYPE("class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+
+/// @brief Object declaration - singleton `object Name { }`
 DEF_TYPE("object_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+
+/// @brief Interface declaration - `interface Name { }`
 DEF_TYPE("interface_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+
+/// @brief Enum class body - enum entries and members
 DEF_TYPE("enum_class_body", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Companion object - `companion object { }`
 DEF_TYPE("companion_object", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Anonymous initializer - `init { }` block
 DEF_TYPE("anonymous_initializer", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, NONE, NONE, 0)
 
-// Variable declarations with mutability refinements
+/** @} */ // end kotlin_classes
+
+// ============================================================================
+// VARIABLE AND PROPERTY DECLARATIONS
+// ============================================================================
+
+/**
+ * @defgroup kotlin_variables Variable and Property Declarations
+ * @brief Properties and variables with mutability
+ *
+ * Kotlin variables:
+ * - `val` - immutable (like final in Java)
+ * - `var` - mutable
+ * - Properties have automatic getters/setters
+ * - Delegated properties: `by lazy`, `by observable`
+ * - `lateinit var` - late initialization for non-null types
+ * @{
+ */
+
+/// @brief Property declaration - `val`/`var` in class
 DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Variable declaration - local `val`/`var`
 DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Multi-variable declaration - destructuring `val (a, b) = pair`
 DEF_TYPE("multi_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, NONE, NONE, 0)
+
+/// @brief Function parameter
 DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Class constructor parameter
 DEF_TYPE("class_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Lambda parameter
 DEF_TYPE("lambda_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
 
-// Function calls and expressions with refinements
+/** @} */ // end kotlin_variables
+
+// ============================================================================
+// FUNCTION CALLS AND EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup kotlin_calls Function Calls and Expressions
+ * @brief Invocations and access expressions
+ *
+ * Kotlin call features:
+ * - Named arguments: `func(name = value)`
+ * - Default parameters: `fun foo(x: Int = 0)`
+ * - Trailing lambdas: `list.map { it * 2 }`
+ * - Infix calls: `1 to 2`
+ * - Safe calls: `obj?.method()`
+ * - Elvis operator: `x ?: default`
+ * @{
+ */
+
+/// @brief Function/method call - `func(args)` or `obj.method(args)`
 DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Navigation expression - `obj.property` or `obj?.property`
 DEF_TYPE("navigation_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Indexing expression - `arr[index]`
 DEF_TYPE("indexing_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief This expression - reference to current instance
 DEF_TYPE("this_expression", NAME_SCOPED, NODE_TEXT, NONE, 0)
+
+/// @brief Super expression - reference to parent class
 DEF_TYPE("super_expression", NAME_SCOPED, NODE_TEXT, NONE, 0)
 
-// Identifiers and references
+/** @} */ // end kotlin_calls
+
+// ============================================================================
+// IDENTIFIERS AND REFERENCES
+// ============================================================================
+
+/**
+ * @defgroup kotlin_identifiers Identifiers and References
+ * @brief Names and type references
+ * @{
+ */
+
+/// @brief Simple identifier - variable, function, or class name
 DEF_TYPE("simple_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Identifier node
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Import identifier - qualified name in import
 DEF_TYPE("import_identifier", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
+
+/// @brief Type identifier - type name
 DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
 
-// Literals with refinements
+/** @} */ // end kotlin_identifiers
+
+// ============================================================================
+// LITERALS
+// ============================================================================
+
+/**
+ * @defgroup kotlin_literals Literals
+ * @brief Kotlin literal values
+ *
+ * Kotlin literals:
+ * - Integers: `123`, `123L`, `0x1F`, `0b1010`
+ * - Floats: `3.14`, `3.14f`
+ * - Characters: `'a'`, `'\n'`
+ * - Strings: `"string"`, `"""raw string"""`
+ * - String templates: `"Value: $x"` or `"${expr}"`
+ * - Boolean: `true`, `false`
+ * - Null: `null`
+ * @{
+ */
+
+/// @brief Integer literal - decimal, hex, or binary
 DEF_TYPE("integer_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
+
+/// @brief Hex literal - `0x1F`
 DEF_TYPE("hex_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
+
+/// @brief Binary literal - `0b1010`
 DEF_TYPE("bin_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
+
+/// @brief Real/float literal - `3.14` or `3.14f`
 DEF_TYPE("real_literal", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean literal - `true` or `false`
 DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Character literal - `'a'`
 DEF_TYPE("character_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief String literal - `"string"` or `"""raw"""`
 DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Null literal
 DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
-// Structured literals with refinements
+/**
+ * @name Structured Literals
+ * @{
+ */
+/// @brief Collection literal
 DEF_TYPE("collection_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
-DEF_TYPE("array_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
-DEF_TYPE("list_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
 
-// Control flow
+/// @brief Array literal - `arrayOf(...)`
+DEF_TYPE("array_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+
+/// @brief List literal - `listOf(...)`
+DEF_TYPE("list_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+/** @} */
+
+/** @} */ // end kotlin_literals
+
+// ============================================================================
+// CONTROL FLOW
+// ============================================================================
+
+/**
+ * @defgroup kotlin_control Control Flow
+ * @brief Conditionals and branching
+ *
+ * Kotlin control flow:
+ * - `if` is an expression (returns value)
+ * - `when` is pattern matching (like switch but more powerful)
+ * - No ternary operator (use `if` expression)
+ * @{
+ */
+
+/// @brief If expression - `if (cond) expr else expr`
 DEF_TYPE("if_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/// @brief When expression - pattern matching `when (x) { ... }`
 DEF_TYPE("when_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/// @brief When condition - individual case in when
 DEF_TYPE("when_condition", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/// @brief Try expression - exception handling
 DEF_TYPE("try_expression", ERROR_TRY, NONE, NONE, 0)
+
+/// @brief Catch block
 DEF_TYPE("catch_block", ERROR_CATCH, NONE, NONE, 0)
+
+/// @brief Finally block
 DEF_TYPE("finally_block", ERROR_FINALLY, NONE, NONE, 0)
 
-// Loop constructs
+/** @} */ // end kotlin_control
+
+// ============================================================================
+// LOOP CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup kotlin_loops Loop Constructs
+ * @brief Iteration mechanisms
+ *
+ * Kotlin loops:
+ * - `for (item in collection)` - iterate over anything with iterator
+ * - `while (condition)` - condition-based loop
+ * - `do { } while (condition)` - post-condition loop
+ * - Labels for break/continue: `loop@ for (...)`
+ * @{
+ */
+
+/// @brief For statement - `for (x in collection)`
 DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+
+/// @brief While statement - `while (cond) { }`
 DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Do-while statement - `do { } while (cond)`
 DEF_TYPE("do_while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
 
-// Jump statements
+/** @} */ // end kotlin_loops
+
+// ============================================================================
+// JUMP STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup kotlin_jumps Jump Statements
+ * @brief Control flow transfer
+ *
+ * Kotlin jumps:
+ * - `return` - exit function
+ * - `break` - exit loop
+ * - `continue` - skip iteration
+ * - Labeled: `return@label`, `break@loop`
+ * @{
+ */
+
+/// @brief Return expression - `return value`
 DEF_TYPE("return_expression", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
+
+/// @brief Throw expression - `throw Exception()`
 DEF_TYPE("throw_expression", ERROR_THROW, NONE, NONE, 0)
+
+/// @brief Break expression - exits loop
 DEF_TYPE("break_expression", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
+
+/// @brief Continue expression - skips to next iteration
 DEF_TYPE("continue_expression", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
 
-// Async/coroutine constructs
+/** @} */ // end kotlin_jumps
+
+// ============================================================================
+// COROUTINES
+// ============================================================================
+
+/**
+ * @defgroup kotlin_coroutines Coroutines
+ * @brief Suspend functions and coroutine support
+ * @{
+ */
+
+/// @brief Suspend modifier - marks function as suspendable
 DEF_TYPE("suspend_modifier", FLOW_SYNC, NONE, NONE, 0)
 
-// Module and import
+/** @} */ // end kotlin_coroutines
+
+// ============================================================================
+// MODULE AND IMPORT
+// ============================================================================
+
+/**
+ * @defgroup kotlin_modules Module and Import
+ * @brief Package and import declarations
+ * @{
+ */
+
+/// @brief Source file - root node
 DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, 0)
+
+/// @brief Package header - `package com.example`
 DEF_TYPE("package_header", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Import header - `import com.example.Class`
 DEF_TYPE("import_header", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Import list
 DEF_TYPE("import_list", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0)
 
-// Type system
+/** @} */ // end kotlin_modules
+
+// ============================================================================
+// TYPE SYSTEM
+// ============================================================================
+
+/**
+ * @defgroup kotlin_types Type System
+ * @brief Kotlin type declarations and references
+ *
+ * Kotlin type system:
+ * - Nullable types: `String?`
+ * - Platform types: `String!` (from Java)
+ * - Generic types: `List<T>`
+ * - Function types: `(Int) -> String`
+ * - Type aliases: `typealias Name = OtherType`
+ * @{
+ */
+
+/// @brief Type alias - `typealias Name = Type`
 DEF_TYPE("type_alias", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Type reference
 DEF_TYPE("type_reference", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief User type - class or interface type
 DEF_TYPE("user_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Nullable type - `Type?`
 DEF_TYPE("nullable_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Function type - `(Params) -> Return`
 DEF_TYPE("function_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/// @brief Parenthesized type
 DEF_TYPE("parenthesized_type", TYPE_REFERENCE, NONE, NONE, 0)
 
-// Operators with refinements
+/** @} */ // end kotlin_types
+
+// ============================================================================
+// OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup kotlin_operators Operators
+ * @brief Kotlin operators and expressions
+ * @{
+ */
+
+/// @brief Assignment - `=`
 DEF_TYPE("assignment", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+
+/// @brief Additive expression - `+`, `-`
 DEF_TYPE("additive_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Multiplicative expression - `*`, `/`, `%`
 DEF_TYPE("multiplicative_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Comparison expression - `<`, `>`, `<=`, `>=`
 DEF_TYPE("comparison_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/// @brief Equality expression - `==`, `!=`, `===`, `!==`
 DEF_TYPE("equality_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/// @brief Conjunction expression - `&&`
 DEF_TYPE("conjunction_expression", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/// @brief Disjunction expression - `||`
 DEF_TYPE("disjunction_expression", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/// @brief Range expression - `1..10` or `1..<10`
 DEF_TYPE("range_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Infix expression - `a to b`
 DEF_TYPE("infix_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Prefix expression - `!`, `-`, `++`
 DEF_TYPE("prefix_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+
+/// @brief Postfix expression - `++`, `--`, `!!`, `?`
 DEF_TYPE("postfix_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+
+/// @brief As expression - type cast `x as Type`
 DEF_TYPE("as_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/// @brief Is expression - type check `x is Type`
 DEF_TYPE("is_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/// @brief In expression - containment check `x in collection`
 DEF_TYPE("in_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/// @brief Elvis expression - `x ?: default`
 DEF_TYPE("elvis_expression", OPERATOR_LOGICAL, NONE, NONE, 0)
 
-// Annotations and metadata
+/** @} */ // end kotlin_operators
+
+// ============================================================================
+// ANNOTATIONS
+// ============================================================================
+
+/**
+ * @defgroup kotlin_annotations Annotations and Metadata
+ * @brief Kotlin annotations
+ * @{
+ */
+
+/// @brief Annotation - `@Annotation`
 DEF_TYPE("annotation", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief File annotation - `@file:Annotation`
 DEF_TYPE("file_annotation", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Use-site target - `@get:`, `@set:`, `@field:`
 DEF_TYPE("use_site_target", METADATA_ANNOTATION, NONE, NONE, 0)
 
-// Comments
+/** @} */ // end kotlin_annotations
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup kotlin_comments Comments
+ * @brief Documentation and annotation
+ * @{
+ */
+
+/// @brief Line comment - `// comment`
 DEF_TYPE("line_comment", METADATA_COMMENT, NONE, NONE, 0)
+
+/// @brief Multiline comment - `/* comment */`
 DEF_TYPE("multiline_comment", METADATA_COMMENT, NONE, NONE, 0)
 
-// Keywords with IS_KEYWORD flag
+/** @} */ // end kotlin_comments
+
+// ============================================================================
+// KEYWORDS
+// ============================================================================
+
+/**
+ * @defgroup kotlin_keywords Keywords
+ * @brief Kotlin reserved and modifier keywords
+ *
+ * Kotlin has hard keywords (always reserved) and soft keywords
+ * (reserved only in certain contexts).
+ * @{
+ */
+
+/**
+ * @name Modifier Keywords
+ * @{
+ */
 DEF_TYPE("abstract", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("actual", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("annotation", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("as", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("break", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("by", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("catch", ERROR_CATCH, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("class", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("companion", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("const", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("constructor", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("continue", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("crossinline", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("data", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("delegate", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("do", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("dynamic", TYPE_REFERENCE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("else", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("enum", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("expect", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("external", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("final", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("finally", ERROR_FINALLY, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("for", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("fun", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("get", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("if", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("import", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("in", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("infix", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("init", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("inline", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("inner", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("interface", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("internal", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("is", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("lateinit", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("noinline", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("object", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("open", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("operator", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("out", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("override", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("package", DEFINITION_MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("private", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("protected", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("public", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("reified", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("return", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("sealed", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("set", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("super", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("suspend", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("tailrec", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("this", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("throw", ERROR_THROW, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("try", ERROR_TRY, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("vararg", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("where", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Definition Keywords
+ * @{
+ */
+DEF_TYPE("as", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("class", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("companion", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("constructor", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("enum", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("fun", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("get", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("init", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("interface", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("object", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("package", DEFINITION_MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("set", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("typealias", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("val", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("var", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("vararg", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("when", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("where", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
 
-// Structure and organization
+/**
+ * @name Control Flow Keywords
+ * @{
+ */
+DEF_TYPE("break", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("continue", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("do", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("else", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("for", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("if", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("in", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("is", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("return", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("when", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Exception Keywords
+ * @{
+ */
+DEF_TYPE("catch", ERROR_CATCH, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("finally", ERROR_FINALLY, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("throw", ERROR_THROW, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("try", ERROR_TRY, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Reference Keywords
+ * @{
+ */
+DEF_TYPE("import", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("super", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("this", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Literal Keywords
+ * @{
+ */
+DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/** @} */ // end kotlin_keywords
+
+// ============================================================================
+// STRUCTURE AND ORGANIZATION
+// ============================================================================
+
+/**
+ * @defgroup kotlin_structure Structure and Organization
+ * @brief Block and list structures
+ * @{
+ */
+
+/// @brief Class body - content of class
 DEF_TYPE("class_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Block - statement block
 DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Lambda literal body
 DEF_TYPE("lambda_literal", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Function body
 DEF_TYPE("function_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief When entry - case in when expression
 DEF_TYPE("when_entry", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Parameter list
 DEF_TYPE("parameter_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Value parameter list
 DEF_TYPE("value_parameter_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Argument list
 DEF_TYPE("argument_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Type parameter list - generics
 DEF_TYPE("type_parameter_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Type arguments - generic arguments
 DEF_TYPE("type_arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
-// Punctuation and delimiters
+/** @} */ // end kotlin_structure
+
+// ============================================================================
+// PUNCTUATION AND DELIMITERS
+// ============================================================================
+
+/**
+ * @defgroup kotlin_punctuation Punctuation and Delimiters
+ * @brief Syntactic markers
+ * @{
+ */
+
 DEF_TYPE("(", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE(")", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE("[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
@@ -210,23 +728,64 @@ DEF_TYPE(".", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 DEF_TYPE(":", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("?", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 
-// Kotlin-specific operators
-DEF_TYPE("!!", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("?:", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)  // Elvis operator
-DEF_TYPE("?..", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)  // Safe navigation
-DEF_TYPE("::", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)  // Member reference
-DEF_TYPE("@", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("$", LITERAL_STRING, NODE_TEXT, NONE, 0)  // String interpolation
+/** @} */ // end kotlin_punctuation
 
-// Assignment operators
+// ============================================================================
+// KOTLIN-SPECIFIC OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup kotlin_special_ops Kotlin-Specific Operators
+ * @brief Special Kotlin operators
+ * @{
+ */
+
+/// @brief Non-null assertion - `!!`
+DEF_TYPE("!!", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief Elvis operator - `?:`
+DEF_TYPE("?:", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief Safe navigation - `?.`
+DEF_TYPE("?..", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/// @brief Member reference - `::`
+DEF_TYPE("::", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)
+
+/// @brief Annotation prefix
+DEF_TYPE("@", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief String interpolation - `$`
+DEF_TYPE("$", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/** @} */ // end kotlin_special_ops
+
+// ============================================================================
+// STANDARD OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup kotlin_std_ops Standard Operators
+ * @brief Arithmetic, comparison, and logical operators
+ * @{
+ */
+
+/**
+ * @name Assignment Operators
+ * @{
+ */
 DEF_TYPE("=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
 DEF_TYPE("+=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
 DEF_TYPE("-=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
 DEF_TYPE("*=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
 DEF_TYPE("/=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
 DEF_TYPE("%=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+/** @} */
 
-// Arithmetic operators
+/**
+ * @name Arithmetic Operators
+ * @{
+ */
 DEF_TYPE("+", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("-", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("*", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
@@ -234,8 +793,12 @@ DEF_TYPE("/", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("%", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("++", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("--", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+/** @} */
 
-// Comparison operators
+/**
+ * @name Comparison Operators
+ * @{
+ */
 DEF_TYPE("==", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 DEF_TYPE("!=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 DEF_TYPE("===", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
@@ -244,21 +807,38 @@ DEF_TYPE("<", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 DEF_TYPE(">", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 DEF_TYPE("<=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 DEF_TYPE(">=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+/** @} */
 
-// Logical operators
+/**
+ * @name Logical Operators
+ * @{
+ */
 DEF_TYPE("&&", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
 DEF_TYPE("||", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
 DEF_TYPE("!", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+/** @} */
 
-// Range operators
+/**
+ * @name Range Operators
+ * @{
+ */
 DEF_TYPE("..", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("..<", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+/** @} */
 
-// ==============================================================================
-// Parser-level semantic mappings only
-// Note: Library-specific function names (map, filter, reduce, etc.) are removed
-// since they're just identifiers - could be user-defined functions with different semantics
-// ==============================================================================
+/** @} */ // end kotlin_std_ops
 
-// Error handling
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup kotlin_errors Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end kotlin_errors
