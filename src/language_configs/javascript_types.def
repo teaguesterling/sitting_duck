@@ -1,282 +1,1233 @@
-// JavaScript node type mappings
-// Format: DEF_TYPE(raw_type, semantic_type, name_extraction, value_extraction, flags)
-// Use bitwise OR to combine semantic types with refinements: DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA
+/**
+ * @file javascript_types.def
+ * @brief JavaScript language node type mappings for AST semantic extraction
+ *
+ * This file defines the mapping from tree-sitter JavaScript node types to semantic
+ * categories, extraction strategies, and behavioral flags. JavaScript is the base
+ * for TypeScript, which extends these definitions via `#include`.
+ *
+ * @details
+ * Each entry uses the DEF_TYPE macro with the following signature:
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | The tree-sitter node type string (e.g., `"function_declaration"`) |
+ * | semantic_type | Base semantic category, optionally OR'd with refinement bits |
+ * | name_extraction | Strategy enum from `ExtractionStrategy` for extracting node names |
+ * | native_extraction | Strategy enum from `NativeExtractionStrategy` for rich context |
+ * | flags | Bitwise OR of `ASTNodeFlags` values |
+ *
+ * ## JavaScript Language Characteristics
+ *
+ * - **Dynamic typing**: No static type annotations (see TypeScript for typed variant)
+ * - **First-class functions**: Functions are values, can be passed and returned
+ * - **Prototypal inheritance**: Objects inherit directly from other objects
+ * - **ES6+ classes**: Syntactic sugar over prototype-based inheritance
+ * - **Arrow functions**: Concise syntax with lexical `this` binding
+ * - **Async/await**: Promise-based asynchronous programming
+ * - **Destructuring**: Pattern matching for arrays and objects
+ * - **Template literals**: String interpolation with backticks
+ * - **Modules**: ES6 import/export system
+ * - **Spread/rest operators**: `...` for expansion and collection
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use 8-bit encoding:
+ * - Bits 7-2: Base category (e.g., `DEFINITION_FUNCTION = 0x04`)
+ * - Bits 1-0: Refinement within category
+ *
+ * Example: `DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA`
+ *   - Base: 0x04 (function definition)
+ *   - Refinement: 0x01 (lambda/arrow)
+ *   - Combined: 0x05
+ *
+ * @see semantic_types.hpp for complete semantic type definitions
+ * @see node_config.hpp for extraction strategy enums and refinements
+ * @see typescript_types.def for TypeScript extensions
+ */
 
-// Function definitions - JavaScript functions always have bodies
+// ============================================================================
+// FUNCTION DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup javascript_functions Function Definitions
+ * @brief JavaScript function declaration forms
+ *
+ * JavaScript has multiple function syntaxes, each with different `this` binding
+ * and hoisting behavior. All JavaScript functions have bodies (IS_EMBODIED).
+ * @{
+ */
+
+/**
+ * @brief Named function declaration: `function name(params) { ... }`
+ * Hoisted to top of scope; creates named binding
+ */
 DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/**
+ * @brief Arrow function: `(params) => expr` or `(params) => { ... }`
+ * Lexically binds `this`; uses LAMBDA refinement
+ */
 DEF_TYPE("arrow_function", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
+
+/**
+ * @brief Function expression: `const f = function(params) { ... }`
+ * Anonymous or named; not hoisted
+ */
 DEF_TYPE("function_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_EMBODIED)
+
+/**
+ * @brief Method definition in class or object: `methodName(params) { ... }`
+ * Shorthand method syntax
+ */
 DEF_TYPE("method_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/**
+ * @brief Async function: `async function name(params) { ... }`
+ * Returns Promise; can use await inside
+ */
 DEF_TYPE("async_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, ASYNC_FUNCTION, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 
-// Class definitions - JavaScript classes always have bodies
+/**
+ * @brief Generator function: `function* name(params) { ... }`
+ * Can yield values; returns iterator
+ */
+DEF_TYPE("generator_function", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Generator function declaration
+ */
+DEF_TYPE("generator_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Async generator: `async function* name(params) { ... }`
+ * Combines async and generator features
+ */
+DEF_TYPE("async_generator_function", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, NONE, 0)
+
+/** @} */ // end javascript_functions
+
+// ============================================================================
+// CLASS DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup javascript_classes Class Definitions
+ * @brief ES6 class syntax (syntactic sugar over prototypes)
+ *
+ * JavaScript classes provide cleaner syntax for constructor functions
+ * and prototype-based inheritance.
+ * @{
+ */
+
+/**
+ * @brief Class declaration: `class Name { ... }`
+ * Creates a constructor function with prototype methods
+ */
 DEF_TYPE("class_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/**
+ * @brief Class expression: `const C = class { ... }`
+ * Anonymous or named class as expression
+ */
 DEF_TYPE("class_expression", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_EMBODIED)
 
-// Variable declarations
+/**
+ * @brief Class body block containing methods and fields
+ */
+DEF_TYPE("class_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::MAPPING, NONE, NONE, 0)
+
+/**
+ * @brief Field definition in class: `fieldName = value;`
+ */
+DEF_TYPE("field_definition", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+
+/** @} */ // end javascript_classes
+
+// ============================================================================
+// VARIABLE DECLARATIONS
+// ============================================================================
+
+/**
+ * @defgroup javascript_variables Variable Declarations
+ * @brief Variable declaration forms with different scoping rules
+ *
+ * JavaScript has three variable declaration keywords with different
+ * scoping and hoisting behaviors.
+ * @{
+ */
+
+/**
+ * @brief Variable declaration: `var name = value;`
+ * Function-scoped, hoisted
+ */
 DEF_TYPE("variable_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/**
+ * @brief Lexical declaration: `let` or `const`
+ * Block-scoped, not hoisted (temporal dead zone)
+ */
 DEF_TYPE("lexical_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
 
-// Function calls and expressions
+/**
+ * @brief Variable declarator: `name = value` within declaration
+ */
+DEF_TYPE("variable_declarator", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/** @} */ // end javascript_variables
+
+// ============================================================================
+// FUNCTION CALLS AND EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup javascript_calls Function Calls and Expressions
+ * @brief Call expressions and operators
+ * @{
+ */
+
+/**
+ * @brief Function call: `func(args)` with FUNCTION refinement
+ */
 DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/**
+ * @brief Constructor call: `new Class(args)` with CONSTRUCTOR refinement
+ */
 DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/**
+ * @brief Binary expression: `a + b`, `a * b`, etc.
+ */
 DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, VARIABLE_WITH_TYPE, 0)
+
+/**
+ * @brief Unary expression: `!a`, `-a`, `typeof a`
+ */
 DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+
+/**
+ * @brief Assignment expression: `a = b`
+ */
 DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/**
+ * @brief Augmented assignment: `a += b`, `a *= b`, etc.
+ */
+DEF_TYPE("augmented_assignment_expression", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/**
+ * @brief Update expression: `a++`, `++a`, `a--`, `--a`
+ */
 DEF_TYPE("update_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
 
-// Member access
+/**
+ * @brief Ternary/conditional expression: `a ? b : c`
+ */
+DEF_TYPE("ternary_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
+
+/**
+ * @brief Sequence expression: `a, b, c` (evaluates all, returns last)
+ */
+DEF_TYPE("sequence_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/**
+ * @brief Parenthesized expression: `(expr)`
+ */
+DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/**
+ * @brief Expression statement: expression used as statement
+ */
+DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, VARIABLE_WITH_TYPE, 0)
+
+/**
+ * @brief Empty statement: standalone `;`
+ */
+DEF_TYPE("empty_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
+
+/** @} */ // end javascript_calls
+
+// ============================================================================
+// MEMBER ACCESS
+// ============================================================================
+
+/**
+ * @defgroup javascript_access Member Access
+ * @brief Property and element access expressions
+ * @{
+ */
+
+/**
+ * @brief Member access: `obj.property`
+ */
 DEF_TYPE("member_expression", COMPUTATION_ACCESS, CUSTOM, VARIABLE_WITH_TYPE, 0)
+
+/**
+ * @brief Subscript access: `obj[key]`
+ */
 DEF_TYPE("subscript_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 
-// Identifiers and references
+/**
+ * @brief Optional chaining: `obj?.property`
+ */
+DEF_TYPE("optional_chain", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/** @} */ // end javascript_access
+
+// ============================================================================
+// IDENTIFIERS AND REFERENCES
+// ============================================================================
+
+/**
+ * @defgroup javascript_identifiers Identifiers and References
+ * @brief Names and special references
+ * @{
+ */
+
+/**
+ * @brief Identifier: variable, function, or parameter name
+ */
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/**
+ * @brief Property identifier in member access
+ */
 DEF_TYPE("property_identifier", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
 
-// Literals - name and value both contain the literal text
-DEF_TYPE("string", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("template_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("number", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
-DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("undefined", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("array", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
-DEF_TYPE("object", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
-
-// Control flow
-DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
-DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
-DEF_TYPE("conditional_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
-DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, 0)
-DEF_TYPE("for_in_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
-DEF_TYPE("for_of_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
-DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("return_statement", FLOW_JUMP, NONE, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("break_statement", FLOW_JUMP, NONE, NONE, 0)
-DEF_TYPE("continue_statement", FLOW_JUMP, NONE, NONE, 0)
-
-// Async/sync constructs
-DEF_TYPE("await_expression", FLOW_SYNC, NONE, NONE, 0)
-DEF_TYPE("yield_expression", FLOW_SYNC, NONE, NONE, 0)
-
-// Error handling
-DEF_TYPE("try_statement", ERROR_TRY, NONE, NONE, 0)
-DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
-DEF_TYPE("throw_statement", ERROR_THROW, NONE, NONE, 0)
-DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
-
-// Structure/Organization
-DEF_TYPE("statement_block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, 0)
-DEF_TYPE("import_statement", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0)
-DEF_TYPE("export_statement", EXTERNAL_EXPORT, NONE, NONE, 0)
-
-// Comments
-DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
-
-// Keywords (marked with IS_KEYWORD flag)
-DEF_TYPE("function", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("class", DEFINITION_CLASS, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("const", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("let", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("var", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("if", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("else", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("for", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("while", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("return", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("async", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("await", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("import", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("export", EXTERNAL_EXPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
-// Punctuation (marked with IS_PUNCTUATION flag)
-DEF_TYPE("(", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE(")", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE("[", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE("]", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE("{", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE("}", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE(",", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE(";", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE(".", PARSER_DELIMITER, NONE, NONE, 0)
-
-// Arithmetic operators
-DEF_TYPE("+", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
-DEF_TYPE("-", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
-DEF_TYPE("*", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
-DEF_TYPE("/", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
-DEF_TYPE("%", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
-DEF_TYPE("**", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
-DEF_TYPE("&", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BITWISE, NONE, NONE, 0)
-DEF_TYPE("|", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BITWISE, NONE, NONE, 0)
-DEF_TYPE("^", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BITWISE, NONE, NONE, 0)
-DEF_TYPE("~", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BITWISE, NONE, NONE, 0)
-DEF_TYPE("<<", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BITWISE, NONE, NONE, 0)
-DEF_TYPE(">>", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BITWISE, NONE, NONE, 0)
-DEF_TYPE(">>>", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BITWISE, NONE, NONE, 0)
-DEF_TYPE("++", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
-DEF_TYPE("--", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
-
-// Logical operators
-DEF_TYPE("&&", OPERATOR_LOGICAL, NONE, NONE, 0)
-DEF_TYPE("||", OPERATOR_LOGICAL, NONE, NONE, 0)
-DEF_TYPE("!", OPERATOR_LOGICAL, NONE, NONE, 0)
-DEF_TYPE("?\?", OPERATOR_LOGICAL, NONE, NONE, 0)
-
-// Comparison operators
-DEF_TYPE("==", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("===", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("!=", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("!==", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("<", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE(">", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("<=", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE(">=", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("instanceof", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("in", OPERATOR_COMPARISON, NONE, NONE, 0)
-
-// Assignment operators
-DEF_TYPE("=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("+=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("-=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("*=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("/=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("%=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("**=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("&=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("|=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("^=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("<<=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE(">>=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE(">>>=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("&&=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("||=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("?\?=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-
-// Common missing constructs in JavaScript/TypeScript
-DEF_TYPE("arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, FUNCTION_WITH_PARAMS, 0)
-DEF_TYPE(":", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE("'", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("formal_parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, FUNCTION_WITH_PARAMS, 0)
-DEF_TYPE("variable_declarator", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-DEF_TYPE("switch_case", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("case", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("pair", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
+/**
+ * @brief Statement identifier (label name)
+ */
 DEF_TYPE("statement_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("string_fragment", LITERAL_STRING, NONE, NONE, 0)
 
-// Missing JavaScript/ES6+ constructs
-DEF_TYPE("labeled_statement", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("switch_default", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("default_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("switch_case", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("case_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("assignment_pattern", PATTERN_DESTRUCTURE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("object_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
-DEF_TYPE("array_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
-DEF_TYPE("rest_pattern", PATTERN_COLLECT, NONE, NONE, 0)
-DEF_TYPE("spread_element", PATTERN_COLLECT, NONE, NONE, 0)
-DEF_TYPE("property_assignment", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, FIND_IDENTIFIER, NONE, 0)
+/**
+ * @brief Shorthand property: `{ x }` equivalent to `{ x: x }`
+ */
 DEF_TYPE("shorthand_property_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("computed_property_name", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-DEF_TYPE("method_signature", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
-DEF_TYPE("property_signature", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
-DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("optional_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("rest_parameter", PATTERN_COLLECT, FIND_IDENTIFIER, NONE, 0)
 
-// Template literals and modern syntax
-DEF_TYPE("template_substitution", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("`", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("${", PARSER_DELIMITER, NONE, NONE, 0)
-
-// Modern operators
-DEF_TYPE("=>", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("?", OPERATOR_LOGICAL, NONE, NONE, 0)
-DEF_TYPE("??", OPERATOR_LOGICAL, NONE, NONE, 0)
-DEF_TYPE("?.", COMPUTATION_ACCESS, NONE, NONE, 0)
-DEF_TYPE("...", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
-
-// Module system
-DEF_TYPE("import_specifier", EXTERNAL_IMPORT | SemanticRefinements::Import::SELECTIVE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("export_specifier", EXTERNAL_EXPORT, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("import_clause", EXTERNAL_IMPORT, NONE, NONE, 0)
-DEF_TYPE("export_clause", EXTERNAL_EXPORT, NONE, NONE, 0)
-DEF_TYPE("import_default_specifier", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("export_default_declaration", EXTERNAL_EXPORT, NONE, NONE, 0)
-DEF_TYPE("namespace_import", EXTERNAL_IMPORT | SemanticRefinements::Import::WILDCARD, FIND_IDENTIFIER, NONE, 0)
-
-// Classes and methods
-DEF_TYPE("constructor", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("extends", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("static", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("get", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("set", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("new", COMPUTATION_CALL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+/**
+ * @brief this keyword: current execution context
+ */
 DEF_TYPE("this", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/**
+ * @brief super keyword: parent class reference
+ */
 DEF_TYPE("super", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Modern JavaScript features
-DEF_TYPE("generator_function", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("generator_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("async_generator_function", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, NONE, 0)
+/**
+ * @brief Meta property: `import.meta`, `new.target`
+ */
 DEF_TYPE("meta_property", NAME_SCOPED, NODE_TEXT, NONE, 0)
 
-// Error handling additions
-DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+/** @} */ // end javascript_identifiers
 
-// TypeScript-specific type constructs
-DEF_TYPE("type_annotation", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
-DEF_TYPE("predefined_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
-DEF_TYPE("required_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("non_null_expression", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("type_arguments", TYPE_GENERIC, NONE, NONE, 0)
-DEF_TYPE("type_assertion", TYPE_REFERENCE, NONE, NONE, 0)
+// ============================================================================
+// LITERALS
+// ============================================================================
 
-// JavaScript perfection - remaining 5,919 unclassified nodes
-DEF_TYPE("\"", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("regex", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("regex_pattern", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("ternary_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
-DEF_TYPE("shorthand_property_identifier_pattern", PATTERN_DESTRUCTURE, NODE_TEXT, NONE, 0)
+/**
+ * @defgroup javascript_literals Literals
+ * @brief Literal values: strings, numbers, booleans, structures
+ * @{
+ */
+
+/**
+ * @brief String literal: `"string"` or `'string'`
+ */
+DEF_TYPE("string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Template string: `` `template ${expr}` ``
+ */
+DEF_TYPE("template_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Template substitution: `${expr}` inside template
+ */
+DEF_TYPE("template_substitution", LITERAL_STRING, NONE, NONE, 0)
+
+/**
+ * @brief String fragment inside template
+ */
+DEF_TYPE("string_fragment", LITERAL_STRING, NONE, NONE, 0)
+
+/**
+ * @brief Escape sequence in string: `\n`, `\t`, etc.
+ */
 DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("typeof", OPERATOR_LOGICAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("empty_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
-DEF_TYPE("augmented_assignment_expression", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("throw", ERROR_THROW, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("try", ERROR_TRY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("catch", ERROR_CATCH, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("break", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/**
+ * @brief Number literal: integers and floats
+ */
+DEF_TYPE("number", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Boolean true
+ */
+DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Boolean false
+ */
+DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Null value
+ */
+DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Undefined value
+ */
+DEF_TYPE("undefined", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Array literal: `[a, b, c]`
+ */
+DEF_TYPE("array", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+
+/**
+ * @brief Object literal: `{ key: value }`
+ */
+DEF_TYPE("object", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
+
+/**
+ * @brief Key-value pair in object: `key: value`
+ */
+DEF_TYPE("pair", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
+
+/**
+ * @brief Property assignment in object literal
+ */
+DEF_TYPE("property_assignment", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Computed property name: `[expr]: value`
+ */
+DEF_TYPE("computed_property_name", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/**
+ * @brief Regular expression literal: `/pattern/flags`
+ */
+DEF_TYPE("regex", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Regex pattern content
+ */
+DEF_TYPE("regex_pattern", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Regex flags: g, i, m, etc.
+ */
 DEF_TYPE("regex_flags", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("delete", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("class_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::MAPPING, NONE, NONE, 0)
-DEF_TYPE("of", OPERATOR_COMPARISON, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("continue", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("from", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("pair_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+
+/** @} */ // end javascript_literals
+
+// ============================================================================
+// CONTROL FLOW
+// ============================================================================
+
+/**
+ * @defgroup javascript_control Control Flow
+ * @brief Conditionals, loops, and jumps
+ * @{
+ */
+
+/**
+ * @brief If statement: `if (cond) { ... }`
+ */
+DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/**
+ * @brief Else clause: `else { ... }`
+ */
+DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/**
+ * @brief Switch statement: `switch (expr) { ... }`
+ */
+DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/**
+ * @brief Switch body block
+ */
 DEF_TYPE("switch_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
-DEF_TYPE("switch", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("finally", ERROR_FINALLY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("sequence_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-DEF_TYPE("hash_bang_line", METADATA_COMMENT, NODE_TEXT, NONE, 0)
-DEF_TYPE("optional_chain", COMPUTATION_ACCESS, NONE, NONE, 0)
-DEF_TYPE("do", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("field_definition", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("default", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("object_assignment_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
-DEF_TYPE("with", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("yield", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/**
+ * @brief Switch case: `case value:`
+ */
+DEF_TYPE("switch_case", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/**
+ * @brief Case clause in switch
+ */
+DEF_TYPE("case_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/**
+ * @brief Switch default: `default:`
+ */
+DEF_TYPE("switch_default", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/**
+ * @brief Default clause in switch
+ */
+DEF_TYPE("default_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/**
+ * @brief Conditional expression: `a ? b : c`
+ */
+DEF_TYPE("conditional_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
+
+/**
+ * @brief C-style for loop: `for (init; cond; update) { ... }`
+ */
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, 0)
+
+/**
+ * @brief For-in loop: `for (key in obj) { ... }`
+ */
+DEF_TYPE("for_in_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+
+/**
+ * @brief For-of loop: `for (item of iterable) { ... }`
+ */
+DEF_TYPE("for_of_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+
+/**
+ * @brief While loop: `while (cond) { ... }`
+ */
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/**
+ * @brief Do-while loop: `do { ... } while (cond);`
+ */
+DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/**
+ * @brief Return statement: `return value;`
+ */
+DEF_TYPE("return_statement", FLOW_JUMP, NONE, VARIABLE_WITH_TYPE, 0)
+
+/**
+ * @brief Break statement: `break;` or `break label;`
+ */
+DEF_TYPE("break_statement", FLOW_JUMP, NONE, NONE, 0)
+
+/**
+ * @brief Continue statement: `continue;` or `continue label;`
+ */
+DEF_TYPE("continue_statement", FLOW_JUMP, NONE, NONE, 0)
+
+/**
+ * @brief Labeled statement: `label: statement`
+ */
+DEF_TYPE("labeled_statement", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
+
+/** @} */ // end javascript_control
+
+// ============================================================================
+// ASYNC/SYNC CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup javascript_async Async/Sync Constructs
+ * @brief Asynchronous programming primitives
+ * @{
+ */
+
+/**
+ * @brief Await expression: `await promise`
+ */
+DEF_TYPE("await_expression", FLOW_SYNC, NONE, NONE, 0)
+
+/**
+ * @brief Yield expression: `yield value` in generators
+ */
+DEF_TYPE("yield_expression", FLOW_SYNC, NONE, NONE, 0)
+
+/** @} */ // end javascript_async
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup javascript_errors Error Handling
+ * @brief Try/catch/finally and throw statements
+ * @{
+ */
+
+/**
+ * @brief Try statement: `try { ... }`
+ */
+DEF_TYPE("try_statement", ERROR_TRY, NONE, NONE, 0)
+
+/**
+ * @brief Catch clause: `catch (e) { ... }`
+ */
+DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
+
+/**
+ * @brief Throw statement: `throw error;`
+ */
+DEF_TYPE("throw_statement", ERROR_THROW, NONE, NONE, 0)
+
+/**
+ * @brief Finally clause: `finally { ... }`
+ */
+DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
+
+/** @} */ // end javascript_errors
+
+// ============================================================================
+// STRUCTURE AND ORGANIZATION
+// ============================================================================
+
+/**
+ * @defgroup javascript_structure Structure and Organization
+ * @brief Blocks, modules, and organizational nodes
+ * @{
+ */
+
+/**
+ * @brief Statement block: `{ statements... }`
+ */
+DEF_TYPE("statement_block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, VARIABLE_WITH_TYPE, 0)
+
+/**
+ * @brief Program root node
+ */
+DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, 0)
+
+/**
+ * @brief Function arguments list
+ */
+DEF_TYPE("arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, FUNCTION_WITH_PARAMS, 0)
+
+/**
+ * @brief Formal parameters in function definition
+ */
+DEF_TYPE("formal_parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, FUNCTION_WITH_PARAMS, 0)
+
+/** @} */ // end javascript_structure
+
+// ============================================================================
+// MODULE SYSTEM
+// ============================================================================
+
+/**
+ * @defgroup javascript_modules Module System
+ * @brief ES6 import/export declarations
+ * @{
+ */
+
+/**
+ * @brief Import statement: `import ... from "module"`
+ */
+DEF_TYPE("import_statement", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0)
+
+/**
+ * @brief Export statement: `export ...`
+ */
+DEF_TYPE("export_statement", EXTERNAL_EXPORT, NONE, NONE, 0)
+
+/**
+ * @brief Import specifier: `{ name }` in import
+ */
+DEF_TYPE("import_specifier", EXTERNAL_IMPORT | SemanticRefinements::Import::SELECTIVE, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Export specifier: `{ name }` in export
+ */
+DEF_TYPE("export_specifier", EXTERNAL_EXPORT, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Import clause in import statement
+ */
+DEF_TYPE("import_clause", EXTERNAL_IMPORT, NONE, NONE, 0)
+
+/**
+ * @brief Export clause in export statement
+ */
+DEF_TYPE("export_clause", EXTERNAL_EXPORT, NONE, NONE, 0)
+
+/**
+ * @brief Default import: `import Name from "module"`
+ */
+DEF_TYPE("import_default_specifier", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Default export: `export default ...`
+ */
+DEF_TYPE("export_default_declaration", EXTERNAL_EXPORT, NONE, NONE, 0)
+
+/**
+ * @brief Namespace import: `import * as name from "module"`
+ */
+DEF_TYPE("namespace_import", EXTERNAL_IMPORT | SemanticRefinements::Import::WILDCARD, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Named imports: `{ a, b, c }`
+ */
 DEF_TYPE("named_imports", EXTERNAL_IMPORT | SemanticRefinements::Import::SELECTIVE, NONE, NONE, 0)
+
+/**
+ * @brief Import attribute (import assertions)
+ */
 DEF_TYPE("import_attribute", EXTERNAL_IMPORT, NONE, NONE, 0)
 
-// ==============================================================================
-// Parser-level semantic mappings only
-// Note: Library-specific function names (map, filter, reduce, etc.) are removed
-// since they're just identifiers - could be user-defined functions with different semantics
-// ==============================================================================
+/** @} */ // end javascript_modules
+
+// ============================================================================
+// DESTRUCTURING PATTERNS
+// ============================================================================
+
+/**
+ * @defgroup javascript_patterns Destructuring Patterns
+ * @brief Pattern matching for arrays and objects
+ * @{
+ */
+
+/**
+ * @brief Assignment pattern: `a = default` in destructuring
+ */
+DEF_TYPE("assignment_pattern", PATTERN_DESTRUCTURE, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Object pattern: `{ a, b }` in destructuring
+ */
+DEF_TYPE("object_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+
+/**
+ * @brief Array pattern: `[a, b]` in destructuring
+ */
+DEF_TYPE("array_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+
+/**
+ * @brief Rest pattern: `...rest` in destructuring
+ */
+DEF_TYPE("rest_pattern", PATTERN_COLLECT, NONE, NONE, 0)
+
+/**
+ * @brief Spread element: `...items` in array/call
+ */
+DEF_TYPE("spread_element", PATTERN_COLLECT, NONE, NONE, 0)
+
+/**
+ * @brief Shorthand property identifier in pattern
+ */
+DEF_TYPE("shorthand_property_identifier_pattern", PATTERN_DESTRUCTURE, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Pair pattern in object destructuring
+ */
+DEF_TYPE("pair_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+
+/**
+ * @brief Object assignment pattern
+ */
+DEF_TYPE("object_assignment_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+
+/** @} */ // end javascript_patterns
+
+// ============================================================================
+// FUNCTION PARAMETERS
+// ============================================================================
+
+/**
+ * @defgroup javascript_parameters Function Parameters
+ * @brief Parameter types in function definitions
+ * @{
+ */
+
+/**
+ * @brief Optional parameter: `param = default`
+ */
+DEF_TYPE("optional_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/**
+ * @brief Rest parameter: `...params`
+ */
+DEF_TYPE("rest_parameter", PATTERN_COLLECT, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Required parameter (TypeScript, but used in JS parsing)
+ */
+DEF_TYPE("required_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Method signature (declaration only)
+ */
+DEF_TYPE("method_signature", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
+
+/**
+ * @brief Property signature (declaration only)
+ */
+DEF_TYPE("property_signature", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
+
+/** @} */ // end javascript_parameters
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup javascript_comments Comments
+ * @brief Documentation and comments
+ * @{
+ */
+
+/**
+ * @brief Comment: `//` or `/* */`
+ */
+DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
+
+/**
+ * @brief Hash-bang line: `#!/usr/bin/env node`
+ */
+DEF_TYPE("hash_bang_line", METADATA_COMMENT, NODE_TEXT, NONE, 0)
+
+/** @} */ // end javascript_comments
+
+// ============================================================================
+// KEYWORDS
+// ============================================================================
+
+/**
+ * @defgroup javascript_keywords Keywords
+ * @brief Reserved words and language keywords
+ * @{
+ */
+
+/** @brief function keyword */
+DEF_TYPE("function", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief class keyword */
+DEF_TYPE("class", DEFINITION_CLASS, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief const keyword (immutable binding) */
+DEF_TYPE("const", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief let keyword (mutable, block-scoped) */
+DEF_TYPE("let", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief var keyword (mutable, function-scoped) */
+DEF_TYPE("var", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief if keyword */
+DEF_TYPE("if", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief else keyword */
+DEF_TYPE("else", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief for keyword */
+DEF_TYPE("for", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief while keyword */
+DEF_TYPE("while", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief do keyword */
+DEF_TYPE("do", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief switch keyword */
+DEF_TYPE("switch", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief case keyword */
+DEF_TYPE("case", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief default keyword */
+DEF_TYPE("default", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief return keyword */
+DEF_TYPE("return", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief break keyword */
+DEF_TYPE("break", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief continue keyword */
+DEF_TYPE("continue", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief async keyword */
+DEF_TYPE("async", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief await keyword */
+DEF_TYPE("await", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief yield keyword */
+DEF_TYPE("yield", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief import keyword */
+DEF_TYPE("import", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief export keyword */
+DEF_TYPE("export", EXTERNAL_EXPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief from keyword in imports */
+DEF_TYPE("from", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief throw keyword */
+DEF_TYPE("throw", ERROR_THROW, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief try keyword */
+DEF_TYPE("try", ERROR_TRY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief catch keyword */
+DEF_TYPE("catch", ERROR_CATCH, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief finally keyword */
+DEF_TYPE("finally", ERROR_FINALLY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief typeof operator/keyword */
+DEF_TYPE("typeof", OPERATOR_LOGICAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief delete operator/keyword */
+DEF_TYPE("delete", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief with keyword (deprecated) */
+DEF_TYPE("with", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief new keyword */
+DEF_TYPE("new", COMPUTATION_CALL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief extends keyword for class inheritance */
+DEF_TYPE("extends", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief static keyword for class members */
+DEF_TYPE("static", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief get keyword for getters */
+DEF_TYPE("get", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief set keyword for setters */
+DEF_TYPE("set", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief constructor keyword */
+DEF_TYPE("constructor", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief of keyword in for-of */
+DEF_TYPE("of", OPERATOR_COMPARISON, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @} */ // end javascript_keywords
+
+// ============================================================================
+// PUNCTUATION
+// ============================================================================
+
+/**
+ * @defgroup javascript_punctuation Punctuation
+ * @brief Syntactic punctuation tokens
+ * @{
+ */
+
+/** @brief Opening parenthesis */
+DEF_TYPE("(", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/** @brief Closing parenthesis */
+DEF_TYPE(")", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/** @brief Opening bracket */
+DEF_TYPE("[", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/** @brief Closing bracket */
+DEF_TYPE("]", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/** @brief Opening brace */
+DEF_TYPE("{", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/** @brief Closing brace */
+DEF_TYPE("}", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/** @brief Colon */
+DEF_TYPE(":", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/** @brief Single quote */
+DEF_TYPE("'", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/** @brief Double quote */
+DEF_TYPE("\"", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @brief Comma delimiter */
+DEF_TYPE(",", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @brief Semicolon delimiter */
+DEF_TYPE(";", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @brief Dot delimiter */
+DEF_TYPE(".", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @brief Backtick for template literals */
+DEF_TYPE("`", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @brief Template substitution start */
+DEF_TYPE("${", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @} */ // end javascript_punctuation
+
+// ============================================================================
+// ARITHMETIC OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup javascript_arithmetic Arithmetic Operators
+ * @brief Mathematical and bitwise operators
+ * @{
+ */
+
+/** @brief Addition */
+DEF_TYPE("+", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/** @brief Subtraction */
+DEF_TYPE("-", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/** @brief Multiplication */
+DEF_TYPE("*", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/** @brief Division */
+DEF_TYPE("/", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/** @brief Modulo */
+DEF_TYPE("%", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/** @brief Exponentiation */
+DEF_TYPE("**", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/** @brief Bitwise AND */
+DEF_TYPE("&", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BITWISE, NONE, NONE, 0)
+
+/** @brief Bitwise OR */
+DEF_TYPE("|", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BITWISE, NONE, NONE, 0)
+
+/** @brief Bitwise XOR */
+DEF_TYPE("^", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BITWISE, NONE, NONE, 0)
+
+/** @brief Bitwise NOT */
+DEF_TYPE("~", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BITWISE, NONE, NONE, 0)
+
+/** @brief Left shift */
+DEF_TYPE("<<", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BITWISE, NONE, NONE, 0)
+
+/** @brief Right shift (sign-propagating) */
+DEF_TYPE(">>", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BITWISE, NONE, NONE, 0)
+
+/** @brief Right shift (zero-fill) */
+DEF_TYPE(">>>", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BITWISE, NONE, NONE, 0)
+
+/** @brief Increment */
+DEF_TYPE("++", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+
+/** @brief Decrement */
+DEF_TYPE("--", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+
+/** @} */ // end javascript_arithmetic
+
+// ============================================================================
+// LOGICAL OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup javascript_logical Logical Operators
+ * @brief Boolean and nullish operators
+ * @{
+ */
+
+/** @brief Logical AND */
+DEF_TYPE("&&", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/** @brief Logical OR */
+DEF_TYPE("||", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/** @brief Logical NOT */
+DEF_TYPE("!", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/** @brief Nullish coalescing (escaped for macro) */
+DEF_TYPE("?\?", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/** @brief Ternary question mark */
+DEF_TYPE("?", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/** @brief Nullish coalescing (alternate) */
+DEF_TYPE("??", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/** @} */ // end javascript_logical
+
+// ============================================================================
+// COMPARISON OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup javascript_comparison Comparison Operators
+ * @brief Equality and relational operators
+ * @{
+ */
+
+/** @brief Loose equality */
+DEF_TYPE("==", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/** @brief Strict equality */
+DEF_TYPE("===", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/** @brief Loose inequality */
+DEF_TYPE("!=", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/** @brief Strict inequality */
+DEF_TYPE("!==", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/** @brief Less than */
+DEF_TYPE("<", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/** @brief Greater than */
+DEF_TYPE(">", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/** @brief Less than or equal */
+DEF_TYPE("<=", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/** @brief Greater than or equal */
+DEF_TYPE(">=", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/** @brief instanceof operator */
+DEF_TYPE("instanceof", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/** @brief in operator */
+DEF_TYPE("in", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/** @} */ // end javascript_comparison
+
+// ============================================================================
+// ASSIGNMENT OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup javascript_assignment Assignment Operators
+ * @brief Simple and compound assignment
+ * @{
+ */
+
+/** @brief Simple assignment */
+DEF_TYPE("=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Arrow function */
+DEF_TYPE("=>", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Add and assign */
+DEF_TYPE("+=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Subtract and assign */
+DEF_TYPE("-=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Multiply and assign */
+DEF_TYPE("*=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Divide and assign */
+DEF_TYPE("/=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Modulo and assign */
+DEF_TYPE("%=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Exponentiate and assign */
+DEF_TYPE("**=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Bitwise AND and assign */
+DEF_TYPE("&=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Bitwise OR and assign */
+DEF_TYPE("|=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Bitwise XOR and assign */
+DEF_TYPE("^=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Left shift and assign */
+DEF_TYPE("<<=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Right shift and assign */
+DEF_TYPE(">>=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Unsigned right shift and assign */
+DEF_TYPE(">>>=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Logical AND and assign */
+DEF_TYPE("&&=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Logical OR and assign */
+DEF_TYPE("||=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Nullish coalescing and assign (escaped) */
+DEF_TYPE("?\?=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @} */ // end javascript_assignment
+
+// ============================================================================
+// MODERN OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup javascript_modern Modern Operators
+ * @brief ES6+ operators
+ * @{
+ */
+
+/** @brief Optional chaining */
+DEF_TYPE("?.", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/** @brief Spread/rest operator */
+DEF_TYPE("...", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
+
+/** @} */ // end javascript_modern
+
+// ============================================================================
+// TYPE CONSTRUCTS (TypeScript compatibility)
+// ============================================================================
+
+/**
+ * @defgroup javascript_types Type Constructs
+ * @brief TypeScript-style types that appear in JavaScript parsing
+ *
+ * These are included for compatibility when parsing TypeScript-like
+ * constructs or JSDoc annotations.
+ * @{
+ */
+
+/** @brief Type annotation */
+DEF_TYPE("type_annotation", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Type identifier */
+DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+
+/** @brief Predefined type */
+DEF_TYPE("predefined_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
+/** @brief Non-null expression */
+DEF_TYPE("non_null_expression", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Type arguments */
+DEF_TYPE("type_arguments", TYPE_GENERIC, NONE, NONE, 0)
+
+/** @brief Type assertion */
+DEF_TYPE("type_assertion", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @} */ // end javascript_types
+
+// ============================================================================
+// PARSER ERRORS
+// ============================================================================
+
+/**
+ * @defgroup javascript_parser_errors Parser Errors
+ * @brief Error nodes from parsing
+ * @{
+ */
+
+/** @brief Parse error node */
+DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end javascript_parser_errors
+
+// ============================================================================
+// Note: Library-specific function names (map, filter, reduce, etc.) are not
+// included since they're just identifiers - could be user-defined functions
+// with different semantics. Only parser-level semantic mappings are defined.
+// ============================================================================
