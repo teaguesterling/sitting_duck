@@ -1,280 +1,1219 @@
-// C language node type definitions
-// Format: DEF_TYPE("raw_type", semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file c_types.def
+ * @brief C language node type mappings for AST semantic extraction
+ *
+ * This file defines the mapping from tree-sitter C node types to semantic
+ * categories, extraction strategies, and behavioral flags. C is the base
+ * for C++, which extends these definitions.
+ *
+ * @details
+ * Each entry uses the DEF_TYPE macro with the following signature:
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | The tree-sitter node type string (e.g., `"function_definition"`) |
+ * | semantic_type | Base semantic category, optionally OR'd with refinement bits |
+ * | name_extraction | Strategy enum from `ExtractionStrategy` for extracting node names |
+ * | native_extraction | Strategy enum from `NativeExtractionStrategy` for rich context |
+ * | flags | Bitwise OR of `ASTNodeFlags` values |
+ *
+ * ## C Language Characteristics
+ *
+ * - **Low-level systems language**: Direct memory access, pointer arithmetic
+ * - **Static typing**: Compile-time type checking
+ * - **Manual memory management**: malloc/free, no garbage collection
+ * - **Preprocessor**: Text substitution before compilation (#include, #define)
+ * - **Structs/unions/enums**: Aggregate data types (no classes)
+ * - **Pointers**: First-class support for memory addresses
+ * - **Function definitions vs declarations**: Prototypes vs implementations
+ * - **Storage classes**: static, extern, register, auto
+ * - **Type qualifiers**: const, volatile, restrict
+ * - **No function overloading**: Each function has unique name
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use 8-bit encoding:
+ * - Bits 7-2: Base category (e.g., `DEFINITION_FUNCTION = 0x04`)
+ * - Bits 1-0: Refinement within category
+ *
+ * Example: `DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR`
+ *   - Base: 0x04 (function definition)
+ *   - Refinement: 0x00 (regular function)
+ *   - Combined: 0x04
+ *
+ * @see semantic_types.hpp for complete semantic type definitions
+ * @see node_config.hpp for extraction strategy enums and refinements
+ * @see cpp_types.def for C++ extensions
+ */
 
-// Translation unit
+// ============================================================================
+// TRANSLATION UNIT
+// ============================================================================
+
+/**
+ * @defgroup c_translation_unit Translation Unit
+ * @brief Top-level compilation unit
+ * @{
+ */
+
+/**
+ * @brief Translation unit: the root of a C source file
+ * Represents an entire .c or .h file
+ */
 DEF_TYPE("translation_unit", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Preprocessor directives
+/** @} */ // end c_translation_unit
+
+// ============================================================================
+// PREPROCESSOR DIRECTIVES
+// ============================================================================
+
+/**
+ * @defgroup c_preprocessor Preprocessor Directives
+ * @brief C preprocessor constructs (#include, #define, etc.)
+ *
+ * The C preprocessor performs text substitution before compilation.
+ * These nodes represent preprocessor directives and macro expansions.
+ * @{
+ */
+
+/**
+ * @brief #include directive: `#include <header.h>` or `#include "header.h"`
+ */
 DEF_TYPE("preproc_include", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/**
+ * @brief Object-like macro: `#define NAME value`
+ * Treated as immutable constant
+ */
 DEF_TYPE("preproc_def", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/**
+ * @brief Function-like macro: `#define NAME(args) body`
+ */
 DEF_TYPE("preproc_function_def", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/**
+ * @brief Macro invocation: `MACRO(args)`
+ * Uses MACRO refinement for Call semantic type
+ */
 DEF_TYPE("preproc_call", COMPUTATION_CALL | SemanticRefinements::Call::MACRO, FIND_CALL_TARGET, NONE, 0)
+
+/**
+ * @brief Conditional compilation: `#if condition`
+ */
 DEF_TYPE("preproc_if", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/**
+ * @brief Conditional compilation: `#ifdef MACRO`
+ */
 DEF_TYPE("preproc_ifdef", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/**
+ * @brief Conditional else: `#else`
+ */
 DEF_TYPE("preproc_else", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/**
+ * @brief Conditional elif: `#elif condition`
+ */
 DEF_TYPE("preproc_elif", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/**
+ * @brief Preprocessor parameters in function-like macro
+ */
 DEF_TYPE("preproc_params", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
-// Declarations - function_definition always has a body (vs function_declarator)
-DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IN_DECLARATOR, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
-DEF_TYPE("declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
-DEF_TYPE("struct_specifier", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
-DEF_TYPE("union_specifier", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
-DEF_TYPE("enum_specifier", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
-DEF_TYPE("typedef_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
-DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("enumerator", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("parameter_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
-
-// Type specifiers
-DEF_TYPE("primitive_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
-DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
-DEF_TYPE("sized_type_specifier", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
-DEF_TYPE("pointer_declarator", TYPE_COMPOSITE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("array_declarator", TYPE_COMPOSITE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("function_declarator", TYPE_COMPOSITE, FIND_IDENTIFIER, NONE, 0)
-
-// Statements
-DEF_TYPE("compound_statement", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
-DEF_TYPE("labeled_statement", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
-DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
-DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
-DEF_TYPE("case_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
-DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, 0)
-DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("goto_statement", FLOW_JUMP | SemanticRefinements::Jump::GOTO, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("continue_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
-DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
-DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
-
-// Expressions
-DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
-DEF_TYPE("field_expression", COMPUTATION_ACCESS, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("subscript_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
-DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
-DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
-DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
-DEF_TYPE("update_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
-DEF_TYPE("cast_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-DEF_TYPE("sizeof_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
-DEF_TYPE("conditional_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
-DEF_TYPE("comma_expression", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-
-// Identifiers and literals
-DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("number_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
-DEF_TYPE("char_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("concatenated_string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-
-// Comments
-DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
-
-// Storage class specifiers
-DEF_TYPE("storage_class_specifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("type_qualifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-
-// Declarators
-DEF_TYPE("init_declarator", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("abstract_declarator", TYPE_COMPOSITE, NONE, NONE, 0)
-DEF_TYPE("parenthesized_declarator", TYPE_COMPOSITE, FIND_IDENTIFIER, NONE, 0)
-
-// Special
-DEF_TYPE("variadic_parameter", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
-DEF_TYPE("attribute_specifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("ms_declspec_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-
-// ====================================
-// PUNCTUATION TOKENS (22.2M misclassified nodes fix)
-// ====================================
-
-// Punctuation marks
-DEF_TYPE(",", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
-DEF_TYPE(";", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
-DEF_TYPE(".", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
-DEF_TYPE(":", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
-
-// Delimiters
-DEF_TYPE("(", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE(")", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE("[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE("]", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE("{", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE("}", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE("'", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE("\"", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-
-// Assignment operators
-DEF_TYPE("=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
-DEF_TYPE("+=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
-DEF_TYPE("-=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
-DEF_TYPE("*=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
-DEF_TYPE("/=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
-DEF_TYPE("%=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
-DEF_TYPE("&=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
-DEF_TYPE("|=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
-DEF_TYPE("^=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
-DEF_TYPE("<<=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
-DEF_TYPE(">>=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
-
-// Comparison operators
-DEF_TYPE("==", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
-DEF_TYPE("!=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
-DEF_TYPE("<", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
-DEF_TYPE(">", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
-DEF_TYPE("<=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
-DEF_TYPE(">=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
-
-// Arithmetic operators
-DEF_TYPE("+", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("-", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("*", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("/", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("%", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("&", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("|", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("^", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("~", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("<<", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-DEF_TYPE(">>", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("++", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("--", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-
-// Logical operators
-DEF_TYPE("&&", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("||", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("!", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
-
-// Member access
-DEF_TYPE("->", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)
-
-// Structural elements
-DEF_TYPE("initializer_pair", PATTERN_DESTRUCTURE, FIND_PROPERTY, NONE, 0)
-DEF_TYPE("argument_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE("subscript_designator", COMPUTATION_ACCESS, NONE, NONE, 0)
-DEF_TYPE("field_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("initializer_list", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
-DEF_TYPE("field_designator", PATTERN_DESTRUCTURE, FIND_PROPERTY, NONE, 0)
-DEF_TYPE("parameter_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-
-// Keywords - now classified by semantic function with IS_KEYWORD flag
-DEF_TYPE("if", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("else", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("for", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("do", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("switch", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("case", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("default", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("break", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("continue", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("return", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("goto", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("const", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("static", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("extern", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("register", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("volatile", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("inline", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("typedef", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("struct", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("union", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("enum", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("sizeof", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-// Preprocessor directives
-DEF_TYPE("#include", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
-DEF_TYPE("#define", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
-DEF_TYPE("#ifdef", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
-DEF_TYPE("#ifndef", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
-DEF_TYPE("#if", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
-DEF_TYPE("#else", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
-DEF_TYPE("#elif", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
-DEF_TYPE("#endif", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
-DEF_TYPE("#undef", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
-DEF_TYPE("#pragma", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
+/**
+ * @brief Preprocessor argument text
+ */
 DEF_TYPE("preproc_arg", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
 
-// String/character content
-DEF_TYPE("string_content", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("character", LITERAL_STRING, NODE_TEXT, NONE, 0)
-
-// Missing C constructs
-DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-DEF_TYPE("pointer_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
-DEF_TYPE("type_descriptor", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("statement_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+/**
+ * @brief defined() operator in preprocessor conditionals
+ */
 DEF_TYPE("defined", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Preprocessor defined check
+ */
 DEF_TYPE("preproc_defined", METADATA_DIRECTIVE, NONE, NONE, 0)
-DEF_TYPE("abstract_pointer_declarator", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("\n", PARSER_SYNTAX, NONE, NONE, 0)
-DEF_TYPE("NULL", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("unsigned", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("type_definition", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Generic preprocessor directive
+ */
 DEF_TYPE("preproc_directive", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
-DEF_TYPE("macro_type_specifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
-DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("system_lib_string", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
-DEF_TYPE("field_declaration_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("ms_restrict_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("ms_pointer_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("enumerator_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("?", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("long", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("nullptr", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("auto", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("...", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
+
+/** @} */ // end c_preprocessor
+
+// ============================================================================
+// DECLARATIONS
+// ============================================================================
+
+/**
+ * @defgroup c_declarations Declarations
+ * @brief Function definitions, variable declarations, type definitions
+ *
+ * C distinguishes between declarations (prototypes) and definitions
+ * (implementations). Function definitions have bodies (IS_EMBODIED).
+ * @{
+ */
+
+/**
+ * @brief Function definition: `type name(params) { body }`
+ * Has a body (IS_EMBODIED); uses FIND_IN_DECLARATOR for complex declarators
+ */
+DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IN_DECLARATOR, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/**
+ * @brief Variable/function declaration: `type name;` or `type name(params);`
+ */
+DEF_TYPE("declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+
+/**
+ * @brief Struct definition: `struct name { fields };`
+ */
+DEF_TYPE("struct_specifier", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/**
+ * @brief Union definition: `union name { fields };`
+ * Tagged union type where members share memory
+ */
+DEF_TYPE("union_specifier", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/**
+ * @brief Enum definition: `enum name { values };`
+ */
+DEF_TYPE("enum_specifier", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/**
+ * @brief Typedef: `typedef old_type new_name;`
+ */
+DEF_TYPE("typedef_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/**
+ * @brief Type definition (alternate form)
+ */
+DEF_TYPE("type_definition", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Field in struct/union: `type name;`
+ */
+DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Enumerator: `NAME` or `NAME = value` in enum
+ */
+DEF_TYPE("enumerator", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Function parameter: `type name` in parameter list
+ */
+DEF_TYPE("parameter_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Initializing declarator: `name = value` in declaration
+ */
+DEF_TYPE("init_declarator", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
+
+/** @} */ // end c_declarations
+
+// ============================================================================
+// TYPE SPECIFIERS
+// ============================================================================
+
+/**
+ * @defgroup c_types Type Specifiers
+ * @brief Type system nodes
+ *
+ * C has primitive types, user-defined types, and compound types
+ * built with pointers, arrays, and function types.
+ * @{
+ */
+
+/**
+ * @brief Primitive type: int, char, float, double, void, etc.
+ */
+DEF_TYPE("primitive_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief User-defined type reference: struct/union/enum/typedef name
+ */
+DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Sized type specifier: `long int`, `short int`, etc.
+ */
+DEF_TYPE("sized_type_specifier", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Pointer declarator: `*name`
+ */
+DEF_TYPE("pointer_declarator", TYPE_COMPOSITE, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Array declarator: `name[size]`
+ */
+DEF_TYPE("array_declarator", TYPE_COMPOSITE, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Function declarator: `name(params)`
+ */
+DEF_TYPE("function_declarator", TYPE_COMPOSITE, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Abstract declarator (type without name)
+ */
+DEF_TYPE("abstract_declarator", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/**
+ * @brief Parenthesized declarator: `(*name)`
+ */
+DEF_TYPE("parenthesized_declarator", TYPE_COMPOSITE, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Abstract pointer declarator
+ */
+DEF_TYPE("abstract_pointer_declarator", TYPE_REFERENCE, NONE, NONE, 0)
+
+/**
+ * @brief Abstract parenthesized declarator
+ */
+DEF_TYPE("abstract_parenthesized_declarator", TYPE_REFERENCE, NONE, NONE, 0)
+
+/**
+ * @brief Abstract array declarator
+ */
+DEF_TYPE("abstract_array_declarator", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/**
+ * @brief Abstract function declarator
+ */
 DEF_TYPE("abstract_function_declarator", TYPE_COMPOSITE, NONE, NONE, 0)
 
-// Final C edge cases for 100% classification - 771 remaining nodes
-DEF_TYPE("compound_literal_expression", LITERAL_STRUCTURED, NONE, NONE, 0)
+/**
+ * @brief Type descriptor in expressions
+ */
+DEF_TYPE("type_descriptor", TYPE_REFERENCE, NONE, NONE, 0)
+
+/**
+ * @brief Macro used as type specifier
+ */
+DEF_TYPE("macro_type_specifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Bitfield specification: `: width`
+ */
 DEF_TYPE("bitfield_clause", TYPE_COMPOSITE, NONE, NONE, 0)
-DEF_TYPE("linkage_specification", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("declaration_list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/** @} */ // end c_types
+
+// ============================================================================
+// STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup c_statements Statements
+ * @brief Control flow and executable statements
+ * @{
+ */
+
+/**
+ * @brief Compound statement (block): `{ statements }`
+ */
+DEF_TYPE("compound_statement", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/**
+ * @brief Labeled statement: `label: statement`
+ */
+DEF_TYPE("labeled_statement", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Expression statement: `expression;`
+ */
+DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
+
+/**
+ * @brief If statement: `if (cond) stmt` or `if (cond) stmt else stmt`
+ */
+DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/**
+ * @brief Else clause in if statement
+ */
+DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/**
+ * @brief Switch statement: `switch (expr) { cases }`
+ */
+DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/**
+ * @brief Case statement: `case value: statements`
+ */
+DEF_TYPE("case_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/**
+ * @brief While loop: `while (cond) stmt`
+ */
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/**
+ * @brief For loop: `for (init; cond; update) stmt`
+ */
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, 0)
+
+/**
+ * @brief Do-while loop: `do stmt while (cond);`
+ */
+DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/**
+ * @brief Goto statement: `goto label;`
+ */
+DEF_TYPE("goto_statement", FLOW_JUMP | SemanticRefinements::Jump::GOTO, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Continue statement: `continue;`
+ */
+DEF_TYPE("continue_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
+
+/**
+ * @brief Break statement: `break;`
+ */
+DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
+
+/**
+ * @brief Return statement: `return expr;`
+ */
+DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
+
+/** @} */ // end c_statements
+
+// ============================================================================
+// EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup c_expressions Expressions
+ * @brief Computation, access, and operator expressions
+ * @{
+ */
+
+/**
+ * @brief Function call: `func(args)`
+ */
+DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/**
+ * @brief Field access: `struct.field` or `struct->field`
+ */
+DEF_TYPE("field_expression", COMPUTATION_ACCESS, FIND_IDENTIFIER, NONE, 0)
+
+/**
+ * @brief Array subscript: `array[index]`
+ */
+DEF_TYPE("subscript_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/**
+ * @brief Assignment: `lvalue = rvalue`
+ */
+DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+
+/**
+ * @brief Binary expression: `a + b`, `a * b`, etc.
+ */
+DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/**
+ * @brief Unary expression: `!a`, `-a`, `*ptr`, `&var`
+ */
+DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+
+/**
+ * @brief Update expression: `a++`, `++a`, `a--`, `--a`
+ */
+DEF_TYPE("update_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+
+/**
+ * @brief Cast expression: `(type)expr`
+ */
+DEF_TYPE("cast_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/**
+ * @brief Sizeof expression: `sizeof(type)` or `sizeof expr`
+ */
+DEF_TYPE("sizeof_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+
+/**
+ * @brief Conditional/ternary expression: `cond ? then : else`
+ */
+DEF_TYPE("conditional_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
+
+/**
+ * @brief Comma expression: `expr1, expr2`
+ */
+DEF_TYPE("comma_expression", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/**
+ * @brief Parenthesized expression: `(expr)`
+ */
+DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/**
+ * @brief Pointer dereference or address-of
+ */
+DEF_TYPE("pointer_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/**
+ * @brief Compound literal: `(type){ initializers }`
+ */
+DEF_TYPE("compound_literal_expression", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/**
+ * @brief offsetof expression: `offsetof(type, member)`
+ */
 DEF_TYPE("offsetof_expression", COMPUTATION_CALL, NONE, NONE, 0)
-DEF_TYPE("offsetof", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("abstract_parenthesized_declarator", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("restrict", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("short", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("signed", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Final C perfection - 404 remaining nodes for 100% classification
-DEF_TYPE("constexpr", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("gnu_asm_output_operand", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-DEF_TYPE("gnu_asm_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-DEF_TYPE("gnu_asm_input_operand_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("gnu_asm_output_operand_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("gnu_asm_clobber_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("asm", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("gnu_asm_qualifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("gnu_asm_input_operand", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-DEF_TYPE("__attribute__", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("__asm__", EXECUTION_STATEMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
-DEF_TYPE("__restrict__", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("abstract_array_declarator", TYPE_COMPOSITE, NONE, NONE, 0)
-DEF_TYPE("__declspec", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("u'", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("L\"", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("::", COMPUTATION_ACCESS, NONE, NONE, 0)
+/** @} */ // end c_expressions
+
+// ============================================================================
+// IDENTIFIERS AND LITERALS
+// ============================================================================
+
+/**
+ * @defgroup c_identifiers Identifiers and Literals
+ * @brief Names and constant values
+ * @{
+ */
+
+/**
+ * @brief Identifier: variable, function, or type name
+ */
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Field identifier in struct access
+ */
+DEF_TYPE("field_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Statement identifier (goto label)
+ */
+DEF_TYPE("statement_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Number literal: 42, 3.14, 0xFF, etc.
+ */
+DEF_TYPE("number_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Character literal: 'a', '\n', etc.
+ */
+DEF_TYPE("char_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief String literal: "hello"
+ */
+DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Concatenated string: "hello" "world"
+ */
+DEF_TYPE("concatenated_string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief String content (inside quotes)
+ */
+DEF_TYPE("string_content", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Escape sequence in string: \n, \t, etc.
+ */
+DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Character content
+ */
+DEF_TYPE("character", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Boolean true (C99 stdbool.h)
+ */
+DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Boolean false (C99 stdbool.h)
+ */
+DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Null pointer: null (lowercase)
+ */
+DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Null pointer: NULL (uppercase macro)
+ */
+DEF_TYPE("NULL", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Null pointer: nullptr (C23)
+ */
+DEF_TYPE("nullptr", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/** @} */ // end c_identifiers
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup c_comments Comments
+ * @brief Code comments
+ * @{
+ */
+
+/**
+ * @brief Comment: `//` or `/* */`
+ */
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/** @} */ // end c_comments
+
+// ============================================================================
+// STORAGE AND TYPE QUALIFIERS
+// ============================================================================
+
+/**
+ * @defgroup c_qualifiers Storage and Type Qualifiers
+ * @brief Storage class specifiers and type qualifiers
+ *
+ * Storage classes control linkage and lifetime. Type qualifiers
+ * modify how values can be accessed.
+ * @{
+ */
+
+/**
+ * @brief Storage class specifier: static, extern, register, auto
+ */
+DEF_TYPE("storage_class_specifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Type qualifier: const, volatile, restrict
+ */
+DEF_TYPE("type_qualifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/** @} */ // end c_qualifiers
+
+// ============================================================================
+// ATTRIBUTES AND EXTENSIONS
+// ============================================================================
+
+/**
+ * @defgroup c_attributes Attributes and Extensions
+ * @brief Compiler-specific attributes and extensions
+ * @{
+ */
+
+/**
+ * @brief Variadic parameter: `...` in function declaration
+ */
+DEF_TYPE("variadic_parameter", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief GNU/C11 attribute specifier
+ */
+DEF_TYPE("attribute_specifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Microsoft __declspec modifier
+ */
+DEF_TYPE("ms_declspec_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Microsoft restrict modifier
+ */
+DEF_TYPE("ms_restrict_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Microsoft pointer modifier
+ */
+DEF_TYPE("ms_pointer_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Microsoft call modifier (__cdecl, __stdcall, etc.)
+ */
 DEF_TYPE("ms_call_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("__forceinline", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("__stdcall", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 
-// Absolute C perfection - final 9 nodes
-DEF_TYPE("thread_local", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("alignas", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("alignas_qualifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("[[", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("u\"", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("]]", PARSER_DELIMITER, NONE, NONE, 0)
+/**
+ * @brief Linkage specification: `extern "C"`
+ */
+DEF_TYPE("linkage_specification", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief C11 attribute declaration: `[[attribute]]`
+ */
 DEF_TYPE("attribute_declaration", METADATA_ANNOTATION, NONE, NONE, 0)
+
+/**
+ * @brief Attribute in attribute list
+ */
 DEF_TYPE("attribute", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 
-// Error handling
+/**
+ * @brief C11 alignas qualifier
+ */
+DEF_TYPE("alignas_qualifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/** @} */ // end c_attributes
+
+// ============================================================================
+// STRUCTURAL ELEMENTS
+// ============================================================================
+
+/**
+ * @defgroup c_structural Structural Elements
+ * @brief Lists and organizational nodes
+ * @{
+ */
+
+/**
+ * @brief Designated initializer: `.field = value` or `[index] = value`
+ */
+DEF_TYPE("initializer_pair", PATTERN_DESTRUCTURE, FIND_PROPERTY, NONE, 0)
+
+/**
+ * @brief Function call argument list
+ */
+DEF_TYPE("argument_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/**
+ * @brief Array subscript in designator
+ */
+DEF_TYPE("subscript_designator", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/**
+ * @brief Initializer list: `{ values }`
+ */
+DEF_TYPE("initializer_list", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+
+/**
+ * @brief Field designator: `.field`
+ */
+DEF_TYPE("field_designator", PATTERN_DESTRUCTURE, FIND_PROPERTY, NONE, 0)
+
+/**
+ * @brief Function parameter list
+ */
+DEF_TYPE("parameter_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/**
+ * @brief Field declaration list in struct/union
+ */
+DEF_TYPE("field_declaration_list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/**
+ * @brief Enumerator list in enum
+ */
+DEF_TYPE("enumerator_list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/**
+ * @brief Declaration list (multiple declarations)
+ */
+DEF_TYPE("declaration_list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/**
+ * @brief System library string: `<header.h>`
+ */
+DEF_TYPE("system_lib_string", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
+
+/** @} */ // end c_structural
+
+// ============================================================================
+// PUNCTUATION
+// ============================================================================
+
+/**
+ * @defgroup c_punctuation Punctuation
+ * @brief Syntactic punctuation tokens
+ * @{
+ */
+
+/** @brief Comma */
+DEF_TYPE(",", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/** @brief Semicolon */
+DEF_TYPE(";", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/** @brief Dot (member access) */
+DEF_TYPE(".", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/** @brief Colon */
+DEF_TYPE(":", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/** @brief Opening parenthesis */
+DEF_TYPE("(", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/** @brief Closing parenthesis */
+DEF_TYPE(")", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/** @brief Opening bracket */
+DEF_TYPE("[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/** @brief Closing bracket */
+DEF_TYPE("]", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/** @brief Opening brace */
+DEF_TYPE("{", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/** @brief Closing brace */
+DEF_TYPE("}", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/** @brief Single quote */
+DEF_TYPE("'", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/** @brief Double quote */
+DEF_TYPE("\"", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/** @brief Ternary question mark */
+DEF_TYPE("?", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/** @brief Ellipsis (variadic) */
+DEF_TYPE("...", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
+
+/** @brief C11 attribute open bracket */
+DEF_TYPE("[[", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @brief C11 attribute close bracket */
+DEF_TYPE("]]", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @brief Unicode string prefix */
+DEF_TYPE("u'", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @brief Unicode string prefix */
+DEF_TYPE("u\"", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @brief Wide string prefix */
+DEF_TYPE("L\"", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @brief Newline (in preprocessor) */
+DEF_TYPE("\n", PARSER_SYNTAX, NONE, NONE, 0)
+
+/** @} */ // end c_punctuation
+
+// ============================================================================
+// ASSIGNMENT OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup c_assignment Assignment Operators
+ * @brief Simple and compound assignment
+ * @{
+ */
+
+/** @brief Simple assignment */
+DEF_TYPE("=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/** @brief Add and assign */
+DEF_TYPE("+=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/** @brief Subtract and assign */
+DEF_TYPE("-=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/** @brief Multiply and assign */
+DEF_TYPE("*=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/** @brief Divide and assign */
+DEF_TYPE("/=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/** @brief Modulo and assign */
+DEF_TYPE("%=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/** @brief Bitwise AND and assign */
+DEF_TYPE("&=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/** @brief Bitwise OR and assign */
+DEF_TYPE("|=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/** @brief Bitwise XOR and assign */
+DEF_TYPE("^=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/** @brief Left shift and assign */
+DEF_TYPE("<<=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/** @brief Right shift and assign */
+DEF_TYPE(">>=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/** @} */ // end c_assignment
+
+// ============================================================================
+// COMPARISON OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup c_comparison Comparison Operators
+ * @brief Equality and relational operators
+ * @{
+ */
+
+/** @brief Equality */
+DEF_TYPE("==", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/** @brief Inequality */
+DEF_TYPE("!=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/** @brief Less than */
+DEF_TYPE("<", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/** @brief Greater than */
+DEF_TYPE(">", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/** @brief Less than or equal */
+DEF_TYPE("<=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/** @brief Greater than or equal */
+DEF_TYPE(">=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/** @} */ // end c_comparison
+
+// ============================================================================
+// ARITHMETIC OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup c_arithmetic Arithmetic Operators
+ * @brief Mathematical and bitwise operators
+ * @{
+ */
+
+/** @brief Addition */
+DEF_TYPE("+", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/** @brief Subtraction */
+DEF_TYPE("-", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/** @brief Multiplication (or pointer dereference) */
+DEF_TYPE("*", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/** @brief Division */
+DEF_TYPE("/", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/** @brief Modulo */
+DEF_TYPE("%", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/** @brief Bitwise AND (or address-of) */
+DEF_TYPE("&", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/** @brief Bitwise OR */
+DEF_TYPE("|", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/** @brief Bitwise XOR */
+DEF_TYPE("^", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/** @brief Bitwise NOT */
+DEF_TYPE("~", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/** @brief Left shift */
+DEF_TYPE("<<", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/** @brief Right shift */
+DEF_TYPE(">>", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/** @brief Increment */
+DEF_TYPE("++", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/** @brief Decrement */
+DEF_TYPE("--", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/** @} */ // end c_arithmetic
+
+// ============================================================================
+// LOGICAL OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup c_logical Logical Operators
+ * @brief Boolean operators
+ * @{
+ */
+
+/** @brief Logical AND */
+DEF_TYPE("&&", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/** @brief Logical OR */
+DEF_TYPE("||", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/** @brief Logical NOT */
+DEF_TYPE("!", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/** @} */ // end c_logical
+
+// ============================================================================
+// MEMBER ACCESS
+// ============================================================================
+
+/**
+ * @defgroup c_member_access Member Access Operators
+ * @brief Pointer and scope operators
+ * @{
+ */
+
+/** @brief Pointer member access: `ptr->member` */
+DEF_TYPE("->", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)
+
+/** @brief Scope resolution (C++ compatibility) */
+DEF_TYPE("::", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/** @} */ // end c_member_access
+
+// ============================================================================
+// KEYWORDS
+// ============================================================================
+
+/**
+ * @defgroup c_keywords Keywords
+ * @brief Reserved words
+ * @{
+ */
+
+/** @brief if keyword */
+DEF_TYPE("if", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief else keyword */
+DEF_TYPE("else", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief while keyword */
+DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief for keyword */
+DEF_TYPE("for", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief do keyword */
+DEF_TYPE("do", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief switch keyword */
+DEF_TYPE("switch", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief case keyword */
+DEF_TYPE("case", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief default keyword */
+DEF_TYPE("default", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief break keyword */
+DEF_TYPE("break", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief continue keyword */
+DEF_TYPE("continue", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief return keyword */
+DEF_TYPE("return", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief goto keyword */
+DEF_TYPE("goto", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief const qualifier */
+DEF_TYPE("const", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief static storage class */
+DEF_TYPE("static", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief extern storage class */
+DEF_TYPE("extern", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief register storage class */
+DEF_TYPE("register", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief volatile qualifier */
+DEF_TYPE("volatile", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief inline specifier */
+DEF_TYPE("inline", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief typedef keyword */
+DEF_TYPE("typedef", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief struct keyword */
+DEF_TYPE("struct", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief union keyword */
+DEF_TYPE("union", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief enum keyword */
+DEF_TYPE("enum", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief sizeof operator */
+DEF_TYPE("sizeof", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief offsetof operator */
+DEF_TYPE("offsetof", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief unsigned type modifier */
+DEF_TYPE("unsigned", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief signed type modifier */
+DEF_TYPE("signed", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief long type modifier */
+DEF_TYPE("long", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief short type modifier */
+DEF_TYPE("short", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief auto storage class (C) / type inference (C++) */
+DEF_TYPE("auto", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief restrict qualifier (C99) */
+DEF_TYPE("restrict", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief thread_local storage class (C11) */
+DEF_TYPE("thread_local", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief alignas specifier (C11) */
+DEF_TYPE("alignas", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief constexpr specifier (C23) */
+DEF_TYPE("constexpr", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief asm keyword */
+DEF_TYPE("asm", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @} */ // end c_keywords
+
+// ============================================================================
+// PREPROCESSOR DIRECTIVE TOKENS
+// ============================================================================
+
+/**
+ * @defgroup c_preproc_tokens Preprocessor Directive Tokens
+ * @brief Preprocessor directive keywords
+ * @{
+ */
+
+/** @brief #include directive */
+DEF_TYPE("#include", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
+
+/** @brief #define directive */
+DEF_TYPE("#define", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
+
+/** @brief #ifdef directive */
+DEF_TYPE("#ifdef", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
+
+/** @brief #ifndef directive */
+DEF_TYPE("#ifndef", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
+
+/** @brief #if directive */
+DEF_TYPE("#if", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
+
+/** @brief #else directive */
+DEF_TYPE("#else", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
+
+/** @brief #elif directive */
+DEF_TYPE("#elif", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
+
+/** @brief #endif directive */
+DEF_TYPE("#endif", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
+
+/** @brief #undef directive */
+DEF_TYPE("#undef", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
+
+/** @brief #pragma directive */
+DEF_TYPE("#pragma", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
+
+/** @} */ // end c_preproc_tokens
+
+// ============================================================================
+// GNU EXTENSIONS
+// ============================================================================
+
+/**
+ * @defgroup c_gnu_extensions GNU Extensions
+ * @brief GCC-specific language extensions
+ * @{
+ */
+
+/**
+ * @brief GNU inline assembly: `__asm__(...)`
+ */
+DEF_TYPE("__asm__", EXECUTION_STATEMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/**
+ * @brief GNU asm expression
+ */
+DEF_TYPE("gnu_asm_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/**
+ * @brief GNU asm output operand
+ */
+DEF_TYPE("gnu_asm_output_operand", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/**
+ * @brief GNU asm input operand
+ */
+DEF_TYPE("gnu_asm_input_operand", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/**
+ * @brief GNU asm input operand list
+ */
+DEF_TYPE("gnu_asm_input_operand_list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/**
+ * @brief GNU asm output operand list
+ */
+DEF_TYPE("gnu_asm_output_operand_list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/**
+ * @brief GNU asm clobber list
+ */
+DEF_TYPE("gnu_asm_clobber_list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/**
+ * @brief GNU asm qualifier (volatile, inline, goto)
+ */
+DEF_TYPE("gnu_asm_qualifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief GNU __attribute__ specifier
+ */
+DEF_TYPE("__attribute__", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief GNU __restrict__ keyword
+ */
+DEF_TYPE("__restrict__", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/**
+ * @brief Microsoft __declspec
+ */
+DEF_TYPE("__declspec", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Microsoft __forceinline
+ */
+DEF_TYPE("__forceinline", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/**
+ * @brief Microsoft __stdcall
+ */
+DEF_TYPE("__stdcall", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/** @} */ // end c_gnu_extensions
+
+// ============================================================================
+// PARSER ERRORS
+// ============================================================================
+
+/**
+ * @defgroup c_parser_errors Parser Errors
+ * @brief Error nodes from parsing
+ * @{
+ */
+
+/** @brief Parse error node */
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end c_parser_errors
