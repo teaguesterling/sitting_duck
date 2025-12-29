@@ -1,66 +1,532 @@
-// Go language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file go_types.def
+ * @brief Go language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter Go AST nodes are mapped to
+ * universal semantic types, along with strategies for extracting names and
+ * native context from the parse tree.
+ *
+ * ## DEF_TYPE Macro Format
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * @param raw_type The tree-sitter node type string (e.g., "function_declaration")
+ * @param semantic_type Universal semantic classification with optional refinement bits
+ * @param name_extraction Strategy for extracting the node's name (see ExtractionStrategy)
+ * @param native_extraction Strategy for rich context extraction (see NativeExtractionStrategy)
+ * @param flags Behavioral flags (e.g., IS_KEYWORD, IS_SYNTAX_ONLY)
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types are 8-bit values where:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_FUNCTION = 0x04)
+ * - Bits 1-0: Refinement within category (e.g., Function::LAMBDA = 0x01)
+ *
+ * Combined using bitwise OR:
+ * ```cpp
+ * DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA  // = 0x05
+ * ```
+ *
+ * ## Go Language Characteristics
+ *
+ * Go has several unique features that affect AST mapping:
+ *
+ * - **Package system**: Every file belongs to a package; `main` package is entry point
+ * - **Goroutines**: Lightweight threads via `go` keyword (FLOW_SYNC)
+ * - **Channels**: First-class communication primitives (`chan`, `<-`)
+ * - **Defer**: Deferred execution until function returns (FLOW_SYNC)
+ * - **Interfaces**: Implicit implementation (no `implements` keyword), use ABSTRACT
+ * - **No classes**: Only structs with methods; methods have receiver parameters
+ * - **Short declarations**: `:=` for declare-and-assign in one step
+ * - **Multiple returns**: Functions can return multiple values
+ * - **Range iteration**: `for range` for iterating collections
+ * - **Select**: Multiplexing channel operations
+ * - **Type switches**: Switch on type rather than value
+ * - **iota**: Auto-incrementing constant generator
+ * - **No generics keywords**: Uses `[T any]` syntax (Go 1.18+)
+ *
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy definitions
+ * @see semantic_types.hpp for full semantic type enumeration
+ */
 
-// Package and imports
+// =============================================================================
+// PACKAGE AND IMPORTS
+// =============================================================================
+
+/**
+ * @defgroup go_packages Package and Imports
+ * @brief Package declarations and import statements
+ *
+ * Every Go file starts with a package clause. The `main` package is special
+ * as it defines an executable. Imports bring in other packages.
+ *
+ * Note: `source_file` represents the entire file as a module.
+ * @{
+ */
+DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, 0)
 DEF_TYPE("package_clause", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("package_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("import_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("import_spec", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("import_spec_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+/** @} */
 
-// Function declarations and definitions with refinements
-// Go functions always have bodies (no forward declarations like C/C++)
+// =============================================================================
+// FUNCTION DEFINITIONS
+// =============================================================================
+
+/**
+ * @defgroup go_functions Function Definitions
+ * @brief Functions, methods, and function literals
+ *
+ * Go distinguishes between:
+ * - `function_declaration`: Package-level functions
+ * - `method_declaration`: Functions with a receiver (attached to a type)
+ * - `func_literal`: Anonymous functions/closures
+ *
+ * Go functions always have bodies (no forward declarations).
+ * Methods use a receiver parameter to associate with a type.
+ * @{
+ */
 DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 DEF_TYPE("func_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("method_elem", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+/** @} */
 
-// Type declarations
+// =============================================================================
+// TYPE DEFINITIONS
+// =============================================================================
+
+/**
+ * @defgroup go_types_def Type Definitions
+ * @brief Struct and interface definitions
+ *
+ * Go uses composition over inheritance:
+ * - `struct_type`: Product types with fields (REGULAR refinement)
+ * - `interface_type`: Abstract types defining method sets (ABSTRACT refinement)
+ *
+ * Types are typically defined with `type Name struct/interface { ... }`.
+ * The `type_declaration` and `type_spec` wrap the actual type definition.
+ * @{
+ */
 DEF_TYPE("type_declaration", EXECUTION_DECLARATION, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("type_spec", EXECUTION_DECLARATION, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("struct_type", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, NONE, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("interface_type", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, NONE, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+/** @} */
 
-// Variable declarations with refinements
+// =============================================================================
+// VARIABLE DECLARATIONS
+// =============================================================================
+
+/**
+ * @defgroup go_variables Variable Declarations
+ * @brief Variable and constant declarations
+ *
+ * Go has several variable declaration forms:
+ * - `var x int`: Explicit var declaration (MUTABLE)
+ * - `x := value`: Short declaration (MUTABLE, infers type)
+ * - `const x = value`: Constant declaration (IMMUTABLE)
+ *
+ * The `_spec` nodes contain the actual identifier and type information.
+ * @{
+ */
 DEF_TYPE("var_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("var_spec", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("var_spec_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 DEF_TYPE("const_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("const_spec", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("short_var_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("parameter_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("variadic_parameter_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+/** @} */
 
-// Expressions and references with refinements
+// =============================================================================
+// FUNCTION CALLS AND ACCESS
+// =============================================================================
+
+/**
+ * @defgroup go_calls Function Calls and Access
+ * @brief Function calls, method calls, and field/index access
+ *
+ * Go uses `selector_expression` for both field access and method calls.
+ * The FIND_PROPERTY strategy extracts the accessed member name.
+ *
+ * Type conversions in Go look like function calls: `int(x)`, `string(bytes)`.
+ * @{
+ */
 DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+DEF_TYPE("type_conversion_expression", COMPUTATION_CALL, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 DEF_TYPE("selector_expression", COMPUTATION_ACCESS, FIND_PROPERTY, NONE, 0)
 DEF_TYPE("index_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 DEF_TYPE("slice_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
+/** @} */
 
-// Identifiers and literals
+// =============================================================================
+// IDENTIFIERS
+// =============================================================================
+
+/**
+ * @defgroup go_identifiers Identifiers
+ * @brief Identifier nodes for values, types, and fields
+ *
+ * Go has distinct identifier types:
+ * - `identifier`: General value identifiers
+ * - `field_identifier`: Struct field names in selectors
+ * - `type_identifier`: Type names
+ * - `label_name`: Labels for goto/break/continue
+ * @{
+ */
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE("field_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+DEF_TYPE("label_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+/** @} */
 
-// Literals with refinements - name and value both contain the literal text
+// =============================================================================
+// LITERALS
+// =============================================================================
+
+/**
+ * @defgroup go_literals Literal Values
+ * @brief Numeric, string, and composite literals
+ *
+ * Go literals include:
+ * - Numeric: int, float, imaginary (complex numbers!)
+ * - String: interpreted (`"..."`) and raw (`` `...` ``)
+ * - Rune: single characters (`'a'`)
+ * - Composite: struct/array/slice/map literals
+ *
+ * The `iota` keyword is a special constant generator in const blocks.
+ * @{
+ */
+
+// Numeric literals
 DEF_TYPE("int_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
 DEF_TYPE("float_literal", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
 DEF_TYPE("imaginary_literal", LITERAL_NUMBER | SemanticRefinements::Number::COMPLEX, NODE_TEXT, NONE, 0)
-DEF_TYPE("rune_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("raw_string_literal", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
-DEF_TYPE("interpreted_string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 
-// Control flow with refinements
+// String literals
+DEF_TYPE("interpreted_string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("raw_string_literal", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
+DEF_TYPE("rune_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("interpreted_string_literal_content", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
+
+// Atomic literals
+DEF_TYPE("nil", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("iota", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Composite literals
+DEF_TYPE("composite_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+DEF_TYPE("literal_value", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+DEF_TYPE("literal_element", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// CONTROL FLOW
+// =============================================================================
+
+/**
+ * @defgroup go_control Control Flow
+ * @brief Conditionals, loops, and jump statements
+ *
+ * Go control flow:
+ * - `if`: Binary conditional (can include init statement)
+ * - `for`: The only loop construct (counter, condition, or range-based)
+ * - `switch`: Value-based multiway branching
+ * - `type_switch`: Switch on type (unique to Go)
+ * - `select`: Multiplex channel operations
+ *
+ * Loop refinements:
+ * - CONDITIONAL: Basic `for` or `for condition`
+ * - ITERATOR: `for range` iteration
+ * @{
+ */
+
+// Conditional statements
 DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
-DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("range_clause", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
 DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+DEF_TYPE("expression_switch_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
 DEF_TYPE("type_switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 DEF_TYPE("select_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+DEF_TYPE("expression_case", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("default_case", FLOW_CONDITIONAL, NONE, NONE, 0)
 
-// Go-specific constructs
+// Loop statements
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("for_clause", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("range_clause", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+
+// Jump statements
+DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
+DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
+DEF_TYPE("continue_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
+DEF_TYPE("goto_statement", FLOW_JUMP | SemanticRefinements::Jump::GOTO, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// CONCURRENCY (Go-Specific)
+// =============================================================================
+
+/**
+ * @defgroup go_concurrency Concurrency Constructs
+ * @brief Goroutines, channels, and defer
+ *
+ * Go's concurrency primitives:
+ * - `go_statement`: Launch a goroutine (lightweight thread)
+ * - `defer_statement`: Delay execution until function returns
+ * - `send_statement`: Send value to channel (`ch <- value`)
+ * - `receive_statement`: Receive from channel (`<-ch`)
+ * - `channel_type`: Channel type declaration (`chan T`, `<-chan T`, `chan<- T`)
+ *
+ * These use FLOW_SYNC semantic type as they relate to synchronization.
+ * @{
+ */
 DEF_TYPE("go_statement", FLOW_SYNC, NONE, NONE, 0)
 DEF_TYPE("defer_statement", FLOW_SYNC, NONE, NONE, 0)
-DEF_TYPE("channel_type", TYPE_COMPOSITE, NONE, NONE, 0)
-DEF_TYPE("receive_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
 DEF_TYPE("send_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
+DEF_TYPE("receive_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
+DEF_TYPE("channel_type", TYPE_COMPOSITE, NONE, NONE, 0)
+/** @} */
 
-// Punctuation and delimiters
+// =============================================================================
+// TYPE SYSTEM
+// =============================================================================
+
+/**
+ * @defgroup go_type_system Type System
+ * @brief Type references, composite types, and generics
+ *
+ * Go types include:
+ * - `pointer_type`: Pointer to type (`*T`)
+ * - `slice_type`: Dynamic array (`[]T`)
+ * - `array_type`: Fixed-size array (`[N]T`)
+ * - `map_type`: Hash map (`map[K]V`)
+ * - `function_type`: Function signature
+ * - `channel_type`: Channel (`chan T`)
+ *
+ * Go 1.18+ generics use `type_arguments` and `type_instantiation_expression`.
+ * @{
+ */
+
+// Basic type references
+DEF_TYPE("pointer_type", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("qualified_type", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("parenthesized_type", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("type_assertion_expression", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("type_elem", TYPE_REFERENCE, NONE, NONE, 0)
+
+// Composite types
+DEF_TYPE("slice_type", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("array_type", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("map_type", TYPE_COMPOSITE, NONE, NONE, 0)
+DEF_TYPE("function_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+// Generics (Go 1.18+)
+DEF_TYPE("generic_type", TYPE_GENERIC, NONE, NONE, 0)
+DEF_TYPE("type_arguments", TYPE_GENERIC, NONE, NONE, 0)
+DEF_TYPE("type_instantiation_expression", TYPE_GENERIC, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// OPERATORS AND EXPRESSIONS
+// =============================================================================
+
+/**
+ * @defgroup go_operators Operators and Expressions
+ * @brief Arithmetic, logical, comparison, and assignment operators
+ *
+ * Go operators:
+ * - Standard arithmetic: `+`, `-`, `*`, `/`, `%`
+ * - Bitwise: `&`, `|`, `^`, `<<`, `>>`, `&^` (bit clear)
+ * - Logical: `&&`, `||`, `!`
+ * - Comparison: `==`, `!=`, `<`, `<=`, `>`, `>=`
+ * - Assignment: `=`, `:=`, `+=`, `-=`, etc.
+ * - Increment/decrement: `++`, `--` (statements, not expressions!)
+ *
+ * Note: `++` and `--` are statements in Go, not expressions.
+ * @{
+ */
+DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+DEF_TYPE("assignment_statement", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// STATEMENTS
+// =============================================================================
+
+/**
+ * @defgroup go_statements Statements
+ * @brief Expression statements and other execution constructs
+ * @{
+ */
+DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
+DEF_TYPE("inc_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
+DEF_TYPE("dec_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
+DEF_TYPE("labeled_statement", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
+/** @} */
+
+// =============================================================================
+// STRUCTURAL ELEMENTS
+// =============================================================================
+
+/**
+ * @defgroup go_structure Structural Elements
+ * @brief Blocks, lists, and organizational nodes
+ * @{
+ */
+DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+DEF_TYPE("expression_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("argument_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("parameter_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("field_declaration_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// COMMENTS
+// =============================================================================
+
+/**
+ * @defgroup go_comments Comments
+ * @brief Line and block comments
+ *
+ * Go has both line comments (`//`) and block comments (`/* */`).
+ * Doc comments precede declarations and use `//` style.
+ * @{
+ */
+DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("line_comment", METADATA_COMMENT, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("block_comment", METADATA_COMMENT, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+/** @} */
+
+// =============================================================================
+// PATTERNS
+// =============================================================================
+
+/**
+ * @defgroup go_patterns Patterns
+ * @brief Range and variadic patterns
+ * @{
+ */
+DEF_TYPE("range", PATTERN_COLLECT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("...", PATTERN_COLLECT, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// KEYWORDS
+// =============================================================================
+
+/**
+ * @defgroup go_keywords Keywords
+ * @brief Go reserved words as syntax tokens
+ *
+ * Keywords are marked with IS_KEYWORD flag and get the same semantic type
+ * as the constructs they introduce. This enables semantic queries that include
+ * or exclude keyword tokens as needed.
+ * @{
+ */
+
+// Package and import keywords
+DEF_TYPE("package", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("import", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Definition keywords
+DEF_TYPE("func", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("var", DEFINITION_VARIABLE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("const", DEFINITION_VARIABLE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("type", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("struct", TYPE_COMPOSITE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("interface", TYPE_COMPOSITE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("map", TYPE_COMPOSITE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("chan", TYPE_COMPOSITE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Control flow keywords
+DEF_TYPE("if", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("else", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("for", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("switch", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("case", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("default", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("select", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Jump keywords
+DEF_TYPE("return", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("break", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("continue", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("goto", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Concurrency keywords
+DEF_TYPE("go", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("defer", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+// =============================================================================
+// OPERATORS
+// =============================================================================
+
+/**
+ * @defgroup go_operators_tokens Operator Tokens
+ * @brief Individual operator symbols
+ * @{
+ */
+
+// Assignment operators
+DEF_TYPE("=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+DEF_TYPE(":=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+DEF_TYPE("+=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+DEF_TYPE("-=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+DEF_TYPE("*=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+DEF_TYPE("/=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+DEF_TYPE("|=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+DEF_TYPE("&^=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+// Arithmetic operators
+DEF_TYPE("+", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("-", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("*", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("/", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("%", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("&", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("|", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("^", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("<<", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE(">>", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("&^", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("++", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("--", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+
+// Comparison operators
+DEF_TYPE("==", OPERATOR_COMPARISON, NONE, NONE, 0)
+DEF_TYPE("!=", OPERATOR_COMPARISON, NONE, NONE, 0)
+DEF_TYPE("<", OPERATOR_COMPARISON, NONE, NONE, 0)
+DEF_TYPE("<=", OPERATOR_COMPARISON, NONE, NONE, 0)
+DEF_TYPE(">", OPERATOR_COMPARISON, NONE, NONE, 0)
+DEF_TYPE(">=", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+// Logical operators
+DEF_TYPE("&&", OPERATOR_LOGICAL, NONE, NONE, 0)
+DEF_TYPE("||", OPERATOR_LOGICAL, NONE, NONE, 0)
+DEF_TYPE("!", OPERATOR_LOGICAL, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// PUNCTUATION AND DELIMITERS
+// =============================================================================
+
+/**
+ * @defgroup go_punctuation Punctuation
+ * @brief Delimiters, separators, and syntax markers
+ * @{
+ */
 DEF_TYPE("(", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE(")", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE("{", PARSER_DELIMITER, NONE, NONE, 0)
@@ -72,147 +538,17 @@ DEF_TYPE(".", PARSER_PUNCTUATION, NONE, NONE, 0)
 DEF_TYPE(";", PARSER_PUNCTUATION, NONE, NONE, 0)
 DEF_TYPE(":", PARSER_PUNCTUATION, NONE, NONE, 0)
 DEF_TYPE("\"", PARSER_PUNCTUATION, NONE, NONE, 0)
-
-// Operators
-DEF_TYPE("=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE(":=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("+=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("-=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("*=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("/=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("+", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("-", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("*", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("/", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("%", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("==", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("!=", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("<", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("<=", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE(">", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE(">=", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("&&", OPERATOR_LOGICAL, NONE, NONE, 0)
-DEF_TYPE("||", OPERATOR_LOGICAL, NONE, NONE, 0)
-DEF_TYPE("!", OPERATOR_LOGICAL, NONE, NONE, 0)
-
-// Go Keywords - proper semantic classifications instead of PARSER_CONSTRUCT
-DEF_TYPE("if", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("else", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("for", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("func", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("var", DEFINITION_VARIABLE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("const", DEFINITION_VARIABLE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("type", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("package", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("import", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("return", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("break", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("continue", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("go", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("defer", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("chan", TYPE_COMPOSITE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("select", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("case", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("default", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("switch", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("range", PATTERN_COLLECT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
-// Additional operators and symbols
-DEF_TYPE("&", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("++", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("--", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("<=", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE(">=", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("!=", OPERATOR_COMPARISON, NONE, NONE, 0)
-
-// Literals and constants
-DEF_TYPE("nil", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-
-// Type constructs
-DEF_TYPE("pointer_type", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("qualified_type", TYPE_REFERENCE, NONE, NONE, 0)
-
-// Complex constructs and statements
-DEF_TYPE("expression_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE("argument_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE("parameter_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE("parameter_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("field_declaration_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
-DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
-DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
-DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
-DEF_TYPE("assignment_statement", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
-DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
-DEF_TYPE("inc_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
-DEF_TYPE("literal_element", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
-DEF_TYPE("literal_value", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
-DEF_TYPE("composite_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
-DEF_TYPE("interpreted_string_literal_content", LITERAL_STRING, NONE, NONE, 0)
-
-// Control flow constructs
-DEF_TYPE("expression_case", FLOW_CONDITIONAL, NONE, NONE, 0)
-
-// Comments (mark as syntax to filter out by default)
-DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
-DEF_TYPE("line_comment", METADATA_COMMENT, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
-DEF_TYPE("block_comment", METADATA_COMMENT, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
-
-// Go perfection - remaining 2,505 unclassified nodes
-DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, 0)
-DEF_TYPE("for_clause", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("|", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("slice_type", TYPE_COMPOSITE, NONE, NONE, 0)
-DEF_TYPE("dec_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
-DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("type_conversion_expression", COMPUTATION_CALL, FIND_CALL_TARGET, FUNCTION_CALL, 0)
-DEF_TYPE("label_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("import_spec_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE("interface", TYPE_COMPOSITE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("struct", TYPE_COMPOSITE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("continue_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
-DEF_TYPE("parenthesized_type", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
-DEF_TYPE("goto_statement", FLOW_JUMP | SemanticRefinements::Jump::GOTO, NONE, NONE, 0)
-DEF_TYPE("goto", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("<<", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("default_case", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("function_type", TYPE_COMPOSITE, NONE, NONE, 0)
-DEF_TYPE("type_assertion_expression", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("labeled_statement", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("array_type", TYPE_COMPOSITE, NONE, NONE, 0)
-DEF_TYPE("var_spec_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE(">>", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("^", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("defer", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("chan", TYPE_COMPOSITE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("method_elem", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("&^=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("type_elem", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("variadic_parameter_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("type_instantiation_expression", TYPE_GENERIC, NONE, NONE, 0)
-DEF_TYPE("type_arguments", TYPE_GENERIC, NONE, NONE, 0)
-DEF_TYPE("iota", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("go", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("map_type", TYPE_COMPOSITE, NONE, NONE, 0)
-DEF_TYPE("map", TYPE_COMPOSITE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("dot", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE("...", PATTERN_COLLECT, NONE, NONE, 0)
-DEF_TYPE("generic_type", TYPE_GENERIC, NONE, NONE, 0)
-DEF_TYPE("expression_switch_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("&^", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("|=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+/** @} */
 
-// ==============================================================================
-// Parser-level semantic mappings only
-// Note: Go built-in function names (make, len, append, etc.) and library functions
-// (Map, Filter, Reduce, etc.) are removed since they're just identifiers - could be 
-// user-defined functions with different semantics
-// ==============================================================================
+// =============================================================================
+// ERROR RECOVERY
+// =============================================================================
 
-// Error handling
+/**
+ * @defgroup go_errors Parse Errors
+ * @brief Error nodes from failed parsing
+ * @{
+ */
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+/** @} */
