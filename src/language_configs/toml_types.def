@@ -1,60 +1,313 @@
-// TOML (Tom's Obvious Minimal Language) node type definitions
-// Used by Cargo.toml, pyproject.toml, Hugo, etc.
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file toml_types.def
+ * @brief TOML configuration format node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter TOML AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for TOML constructs.
+ *
+ * ## TOML Format Characteristics
+ *
+ * - **Configuration format**: Tom's Obvious Minimal Language
+ * - **Tables**: `[section]` for grouping key-value pairs
+ * - **Array tables**: `[[array]]` for repeated sections
+ * - **Key-value pairs**: `key = value`
+ * - **Dotted keys**: `parent.child = value`
+ * - **Inline tables**: `{key = value, ...}`
+ * - **Arrays**: `[value1, value2]`
+ * - **Date/time**: RFC 3339 format support
+ * - **Multi-line strings**: Triple-quoted `"""` and `'''`
+ * - **Comments**: `# comment` style
+ *
+ * Common uses:
+ * - Cargo.toml (Rust)
+ * - pyproject.toml (Python)
+ * - Hugo, Netlify, and other tools
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Document structure
+// ============================================================================
+// DOCUMENT STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup toml_document Document Structure
+ * @brief Top-level TOML document
+ * @{
+ */
+
+/// @brief Document - root TOML container
 DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Table definitions [section]
+/** @} */ // end toml_document
+
+// ============================================================================
+// TABLES
+// ============================================================================
+
+/**
+ * @defgroup toml_tables Table Definitions
+ * @brief TOML section groupings
+ *
+ * Table types:
+ * - Standard tables: `[section]`
+ * - Dotted tables: `[parent.child]`
+ * - Array tables: `[[array]]` for repeated sections
+ * @{
+ */
+
+/// @brief Table - `[section]`
 DEF_TYPE("table", DEFINITION_CLASS, CUSTOM, NONE, 0)
+
+/// @brief Array table element - `[[array]]`
 DEF_TYPE("table_array_element", DEFINITION_CLASS, CUSTOM, NONE, 0)
 
-// Key-value pairs
+/** @} */ // end toml_tables
+
+// ============================================================================
+// KEY-VALUE PAIRS
+// ============================================================================
+
+/**
+ * @defgroup toml_pairs Key-Value Pairs
+ * @brief TOML assignment syntax
+ *
+ * Key-value format:
+ * - Basic: `key = value`
+ * - Quoted: `"key" = value`
+ * - Dotted: `parent.child = value`
+ * @{
+ */
+
+/// @brief Key-value pair - `key = value`
 DEF_TYPE("pair", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
 
-// Key types
+/** @} */ // end toml_pairs
+
+// ============================================================================
+// KEY TYPES
+// ============================================================================
+
+/**
+ * @defgroup toml_keys Key Types
+ * @brief TOML key formats
+ *
+ * Key formats:
+ * - Bare keys: `key` (alphanumeric, `_`, `-`)
+ * - Quoted keys: `"key with spaces"`
+ * - Dotted keys: `parent.child.grandchild`
+ * @{
+ */
+
+/// @brief Bare key - unquoted identifier
 DEF_TYPE("bare_key", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Quoted key - `"key"` or `'key'`
 DEF_TYPE("quoted_key", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Dotted key - `parent.child`
 DEF_TYPE("dotted_key", NAME_IDENTIFIER, CUSTOM, NONE, 0)
 
-// Inline table { key = value }
+/** @} */ // end toml_keys
+
+// ============================================================================
+// COLLECTIONS
+// ============================================================================
+
+/**
+ * @defgroup toml_collections Collections
+ * @brief TOML inline structures
+ *
+ * Collection types:
+ * - Inline tables: `{key = value}`
+ * - Arrays: `[value1, value2]`
+ * @{
+ */
+
+/// @brief Inline table - `{key = value, ...}`
 DEF_TYPE("inline_table", LITERAL_STRUCTURED, NONE, NONE, 0)
 
-// Array [ values ]
+/// @brief Array - `[value, ...]`
 DEF_TYPE("array", LITERAL_STRUCTURED, NONE, NONE, 0)
 
-// Literal values
+/** @} */ // end toml_collections
+
+// ============================================================================
+// LITERAL VALUES
+// ============================================================================
+
+/**
+ * @defgroup toml_literals Literal Values
+ * @brief TOML primitive types
+ *
+ * TOML value types:
+ * - Strings: basic `"..."`, literal `'...'`
+ * - Integers: decimal, hex `0x`, octal `0o`, binary `0b`
+ * - Floats: `3.14`, `inf`, `nan`
+ * - Booleans: `true`, `false`
+ * @{
+ */
+
+/// @brief String literal - `"value"` or `'value'`
 DEF_TYPE("string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Integer literal - `42`, `0xFF`
 DEF_TYPE("integer", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief Float literal - `3.14`, `inf`
 DEF_TYPE("float", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean literal - `true`, `false`
 DEF_TYPE("boolean", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
-// Date/time types
+/** @} */ // end toml_literals
+
+// ============================================================================
+// DATE/TIME TYPES
+// ============================================================================
+
+/**
+ * @defgroup toml_datetime Date/Time Types
+ * @brief TOML temporal values (RFC 3339)
+ *
+ * Date/time formats:
+ * - Local date: `2024-01-15`
+ * - Local time: `14:30:00`
+ * - Local datetime: `2024-01-15T14:30:00`
+ * - Offset datetime: `2024-01-15T14:30:00-05:00`
+ * @{
+ */
+
+/// @brief Local date - `2024-01-15`
 DEF_TYPE("local_date", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Local time - `14:30:00`
 DEF_TYPE("local_time", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Local datetime - `2024-01-15T14:30:00`
 DEF_TYPE("local_date_time", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Offset datetime - `2024-01-15T14:30:00-05:00`
 DEF_TYPE("offset_date_time", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
-// String content
+/** @} */ // end toml_datetime
+
+// ============================================================================
+// STRING CONTENT
+// ============================================================================
+
+/**
+ * @defgroup toml_string_content String Content
+ * @brief String internals
+ * @{
+ */
+
+/// @brief Escape sequence - `\n`, `\t`, etc.
 DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
-// Comments
+/** @} */ // end toml_string_content
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup toml_comments Comments
+ * @brief TOML comment syntax
+ * @{
+ */
+
+/// @brief Comment - `# comment`
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
 
-// Punctuation
+/** @} */ // end toml_comments
+
+// ============================================================================
+// PUNCTUATION
+// ============================================================================
+
+/**
+ * @defgroup toml_punctuation Punctuation
+ * @brief TOML syntax tokens
+ * @{
+ */
+
+/// @brief Opening brace - inline table `{`
 DEF_TYPE("{", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Closing brace - inline table `}`
 DEF_TYPE("}", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Opening bracket - array or table `[`
 DEF_TYPE("[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Closing bracket - array or table `]`
 DEF_TYPE("]", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Double opening bracket - array table `[[`
 DEF_TYPE("[[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Double closing bracket - array table `]]`
 DEF_TYPE("]]", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Equals - assignment `=`
 DEF_TYPE("=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/// @brief Comma - element separator `,`
 DEF_TYPE(",", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Period - dotted key separator `.`
 DEF_TYPE(".", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Double quote - string delimiter `"`
 DEF_TYPE("\"", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Single quote - literal string delimiter `'`
 DEF_TYPE("'", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Triple double quote - multi-line string `"""`
 DEF_TYPE("\"\"\"", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Triple single quote - multi-line literal `'''`
 DEF_TYPE("'''", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 
-// Error handling
+/** @} */ // end toml_punctuation
+
+// ============================================================================
+// PARSER ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup toml_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end toml_parser_errors

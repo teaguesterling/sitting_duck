@@ -1,155 +1,670 @@
-// GraphQL node type definitions
-// For GraphQL schema and query language parsing
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, native_strategy, flags)
+/**
+ * @file graphql_types.def
+ * @brief GraphQL language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter GraphQL AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for GraphQL language constructs.
+ *
+ * ## GraphQL Language Characteristics
+ *
+ * - **Query language**: API query and schema definition
+ * - **Operations**: `query`, `mutation`, `subscription`
+ * - **Type system**: Strong typing with object, interface, union, enum, scalar
+ * - **Fragments**: Reusable field selections
+ * - **Directives**: `@directive(arg: value)` metadata
+ * - **Variables**: `$variableName: Type` parameters
+ * - **Arguments**: Named arguments on fields and directives
+ * - **Selection sets**: `{ field1 field2 }` field requests
+ * - **Descriptions**: Documentation strings (triple-quoted)
+ * - **Introspection**: Schema self-documentation
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Document structure
+// ============================================================================
+// DOCUMENT STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup gql_document Document Structure
+ * @brief Top-level GraphQL document
+ *
+ * GraphQL documents contain:
+ * - Executable definitions (operations, fragments)
+ * - Type system definitions (schema, types)
+ * - Type system extensions
+ * @{
+ */
+
+/// @brief Source file - root GraphQL file
 DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, 0)
+
+/// @brief Document - GraphQL document container
 DEF_TYPE("document", ORGANIZATION_CONTAINER, NONE, NONE, 0)
+
+/// @brief Definition - generic definition container
 DEF_TYPE("definition", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Executable definition - operation or fragment
 DEF_TYPE("executable_definition", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Type system definition - schema or type
 DEF_TYPE("type_system_definition", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Type system extension - extends existing types
 DEF_TYPE("type_system_extension", ORGANIZATION_BLOCK, NONE, NONE, 0)
 
-// Schema definition
+/** @} */ // end gql_document
+
+// ============================================================================
+// SCHEMA DEFINITION
+// ============================================================================
+
+/**
+ * @defgroup gql_schema Schema Definition
+ * @brief GraphQL schema constructs
+ *
+ * Schema syntax:
+ * - `schema { query: Query, mutation: Mutation }`
+ * @{
+ */
+
+/// @brief Schema definition - `schema { }`
 DEF_TYPE("schema_definition", DEFINITION_MODULE, NONE, NONE, 0)
+
+/// @brief Schema extension - `extend schema { }`
 DEF_TYPE("schema_extension", DEFINITION_MODULE, NONE, NONE, 0)
+
+/// @brief Root operation type - `query: Query`
 DEF_TYPE("root_operation_type_definition", DEFINITION_VARIABLE, NONE, NONE, 0)
 
-// Type definitions (like classes in GraphQL)
+/** @} */ // end gql_schema
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup gql_types Type Definitions
+ * @brief GraphQL type system
+ *
+ * Type kinds:
+ * - Object: `type Name { fields }`
+ * - Interface: `interface Name { fields }`
+ * - Union: `union Name = Type1 | Type2`
+ * - Enum: `enum Name { VALUE1 VALUE2 }`
+ * - Input: `input Name { fields }`
+ * - Scalar: `scalar Name`
+ * @{
+ */
+
+/// @brief Type definition container
 DEF_TYPE("type_definition", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Object type - `type Name { }`
 DEF_TYPE("object_type_definition", DEFINITION_CLASS, CUSTOM, NONE, 0)
+
+/// @brief Interface type - `interface Name { }`
 DEF_TYPE("interface_type_definition", DEFINITION_CLASS, CUSTOM, NONE, 0)
+
+/// @brief Union type - `union Name = A | B`
 DEF_TYPE("union_type_definition", DEFINITION_CLASS, CUSTOM, NONE, 0)
+
+/// @brief Enum type - `enum Name { }`
 DEF_TYPE("enum_type_definition", DEFINITION_CLASS, CUSTOM, NONE, 0)
+
+/// @brief Input object type - `input Name { }`
 DEF_TYPE("input_object_type_definition", DEFINITION_CLASS, CUSTOM, NONE, 0)
+
+/// @brief Scalar type - `scalar Name`
 DEF_TYPE("scalar_type_definition", DEFINITION_CLASS, CUSTOM, NONE, 0)
 
-// Type extensions
+/** @} */ // end gql_types
+
+// ============================================================================
+// TYPE EXTENSIONS
+// ============================================================================
+
+/**
+ * @defgroup gql_extensions Type Extensions
+ * @brief GraphQL type extensions
+ *
+ * Extension syntax:
+ * - `extend type Name { newFields }`
+ * @{
+ */
+
+/// @brief Type extension container
 DEF_TYPE("type_extension", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Object type extension
 DEF_TYPE("object_type_extension", DEFINITION_CLASS, CUSTOM, NONE, 0)
+
+/// @brief Interface type extension
 DEF_TYPE("interface_type_extension", DEFINITION_CLASS, CUSTOM, NONE, 0)
+
+/// @brief Union type extension
 DEF_TYPE("union_type_extension", DEFINITION_CLASS, CUSTOM, NONE, 0)
+
+/// @brief Enum type extension
 DEF_TYPE("enum_type_extension", DEFINITION_CLASS, CUSTOM, NONE, 0)
+
+/// @brief Input object type extension
 DEF_TYPE("input_object_type_extension", DEFINITION_CLASS, CUSTOM, NONE, 0)
+
+/// @brief Scalar type extension
 DEF_TYPE("scalar_type_extension", DEFINITION_CLASS, CUSTOM, NONE, 0)
 
-// Operations (query, mutation, subscription)
+/** @} */ // end gql_extensions
+
+// ============================================================================
+// OPERATIONS
+// ============================================================================
+
+/**
+ * @defgroup gql_operations Operations
+ * @brief GraphQL executable operations
+ *
+ * Operation types:
+ * - `query` - read operations
+ * - `mutation` - write operations
+ * - `subscription` - real-time updates
+ * @{
+ */
+
+/// @brief Operation definition - `query Name { }`
 DEF_TYPE("operation_definition", DEFINITION_FUNCTION, CUSTOM, NONE, 0)
+
+/// @brief Operation type - `query`, `mutation`, `subscription`
 DEF_TYPE("operation_type", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// Fragments
+/** @} */ // end gql_operations
+
+// ============================================================================
+// FRAGMENTS
+// ============================================================================
+
+/**
+ * @defgroup gql_fragments Fragments
+ * @brief GraphQL fragment definitions
+ *
+ * Fragment syntax:
+ * - Definition: `fragment Name on Type { fields }`
+ * - Spread: `...FragmentName`
+ * - Inline: `... on Type { fields }`
+ * @{
+ */
+
+/// @brief Fragment definition - `fragment Name on Type { }`
 DEF_TYPE("fragment_definition", DEFINITION_FUNCTION, CUSTOM, NONE, 0)
+
+/// @brief Fragment spread - `...FragmentName`
 DEF_TYPE("fragment_spread", COMPUTATION_CALL, CUSTOM, FUNCTION_CALL, 0)
+
+/// @brief Fragment name - identifier
 DEF_TYPE("fragment_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Inline fragment - `... on Type { }`
 DEF_TYPE("inline_fragment", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Type condition - `on TypeName`
 DEF_TYPE("type_condition", TYPE_REFERENCE, CUSTOM, NONE, 0)
 
-// Field definitions and fields
+/** @} */ // end gql_fragments
+
+// ============================================================================
+// FIELDS
+// ============================================================================
+
+/**
+ * @defgroup gql_fields Fields
+ * @brief GraphQL field definitions and selections
+ *
+ * Field syntax:
+ * - Definition: `fieldName: Type`
+ * - Selection: `fieldName` or `alias: fieldName(args)`
+ * @{
+ */
+
+/// @brief Fields definition - field list in type
 DEF_TYPE("fields_definition", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Field definition - `fieldName: Type`
 DEF_TYPE("field_definition", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
+
+/// @brief Field selection - field in query
 DEF_TYPE("field", COMPUTATION_ACCESS, CUSTOM, NONE, 0)
+
+/// @brief Alias - `aliasName: fieldName`
 DEF_TYPE("alias", NAME_IDENTIFIER, CUSTOM, NONE, 0)
+
+/// @brief Selection set - `{ field1 field2 }`
 DEF_TYPE("selection_set", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Selection - single selection
 DEF_TYPE("selection", ORGANIZATION_BLOCK, NONE, NONE, 0)
 
-// Enum definitions
+/** @} */ // end gql_fields
+
+// ============================================================================
+// ENUM DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup gql_enums Enum Definitions
+ * @brief GraphQL enum constructs
+ *
+ * Enum syntax:
+ * - `enum Status { ACTIVE INACTIVE }`
+ * @{
+ */
+
+/// @brief Enum values definition - value list
 DEF_TYPE("enum_values_definition", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Enum value definition - single value
 DEF_TYPE("enum_value_definition", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
+
+/// @brief Enum value - value reference
 DEF_TYPE("enum_value", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// Union members
+/** @} */ // end gql_enums
+
+// ============================================================================
+// UNION AND INTERFACE
+// ============================================================================
+
+/**
+ * @defgroup gql_union_interface Union and Interface
+ * @brief GraphQL union and interface constructs
+ * @{
+ */
+
+/// @brief Union member types - `= Type1 | Type2`
 DEF_TYPE("union_member_types", ORGANIZATION_LIST, NONE, NONE, 0)
 
-// Implements interfaces
+/// @brief Implements interfaces - `implements A & B`
 DEF_TYPE("implements_interfaces", ORGANIZATION_LIST, NONE, NONE, 0)
 
-// Input fields
+/** @} */ // end gql_union_interface
+
+// ============================================================================
+// INPUT FIELDS
+// ============================================================================
+
+/**
+ * @defgroup gql_input_fields Input Fields
+ * @brief GraphQL input object fields
+ * @{
+ */
+
+/// @brief Input fields definition - input type fields
 DEF_TYPE("input_fields_definition", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Input value definition - input field
 DEF_TYPE("input_value_definition", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
 
-// Arguments
+/** @} */ // end gql_input_fields
+
+// ============================================================================
+// ARGUMENTS
+// ============================================================================
+
+/**
+ * @defgroup gql_arguments Arguments
+ * @brief GraphQL argument constructs
+ *
+ * Argument syntax:
+ * - Definition: `(argName: Type = default)`
+ * - Usage: `(argName: value)`
+ * @{
+ */
+
+/// @brief Arguments definition - parameter list
 DEF_TYPE("arguments_definition", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Arguments - argument list at call site
 DEF_TYPE("arguments", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Argument - single argument
 DEF_TYPE("argument", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
 
-// Variables
+/** @} */ // end gql_arguments
+
+// ============================================================================
+// VARIABLES
+// ============================================================================
+
+/**
+ * @defgroup gql_variables Variables
+ * @brief GraphQL variable constructs
+ *
+ * Variable syntax:
+ * - Definition: `($varName: Type = default)`
+ * - Usage: `$varName`
+ * @{
+ */
+
+/// @brief Variable definitions - operation parameters
 DEF_TYPE("variable_definitions", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Variable definition - `$name: Type`
 DEF_TYPE("variable_definition", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
+
+/// @brief Variable reference - `$name`
 DEF_TYPE("variable", NAME_IDENTIFIER, CUSTOM, NONE, 0)
+
+/// @brief Default value - `= value`
 DEF_TYPE("default_value", LITERAL_ATOMIC, NONE, NONE, 0)
 
-// Directives (like decorators/annotations)
+/** @} */ // end gql_variables
+
+// ============================================================================
+// DIRECTIVES
+// ============================================================================
+
+/**
+ * @defgroup gql_directives Directives
+ * @brief GraphQL directive constructs
+ *
+ * Directive syntax:
+ * - Definition: `directive @name on LOCATION`
+ * - Usage: `@directive(arg: value)`
+ * @{
+ */
+
+/// @brief Directive definition - `directive @name`
 DEF_TYPE("directive_definition", DEFINITION_FUNCTION, CUSTOM, NONE, 0)
+
+/// @brief Directives list - applied directives
 DEF_TYPE("directives", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Directive usage - `@name(args)`
 DEF_TYPE("directive", METADATA_ANNOTATION, CUSTOM, NONE, 0)
+
+/// @brief Directive locations - valid locations
 DEF_TYPE("directive_locations", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Directive location - single location
 DEF_TYPE("directive_location", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Executable directive location - operation locations
 DEF_TYPE("executable_directive_location", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Type system directive location - schema locations
 DEF_TYPE("type_system_directive_location", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// Types
+/** @} */ // end gql_directives
+
+// ============================================================================
+// TYPE REFERENCES
+// ============================================================================
+
+/**
+ * @defgroup gql_type_refs Type References
+ * @brief GraphQL type reference constructs
+ *
+ * Type syntax:
+ * - Named: `TypeName`
+ * - List: `[TypeName]`
+ * - Non-null: `TypeName!`
+ * @{
+ */
+
+/// @brief Type reference container
 DEF_TYPE("type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Named type - `TypeName`
 DEF_TYPE("named_type", TYPE_PRIMITIVE, CUSTOM, NONE, 0)
+
+/// @brief List type - `[TypeName]`
 DEF_TYPE("list_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/// @brief Non-null type - `TypeName!`
 DEF_TYPE("non_null_type", TYPE_REFERENCE, NONE, NONE, 0)
 
-// Values
+/** @} */ // end gql_type_refs
+
+// ============================================================================
+// VALUES
+// ============================================================================
+
+/**
+ * @defgroup gql_values Values
+ * @brief GraphQL literal values
+ *
+ * Value types:
+ * - String, Int, Float
+ * - Boolean (`true`, `false`)
+ * - Null
+ * - Enum values
+ * - Lists, Objects
+ * @{
+ */
+
+/// @brief Value container
 DEF_TYPE("value", LITERAL_ATOMIC, NONE, NONE, 0)
+
+/// @brief String value - `"text"`
 DEF_TYPE("string_value", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Integer value - `42`
 DEF_TYPE("int_value", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief Float value - `3.14`
 DEF_TYPE("float_value", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean value - `true`, `false`
 DEF_TYPE("boolean_value", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Null value - `null`
 DEF_TYPE("null_value", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief List value - `[1, 2, 3]`
 DEF_TYPE("list_value", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Object value - `{key: value}`
 DEF_TYPE("object_value", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Object field - `key: value` in object
 DEF_TYPE("object_field", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
 
-// Names
+/** @} */ // end gql_values
+
+// ============================================================================
+// NAMES
+// ============================================================================
+
+/**
+ * @defgroup gql_names Names
+ * @brief GraphQL identifiers
+ * @{
+ */
+
+/// @brief Name - identifier token
 DEF_TYPE("name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// Description (documentation strings)
+/** @} */ // end gql_names
+
+// ============================================================================
+// DOCUMENTATION
+// ============================================================================
+
+/**
+ * @defgroup gql_docs Documentation
+ * @brief GraphQL documentation constructs
+ * @{
+ */
+
+/// @brief Description - triple-quoted doc string
 DEF_TYPE("description", METADATA_COMMENT, NONE, NONE, 0)
 
-// Comments
+/// @brief Comment - `# comment`
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
 
-// Punctuation
+/** @} */ // end gql_docs
+
+// ============================================================================
+// PUNCTUATION
+// ============================================================================
+
+/**
+ * @defgroup gql_punctuation Punctuation
+ * @brief GraphQL syntax tokens
+ * @{
+ */
+
+/// @brief Exclamation - non-null `!`
 DEF_TYPE("!", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Dollar - variable prefix `$`
 DEF_TYPE("$", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief At sign - directive prefix `@`
 DEF_TYPE("@", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Ampersand - interface separator `&`
 DEF_TYPE("&", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Pipe - union separator `|`
 DEF_TYPE("|", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Equals - default value `=`
 DEF_TYPE("=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/// @brief Colon - type separator `:`
 DEF_TYPE(":", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Spread - `...`
 DEF_TYPE("...", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Opening parenthesis - `(`
 DEF_TYPE("(", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Closing parenthesis - `)`
 DEF_TYPE(")", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Opening bracket - `[`
 DEF_TYPE("[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Closing bracket - `]`
 DEF_TYPE("]", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Opening brace - `{`
 DEF_TYPE("{", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Closing brace - `}`
 DEF_TYPE("}", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Comma - `,`
 DEF_TYPE(",", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 
-// Keywords
+/** @} */ // end gql_punctuation
+
+// ============================================================================
+// KEYWORDS
+// ============================================================================
+
+/**
+ * @defgroup gql_keywords Keywords
+ * @brief GraphQL reserved keywords
+ * @{
+ */
+
+/// @brief Query keyword
 DEF_TYPE("query", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Mutation keyword
 DEF_TYPE("mutation", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Subscription keyword
 DEF_TYPE("subscription", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Fragment keyword
 DEF_TYPE("fragment", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief On keyword - type condition
 DEF_TYPE("on", PARSER_SYNTAX, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Type keyword
 DEF_TYPE("type", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Interface keyword
 DEF_TYPE("interface", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Union keyword
 DEF_TYPE("union", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Enum keyword
 DEF_TYPE("enum", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Input keyword
 DEF_TYPE("input", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Scalar keyword
 DEF_TYPE("scalar", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Schema keyword
 DEF_TYPE("schema", DEFINITION_MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Extend keyword
 DEF_TYPE("extend", PARSER_SYNTAX, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Directive keyword
 DEF_TYPE("directive", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Implements keyword
 DEF_TYPE("implements", PARSER_SYNTAX, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Repeatable keyword
 DEF_TYPE("repeatable", PARSER_SYNTAX, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief True keyword
 DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief False keyword
 DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Null keyword
 DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Error handling
+/** @} */ // end gql_keywords
+
+// ============================================================================
+// PARSER ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup gql_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end gql_parser_errors

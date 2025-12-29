@@ -1,35 +1,208 @@
-// JSON language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file json_types.def
+ * @brief JSON data format node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter JSON AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for JSON constructs.
+ *
+ * ## JSON Format Characteristics
+ *
+ * - **Data interchange format**: Language-independent structured data
+ * - **Simple syntax**: Objects `{}`, arrays `[]`, primitives
+ * - **Key-value pairs**: `"key": value` within objects
+ * - **Strict formatting**: Double quotes required for strings/keys
+ * - **No comments**: Standard JSON has no comment syntax
+ * - **Primitive types**: string, number, boolean (`true`/`false`), `null`
+ * - **No trailing commas**: Strict comma placement rules
+ * - **Unicode support**: UTF-8 with escape sequences
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., LITERAL_STRUCTURED = 0x50)
+ * - Bits 1-0: Refinement within category
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Document structure
+// ============================================================================
+// DOCUMENT STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup json_document Document Structure
+ * @brief Top-level JSON document
+ *
+ * JSON document is the root container for all content.
+ * Valid JSON must have exactly one root value.
+ * @{
+ */
+
+/// @brief Document - root JSON container
 DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Object structure
+/** @} */ // end json_document
+
+// ============================================================================
+// OBJECT STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup json_objects Object Structure
+ * @brief JSON object constructs
+ *
+ * JSON objects:
+ * - Unordered key-value collections
+ * - Keys must be strings
+ * - `{ "key": value, "key2": value2 }`
+ * @{
+ */
+
+/// @brief Object - `{ key: value, ... }`
 DEF_TYPE("object", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Key-value pair - `"key": value`
 DEF_TYPE("pair", PATTERN_DESTRUCTURE, FIND_PROPERTY, NONE, 0)
 
-// Array structure  
+/** @} */ // end json_objects
+
+// ============================================================================
+// ARRAY STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup json_arrays Array Structure
+ * @brief JSON array constructs
+ *
+ * JSON arrays:
+ * - Ordered collections of values
+ * - Mixed types allowed
+ * - `[ value1, value2, value3 ]`
+ * @{
+ */
+
+/// @brief Array - `[ value, ... ]`
 DEF_TYPE("array", LITERAL_STRUCTURED, NONE, NONE, 0)
 
-// Literals and values
+/** @} */ // end json_arrays
+
+// ============================================================================
+// LITERALS AND VALUES
+// ============================================================================
+
+/**
+ * @defgroup json_literals Literals and Values
+ * @brief JSON primitive values
+ *
+ * JSON value types:
+ * - Strings: `"text"` (double quotes required)
+ * - Numbers: `42`, `3.14`, `-1e10`
+ * - Booleans: `true`, `false`
+ * - Null: `null`
+ * @{
+ */
+
+/// @brief String literal - `"text"`
 DEF_TYPE("string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Number literal - `42`, `3.14`, `-1e10`
 DEF_TYPE("number", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean true - `true`
 DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean false - `false`
 DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Null value - `null`
 DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
-// String content
+/** @} */ // end json_literals
+
+// ============================================================================
+// STRING CONTENT
+// ============================================================================
+
+/**
+ * @defgroup json_string_content String Content
+ * @brief String internals
+ *
+ * String components:
+ * - Content between quotes
+ * - Escape sequences: `\n`, `\t`, `\"`, `\\`, `\uXXXX`
+ * @{
+ */
+
+/// @brief String content - text inside quotes
 DEF_TYPE("string_content", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Escape sequence - `\n`, `\uXXXX`, etc.
 DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
-// Punctuation
+/** @} */ // end json_string_content
+
+// ============================================================================
+// PUNCTUATION
+// ============================================================================
+
+/**
+ * @defgroup json_punctuation Punctuation
+ * @brief JSON syntax tokens
+ * @{
+ */
+
+/// @brief Opening brace - `{`
 DEF_TYPE("{", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Closing brace - `}`
 DEF_TYPE("}", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Opening bracket - `[`
 DEF_TYPE("[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Closing bracket - `]`
 DEF_TYPE("]", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Colon - key-value separator `:`
 DEF_TYPE(":", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Comma - element separator `,`
 DEF_TYPE(",", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Double quote - string delimiter `"`
 DEF_TYPE("\"", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 
-// Error handling
+/** @} */ // end json_punctuation
+
+// ============================================================================
+// PARSER ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup json_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end json_parser_errors

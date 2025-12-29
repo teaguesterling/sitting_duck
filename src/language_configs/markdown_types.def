@@ -1,149 +1,613 @@
-// Markdown language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file markdown_types.def
+ * @brief Markdown document format node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter Markdown AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for Markdown constructs.
+ *
+ * ## Markdown Format Characteristics
+ *
+ * - **Lightweight markup**: Plain text with formatting syntax
+ * - **Headings**: ATX `# Heading` and Setext underline styles
+ * - **Emphasis**: `*italic*`, `**bold**`, `***both***`
+ * - **Lists**: Ordered `1.` and unordered `-`, `*`, `+`
+ * - **Code**: Inline `` `code` `` and fenced ``` blocks
+ * - **Links**: `[text](url)` and reference `[text][ref]`
+ * - **Images**: `![alt](url)`
+ * - **Block quotes**: `> quoted text`
+ * - **Tables**: GFM pipe tables
+ * - **Task lists**: GFM `- [ ]` and `- [x]`
+ * - **HTML**: Inline and block HTML allowed
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., ORGANIZATION_SECTION = 0x64)
+ * - Bits 1-0: Refinement within category
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Document structure
+// ============================================================================
+// DOCUMENT STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup md_document Document Structure
+ * @brief Top-level Markdown structure
+ * @{
+ */
+
+/// @brief Document - root Markdown container
 DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Section - logical document division
 DEF_TYPE("section", ORGANIZATION_SECTION, CUSTOM, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Paragraph - text block
 DEF_TYPE("paragraph", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Block quote - `> quoted text`
 DEF_TYPE("block_quote", ORGANIZATION_BLOCK, NONE, NONE, 0)
 
-// Headings
+/** @} */ // end md_document
+
+// ============================================================================
+// HEADINGS
+// ============================================================================
+
+/**
+ * @defgroup md_headings Headings
+ * @brief Markdown heading styles
+ *
+ * Heading types:
+ * - ATX: `# H1`, `## H2`, etc. (1-6 levels)
+ * - Setext: Underlined with `===` or `---`
+ * @{
+ */
+
+/// @brief ATX heading - `# Heading`
 DEF_TYPE("atx_heading", ORGANIZATION_SECTION, CUSTOM, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Setext heading - underlined style
 DEF_TYPE("setext_heading", ORGANIZATION_SECTION, CUSTOM, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Heading content - text of heading
 DEF_TYPE("heading_content", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// Lists
+/** @} */ // end md_headings
+
+// ============================================================================
+// LISTS
+// ============================================================================
+
+/**
+ * @defgroup md_lists Lists
+ * @brief Markdown list constructs
+ *
+ * List types:
+ * - Unordered: `-`, `*`, `+` markers
+ * - Ordered: `1.` or `1)` markers
+ * - Nested via indentation
+ * @{
+ */
+
+/// @brief Generic list container
 DEF_TYPE("list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief List item - single item in list
 DEF_TYPE("list_item", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Ordered list - `1.`, `2.`, etc.
 DEF_TYPE("ordered_list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Unordered list - `-`, `*`, `+`
 DEF_TYPE("unordered_list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief List marker - the bullet/number
 DEF_TYPE("list_marker", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 
-// Code
+/** @} */ // end md_lists
+
+// ============================================================================
+// CODE
+// ============================================================================
+
+/**
+ * @defgroup md_code Code Blocks
+ * @brief Markdown code constructs
+ *
+ * Code types:
+ * - Fenced: ``` with optional language
+ * - Indented: 4-space prefix
+ * - Inline: `` `code` ``
+ * @{
+ */
+
+/// @brief Code fence - ``` or ~~~
 DEF_TYPE("code_fence", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Fenced code block - ``` block
 DEF_TYPE("fenced_code_block", ORGANIZATION_BLOCK, CUSTOM, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Indented code block - 4-space indented
 DEF_TYPE("indented_code_block", ORGANIZATION_BLOCK, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Code span - inline `` `code` ``
 DEF_TYPE("code_span", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Info string - language after ```
 DEF_TYPE("info_string", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Language - extracted language name
 DEF_TYPE("language", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 
-// Links and references
+/** @} */ // end md_code
+
+// ============================================================================
+// LINKS AND REFERENCES
+// ============================================================================
+
+/**
+ * @defgroup md_links Links and References
+ * @brief Markdown link constructs
+ *
+ * Link types:
+ * - Inline: `[text](url "title")`
+ * - Reference: `[text][ref]`
+ * - Definition: `[ref]: url "title"`
+ * @{
+ */
+
+/// @brief Link - `[text](url)`
 DEF_TYPE("link", COMPUTATION_ACCESS, CUSTOM, CUSTOM, 0)
+
+/// @brief Image - `![alt](url)`
 DEF_TYPE("image", COMPUTATION_ACCESS, CUSTOM, CUSTOM, 0)
+
+/// @brief Link text - display text
 DEF_TYPE("link_text", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Link title - optional title
 DEF_TYPE("link_title", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Link destination - URL/path
 DEF_TYPE("link_destination", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Link reference definition - `[ref]: url`
 DEF_TYPE("link_reference_definition", DEFINITION_VARIABLE, CUSTOM, CUSTOM, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Link label - reference identifier
 DEF_TYPE("link_label", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// Inline elements
+/** @} */ // end md_links
+
+// ============================================================================
+// INLINE ELEMENTS
+// ============================================================================
+
+/**
+ * @defgroup md_inline Inline Elements
+ * @brief Markdown inline formatting
+ *
+ * Inline styles:
+ * - Emphasis: `*text*` or `_text_`
+ * - Strong: `**text**` or `__text__`
+ * - Code: `` `code` ``
+ * @{
+ */
+
+/// @brief Emphasis - `*italic*`
 DEF_TYPE("emphasis", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Strong emphasis - `**bold**`
 DEF_TYPE("strong_emphasis", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Text - plain text content
 DEF_TYPE("text", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Hard line break - trailing spaces or `\`
 DEF_TYPE("hard_line_break", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Soft line break - single newline
 DEF_TYPE("soft_line_break", PARSER_DELIMITER, NONE, NONE, 0)
 
-// Tables (GFM extension)
+/** @} */ // end md_inline
+
+// ============================================================================
+// TABLES (GFM)
+// ============================================================================
+
+/**
+ * @defgroup md_tables Tables
+ * @brief GitHub Flavored Markdown tables
+ *
+ * Table syntax:
+ * ```
+ * | Header | Header |
+ * |--------|--------|
+ * | Cell   | Cell   |
+ * ```
+ * @{
+ */
+
+/// @brief Table container
 DEF_TYPE("table", ORGANIZATION_CONTAINER, NONE, NONE, 0)
+
+/// @brief Table header row
 DEF_TYPE("table_header", ORGANIZATION_SECTION, NONE, NONE, 0)
+
+/// @brief Table data row
 DEF_TYPE("table_row", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Table cell content
 DEF_TYPE("table_cell", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Table delimiter row - `|---|---|`
 DEF_TYPE("table_delimiter_row", PARSER_DELIMITER, NONE, NONE, 0)
 
+/** @} */ // end md_tables
+
+// ============================================================================
 // HTML
+// ============================================================================
+
+/**
+ * @defgroup md_html HTML Content
+ * @brief Embedded HTML in Markdown
+ * @{
+ */
+
+/// @brief HTML block - standalone HTML
 DEF_TYPE("html_block", EXTERNAL_EMBED, NODE_TEXT, NONE, 0)
+
+/// @brief HTML inline - inline HTML tags
 DEF_TYPE("html_inline", EXTERNAL_EMBED, NODE_TEXT, NONE, 0)
 
-// Metadata
+/** @} */ // end md_html
+
+// ============================================================================
+// METADATA
+// ============================================================================
+
+/**
+ * @defgroup md_metadata Metadata
+ * @brief Document metadata and structure
+ * @{
+ */
+
+/// @brief Frontmatter - YAML/TOML metadata block
 DEF_TYPE("frontmatter", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Thematic break - `---`, `***`, `___`
 DEF_TYPE("thematic_break", PARSER_DELIMITER, NONE, NONE, 0)
 
-// ====================================
-// MISSING MARKDOWN CONSTRUCTS - Based on analysis of 98k unclassified nodes
-// ====================================
+/** @} */ // end md_metadata
 
-// Punctuation and delimiters - majority of unclassified nodes
+// ============================================================================
+// PUNCTUATION AND DELIMITERS
+// ============================================================================
+
+/**
+ * @defgroup md_punctuation Punctuation and Delimiters
+ * @brief Markdown syntax tokens
+ * @{
+ */
+
+/// @brief Forward slash - `/`
 DEF_TYPE("/", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Dash/minus - `-`
 DEF_TYPE("-", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Underscore - `_`
 DEF_TYPE("_", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Period - `.`
 DEF_TYPE(".", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Asterisk - `*`
 DEF_TYPE("*", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Comma - `,`
 DEF_TYPE(",", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Backtick - `` ` ``
 DEF_TYPE("`", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Closing parenthesis - `)`
 DEF_TYPE(")", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Opening parenthesis - `(`
 DEF_TYPE("(", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Colon - `:`
 DEF_TYPE(":", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Equals - `=`
 DEF_TYPE("=", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Single quote - `'`
 DEF_TYPE("'", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Opening bracket - `[`
 DEF_TYPE("[", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Closing bracket - `]`
 DEF_TYPE("]", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Double quote - `"`
 DEF_TYPE("\"", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Semicolon - `;`
 DEF_TYPE(";", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Hash - `#`
 DEF_TYPE("#", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Plus - `+`
 DEF_TYPE("+", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Greater than - `>`
 DEF_TYPE(">", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Less than - `<`
 DEF_TYPE("<", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Pipe - `|`
 DEF_TYPE("|", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Exclamation - `!`
 DEF_TYPE("!", PARSER_PUNCTUATION, NONE, NONE, 0)
 
-// Markdown-specific constructs
+/** @} */ // end md_punctuation
+
+// ============================================================================
+// MARKDOWN-SPECIFIC CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup md_specific Markdown-Specific Constructs
+ * @brief Markdown structural elements
+ * @{
+ */
+
+/// @brief Block continuation - continued block
 DEF_TYPE("block_continuation", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Inline content - inline text run
 DEF_TYPE("inline", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief List marker minus - `-`
 DEF_TYPE("list_marker_minus", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Fenced code block delimiter - ``` or ~~~
 DEF_TYPE("fenced_code_block_delimiter", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief List marker plus - `+`
 DEF_TYPE("list_marker_plus", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief List marker star - `*`
 DEF_TYPE("list_marker_star", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief List marker dot - ordered list dot
 DEF_TYPE("list_marker_dot", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief List marker parenthesis - ordered list paren
 DEF_TYPE("list_marker_parenthesis", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Emphasis delimiter - `*` or `_`
 DEF_TYPE("emphasis_delimiter", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Strong emphasis delimiter - `**` or `__`
 DEF_TYPE("strong_emphasis_delimiter", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Code fence content - code inside fence
 DEF_TYPE("code_fence_content", LITERAL_STRING, NONE, NONE, 0)
+
+/// @brief Backslash escape - `\*`
 DEF_TYPE("backslash_escape", LITERAL_STRING, NONE, NONE, 0)
+
+/// @brief Entity reference - `&nbsp;`
 DEF_TYPE("entity_reference", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Numeric character reference - `&#160;`
 DEF_TYPE("numeric_character_reference", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
-// Table delimiters and structure  
+/** @} */ // end md_specific
+
+// ============================================================================
+// PIPE TABLES
+// ============================================================================
+
+/**
+ * @defgroup md_pipe_tables Pipe Tables
+ * @brief GFM pipe table constructs
+ * @{
+ */
+
+/// @brief Pipe table header row
 DEF_TYPE("pipe_table_header", ORGANIZATION_SECTION, NONE, NONE, 0)
+
+/// @brief Pipe table data row
 DEF_TYPE("pipe_table_row", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Pipe table delimiter row
 DEF_TYPE("pipe_table_delimiter_row", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Pipe table cell content
 DEF_TYPE("pipe_table_cell", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
-// Task lists (GFM extension)
+/** @} */ // end md_pipe_tables
+
+// ============================================================================
+// TASK LISTS (GFM)
+// ============================================================================
+
+/**
+ * @defgroup md_task_lists Task Lists
+ * @brief GitHub Flavored Markdown task lists
+ *
+ * Task list syntax:
+ * - `- [ ]` unchecked
+ * - `- [x]` checked
+ * @{
+ */
+
+/// @brief Task list marker checked - `[x]`
 DEF_TYPE("task_list_marker_checked", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Task list marker unchecked - `[ ]`
 DEF_TYPE("task_list_marker_unchecked", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 
-// Strikethrough (GFM extension)
+/** @} */ // end md_task_lists
+
+// ============================================================================
+// STRIKETHROUGH (GFM)
+// ============================================================================
+
+/**
+ * @defgroup md_strikethrough Strikethrough
+ * @brief GFM strikethrough syntax
+ * @{
+ */
+
+/// @brief Strikethrough - `~~text~~`
 DEF_TYPE("strikethrough", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Strikethrough delimiter - `~~`
 DEF_TYPE("strikethrough_delimiter", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 
-// Autolinks
+/** @} */ // end md_strikethrough
+
+// ============================================================================
+// AUTOLINKS
+// ============================================================================
+
+/**
+ * @defgroup md_autolinks Autolinks
+ * @brief Automatic link detection
+ * @{
+ */
+
+/// @brief URI autolink - `<https://example.com>`
 DEF_TYPE("uri_autolink", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)
+
+/// @brief Email autolink - `<email@example.com>`
 DEF_TYPE("email_autolink", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)
 
-// Markdown perfection - remaining 4,037 unclassified nodes
+/** @} */ // end md_autolinks
+
+// ============================================================================
+// HEADING MARKERS
+// ============================================================================
+
+/**
+ * @defgroup md_heading_markers Heading Markers
+ * @brief ATX and Setext heading markers
+ * @{
+ */
+
+/// @brief ATX H3 marker - `###`
 DEF_TYPE("atx_h3_marker", ORGANIZATION_SECTION, NODE_TEXT, NONE, 0)
+
+/// @brief ATX H2 marker - `##`
 DEF_TYPE("atx_h2_marker", ORGANIZATION_SECTION, NODE_TEXT, NONE, 0)
+
+/// @brief Opening brace - `{`
 DEF_TYPE("{", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Closing brace - `}`
 DEF_TYPE("}", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Ampersand - `&`
 DEF_TYPE("&", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Percent - `%`
 DEF_TYPE("%", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Dollar - `$`
 DEF_TYPE("$", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief ATX H1 marker - `#`
 DEF_TYPE("atx_h1_marker", ORGANIZATION_SECTION, NODE_TEXT, NONE, 0)
+
+/// @brief Question mark - `?`
 DEF_TYPE("?", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief At sign - `@`
 DEF_TYPE("@", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Pipe table delimiter cell - `---`
 DEF_TYPE("pipe_table_delimiter_cell", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief ATX H4 marker - `####`
 DEF_TYPE("atx_h4_marker", ORGANIZATION_SECTION, NODE_TEXT, NONE, 0)
+
+/// @brief Backslash - `\`
 DEF_TYPE("\\", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Tilde - `~`
 DEF_TYPE("~", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Pipe table container
 DEF_TYPE("pipe_table", ORGANIZATION_CONTAINER, NONE, NONE, 0)
+
+/// @brief Caret - `^`
 DEF_TYPE("^", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Pipe table align left - `:---`
 DEF_TYPE("pipe_table_align_left", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Block quote marker - `>`
 DEF_TYPE("block_quote_marker", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief HTML comment end - `-->`
 DEF_TYPE("-->", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Pipe table align right - `---:`
 DEF_TYPE("pipe_table_align_right", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Minus metadata - frontmatter delimiter
 DEF_TYPE("minus_metadata", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Setext H1 underline - `===`
 DEF_TYPE("setext_h1_underline", ORGANIZATION_SECTION, NODE_TEXT, NONE, 0)
+
+/// @brief ATX H5 marker - `#####`
 DEF_TYPE("atx_h5_marker", ORGANIZATION_SECTION, NODE_TEXT, NONE, 0)
 
-// Error handling
+/** @} */ // end md_heading_markers
+
+// ============================================================================
+// PARSER ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup md_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end md_parser_errors

@@ -1,148 +1,669 @@
-// HCL (HashiCorp Configuration Language) node type definitions
-// Used by Terraform, Vault, Nomad, Waypoint, etc.
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, native_strategy, flags)
+/**
+ * @file hcl_types.def
+ * @brief HCL (HashiCorp Configuration Language) node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter HCL AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for HCL language constructs.
+ *
+ * ## HCL Language Characteristics
+ *
+ * - **Infrastructure as Code**: Declarative configuration language
+ * - **Blocks**: Named blocks with labels `resource "type" "name" { }`
+ * - **Attributes**: Key-value assignments `name = value`
+ * - **Expressions**: Rich expression syntax with functions
+ * - **Variables**: `var.name` references
+ * - **String templates**: `${expression}` interpolation
+ * - **For expressions**: List/map comprehensions
+ * - **Splat expressions**: `[*]` and `.*` syntax
+ * - **Conditionals**: `condition ? true : false`
+ * - **Heredocs**: Multi-line strings with `<<EOF`
+ *
+ * Used by:
+ * - Terraform (infrastructure)
+ * - Vault (secrets)
+ * - Nomad (orchestration)
+ * - Waypoint (deployment)
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Document structure
+// ============================================================================
+// DOCUMENT STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup hcl_document Document Structure
+ * @brief Top-level HCL structure
+ * @{
+ */
+
+/// @brief Config file - root HCL container
 DEF_TYPE("config_file", DEFINITION_MODULE, NONE, NONE, 0)
+
+/// @brief Body - content container within blocks
 DEF_TYPE("body", ORGANIZATION_BLOCK, NONE, NONE, 0)
 
-// Block definitions (resource, variable, output, etc.)
+/** @} */ // end hcl_document
+
+// ============================================================================
+// BLOCKS
+// ============================================================================
+
+/**
+ * @defgroup hcl_blocks Block Definitions
+ * @brief HCL block constructs
+ *
+ * Block syntax:
+ * - `resource "type" "name" { body }`
+ * - `variable "name" { }`
+ * - `output "name" { }`
+ * - `provider "name" { }`
+ * @{
+ */
+
+/// @brief Block - named block `type "label" { }`
 DEF_TYPE("block", DEFINITION_CLASS, CUSTOM, NONE, 0)
+
+/// @brief Block start - opening delimiter
 DEF_TYPE("block_start", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Block end - closing delimiter
 DEF_TYPE("block_end", PARSER_DELIMITER, NONE, NONE, 0)
 
-// Attributes (key = value pairs)
+/** @} */ // end hcl_blocks
+
+// ============================================================================
+// ATTRIBUTES
+// ============================================================================
+
+/**
+ * @defgroup hcl_attributes Attributes
+ * @brief HCL key-value assignments
+ *
+ * Attribute syntax:
+ * - `name = value`
+ * - `name = expression`
+ * @{
+ */
+
+/// @brief Attribute - `name = value`
 DEF_TYPE("attribute", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
 
-// Expressions
+/** @} */ // end hcl_attributes
+
+// ============================================================================
+// EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup hcl_expressions Expressions
+ * @brief HCL expression constructs
+ *
+ * Expression types:
+ * - Literals, references, function calls
+ * - Binary and unary operations
+ * - Conditionals: `cond ? a : b`
+ * @{
+ */
+
+/// @brief Expression container
 DEF_TYPE("expression", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Conditional - `cond ? true_val : false_val`
 DEF_TYPE("conditional", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Generic operation
 DEF_TYPE("operation", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+
+/// @brief Binary operation - `a + b`, `a && b`
 DEF_TYPE("binary_operation", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+
+/// @brief Unary operation - `!a`, `-a`
 DEF_TYPE("unary_operation", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 
-// Variable and function references
+/** @} */ // end hcl_expressions
+
+// ============================================================================
+// VARIABLE AND FUNCTION REFERENCES
+// ============================================================================
+
+/**
+ * @defgroup hcl_references Variable and Function References
+ * @brief HCL reference constructs
+ *
+ * Reference types:
+ * - Variables: `var.name`
+ * - Functions: `function(args)`
+ * - Attributes: `resource.name.attr`
+ * - Indexes: `list[0]`
+ * @{
+ */
+
+/// @brief Variable expression - `var.name`
 DEF_TYPE("variable_expr", NAME_IDENTIFIER, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Function call - `function(args)`
 DEF_TYPE("function_call", COMPUTATION_CALL, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Function arguments - argument list
 DEF_TYPE("function_arguments", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Get attribute - `.attribute`
 DEF_TYPE("get_attr", COMPUTATION_ACCESS, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Index access - `[index]`
 DEF_TYPE("index", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief New-style index - modern syntax
 DEF_TYPE("new_index", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Legacy index - older syntax
 DEF_TYPE("legacy_index", COMPUTATION_ACCESS, NONE, NONE, 0)
 
-// Identifiers
+/** @} */ // end hcl_references
+
+// ============================================================================
+// IDENTIFIERS
+// ============================================================================
+
+/**
+ * @defgroup hcl_identifiers Identifiers
+ * @brief HCL name tokens
+ * @{
+ */
+
+/// @brief Identifier - name token
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// Literals
+/** @} */ // end hcl_identifiers
+
+// ============================================================================
+// LITERALS
+// ============================================================================
+
+/**
+ * @defgroup hcl_literals Literals
+ * @brief HCL literal values
+ *
+ * Literal types:
+ * - Numbers: `42`, `3.14`
+ * - Strings: `"text"`
+ * - Booleans: `true`, `false`
+ * - Null: `null`
+ * @{
+ */
+
+/// @brief Literal value container
 DEF_TYPE("literal_value", LITERAL_ATOMIC, NONE, NONE, 0)
+
+/// @brief Numeric literal - `42`, `3.14`
 DEF_TYPE("numeric_lit", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief String literal - `"text"`
 DEF_TYPE("string_lit", LITERAL_STRING, NONE, NONE, 0)
+
+/// @brief Boolean literal - `true`, `false`
 DEF_TYPE("bool_lit", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Null literal - `null`
 DEF_TYPE("null_lit", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean true - `true`
 DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean false - `false`
 DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
-// Collection types
+/** @} */ // end hcl_literals
+
+// ============================================================================
+// COLLECTION TYPES
+// ============================================================================
+
+/**
+ * @defgroup hcl_collections Collection Types
+ * @brief HCL collection values
+ *
+ * Collection types:
+ * - Objects: `{ key = value }`
+ * - Tuples: `[value1, value2]`
+ * @{
+ */
+
+/// @brief Collection value container
 DEF_TYPE("collection_value", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Object - `{ key = value }`
 DEF_TYPE("object", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Object element - `key = value`
 DEF_TYPE("object_elem", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Object start - `{`
 DEF_TYPE("object_start", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Object end - `}`
 DEF_TYPE("object_end", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Tuple - `[value, ...]`
 DEF_TYPE("tuple", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Tuple start - `[`
 DEF_TYPE("tuple_start", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Tuple end - `]`
 DEF_TYPE("tuple_end", PARSER_DELIMITER, NONE, NONE, 0)
 
-// For expressions (list/map comprehensions)
+/** @} */ // end hcl_collections
+
+// ============================================================================
+// FOR EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup hcl_for For Expressions
+ * @brief HCL comprehension syntax
+ *
+ * For expression syntax:
+ * - Tuple: `[for x in list : x * 2]`
+ * - Object: `{for k, v in map : k => v}`
+ * - With filter: `[for x in list : x if x > 0]`
+ * @{
+ */
+
+/// @brief For expression container
 DEF_TYPE("for_expr", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief For tuple expression - `[for ...]`
 DEF_TYPE("for_tuple_expr", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief For object expression - `{for ...}`
 DEF_TYPE("for_object_expr", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief For intro - `for x in list`
 DEF_TYPE("for_intro", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief For condition - `if condition`
 DEF_TYPE("for_cond", FLOW_CONDITIONAL, NONE, NONE, 0)
 
-// Splat expressions
+/** @} */ // end hcl_for
+
+// ============================================================================
+// SPLAT EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup hcl_splat Splat Expressions
+ * @brief HCL splat syntax
+ *
+ * Splat types:
+ * - Attribute: `list.*.attr`
+ * - Full: `list[*].attr`
+ * @{
+ */
+
+/// @brief Splat expression container
 DEF_TYPE("splat", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Attribute splat - `.*`
 DEF_TYPE("attr_splat", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Full splat - `[*]`
 DEF_TYPE("full_splat", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Ellipsis - `...`
 DEF_TYPE("ellipsis", PARSER_SYNTAX, NONE, NONE, 0)
 
-// Template expressions (string interpolation)
+/** @} */ // end hcl_splat
+
+// ============================================================================
+// TEMPLATE EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup hcl_templates Template Expressions
+ * @brief HCL string interpolation
+ *
+ * Template syntax:
+ * - Interpolation: `${expression}`
+ * - Directive: `%{if cond}...%{endif}`
+ * @{
+ */
+
+/// @brief Template expression container
 DEF_TYPE("template_expr", LITERAL_STRING, NONE, NONE, 0)
+
+/// @brief Quoted template - `"...${...}..."`
 DEF_TYPE("quoted_template", LITERAL_STRING, NONE, NONE, 0)
+
+/// @brief Quoted template start - opening `"`
 DEF_TYPE("quoted_template_start", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Quoted template end - closing `"`
 DEF_TYPE("quoted_template_end", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Template literal - static text
 DEF_TYPE("template_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Template interpolation - `${expr}`
 DEF_TYPE("template_interpolation", COMPUTATION_CALL, NONE, NONE, 0)
+
+/// @brief Interpolation start - `${`
 DEF_TYPE("template_interpolation_start", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Interpolation end - `}`
 DEF_TYPE("template_interpolation_end", PARSER_DELIMITER, NONE, NONE, 0)
 
-// Template directives (control flow in templates)
+/** @} */ // end hcl_templates
+
+// ============================================================================
+// TEMPLATE DIRECTIVES
+// ============================================================================
+
+/**
+ * @defgroup hcl_template_directives Template Directives
+ * @brief HCL template control flow
+ *
+ * Directive syntax:
+ * - If: `%{if cond}...%{else}...%{endif}`
+ * - For: `%{for x in list}...%{endfor}`
+ * @{
+ */
+
+/// @brief Template directive container
 DEF_TYPE("template_directive", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Template directive start - `%{`
 DEF_TYPE("template_directive_start", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Template directive end - `}`
 DEF_TYPE("template_directive_end", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Template if block
 DEF_TYPE("template_if", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Template if intro - `%{if cond}`
 DEF_TYPE("template_if_intro", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Template if end - `%{endif}`
 DEF_TYPE("template_if_end", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Template else - `%{else}`
 DEF_TYPE("template_else_intro", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Template for block
 DEF_TYPE("template_for", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief Template for start - `%{for ...}`
 DEF_TYPE("template_for_start", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief Template for end - `%{endfor}`
 DEF_TYPE("template_for_end", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief Strip marker - `~`
 DEF_TYPE("strip_marker", PARSER_SYNTAX, NONE, NONE, 0)
 
-// Heredoc templates
+/** @} */ // end hcl_template_directives
+
+// ============================================================================
+// HEREDOCS
+// ============================================================================
+
+/**
+ * @defgroup hcl_heredocs Heredocs
+ * @brief HCL heredoc strings
+ *
+ * Heredoc syntax:
+ * - Standard: `<<EOF ... EOF`
+ * - Indented: `<<-EOF ... EOF`
+ * @{
+ */
+
+/// @brief Heredoc template - `<<EOF ... EOF`
 DEF_TYPE("heredoc_template", LITERAL_STRING, NONE, NONE, 0)
+
+/// @brief Heredoc start - `<<` or `<<-`
 DEF_TYPE("heredoc_start", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Heredoc identifier - terminator name
 DEF_TYPE("heredoc_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// Comments
+/** @} */ // end hcl_heredocs
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup hcl_comments Comments
+ * @brief HCL comment syntax
+ *
+ * Comment styles:
+ * - Line: `# comment` or `// comment`
+ * - Block: `/* comment */`
+ * @{
+ */
+
+/// @brief Comment
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
 
-// Operators - arithmetic
+/** @} */ // end hcl_comments
+
+// ============================================================================
+// ARITHMETIC OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup hcl_arithmetic Arithmetic Operators
+ * @brief HCL arithmetic operator tokens
+ * @{
+ */
+
+/// @brief Plus - `+`
 DEF_TYPE("+", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Minus - `-`
 DEF_TYPE("-", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Multiply - `*`
 DEF_TYPE("*", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Divide - `/`
 DEF_TYPE("/", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Modulo - `%`
 DEF_TYPE("%", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 
-// Operators - comparison
+/** @} */ // end hcl_arithmetic
+
+// ============================================================================
+// COMPARISON OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup hcl_comparison Comparison Operators
+ * @brief HCL comparison operator tokens
+ * @{
+ */
+
+/// @brief Equals - `==`
 DEF_TYPE("==", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/// @brief Not equals - `!=`
 DEF_TYPE("!=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/// @brief Less than - `<`
 DEF_TYPE("<", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/// @brief Greater than - `>`
 DEF_TYPE(">", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/// @brief Less than or equal - `<=`
 DEF_TYPE("<=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/// @brief Greater than or equal - `>=`
 DEF_TYPE(">=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 
-// Operators - logical
+/** @} */ // end hcl_comparison
+
+// ============================================================================
+// LOGICAL OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup hcl_logical Logical Operators
+ * @brief HCL logical operator tokens
+ * @{
+ */
+
+/// @brief Logical and - `&&`
 DEF_TYPE("&&", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief Logical or - `||`
 DEF_TYPE("||", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief Logical not - `!`
 DEF_TYPE("!", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
 
-// Assignment and arrow
+/** @} */ // end hcl_logical
+
+// ============================================================================
+// ASSIGNMENT OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup hcl_assignment Assignment Operators
+ * @brief HCL assignment operator tokens
+ * @{
+ */
+
+/// @brief Assignment - `=`
 DEF_TYPE("=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/// @brief Fat arrow - `=>`
 DEF_TYPE("=>", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
 
-// Punctuation
+/** @} */ // end hcl_assignment
+
+// ============================================================================
+// PUNCTUATION
+// ============================================================================
+
+/**
+ * @defgroup hcl_punctuation Punctuation
+ * @brief HCL syntax tokens
+ * @{
+ */
+
+/// @brief Opening parenthesis - `(`
 DEF_TYPE("(", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Closing parenthesis - `)`
 DEF_TYPE(")", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Opening bracket - `[`
 DEF_TYPE("[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Closing bracket - `]`
 DEF_TYPE("]", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Opening brace - `{`
 DEF_TYPE("{", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Closing brace - `}`
 DEF_TYPE("}", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Comma - `,`
 DEF_TYPE(",", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Colon - `:`
 DEF_TYPE(":", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Period - `.`
 DEF_TYPE(".", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Question mark - `?`
 DEF_TYPE("?", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Attribute splat - `.*`
 DEF_TYPE(".*", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Full splat - `[*]`
 DEF_TYPE("[*]", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Heredoc standard - `<<`
 DEF_TYPE("<<", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Heredoc indented - `<<-`
 DEF_TYPE("<<-", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 
-// Keywords
+/** @} */ // end hcl_punctuation
+
+// ============================================================================
+// KEYWORDS
+// ============================================================================
+
+/**
+ * @defgroup hcl_keywords Keywords
+ * @brief HCL reserved keywords
+ * @{
+ */
+
+/// @brief For keyword - `for`
 DEF_TYPE("for", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief In keyword - `in`
 DEF_TYPE("in", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief If keyword - `if`
 DEF_TYPE("if", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Else keyword - `else`
 DEF_TYPE("else", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Endif keyword - `endif`
 DEF_TYPE("endif", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Endfor keyword - `endfor`
 DEF_TYPE("endfor", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Error handling
+/** @} */ // end hcl_keywords
+
+// ============================================================================
+// PARSER ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup hcl_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end hcl_parser_errors
