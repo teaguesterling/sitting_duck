@@ -1,128 +1,496 @@
-// Rust language node type definitions
-// Format: DEF_TYPE("raw_type", semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file rust_types.def
+ * @brief Rust language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter Rust AST nodes are mapped to
+ * universal semantic types, along with strategies for extracting names and
+ * native context from the parse tree.
+ *
+ * ## DEF_TYPE Macro Format
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * @param raw_type The tree-sitter node type string (e.g., "function_item")
+ * @param semantic_type Universal semantic classification with optional refinement bits
+ * @param name_extraction Strategy for extracting the node's name (see ExtractionStrategy)
+ * @param native_extraction Strategy for rich context extraction (see NativeExtractionStrategy)
+ * @param flags Behavioral flags (e.g., IS_KEYWORD, IS_SYNTAX_ONLY)
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types are 8-bit values where:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_FUNCTION = 0x04)
+ * - Bits 1-0: Refinement within category (e.g., Function::LAMBDA = 0x01)
+ *
+ * Combined using bitwise OR:
+ * ```cpp
+ * DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA  // = 0x05
+ * ```
+ *
+ * ## Rust Language Characteristics
+ *
+ * Rust has several unique features that affect AST mapping:
+ *
+ * - **Ownership system**: Variables are immutable by default; `mut` keyword for mutability
+ * - **Pattern matching**: First-class `match` expressions with exhaustive checking
+ * - **Traits**: Abstract interfaces similar to interfaces/protocols, use ABSTRACT refinement
+ * - **Impl blocks**: Separate from struct/enum definitions, implement methods or traits
+ * - **Closures**: Use `|args|` syntax, capture environment by reference or move
+ * - **Macros**: Both declarative (`macro_rules!`) and procedural macros
+ * - **Lifetimes**: Explicit lifetime annotations in generics (`'a`, `'static`)
+ * - **Unsafe**: Blocks that opt out of safety guarantees
+ * - **Async/await**: First-class async support with futures
+ * - **Visibility**: `pub` modifier with optional scope (`pub(crate)`, `pub(super)`)
+ *
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy definitions
+ * @see semantic_types.hpp for full semantic type enumeration
+ */
 
-// Source file and modules
+// =============================================================================
+// MODULES AND CRATES
+// =============================================================================
+
+/**
+ * @defgroup rust_modules Modules and Crates
+ * @brief Module structure and external crate declarations
+ *
+ * Rust organizes code into modules (`mod`) and external crates. The `source_file`
+ * is the root module. The `use` declaration imports items from other modules
+ * with various patterns (simple, wildcard, aliased).
+ *
+ * Import refinements:
+ * - MODULE: Full crate/module import
+ * - SELECTIVE: Specific items via `use_as_clause`
+ * - WILDCARD: Glob imports via `use_wildcard`
+ * @{
+ */
 DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("mod_item", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("use_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("extern_crate_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
-DEF_TYPE("crate", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("use_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("use_as_clause", EXTERNAL_IMPORT | SemanticRefinements::Import::SELECTIVE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("use_wildcard", EXTERNAL_IMPORT | SemanticRefinements::Import::WILDCARD, NODE_TEXT, NONE, 0)
+/** @} */
 
-// Function definitions - Rust functions always have bodies
+// =============================================================================
+// FUNCTION DEFINITIONS
+// =============================================================================
+
+/**
+ * @defgroup rust_functions Function Definitions
+ * @brief Functions, closures, and function signatures
+ *
+ * Rust functions use `fn` keyword and always have bodies (except in trait definitions).
+ * Closures use `|params|` syntax and can capture their environment.
+ *
+ * Function refinements:
+ * - REGULAR: Named functions defined with `fn`
+ * - LAMBDA: Closures/anonymous functions with `|params|`
+ *
+ * Note: `function_signature_item` appears in trait definitions without a body,
+ * marked with IS_DECLARATION_ONLY flag.
+ * @{
+ */
 DEF_TYPE("function_item", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 DEF_TYPE("closure_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
-DEF_TYPE("function_signature_item", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)  // trait signature - no body
+DEF_TYPE("function_signature_item", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
+DEF_TYPE("macro_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+/** @} */
 
-// Type definitions
+// =============================================================================
+// TYPE DEFINITIONS
+// =============================================================================
+
+/**
+ * @defgroup rust_types_def Type Definitions
+ * @brief Structs, enums, unions, traits, and type aliases
+ *
+ * Rust has several type definition constructs:
+ * - `struct`: Product types with named or tuple fields
+ * - `enum`: Sum types with variants
+ * - `union`: Unsafe C-compatible unions
+ * - `trait`: Abstract interfaces (ABSTRACT refinement)
+ * - `type`: Type aliases
+ *
+ * Note: Uses CUSTOM name extraction because tree-sitter-rust has complex
+ * identifier patterns for generic structs/enums.
+ * @{
+ */
 DEF_TYPE("struct_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("enum_item", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, CUSTOM, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("union_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("trait_item", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, CUSTOM, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("type_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+/** @} */
 
-// Implementation blocks
+// =============================================================================
+// IMPLEMENTATION BLOCKS
+// =============================================================================
+
+/**
+ * @defgroup rust_impl Implementation Blocks
+ * @brief Impl blocks and associated types
+ *
+ * Rust separates type definitions from their implementations. An `impl` block
+ * can either implement inherent methods or a trait for a type. Associated types
+ * are type aliases within traits/impls.
+ * @{
+ */
 DEF_TYPE("impl_item", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("associated_type", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+/** @} */
 
-// Variable declarations (Rust defaults to immutable)
+// =============================================================================
+// VARIABLE DECLARATIONS
+// =============================================================================
+
+/**
+ * @defgroup rust_variables Variable Declarations
+ * @brief Let bindings, constants, and statics
+ *
+ * Rust variables are immutable by default. The `mut` keyword makes them mutable.
+ * However, we mark `let_declaration` as IMMUTABLE since that's the default;
+ * the presence of `mut` would be a child node.
+ *
+ * Variable types:
+ * - `let`: Local bindings (default immutable)
+ * - `const`: Compile-time constants
+ * - `static`: Global variables with `'static` lifetime
+ * @{
+ */
 DEF_TYPE("let_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("const_item", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("static_item", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("enum_variant", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+/** @} */
 
-// Function calls and expressions
+// =============================================================================
+// FUNCTION CALLS AND EXPRESSIONS
+// =============================================================================
+
+/**
+ * @defgroup rust_calls Function Calls and Access
+ * @brief Function calls, method calls, and field/index access
+ *
+ * Rust distinguishes between function calls and method calls syntactically.
+ * Method calls use `.method()` syntax while function calls are direct.
+ *
+ * Call refinements:
+ * - FUNCTION: Direct function calls `foo()`
+ * - METHOD: Method calls `obj.method()`
+ * - MACRO: Macro invocations `println!()`
+ * @{
+ */
 DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 DEF_TYPE("method_call_expression", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+DEF_TYPE("macro_invocation", COMPUTATION_CALL | SemanticRefinements::Call::MACRO, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 DEF_TYPE("field_expression", COMPUTATION_ACCESS, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("index_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
+/** @} */
 
-// Identifiers and paths
+// =============================================================================
+// IDENTIFIERS AND PATHS
+// =============================================================================
+
+/**
+ * @defgroup rust_identifiers Identifiers and Paths
+ * @brief Identifiers, type identifiers, and scoped paths
+ *
+ * Rust has distinct identifier types for values vs types. Scoped identifiers
+ * use `::` for path navigation (e.g., `std::collections::HashMap`).
+ * @{
+ */
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE("field_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
 DEF_TYPE("scoped_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 DEF_TYPE("scoped_type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+/** @} */
 
-// Literals
+// =============================================================================
+// LITERALS
+// =============================================================================
+
+/**
+ * @defgroup rust_literals Literal Values
+ * @brief Numeric, string, and structured literals
+ *
+ * Rust literals include numbers, strings, chars, and structured data.
+ * Raw strings use `r#"..."#` syntax and get the RAW refinement.
+ *
+ * Structured literals:
+ * - Arrays: `[1, 2, 3]` (SEQUENCE refinement)
+ * - Tuples: `(a, b, c)` (SEQUENCE refinement)
+ * - Struct expressions: `Point { x: 1, y: 2 }` (MAPPING refinement)
+ * @{
+ */
+
+// Numeric literals
 DEF_TYPE("integer_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
 DEF_TYPE("float_literal", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
+
+// String literals
 DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 DEF_TYPE("raw_string_literal", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
 DEF_TYPE("char_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+// Atomic literals
 DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+// Structured literals
 DEF_TYPE("array_expression", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
 DEF_TYPE("tuple_expression", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
 DEF_TYPE("struct_expression", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
+/** @} */
 
-// Control flow
+// =============================================================================
+// CONTROL FLOW
+// =============================================================================
+
+/**
+ * @defgroup rust_control Control Flow
+ * @brief Conditionals, loops, and jump expressions
+ *
+ * Rust control flow constructs are expressions that return values.
+ * The `match` expression provides exhaustive pattern matching.
+ *
+ * Loop refinements:
+ * - CONDITIONAL: `while` loops
+ * - ITERATOR: `for` loops (always iterator-based in Rust)
+ * - INFINITE: `loop` (infinite loop, must break to exit)
+ *
+ * Note: Rust uses expressions rather than statements, so these are
+ * `*_expression` rather than `*_statement`.
+ * @{
+ */
+
+// Conditional expressions
 DEF_TYPE("if_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
 DEF_TYPE("match_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+DEF_TYPE("match_arm", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+// Loop expressions
 DEF_TYPE("while_expression", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
 DEF_TYPE("for_expression", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
 DEF_TYPE("loop_expression", FLOW_LOOP | SemanticRefinements::Loop::INFINITE, NONE, NONE, 0)
+
+// Jump expressions
 DEF_TYPE("break_expression", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
 DEF_TYPE("continue_expression", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
 DEF_TYPE("return_expression", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
+/** @} */
 
-// Pattern matching
-DEF_TYPE("match_arm", FLOW_CONDITIONAL, NONE, NONE, 0)
+// =============================================================================
+// PATTERN MATCHING
+// =============================================================================
+
+/**
+ * @defgroup rust_patterns Pattern Matching
+ * @brief Destructuring and matching patterns
+ *
+ * Rust patterns appear in `let` bindings, `match` arms, and function parameters.
+ * They can destructure complex types and bind variables.
+ *
+ * Pattern types:
+ * - PATTERN_DESTRUCTURE: Structural patterns (tuple, struct, reference)
+ * - PATTERN_COLLECT: Wildcard `_` and range patterns `..`
+ * @{
+ */
 DEF_TYPE("match_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
 DEF_TYPE("tuple_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
 DEF_TYPE("struct_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
 DEF_TYPE("reference_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
 DEF_TYPE("wildcard_pattern", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
 DEF_TYPE("range_pattern", PATTERN_COLLECT, NONE, NONE, 0)
+/** @} */
 
-// Types
+// =============================================================================
+// TYPE SYSTEM
+// =============================================================================
+
+/**
+ * @defgroup rust_type_system Type System
+ * @brief Type references, generics, and lifetimes
+ *
+ * Rust has a rich type system with generics, lifetimes, and trait bounds.
+ *
+ * Type categories:
+ * - TYPE_PRIMITIVE: Built-in types (`i32`, `bool`, `str`)
+ * - TYPE_REFERENCE: References (`&T`, `&mut T`), pointers (`*const T`)
+ * - TYPE_GENERIC: Generic parameters and arguments
+ * - TYPE_COMPOSITE: Compound types (tuples, arrays, function types, trait objects)
+ *
+ * Lifetimes (`'a`, `'static`) are part of the generic system.
+ * @{
+ */
+
+// Primitive and reference types
 DEF_TYPE("primitive_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
-DEF_TYPE("generic_type", TYPE_GENERIC, NONE, NONE, 0)
 DEF_TYPE("reference_type", TYPE_REFERENCE, NONE, NONE, 0)
 DEF_TYPE("pointer_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+// Composite types
 DEF_TYPE("tuple_type", TYPE_COMPOSITE, NONE, NONE, 0)
 DEF_TYPE("array_type", TYPE_COMPOSITE, NONE, NONE, 0)
 DEF_TYPE("function_type", TYPE_COMPOSITE, NONE, NONE, 0)
 DEF_TYPE("trait_object_type", TYPE_COMPOSITE, NONE, NONE, 0)
 
 // Generics and lifetimes
+DEF_TYPE("generic_type", TYPE_GENERIC, NONE, NONE, 0)
 DEF_TYPE("type_parameters", TYPE_GENERIC, NONE, NONE, 0)
 DEF_TYPE("type_parameter", TYPE_GENERIC, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("type_arguments", TYPE_GENERIC, NONE, NONE, 0)
 DEF_TYPE("lifetime", TYPE_GENERIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("lifetime_parameter", TYPE_GENERIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("where_clause", TYPE_GENERIC, NONE, NONE, 0)
+DEF_TYPE("higher_ranked_trait_bound", TYPE_GENERIC, NONE, NONE, 0)
+/** @} */
 
-// Operators and expressions
+// =============================================================================
+// OPERATORS AND EXPRESSIONS
+// =============================================================================
+
+/**
+ * @defgroup rust_operators Operators and Expressions
+ * @brief Arithmetic, logical, comparison, and assignment operators
+ *
+ * Rust operators follow standard precedence rules. Range operators
+ * (`..`, `..=`) are used for iterating and slicing.
+ *
+ * Assignment refinements:
+ * - SIMPLE: Basic assignment `=`
+ * - COMPOUND: Compound assignment `+=`, `-=`, etc.
+ *
+ * Arithmetic refinements:
+ * - BINARY: Standard binary operators
+ * - UNARY: Unary operators (negation, dereference)
+ * - RANGE: Range operators `..` and `..=`
+ * @{
+ */
 DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
 DEF_TYPE("compound_assignment_expr", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::COMPOUND, NONE, NONE, 0)
 DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
 DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
 DEF_TYPE("range_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::RANGE, NONE, NONE, 0)
+/** @} */
 
-// Blocks and statements
+// =============================================================================
+// BLOCKS AND STATEMENTS
+// =============================================================================
+
+/**
+ * @defgroup rust_blocks Blocks and Statements
+ * @brief Code blocks and expression statements
+ *
+ * Rust blocks are expressions that evaluate to their final expression.
+ * Expression statements end with `;` and discard their value.
+ * @{
+ */
 DEF_TYPE("block", ORGANIZATION_BLOCK, NONE, NONE, 0)
 DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
-DEF_TYPE("macro_invocation", COMPUTATION_CALL | SemanticRefinements::Call::MACRO, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+/** @} */
 
-// Attributes and macros
-DEF_TYPE("attribute_item", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("inner_attribute_item", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("macro_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+// =============================================================================
+// UNSAFE AND ASYNC
+// =============================================================================
 
-// Unsafe and async
+/**
+ * @defgroup rust_unsafe Unsafe and Async
+ * @brief Unsafe blocks and async/await constructs
+ *
+ * Unsafe blocks opt out of Rust's safety guarantees for low-level operations.
+ * Async blocks and await expressions handle asynchronous programming.
+ * @{
+ */
 DEF_TYPE("unsafe_block", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("async_block", FLOW_SYNC, NONE, NONE, 0)
 DEF_TYPE("await_expression", FLOW_SYNC, NONE, NONE, 0)
+/** @} */
 
-// Visibility and modifiers
+// =============================================================================
+// ATTRIBUTES AND VISIBILITY
+// =============================================================================
+
+/**
+ * @defgroup rust_attributes Attributes and Visibility
+ * @brief Attributes (#[...]) and visibility modifiers
+ *
+ * Rust attributes provide metadata for items:
+ * - Outer attributes: `#[derive(Debug)]` apply to the following item
+ * - Inner attributes: `#![allow(unused)]` apply to the enclosing item
+ *
+ * Visibility modifiers control access:
+ * - `pub`: Public
+ * - `pub(crate)`: Crate-visible
+ * - `pub(super)`: Parent module visible
+ * - (no modifier): Private to module
+ *
+ * The `mut` specifier indicates mutability for bindings and references.
+ * @{
+ */
+DEF_TYPE("attribute_item", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+DEF_TYPE("inner_attribute_item", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("visibility_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("mutable_specifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+/** @} */
 
-// Comments
+// =============================================================================
+// COMMENTS
+// =============================================================================
+
+/**
+ * @defgroup rust_comments Comments
+ * @brief Line and block comments
+ *
+ * Rust has both line comments (`//`) and block comments (`/* */`).
+ * Doc comments (`///`, `//!`, `/** */`) are also captured as comments.
+ * @{
+ */
 DEF_TYPE("line_comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("block_comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+/** @} */
 
-// Rust keywords
+// =============================================================================
+// STRUCTURAL ELEMENTS
+// =============================================================================
+
+/**
+ * @defgroup rust_structure Structural Elements
+ * @brief Lists and organizational nodes
+ *
+ * These nodes organize other nodes into logical groups (parameters,
+ * arguments, field declarations, etc.).
+ * @{
+ */
+DEF_TYPE("parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("closure_parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("field_declaration_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+DEF_TYPE("enum_variant_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// KEYWORDS
+// =============================================================================
+
+/**
+ * @defgroup rust_keywords Keywords
+ * @brief Rust reserved words as syntax tokens
+ *
+ * Keywords are marked with IS_KEYWORD flag and get the same semantic type
+ * as the constructs they introduce. This enables semantic queries that include
+ * or exclude keyword tokens as needed.
+ * @{
+ */
+
+// Definition keywords
 DEF_TYPE("fn", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("let", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("mut", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("const", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("static", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("struct", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -130,34 +498,61 @@ DEF_TYPE("enum", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("trait", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("impl", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("type", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("union", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("mod", DEFINITION_MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Import keywords
 DEF_TYPE("use", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("pub", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("extern", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("crate", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Control flow keywords
 DEF_TYPE("if", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("else", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("match", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("for", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("loop", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("in", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Jump keywords
 DEF_TYPE("break", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("continue", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("return", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Async keywords
 DEF_TYPE("async", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("await", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Modifier keywords
+DEF_TYPE("pub", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("mut", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("unsafe", EXECUTION_STATEMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("extern", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Type system keywords
 DEF_TYPE("where", TYPE_GENERIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("dyn", TYPE_COMPOSITE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("Self", TYPE_REFERENCE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Other keywords
 DEF_TYPE("as", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("ref", PATTERN_DESTRUCTURE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("move", COMPUTATION_EXPRESSION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("in", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("self", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("Self", TYPE_REFERENCE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("super", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("union", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("dyn", TYPE_COMPOSITE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
 
-// Operators and punctuation
+// =============================================================================
+// OPERATORS
+// =============================================================================
+
+/**
+ * @defgroup rust_operators_tokens Operator Tokens
+ * @brief Individual operator symbols
+ * @{
+ */
+
+// Assignment operators
 DEF_TYPE("=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
 DEF_TYPE("+=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
 DEF_TYPE("-=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
@@ -170,6 +565,7 @@ DEF_TYPE("^=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
 DEF_TYPE("<<=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
 DEF_TYPE(">>=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
 
+// Comparison operators
 DEF_TYPE("==", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 DEF_TYPE("!=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 DEF_TYPE("<", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
@@ -177,6 +573,7 @@ DEF_TYPE(">", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 DEF_TYPE("<=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 DEF_TYPE(">=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
 
+// Arithmetic operators
 DEF_TYPE("+", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("-", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("*", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
@@ -188,50 +585,52 @@ DEF_TYPE("^", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("<<", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE(">>", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 
+// Logical operators
 DEF_TYPE("&&", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
 DEF_TYPE("||", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
 DEF_TYPE("!", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
 
+// Access and range operators
 DEF_TYPE("->", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)
 DEF_TYPE("::", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)
 DEF_TYPE(".", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)
 DEF_TYPE("..", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("..=", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("?", FLOW_CONDITIONAL, NODE_TEXT, NONE, 0)
 
-// Delimiters and punctuation
+// Error propagation operator
+DEF_TYPE("?", FLOW_CONDITIONAL, NODE_TEXT, NONE, 0)
+/** @} */
+
+// =============================================================================
+// PUNCTUATION AND DELIMITERS
+// =============================================================================
+
+/**
+ * @defgroup rust_punctuation Punctuation
+ * @brief Delimiters, separators, and syntax markers
+ * @{
+ */
 DEF_TYPE("(", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE(")", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE("[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE("]", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE("{", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE("}", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE("<", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE(">", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-
 DEF_TYPE(",", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 DEF_TYPE(";", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 DEF_TYPE(":", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("=>", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("|", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("_", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+/** @} */
 
-// Additional Rust constructs
-DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE("arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE("type_arguments", TYPE_GENERIC, NONE, NONE, 0)
-DEF_TYPE("field_declaration_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("enum_variant_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE("enum_variant", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("use_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE("use_as_clause", EXTERNAL_IMPORT | SemanticRefinements::Import::SELECTIVE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("use_wildcard", EXTERNAL_IMPORT | SemanticRefinements::Import::WILDCARD, NODE_TEXT, NONE, 0)
+// =============================================================================
+// ERROR RECOVERY
+// =============================================================================
 
-// Closure and function types
-DEF_TYPE("closure_parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
-DEF_TYPE("higher_ranked_trait_bound", TYPE_GENERIC, NONE, NONE, 0)
-
-// Error handling
+/**
+ * @defgroup rust_errors Parse Errors
+ * @brief Error nodes from failed parsing
+ * @{
+ */
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+/** @} */
