@@ -1,242 +1,857 @@
-// TypeScript node type mappings
-// Format: DEF_TYPE(raw_type, semantic_type, name_extraction, value_extraction, flags)
-// Use bitwise OR to combine semantic types with refinements
+/**
+ * @file typescript_types.def
+ * @brief TypeScript language node type mappings for AST semantic extraction
+ *
+ * This file defines the mapping from tree-sitter TypeScript node types to semantic
+ * categories, extraction strategies, and behavioral flags. It extends JavaScript
+ * with static typing features.
+ *
+ * @details
+ * Each entry uses the DEF_TYPE macro with the following signature:
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | The tree-sitter node type string (e.g., `"interface_declaration"`) |
+ * | semantic_type | Base semantic category, optionally OR'd with refinement bits |
+ * | name_extraction | Strategy enum from `ExtractionStrategy` for extracting node names |
+ * | native_extraction | Strategy enum from `NativeExtractionStrategy` for rich context |
+ * | flags | Bitwise OR of `ASTNodeFlags` values |
+ *
+ * ## TypeScript Language Characteristics
+ *
+ * - **Superset of JavaScript**: Includes all JS constructs via `#include`
+ * - **Static typing**: Compile-time type checking with structural typing
+ * - **Interfaces**: Contract definitions for object shapes (ABSTRACT refinement)
+ * - **Type aliases**: Named types via `type` keyword
+ * - **Enums**: Enumerated types (ENUM refinement)
+ * - **Generics**: Type parameters with constraints
+ * - **Access modifiers**: `public`, `private`, `protected`, `readonly`
+ * - **Decorators**: Metadata annotations via `@decorator` syntax
+ * - **Declaration files**: `.d.ts` ambient declarations
+ * - **Namespaces/modules**: Code organization constructs
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use 8-bit encoding:
+ * - Bits 7-2: Base category (e.g., `DEFINITION_CLASS = 0x0C`)
+ * - Bits 1-0: Refinement within category
+ *
+ * Example: `DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT`
+ *   - Base: 0x0C (class definition)
+ *   - Refinement: 0x01 (abstract/interface)
+ *   - Combined: 0x0D
+ *
+ * @see semantic_types.hpp for complete semantic type definitions
+ * @see node_config.hpp for extraction strategy enums and refinements
+ * @see javascript_types.def for inherited JavaScript definitions
+ */
 
-// Include all JavaScript definitions first (inherits JS refinements)
+/**
+ * @brief Include JavaScript base definitions
+ *
+ * TypeScript is a superset of JavaScript, so we inherit all JavaScript
+ * node type mappings. TypeScript-specific constructs are defined below
+ * and may override JavaScript definitions where the TypeScript parser
+ * produces different node types.
+ */
 #include "javascript_types.def"
 
-// ====================================
+// ============================================================================
 // TYPESCRIPT-SPECIFIC CONSTRUCTS - Based on ~1000 file analysis
-// ====================================
+// ============================================================================
 
-// Type system constructs
+/**
+ * @defgroup typescript_type_system Type System Constructs
+ * @brief TypeScript's static type system definitions
+ *
+ * TypeScript adds a rich type system on top of JavaScript. These nodes
+ * represent type declarations, interfaces, and type signatures that
+ * exist only at compile time and are erased during transpilation.
+ * @{
+ */
+
+/**
+ * @brief Type alias declaration: `type Name = SomeType`
+ * Creates a named alias for a type expression
+ */
 DEF_TYPE("type_alias_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/**
+ * @brief Interface declaration: `interface Name { ... }`
+ * Defines a structural type contract; uses ABSTRACT refinement
+ */
 DEF_TYPE("interface_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/**
+ * @brief Property signature in interface: `name: Type;`
+ * Declares a property that implementing objects must have
+ */
 DEF_TYPE("property_signature", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
+
+/**
+ * @brief Method signature in interface: `methodName(params): ReturnType;`
+ * Declares a method that implementing objects must have
+ */
 DEF_TYPE("method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
+
+/**
+ * @brief Construct signature: `new (params): Type`
+ * Defines how to construct instances; CONSTRUCTOR refinement
+ */
 DEF_TYPE("construct_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NONE, CONSTRUCTOR_DEFINITION, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
+
+/**
+ * @brief Call signature: `(params): ReturnType`
+ * Defines callable object signature
+ */
 DEF_TYPE("call_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, NONE, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
+
+/**
+ * @brief Index signature: `[key: KeyType]: ValueType`
+ * Defines indexable object behavior
+ */
 DEF_TYPE("index_signature", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
 
-// Type annotations and references
+/**
+ * @brief Function signature (declaration only): `function name(params): Type;`
+ * Overload signatures or ambient declarations
+ */
+DEF_TYPE("function_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
+
+/** @} */ // end typescript_type_system
+
+/**
+ * @defgroup typescript_type_annotations Type Annotations and References
+ * @brief Type annotations attached to declarations
+ *
+ * These nodes represent type annotations (`: Type`), type identifiers,
+ * and predefined primitive types.
+ * @{
+ */
+
+/** @brief Type annotation syntax: `: Type` */
 DEF_TYPE("type_annotation", TYPE_REFERENCE, NONE, VARIABLE_WITH_TYPE, 0)
+
+/** @brief Type identifier reference: `MyType` */
 DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/** @brief Predefined/primitive type: `string`, `number`, `boolean`, etc. */
 DEF_TYPE("predefined_type", TYPE_PRIMITIVE, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/** @brief This type: `this` in return type position */
+DEF_TYPE("this_type", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+
+/** @brief Nested type identifier: `Namespace.Type` */
+DEF_TYPE("nested_type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+
+/** @} */ // end typescript_type_annotations
+
+/**
+ * @defgroup typescript_composite_types Composite Types
+ * @brief Union, intersection, array, tuple, and other composite types
+ *
+ * TypeScript's type combinators allow building complex types from simpler ones.
+ * @{
+ */
+
+/** @brief Union type: `Type1 | Type2 | Type3` */
 DEF_TYPE("union_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/** @brief Intersection type: `Type1 & Type2` */
 DEF_TYPE("intersection_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/** @brief Array type: `Type[]` */
 DEF_TYPE("array_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/** @brief Tuple type: `[Type1, Type2, ...]` */
 DEF_TYPE("tuple_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/** @brief Object type literal: `{ prop: Type; ... }` */
 DEF_TYPE("object_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/** @brief Function type: `(params) => ReturnType` */
 DEF_TYPE("function_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/** @brief Constructor type: `new (params) => Type` */
 DEF_TYPE("constructor_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/** @brief Template literal type: `` `prefix${Type}suffix` `` */
+DEF_TYPE("template_literal_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/** @brief Template type (generic instantiation) */
+DEF_TYPE("template_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/** @} */ // end typescript_composite_types
+
+/**
+ * @defgroup typescript_literal_types Literal Types
+ * @brief Types representing specific literal values
+ *
+ * TypeScript allows literal values as types for precise type narrowing.
+ * @{
+ */
+
+/** @brief Generic literal type */
 DEF_TYPE("literal_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
+/** @brief String literal type: `"specific-string"` */
 DEF_TYPE("string_literal_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
+/** @brief Number literal type: `42` as a type */
 DEF_TYPE("number_literal_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
+/** @brief Boolean literal type: `true` or `false` as a type */
 DEF_TYPE("boolean_literal_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
 
-// Generic/template types
+/** @} */ // end typescript_literal_types
+
+/**
+ * @defgroup typescript_generics Generic/Template Types
+ * @brief Parameterized types and type parameters
+ *
+ * TypeScript supports generics with constraints and defaults.
+ * @{
+ */
+
+/** @brief Type parameters list: `<T, U extends Base>` */
 DEF_TYPE("type_parameters", TYPE_GENERIC, NONE, NONE, 0)
+
+/** @brief Single type parameter: `T` or `T extends Base` */
 DEF_TYPE("type_parameter", TYPE_GENERIC, FIND_IDENTIFIER, NONE, 0)
+
+/** @brief Type arguments list: `<string, number>` */
 DEF_TYPE("type_arguments", TYPE_GENERIC, NONE, NONE, 0)
+
+/** @brief Generic type instantiation: `Array<T>` */
 DEF_TYPE("generic_type", TYPE_GENERIC, NONE, NONE, 0)
+
+/** @brief Type constraint: `extends SomeType` */
 DEF_TYPE("constraint", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Default type: `= DefaultType` */
 DEF_TYPE("default_type", TYPE_REFERENCE, NONE, NONE, 0)
 
-// Advanced type constructs
+/** @} */ // end typescript_generics
+
+/**
+ * @defgroup typescript_advanced_types Advanced Type Constructs
+ * @brief Conditional types, mapped types, indexed access, and inference
+ *
+ * TypeScript's advanced type-level programming features.
+ * @{
+ */
+
+/** @brief Conditional type: `T extends U ? X : Y` */
 DEF_TYPE("conditional_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Infer type: `infer U` in conditional types */
 DEF_TYPE("infer_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Mapped type clause: `[K in Keys]` */
 DEF_TYPE("mapped_type_clause", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("template_literal_type", TYPE_COMPOSITE, NONE, NONE, 0)
-DEF_TYPE("template_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/** @brief Indexed access type: `T[K]` */
 DEF_TYPE("indexed_access_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Parenthesized type: `(Type)` for grouping */
 DEF_TYPE("parenthesized_type", TYPE_REFERENCE, NONE, NONE, 0)
 
-// Type operators and utilities
+/** @brief Lookup type */
+DEF_TYPE("lookup_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Index type query: `keyof T` result */
+DEF_TYPE("index_type_query", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Type query: `typeof x` in type position */
+DEF_TYPE("type_query", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Extends type clause in generics */
+DEF_TYPE("extends_type_clause", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Flow maybe type (compatibility) */
+DEF_TYPE("flow_maybe_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @} */ // end typescript_advanced_types
+
+/**
+ * @defgroup typescript_type_operators Type Operators and Utilities
+ * @brief Built-in type operators for type manipulation
+ * @{
+ */
+
+/** @brief typeof type: `typeof variable` in type context */
 DEF_TYPE("typeof_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief keyof type: `keyof T` */
 DEF_TYPE("keyof_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief readonly type modifier */
 DEF_TYPE("readonly_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Asserts modifier for type predicates */
 DEF_TYPE("asserts", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Access modifiers and visibility
-DEF_TYPE("accessibility_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("public", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("private", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("protected", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("readonly", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("static", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("abstract", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @brief Asserts annotation on return type */
+DEF_TYPE("asserts_annotation", TYPE_REFERENCE, NONE, NONE, 0)
 
-// Declaration constructs
-DEF_TYPE("ambient_declaration", DEFINITION_MODULE, NONE, NONE, 0)
-DEF_TYPE("declaration_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("enum_assignment", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("module_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("namespace_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
+/** @brief Optional type annotation */
+DEF_TYPE("opting_type_annotation", TYPE_REFERENCE, NONE, NONE, 0)
 
-// Import/export with types
-DEF_TYPE("import_type_clause", EXTERNAL_IMPORT, NONE, NONE, 0)
-DEF_TYPE("export_type_clause", EXTERNAL_EXPORT, NONE, NONE, 0)
-DEF_TYPE("import_specifier", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("export_specifier", EXTERNAL_EXPORT, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("import_require_clause", EXTERNAL_IMPORT, NONE, NONE, 0)
-DEF_TYPE("external_module_reference", EXTERNAL_IMPORT, NONE, NONE, 0)
-
-// Type assertions and guards
-DEF_TYPE("type_assertion", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("as_expression", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("non_null_expression", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("satisfies_expression", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("type_predicate", TYPE_REFERENCE, NONE, NONE, 0)
-
-// Class-specific TypeScript constructs
-DEF_TYPE("abstract_class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
-DEF_TYPE("abstract_method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
-DEF_TYPE("override_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("parameter_property", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
-
-// Function/method constructs
-DEF_TYPE("required_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("optional_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("rest_parameter", PATTERN_COLLECT, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("decorator", NAME_ATTRIBUTE, FIND_IDENTIFIER, NONE, 0)
-
-// Control flow and conditionals  
-DEF_TYPE("labeled_statement", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
-
-// Keywords - TypeScript-specific
-DEF_TYPE("type", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("interface", DEFINITION_CLASS, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("enum", DEFINITION_CLASS, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("namespace", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("module", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("declare", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("keyof", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("typeof", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("infer", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("extends", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("implements", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("as", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("is", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("satisfies", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("override", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
-// TypeScript literals and primitives
-DEF_TYPE("boolean", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("string", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("number", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("bigint", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("symbol", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("object", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("any", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("unknown", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("never", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("void", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-// Special references and identifiers
-DEF_TYPE("this", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("super", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("new", COMPUTATION_CALL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("get", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("set", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
-// Template and string constructs
-DEF_TYPE("template_literal_type_span", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("template_substitution", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("`", PARSER_DELIMITER, NONE, NONE, 0)
-
-// Operators specific to TypeScript
-DEF_TYPE("=>", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("?", OPERATOR_LOGICAL, NONE, NONE, 0)
-DEF_TYPE("??", OPERATOR_LOGICAL, NONE, NONE, 0)
-DEF_TYPE("?.", COMPUTATION_ACCESS, NONE, NONE, 0)
-DEF_TYPE("!", OPERATOR_LOGICAL, NONE, NONE, 0)
-
-// Additional punctuation
-DEF_TYPE("...", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
-DEF_TYPE("<", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE(">", PARSER_DELIMITER, NONE, NONE, 0)
-
-// Final TypeScript perfection - 16,499 remaining nodes for 100% classification
-DEF_TYPE("shorthand_property_identifier_pattern", PATTERN_DESTRUCTURE, NODE_TEXT, NONE, 0)
-DEF_TYPE("pair_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
-DEF_TYPE("regex_pattern", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("optional_chain", COMPUTATION_ACCESS, NONE, NONE, 0)
-DEF_TYPE("default", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("nested_type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
-DEF_TYPE("regex", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("interface_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
-DEF_TYPE("nested_identifier", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
-DEF_TYPE("throw", ERROR_THROW, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("object_assignment_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
-DEF_TYPE("regex_flags", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("extends_type_clause", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("flow_maybe_type", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("lookup_type", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("function_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
-DEF_TYPE("of", OPERATOR_COMPARISON, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("index_type_query", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("type_query", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("class_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
-DEF_TYPE("enum_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
-DEF_TYPE("this_type", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
-DEF_TYPE("internal_module", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
+/** @brief Type predicate annotation: `arg is Type` */
 DEF_TYPE("type_predicate_annotation", TYPE_REFERENCE, NONE, NONE, 0)
 
-// TypeScript perfection - remaining 11,844 unclassified nodes
-DEF_TYPE("\"", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("try", ERROR_TRY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("catch", ERROR_CATCH, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("instantiation_expression", COMPUTATION_CALL, NONE, NONE, 0)
+/** @} */ // end typescript_type_operators
 
-// Function calls and expressions (TypeScript inherits JavaScript syntax)
-DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
-DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+/**
+ * @defgroup typescript_modifiers Access Modifiers and Visibility
+ * @brief TypeScript access control keywords
+ *
+ * Unlike JavaScript, TypeScript has compile-time access modifiers.
+ * These are mapped to METADATA_ANNOTATION as they affect visibility.
+ * @{
+ */
 
-DEF_TYPE("meta", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("delete", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("class_heritage", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("implements_clause", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("extends_clause", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("empty_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
-DEF_TYPE("target", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("finally", ERROR_FINALLY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("?:", OPERATOR_LOGICAL, NONE, NONE, 0)
-DEF_TYPE("asserts_annotation", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("opting_type_annotation", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("do", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("yield", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @brief Generic accessibility modifier */
+DEF_TYPE("accessibility_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Public access modifier (default) */
+DEF_TYPE("public", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Private access modifier */
+DEF_TYPE("private", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Protected access modifier */
+DEF_TYPE("protected", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Readonly modifier for properties */
+DEF_TYPE("readonly", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Static modifier for class members */
+DEF_TYPE("static", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Abstract modifier for classes/methods */
+DEF_TYPE("abstract", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Override modifier for method overriding */
+DEF_TYPE("override_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Override keyword */
+DEF_TYPE("override", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Getter accessor */
+DEF_TYPE("get", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Setter accessor */
+DEF_TYPE("set", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Global modifier in declarations */
 DEF_TYPE("global", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Error handling - TypeScript parse errors
-DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+/** @} */ // end typescript_modifiers
 
-// Missing JavaScript constructs that appear in TypeScript
+/**
+ * @defgroup typescript_declarations Declaration Constructs
+ * @brief TypeScript-specific declaration types
+ *
+ * Includes enums, namespaces, modules, and ambient declarations.
+ * @{
+ */
+
+/** @brief Ambient declaration: `declare ...` */
+DEF_TYPE("ambient_declaration", DEFINITION_MODULE, NONE, NONE, 0)
+
+/** @brief Declaration list */
+DEF_TYPE("declaration_list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/** @brief Enum declaration: `enum Name { ... }` */
+DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, NONE, 0)
+
+/** @brief Enum member assignment: `Member = value` */
+DEF_TYPE("enum_assignment", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, 0)
+
+/** @brief Module declaration (external): `module "name" { }` */
+DEF_TYPE("module_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
+
+/** @brief Namespace declaration: `namespace Name { }` */
+DEF_TYPE("namespace_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
+
+/** @brief Internal module (namespace alias) */
+DEF_TYPE("internal_module", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
+
+/** @} */ // end typescript_declarations
+
+/**
+ * @defgroup typescript_imports Import/Export with Types
+ * @brief TypeScript import/export extensions for types
+ * @{
+ */
+
+/** @brief Import type clause: `import type { ... }` */
+DEF_TYPE("import_type_clause", EXTERNAL_IMPORT, NONE, NONE, 0)
+
+/** @brief Export type clause: `export type { ... }` */
+DEF_TYPE("export_type_clause", EXTERNAL_EXPORT, NONE, NONE, 0)
+
+/** @brief Import specifier: individual import binding */
+DEF_TYPE("import_specifier", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
+
+/** @brief Export specifier: individual export binding */
+DEF_TYPE("export_specifier", EXTERNAL_EXPORT, FIND_IDENTIFIER, NONE, 0)
+
+/** @brief CommonJS require import: `import x = require("module")` */
+DEF_TYPE("import_require_clause", EXTERNAL_IMPORT, NONE, NONE, 0)
+
+/** @brief External module reference in require */
+DEF_TYPE("external_module_reference", EXTERNAL_IMPORT, NONE, NONE, 0)
+
+/** @brief Named imports: `{ a, b, c }` */
+DEF_TYPE("named_imports", EXTERNAL_IMPORT | SemanticRefinements::Import::SELECTIVE, NONE, NONE, 0)
+
+/** @brief From keyword in imports */
+DEF_TYPE("from", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @} */ // end typescript_imports
+
+/**
+ * @defgroup typescript_assertions Type Assertions and Guards
+ * @brief Runtime and compile-time type narrowing
+ * @{
+ */
+
+/** @brief Type assertion (angle bracket): `<Type>value` */
+DEF_TYPE("type_assertion", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief As expression: `value as Type` */
+DEF_TYPE("as_expression", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Non-null assertion: `value!` */
+DEF_TYPE("non_null_expression", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Satisfies expression: `value satisfies Type` */
+DEF_TYPE("satisfies_expression", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Type predicate: `arg is Type` */
+DEF_TYPE("type_predicate", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @} */ // end typescript_assertions
+
+/**
+ * @defgroup typescript_classes Class-Specific Constructs
+ * @brief TypeScript class extensions
+ * @{
+ */
+
+/** @brief Abstract class: `abstract class Name { }` */
+DEF_TYPE("abstract_class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/** @brief Abstract method signature in abstract class */
+DEF_TYPE("abstract_method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_DECLARATION_ONLY)
+
+/** @brief Parameter property: constructor parameter with modifier */
+DEF_TYPE("parameter_property", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+
+/** @brief Public field definition in class body */
+DEF_TYPE("public_field_definition", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/** @brief Class heritage (extends/implements list) */
+DEF_TYPE("class_heritage", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Implements clause: `implements Interface1, Interface2` */
+DEF_TYPE("implements_clause", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Extends clause: `extends BaseClass` */
+DEF_TYPE("extends_clause", TYPE_REFERENCE, NONE, NONE, 0)
+
+/** @brief Class body block */
+DEF_TYPE("class_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/** @brief Interface body block */
+DEF_TYPE("interface_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/** @brief Enum body block */
+DEF_TYPE("enum_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/** @} */ // end typescript_classes
+
+/**
+ * @defgroup typescript_parameters Function Parameters
+ * @brief TypeScript function parameter types
+ * @{
+ */
+
+/** @brief Required parameter: `name: Type` */
+DEF_TYPE("required_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/** @brief Optional parameter: `name?: Type` */
+DEF_TYPE("optional_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/** @brief Rest parameter: `...args: Type[]` */
+DEF_TYPE("rest_parameter", PATTERN_COLLECT, FIND_IDENTIFIER, NONE, 0)
+
+/** @brief Decorator: `@decoratorName` */
+DEF_TYPE("decorator", NAME_ATTRIBUTE, FIND_IDENTIFIER, NONE, 0)
+
+/** @} */ // end typescript_parameters
+
+/**
+ * @defgroup typescript_calls Function Calls and Expressions
+ * @brief Call expressions with TypeScript refinements
+ * @{
+ */
+
+/** @brief Function call: `func(args)` with FUNCTION refinement */
+DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/** @brief Constructor call: `new Class(args)` with CONSTRUCTOR refinement */
+DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/** @brief Instantiation expression (generic call) */
+DEF_TYPE("instantiation_expression", COMPUTATION_CALL, NONE, NONE, 0)
+
+/** @} */ // end typescript_calls
+
+/**
+ * @defgroup typescript_control Control Flow
+ * @brief Control flow statements and expressions
+ * @{
+ */
+
+/** @brief Labeled statement: `label: statement` */
+DEF_TYPE("labeled_statement", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
+
+/** @brief Else clause in if statement */
+DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/** @brief Switch statement */
+DEF_TYPE("switch", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Switch body block */
+DEF_TYPE("switch_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/** @brief Switch default (fallback case) */
 DEF_TYPE("switch_default", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/** @brief Default clause in switch */
 DEF_TYPE("default_clause", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/** @brief Switch case: `case value:` */
 DEF_TYPE("switch_case", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/** @brief Case clause in switch */
 DEF_TYPE("case_clause", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/** @brief Default keyword */
+DEF_TYPE("default", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Ternary/conditional expression: `a ? b : c` */
+DEF_TYPE("ternary_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
+
+/** @brief Break statement */
+DEF_TYPE("break", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Continue statement */
+DEF_TYPE("continue", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Do-while loop */
+DEF_TYPE("do", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Yield expression in generators */
+DEF_TYPE("yield", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @} */ // end typescript_control
+
+/**
+ * @defgroup typescript_exceptions Exception Handling
+ * @brief Try/catch/finally and throw statements
+ * @{
+ */
+
+/** @brief Throw keyword */
+DEF_TYPE("throw", ERROR_THROW, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Try keyword */
+DEF_TYPE("try", ERROR_TRY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Catch keyword */
+DEF_TYPE("catch", ERROR_CATCH, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Finally keyword */
+DEF_TYPE("finally", ERROR_FINALLY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @} */ // end typescript_exceptions
+
+/**
+ * @defgroup typescript_patterns Pattern Matching and Destructuring
+ * @brief Destructuring patterns for arrays and objects
+ * @{
+ */
+
+/** @brief Variable declarator: `name = value` */
 DEF_TYPE("variable_declarator", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
+
+/** @brief Assignment pattern in destructuring */
 DEF_TYPE("assignment_pattern", PATTERN_DESTRUCTURE, FIND_IDENTIFIER, NONE, 0)
+
+/** @brief Object destructuring pattern: `{ a, b }` */
 DEF_TYPE("object_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+
+/** @brief Array destructuring pattern: `[a, b]` */
 DEF_TYPE("array_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+
+/** @brief Rest pattern in destructuring: `...rest` */
 DEF_TYPE("rest_pattern", PATTERN_COLLECT, NONE, NONE, 0)
+
+/** @brief Spread element: `...items` */
 DEF_TYPE("spread_element", PATTERN_COLLECT, NONE, NONE, 0)
-DEF_TYPE("property_assignment", LITERAL_STRUCTURED, FIND_IDENTIFIER, NONE, 0)
+
+/** @brief Shorthand property identifier in pattern */
+DEF_TYPE("shorthand_property_identifier_pattern", PATTERN_DESTRUCTURE, NODE_TEXT, NONE, 0)
+
+/** @brief Key-value pattern in object destructuring */
+DEF_TYPE("pair_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+
+/** @brief Object assignment pattern */
+DEF_TYPE("object_assignment_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+
+/** @} */ // end typescript_patterns
+
+/**
+ * @defgroup typescript_keywords TypeScript-Specific Keywords
+ * @brief Reserved words specific to TypeScript
+ * @{
+ */
+
+/** @brief type keyword */
+DEF_TYPE("type", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief interface keyword */
+DEF_TYPE("interface", DEFINITION_CLASS, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief enum keyword */
+DEF_TYPE("enum", DEFINITION_CLASS, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief namespace keyword */
+DEF_TYPE("namespace", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief module keyword */
+DEF_TYPE("module", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief declare keyword for ambient declarations */
+DEF_TYPE("declare", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief keyof operator in type context */
+DEF_TYPE("keyof", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief typeof operator in type context */
+DEF_TYPE("typeof", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief infer keyword in conditional types */
+DEF_TYPE("infer", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief extends keyword for inheritance/constraints */
+DEF_TYPE("extends", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief implements keyword for interface implementation */
+DEF_TYPE("implements", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief as keyword for type assertions */
+DEF_TYPE("as", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief is keyword for type predicates */
+DEF_TYPE("is", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief satisfies keyword for type constraints */
+DEF_TYPE("satisfies", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief of keyword in for-of loops */
+DEF_TYPE("of", OPERATOR_COMPARISON, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief delete operator */
+DEF_TYPE("delete", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief new keyword */
+DEF_TYPE("new", COMPUTATION_CALL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @} */ // end typescript_keywords
+
+/**
+ * @defgroup typescript_primitives Primitive Type Keywords
+ * @brief Built-in primitive type names
+ * @{
+ */
+
+/** @brief boolean type */
+DEF_TYPE("boolean", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief string type */
+DEF_TYPE("string", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief number type */
+DEF_TYPE("number", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief bigint type */
+DEF_TYPE("bigint", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief symbol type */
+DEF_TYPE("symbol", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief object type (non-primitive) */
+DEF_TYPE("object", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief any type (opt-out of type checking) */
+DEF_TYPE("any", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief unknown type (safe any) */
+DEF_TYPE("unknown", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief never type (impossible values) */
+DEF_TYPE("never", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief void type (no return value) */
+DEF_TYPE("void", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @} */ // end typescript_primitives
+
+/**
+ * @defgroup typescript_identifiers Special References and Identifiers
+ * @brief Special identifier nodes
+ * @{
+ */
+
+/** @brief this keyword reference */
+DEF_TYPE("this", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief super keyword reference */
+DEF_TYPE("super", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Shorthand property identifier: `{ x }` equivalent to `{ x: x }` */
 DEF_TYPE("shorthand_property_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/** @brief Nested identifier: `a.b.c` */
+DEF_TYPE("nested_identifier", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
+
+/** @brief Target in import.meta.target */
+DEF_TYPE("target", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/** @brief Meta property: import.meta */
+DEF_TYPE("meta", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/** @} */ // end typescript_identifiers
+
+/**
+ * @defgroup typescript_literals Literals and Values
+ * @brief String, template, and regex literals
+ * @{
+ */
+
+/** @brief Template literal type span */
+DEF_TYPE("template_literal_type_span", LITERAL_STRING, NONE, NONE, 0)
+
+/** @brief Template substitution: `${expr}` */
+DEF_TYPE("template_substitution", LITERAL_STRING, NONE, NONE, 0)
+
+/** @brief Regular expression literal */
+DEF_TYPE("regex", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/** @brief Regex pattern content */
+DEF_TYPE("regex_pattern", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/** @brief Regex flags: g, i, m, etc. */
+DEF_TYPE("regex_flags", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/** @brief Escape sequence in strings */
+DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
+
+/** @brief Property assignment in object literal */
+DEF_TYPE("property_assignment", LITERAL_STRUCTURED, FIND_IDENTIFIER, NONE, 0)
+
+/** @brief Computed property name: `[expr]: value` */
 DEF_TYPE("computed_property_name", COMPUTATION_EXPRESSION, NONE, NONE, 0)
 
-// Final TypeScript edge cases - remaining high-count unclassified types
-DEF_TYPE("ternary_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
-DEF_TYPE("from", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */ // end typescript_literals
+
+/**
+ * @defgroup typescript_operators TypeScript Operators
+ * @brief Operators including TypeScript-specific ones
+ * @{
+ */
+
+/** @brief Arrow function operator */
+DEF_TYPE("=>", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/** @brief Optional chaining: `?.` */
+DEF_TYPE("?.", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/** @brief Optional chain expression */
+DEF_TYPE("optional_chain", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/** @brief Ternary operator question mark */
+DEF_TYPE("?", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/** @brief Nullish coalescing: `??` */
+DEF_TYPE("??", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/** @brief Logical NOT or non-null assertion */
+DEF_TYPE("!", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/** @brief Optional type indicator in ternary */
+DEF_TYPE("?:", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/** @brief Augmented assignment: `+=`, `-=`, etc. */
 DEF_TYPE("augmented_assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::COMPOUND, NONE, NONE, 0)
-DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("break", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("named_imports", EXTERNAL_IMPORT | SemanticRefinements::Import::SELECTIVE, NONE, NONE, 0)
-DEF_TYPE("public_field_definition", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
-DEF_TYPE("switch", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("switch_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
-DEF_TYPE("continue", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @brief Spread/rest operator */
+DEF_TYPE("...", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
+
+/** @} */ // end typescript_operators
+
+/**
+ * @defgroup typescript_expressions Expressions
+ * @brief Expression nodes
+ * @{
+ */
+
+/** @brief Sequence expression: `a, b, c` */
 DEF_TYPE("sequence_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/** @brief Parenthesized expression: `(expr)` */
 DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/** @brief Empty statement: standalone `;` */
+DEF_TYPE("empty_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
+
+/** @} */ // end typescript_expressions
+
+/**
+ * @defgroup typescript_punctuation Delimiters and Punctuation
+ * @brief Syntactic punctuation tokens
+ * @{
+ */
+
+/** @brief Template literal delimiter */
+DEF_TYPE("`", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @brief Generic type angle bracket open */
+DEF_TYPE("<", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @brief Generic type angle bracket close */
+DEF_TYPE(">", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @brief String delimiter */
+DEF_TYPE("\"", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @} */ // end typescript_punctuation
+
+/**
+ * @defgroup typescript_errors Parser Errors
+ * @brief Error nodes from parsing
+ * @{
+ */
+
+/** @brief Parse error node */
+DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end typescript_errors
