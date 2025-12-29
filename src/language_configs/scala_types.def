@@ -1,64 +1,393 @@
-// Scala language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
-// TODO: Complete after examining tree-sitter parse results
+/**
+ * @file scala_types.def
+ * @brief Scala language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter Scala AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for Scala language constructs.
+ *
+ * ## Scala Language Characteristics
+ *
+ * - **Multi-paradigm**: Functional and object-oriented
+ * - **JVM language**: Interoperable with Java
+ * - **Type inference**: Strong static typing with inference
+ * - **Case classes**: Immutable data classes with pattern matching
+ * - **Traits**: Mixins with implementation
+ * - **Pattern matching**: Powerful match expressions
+ * - **For-comprehensions**: Monadic operations
+ * - **Implicit conversions**: Type-safe implicit parameters
+ * - **Higher-order functions**: First-class function support
+ * - **Companion objects**: Static-like members
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category (e.g., Class::REGULAR = 0x00)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Program structure
+// ============================================================================
+// PROGRAM STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup scala_program Program Structure
+ * @brief Top-level file structure
+ *
+ * Scala file organization:
+ * - Compilation unit is the root
+ * - Package declarations organize code
+ * - Objects can contain main methods
+ * @{
+ */
+
+/// @brief Compilation unit - root node for Scala file
 DEF_TYPE("compilation_unit", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Package clause - `package com.example`
 DEF_TYPE("package_clause", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
 
-// Import statements
+/** @} */ // end scala_program
+
+// ============================================================================
+// IMPORT STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup scala_imports Import Statements
+ * @brief Scala import declarations
+ *
+ * Scala import features:
+ * - `import package.Class` - single import
+ * - `import package._` - wildcard import
+ * - `import package.{A, B}` - selective import
+ * - `import package.{A => B}` - renaming import
+ * @{
+ */
+
+/// @brief Import declaration
 DEF_TYPE("import_declaration", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
 
-// Function definitions
+/** @} */ // end scala_imports
+
+// ============================================================================
+// FUNCTION DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup scala_functions Function Definitions
+ * @brief Scala method and function declarations
+ *
+ * Scala function features:
+ * - `def name(params): Type = body`
+ * - Curried parameters: `def add(x: Int)(y: Int)`
+ * - By-name parameters: `def foo(x: => Int)`
+ * - Implicit parameters: `def foo(implicit x: Context)`
+ * - Multiple parameter lists
+ * - Type parameters: `def foo[T](x: T)`
+ * @{
+ */
+
+/// @brief Function definition - `def name(params): Type = body`
 DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Function declaration - abstract method signature
 DEF_TYPE("function_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
 
-// Class and object definitions
+/** @} */ // end scala_functions
+
+// ============================================================================
+// CLASS AND OBJECT DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup scala_classes Class and Object Definitions
+ * @brief Scala class hierarchy constructs
+ *
+ * Scala class types:
+ * - `class` - regular class
+ * - `case class` - immutable data class with pattern matching
+ * - `object` - singleton object (companion or standalone)
+ * - `trait` - mixin with optional implementation
+ * - `abstract class` - cannot be instantiated
+ * - `sealed` - restricted subclass hierarchy
+ * @{
+ */
+
+/// @brief Class definition - `class Name(params) extends Parent`
 DEF_TYPE("class_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Object definition - singleton `object Name`
 DEF_TYPE("object_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Trait definition - `trait Name`
 DEF_TYPE("trait_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Case class definition - `case class Name(params)`
 DEF_TYPE("case_class_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
 
-// Variable declarations
+/** @} */ // end scala_classes
+
+// ============================================================================
+// VARIABLE DECLARATIONS
+// ============================================================================
+
+/**
+ * @defgroup scala_variables Variable Declarations
+ * @brief Value and variable bindings
+ *
+ * Scala variable declarations:
+ * - `val` - immutable binding (recommended)
+ * - `var` - mutable variable (discouraged)
+ * - `lazy val` - lazily evaluated immutable
+ * - Pattern matching in bindings: `val (a, b) = tuple`
+ * @{
+ */
+
+/// @brief Val definition - immutable `val x = value`
 DEF_TYPE("val_definition", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Var definition - mutable `var x = value`
 DEF_TYPE("var_definition", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Val declaration - abstract val signature
 DEF_TYPE("val_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Var declaration - abstract var signature
 DEF_TYPE("var_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
 
-// Function calls and expressions
+/** @} */ // end scala_variables
+
+// ============================================================================
+// FUNCTION CALLS AND EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup scala_calls Function Calls and Expressions
+ * @brief Method invocations and expressions
+ *
+ * Scala call syntax:
+ * - `method(args)` - regular call
+ * - `obj.method(args)` - method call
+ * - `method arg` - infix notation for single arg
+ * - `method { block }` - block as last argument
+ * @{
+ */
+
+/// @brief Call expression - `function(args)`
 DEF_TYPE("call_expression", COMPUTATION_CALL, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Application expression - method application
 DEF_TYPE("application_expression", COMPUTATION_CALL, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 
-// Control flow
+/** @} */ // end scala_calls
+
+// ============================================================================
+// CONTROL FLOW
+// ============================================================================
+
+/**
+ * @defgroup scala_control Control Flow
+ * @brief Conditionals and pattern matching
+ *
+ * Scala control flow:
+ * - `if` is an expression (returns value)
+ * - `match` for pattern matching (like switch but more powerful)
+ * - Everything is an expression
+ * @{
+ */
+
+/// @brief If expression - `if (cond) expr else expr`
 DEF_TYPE("if_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Match expression - pattern matching
 DEF_TYPE("match_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/** @} */ // end scala_control
+
+// ============================================================================
+// LOOP CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup scala_loops Loop Constructs
+ * @brief Iteration mechanisms
+ *
+ * Scala loops:
+ * - `for (x <- collection)` - for-comprehension
+ * - `for { ... } yield expr` - produces collection
+ * - `while (cond) body` - traditional loop
+ * - Prefer higher-order functions over loops
+ * @{
+ */
+
+/// @brief For expression - for-comprehension
 DEF_TYPE("for_expression", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief While expression - `while (cond) body`
 DEF_TYPE("while_expression", FLOW_LOOP, NONE, NONE, 0)
 
-// Jump statements
+/** @} */ // end scala_loops
+
+// ============================================================================
+// JUMP STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup scala_jumps Jump Statements
+ * @brief Control flow transfer
+ * @{
+ */
+
+/// @brief Return expression - `return value` (rarely used)
 DEF_TYPE("return_expression", FLOW_JUMP, NONE, NONE, 0)
+
+/// @brief Throw expression - `throw exception`
 DEF_TYPE("throw_expression", ERROR_THROW, NONE, NONE, 0)
 
-// Error handling
+/** @} */ // end scala_jumps
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup scala_errors Error Handling
+ * @brief Exception handling constructs
+ *
+ * Scala error handling:
+ * - `try { } catch { case e: Exception => } finally { }`
+ * - Pattern matching in catch clauses
+ * - Prefer `Try`, `Option`, `Either` over exceptions
+ * @{
+ */
+
+/// @brief Try expression - exception handling
 DEF_TYPE("try_expression", ERROR_TRY, NONE, NONE, 0)
+
+/// @brief Catch clause - handles exceptions
 DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
+
+/// @brief Finally clause - always executed
 DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
 
-// Lambdas and anonymous functions
+/** @} */ // end scala_errors
+
+// ============================================================================
+// LAMBDAS AND ANONYMOUS FUNCTIONS
+// ============================================================================
+
+/**
+ * @defgroup scala_lambdas Lambdas and Anonymous Functions
+ * @brief Function literals
+ *
+ * Scala function literal syntax:
+ * - `(x: Int) => x * 2` - with type
+ * - `x => x * 2` - with type inference
+ * - `_ * 2` - placeholder syntax
+ * - `{ case pattern => expr }` - partial function
+ * @{
+ */
+
+/// @brief Lambda expression - `(x) => expr`
 DEF_TYPE("lambda_expression", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
+
+/// @brief Anonymous function
 DEF_TYPE("anonymous_function", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
 
-// Identifiers and literals
+/** @} */ // end scala_lambdas
+
+// ============================================================================
+// IDENTIFIERS AND LITERALS
+// ============================================================================
+
+/**
+ * @defgroup scala_literals Identifiers and Literals
+ * @brief Names and literal values
+ *
+ * Scala literals:
+ * - Integers: `42`, `0xFF`, `42L`
+ * - Floats: `3.14`, `3.14f`, `3.14d`
+ * - Strings: `"string"`, `"""raw"""`, `s"interpolated $x"`
+ * - Symbols: `'symbol` (deprecated in Scala 3)
+ * - Boolean: `true`, `false`
+ * - Null: `null` (avoid in idiomatic Scala)
+ * @{
+ */
+
+/// @brief Identifier - name
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Integer literal
 DEF_TYPE("integer_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief Floating-point literal
 DEF_TYPE("floating_point_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief String literal
 DEF_TYPE("string_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Character literal - `'a'`
 DEF_TYPE("character_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean literal - `true` or `false`
 DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Null literal (avoid in idiomatic Scala)
 DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
-// Comments
+/** @} */ // end scala_literals
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup scala_comments Comments
+ * @brief Documentation and annotation
+ *
+ * Scala comment styles:
+ * - `// line comment`
+ * - `/* block comment */`
+ * - `/** ScalaDoc comment */`
+ * @{
+ */
+
+/// @brief Comment
 DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Error handling
+/** @} */ // end scala_comments
+
+// ============================================================================
+// PARSER ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup scala_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end scala_parser_errors

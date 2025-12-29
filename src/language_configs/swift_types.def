@@ -1,130 +1,641 @@
-// Swift language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file swift_types.def
+ * @brief Swift language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter Swift AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for Swift language constructs.
+ *
+ * ## Swift Language Characteristics
+ *
+ * - **Type safety**: Strong static typing with type inference
+ * - **Optionals**: Explicit nil handling via `T?` optional types
+ * - **Value types**: Structs and enums are value types (copied)
+ * - **Reference types**: Classes are reference types (shared)
+ * - **Protocols**: Interface-like contracts with protocol extensions
+ * - **Extensions**: Add functionality to existing types
+ * - **Closures**: First-class functions with capture semantics
+ * - **Generics**: Parametric polymorphism with constraints
+ * - **Actors**: Concurrency-safe reference types (Swift 5.5+)
+ * - **Async/await**: Structured concurrency model
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category (e.g., Class::REGULAR = 0x00)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Program structure
+// ============================================================================
+// PROGRAM STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup swift_program Program Structure
+ * @brief Top-level source file structure
+ * @{
+ */
+
+/// @brief Source file root - represents the entire Swift file
 DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Import statements
+/** @} */ // end swift_program
+
+// ============================================================================
+// IMPORT STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup swift_imports Import Statements
+ * @brief Module import declarations
+ *
+ * Swift import types:
+ * - `import Module` - import entire module
+ * - `import Module.Submodule` - import specific submodule
+ * - `import func Module.function` - import specific symbol
+ * @{
+ */
+
+/// @brief Import declaration - `import Foundation`
 DEF_TYPE("import_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, FIND_IDENTIFIER, NONE, 0)
 
-// Function definitions - Swift functions always have bodies
+/** @} */ // end swift_imports
+
+// ============================================================================
+// FUNCTION DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup swift_functions Function Definitions
+ * @brief Swift function and method declarations
+ *
+ * Swift function features:
+ * - `func name(param: Type) -> ReturnType`
+ * - External/internal parameter names: `func foo(external internal: Type)`
+ * - Default parameters: `func foo(x: Int = 0)`
+ * - Variadic parameters: `func foo(_ items: Int...)`
+ * - inout parameters: `func foo(_ x: inout Int)`
+ * - Throwing functions: `func foo() throws`
+ * - Async functions: `func foo() async`
+ * @{
+ */
+
+/// @brief Function declaration - `func name(params) -> Type { }`
 DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Initializer - `init(params) { }`
 DEF_TYPE("init_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, CUSTOM, CONSTRUCTOR_DEFINITION, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Deinitializer - `deinit { }` (destructor)
 DEF_TYPE("deinit_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, CUSTOM, NONE, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Subscript declaration - `subscript(index: Int) -> Element`
 DEF_TYPE("subscript_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 
-// Class and structure definitions - Swift types always have bodies
+/** @} */ // end swift_functions
+
+// ============================================================================
+// CLASS AND TYPE DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup swift_classes Class and Type Definitions
+ * @brief Swift type declarations
+ *
+ * Swift type kinds:
+ * - `class` - reference type with inheritance
+ * - `struct` - value type, no inheritance
+ * - `enum` - value type with associated values
+ * - `protocol` - interface/trait definition
+ * - `extension` - add members to existing types
+ * - `actor` - concurrency-safe reference type (Swift 5.5+)
+ * @{
+ */
+
+/// @brief Class declaration - reference type with inheritance
 DEF_TYPE("class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Struct declaration - value type, copied on assignment
 DEF_TYPE("struct_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Actor declaration - concurrency-safe reference type
 DEF_TYPE("actor_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Enum declaration - value type with cases
 DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Protocol declaration - interface/trait
 DEF_TYPE("protocol_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Extension - adds members to existing type
 DEF_TYPE("extension_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 
-// Variable and property declarations
+/** @} */ // end swift_classes
+
+// ============================================================================
+// VARIABLE AND PROPERTY DECLARATIONS
+// ============================================================================
+
+/**
+ * @defgroup swift_variables Variable and Property Declarations
+ * @brief Properties and variables
+ *
+ * Swift variable declarations:
+ * - `let` - immutable (constant)
+ * - `var` - mutable
+ * - Computed properties with get/set
+ * - Property observers: willSet, didSet
+ * - Lazy properties: `lazy var`
+ * @{
+ */
+
+/// @brief Property declaration - class/struct property
 DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Variable declaration - local or global `let`/`var`
 DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Function parameter
 DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
 
-// Type definitions
+/** @} */ // end swift_variables
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup swift_typedefs Type Definitions
+ * @brief Type aliases and associated types
+ * @{
+ */
+
+/// @brief Type alias - `typealias Name = ExistingType`
 DEF_TYPE("typealias_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Associated type - protocol type placeholder
 DEF_TYPE("associatedtype_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Control flow
+/** @} */ // end swift_typedefs
+
+// ============================================================================
+// CONTROL FLOW
+// ============================================================================
+
+/**
+ * @defgroup swift_control Control Flow
+ * @brief Conditionals and branching
+ *
+ * Swift control flow features:
+ * - `if let` for optional binding
+ * - `guard let` for early exit with optional binding
+ * - `switch` with pattern matching (must be exhaustive)
+ * - No implicit fallthrough in switch cases
+ * @{
+ */
+
+/// @brief If statement - `if condition { }`
 DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/// @brief Guard statement - early exit `guard condition else { return }`
 DEF_TYPE("guard_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::GUARD, NONE, NONE, 0)
+
+/// @brief Switch statement - exhaustive pattern matching
 DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/// @brief Case item in switch
 DEF_TYPE("case_item", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/// @brief Default case in switch
 DEF_TYPE("default_case", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/** @} */ // end swift_control
+
+// ============================================================================
+// LOOP CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup swift_loops Loop Constructs
+ * @brief Iteration mechanisms
+ *
+ * Swift loops:
+ * - `for item in collection` - iterate over Sequence
+ * - `for i in 0..<10` - range iteration
+ * - `while condition` - condition-based
+ * - `repeat { } while condition` - post-condition
+ * @{
+ */
+
+/// @brief For-in loop - `for item in collection`
 DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+
+/// @brief While loop - `while condition { }`
 DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Repeat-while loop - `repeat { } while condition`
 DEF_TYPE("repeat_while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Do block - `do { }` for scoping or error handling
 DEF_TYPE("do_statement", FLOW_SYNC, NONE, NONE, 0)
+
+/// @brief Defer statement - executes when scope exits
 DEF_TYPE("defer_statement", FLOW_SYNC, NONE, NONE, 0)
 
-// Jump statements
+/** @} */ // end swift_loops
+
+// ============================================================================
+// JUMP STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup swift_jumps Jump Statements
+ * @brief Control flow transfer
+ *
+ * Swift jump statements:
+ * - `break` - exit loop or switch
+ * - `continue` - skip to next iteration
+ * - `fallthrough` - explicit fallthrough in switch
+ * - `return` - exit function with value
+ * - `throw` - raise error
+ * @{
+ */
+
+/// @brief Break statement - exits loop or switch
 DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
+
+/// @brief Continue statement - skips to next iteration
 DEF_TYPE("continue_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
+
+/// @brief Fallthrough statement - explicit switch case fallthrough
 DEF_TYPE("fallthrough_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
+
+/// @brief Return statement - exits function with value
 DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
+
+/// @brief Throw statement - raises error
 DEF_TYPE("throw_statement", ERROR_THROW, NONE, NONE, 0)
 
-// Expressions
+/** @} */ // end swift_jumps
+
+// ============================================================================
+// EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup swift_expressions Expressions
+ * @brief Operators and expression types
+ * @{
+ */
+
+/// @brief Function call - `function(args)`
 DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Postfix expression - method calls, subscripts
 DEF_TYPE("postfix_expression", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Binary expression - arithmetic, comparison, logical
 DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Unary expression - `-x`, `!x`
 DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+
+/// @brief Ternary expression - `condition ? true : false`
 DEF_TYPE("ternary_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
+
+/// @brief Assignment - `x = value`
 DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+
+/// @brief Compound assignment - `x += value`
 DEF_TYPE("compound_assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::COMPOUND, NONE, NONE, 0)
 
-// Member access
+/** @} */ // end swift_expressions
+
+// ============================================================================
+// MEMBER ACCESS
+// ============================================================================
+
+/**
+ * @defgroup swift_access Member Access
+ * @brief Property and element access
+ * @{
+ */
+
+/// @brief Navigation expression - `obj.property`
 DEF_TYPE("navigation_expression", COMPUTATION_ACCESS, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Member access - dot access
 DEF_TYPE("member_access_expression", COMPUTATION_ACCESS, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Subscript expression - `arr[index]`
 DEF_TYPE("subscript_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 
-// Literals
+/** @} */ // end swift_access
+
+// ============================================================================
+// LITERALS
+// ============================================================================
+
+/**
+ * @defgroup swift_literals Literals
+ * @brief Swift literal values
+ *
+ * Swift literals:
+ * - Integers: `42`, `0xFF`, `0b1010`, `0o755`
+ * - Floats: `3.14`, `1.0e10`
+ * - Strings: `"string"`, multiline `"""..."""`
+ * - Characters: implicit in String
+ * - Boolean: `true`, `false`
+ * - Nil: `nil` (typed null)
+ * @{
+ */
+
+/// @brief Integer literal
 DEF_TYPE("integer_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
+
+/// @brief Float literal
 DEF_TYPE("real_literal", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean literal - `true` or `false`
 DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief String literal - `"text"`
 DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Multiline string literal - `"""..."""`
 DEF_TYPE("multiline_string_literal", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
+
+/// @brief Character literal
 DEF_TYPE("character_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Nil literal - typed null
 DEF_TYPE("nil_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
-// Collections
+/** @} */ // end swift_literals
+
+// ============================================================================
+// COLLECTIONS
+// ============================================================================
+
+/**
+ * @defgroup swift_collections Collection Literals
+ * @brief Array, dictionary, and tuple literals
+ * @{
+ */
+
+/// @brief Array literal - `[1, 2, 3]`
 DEF_TYPE("array_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+
+/// @brief Dictionary literal - `["key": value]`
 DEF_TYPE("dictionary_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
+
+/// @brief Tuple expression - `(a, b, c)`
 DEF_TYPE("tuple_expression", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
 
-// Identifiers and types
+/** @} */ // end swift_collections
+
+// ============================================================================
+// IDENTIFIERS AND TYPES
+// ============================================================================
+
+/**
+ * @defgroup swift_identifiers Identifiers and Types
+ * @brief Names and type references
+ * @{
+ */
+
+/// @brief Simple identifier - name
 DEF_TYPE("simple_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Identifier node
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Type identifier - type name
 DEF_TYPE("type_identifier", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
+/// @brief User-defined type
 DEF_TYPE("user_type", TYPE_COMPOSITE, NODE_TEXT, NONE, 0)
+
+/// @brief Optional type - `Type?`
 DEF_TYPE("optional_type", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+
+/// @brief Array type - `[Element]`
 DEF_TYPE("array_type", TYPE_COMPOSITE, NODE_TEXT, NONE, 0)
+
+/// @brief Dictionary type - `[Key: Value]`
 DEF_TYPE("dictionary_type", TYPE_COMPOSITE, NODE_TEXT, NONE, 0)
+
+/// @brief Function type - `(Params) -> Return`
 DEF_TYPE("function_type", TYPE_COMPOSITE, NODE_TEXT, NONE, 0)
+
+/// @brief Tuple type - `(A, B, C)`
 DEF_TYPE("tuple_type", TYPE_COMPOSITE, NODE_TEXT, NONE, 0)
 
-// Async/await and concurrency
+/** @} */ // end swift_identifiers
+
+// ============================================================================
+// ASYNC/AWAIT AND CONCURRENCY
+// ============================================================================
+
+/**
+ * @defgroup swift_concurrency Async/Await and Concurrency
+ * @brief Swift structured concurrency (5.5+)
+ *
+ * Swift concurrency features:
+ * - `async` functions that can suspend
+ * - `await` to wait for async results
+ * - `actor` types for data isolation
+ * - Task groups for structured concurrency
+ * @{
+ */
+
+/// @brief Await expression - `await asyncCall()`
 DEF_TYPE("await_expression", FLOW_SYNC, NONE, NONE, 0)
+
+/// @brief Async keyword
 DEF_TYPE("async_keyword", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Error handling
+/** @} */ // end swift_concurrency
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup swift_errors Error Handling
+ * @brief Swift error handling constructs
+ *
+ * Swift error handling:
+ * - `throw` to raise errors (must conform to Error)
+ * - `try` to call throwing function
+ * - `try?` returns optional (nil on error)
+ * - `try!` force unwraps (crashes on error)
+ * - `do { } catch { }` for handling
+ * @{
+ */
+
+/// @brief Try expression - `try throwingFunction()`
 DEF_TYPE("try_expression", ERROR_TRY, FIND_IDENTIFIER, FUNCTION_CALL, 0)
+
+/// @brief Catch clause - handles error
 DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
 
-// Closures and lambdas
+/** @} */ // end swift_errors
+
+// ============================================================================
+// CLOSURES AND LAMBDAS
+// ============================================================================
+
+/**
+ * @defgroup swift_closures Closures and Lambdas
+ * @brief Swift closure expressions
+ *
+ * Swift closures:
+ * - `{ (params) -> Return in body }`
+ * - Trailing closure syntax
+ * - Shorthand: `$0`, `$1` for arguments
+ * - Capture lists: `[weak self, unowned delegate]`
+ * @{
+ */
+
+/// @brief Lambda/closure literal
 DEF_TYPE("lambda_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, 0)
+
+/// @brief Closure expression
 DEF_TYPE("closure_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, 0)
 
-// Attributes and modifiers
+/** @} */ // end swift_closures
+
+// ============================================================================
+// ATTRIBUTES AND MODIFIERS
+// ============================================================================
+
+/**
+ * @defgroup swift_attributes Attributes and Modifiers
+ * @brief Annotations and access control
+ *
+ * Swift attributes:
+ * - `@available` for API availability
+ * - `@escaping` for closure parameters
+ * - `@objc` for Objective-C interop
+ * - Property wrappers: `@Published`, `@State`
+ * @{
+ */
+
+/// @brief Attribute - `@attribute`
 DEF_TYPE("attribute", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Availability condition - `#available(iOS 15, *)`
 DEF_TYPE("availability_condition", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Modifier list
 DEF_TYPE("modifiers", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 
-// Access control
+/// @brief Visibility modifier - `public`, `private`, etc.
 DEF_TYPE("visibility_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Mutation modifier - `mutating`, `nonmutating`
 DEF_TYPE("mutation_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Comments
+/** @} */ // end swift_attributes
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup swift_comments Comments
+ * @brief Documentation and annotation
+ * @{
+ */
+
+/// @brief Single-line comment - `// comment`
 DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Multi-line comment - `/* comment */`
 DEF_TYPE("multiline_comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Operators
+/** @} */ // end swift_comments
+
+// ============================================================================
+// OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup swift_operators Operators
+ * @brief Swift custom operators
+ *
+ * Swift supports custom operator definitions:
+ * - prefix: `prefix func -(x: T)`
+ * - infix: `infix func +(lhs: T, rhs: T)`
+ * - postfix: `postfix func ++(x: inout T)`
+ * @{
+ */
+
+/// @brief Custom operator
 DEF_TYPE("custom_operator", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NODE_TEXT, NONE, 0)
+
+/// @brief Prefix operator
 DEF_TYPE("prefix_operator", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NODE_TEXT, NONE, 0)
+
+/// @brief Postfix operator
 DEF_TYPE("postfix_operator", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NODE_TEXT, NONE, 0)
+
+/// @brief Infix operator
 DEF_TYPE("infix_operator", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NODE_TEXT, NONE, 0)
 
-// Code organization
+/** @} */ // end swift_operators
+
+// ============================================================================
+// CODE ORGANIZATION
+// ============================================================================
+
+/**
+ * @defgroup swift_organization Code Organization
+ * @brief Blocks and structural elements
+ * @{
+ */
+
+/// @brief Statements block
 DEF_TYPE("statements", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Code block - `{ }`
 DEF_TYPE("code_block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Capture list - `[weak self]` in closures
 DEF_TYPE("capture_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
-// Punctuation and delimiters
+/** @} */ // end swift_organization
+
+// ============================================================================
+// PUNCTUATION AND DELIMITERS
+// ============================================================================
+
+/**
+ * @defgroup swift_punctuation Punctuation and Delimiters
+ * @brief Syntactic markers
+ * @{
+ */
+
 DEF_TYPE("(", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE(")", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE("{", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
@@ -140,7 +651,25 @@ DEF_TYPE(":", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("?", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("!", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 
-// Swift keywords
+/** @} */ // end swift_punctuation
+
+// ============================================================================
+// KEYWORDS
+// ============================================================================
+
+/**
+ * @defgroup swift_keywords Keywords
+ * @brief Swift reserved words
+ *
+ * Swift has declaration keywords, statement keywords, expression keywords,
+ * and context-sensitive keywords.
+ * @{
+ */
+
+/**
+ * @name Declaration Keywords
+ * @{
+ */
 DEF_TYPE("associatedtype", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("class", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("deinit", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -163,6 +692,12 @@ DEF_TYPE("struct", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("subscript", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("typealias", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("var", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Statement Keywords
+ * @{
+ */
 DEF_TYPE("break", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("case", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("continue", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -180,6 +715,12 @@ DEF_TYPE("return", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("switch", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("where", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Expression Keywords
+ * @{
+ */
 DEF_TYPE("as", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("catch", ERROR_CATCH, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -193,19 +734,72 @@ DEF_TYPE("throw", ERROR_THROW, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("throws", ERROR_THROW, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("try", ERROR_TRY, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Concurrency Keywords
+ * @{
+ */
 DEF_TYPE("await", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("async", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("actor", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
 
-// Generic and protocols
+/** @} */ // end swift_keywords
+
+// ============================================================================
+// GENERICS AND PROTOCOLS
+// ============================================================================
+
+/**
+ * @defgroup swift_generics Generics and Protocols
+ * @brief Generic type parameters and constraints
+ * @{
+ */
+
+/// @brief Generic parameter clause - `<T, U>`
 DEF_TYPE("generic_parameter_clause", TYPE_GENERIC, NONE, NONE, 0)
+
+/// @brief Generic where clause - `where T: Equatable`
 DEF_TYPE("generic_where_clause", TYPE_GENERIC, NONE, NONE, 0)
+
+/// @brief Conformance requirement - `T: Protocol`
 DEF_TYPE("conformance_requirement", TYPE_GENERIC, NONE, NONE, 0)
+
+/// @brief Same type requirement - `T == U`
 DEF_TYPE("same_type_requirement", TYPE_GENERIC, NONE, NONE, 0)
 
-// Property wrappers and result builders
+/** @} */ // end swift_generics
+
+// ============================================================================
+// PROPERTY WRAPPERS AND RESULT BUILDERS
+// ============================================================================
+
+/**
+ * @defgroup swift_wrappers Property Wrappers and Result Builders
+ * @brief Swift metaprogramming features
+ * @{
+ */
+
+/// @brief Property wrapper type - `@Published`, `@State`
 DEF_TYPE("property_wrapper_type", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Result builder - `@ViewBuilder`
 DEF_TYPE("result_builder", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 
-// Error handling
+/** @} */ // end swift_wrappers
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup swift_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end swift_parser_errors
