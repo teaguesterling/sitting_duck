@@ -1,79 +1,518 @@
-// Python node type mappings
-// Format: DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
-// Use bitwise OR to combine semantic types with refinements: DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA
+/**
+ * @file python_types.def
+ * @brief Python language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter Python AST nodes are mapped to
+ * universal semantic types, along with strategies for extracting names and
+ * native context from the parse tree.
+ *
+ * ## DEF_TYPE Macro Format
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * @param raw_type The tree-sitter node type string (e.g., "function_definition")
+ * @param semantic_type Universal semantic classification with optional refinement bits
+ * @param name_extraction Strategy for extracting the node's name (see ExtractionStrategy)
+ * @param native_extraction Strategy for rich context extraction (see NativeExtractionStrategy)
+ * @param flags Behavioral flags (e.g., IS_KEYWORD, IS_SYNTAX_ONLY)
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types are 8-bit values where:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_FUNCTION = 0x04)
+ * - Bits 1-0: Refinement within category (e.g., Function::LAMBDA = 0x01)
+ *
+ * Combined using bitwise OR:
+ * ```cpp
+ * DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA  // = 0x05
+ * ```
+ *
+ * ## Python Language Characteristics
+ *
+ * Python has several unique features that affect AST mapping:
+ *
+ * - **Indentation-based blocks**: No explicit braces; tree-sitter uses 'block' nodes
+ * - **Decorators**: First-class syntax via `decorated_definition` wrapper nodes
+ * - **Comprehensions**: Distinct syntax for list/dict/set comprehensions and generators
+ * - **Type hints**: Optional type annotations via `type` and `generic_type` nodes
+ * - **Async/await**: Async functions are `function_definition` with `async` keyword child
+ * - **Pattern matching**: Python 3.10+ match/case statements
+ * - **Walrus operator**: Named expressions with `:=`
+ *
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy definitions
+ * @see semantic_types.hpp for full semantic type enumeration
+ */
 
-// Function definitions - Python functions always have bodies
+// =============================================================================
+// DEFINITIONS - Functions, Classes, Variables
+// =============================================================================
+
+/**
+ * @defgroup python_functions Function Definitions
+ * @brief Python function and method definitions
+ *
+ * Python functions use FIND_IDENTIFIER to locate the function name which is
+ * a direct child of `function_definition`. The FUNCTION_WITH_PARAMS native
+ * strategy extracts the full signature including parameters and return type.
+ *
+ * Note: Python does NOT have a distinct `async_function_definition` node in
+ * tree-sitter-python. Async functions are regular `function_definition` nodes
+ * with an `async` keyword child. The async keyword itself gets FLOW_SYNC.
+ * @{
+ */
 DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 DEF_TYPE("async_function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, ASYNC_FUNCTION, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+/** @} */
 
-// Class definitions - Python classes always have bodies
+/**
+ * @defgroup python_classes Class Definitions
+ * @brief Python class definitions including inheritance
+ *
+ * Classes use CLASS_WITH_METHODS native extraction to capture the class name,
+ * base classes, and method signatures. Python classes always have bodies.
+ * @{
+ */
 DEF_TYPE("class_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+/** @} */
 
-// Variable declarations
+/**
+ * @defgroup python_variables Variable Definitions
+ * @brief Variable assignments and parameter declarations
+ *
+ * Python variables are always mutable (no const/final keyword). The refinements
+ * distinguish between regular assignments (MUTABLE) and function parameters
+ * (PARAMETER). Fields are not separately tracked since Python doesn't have
+ * formal field declarations.
+ * @{
+ */
 DEF_TYPE("assignment", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("typed_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("default_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("typed_default_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("named_expression", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+/** @} */
 
-// Function calls and expressions
+// =============================================================================
+// COMPUTATIONS - Calls, Operators, Access
+// =============================================================================
+
+/**
+ * @defgroup python_calls Function Calls
+ * @brief Function and method invocation
+ *
+ * FIND_CALL_TARGET handles both simple calls (`foo()`) and method calls
+ * (`obj.method()`), extracting just the function/method name. FUNCTION_CALL
+ * native extraction captures the full call including arguments.
+ * @{
+ */
 DEF_TYPE("call", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+/** @} */
+
+/**
+ * @defgroup python_operators Operators and Expressions
+ * @brief Arithmetic, logical, comparison, and assignment operators
+ *
+ * Python operator nodes include both the compound expression and the
+ * individual operator tokens. Compound operators use NONE for name extraction
+ * since the operator itself carries the meaning.
+ * @{
+ */
 DEF_TYPE("binary_operator", OPERATOR_ARITHMETIC, NONE, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("unary_operator", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 DEF_TYPE("comparison_operator", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE("boolean_operator", OPERATOR_LOGICAL, NONE, NONE, 0)
+DEF_TYPE("not_operator", OPERATOR_LOGICAL, NONE, NONE, 0)
+DEF_TYPE("augmented_assignment", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+/** @} */
 
-// Identifiers and references
+/**
+ * @defgroup python_access Attribute and Index Access
+ * @brief Dot notation and subscript access patterns
+ *
+ * Attribute access (`obj.attr`) uses NODE_TEXT to capture the attribute name.
+ * Subscript access (`obj[key]`) doesn't have a meaningful name.
+ * @{
+ */
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("attribute", COMPUTATION_ACCESS, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("subscript", COMPUTATION_ACCESS, NONE, NONE, 0)
+DEF_TYPE("slice", COMPUTATION_ACCESS, NONE, NONE, 0)
+/** @} */
 
-// Literals - name and value both contain the literal text
+// =============================================================================
+// LITERALS - Strings, Numbers, Collections
+// =============================================================================
+
+/**
+ * @defgroup python_literals Literal Values
+ * @brief String, numeric, and structured literal values
+ *
+ * Literals use NODE_TEXT to capture their textual representation. Structured
+ * literals (list, dict, set, tuple) use refinements to distinguish container types.
+ *
+ * Note: String literals in Python are complex due to f-strings, raw strings,
+ * and concatenated strings. The tree-sitter grammar breaks these into multiple
+ * node types.
+ * @{
+ */
+
+// String literals with refinements
 DEF_TYPE("string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("string_content", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("concatenated_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("interpolation", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("escape_interpolation", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("format_specifier", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("format_expression", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("conversion", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("interpolation_conversion", LITERAL_STRING, NONE, NONE, 0)
+
+// Numeric literals
 DEF_TYPE("integer", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
 DEF_TYPE("float", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
+
+// Atomic literals (singletons)
 DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 DEF_TYPE("none", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("ellipsis", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
-// Control flow
+// Structured literals with container refinements
+DEF_TYPE("list", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+DEF_TYPE("tuple", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+DEF_TYPE("dictionary", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
+DEF_TYPE("pair", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
+DEF_TYPE("set", LITERAL_STRUCTURED | SemanticRefinements::Structured::SET, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// CONTROL FLOW - Conditionals, Loops, Jumps
+// =============================================================================
+
+/**
+ * @defgroup python_control Control Flow
+ * @brief Conditional statements, loops, and jump statements
+ *
+ * Python control flow uses refinements to distinguish between:
+ * - Binary conditionals (if/else) vs multiway (match/case)
+ * - Iterator loops (for) vs conditional loops (while)
+ * - Different jump types (return, break, continue)
+ * @{
+ */
+
+// Conditional statements
 DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("elif_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("conditional_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
+DEF_TYPE("match_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+DEF_TYPE("case_clause", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+// Loop statements
 DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
 DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("for_in_clause", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("if_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+// Jump statements
 DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
 DEF_TYPE("continue_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
+/** @} */
 
-// Structure
-DEF_TYPE("block", ORGANIZATION_BLOCK, NONE, VARIABLE_WITH_TYPE, 0)
+// =============================================================================
+// ERROR HANDLING - Try/Except/Finally
+// =============================================================================
+
+/**
+ * @defgroup python_errors Error Handling
+ * @brief Exception handling constructs
+ *
+ * Python uses try/except/finally for exception handling. The `raise` and
+ * `assert` statements both use ERROR_THROW since they can raise exceptions.
+ * @{
+ */
+DEF_TYPE("try_statement", ERROR_TRY, NONE, NONE, 0)
+DEF_TYPE("except_clause", ERROR_CATCH, NONE, NONE, 0)
+DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
+DEF_TYPE("raise_statement", ERROR_THROW, NONE, NONE, 0)
+DEF_TYPE("assert_statement", ERROR_THROW, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// MODULES AND IMPORTS
+// =============================================================================
+
+/**
+ * @defgroup python_modules Modules and Imports
+ * @brief Module structure and import statements
+ *
+ * Python modules are the top-level `module` node. Import statements come in
+ * several forms:
+ * - `import module` (EXTERNAL_IMPORT)
+ * - `from module import name` (EXTERNAL_IMPORT)
+ * - `from . import name` (relative import)
+ * - `from module import *` (wildcard import)
+ * @{
+ */
 DEF_TYPE("module", DEFINITION_MODULE, NONE, NONE, 0)
 DEF_TYPE("import_statement", EXTERNAL_IMPORT, NONE, NONE, 0)
 DEF_TYPE("import_from_statement", EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE("aliased_import", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("relative_import", EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE("import_prefix", EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE("wildcard_import", EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE("future_import_statement", EXTERNAL_IMPORT, NONE, NONE, 0)
+DEF_TYPE("__future__", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
+/** @} */
 
-// Comments
+// =============================================================================
+// TYPE SYSTEM
+// =============================================================================
+
+/**
+ * @defgroup python_types Type Annotations
+ * @brief Type hints and generic types (PEP 484+)
+ *
+ * Python's optional type system uses annotations that don't affect runtime
+ * behavior. The `type` node represents a type reference, while `generic_type`
+ * handles parameterized types like `List[int]` or `Dict[str, Any]`.
+ * @{
+ */
+DEF_TYPE("type", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+DEF_TYPE("generic_type", TYPE_GENERIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("type_parameter", TYPE_GENERIC, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("->", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("type_conversion", TYPE_REFERENCE, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// COMPREHENSIONS AND GENERATORS
+// =============================================================================
+
+/**
+ * @defgroup python_comprehensions Comprehensions and Generators
+ * @brief List/dict/set comprehensions and generator expressions
+ *
+ * Python comprehensions are a distinct syntax for creating collections via
+ * iteration. They map to TRANSFORM_QUERY with refinements:
+ * - SIMPLE: List/dict/set comprehensions `[x for x in items]`
+ * - NESTED: Generator expressions `(x for x in items)`
+ * @{
+ */
+DEF_TYPE("list_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, 0)
+DEF_TYPE("dictionary_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, 0)
+DEF_TYPE("set_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, 0)
+DEF_TYPE("generator_expression", TRANSFORM_QUERY | SemanticRefinements::Query::NESTED, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// DECORATORS AND ANNOTATIONS
+// =============================================================================
+
+/**
+ * @defgroup python_decorators Decorators and Metadata
+ * @brief Decorator syntax and annotation patterns
+ *
+ * Decorators are a form of metaprogramming that wrap functions/classes.
+ * The `decorated_definition` node wraps the actual definition and contains
+ * one or more `decorator` children.
+ * @{
+ */
+DEF_TYPE("decorator", NAME_ATTRIBUTE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("decorated_definition", METADATA_ANNOTATION, NONE, NONE, 0)
+DEF_TYPE("as_clause", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("global_statement", METADATA_ANNOTATION, NONE, NONE, 0)
+DEF_TYPE("nonlocal_statement", METADATA_ANNOTATION, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// PATTERN MATCHING (Python 3.10+)
+// =============================================================================
+
+/**
+ * @defgroup python_patterns Pattern Matching
+ * @brief Structural pattern matching constructs (PEP 634)
+ *
+ * Python 3.10 introduced match/case statements with various pattern types:
+ * - PATTERN_DESTRUCTURE: Extracts values from structures
+ * - PATTERN_MATCH: Matches against specific patterns
+ * - PATTERN_COLLECT: Captures variable-length portions (*args)
+ * @{
+ */
+DEF_TYPE("case_pattern", PATTERN_MATCH, NONE, NONE, 0)
+DEF_TYPE("class_pattern", PATTERN_MATCH, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("keyword_pattern", PATTERN_MATCH, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("complex_pattern", PATTERN_MATCH, NONE, NONE, 0)
+DEF_TYPE("union_pattern", PATTERN_MATCH, NONE, NONE, 0)
+DEF_TYPE("value_pattern", PATTERN_MATCH, NONE, NONE, 0)
+DEF_TYPE("pattern_list", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+DEF_TYPE("as_pattern_target", PATTERN_DESTRUCTURE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("as_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+DEF_TYPE("tuple_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+DEF_TYPE("list_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+DEF_TYPE("attribute_pattern", PATTERN_DESTRUCTURE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("list_splat_pattern", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
+DEF_TYPE("dictionary_splat_pattern", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
+DEF_TYPE("list_splat", PATTERN_COLLECT, NONE, NONE, 0)
+DEF_TYPE("dictionary_splat", PATTERN_COLLECT, NONE, NONE, 0)
+DEF_TYPE("splat_pattern", PATTERN_COLLECT, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// SCOPED REFERENCES
+// =============================================================================
+
+/**
+ * @defgroup python_scoped Scoped References
+ * @brief Self, super, and cls references
+ *
+ * Python uses `self` for instance references and `cls` for class references
+ * by convention. `super()` provides parent class access.
+ * @{
+ */
+DEF_TYPE("self", NAME_SCOPED, NODE_TEXT, NONE, 0)
+DEF_TYPE("super", NAME_SCOPED, NODE_TEXT, NONE, 0)
+DEF_TYPE("cls", NAME_SCOPED, NODE_TEXT, NONE, 0)
+/** @} */
+
+// =============================================================================
+// STRUCTURAL ELEMENTS
+// =============================================================================
+
+/**
+ * @defgroup python_structure Structural Elements
+ * @brief Blocks, lists, and organizational nodes
+ *
+ * These nodes provide structure but don't have semantic meaning themselves.
+ * They organize other nodes into logical groups.
+ * @{
+ */
+DEF_TYPE("block", ORGANIZATION_BLOCK, NONE, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("parameters", ORGANIZATION_LIST, NONE, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("argument_list", ORGANIZATION_LIST, NONE, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("keyword_argument", ORGANIZATION_LIST, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("expression_list", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("lambda_parameters", ORGANIZATION_LIST, NONE, NONE, 0)
+DEF_TYPE("with_statement", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("with_clause", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("with_item", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// IDENTIFIERS AND NAMES
+// =============================================================================
+
+/**
+ * @defgroup python_names Names and Identifiers
+ * @brief Identifier nodes and qualified names
+ * @{
+ */
+DEF_TYPE("dotted_name", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
+DEF_TYPE("_", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+/** @} */
+
+// =============================================================================
+// STATEMENTS
+// =============================================================================
+
+/**
+ * @defgroup python_statements Statement Nodes
+ * @brief Expression statements and execution constructs
+ * @{
+ */
+DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("pass_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
+DEF_TYPE("delete_statement", EXECUTION_MUTATION, NONE, NONE, 0)
+DEF_TYPE("print_statement", EXECUTION_STATEMENT_CALL, NONE, NONE, 0)
+DEF_TYPE("exec_statement", EXECUTION_STATEMENT_CALL, NONE, NONE, 0)
+/** @} */
+
+// =============================================================================
+// COMMENTS
+// =============================================================================
+
+/**
+ * @defgroup python_comments Comments
+ * @brief Comment nodes
+ * @{
+ */
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
+/** @} */
 
-// Keywords - now classified by semantic function with IS_KEYWORD flag
+// =============================================================================
+// KEYWORDS
+// =============================================================================
+
+/**
+ * @defgroup python_keywords Keywords
+ * @brief Python reserved words as syntax tokens
+ *
+ * Keywords are marked with IS_KEYWORD flag and get the same semantic type
+ * as the constructs they introduce. This enables semantic queries that include
+ * or exclude keyword tokens as needed.
+ * @{
+ */
+
+// Definition keywords
 DEF_TYPE("def", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("class", DEFINITION_CLASS, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("lambda", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::IS_KEYWORD_IF_LEAF)
+
+// Control flow keywords
 DEF_TYPE("if", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("else", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("elif", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("for", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("while", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("match", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("case", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Jump keywords
 DEF_TYPE("return", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("break", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("continue", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("pass", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Async keywords
+DEF_TYPE("async", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("await", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("yield", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("with", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Import keywords
 DEF_TYPE("import", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("from", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Punctuation 
-DEF_TYPE("(", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE(")", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("[", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("]", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("{", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("}", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE(",", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE(":", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE(";", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE(".", PARSER_PUNCTUATION, NONE, NONE, 0)
+// Error handling keywords
+DEF_TYPE("try", ERROR_TRY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("except", ERROR_CATCH, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("finally", ERROR_FINALLY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("raise", ERROR_THROW, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("assert", ERROR_THROW, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+// Other keywords
+DEF_TYPE("as", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("global", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("nonlocal", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("del", EXECUTION_MUTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("print", EXECUTION_STATEMENT_CALL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("exec", EXECUTION_STATEMENT_CALL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+// =============================================================================
+// OPERATORS
+// =============================================================================
+
+/**
+ * @defgroup python_operators_tokens Operator Tokens
+ * @brief Individual operator symbols
+ * @{
+ */
 
 // Arithmetic operators
 DEF_TYPE("+", OPERATOR_ARITHMETIC, NONE, NONE, 0)
@@ -103,8 +542,11 @@ DEF_TYPE("<", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE(">", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE("<=", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE(">=", OPERATOR_COMPARISON, NONE, NONE, 0)
+DEF_TYPE("<>", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE("is", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE("in", OPERATOR_COMPARISON, NONE, NONE, 0)
+DEF_TYPE("not in", OPERATOR_COMPARISON, NONE, NONE, 0)
+DEF_TYPE("is not", OPERATOR_COMPARISON, NONE, NONE, 0)
 
 // Assignment operators
 DEF_TYPE("=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
@@ -122,166 +564,43 @@ DEF_TYPE("^=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 DEF_TYPE("<<=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 DEF_TYPE(">>=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 DEF_TYPE(":=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+/** @} */
 
-// Python-specific constructs
+// =============================================================================
+// PUNCTUATION AND DELIMITERS
+// =============================================================================
 
-// Variadic patterns (PATTERN_COLLECT)
-DEF_TYPE("list_splat_pattern", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
-DEF_TYPE("dictionary_splat_pattern", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
-DEF_TYPE("*", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
-DEF_TYPE("**", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
-
-// Scoped references
-DEF_TYPE("self", NAME_SCOPED, NODE_TEXT, NONE, 0)
-DEF_TYPE("super", NAME_SCOPED, NODE_TEXT, NONE, 0)
-DEF_TYPE("cls", NAME_SCOPED, NODE_TEXT, NONE, 0)
-
-// Decorators and attributes 
-DEF_TYPE("@", NAME_ATTRIBUTE, NODE_TEXT, NONE, 0)
-DEF_TYPE("decorator", NAME_ATTRIBUTE, FIND_IDENTIFIER, NONE, 0)
-
-// Private/public patterns based on naming convention
-// Note: These would need custom logic to detect _name patterns
-// For now, we'll handle them as regular identifiers
-
-// Error handling
-DEF_TYPE("try_statement", ERROR_TRY, NONE, NONE, 0)
-DEF_TYPE("except_clause", ERROR_CATCH, NONE, NONE, 0)
-DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
-DEF_TYPE("raise_statement", ERROR_THROW, NONE, NONE, 0)
-DEF_TYPE("assert_statement", ERROR_THROW, NONE, NONE, 0)
-
-// More keywords
-DEF_TYPE("try", ERROR_TRY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("except", ERROR_CATCH, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("finally", ERROR_FINALLY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("raise", ERROR_THROW, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("assert", ERROR_THROW, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("with", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("as", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("lambda", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::IS_KEYWORD_IF_LEAF)
-DEF_TYPE("yield", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("async", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("await", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
-// Missing Python constructs
-DEF_TYPE("argument_list", ORGANIZATION_LIST, NONE, FUNCTION_WITH_PARAMS, 0)
-DEF_TYPE("string_content", LITERAL_STRING, NONE, NONE, 0)
+/**
+ * @defgroup python_punctuation Punctuation
+ * @brief Delimiters, separators, and syntax markers
+ * @{
+ */
+DEF_TYPE("(", PARSER_DELIMITER, NONE, NONE, 0)
+DEF_TYPE(")", PARSER_DELIMITER, NONE, NONE, 0)
+DEF_TYPE("[", PARSER_DELIMITER, NONE, NONE, 0)
+DEF_TYPE("]", PARSER_DELIMITER, NONE, NONE, 0)
+DEF_TYPE("{", PARSER_DELIMITER, NONE, NONE, 0)
+DEF_TYPE("}", PARSER_DELIMITER, NONE, NONE, 0)
+DEF_TYPE(",", PARSER_PUNCTUATION, NONE, NONE, 0)
+DEF_TYPE(":", PARSER_PUNCTUATION, NONE, NONE, 0)
+DEF_TYPE(";", PARSER_PUNCTUATION, NONE, NONE, 0)
+DEF_TYPE(".", PARSER_PUNCTUATION, NONE, NONE, 0)
 DEF_TYPE("string_start", PARSER_PUNCTUATION, NONE, NONE, 0)
 DEF_TYPE("string_end", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE("expression_statement", EXECUTION_STATEMENT, NONE, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("list", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
-DEF_TYPE("keyword_argument", ORGANIZATION_LIST, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("dotted_name", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
-DEF_TYPE("parameters", ORGANIZATION_LIST, NONE, FUNCTION_WITH_PARAMS, 0)
-DEF_TYPE("tuple", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
-DEF_TYPE("type", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
-DEF_TYPE("pair", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
-DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("interpolation", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("dictionary", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
-
-// Advanced Python constructs
-DEF_TYPE("typed_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("for_in_clause", FLOW_LOOP, NONE, NONE, 0)
-DEF_TYPE("->", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("with_item", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-DEF_TYPE("with_statement", ORGANIZATION_BLOCK, NONE, NONE, 0)
-DEF_TYPE("with_clause", ORGANIZATION_BLOCK, NONE, NONE, 0)
-DEF_TYPE("list_comprehension", TRANSFORM_QUERY, NONE, NONE, 0)
-DEF_TYPE("generic_type", TYPE_GENERIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("type_parameter", TYPE_GENERIC, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-DEF_TYPE("pass", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("pass_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
-DEF_TYPE("augmented_assignment", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("decorated_definition", METADATA_ANNOTATION, NONE, NONE, 0)
-DEF_TYPE("not_operator", OPERATOR_LOGICAL, NONE, NONE, 0)
-DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("pattern_list", PATTERN_DESTRUCTURE, NONE, NONE, 0)
-DEF_TYPE("as_pattern_target", PATTERN_DESTRUCTURE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("as_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
-DEF_TYPE("default_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
-
-// Final Python edge cases
-DEF_TYPE("conditional_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
-DEF_TYPE("elif_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("typed_default_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("generator_expression", TRANSFORM_QUERY, NONE, NONE, 0)
-DEF_TYPE("aliased_import", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("slice", COMPUTATION_ACCESS, NONE, NONE, 0)
-DEF_TYPE("relative_import", EXTERNAL_IMPORT, NONE, NONE, 0)
-DEF_TYPE("import_prefix", EXTERNAL_IMPORT, NONE, NONE, 0)
-DEF_TYPE("list_splat", PATTERN_COLLECT, NONE, NONE, 0)
-DEF_TYPE("not in", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("if_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
-DEF_TYPE("expression_list", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("is not", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("lambda_parameters", ORGANIZATION_LIST, NONE, NONE, 0)
-DEF_TYPE("dictionary_splat", PATTERN_COLLECT, NONE, NONE, 0)
-DEF_TYPE("escape_interpolation", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("delete_statement", EXECUTION_MUTATION, NONE, NONE, 0)
-DEF_TYPE("del", EXECUTION_MUTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("print_statement", EXECUTION_STATEMENT_CALL, NONE, NONE, 0)
-DEF_TYPE("print", EXECUTION_STATEMENT_CALL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
-// Final Python edge cases for 100% classification - 489 remaining nodes
-DEF_TYPE("tuple_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
-DEF_TYPE("concatenated_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("case_pattern", PATTERN_MATCH, NONE, NONE, 0)
-DEF_TYPE("ellipsis", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("type_conversion", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("global", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("global_statement", METADATA_ANNOTATION, NONE, NONE, 0)
-DEF_TYPE("set", LITERAL_STRUCTURED | SemanticRefinements::Structured::SET, NONE, NONE, 0)
-DEF_TYPE("wildcard_import", EXTERNAL_IMPORT, NONE, NONE, 0)
 DEF_TYPE("keyword_separator", PARSER_PUNCTUATION, NONE, NONE, 0)
 DEF_TYPE("chevron", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE("format_specifier", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("list_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
-DEF_TYPE("dictionary_comprehension", TRANSFORM_QUERY, NONE, NONE, 0)
-DEF_TYPE("case_clause", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
-DEF_TYPE("set_comprehension", TRANSFORM_QUERY, NONE, NONE, 0)
-DEF_TYPE("complex_pattern", PATTERN_MATCH, NONE, NONE, 0)
-DEF_TYPE("attribute_pattern", PATTERN_DESTRUCTURE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("class_pattern", PATTERN_MATCH, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("keyword_pattern", PATTERN_MATCH, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("splat_pattern", PATTERN_COLLECT, NONE, NONE, 0)
-DEF_TYPE("union_pattern", PATTERN_MATCH, NONE, NONE, 0)
-DEF_TYPE("value_pattern", PATTERN_MATCH, NONE, NONE, 0)
-DEF_TYPE("as_clause", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("format_expression", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("conversion", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("interpolation_conversion", LITERAL_STRING, NONE, NONE, 0)
-
-// Absolute final Python edge cases for 100% perfect classification - 79 remaining nodes
-DEF_TYPE("case", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("exec", EXECUTION_STATEMENT_CALL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("exec_statement", EXECUTION_STATEMENT_CALL, NONE, NONE, 0)
-DEF_TYPE("named_expression", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("nonlocal_statement", METADATA_ANNOTATION, NONE, NONE, 0)
-DEF_TYPE("nonlocal", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("<>", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("line_continuation", PARSER_SYNTAX, NONE, NONE, 0)
-DEF_TYPE("match", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("match_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 DEF_TYPE("positional_separator", PARSER_PUNCTUATION, NONE, NONE, 0)
-DEF_TYPE("future_import_statement", EXTERNAL_IMPORT, NONE, NONE, 0)
-DEF_TYPE("__future__", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
-DEF_TYPE("_", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("line_continuation", PARSER_SYNTAX, NONE, NONE, 0)
+/** @} */
 
-// ==============================================================================
-// Parser-level semantic mappings only (Python comprehensions have distinct syntax)
-// ==============================================================================
+// =============================================================================
+// ERROR RECOVERY
+// =============================================================================
 
-// List comprehensions and generator expressions - these have distinct syntax
-DEF_TYPE("list_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, 0)
-DEF_TYPE("dictionary_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, 0)
-DEF_TYPE("set_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, 0)
-DEF_TYPE("generator_expression", TRANSFORM_QUERY | SemanticRefinements::Query::NESTED, NONE, NONE, 0)
-
-// Note: Built-in function names (map, filter, len, sum, etc.) removed
-// since they're just identifiers that could be user-redefined
-
-// Error handling
+/**
+ * @defgroup python_errors_parse Parse Errors
+ * @brief Error nodes from failed parsing
+ * @{
+ */
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+/** @} */
