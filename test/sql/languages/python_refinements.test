@@ -1,0 +1,479 @@
+# name: test/sql/languages/python_refinements.test
+# description: Test Python semantic refinements
+# group: [languages]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Python Refinement Tests
+# =============================================================================
+#
+# Tests that semantic refinements are correctly applied to Python code.
+# Refinements are 2-bit values in the lower bits of semantic_type that provide
+# finer-grained classification within each semantic category.
+# =============================================================================
+
+# =============================================================================
+# FUNCTION REFINEMENTS
+# =============================================================================
+
+# Test: Regular function should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'function_definition'
+LIMIT 1;
+----
+function_definition	DEFINITION_FUNCTION
+
+# Test: def keyword should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'def'
+LIMIT 1;
+----
+def	DEFINITION_FUNCTION
+
+# Test: async keyword should be FLOW_SYNC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'async'
+LIMIT 1;
+----
+async	FLOW_SYNC
+
+# =============================================================================
+# CLASS REFINEMENTS
+# =============================================================================
+
+# Test: Class definition should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'class_definition'
+LIMIT 1;
+----
+class_definition	DEFINITION_CLASS
+
+# Test: class keyword should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'class'
+LIMIT 1;
+----
+class	DEFINITION_CLASS
+
+# =============================================================================
+# VARIABLE REFINEMENTS
+# =============================================================================
+
+# Test: Typed parameter should be DEFINITION_VARIABLE (with PARAMETER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'typed_parameter'
+LIMIT 1;
+----
+typed_parameter	DEFINITION_VARIABLE
+
+# Test: Typed default parameter should be DEFINITION_VARIABLE (with PARAMETER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'typed_default_parameter'
+LIMIT 1;
+----
+typed_default_parameter	DEFINITION_VARIABLE
+
+# =============================================================================
+# IMPORT REFINEMENTS
+# =============================================================================
+
+# Test: Import from statement should be EXTERNAL_IMPORT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'import_from_statement'
+LIMIT 1;
+----
+import_from_statement	EXTERNAL_IMPORT
+
+# Test: import keyword should be EXTERNAL_IMPORT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'import'
+LIMIT 1;
+----
+import	EXTERNAL_IMPORT
+
+# Test: from keyword should be EXTERNAL_IMPORT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'from'
+LIMIT 1;
+----
+from	EXTERNAL_IMPORT
+
+# =============================================================================
+# CALL REFINEMENTS
+# =============================================================================
+
+# Test: Call expression should be COMPUTATION_CALL (with FUNCTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'call'
+LIMIT 1;
+----
+call	COMPUTATION_CALL
+
+# Test: Attribute access should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'attribute'
+LIMIT 1;
+----
+attribute	COMPUTATION_ACCESS
+
+# Test: Subscript should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'subscript'
+LIMIT 1;
+----
+subscript	COMPUTATION_ACCESS
+
+# =============================================================================
+# LITERAL REFINEMENTS
+# =============================================================================
+
+# Test: String should be LITERAL_STRING (with LITERAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'string'
+LIMIT 1;
+----
+string	LITERAL_STRING
+
+# Test: String content should be LITERAL_STRING
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'string_content'
+LIMIT 1;
+----
+string_content	LITERAL_STRING
+
+# Test: None should be LITERAL_ATOMIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'none'
+LIMIT 1;
+----
+none	LITERAL_ATOMIC
+
+# Test: List literal should be LITERAL_STRUCTURED (with SEQUENCE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'list'
+LIMIT 1;
+----
+list	LITERAL_STRUCTURED
+
+# Test: Pair (dict entry) should be LITERAL_STRUCTURED (with MAPPING refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'pair'
+LIMIT 1;
+----
+pair	LITERAL_STRUCTURED
+
+# =============================================================================
+# CONTROL FLOW REFINEMENTS
+# =============================================================================
+
+# Test: If statement should be FLOW_CONDITIONAL (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'if_statement'
+LIMIT 1;
+----
+if_statement	FLOW_CONDITIONAL
+
+# Test: if keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'if'
+LIMIT 1;
+----
+if	FLOW_CONDITIONAL
+
+# Test: For statement should be FLOW_LOOP (with ITERATOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'for_statement'
+LIMIT 1;
+----
+for_statement	FLOW_LOOP
+
+# Test: for keyword should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'for'
+LIMIT 1;
+----
+for	FLOW_LOOP
+
+# Test: Return statement should be FLOW_JUMP (with RETURN refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'return_statement'
+LIMIT 1;
+----
+return_statement	FLOW_JUMP
+
+# Test: return keyword should be FLOW_JUMP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'return'
+LIMIT 1;
+----
+return	FLOW_JUMP
+
+# Test: yield keyword should be FLOW_SYNC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'yield'
+LIMIT 1;
+----
+yield	FLOW_SYNC
+
+# =============================================================================
+# TYPE SYSTEM
+# =============================================================================
+
+# Test: type should be TYPE_REFERENCE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'type'
+LIMIT 1;
+----
+type	TYPE_REFERENCE
+
+# Test: -> (return type annotation) should be TYPE_REFERENCE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = '->'
+LIMIT 1;
+----
+->	TYPE_REFERENCE
+
+# Test: generic_type should be TYPE_GENERIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'generic_type'
+LIMIT 1;
+----
+generic_type	TYPE_GENERIC
+
+# Test: type_parameter should be TYPE_GENERIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'type_parameter'
+LIMIT 1;
+----
+type_parameter	TYPE_GENERIC
+
+# =============================================================================
+# DECORATORS AND ANNOTATIONS
+# =============================================================================
+
+# Test: decorator should be NAME_ATTRIBUTE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'decorator'
+LIMIT 1;
+----
+decorator	NAME_ATTRIBUTE
+
+# =============================================================================
+# STRUCTURAL ELEMENTS
+# =============================================================================
+
+# Test: Block should be ORGANIZATION_BLOCK
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'block'
+LIMIT 1;
+----
+block	ORGANIZATION_BLOCK
+
+# Test: Parameters should be ORGANIZATION_LIST
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'parameters'
+LIMIT 1;
+----
+parameters	ORGANIZATION_LIST
+
+# Test: Argument list should be ORGANIZATION_LIST
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'argument_list'
+LIMIT 1;
+----
+argument_list	ORGANIZATION_LIST
+
+# Test: Keyword argument should be ORGANIZATION_LIST
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'keyword_argument'
+LIMIT 1;
+----
+keyword_argument	ORGANIZATION_LIST
+
+# =============================================================================
+# IDENTIFIERS
+# =============================================================================
+
+# Test: Identifier should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'identifier'
+LIMIT 1;
+----
+identifier	NAME_IDENTIFIER
+
+# Test: Dotted name should be NAME_QUALIFIED
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'dotted_name'
+LIMIT 1;
+----
+dotted_name	NAME_QUALIFIED
+
+# =============================================================================
+# STATEMENTS
+# =============================================================================
+
+# Test: Expression statement should be EXECUTION_STATEMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'expression_statement'
+LIMIT 1;
+----
+expression_statement	EXECUTION_STATEMENT
+
+# =============================================================================
+# ADDITIONAL TESTS FROM simple.py for coverage
+# =============================================================================
+
+# Test: Integer should be LITERAL_NUMBER (with INTEGER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'integer'
+LIMIT 1;
+----
+integer	LITERAL_NUMBER
+
+# Test: Comment should be METADATA_COMMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/comments.py', context := 'native')
+WHERE type = 'comment'
+LIMIT 1;
+----
+comment	METADATA_COMMENT
+
+# Test: Assignment should be DEFINITION_VARIABLE (with MUTABLE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'assignment'
+LIMIT 1;
+----
+assignment	DEFINITION_VARIABLE
+
+# Test: Binary operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'binary_operator'
+LIMIT 1;
+----
+binary_operator	OPERATOR_ARITHMETIC
+
+# Test: Comparison operator should be OPERATOR_COMPARISON
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = 'comparison_operator'
+LIMIT 1;
+----
+comparison_operator	OPERATOR_COMPARISON
+
+# Test: + operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = '+'
+LIMIT 1;
+----
++	OPERATOR_ARITHMETIC
+
+# Test: = operator should be OPERATOR_ASSIGNMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/simple.py', context := 'native')
+WHERE type = '='
+LIMIT 1;
+----
+=	OPERATOR_ASSIGNMENT
+
+# =============================================================================
+# PYTHON-SPECIFIC CONSTRUCTS FROM decorators.py
+# =============================================================================
+
+# Test: Decorated definition should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/python/decorators.py', context := 'native')
+WHERE type = 'decorated_definition'
+LIMIT 1;
+----
+decorated_definition	METADATA_ANNOTATION
+
