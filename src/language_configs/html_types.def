@@ -1,91 +1,352 @@
-// HTML language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file html_types.def
+ * @brief HTML language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter HTML AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for HTML language constructs.
+ *
+ * ## HTML Language Characteristics
+ *
+ * - **Markup language**: Structure and content of web documents
+ * - **Elements**: Nested tag-based structure `<tag>content</tag>`
+ * - **Attributes**: Key-value pairs on elements `id="value"`
+ * - **Self-closing tags**: `<img />`, `<br />`
+ * - **DOCTYPE**: Document type declaration
+ * - **Comments**: `<!-- comment -->`
+ * - **Embedded content**: `<script>` and `<style>` elements
+ * - **HTML5**: Semantic elements like `<article>`, `<section>`, `<nav>`
+ * - **Entities**: Character references like `&nbsp;`, `&#x00A0;`
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category (e.g., Class::REGULAR = 0x00)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Document structure
+// ============================================================================
+// DOCUMENT STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup html_document Document Structure
+ * @brief Top-level HTML structure
+ *
+ * HTML document structure:
+ * - `<!DOCTYPE html>` - document type declaration
+ * - `<html>` - root element
+ * - `<head>` - metadata section
+ * - `<body>` - content section
+ * @{
+ */
+
+/// @brief Document root - complete HTML document
 DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, 0)
+
+/// @brief Fragment - partial HTML content
 DEF_TYPE("fragment", DEFINITION_MODULE, NONE, NONE, 0)
+
+/// @brief DOCTYPE declaration - `<!DOCTYPE html>`
 DEF_TYPE("doctype", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
 
-// Elements
+/** @} */ // end html_document
+
+// ============================================================================
+// ELEMENTS
+// ============================================================================
+
+/**
+ * @defgroup html_elements Elements
+ * @brief HTML element constructs
+ *
+ * HTML elements:
+ * - `<tag>content</tag>` - paired tags
+ * - `<tag />` - self-closing tags
+ * - Start tag contains attributes
+ * @{
+ */
+
+/// @brief Element - `<tag>content</tag>`
 DEF_TYPE("element", ORGANIZATION_BLOCK, CUSTOM, FUNCTION_WITH_PARAMS, 0)
+
+/// @brief Script element - `<script>code</script>`
 DEF_TYPE("script_element", EXTERNAL_EMBED, CUSTOM, FUNCTION_WITH_PARAMS, 0)
+
+/// @brief Style element - `<style>css</style>`
 DEF_TYPE("style_element", EXTERNAL_EMBED, CUSTOM, FUNCTION_WITH_PARAMS, 0)
+
+/// @brief Start tag - `<tag attr="value">`
 DEF_TYPE("start_tag", PARSER_DELIMITER, CUSTOM, FUNCTION_WITH_PARAMS, 0)
+
+/// @brief End tag - `</tag>`
 DEF_TYPE("end_tag", PARSER_DELIMITER, CUSTOM, NONE, 0)
+
+/// @brief Self-closing tag - `<tag />`
 DEF_TYPE("self_closing_tag", PARSER_DELIMITER, CUSTOM, FUNCTION_WITH_PARAMS, 0)
+
+/// @brief Tag name - element name like `div`, `span`
 DEF_TYPE("tag_name", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
 
-// Attributes
+/** @} */ // end html_elements
+
+// ============================================================================
+// ATTRIBUTES
+// ============================================================================
+
+/**
+ * @defgroup html_attributes Attributes
+ * @brief HTML element attributes
+ *
+ * HTML attributes:
+ * - `name="value"` - quoted value
+ * - `name=value` - unquoted value
+ * - `name` - boolean attribute
+ * @{
+ */
+
+/// @brief Attribute - `name="value"`
 DEF_TYPE("attribute", DEFINITION_VARIABLE, CUSTOM, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Attribute name - the attribute identifier
 DEF_TYPE("attribute_name", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Attribute value - the value part
 DEF_TYPE("attribute_value", LITERAL_STRING, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Quoted attribute value - `"value"`
 DEF_TYPE("quoted_attribute_value", LITERAL_STRING, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
 
-// Text and content
+/// @brief Unquoted attribute value - `value`
+DEF_TYPE("unquoted_attribute_value", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/** @} */ // end html_attributes
+
+// ============================================================================
+// TEXT AND CONTENT
+// ============================================================================
+
+/**
+ * @defgroup html_content Text and Content
+ * @brief Text content and special constructs
+ * @{
+ */
+
+/// @brief Text - plain text content
 DEF_TYPE("text", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Raw text - text in script/style elements
 DEF_TYPE("raw_text", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Comment - `<!-- comment -->`
 DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
-// Special HTML5 elements
-DEF_TYPE("erroneous_end_tag", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
-
-// DOCTYPE components
-DEF_TYPE("doctype_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-
-// Custom extraction strategies for HTML
-// Note: FIND_TAG_NAME, FIND_ATTRIBUTE_NAME, and FIND_ATTRIBUTE_VALUE 
-// would need to be implemented as custom strategies in the HTML adapter
-
-// ====================================
-// MISSING HTML CONSTRUCTS - Based on analysis of 18k+ nodes  
-// ====================================
-
-// Punctuation and delimiters - 90%+ of unclassified nodes
-DEF_TYPE(">", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("<", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("\"", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
-DEF_TYPE("</", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("/>", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("<!", PARSER_DELIMITER, NONE, NONE, 0)
-
-// HTML entities and special constructs  
+/// @brief Entity - character reference like `&nbsp;`
 DEF_TYPE("entity", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("erroneous_end_tag_name", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
 
-// Additional HTML constructs
-DEF_TYPE("quoted_attribute_value", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("unquoted_attribute_value", LITERAL_STRING, NODE_TEXT, NONE, 0)
+/// @brief CDATA section - `<![CDATA[...]]>`
 DEF_TYPE("cdata_section", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Processing instruction - `<?target data?>`
 DEF_TYPE("processing_instruction", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
 
-// Common HTML tag names (could be handled by tag_name but adding for completeness)
+/** @} */ // end html_content
+
+// ============================================================================
+// ERROR NODES
+// ============================================================================
+
+/**
+ * @defgroup html_errors Error Nodes
+ * @brief Parser error constructs
+ * @{
+ */
+
+/// @brief Erroneous end tag - mismatched closing tag
+DEF_TYPE("erroneous_end_tag", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/// @brief Erroneous end tag name - name of mismatched tag
+DEF_TYPE("erroneous_end_tag_name", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end html_errors
+
+// ============================================================================
+// DOCTYPE COMPONENTS
+// ============================================================================
+
+/**
+ * @defgroup html_doctype DOCTYPE Components
+ * @brief DOCTYPE declaration parts
+ * @{
+ */
+
+/// @brief DOCTYPE name - `html` in `<!DOCTYPE html>`
+DEF_TYPE("doctype_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/** @} */ // end html_doctype
+
+// ============================================================================
+// PUNCTUATION AND DELIMITERS
+// ============================================================================
+
+/**
+ * @defgroup html_punctuation Punctuation and Delimiters
+ * @brief HTML syntax tokens
+ * @{
+ */
+
+/// @brief Greater than - `>`
+DEF_TYPE(">", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Less than - `<`
+DEF_TYPE("<", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Double quote - `"`
+DEF_TYPE("\"", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Equals - `=`
+DEF_TYPE("=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/// @brief End tag open - `</`
+DEF_TYPE("</", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Self-closing - `/>`
+DEF_TYPE("/>", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief DOCTYPE open - `<!`
+DEF_TYPE("<!", PARSER_DELIMITER, NONE, NONE, 0)
+
+/** @} */ // end html_punctuation
+
+// ============================================================================
+// COMMON HTML TAG NAMES
+// ============================================================================
+
+/**
+ * @defgroup html_tags Common HTML Tag Names
+ * @brief Frequently used HTML element names
+ *
+ * These tag names are handled by the generic `tag_name` type,
+ * but are included for explicit recognition and IS_KEYWORD flagging.
+ * @{
+ */
+
+/// @brief HTML root element
 DEF_TYPE("html", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("head", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)  
+
+/// @brief Head element - metadata container
+DEF_TYPE("head", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Body element - content container
 DEF_TYPE("body", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Title element - document title
 DEF_TYPE("title", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Meta element - metadata
 DEF_TYPE("meta", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Link element - external resource
 DEF_TYPE("link", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Script element name
 DEF_TYPE("script", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Style element name
 DEF_TYPE("style", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Div element - generic container
 DEF_TYPE("div", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Span element - inline container
 DEF_TYPE("span", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Paragraph element
 DEF_TYPE("p", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Anchor element - hyperlink
 DEF_TYPE("a", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Image element
 DEF_TYPE("img", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Input element - form input
 DEF_TYPE("input", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Form element
 DEF_TYPE("form", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Table element
 DEF_TYPE("table", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Common HTML attributes  
+/** @} */ // end html_tags
+
+// ============================================================================
+// COMMON HTML ATTRIBUTES
+// ============================================================================
+
+/**
+ * @defgroup html_attrs Common HTML Attributes
+ * @brief Frequently used attribute names
+ * @{
+ */
+
+/// @brief ID attribute - `id="value"`
 DEF_TYPE("id", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Class attribute - `class="value"`
 DEF_TYPE("class", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Source attribute - `src="url"`
 DEF_TYPE("src", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Href attribute - `href="url"`
 DEF_TYPE("href", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Alt attribute - `alt="text"`
 DEF_TYPE("alt", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Type attribute - `type="value"`
 DEF_TYPE("type", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Value attribute - `value="value"`
 DEF_TYPE("value", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Name attribute - `name="value"`
 DEF_TYPE("name", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Error handling
+/** @} */ // end html_attrs
+
+// ============================================================================
+// PARSER ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup html_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end html_parser_errors

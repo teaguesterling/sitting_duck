@@ -1,281 +1,1144 @@
-// Dart programming language node type definitions
-// Client-optimized language with sound null safety and async support
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file dart_types.def
+ * @brief Dart language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter Dart AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for Dart language constructs.
+ *
+ * ## Dart Language Characteristics
+ *
+ * - **Client-optimized**: Designed for fast apps on any platform
+ * - **Sound null safety**: Compile-time null checking (Dart 2.12+)
+ * - **Strong typing**: Static type system with type inference
+ * - **Async/await**: First-class asynchronous programming
+ * - **Isolates**: Concurrent execution without shared memory
+ * - **Mixins**: Code reuse across class hierarchies
+ * - **Extensions**: Add functionality to existing types
+ * - **Records**: Immutable composite values (Dart 3.0+)
+ * - **Patterns**: Destructuring and pattern matching (Dart 3.0+)
+ * - **Flutter**: Primary language for cross-platform UI development
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category (e.g., Class::REGULAR = 0x00)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Document structure
+// ============================================================================
+// PROGRAM STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup dart_program Program Structure
+ * @brief Top-level file organization
+ * @{
+ */
+
+/// @brief Program root - top-level compilation unit
 DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Class and type definitions
+/** @} */ // end dart_program
+
+// ============================================================================
+// CLASS AND TYPE DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup dart_classes Class and Type Definitions
+ * @brief Dart class hierarchy constructs
+ *
+ * Dart class system:
+ * - `class Name { }` - regular class
+ * - `abstract class Name { }` - abstract class
+ * - `mixin Name { }` - mixin for code reuse
+ * - `enum Name { }` - enumeration
+ * - `extension Name on Type { }` - extend existing types
+ * - `typedef Name = Type` - type alias
+ * @{
+ */
+
+/// @brief Class definition - `class Name { }`
 DEF_TYPE("class_definition", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+
+/// @brief Class body - contents of class
 DEF_TYPE("class_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Enum declaration - `enum Name { A, B, C }`
 DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+
+/// @brief Enum body - enum constants and members
 DEF_TYPE("enum_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Enum constant - individual enum value
 DEF_TYPE("enum_constant", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Mixin declaration - `mixin Name { }`
 DEF_TYPE("mixin_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+
+/// @brief Extension declaration - `extension Name on Type { }`
 DEF_TYPE("extension_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+
+/// @brief Extension type declaration - Dart 3.0+
 DEF_TYPE("extension_type_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+
+/// @brief Extension body - extension methods
 DEF_TYPE("extension_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Type alias - `typedef Name = Type`
 DEF_TYPE("type_alias", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
 
-// Function and method definitions
-// Note: In Dart's tree-sitter grammar, signatures and bodies are siblings, not parent-child
-// Signatures are marked IS_DECLARATION_ONLY since they don't contain the body
-DEF_TYPE("function_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
-DEF_TYPE("function_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
-DEF_TYPE("function_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
-DEF_TYPE("function_expression_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
-DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
-DEF_TYPE("method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
-DEF_TYPE("getter_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
-DEF_TYPE("setter_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
-DEF_TYPE("operator_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, NONE, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
-DEF_TYPE("local_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)  // Contains body via lambda_expression
+/** @} */ // end dart_classes
 
-// Constructor definitions
+// ============================================================================
+// FUNCTION AND METHOD DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup dart_functions Function and Method Definitions
+ * @brief Dart function declarations
+ *
+ * Dart function features:
+ * - `ReturnType name(params) { }` - standard function
+ * - `ReturnType name(params) => expr;` - arrow function
+ * - `(params) { }` - anonymous function
+ * - `(params) => expr` - lambda expression
+ * - Optional parameters: `[type param = default]`
+ * - Named parameters: `{type param = default}`
+ *
+ * Note: In Dart's tree-sitter grammar, signatures and bodies are siblings
+ * @{
+ */
+
+/// @brief Function signature - function declaration without body
+DEF_TYPE("function_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+
+/// @brief Function body - function implementation
+DEF_TYPE("function_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Function expression - anonymous function
+DEF_TYPE("function_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
+
+/// @brief Function expression body
+DEF_TYPE("function_expression_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Lambda expression - `(x) => expr`
+DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
+
+/// @brief Method signature - class method declaration
+DEF_TYPE("method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+
+/// @brief Getter signature - `get name => value`
+DEF_TYPE("getter_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+
+/// @brief Setter signature - `set name(value) { }`
+DEF_TYPE("setter_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+
+/// @brief Operator signature - operator overload
+DEF_TYPE("operator_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, NONE, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+
+/// @brief Local function declaration - nested function
+DEF_TYPE("local_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+
+/** @} */ // end dart_functions
+
+// ============================================================================
+// CONSTRUCTOR DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup dart_constructors Constructor Definitions
+ * @brief Dart constructor variants
+ *
+ * Dart constructor types:
+ * - `ClassName(params)` - generative constructor
+ * - `ClassName.named(params)` - named constructor
+ * - `const ClassName()` - const constructor
+ * - `factory ClassName()` - factory constructor
+ * @{
+ */
+
+/// @brief Constructor signature - regular constructor
 DEF_TYPE("constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+
+/// @brief Constant constructor signature - `const` constructor
 DEF_TYPE("constant_constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+
+/// @brief Factory constructor signature - `factory` constructor
 DEF_TYPE("factory_constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+
+/// @brief Redirecting factory constructor
 DEF_TYPE("redirecting_factory_constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+
+/// @brief Constructor invocation - `new ClassName()` or `ClassName()`
 DEF_TYPE("constructor_invocation", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Constructor parameter
 DEF_TYPE("constructor_param", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Constructor tearoff - reference to constructor
 DEF_TYPE("constructor_tearoff", COMPUTATION_ACCESS, NONE, NONE, 0)
 
-// Parameters
+/** @} */ // end dart_constructors
+
+// ============================================================================
+// PARAMETERS
+// ============================================================================
+
+/**
+ * @defgroup dart_parameters Parameters
+ * @brief Function parameter declarations
+ * @{
+ */
+
+/// @brief Formal parameter - regular parameter
 DEF_TYPE("formal_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Formal parameter list - `(params)`
 DEF_TYPE("formal_parameter_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Optional formal parameters - `[optional]` or `{named}`
 DEF_TYPE("optional_formal_parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Super formal parameter - `super.field`
 DEF_TYPE("super_formal_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
 
-// Variable declarations
+/** @} */ // end dart_parameters
+
+// ============================================================================
+// VARIABLE DECLARATIONS
+// ============================================================================
+
+/**
+ * @defgroup dart_variables Variable Declarations
+ * @brief Variable and field declarations
+ *
+ * Dart variable types:
+ * - `var name = value` - inferred type
+ * - `Type name = value` - explicit type
+ * - `final name = value` - single assignment
+ * - `const name = value` - compile-time constant
+ * - `late Type name` - lazily initialized
+ * @{
+ */
+
+/// @brief Variable declaration - `var x = value`
 DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Local variable declaration
 DEF_TYPE("local_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Initialized variable definition
 DEF_TYPE("initialized_variable_definition", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Initialized identifier - variable with initializer
 DEF_TYPE("initialized_identifier", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Initialized identifier list
 DEF_TYPE("initialized_identifier_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Static final declaration - `static final name = value`
 DEF_TYPE("static_final_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Static final declaration list
 DEF_TYPE("static_final_declaration_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Declaration - general declaration
 DEF_TYPE("declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Pattern variable declaration - Dart 3.0+ patterns
 DEF_TYPE("pattern_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
 
-// Import/export
+/** @} */ // end dart_variables
+
+// ============================================================================
+// IMPORT/EXPORT
+// ============================================================================
+
+/**
+ * @defgroup dart_imports Import/Export
+ * @brief Library and import directives
+ *
+ * Dart import features:
+ * - `import 'package:name/name.dart'`
+ * - `import 'path.dart' as alias`
+ * - `import 'path.dart' show name`
+ * - `import 'path.dart' hide name`
+ * - `export 'path.dart'`
+ * - `part 'path.dart'` / `part of 'path.dart'`
+ * @{
+ */
+
+/// @brief Import or export statement
 DEF_TYPE("import_or_export", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0)
+
+/// @brief Import specification
 DEF_TYPE("import_specification", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0)
+
+/// @brief Library import - `import 'uri'`
 DEF_TYPE("library_import", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0)
+
+/// @brief Library export - `export 'uri'`
 DEF_TYPE("library_export", EXTERNAL_EXPORT, NONE, NONE, 0)
+
+/// @brief Library name - `library name;`
 DEF_TYPE("library_name", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Part directive - `part 'file.dart'`
 DEF_TYPE("part_directive", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0)
+
+/// @brief Part of directive - `part of 'main.dart'`
 DEF_TYPE("part_of_directive", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0)
+
+/// @brief URI literal - `'package:name/name.dart'`
 DEF_TYPE("uri", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Configurable URI - conditional imports
 DEF_TYPE("configurable_uri", LITERAL_STRING, NONE, NONE, 0)
+
+/// @brief Combinator - `show` or `hide`
 DEF_TYPE("combinator", EXTERNAL_IMPORT, NONE, NONE, 0)
 
-// Expressions
+/** @} */ // end dart_imports
+
+// ============================================================================
+// EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup dart_expressions Expressions
+ * @brief Dart expression types
+ * @{
+ */
+
+/// @brief Assignment expression - `x = value`
 DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+
+/// @brief Assignment without cascade
 DEF_TYPE("assignment_expression_without_cascade", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+
+/// @brief Assignable expression - left-hand side of assignment
 DEF_TYPE("assignable_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Conditional expression - `cond ? a : b`
 DEF_TYPE("conditional_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
+
+/// @brief If-null expression - `a ?? b`
 DEF_TYPE("if_null_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/// @brief Logical OR expression - `a || b`
 DEF_TYPE("logical_or_expression", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/// @brief Logical AND expression - `a && b`
 DEF_TYPE("logical_and_expression", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/// @brief Equality expression - `a == b`, `a != b`
 DEF_TYPE("equality_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/// @brief Relational expression - `a < b`, `a >= b`
 DEF_TYPE("relational_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/// @brief Bitwise OR expression - `a | b`
 DEF_TYPE("bitwise_or_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Bitwise XOR expression - `a ^ b`
 DEF_TYPE("bitwise_xor_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Bitwise AND expression - `a & b`
 DEF_TYPE("bitwise_and_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Shift expression - `a << b`, `a >> b`
 DEF_TYPE("shift_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Additive expression - `a + b`, `a - b`
 DEF_TYPE("additive_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Multiplicative expression - `a * b`, `a / b`
 DEF_TYPE("multiplicative_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Unary expression - `-a`, `!a`
 DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+
+/// @brief Postfix expression - `a++`, `a--`
 DEF_TYPE("postfix_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+
+/// @brief Type cast expression - `expr as Type`
 DEF_TYPE("type_cast_expression", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Type test expression - `expr is Type`
 DEF_TYPE("type_test_expression", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief New expression - `new ClassName()`
 DEF_TYPE("new_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Const object expression - `const ClassName()`
 DEF_TYPE("const_object_expression", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Parenthesized expression - `(expr)`
 DEF_TYPE("parenthesized_expression", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Expression statement
 DEF_TYPE("expression_statement", ORGANIZATION_BLOCK, NONE, NONE, 0)
 
-// Function calls and selectors
+/** @} */ // end dart_expressions
+
+// ============================================================================
+// FUNCTION CALLS AND SELECTORS
+// ============================================================================
+
+/**
+ * @defgroup dart_calls Function Calls and Selectors
+ * @brief Method invocations and member access
+ *
+ * Dart call syntax:
+ * - `function(args)`
+ * - `obj.method(args)`
+ * - `obj?.method(args)` - null-aware
+ * - `obj..method()..other()` - cascade
+ * @{
+ */
+
+/// @brief Arguments - `(arg1, arg2)`
 DEF_TYPE("arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Argument - single argument
 DEF_TYPE("argument", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Argument part
 DEF_TYPE("argument_part", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Named argument - `name: value`
 DEF_TYPE("named_argument", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Selector - `.member` or `[index]`
 DEF_TYPE("selector", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Cascade section - `..method()`
 DEF_TYPE("cascade_section", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Cascade selector
 DEF_TYPE("cascade_selector", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Index selector - `[index]`
 DEF_TYPE("index_selector", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Unconditional assignable selector - `.member`
 DEF_TYPE("unconditional_assignable_selector", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Conditional assignable selector - `?.member`
 DEF_TYPE("conditional_assignable_selector", COMPUTATION_ACCESS, NONE, NONE, 0)
 
-// Control flow
+/** @} */ // end dart_calls
+
+// ============================================================================
+// CONTROL FLOW
+// ============================================================================
+
+/**
+ * @defgroup dart_control Control Flow
+ * @brief Conditionals and branching
+ *
+ * Dart control flow:
+ * - `if (cond) { } else { }`
+ * - `switch (value) { case: ... }`
+ * - Switch expressions (Dart 3.0+)
+ * @{
+ */
+
+/// @brief If statement - `if (cond) { }`
 DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/// @brief If element - if in collection
 DEF_TYPE("if_element", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/// @brief For statement - `for (var x in items) { }`
 DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+
+/// @brief For element - for in collection
 DEF_TYPE("for_element", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+
+/// @brief For loop parts
 DEF_TYPE("for_loop_parts", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief While statement - `while (cond) { }`
 DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Do statement - `do { } while (cond)`
 DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Switch statement
 DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/// @brief Switch block
 DEF_TYPE("switch_block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Switch statement case
 DEF_TYPE("switch_statement_case", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/// @brief Switch statement default
 DEF_TYPE("switch_statement_default", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/// @brief Switch expression - Dart 3.0+
 DEF_TYPE("switch_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/// @brief Switch expression case
 DEF_TYPE("switch_expression_case", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/// @brief Break statement
 DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
+
+/// @brief Continue statement
 DEF_TYPE("continue_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
+
+/// @brief Return statement
 DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
 
-// Error handling
+/** @} */ // end dart_control
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup dart_errors Error Handling
+ * @brief Exception handling constructs
+ *
+ * Dart error handling:
+ * - `try { } on Type catch (e) { } finally { }`
+ * - `throw exception`
+ * - `rethrow`
+ * @{
+ */
+
+/// @brief Try statement
 DEF_TYPE("try_statement", ERROR_TRY, NONE, NONE, 0)
+
+/// @brief Catch clause - `catch (e) { }` or `on Type catch (e) { }`
 DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
+
+/// @brief Catch parameters
 DEF_TYPE("catch_parameters", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Finally clause
 DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
+
+/// @brief Throw expression - `throw exception`
 DEF_TYPE("throw_expression", ERROR_THROW, NONE, NONE, 0)
+
+/// @brief Throw expression without cascade
 DEF_TYPE("throw_expression_without_cascade", ERROR_THROW, NONE, NONE, 0)
+
+/// @brief Rethrow expression - `rethrow`
 DEF_TYPE("rethrow_expression", ERROR_THROW, NONE, NONE, 0)
 
-// Async/await
+/** @} */ // end dart_errors
+
+// ============================================================================
+// ASYNC/AWAIT
+// ============================================================================
+
+/**
+ * @defgroup dart_async Async/Await
+ * @brief Asynchronous programming support
+ *
+ * Dart async features:
+ * - `async` / `async*` function modifiers
+ * - `await` for awaiting futures
+ * - `yield` / `yield*` for generators
+ * @{
+ */
+
+/// @brief Await expression - `await future`
 DEF_TYPE("await_expression", FLOW_SYNC, NONE, NONE, 0)
+
+/// @brief Yield statement - `yield value`
 DEF_TYPE("yield_statement", FLOW_SYNC, NONE, NONE, 0)
+
+/// @brief Yield each statement - `yield* stream`
 DEF_TYPE("yield_each_statement", FLOW_SYNC, NONE, NONE, 0)
 
-// Blocks
+/** @} */ // end dart_async
+
+// ============================================================================
+// BLOCKS
+// ============================================================================
+
+/**
+ * @defgroup dart_blocks Blocks
+ * @brief Code blocks
+ * @{
+ */
+
+/// @brief Block - `{ statements }`
 DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
-// Pattern matching
+/** @} */ // end dart_blocks
+
+// ============================================================================
+// PATTERN MATCHING
+// ============================================================================
+
+/**
+ * @defgroup dart_patterns Pattern Matching
+ * @brief Dart 3.0+ pattern matching
+ *
+ * Pattern types:
+ * - Constant patterns
+ * - Variable patterns
+ * - List/map/record patterns
+ * - Object patterns
+ * - Cast/null-check/null-assert patterns
+ * @{
+ */
+
+/// @brief Constant pattern
 DEF_TYPE("constant_pattern", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Variable pattern
 DEF_TYPE("variable_pattern", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief List pattern - `[a, b, c]`
 DEF_TYPE("list_pattern", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Map pattern - `{'key': value}`
 DEF_TYPE("map_pattern", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Record pattern - `(a, b: c)`
 DEF_TYPE("record_pattern", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Object pattern - `ClassName(field: pattern)`
 DEF_TYPE("object_pattern", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Cast pattern - `pattern as Type`
 DEF_TYPE("cast_pattern", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Null check pattern - `pattern?`
 DEF_TYPE("null_check_pattern", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Null assert pattern - `pattern!`
 DEF_TYPE("null_assert_pattern", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Rest pattern - `...`
 DEF_TYPE("rest_pattern", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Pattern assignment
 DEF_TYPE("pattern_assignment", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 
-// Types
+/** @} */ // end dart_patterns
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+/**
+ * @defgroup dart_types Types
+ * @brief Type system constructs
+ *
+ * Dart type system:
+ * - Nullable types: `Type?`
+ * - Generic types: `List<Type>`
+ * - Function types: `Type Function(Type)`
+ * - Record types: `(Type, {Type name})` (Dart 3.0+)
+ * @{
+ */
+
+/// @brief Type identifier - type name
 DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+
+/// @brief Type arguments - `<Type1, Type2>`
 DEF_TYPE("type_arguments", TYPE_GENERIC, NONE, NONE, 0)
+
+/// @brief Type parameters - generic type parameters
 DEF_TYPE("type_parameters", TYPE_GENERIC, NONE, NONE, 0)
+
+/// @brief Type parameter - single type parameter
 DEF_TYPE("type_parameter", TYPE_GENERIC, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Type bound - `extends Type`
 DEF_TYPE("type_bound", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Type alias declaration
 DEF_TYPE("type_alias", TYPE_REFERENCE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Type test - `is Type`
 DEF_TYPE("type_test", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Type cast - `as Type`
 DEF_TYPE("type_cast", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Void type - `void`
 DEF_TYPE("void_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
+/// @brief Function type - `Type Function(Type)`
 DEF_TYPE("function_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/// @brief Record type - `(Type, Type)` (Dart 3.0+)
 DEF_TYPE("record_type", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/// @brief Record type field
 DEF_TYPE("record_type_field", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Record type named field
 DEF_TYPE("record_type_named_field", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Nullable type - `Type?`
 DEF_TYPE("nullable_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Inferred type - `var`
 DEF_TYPE("inferred_type", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+
+/// @brief Typed identifier
 DEF_TYPE("typed_identifier", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Parameter type list
 DEF_TYPE("parameter_type_list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Normal parameter type
 DEF_TYPE("normal_parameter_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Optional parameter types
 DEF_TYPE("optional_parameter_types", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Optional positional parameter types
 DEF_TYPE("optional_positional_parameter_types", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Named parameter types
 DEF_TYPE("named_parameter_types", ORGANIZATION_LIST, NONE, NONE, 0)
 
-// Inheritance
+/** @} */ // end dart_types
+
+// ============================================================================
+// INHERITANCE
+// ============================================================================
+
+/**
+ * @defgroup dart_inheritance Inheritance
+ * @brief Class inheritance constructs
+ * @{
+ */
+
+/// @brief Superclass - `extends Parent`
 DEF_TYPE("superclass", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Mixins - `with Mixin1, Mixin2`
 DEF_TYPE("mixins", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Mixin application - `Base with Mixin`
 DEF_TYPE("mixin_application", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Mixin application class
 DEF_TYPE("mixin_application_class", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+
+/// @brief Interfaces - `implements Interface1, Interface2`
 DEF_TYPE("interfaces", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Representation declaration - extension type representation
 DEF_TYPE("representation_declaration", TYPE_REFERENCE, NONE, NONE, 0)
 
-// Initializers
+/** @} */ // end dart_inheritance
+
+// ============================================================================
+// INITIALIZERS
+// ============================================================================
+
+/**
+ * @defgroup dart_initializers Initializers
+ * @brief Constructor initializer lists
+ * @{
+ */
+
+/// @brief Initializers - `: field = value, super()`
 DEF_TYPE("initializers", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Initializer list entry
 DEF_TYPE("initializer_list_entry", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Field initializer - `this.field = value`
 DEF_TYPE("field_initializer", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Redirection - `: this()` or `: this.named()`
 DEF_TYPE("redirection", ORGANIZATION_BLOCK, NONE, NONE, 0)
 
-// Assertions
+/** @} */ // end dart_initializers
+
+// ============================================================================
+// ASSERTIONS
+// ============================================================================
+
+/**
+ * @defgroup dart_assertions Assertions
+ * @brief Assert statements
+ * @{
+ */
+
+/// @brief Assert statement - `assert(condition)`
 DEF_TYPE("assert_statement", ERROR_THROW, NONE, NONE, 0)
+
+/// @brief Assertion expression
 DEF_TYPE("assertion", ERROR_THROW, NONE, NONE, 0)
+
+/// @brief Assertion arguments
 DEF_TYPE("assertion_arguments", ORGANIZATION_LIST, NONE, NONE, 0)
 
-// Literals
+/** @} */ // end dart_assertions
+
+// ============================================================================
+// LITERALS
+// ============================================================================
+
+/**
+ * @defgroup dart_literals Literals
+ * @brief Dart literal values
+ *
+ * Dart literals:
+ * - `null` - null value
+ * - `true`, `false` - boolean
+ * - `42`, `0xFF` - integer
+ * - `3.14` - double
+ * - `'string'`, `"string"` - string
+ * - `#symbol` - symbol
+ * @{
+ */
+
+/// @brief Null literal - `null`
 DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean true
 DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean false
 DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Decimal integer literal
 DEF_TYPE("decimal_integer_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
+
+/// @brief Hex integer literal - `0xFF`
 DEF_TYPE("hex_integer_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
+
+/// @brief Decimal floating point literal
 DEF_TYPE("decimal_floating_point_literal", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
+
+/// @brief String literal
 DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Symbol literal - `#symbol`
 DEF_TYPE("symbol_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Escape sequence - `\n`, `\t`, etc.
 DEF_TYPE("escape_sequence", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Template substitution - `${expr}` in string
 DEF_TYPE("template_substitution", LITERAL_STRING | SemanticRefinements::String::TEMPLATE, NONE, NONE, 0)
 
-// Collections
+/** @} */ // end dart_literals
+
+// ============================================================================
+// COLLECTIONS
+// ============================================================================
+
+/**
+ * @defgroup dart_collections Collections
+ * @brief Collection literals
+ *
+ * Dart collections:
+ * - `[1, 2, 3]` - list
+ * - `{1, 2, 3}` or `{'key': value}` - set or map
+ * - `(1, 2)` - record (Dart 3.0+)
+ * @{
+ */
+
+/// @brief List literal - `[items]`
 DEF_TYPE("list_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+
+/// @brief Set or map literal - `{items}` or `{key: value}`
 DEF_TYPE("set_or_map_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
+
+/// @brief Record literal - `(value1, name: value2)` (Dart 3.0+)
 DEF_TYPE("record_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+
+/// @brief Record field
 DEF_TYPE("record_field", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, NONE, NONE, 0)
+
+/// @brief Pair - map entry `key: value`
 DEF_TYPE("pair", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, NONE, NONE, 0)
+
+/// @brief Spread element - `...list`
 DEF_TYPE("spread_element", ORGANIZATION_BLOCK, NONE, NONE, 0)
 
-// Identifiers
+/** @} */ // end dart_collections
+
+// ============================================================================
+// IDENTIFIERS
+// ============================================================================
+
+/**
+ * @defgroup dart_identifiers Identifiers
+ * @brief Names and identifiers
+ * @{
+ */
+
+/// @brief Identifier - simple name
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Identifier list
 DEF_TYPE("identifier_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Identifier with dollar escaped
 DEF_TYPE("identifier_dollar_escaped", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Dotted identifier list
 DEF_TYPE("dotted_identifier_list", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Scoped identifier - `prefix.name`
 DEF_TYPE("scoped_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Qualified identifier
 DEF_TYPE("qualified", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// Annotations and metadata
+/** @} */ // end dart_identifiers
+
+// ============================================================================
+// ANNOTATIONS AND METADATA
+// ============================================================================
+
+/**
+ * @defgroup dart_annotations Annotations and Metadata
+ * @brief Dart annotations and metadata
+ *
+ * Dart annotations:
+ * - `@override`
+ * - `@deprecated`
+ * - `@CustomAnnotation()`
+ * @{
+ */
+
+/// @brief Annotation - `@annotation`
 DEF_TYPE("annotation", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Label - `labelName:`
 DEF_TYPE("label", NAME_IDENTIFIER, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Script tag - `#!/usr/bin/env dart`
 DEF_TYPE("script_tag", METADATA_DIRECTIVE, NONE, NONE, 0)
 
-// Comments
+/** @} */ // end dart_annotations
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup dart_comments Comments
+ * @brief Documentation and comments
+ *
+ * Dart comment styles:
+ * - `// line comment`
+ * - `/* block comment */`
+ * - `/// documentation comment`
+ * @{
+ */
+
+/// @brief Comment
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
+
+/// @brief Documentation comment - `/// doc`
 DEF_TYPE("documentation_comment", METADATA_COMMENT, NONE, NONE, 0)
 
-// Operators
+/** @} */ // end dart_comments
+
+// ============================================================================
+// OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup dart_operators Operators
+ * @brief Dart operators
+ * @{
+ */
+
+/// @brief Equality operator - `==`, `!=`
 DEF_TYPE("equality_operator", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/// @brief Relational operator - `<`, `>`, `<=`, `>=`
 DEF_TYPE("relational_operator", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/// @brief Additive operator - `+`, `-`
 DEF_TYPE("additive_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Multiplicative operator - `*`, `/`, `~/`, `%`
 DEF_TYPE("multiplicative_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Shift operator - `<<`, `>>`, `>>>`
 DEF_TYPE("shift_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Bitwise operator - `&`, `|`, `^`
 DEF_TYPE("bitwise_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Logical OR operator - `||`
 DEF_TYPE("logical_or_operator", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief Logical AND operator - `&&`
 DEF_TYPE("logical_and_operator", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief Prefix operator - `!`, `-`, `~`
 DEF_TYPE("prefix_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Postfix operator - `!` (null assertion)
 DEF_TYPE("postfix_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Increment operator - `++`, `--`
 DEF_TYPE("increment_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Minus operator - `-`
 DEF_TYPE("minus_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Negation operator - `!`
 DEF_TYPE("negation_operator", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief Tilde operator - `~`
 DEF_TYPE("tilde_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Binary operator
 DEF_TYPE("binary_operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief As operator - `as` type cast
 DEF_TYPE("as_operator", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+
+/// @brief Is operator - `is` type test
 DEF_TYPE("is_operator", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
 
-// Builtin keywords
+/** @} */ // end dart_operators
+
+// ============================================================================
+// BUILTIN KEYWORDS
+// ============================================================================
+
+/**
+ * @defgroup dart_keywords Builtin Keywords
+ * @brief Dart language keywords
+ * @{
+ */
+
+/// @brief Const builtin - `const`
 DEF_TYPE("const_builtin", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Final builtin - `final`
 DEF_TYPE("final_builtin", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Break builtin - `break`
 DEF_TYPE("break_builtin", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Assert builtin - `assert`
 DEF_TYPE("assert_builtin", ERROR_THROW, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Case builtin - `case`
 DEF_TYPE("case_builtin", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Rethrow builtin - `rethrow`
 DEF_TYPE("rethrow_builtin", ERROR_THROW, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Part of builtin - `part of`
 DEF_TYPE("part_of_builtin", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Modifiers
+/** @} */ // end dart_keywords
+
+// ============================================================================
+// MODIFIERS
+// ============================================================================
+
+/**
+ * @defgroup dart_modifiers Modifiers
+ * @brief Class and member modifiers
+ * @{
+ */
+
+/// @brief Abstract modifier - `abstract`
 DEF_TYPE("abstract", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Base modifier - `base` (Dart 3.0+)
 DEF_TYPE("base", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Sealed modifier - `sealed` (Dart 3.0+)
 DEF_TYPE("sealed", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Interface modifier - `interface` (Dart 3.0+)
 DEF_TYPE("interface", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Mixin modifier - `mixin`
 DEF_TYPE("mixin", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Special keywords
+/** @} */ // end dart_modifiers
+
+// ============================================================================
+// SPECIAL KEYWORDS
+// ============================================================================
+
+/**
+ * @defgroup dart_special Special Keywords
+ * @brief Special reference keywords
+ * @{
+ */
+
+/// @brief This keyword - `this`
 DEF_TYPE("this", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Super keyword - `super`
 DEF_TYPE("super", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// URI and configuration
+/** @} */ // end dart_special
+
+// ============================================================================
+// URI AND CONFIGURATION
+// ============================================================================
+
+/**
+ * @defgroup dart_uri URI and Configuration
+ * @brief Conditional imports
+ * @{
+ */
+
+/// @brief URI test - conditional import test
 DEF_TYPE("uri_test", LITERAL_STRING, NONE, NONE, 0)
+
+/// @brief Configuration URI
 DEF_TYPE("configuration_uri", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Configuration URI condition
 DEF_TYPE("configuration_uri_condition", FLOW_CONDITIONAL, NONE, NONE, 0)
 
-// Error handling
+/** @} */ // end dart_uri
+
+// ============================================================================
+// PARSER ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup dart_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end dart_parser_errors

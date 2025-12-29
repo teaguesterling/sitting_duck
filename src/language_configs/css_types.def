@@ -1,158 +1,724 @@
-// CSS language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file css_types.def
+ * @brief CSS language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter CSS AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for CSS language constructs.
+ *
+ * ## CSS Language Characteristics
+ *
+ * - **Stylesheet language**: Visual presentation of web documents
+ * - **Selectors**: Target HTML elements with specificity rules
+ * - **Cascade**: Inheritance and specificity determine applied styles
+ * - **At-rules**: `@media`, `@keyframes`, `@import`, `@supports`
+ * - **Custom properties**: CSS variables with `--name` and `var()`
+ * - **Functions**: `calc()`, `rgb()`, `url()`, `clamp()`, `min()`, `max()`
+ * - **Units**: Absolute (`px`, `cm`) and relative (`em`, `rem`, `vh`, `vw`, `%`)
+ * - **Media queries**: Responsive design breakpoints
+ * - **Animations**: `@keyframes` with percentage or `from`/`to` blocks
+ * - **Modern CSS**: Grid, Flexbox, container queries, nesting
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category (e.g., Class::REGULAR = 0x00)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Document structure
+// ============================================================================
+// DOCUMENT STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup css_document Document Structure
+ * @brief Top-level CSS structure
+ *
+ * CSS document organization:
+ * - Stylesheet is the root containing all rules
+ * - Rule sets contain selectors and declaration blocks
+ * - At-rules provide special directives
+ * @{
+ */
+
+/// @brief Stylesheet - root node containing all CSS rules
 DEF_TYPE("stylesheet", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Rule set - selector(s) + declaration block `selector { declarations }`
 DEF_TYPE("rule_set", DEFINITION_CLASS, NONE, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+
+/** @} */ // end css_document
+
+// ============================================================================
+// AT-RULES
+// ============================================================================
+
+/**
+ * @defgroup css_at_rules At-Rules
+ * @brief CSS at-rule directives
+ *
+ * CSS at-rules:
+ * - `@media` - responsive breakpoints
+ * - `@import` - external stylesheet import
+ * - `@keyframes` - animation definition
+ * - `@supports` - feature detection
+ * - `@charset` - character encoding
+ * - `@namespace` - XML namespace
+ * @{
+ */
+
+/// @brief Generic at-rule - `@rule { }`
 DEF_TYPE("at_rule", DEFINITION_CLASS, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Media statement - `@media screen and (min-width: 768px)`
 DEF_TYPE("media_statement", DEFINITION_CLASS, NODE_TEXT, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Import statement - `@import url("file.css")`
 DEF_TYPE("import_statement", EXTERNAL_IMPORT, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Namespace statement - `@namespace svg url(...)`
 DEF_TYPE("namespace_statement", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Keyframes statement - `@keyframes animation-name`
 DEF_TYPE("keyframes_statement", DEFINITION_CLASS, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Supports statement - `@supports (display: grid)`
 DEF_TYPE("supports_statement", DEFINITION_CLASS, NODE_TEXT, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Charset statement - `@charset "UTF-8"`
 DEF_TYPE("charset_statement", METADATA_DIRECTIVE, CUSTOM, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Selectors
+/** @} */ // end css_at_rules
+
+// ============================================================================
+// SELECTORS
+// ============================================================================
+
+/**
+ * @defgroup css_selectors Selectors
+ * @brief CSS selector constructs
+ *
+ * CSS selector types:
+ * - `.class` - class selector
+ * - `#id` - ID selector
+ * - `element` - type/tag selector
+ * - `*` - universal selector
+ * - `[attr]` - attribute selector
+ * - `:pseudo` - pseudo-class selector
+ * - `::pseudo` - pseudo-element selector
+ * - Combinators: descendant, child (`>`), sibling (`~`), adjacent (`+`)
+ * @{
+ */
+
+/// @brief Selectors list - comma-separated selectors
 DEF_TYPE("selectors", ORGANIZATION_LIST, NODE_TEXT, NONE, 0)
+
+/// @brief Class selector - `.classname`
 DEF_TYPE("class_selector", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/// @brief ID selector - `#identifier`
 DEF_TYPE("id_selector", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Tag/type selector - `div`, `p`, `span`
 DEF_TYPE("tag_name", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Universal selector - `*`
 DEF_TYPE("universal_selector", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Attribute selector - `[attr="value"]`
 DEF_TYPE("attribute_selector", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
+
+/// @brief Pseudo-class selector - `:hover`, `:nth-child()`
 DEF_TYPE("pseudo_class_selector", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Pseudo-element selector - `::before`, `::after`
 DEF_TYPE("pseudo_element_selector", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Descendant selector - `ancestor descendant`
 DEF_TYPE("descendant_selector", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief Child selector - `parent > child`
 DEF_TYPE("child_selector", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief General sibling selector - `element ~ sibling`
 DEF_TYPE("sibling_selector", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief Adjacent sibling selector - `element + sibling`
 DEF_TYPE("adjacent_sibling_selector", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
 
-// Declarations and properties
+/** @} */ // end css_selectors
+
+// ============================================================================
+// DECLARATIONS AND PROPERTIES
+// ============================================================================
+
+/**
+ * @defgroup css_declarations Declarations and Properties
+ * @brief CSS property declarations
+ *
+ * CSS declaration structure:
+ * - Declaration: `property: value;`
+ * - Block: `{ declarations }`
+ * - Important: `!important` modifier
+ * @{
+ */
+
+/// @brief Declaration block - `{ property: value; ... }`
 DEF_TYPE("block", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Declaration - `property: value`
 DEF_TYPE("declaration", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
+
+/// @brief Property name - `color`, `margin`, `display`
 DEF_TYPE("property_name", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Important marker - `!important`
 DEF_TYPE("important", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 
-// Values and literals
+/** @} */ // end css_declarations
+
+// ============================================================================
+// VALUES AND LITERALS
+// ============================================================================
+
+/**
+ * @defgroup css_values Values and Literals
+ * @brief CSS value types
+ *
+ * CSS value types:
+ * - Numbers: `42`, `3.14`
+ * - Dimensions: `16px`, `1.5em`, `100%`
+ * - Colors: `#fff`, `rgb()`, `hsl()`
+ * - Strings: `"content"`, `'font-family'`
+ * - Keywords: `auto`, `inherit`, `none`
+ * @{
+ */
+
+/// @brief Integer value - `42`
 DEF_TYPE("integer_value", LITERAL_NUMBER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Float value - `3.14`
 DEF_TYPE("float_value", LITERAL_NUMBER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Unit - `px`, `em`, `%`, etc.
 DEF_TYPE("unit", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief String value - `"text"`
 DEF_TYPE("string_value", LITERAL_STRING, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Color value - `#rgb`, `#rrggbb`
 DEF_TYPE("color_value", LITERAL_ATOMIC, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Identifier - generic name token
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/// @brief Plain value - unquoted keyword value
 DEF_TYPE("plain_value", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Binary expression - `calc(100% - 20px)`
 DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+
+/// @brief Parenthesized value - `(value)`
 DEF_TYPE("parenthesized_value", ORGANIZATION_CONTAINER, NONE, NONE, 0)
 
-// Functions and calculations
+/** @} */ // end css_values
+
+// ============================================================================
+// FUNCTIONS AND CALCULATIONS
+// ============================================================================
+
+/**
+ * @defgroup css_functions Functions and Calculations
+ * @brief CSS function calls
+ *
+ * CSS functions:
+ * - `calc()` - mathematical calculations
+ * - `var()` - custom property reference
+ * - `url()` - resource reference
+ * - `rgb()`, `rgba()`, `hsl()`, `hsla()` - color functions
+ * - `min()`, `max()`, `clamp()` - comparison functions
+ * @{
+ */
+
+/// @brief Function call - `function(args)`
 DEF_TYPE("call_expression", COMPUTATION_CALL, CUSTOM, FUNCTION_WITH_PARAMS, 0)
+
+/// @brief Function name - `calc`, `rgb`, `var`
 DEF_TYPE("function_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Function arguments - argument list
 DEF_TYPE("arguments", ORGANIZATION_LIST, NONE, NONE, 0)
 
-// Comments
+/** @} */ // end css_functions
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup css_comments Comments
+ * @brief CSS comment blocks
+ * @{
+ */
+
+/// @brief Comment - `/* comment */`
 DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Media queries
+/** @} */ // end css_comments
+
+// ============================================================================
+// MEDIA QUERIES
+// ============================================================================
+
+/**
+ * @defgroup css_media Media Queries
+ * @brief Media query components
+ *
+ * Media query features:
+ * - `min-width`, `max-width` - viewport dimensions
+ * - `orientation` - portrait/landscape
+ * - `prefers-color-scheme` - light/dark mode
+ * @{
+ */
+
+/// @brief Media feature name - `min-width`, `orientation`
 DEF_TYPE("media_feature_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Feature name - generic feature identifier
 DEF_TYPE("feature_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// Keyframes
+/** @} */ // end css_media
+
+// ============================================================================
+// KEYFRAMES
+// ============================================================================
+
+/**
+ * @defgroup css_keyframes Keyframes
+ * @brief Animation keyframe constructs
+ *
+ * Keyframe syntax:
+ * - `@keyframes name { 0% { } 100% { } }`
+ * - `from` = 0%, `to` = 100%
+ * @{
+ */
+
+/// @brief Keyframe block list - contains keyframe blocks
 DEF_TYPE("keyframe_block_list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Keyframe block - single animation frame `50% { }`
 DEF_TYPE("keyframe_block", ORGANIZATION_BLOCK, CUSTOM, NONE, 0)
 
-// Variables (CSS custom properties)
+/** @} */ // end css_keyframes
+
+// ============================================================================
+// CSS CUSTOM PROPERTIES
+// ============================================================================
+
+/**
+ * @defgroup css_custom_properties CSS Custom Properties
+ * @brief CSS variables and custom properties
+ *
+ * Custom property syntax:
+ * - Definition: `--custom-property: value;`
+ * - Usage: `var(--custom-property)`
+ * @{
+ */
+
+/// @brief Variable name - `--custom-property`
 DEF_TYPE("variable_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief PostCSS statement - preprocessor directive
 DEF_TYPE("postcss_statement", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
 
-// Grid and flexbox
+/** @} */ // end css_custom_properties
+
+// ============================================================================
+// LAYOUT VALUES
+// ============================================================================
+
+/**
+ * @defgroup css_layout Layout Values
+ * @brief Grid and flexbox specific values
+ * @{
+ */
+
+/// @brief Grid value - grid-specific syntax
 DEF_TYPE("grid_value", LITERAL_STRUCTURED, NODE_TEXT, NONE, 0)
 
-// Special selectors
+/** @} */ // end css_layout
+
+// ============================================================================
+// SPECIAL SELECTORS
+// ============================================================================
+
+/**
+ * @defgroup css_special_selectors Special Selectors
+ * @brief Modern CSS selector features
+ * @{
+ */
+
+/// @brief Nesting selector - `&` in nested CSS
 DEF_TYPE("nesting_selector", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Namespace name - XML namespace prefix
 DEF_TYPE("namespace_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// ====================================
-// MISSING CSS CONSTRUCTS - Based on analysis of 101k+ nodes
-// ====================================
+/** @} */ // end css_special_selectors
 
-// Punctuation and delimiters - major unclassified types
+// ============================================================================
+// PUNCTUATION AND DELIMITERS
+// ============================================================================
+
+/**
+ * @defgroup css_punctuation Punctuation and Delimiters
+ * @brief CSS syntax tokens
+ * @{
+ */
+
+/// @brief Colon - property separator `:`
 DEF_TYPE(":", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Semicolon - declaration terminator `;`
 DEF_TYPE(";", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Period - class selector prefix `.`
 DEF_TYPE(".", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Comma - selector/value separator `,`
 DEF_TYPE(",", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Opening brace - block start `{`
 DEF_TYPE("{", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Closing brace - block end `}`
 DEF_TYPE("}", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Opening parenthesis - function call `(`
 DEF_TYPE("(", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Closing parenthesis - function call `)`
 DEF_TYPE(")", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Hash - ID selector prefix `#`
 DEF_TYPE("#", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Greater than - child combinator `>`
 DEF_TYPE(">", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/// @brief Double colon - pseudo-element prefix `::`
 DEF_TYPE("::", PARSER_PUNCTUATION, NONE, NONE, 0)
+
+/// @brief Double quote - string delimiter `"`
 DEF_TYPE("\"", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Single quote - string delimiter `'`
 DEF_TYPE("'", PARSER_DELIMITER, NONE, NONE, 0)
 
-// CSS selectors and names  
+/** @} */ // end css_punctuation
+
+// ============================================================================
+// SELECTOR NAMES
+// ============================================================================
+
+/**
+ * @defgroup css_names Selector Names
+ * @brief CSS selector name tokens
+ * @{
+ */
+
+/// @brief Class name - name portion of `.classname`
 DEF_TYPE("class_name", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+
+/// @brief String content - text inside quotes
 DEF_TYPE("string_content", LITERAL_STRING, NONE, NONE, 0)
 
-// CSS operators and combinators
+/** @} */ // end css_names
+
+// ============================================================================
+// OPERATORS AND COMBINATORS
+// ============================================================================
+
+/**
+ * @defgroup css_operators Operators and Combinators
+ * @brief CSS operator tokens
+ * @{
+ */
+
+/// @brief Plus - adjacent sibling combinator `+`
 DEF_TYPE("+", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/// @brief Tilde - general sibling combinator `~`
 DEF_TYPE("~", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/// @brief Asterisk - universal selector `*`
 DEF_TYPE("*", OPERATOR_LOGICAL, NONE, NONE, 0)
 
-// CSS at-rules and keywords
+/** @} */ // end css_operators
+
+// ============================================================================
+// AT-RULE KEYWORDS
+// ============================================================================
+
+/**
+ * @defgroup css_at_keywords At-Rule Keywords
+ * @brief CSS at-rule keyword tokens
+ * @{
+ */
+
+/// @brief @media keyword
 DEF_TYPE("@media", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("@import", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD) 
+
+/// @brief @import keyword
+DEF_TYPE("@import", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief @keyframes keyword
 DEF_TYPE("@keyframes", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief @supports keyword
 DEF_TYPE("@supports", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief @charset keyword
 DEF_TYPE("@charset", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief @namespace keyword
 DEF_TYPE("@namespace", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// CSS values and units
+/** @} */ // end css_at_keywords
+
+// ============================================================================
+// UNITS
+// ============================================================================
+
+/**
+ * @defgroup css_units Units
+ * @brief CSS measurement unit tokens
+ *
+ * Unit categories:
+ * - Absolute: `px`, `cm`, `mm`, `in`, `pt`, `pc`
+ * - Relative: `em`, `rem`, `%`
+ * - Viewport: `vh`, `vw`, `vmin`, `vmax`
+ * @{
+ */
+
+/// @brief Pixels unit - `px`
 DEF_TYPE("px", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Root em unit - `rem`
 DEF_TYPE("rem", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Em unit - `em`
 DEF_TYPE("em", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Percentage unit - `%`
 DEF_TYPE("%", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Viewport height unit - `vh`
 DEF_TYPE("vh", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Viewport width unit - `vw`
 DEF_TYPE("vw", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 
-// CSS special values
+/** @} */ // end css_units
+
+// ============================================================================
+// SPECIAL VALUES
+// ============================================================================
+
+/**
+ * @defgroup css_special_values Special Values
+ * @brief CSS keyword values
+ * @{
+ */
+
+/// @brief Important declaration - `!important`
 DEF_TYPE("!important", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
+
+/// @brief Inherit value - inherit from parent
 DEF_TYPE("inherit", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Initial value - use initial value
 DEF_TYPE("initial", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Unset value - reset to natural value
 DEF_TYPE("unset", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief None value - disable property
 DEF_TYPE("none", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Auto value - automatic calculation
 DEF_TYPE("auto", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Modern CSS constructs
+/** @} */ // end css_special_values
+
+// ============================================================================
+// CSS FUNCTIONS
+// ============================================================================
+
+/**
+ * @defgroup css_function_names CSS Function Names
+ * @brief Built-in CSS function keywords
+ * @{
+ */
+
+/// @brief var() function - custom property reference
 DEF_TYPE("var", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief calc() function - mathematical calculation
 DEF_TYPE("calc", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief url() function - resource reference
 DEF_TYPE("url", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief rgb() function - RGB color
 DEF_TYPE("rgb", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief rgba() function - RGB color with alpha
 DEF_TYPE("rgba", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief hsl() function - HSL color
 DEF_TYPE("hsl", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief hsla() function - HSL color with alpha
 DEF_TYPE("hsla", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Final CSS edge cases - remaining unclassified types
+/** @} */ // end css_function_names
+
+// ============================================================================
+// STRING AND ESCAPE SEQUENCES
+// ============================================================================
+
+/**
+ * @defgroup css_strings String and Escape Sequences
+ * @brief CSS string-related tokens
+ * @{
+ */
+
+/// @brief Escape sequence - `\n`, `\u0041`
 DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
+
+/** @} */ // end css_strings
+
+// ============================================================================
+// ATTRIBUTE SELECTORS
+// ============================================================================
+
+/**
+ * @defgroup css_attribute_selectors Attribute Selector Components
+ * @brief Attribute selector parts
+ * @{
+ */
+
+/// @brief Attribute name - name in `[attr]`
 DEF_TYPE("attribute_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Opening bracket - `[`
 DEF_TYPE("[", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Closing bracket - `]`
 DEF_TYPE("]", PARSER_DELIMITER, NONE, NONE, 0)
+
+/// @brief Feature query - `@supports` condition
 DEF_TYPE("feature_query", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Equals operator - `=`
 DEF_TYPE("=", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/// @brief ID name - name portion of `#idname`
 DEF_TYPE("id_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/** @} */ // end css_attribute_selectors
+
+// ============================================================================
+// MEDIA QUERY OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup css_media_operators Media Query Operators
+ * @brief Media query logical operators
+ * @{
+ */
+
+/// @brief And operator - `and` in media queries
 DEF_TYPE("and", OPERATOR_LOGICAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Binary query - combined media conditions
 DEF_TYPE("binary_query", OPERATOR_LOGICAL, NONE, NONE, 0)
 
-// Absolute CSS perfection - final 40 nodes  
+/** @} */ // end css_media_operators
+
+// ============================================================================
+// ADDITIONAL CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup css_additional Additional Constructs
+ * @brief Remaining CSS constructs
+ * @{
+ */
+
+/// @brief Keyword query - media type query
 DEF_TYPE("keyword_query", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Unary query - negated media query
 DEF_TYPE("unary_query", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/// @brief Only keyword - media query modifier
 DEF_TYPE("only", OPERATOR_LOGICAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Keyframes name - animation identifier
 DEF_TYPE("keyframes_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Substring match operator - `*=`
 DEF_TYPE("*=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+
+/// @brief At keyword - generic at-rule identifier
 DEF_TYPE("at_keyword", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
+
+/// @brief Minus operator - subtraction `-`
 DEF_TYPE("-", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+
+/// @brief Division operator - `/`
 DEF_TYPE("/", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+
+/// @brief To keyword - keyframe end `to`
 DEF_TYPE("to", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief From keyword - keyframe start `from`
 DEF_TYPE("from", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Error handling
+/** @} */ // end css_additional
+
+// ============================================================================
+// PARSER ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup css_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end css_parser_errors

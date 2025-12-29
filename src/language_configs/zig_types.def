@@ -1,193 +1,817 @@
-// Zig programming language node type definitions
-// Modern systems programming language with focus on safety and performance
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file zig_types.def
+ * @brief Zig language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter Zig AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for Zig language constructs.
+ *
+ * ## Zig Language Characteristics
+ *
+ * - **Systems programming**: Direct hardware access and manual memory management
+ * - **No hidden control flow**: No hidden allocations, no garbage collection
+ * - **Compile-time execution**: `comptime` for powerful metaprogramming
+ * - **Error handling**: Explicit error unions and `try`/`catch`
+ * - **Optionals**: First-class optional types with `?Type`
+ * - **Pointers and slices**: Rich pointer types with safety features
+ * - **No undefined behavior**: Detectable at compile-time or runtime
+ * - **C interop**: Direct ABI compatibility with C
+ * - **SIMD**: First-class vector types for SIMD operations
+ * - **Async/await**: Stackless coroutines for async programming
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category (e.g., Class::REGULAR = 0x00)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Document structure
+// ============================================================================
+// PROGRAM STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup zig_program Program Structure
+ * @brief Top-level file organization
+ * @{
+ */
+
+/// @brief Source file root - top-level compilation unit
 DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Function definitions
+/** @} */ // end zig_program
+
+// ============================================================================
+// FUNCTION DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup zig_functions Function Definitions
+ * @brief Zig function declarations
+ *
+ * Zig function features:
+ * - `fn name(params) ReturnType { }`
+ * - `pub fn name(params) ReturnType { }` - public
+ * - `inline fn` - force inlining
+ * - `export fn` - export for C ABI
+ * - Error return types: `fn foo() !ReturnType`
+ * - Optional return types: `fn foo() ?ReturnType`
+ * @{
+ */
+
+/// @brief Function declaration - `fn name(params) Type { }`
 DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Function signature - return type and parameters
 DEF_TYPE("function_signature", TYPE_COMPOSITE, NONE, NONE, 0)
+
+/// @brief Parameters - `(param1, param2)`
 DEF_TYPE("parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
+
+/// @brief Parameter - function parameter
 DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
 
-// Type definitions
+/** @} */ // end zig_functions
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup zig_types Type Definitions
+ * @brief Zig type declarations
+ *
+ * Zig type system:
+ * - `struct { }` - struct type
+ * - `enum { }` - enumeration
+ * - `union { }` - tagged or untagged union
+ * - `opaque {}` - opaque type for C interop
+ * - Error sets: `error { OutOfMemory, ... }`
+ * @{
+ */
+
+/// @brief Struct declaration - `const S = struct { }`
 DEF_TYPE("struct_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Enum declaration - `const E = enum { }`
 DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Union declaration - `const U = union { }`
 DEF_TYPE("union_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Opaque declaration - for C interop
 DEF_TYPE("opaque_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Error set declaration - `const E = error { }`
 DEF_TYPE("error_set_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, NONE, 0)
 
-// Variable declarations
+/** @} */ // end zig_types
+
+// ============================================================================
+// VARIABLE DECLARATIONS
+// ============================================================================
+
+/**
+ * @defgroup zig_variables Variable Declarations
+ * @brief Variable and constant declarations
+ *
+ * Zig variable declarations:
+ * - `var name: Type = value` - mutable variable
+ * - `const name = value` - immutable constant
+ * - `comptime var` - compile-time variable
+ * - `threadlocal var` - thread-local storage
+ * @{
+ */
+
+/// @brief Variable declaration - `var` or `const`
 DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Comptime declaration - compile-time variable
 DEF_TYPE("comptime_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Test declaration - `test "name" { }`
 DEF_TYPE("test_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Using namespace declaration - `usingnamespace @import("...")`
 DEF_TYPE("using_namespace_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0)
 
-// Expressions
+/** @} */ // end zig_variables
+
+// ============================================================================
+// EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup zig_expressions Expressions
+ * @brief Zig expression types
+ * @{
+ */
+
+/// @brief Expression - general expression
 DEF_TYPE("expression", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Binary expression - `a + b`, `a == b`
 DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
+
+/// @brief Unary expression - `-a`, `!a`
 DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
+
+/// @brief Assignment expression - `a = b`
 DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
+
+/// @brief Call expression - `function(args)`
 DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Builtin function - `@builtin(args)`
 DEF_TYPE("builtin_function", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, NODE_TEXT, NONE, 0)
+
+/// @brief Field expression - `struct.field`
 DEF_TYPE("field_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Index expression - `array[index]`
 DEF_TYPE("index_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Dereference expression - `ptr.*`
 DEF_TYPE("dereference_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Range expression - `a..b`
 DEF_TYPE("range_expression", LITERAL_STRUCTURED, NONE, NONE, 0)
 
-// Control flow
+/** @} */ // end zig_expressions
+
+// ============================================================================
+// CONTROL FLOW
+// ============================================================================
+
+/**
+ * @defgroup zig_control Control Flow
+ * @brief Conditionals and branching
+ *
+ * Zig control flow:
+ * - `if (cond) body else body`
+ * - `switch (value) { cases... }`
+ * - `if (optional) |value| body` - optional unwrapping
+ * @{
+ */
+
+/// @brief If statement - `if (cond) body`
 DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/// @brief For statement - `for (items) |item| body`
 DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+
+/// @brief While statement - `while (cond) body`
 DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Switch expression - `switch (value) { }`
 DEF_TYPE("switch_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/// @brief Switch case - `pattern => body`
 DEF_TYPE("switch_case", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/// @brief Break expression - `break` or `break :label value`
 DEF_TYPE("break_expression", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
+
+/// @brief Continue expression - `continue`
 DEF_TYPE("continue_expression", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
+
+/// @brief Return expression - `return value`
 DEF_TYPE("return_expression", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
 
-// Async/await
+/** @} */ // end zig_control
+
+// ============================================================================
+// ASYNC/AWAIT
+// ============================================================================
+
+/**
+ * @defgroup zig_async Async/Await
+ * @brief Zig's stackless coroutines
+ *
+ * Zig async features:
+ * - `async function()` - start async frame
+ * - `await handle` - wait for completion
+ * - `suspend` - yield control
+ * - `resume frame` - resume suspended frame
+ * - `nosuspend` - assert no suspension
+ * @{
+ */
+
+/// @brief Async expression - `async function()`
 DEF_TYPE("async_expression", FLOW_SYNC, NONE, NONE, 0)
+
+/// @brief Await expression - `await handle`
 DEF_TYPE("await_expression", FLOW_SYNC, NONE, NONE, 0)
+
+/// @brief Suspend statement - `suspend { }`
 DEF_TYPE("suspend_statement", FLOW_SYNC, NONE, NONE, 0)
+
+/// @brief Resume expression - `resume frame`
 DEF_TYPE("resume_expression", FLOW_SYNC, NONE, NONE, 0)
+
+/// @brief Nosuspend expression - `nosuspend expr`
 DEF_TYPE("nosuspend_expression", FLOW_SYNC, NONE, NONE, 0)
 
-// Error handling
+/** @} */ // end zig_async
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup zig_errors Error Handling
+ * @brief Zig error handling constructs
+ *
+ * Zig error handling:
+ * - `try expr` - unwrap error union or return error
+ * - `catch` - handle errors
+ * - `orelse` - provide default for optional/error
+ * - `errdefer` - cleanup on error path
+ * @{
+ */
+
+/// @brief Try expression - `try value`
 DEF_TYPE("try_expression", ERROR_TRY, NONE, NONE, 0)
+
+/// @brief Catch expression - `value catch |err| handler`
 DEF_TYPE("catch_expression", ERROR_CATCH, NONE, NONE, 0)
+
+/// @brief Orelse expression - `optional orelse default`
 DEF_TYPE("orelse_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
 
-// Defer statements
+/** @} */ // end zig_errors
+
+// ============================================================================
+// DEFER STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup zig_defer Defer Statements
+ * @brief Deferred execution
+ *
+ * Zig defer:
+ * - `defer expr` - execute on scope exit
+ * - `errdefer expr` - execute only on error
+ * @{
+ */
+
+/// @brief Defer statement - `defer cleanup()`
 DEF_TYPE("defer_statement", FLOW_JUMP, NONE, NONE, 0)
+
+/// @brief Errdefer statement - `errdefer cleanup()`
 DEF_TYPE("errdefer_statement", ERROR_FINALLY, NONE, NONE, 0)
 
-// Comptime
+/** @} */ // end zig_defer
+
+// ============================================================================
+// COMPTIME
+// ============================================================================
+
+/**
+ * @defgroup zig_comptime Comptime
+ * @brief Compile-time execution
+ *
+ * Zig comptime:
+ * - `comptime { }` - compile-time block
+ * - `comptime var` - compile-time variable
+ * - Metaprogramming without macros
+ * @{
+ */
+
+/// @brief Comptime statement - `comptime { }`
 DEF_TYPE("comptime_statement", METADATA_ANNOTATION, NONE, NONE, 0)
+
+/// @brief Comptime expression - `comptime expr`
 DEF_TYPE("comptime_expression", METADATA_ANNOTATION, NONE, NONE, 0)
 
-// Types
+/** @} */ // end zig_comptime
+
+// ============================================================================
+// TYPE EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup zig_type_exprs Type Expressions
+ * @brief Type system constructs
+ *
+ * Zig types:
+ * - `*T` - single-item pointer
+ * - `[*]T` - many-item pointer
+ * - `[]T` - slice
+ * - `[N]T` - array
+ * - `?T` - optional
+ * - `E!T` - error union
+ * - `anyframe` - async frame type
+ * @{
+ */
+
+/// @brief Type expression
 DEF_TYPE("type_expression", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Pointer type - `*T`, `[*]T`
 DEF_TYPE("pointer_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Slice type - `[]T`
 DEF_TYPE("slice_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Array type - `[N]T`
 DEF_TYPE("array_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Nullable type - `?T`
 DEF_TYPE("nullable_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Error union type - `E!T`
 DEF_TYPE("error_union_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Anyframe type - async frame
 DEF_TYPE("anyframe_type", TYPE_REFERENCE, NONE, NONE, 0)
+
+/// @brief Builtin type - `u32`, `i64`, `f32`, etc.
 DEF_TYPE("builtin_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
 
-// Identifiers
+/** @} */ // end zig_type_exprs
+
+// ============================================================================
+// IDENTIFIERS
+// ============================================================================
+
+/**
+ * @defgroup zig_identifiers Identifiers
+ * @brief Names and identifiers
+ * @{
+ */
+
+/// @brief Identifier - name
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Builtin identifier - `@identifier`
 DEF_TYPE("builtin_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// Literals
+/** @} */ // end zig_identifiers
+
+// ============================================================================
+// LITERALS
+// ============================================================================
+
+/**
+ * @defgroup zig_literals Literals
+ * @brief Zig literal values
+ *
+ * Zig literals:
+ * - Integers: `42`, `0xFF`, `0b1010`, `1_000`
+ * - Floats: `3.14`, `1e10`
+ * - Characters: `'a'`
+ * - Strings: `"string"`, `\\multiline string\\`
+ * - Boolean: `true`, `false`
+ * @{
+ */
+
+/// @brief Integer literal
 DEF_TYPE("integer", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
+
+/// @brief Float literal
 DEF_TYPE("float", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
+
+/// @brief String literal
 DEF_TYPE("string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief String content
 DEF_TYPE("string_content", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Multiline string - `\\string\\`
 DEF_TYPE("multiline_string", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
+
+/// @brief Character literal - `'a'`
 DEF_TYPE("character", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean literal - `true` or `false`
 DEF_TYPE("boolean", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
-// Block and statements
+/** @} */ // end zig_literals
+
+// ============================================================================
+// BLOCKS AND STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup zig_blocks Blocks and Statements
+ * @brief Code blocks and statements
+ * @{
+ */
+
+/// @brief Block - `{ statements }`
 DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Block expression - block that returns value
 DEF_TYPE("block_expression", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Statement
 DEF_TYPE("statement", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+
+/// @brief Labeled statement - `label: statement`
 DEF_TYPE("labeled_statement", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, FIND_IDENTIFIER, NONE, 0)
 
-// Initializers
+/** @} */ // end zig_blocks
+
+// ============================================================================
+// INITIALIZERS
+// ============================================================================
+
+/**
+ * @defgroup zig_initializers Initializers
+ * @brief Struct and array initializers
+ * @{
+ */
+
+/// @brief Struct initializer - `.{ .field = value }`
 DEF_TYPE("struct_initializer", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
+
+/// @brief Anonymous struct initializer
 DEF_TYPE("anonymous_struct_initializer", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
+
+/// @brief Array initializer - `.{ value, value }`
 DEF_TYPE("array_initializer", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+
+/// @brief Initializer list
 DEF_TYPE("initializer_list", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
+
+/// @brief Arguments - function call arguments
 DEF_TYPE("arguments", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
-// Assembly
+/** @} */ // end zig_initializers
+
+// ============================================================================
+// ASSEMBLY
+// ============================================================================
+
+/**
+ * @defgroup zig_asm Assembly
+ * @brief Inline assembly support
+ * @{
+ */
+
+/// @brief Asm expression - `asm volatile ("...")`
 DEF_TYPE("asm_expression", METADATA_ANNOTATION, NONE, NONE, 0)
+
+/// @brief Asm input - input operand
 DEF_TYPE("asm_input", METADATA_ANNOTATION, NONE, NONE, 0)
+
+/// @brief Asm output - output operand
 DEF_TYPE("asm_output", METADATA_ANNOTATION, NONE, NONE, 0)
 
-// Comments
+/** @} */ // end zig_asm
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup zig_comments Comments
+ * @brief Documentation and comments
+ *
+ * Zig comment styles:
+ * - `// line comment`
+ * - `/// doc comment`
+ * - No block comments by design
+ * @{
+ */
+
+/// @brief Comment
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
+
+/// @brief Line comment - `// comment`
 DEF_TYPE("line_comment", METADATA_COMMENT, NONE, NONE, 0)
+
+/// @brief Doc comment - `/// documentation`
 DEF_TYPE("doc_comment", METADATA_COMMENT, NONE, NONE, 0)
 
-// Keywords
+/** @} */ // end zig_comments
+
+// ============================================================================
+// KEYWORDS
+// ============================================================================
+
+/**
+ * @defgroup zig_keywords Keywords
+ * @brief Zig language keywords
+ * @{
+ */
+
+/// @brief Const keyword - `const`
 DEF_TYPE("const", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Var keyword - `var`
 DEF_TYPE("var", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Pub keyword - `pub`
 DEF_TYPE("pub", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Extern keyword - `extern`
 DEF_TYPE("extern", EXTERNAL_FOREIGN, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Export keyword - `export`
 DEF_TYPE("export", EXTERNAL_EXPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Inline keyword - `inline`
 DEF_TYPE("inline", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Noinline keyword - `noinline`
 DEF_TYPE("noinline", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Comptime keyword - `comptime`
 DEF_TYPE("comptime", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Test keyword - `test`
 DEF_TYPE("test", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Fn keyword - `fn`
 DEF_TYPE("fn", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Struct keyword - `struct`
 DEF_TYPE("struct", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Enum keyword - `enum`
 DEF_TYPE("enum", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Union keyword - `union`
 DEF_TYPE("union", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief If keyword - `if`
 DEF_TYPE("if", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Else keyword - `else`
 DEF_TYPE("else", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief For keyword - `for`
 DEF_TYPE("for", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief While keyword - `while`
 DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Switch keyword - `switch`
 DEF_TYPE("switch", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Return keyword - `return`
 DEF_TYPE("return", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Break keyword - `break`
 DEF_TYPE("break", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Continue keyword - `continue`
 DEF_TYPE("continue", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Defer keyword - `defer`
 DEF_TYPE("defer", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Errdefer keyword - `errdefer`
 DEF_TYPE("errdefer", ERROR_FINALLY, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Try keyword - `try`
 DEF_TYPE("try", ERROR_TRY, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Catch keyword - `catch`
 DEF_TYPE("catch", ERROR_CATCH, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Orelse keyword - `orelse`
 DEF_TYPE("orelse", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Async keyword - `async`
 DEF_TYPE("async", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Await keyword - `await`
 DEF_TYPE("await", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Suspend keyword - `suspend`
 DEF_TYPE("suspend", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Resume keyword - `resume`
 DEF_TYPE("resume", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Nosuspend keyword - `nosuspend`
 DEF_TYPE("nosuspend", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Special values
+/** @} */ // end zig_keywords
+
+// ============================================================================
+// SPECIAL VALUES
+// ============================================================================
+
+/**
+ * @defgroup zig_special Special Values
+ * @brief Zig special value literals
+ * @{
+ */
+
+/// @brief Null literal - `null`
 DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Undefined literal - `undefined`
 DEF_TYPE("undefined", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Anytype - generic type placeholder
 DEF_TYPE("anytype", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
+/// @brief Anyerror - any error type
 DEF_TYPE("anyerror", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
+/// @brief Anyframe - any async frame type
 DEF_TYPE("anyframe", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
+/// @brief Anyopaque - opaque pointer type
 DEF_TYPE("anyopaque", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
 
-// Punctuation
+/** @} */ // end zig_special
+
+// ============================================================================
+// PUNCTUATION
+// ============================================================================
+
+/**
+ * @defgroup zig_punctuation Punctuation
+ * @brief Delimiters and punctuation
+ * @{
+ */
+
+/// @brief Left brace - `{`
 DEF_TYPE("{", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Right brace - `}`
 DEF_TYPE("}", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Left parenthesis - `(`
 DEF_TYPE("(", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Right parenthesis - `)`
 DEF_TYPE(")", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Left bracket - `[`
 DEF_TYPE("[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Right bracket - `]`
 DEF_TYPE("]", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Semicolon - `;`
 DEF_TYPE(";", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Comma - `,`
 DEF_TYPE(",", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Colon - `:`
 DEF_TYPE(":", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Period - `.`
 DEF_TYPE(".", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief At sign - `@`
 DEF_TYPE("@", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 
-// Operators
+/** @} */ // end zig_punctuation
+
+// ============================================================================
+// OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup zig_operators Operators
+ * @brief Zig operators
+ * @{
+ */
+
+/// @brief Assignment - `=`
 DEF_TYPE("=", OPERATOR_ASSIGNMENT, NODE_TEXT, NONE, 0)
+
+/// @brief Addition - `+`
 DEF_TYPE("+", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Subtraction - `-`
 DEF_TYPE("-", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Multiplication - `*`
 DEF_TYPE("*", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Division - `/`
 DEF_TYPE("/", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Modulo - `%`
 DEF_TYPE("%", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Equality - `==`
 DEF_TYPE("==", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/// @brief Inequality - `!=`
 DEF_TYPE("!=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/// @brief Less than - `<`
 DEF_TYPE("<", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/// @brief Greater than - `>`
 DEF_TYPE(">", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/// @brief Less than or equal - `<=`
 DEF_TYPE("<=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/// @brief Greater than or equal - `>=`
 DEF_TYPE(">=", OPERATOR_COMPARISON, NODE_TEXT, NONE, 0)
+
+/// @brief Logical AND - `and`
 DEF_TYPE("and", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief Logical OR - `or`
 DEF_TYPE("or", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief Logical NOT - `!`
 DEF_TYPE("!", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief Bitwise AND - `&`
 DEF_TYPE("&", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Bitwise OR - `|`
 DEF_TYPE("|", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Bitwise XOR - `^`
 DEF_TYPE("^", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Bitwise NOT - `~`
 DEF_TYPE("~", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Left shift - `<<`
 DEF_TYPE("<<", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Right shift - `>>`
 DEF_TYPE(">>", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
 
-// Error handling
+/** @} */ // end zig_operators
+
+// ============================================================================
+// PARSER ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup zig_parser_errors Parser Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end zig_parser_errors
