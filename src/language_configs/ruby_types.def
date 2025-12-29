@@ -1,135 +1,673 @@
-// Ruby language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file ruby_types.def
+ * @brief Ruby language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter Ruby AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for Ruby language constructs.
+ *
+ * ## Ruby Language Characteristics
+ *
+ * - **Pure OOP**: Everything is an object, including primitives
+ * - **Dynamic typing**: No static type declarations, duck typing
+ * - **Blocks**: First-class closures passed to methods (`do...end`, `{...}`)
+ * - **Modules**: Mixins for code reuse without inheritance
+ * - **Symbols**: Immutable interned strings (`:symbol`)
+ * - **Metaprogramming**: `define_method`, `method_missing`, `eval`
+ * - **Pattern matching**: `case...in` patterns (Ruby 3.0+)
+ * - **Multiple assignment**: Parallel assignment and destructuring
+ * - **Implicit returns**: Last expression is return value
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., DEFINITION_CLASS = 0x08)
+ * - Bits 1-0: Refinement within category (e.g., Class::REGULAR = 0x00)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, IS_EMBODIED, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Module and class definitions - Ruby modules/classes always have bodies
+// ============================================================================
+// MODULE AND CLASS DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup ruby_modules Module and Class Definitions
+ * @brief Ruby modules and classes
+ *
+ * Ruby class hierarchy:
+ * - `Module` - container for methods and constants (mixin)
+ * - `Class` - inherits from Module, can be instantiated
+ * - Single inheritance with multiple module mixins
+ *
+ * Modules provide:
+ * - Namespacing via `ModuleName::ClassName`
+ * - Mixins via `include` (instance methods) and `extend` (class methods)
+ * - `prepend` for method chain insertion
+ * @{
+ */
+
+/// @brief Module definition - `module Name ... end` for namespacing and mixins
 DEF_TYPE("module", DEFINITION_MODULE, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Class definition - `class Name < Superclass ... end`
 DEF_TYPE("class", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 
-// Method definitions with refinements - Ruby methods always have bodies
+/** @} */ // end ruby_modules
+
+// ============================================================================
+// METHOD DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup ruby_methods Method Definitions
+ * @brief Ruby method declarations
+ *
+ * Ruby method features:
+ * - `def name(args) ... end` for instance methods
+ * - `def self.name` or `def ClassName.name` for class methods
+ * - No explicit return type - implicit return of last expression
+ * - Optional parentheses for parameters
+ * - Keyword arguments: `def foo(name:, age: 18)`
+ * - Block parameters: `def foo(&block)`
+ * - Splat operators: `*args` (array), `**kwargs` (hash)
+ * @{
+ */
+
+/// @brief Instance method definition - `def method_name(params) ... end`
 DEF_TYPE("method", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Singleton/class method - `def self.method_name` or `def obj.method_name`
 DEF_TYPE("singleton_method", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+
+/// @brief Method alias - `alias new_name old_name`
 DEF_TYPE("alias", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Variable and constant definitions with refinements
+/** @} */ // end ruby_methods
+
+// ============================================================================
+// VARIABLE DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup ruby_variables Variable and Constant Definitions
+ * @brief Ruby variable scopes and assignments
+ *
+ * Ruby variable scopes (by naming convention):
+ * - `local` - local to current scope
+ * - `@instance` - instance variable, per-object
+ * - `@@class` - class variable, shared across instances
+ * - `$global` - global variable
+ * - `CONSTANT` - constants (uppercase), warning on reassignment
+ *
+ * Assignment operators:
+ * - `=` simple assignment
+ * - `||=` assign if nil/false (memoization pattern)
+ * - `&&=` assign if truthy
+ * - `+=`, `-=`, etc. compound assignment
+ * @{
+ */
+
+/// @brief Simple assignment - `var = value`
 DEF_TYPE("assignment", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Compound assignment - `var += value`, `var ||= default`
 DEF_TYPE("operator_assignment", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Multiple/parallel assignment - `a, b = 1, 2` or `a, b = arr`
 DEF_TYPE("multiple_assignment", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, NONE, NONE, 0)
+
+/// @brief Constant definition - `CONSTANT = value` (uppercase names)
 DEF_TYPE("constant", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, NODE_TEXT, NONE, 0)
 
-// Expressions and calls with refinements
+/** @} */ // end ruby_variables
+
+// ============================================================================
+// EXPRESSIONS AND CALLS
+// ============================================================================
+
+/**
+ * @defgroup ruby_calls Expressions and Calls
+ * @brief Method invocations and access
+ *
+ * Ruby method calls:
+ * - Parentheses optional: `puts "hello"` or `puts("hello")`
+ * - Method chaining: `str.downcase.strip.split`
+ * - Safe navigation: `obj&.method` (nil-safe)
+ * - Block passing: `arr.map { |x| x * 2 }` or `arr.map(&:to_s)`
+ * @{
+ */
+
+/// @brief Function-style call - `method(args)`
 DEF_TYPE("call", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Method call on object - `obj.method(args)`
 DEF_TYPE("method_call", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Chained method call - `obj.method1.method2`
 DEF_TYPE("chained_call", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
+
+/// @brief Array/hash element access - `arr[index]` or `hash[key]`
 DEF_TYPE("element_reference", COMPUTATION_ACCESS, NONE, NONE, 0)
 
-// Identifiers and names
+/** @} */ // end ruby_calls
+
+// ============================================================================
+// IDENTIFIERS AND NAMES
+// ============================================================================
+
+/**
+ * @defgroup ruby_identifiers Identifiers and Names
+ * @brief Ruby naming conventions and variable types
+ *
+ * Ruby identifier conventions:
+ * - `snake_case` for methods and local variables
+ * - `CamelCase` for classes and modules
+ * - `SCREAMING_SNAKE` for constants
+ * - Prefix conventions indicate scope (see variables section)
+ * - Query methods end with `?`: `empty?`, `nil?`
+ * - Mutating methods end with `!`: `sort!`, `map!`
+ * @{
+ */
+
+/// @brief Local variable or method name
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Constant identifier - uppercase names
 DEF_TYPE("constant_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Instance variable - `@name`
 DEF_TYPE("instance_variable", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Class variable - `@@name`
 DEF_TYPE("class_variable", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Global variable - `$name`
 DEF_TYPE("global_variable", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// Literals with refinements - name and value both contain the literal text
-DEF_TYPE("integer", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
-DEF_TYPE("float", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
-DEF_TYPE("complex", LITERAL_NUMBER | SemanticRefinements::Number::COMPLEX, NODE_TEXT, NONE, 0)
-DEF_TYPE("rational", LITERAL_NUMBER | SemanticRefinements::Number::COMPLEX, NODE_TEXT, NONE, 0)
-DEF_TYPE("string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("character", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("symbol", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("simple_symbol", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("regex", LITERAL_STRING | SemanticRefinements::String::REGEX, NODE_TEXT, NONE, 0)
-DEF_TYPE("string_array", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NONE, 0)
-DEF_TYPE("symbol_array", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NONE, 0)
-DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
-DEF_TYPE("nil", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+/** @} */ // end ruby_identifiers
 
-// Control flow with refinements
+// ============================================================================
+// LITERALS
+// ============================================================================
+
+/**
+ * @defgroup ruby_literals Literals
+ * @brief Ruby literal values
+ *
+ * Ruby literal types:
+ * - Numbers: integers, floats, rationals (`1/3r`), complex (`1+2i`)
+ * - Strings: single/double quoted, heredocs, `%q{}` and `%Q{}`
+ * - Symbols: `:symbol` or `:"symbol with spaces"`
+ * - Arrays: `[1, 2, 3]` or `%w[a b c]` or `%i[a b c]`
+ * - Hashes: `{key: value}` or `{:key => value}`
+ * - Ranges: `1..10` (inclusive) or `1...10` (exclusive)
+ * - Regex: `/pattern/flags`
+ * @{
+ */
+
+/**
+ * @name Numeric Literals
+ * @{
+ */
+/// @brief Integer literal - `42`, `1_000_000`, `0xFF`
+DEF_TYPE("integer", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
+
+/// @brief Floating-point literal - `3.14`, `1.0e10`
+DEF_TYPE("float", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT, NONE, 0)
+
+/// @brief Complex number - `1+2i`
+DEF_TYPE("complex", LITERAL_NUMBER | SemanticRefinements::Number::COMPLEX, NODE_TEXT, NONE, 0)
+
+/// @brief Rational number - `1/3r`
+DEF_TYPE("rational", LITERAL_NUMBER | SemanticRefinements::Number::COMPLEX, NODE_TEXT, NONE, 0)
+/** @} */
+
+/**
+ * @name String Literals
+ * @{
+ */
+/// @brief String literal - double or single quoted
+DEF_TYPE("string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Character literal - `?a`
+DEF_TYPE("character", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Symbol - `:name` immutable interned string
+DEF_TYPE("symbol", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Simple symbol - unquoted symbol `:name`
+DEF_TYPE("simple_symbol", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+
+/// @brief Regular expression - `/pattern/flags`
+DEF_TYPE("regex", LITERAL_STRING | SemanticRefinements::String::REGEX, NODE_TEXT, NONE, 0)
+/** @} */
+
+/**
+ * @name Structured Literals
+ * @{
+ */
+/// @brief String array literal - `%w[a b c]`
+DEF_TYPE("string_array", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NONE, 0)
+
+/// @brief Symbol array literal - `%i[a b c]`
+DEF_TYPE("symbol_array", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NONE, 0)
+
+/// @brief Array literal - `[1, 2, 3]`
+DEF_TYPE("array", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Hash literal - `{key: value}`
+DEF_TYPE("hash", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief Range literal - `1..10` or `1...10`
+DEF_TYPE("range", LITERAL_STRUCTURED, NONE, NONE, 0)
+/** @} */
+
+/**
+ * @name Atomic Literals
+ * @{
+ */
+/// @brief Boolean true
+DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Boolean false
+DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+
+/// @brief Nil value - Ruby's null
+DEF_TYPE("nil", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
+/** @} */
+
+/** @} */ // end ruby_literals
+
+// ============================================================================
+// CONTROL FLOW
+// ============================================================================
+
+/**
+ * @defgroup ruby_control Control Flow
+ * @brief Conditionals and branching
+ *
+ * Ruby control flow features:
+ * - `if`/`elsif`/`else`/`end` - standard conditional
+ * - `unless` - negated if (preferred for negative conditions)
+ * - Modifier forms: `return if condition`
+ * - `case`/`when`/`end` - pattern matching
+ * - Ternary: `condition ? true_val : false_val`
+ * - Everything is an expression (returns a value)
+ * @{
+ */
+
+/// @brief If statement - `if condition ... end`
 DEF_TYPE("if", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/// @brief Unless statement - `unless condition ... end` (negated if)
 DEF_TYPE("unless", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/// @brief Case statement - `case expr when pattern ... end`
 DEF_TYPE("case", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/// @brief When clause - pattern in case statement
 DEF_TYPE("when", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
+
+/// @brief If modifier - `expr if condition`
 DEF_TYPE("if_modifier", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
+
+/// @brief Unless modifier - `expr unless condition`
 DEF_TYPE("unless_modifier", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
 
-// Loops with refinements
+/** @} */ // end ruby_control
+
+// ============================================================================
+// LOOPS
+// ============================================================================
+
+/**
+ * @defgroup ruby_loops Loop Constructs
+ * @brief Ruby iteration mechanisms
+ *
+ * Ruby loop constructs:
+ * - `while` - condition-based loop
+ * - `until` - negated while
+ * - `for x in collection` - rarely used, prefer iterators
+ * - Modifier forms: `expr while condition`
+ *
+ * Preferred: Block iterators
+ * - `collection.each { |item| ... }`
+ * - `5.times { ... }`
+ * - `1.upto(10) { |n| ... }`
+ * @{
+ */
+
+/// @brief While loop - `while condition ... end`
 DEF_TYPE("while", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Until loop - `until condition ... end` (negated while)
 DEF_TYPE("until", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/// @brief For loop - `for x in collection ... end`
 DEF_TYPE("for", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+
+/// @brief While modifier - `expr while condition`
 DEF_TYPE("while_modifier", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Until modifier - `expr until condition`
 DEF_TYPE("until_modifier", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
 
-// Jump statements with refinements
+/** @} */ // end ruby_loops
+
+// ============================================================================
+// JUMP STATEMENTS
+// ============================================================================
+
+/**
+ * @defgroup ruby_jumps Jump Statements
+ * @brief Control flow transfer
+ *
+ * Ruby jump statements:
+ * - `return` - exit method with value
+ * - `break` - exit loop or block
+ * - `next` - skip to next iteration (like `continue`)
+ * - `redo` - restart current iteration
+ * - `retry` - restart from begin block
+ * @{
+ */
+
+/// @brief Return statement - exits method with value
 DEF_TYPE("return", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
+
+/// @brief Break statement - exits loop or block
 DEF_TYPE("break", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
+
+/// @brief Next statement - skips to next iteration
 DEF_TYPE("next", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
+
+/// @brief Redo statement - restarts current iteration
 DEF_TYPE("redo", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
+
+/// @brief Retry statement - restarts from begin block
 DEF_TYPE("retry", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
 
-// Error handling
+/** @} */ // end ruby_jumps
+
+// ============================================================================
+// EXCEPTION HANDLING
+// ============================================================================
+
+/**
+ * @defgroup ruby_exceptions Exception Handling
+ * @brief Ruby error handling constructs
+ *
+ * Ruby exception handling:
+ * - `begin ... rescue ... ensure ... end`
+ * - `raise` to throw exceptions
+ * - Multiple rescue clauses for different exception types
+ * - `retry` to re-execute begin block
+ * - Modifier form: `expr rescue default_value`
+ * @{
+ */
+
+/// @brief Begin block - starts exception handling region
 DEF_TYPE("begin", ERROR_TRY, NONE, NONE, 0)
+
+/// @brief Rescue clause - catches exceptions
 DEF_TYPE("rescue", ERROR_CATCH, NONE, NONE, 0)
+
+/// @brief Ensure clause - always executed (like finally)
 DEF_TYPE("ensure", ERROR_FINALLY, NONE, NONE, 0)
+
+/// @brief Raise statement - throws exception
 DEF_TYPE("raise", ERROR_THROW, NONE, NONE, 0)
 
-// Block and iteration constructs
+/** @} */ // end ruby_exceptions
+
+// ============================================================================
+// BLOCKS AND CLOSURES
+// ============================================================================
+
+/**
+ * @defgroup ruby_blocks Blocks and Closures
+ * @brief Ruby block and lambda constructs
+ *
+ * Ruby closures:
+ * - Blocks: `{ |params| body }` or `do |params| body end`
+ * - Procs: `Proc.new { }` or `proc { }`
+ * - Lambdas: `lambda { }` or `-> { }` (strict arity)
+ *
+ * Blocks are passed implicitly to methods:
+ * - `yield` calls the block
+ * - `block_given?` checks for block
+ * - `&block` captures block as Proc parameter
+ * @{
+ */
+
+/// @brief Block - `{ |params| ... }` single-line form
 DEF_TYPE("block", ORGANIZATION_BLOCK, NONE, ARROW_FUNCTION, 0)
+
+/// @brief Do block - `do |params| ... end` multi-line form
 DEF_TYPE("do_block", ORGANIZATION_BLOCK, NONE, ARROW_FUNCTION, 0)
+
+/// @brief Lambda - `-> { }` or `lambda { }`
 DEF_TYPE("lambda", COMPUTATION_CLOSURE, NONE, ARROW_FUNCTION, 0)
+
+/// @brief Proc - `proc { }` or `Proc.new { }`
 DEF_TYPE("proc", COMPUTATION_CLOSURE, NONE, ARROW_FUNCTION, 0)
 
-// Import/export (Ruby uses require/load)
+/** @} */ // end ruby_blocks
+
+// ============================================================================
+// IMPORTS
+// ============================================================================
+
+/**
+ * @defgroup ruby_imports Import Constructs
+ * @brief Ruby file loading mechanisms
+ *
+ * Ruby file loading:
+ * - `require 'lib'` - load from $LOAD_PATH (once)
+ * - `require_relative './file'` - load relative to current file
+ * - `load 'file.rb'` - always reload
+ * - `include Module` - mix in module methods as instance methods
+ * - `extend Module` - mix in module methods as class methods
+ * - `prepend Module` - insert module before class in method chain
+ * @{
+ */
+
+/// @brief Require - loads library from load path
 DEF_TYPE("require", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Require relative - loads file relative to current
 DEF_TYPE("require_relative", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Load - loads and re-evaluates file
 DEF_TYPE("load", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Comments
+/// @brief Include - mixes in module as instance methods
+DEF_TYPE("include", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Extend - mixes in module as class methods
+DEF_TYPE("extend", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Prepend - inserts module before class in method chain
+DEF_TYPE("prepend", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/** @} */ // end ruby_imports
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup ruby_comments Comments
+ * @brief Documentation and annotation
+ * @{
+ */
+
+/// @brief Comment - `# single line comment`
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
 
-// Ruby-specific constructs
+/** @} */ // end ruby_comments
+
+// ============================================================================
+// SPECIAL CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup ruby_special Special Ruby Constructs
+ * @brief Ruby-specific language features
+ *
+ * Ruby special constructs:
+ * - `yield` - invoke passed block
+ * - `super` - call parent method
+ * - `self` - current object reference
+ * @{
+ */
+
+/// @brief Yield - invokes block passed to method
 DEF_TYPE("yield", FLOW_SYNC, NONE, NONE, 0)
+
+/// @brief Super - calls parent class method
 DEF_TYPE("super", COMPUTATION_CALL, NONE, NONE, 0)
+
+/// @brief Self - reference to current object
 DEF_TYPE("self", NAME_SCOPED, NODE_TEXT, NONE, 0)
 
-// Operators
+/** @} */ // end ruby_special
+
+// ============================================================================
+// OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup ruby_operators Operators
+ * @brief Ruby operators and expressions
+ * @{
+ */
+
+/// @brief Binary expression - two operand operation
 DEF_TYPE("binary", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+
+/// @brief Unary expression - single operand operation
 DEF_TYPE("unary", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+
+/// @brief Assignment operator node
 DEF_TYPE("assignment_operator", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 
-// ====================================
-// MISSING RUBY CONSTRUCTS - Based on ~300 file analysis
-// ====================================
+/** @} */ // end ruby_operators
 
-// Keywords - now classified by semantic function with IS_KEYWORD flag
+// ============================================================================
+// KEYWORDS
+// ============================================================================
+
+/**
+ * @defgroup ruby_keywords Keywords
+ * @brief Ruby reserved words with special meaning
+ *
+ * Ruby keywords are reserved and cannot be used as identifiers.
+ * They are classified by their semantic function with the IS_KEYWORD flag.
+ * @{
+ */
+
+/**
+ * @name Definition Keywords
+ * @{
+ */
 DEF_TYPE("def", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("end", ORGANIZATION_BLOCK, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("class", DEFINITION_CLASS, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("module", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Conditional Keywords
+ * @{
+ */
 DEF_TYPE("if", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("unless", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("else", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("elsif", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("case", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("when", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("then", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Loop Keywords
+ * @{
+ */
 DEF_TYPE("while", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("until", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("for", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("in", OPERATOR_COMPARISON, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("do", ORGANIZATION_BLOCK, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Exception Keywords
+ * @{
+ */
 DEF_TYPE("begin", ERROR_TRY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("rescue", ERROR_CATCH, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("ensure", ERROR_FINALLY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("raise", ERROR_THROW, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Jump Keywords
+ * @{
+ */
 DEF_TYPE("return", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("break", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("next", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("redo", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("retry", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Special Keywords
+ * @{
+ */
 DEF_TYPE("yield", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("super", COMPUTATION_CALL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
 
-// Punctuation and delimiters
+/**
+ * @name Logical Keywords
+ * @{
+ */
+DEF_TYPE("and", OPERATOR_LOGICAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("or", OPERATOR_LOGICAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("not", OPERATOR_LOGICAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/** @} */ // end ruby_keywords
+
+// ============================================================================
+// PUNCTUATION AND DELIMITERS
+// ============================================================================
+
+/**
+ * @defgroup ruby_punctuation Punctuation and Delimiters
+ * @brief Syntactic markers
+ * @{
+ */
+
 DEF_TYPE("\"", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE("'", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE(",", PARSER_PUNCTUATION, NONE, NONE, 0)
@@ -144,7 +682,18 @@ DEF_TYPE("{", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE("}", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE("|", PARSER_DELIMITER, NONE, NONE, 0)
 
-// Arithmetic operators
+/** @} */ // end ruby_punctuation
+
+// ============================================================================
+// ARITHMETIC OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup ruby_arithmetic Arithmetic Operators
+ * @brief Math and bitwise operations
+ * @{
+ */
+
 DEF_TYPE("+", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 DEF_TYPE("-", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 DEF_TYPE("*", OPERATOR_ARITHMETIC, NONE, NONE, 0)
@@ -157,15 +706,45 @@ DEF_TYPE("~", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 DEF_TYPE("<<", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 DEF_TYPE(">>", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 
-// Logical operators
+/** @} */ // end ruby_arithmetic
+
+// ============================================================================
+// LOGICAL OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup ruby_logical Logical Operators
+ * @brief Boolean operators
+ *
+ * Ruby has both symbolic and keyword logical operators:
+ * - `&&` / `and` - logical AND (different precedence)
+ * - `||` / `or` - logical OR (different precedence)
+ * - `!` / `not` - logical NOT
+ * @{
+ */
+
 DEF_TYPE("&&", OPERATOR_LOGICAL, NONE, NONE, 0)
 DEF_TYPE("||", OPERATOR_LOGICAL, NONE, NONE, 0)
 DEF_TYPE("!", OPERATOR_LOGICAL, NONE, NONE, 0)
-DEF_TYPE("and", OPERATOR_LOGICAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("or", OPERATOR_LOGICAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("not", OPERATOR_LOGICAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Comparison operators
+/** @} */ // end ruby_logical
+
+// ============================================================================
+// COMPARISON OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup ruby_comparison Comparison Operators
+ * @brief Equality and ordering comparisons
+ *
+ * Ruby comparison operators:
+ * - `==` - equality by value
+ * - `===` - case equality (pattern matching)
+ * - `<=>` - spaceship operator (returns -1, 0, 1)
+ * - `=~` / `!~` - regex match/non-match
+ * @{
+ */
+
 DEF_TYPE("==", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE("!=", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE("<", OPERATOR_COMPARISON, NONE, NONE, 0)
@@ -177,7 +756,22 @@ DEF_TYPE("===", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE("=~", OPERATOR_COMPARISON, NONE, NONE, 0)
 DEF_TYPE("!~", OPERATOR_COMPARISON, NONE, NONE, 0)
 
-// Assignment operators
+/** @} */ // end ruby_comparison
+
+// ============================================================================
+// ASSIGNMENT OPERATORS
+// ============================================================================
+
+/**
+ * @defgroup ruby_assignment Assignment Operators
+ * @brief Assignment and compound assignment
+ *
+ * Notable Ruby idioms:
+ * - `||=` - memoization: `@cached ||= expensive_computation`
+ * - `&&=` - conditional assignment if truthy
+ * @{
+ */
+
 DEF_TYPE("=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 DEF_TYPE("+=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 DEF_TYPE("-=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
@@ -193,85 +787,289 @@ DEF_TYPE(">>=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 DEF_TYPE("&&=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 DEF_TYPE("||=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 
-// Ruby-specific constructs
+/** @} */ // end ruby_assignment
+
+// ============================================================================
+// RUBY-SPECIFIC CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup ruby_constructs Ruby-Specific Constructs
+ * @brief Additional Ruby AST nodes
+ * @{
+ */
+
+/// @brief String content - text inside string literal
 DEF_TYPE("string_content", LITERAL_STRING, NONE, NONE, 0)
+
+/// @brief Body statement - method/class body
 DEF_TYPE("body_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
+
+/// @brief Argument list - method call arguments
 DEF_TYPE("argument_list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Program root node
 DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, 0)
+
+/// @brief Method parameters
 DEF_TYPE("method_parameters", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief In clause - for loop iterator
 DEF_TYPE("in_clause", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief Bare symbol - unquoted symbol
 DEF_TYPE("bare_symbol", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Parameter list
 DEF_TYPE("parameter_list", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Block parameters - `|x, y|`
 DEF_TYPE("block_parameters", ORGANIZATION_LIST, NONE, NONE, 0)
+
+/// @brief Parenthesized statements
 DEF_TYPE("parenthesized_statements", ORGANIZATION_BLOCK, NONE, NONE, 0)
-DEF_TYPE("then", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief Elsif clause
 DEF_TYPE("elsif_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Else clause
 DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Rescue clause
 DEF_TYPE("rescue_clause", ERROR_CATCH, NONE, NONE, 0)
+
+/// @brief Ensure clause
 DEF_TYPE("ensure_clause", ERROR_FINALLY, NONE, NONE, 0)
+
+/// @brief When clause in case statement
 DEF_TYPE("when_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
 
-// Advanced Ruby constructs
+/** @} */ // end ruby_constructs
+
+// ============================================================================
+// ADVANCED RUBY CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup ruby_advanced Advanced Ruby Constructs
+ * @brief Scope resolution, splat, and complex structures
+ * @{
+ */
+
+/// @brief Scope resolution - `Module::Constant` or `Module::Class`
 DEF_TYPE("scope_resolution", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Scope resolution operator `::`
 DEF_TYPE("::", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Splat argument - `*args` in call
 DEF_TYPE("splat_argument", PATTERN_COLLECT, NONE, NONE, 0)
+
+/// @brief Hash splat argument - `**kwargs` in call
 DEF_TYPE("hash_splat_argument", PATTERN_COLLECT, NONE, NONE, 0)
+
+/// @brief Keyword splat - `**options`
 DEF_TYPE("keyword_splat", PATTERN_COLLECT, NONE, NONE, 0)
-DEF_TYPE("hash", LITERAL_STRUCTURED, NONE, NONE, 0)
-DEF_TYPE("array", LITERAL_STRUCTURED, NONE, NONE, 0)
-DEF_TYPE("range", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/// @brief String interpolation - `#{expr}`
 DEF_TYPE("interpolation", LITERAL_STRING, NONE, NONE, 0)
+
+/// @brief Escape sequence in string
 DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
+
+/// @brief Heredoc start marker
 DEF_TYPE("heredoc_beginning", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Heredoc end marker
 DEF_TYPE("heredoc_end", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Heredoc body content
 DEF_TYPE("heredoc_body", LITERAL_STRING, NONE, NONE, 0)
 
-// Method definition variations
+/** @} */ // end ruby_advanced
+
+// ============================================================================
+// METHOD VARIATIONS
+// ============================================================================
+
+/**
+ * @defgroup ruby_method_variants Method Definition Variations
+ * @brief Alternative method definition forms
+ * @{
+ */
+
+/// @brief Singleton method (class method form)
 DEF_TYPE("singleton_method", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Method alias
 DEF_TYPE("alias_method", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Undef - removes method definition
 DEF_TYPE("undef", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Module/class constructs
-DEF_TYPE("superclass", TYPE_REFERENCE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("include", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("extend", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("prepend", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */ // end ruby_method_variants
 
-// Access modifiers
+// ============================================================================
+// MODULE/CLASS CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup ruby_inheritance Module and Class Constructs
+ * @brief Inheritance and type references
+ * @{
+ */
+
+/// @brief Superclass reference - `< ParentClass`
+DEF_TYPE("superclass", TYPE_REFERENCE, FIND_IDENTIFIER, NONE, 0)
+
+/** @} */ // end ruby_inheritance
+
+// ============================================================================
+// ACCESS MODIFIERS
+// ============================================================================
+
+/**
+ * @defgroup ruby_access Access Modifiers
+ * @brief Method visibility control
+ *
+ * Ruby access modifiers:
+ * - `public` - callable from anywhere (default)
+ * - `protected` - callable from same class or subclasses
+ * - `private` - callable only with implicit receiver (no `self.`)
+ * @{
+ */
+
 DEF_TYPE("private", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("protected", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("public", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
-// Special variables
+/** @} */ // end ruby_access
+
+// ============================================================================
+// SPECIAL VARIABLES
+// ============================================================================
+
+/**
+ * @defgroup ruby_special_vars Special Variables
+ * @brief Ruby magic constants and variables
+ * @{
+ */
+
+/// @brief Current file path
 DEF_TYPE("__FILE__", NAME_SCOPED, NODE_TEXT, NONE, 0)
+
+/// @brief Current line number
 DEF_TYPE("__LINE__", NAME_SCOPED, NODE_TEXT, NONE, 0)
+
+/// @brief Current directory
 DEF_TYPE("__dir__", NAME_SCOPED, NODE_TEXT, NONE, 0)
+
+/// @brief Current encoding
 DEF_TYPE("__ENCODING__", NAME_SCOPED, NODE_TEXT, NONE, 0)
 
-// Pattern matching (Ruby 3.0+)
+/** @} */ // end ruby_special_vars
+
+// ============================================================================
+// PATTERN MATCHING (Ruby 3.0+)
+// ============================================================================
+
+/**
+ * @defgroup ruby_patterns Pattern Matching
+ * @brief Ruby 3.0+ pattern matching constructs
+ *
+ * Pattern matching syntax:
+ * - `case expr in pattern ... end`
+ * - Variable binding: `in x` captures value
+ * - Array patterns: `in [a, b, *rest]`
+ * - Hash patterns: `in {name:, age:}`
+ * - Guard clauses: `in pattern if condition`
+ * @{
+ */
+
+/// @brief Case match expression - `case ... in`
 DEF_TYPE("case_match", PATTERN_MATCH, NONE, NONE, 0)
+
+/// @brief In pattern - pattern matching clause
 DEF_TYPE("in_pattern", PATTERN_MATCH, NONE, NONE, 0)
+
+/// @brief Variable pattern - captures value in pattern
 DEF_TYPE("variable_pattern", PATTERN_DESTRUCTURE, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Array pattern - `[a, b, c]`
 DEF_TYPE("array_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+
+/// @brief Hash pattern - `{key:}`
 DEF_TYPE("hash_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
+
+/// @brief Rest pattern - `*rest`
 DEF_TYPE("rest_pattern", PATTERN_COLLECT, NONE, NONE, 0)
 
-// Metaprogramming
+/// @brief Keyword pattern
+DEF_TYPE("keyword_pattern", PATTERN_MATCH, NONE, NONE, 0)
+
+/// @brief Alternative pattern - `a | b`
+DEF_TYPE("alternative_pattern", PATTERN_MATCH, NONE, NONE, 0)
+
+/** @} */ // end ruby_patterns
+
+// ============================================================================
+// METAPROGRAMMING
+// ============================================================================
+
+/**
+ * @defgroup ruby_meta Metaprogramming Constructs
+ * @brief Dynamic method and attribute generation
+ * @{
+ */
+
+/// @brief attr_reader - generates getter methods
 DEF_TYPE("attr_reader", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief attr_writer - generates setter methods
 DEF_TYPE("attr_writer", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief attr_accessor - generates getter and setter methods
 DEF_TYPE("attr_accessor", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief define_method - dynamically defines instance method
 DEF_TYPE("define_method", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief define_singleton_method - dynamically defines class method
 DEF_TYPE("define_singleton_method", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
 
-// Ruby-specific literals
+/** @} */ // end ruby_meta
+
+// ============================================================================
+// ADDITIONAL LITERALS
+// ============================================================================
+
+/**
+ * @defgroup ruby_extra_literals Additional Ruby Literals
+ * @brief Various literal forms
+ * @{
+ */
+
 DEF_TYPE("word_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("symbol_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("regex_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
-
-// Final Ruby edge cases - remaining unclassified types
-DEF_TYPE("keyword_pattern", PATTERN_MATCH, NONE, NONE, 0)
 DEF_TYPE("hash_key_symbol", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("bare_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("delimited_symbol", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("chained_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("heredoc_content", LITERAL_STRING, NONE, NONE, 0)
+
+/** @} */ // end ruby_extra_literals
+
+// ============================================================================
+// REMAINING EDGE CASES
+// ============================================================================
+
+/**
+ * @defgroup ruby_edge_cases Remaining Edge Cases
+ * @brief Miscellaneous AST nodes for completeness
+ * @{
+ */
+
 DEF_TYPE("%i(", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE("%w(", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE("encoding", NAME_SCOPED, NODE_TEXT, NONE, 0)
@@ -282,14 +1080,10 @@ DEF_TYPE("destructured_parameter", PATTERN_DESTRUCTURE, FIND_IDENTIFIER, NONE, 0
 DEF_TYPE("lambda_parameters", ORGANIZATION_LIST, NONE, NONE, 0)
 DEF_TYPE(":\"", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE("#{", PARSER_DELIMITER, NONE, NONE, 0)
-DEF_TYPE("delimited_symbol", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("line", NAME_SCOPED, NODE_TEXT, NONE, 0)
 DEF_TYPE("->", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 DEF_TYPE("keyword_parameter", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
-DEF_TYPE("alternative_pattern", PATTERN_MATCH, NONE, NONE, 0)
 DEF_TYPE("hash_splat_nil", PATTERN_COLLECT, NONE, NONE, 0)
-
-// Final Ruby perfection - 3,875 remaining nodes for 100% classification
 DEF_TYPE("pair", LITERAL_STRUCTURED, NONE, NONE, 0)
 DEF_TYPE("=>", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 DEF_TYPE("exceptions", ERROR_CATCH, NONE, NONE, 0)
@@ -299,21 +1093,25 @@ DEF_TYPE("conditional", FLOW_CONDITIONAL, NONE, NONE, 0)
 DEF_TYPE("?", FLOW_CONDITIONAL, NONE, NONE, 0)
 DEF_TYPE("&.", COMPUTATION_ACCESS, NONE, NONE, 0)
 DEF_TYPE("..", LITERAL_STRUCTURED, NONE, NONE, 0)
-DEF_TYPE("heredoc_content", LITERAL_STRING, NONE, NONE, 0)
 DEF_TYPE("block_argument", ORGANIZATION_LIST, NONE, NONE, 0)
 DEF_TYPE("defined?", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("chained_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("block_parameter", ORGANIZATION_LIST, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("splat_parameter", PATTERN_COLLECT, FIND_IDENTIFIER, NONE, 0)
-
-// Absolute Ruby perfection - final 1 node
 DEF_TYPE("...", PATTERN_COLLECT, NONE, NONE, 0)
 
-// ==============================================================================
-// Parser-level semantic mappings only
-// Note: Ruby enumerable method names (map, select, reduce, etc.) are removed
-// since they're just identifiers - could be user-defined methods with different semantics
-// ==============================================================================
+/** @} */ // end ruby_edge_cases
 
-// Error handling
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup ruby_errors Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Parse error node
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end ruby_errors
