@@ -1,120 +1,666 @@
-// Bash language node type definitions
-// Format: DEF_TYPE(raw_type, semantic_type, name_strategy, value_strategy, flags)
+/**
+ * @file bash_types.def
+ * @brief Bash shell language node type mappings for AST semantic extraction
+ *
+ * @details This file defines how tree-sitter Bash AST node types map to semantic
+ * categories used by the sitting_duck extension. Each mapping specifies the semantic
+ * classification, name extraction strategy, native context extraction, and behavioral
+ * flags for Bash shell script constructs.
+ *
+ * ## Bash Language Characteristics
+ *
+ * - **Command-oriented**: Primary unit is command execution, not expressions
+ * - **Pipelines**: Commands chained via `|` for stream processing
+ * - **Expansions**: Variable (`$var`), command (`$()`), arithmetic (`$(())`)
+ * - **Here documents**: Multi-line string input via `<<EOF`
+ * - **Test expressions**: Conditional tests via `[`, `[[`, and `test`
+ * - **Arrays**: Indexed and associative arrays (Bash 4+)
+ * - **Exit codes**: Commands return integer status (0 = success)
+ * - **Subshells**: Isolated execution environments via `()`
+ * - **Background jobs**: Asynchronous execution via `&`
+ * - **Redirections**: I/O stream manipulation (`>`, `<`, `>>`, `2>&1`)
+ *
+ * ## Semantic Type Encoding
+ *
+ * Semantic types use an 8-bit encoding:
+ * - Bits 7-2: Base semantic category (e.g., FLOW_LOOP = 0x24)
+ * - Bits 1-0: Refinement within category (e.g., Loop::ITERATOR = 0x01)
+ *
+ * ## DEF_TYPE Macro Parameters
+ *
+ * ```cpp
+ * DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags)
+ * ```
+ *
+ * | Parameter | Description |
+ * |-----------|-------------|
+ * | raw_type | Tree-sitter node type string |
+ * | semantic_type | Semantic category with optional refinement |
+ * | name_extraction | Strategy for extracting node name |
+ * | native_extraction | Strategy for rich context extraction |
+ * | flags | Behavioral flags (IS_CONSTRUCT, IS_KEYWORD, etc.) |
+ *
+ * @see python_types.def for the comprehensive documentation template
+ * @see node_config.hpp for ExtractionStrategy and NativeExtractionStrategy enums
+ * @see semantic_types.hpp for semantic type constants
+ */
 
-// Program structure
+// ============================================================================
+// PROGRAM STRUCTURE
+// ============================================================================
+
+/**
+ * @defgroup bash_program Program Structure
+ * @brief Top-level script structure
+ * @{
+ */
+
+/// @brief Script root - represents the entire Bash script file
 DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
-// Function definitions
+/** @} */ // end bash_program
+
+// ============================================================================
+// FUNCTION DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup bash_functions Function Definitions
+ * @brief Bash function declarations
+ *
+ * Bash supports two function syntaxes:
+ * - POSIX style: `name() { commands; }`
+ * - Bash style: `function name { commands; }` or `function name() { commands; }`
+ *
+ * Functions in Bash:
+ * - Have no formal parameter declarations (use $1, $2, etc.)
+ * - Return exit codes (0-255) via `return` or last command status
+ * - Can access and modify global variables
+ * - Can declare `local` variables for scope isolation
+ * @{
+ */
+
+/// @brief Function definition - both POSIX `name()` and Bash `function name` styles
 DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
 
-// Variable declarations and assignments
+/** @} */ // end bash_functions
+
+// ============================================================================
+// VARIABLE DEFINITIONS
+// ============================================================================
+
+/**
+ * @defgroup bash_variables Variable Declarations and Assignments
+ * @brief Variable creation and modification
+ *
+ * Bash variables:
+ * - No explicit type declarations (everything is a string internally)
+ * - Assignment uses `name=value` (no spaces around `=`)
+ * - `declare`/`typeset` for attributes (-i integer, -a array, -A associative)
+ * - `local` for function-scoped variables
+ * - `readonly` for immutable variables
+ * - `export` for environment variable propagation
+ * - `unset` to remove variables
+ * @{
+ */
+
+/// @brief Variable assignment - `name=value` or `name+=value`
 DEF_TYPE("variable_assignment", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Declaration command - `declare`, `local`, `readonly`, `typeset`, `export`
 DEF_TYPE("declaration_command", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+
+/// @brief Unset command - removes variable or function definition
 DEF_TYPE("unset_command", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
 
-// Commands and execution
+/** @} */ // end bash_variables
+
+// ============================================================================
+// COMMANDS AND EXECUTION
+// ============================================================================
+
+/**
+ * @defgroup bash_commands Commands and Execution
+ * @brief Command invocation and pipeline constructs
+ *
+ * Command execution in Bash:
+ * - Simple commands: `command arg1 arg2`
+ * - Pipelines: `cmd1 | cmd2 | cmd3`
+ * - Command substitution: `$(command)` or `` `command` ``
+ * - Process substitution: `<(command)` or `>(command)`
+ *
+ * Exit codes:
+ * - 0 = success
+ * - 1-125 = command-specific errors
+ * - 126 = command not executable
+ * - 127 = command not found
+ * - 128+N = killed by signal N
+ * @{
+ */
+
+/// @brief Generic command - wrapper for command structures
 DEF_TYPE("command", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Simple command - direct command invocation with arguments
 DEF_TYPE("simple_command", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
+
+/// @brief Pipeline - commands connected via `|` for stream processing
 DEF_TYPE("pipeline", EXECUTION_STATEMENT, NONE, NONE, 0)
+
+/// @brief Command substitution - `$(cmd)` captures command output as string
 DEF_TYPE("command_substitution", COMPUTATION_CALL, NONE, NONE, 0)
+
+/// @brief Process substitution - `<(cmd)` or `>(cmd)` provides file descriptor
 DEF_TYPE("process_substitution", COMPUTATION_CALL, NONE, NONE, 0)
 
-// Control flow
+/** @} */ // end bash_commands
+
+// ============================================================================
+// CONTROL FLOW
+// ============================================================================
+
+/**
+ * @defgroup bash_control Control Flow
+ * @brief Conditional and loop constructs
+ *
+ * Bash control structures:
+ * - `if`/`then`/`elif`/`else`/`fi` - conditional branching
+ * - `case`/`in`/`esac` - pattern matching (similar to switch)
+ * - `for`/`in`/`do`/`done` - iteration over lists
+ * - `for ((;;))` - C-style for loop (Bash extension)
+ * - `while`/`do`/`done` - condition-based loop
+ * - `until`/`do`/`done` - inverse while loop
+ * - `break` - exit loop (with optional level N)
+ * - `continue` - skip to next iteration
+ * - `return` - exit function with status
+ * - `exit` - terminate script with status
+ * @{
+ */
+
+/// @brief If statement - `if cmd; then ...; fi`
 DEF_TYPE("if_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Case statement - pattern matching `case $var in pattern) ...; esac`
 DEF_TYPE("case_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief While loop - `while cmd; do ...; done`
 DEF_TYPE("while_statement", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief For loop - `for var in list; do ...; done`
 DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief C-style for loop - `for ((i=0; i<n; i++)); do ...; done`
 DEF_TYPE("c_style_for_statement", FLOW_LOOP, NONE, NONE, 0)
+
+/// @brief Break statement - exit from enclosing loop
 DEF_TYPE("break_statement", FLOW_JUMP, NONE, NONE, 0)
+
+/// @brief Continue statement - skip to next loop iteration
 DEF_TYPE("continue_statement", FLOW_JUMP, NONE, NONE, 0)
+
+/// @brief Return statement - exit function with status code
 DEF_TYPE("return_statement", FLOW_JUMP, NONE, NONE, 0)
+
+/// @brief Exit statement - terminate script with status code
 DEF_TYPE("exit_statement", FLOW_JUMP, NONE, NONE, 0)
 
-// Expansions and substitutions
-DEF_TYPE("expansion", COMPUTATION_ACCESS, NONE, NONE, 0)
-DEF_TYPE("simple_expansion", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)
-DEF_TYPE("string_expansion", COMPUTATION_ACCESS, NONE, NONE, 0)
-DEF_TYPE("arithmetic_expansion", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-DEF_TYPE("brace_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-
-// String literals and quoting
-DEF_TYPE("string", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("raw_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("ansii_c_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("concatenation", LITERAL_STRING, NODE_TEXT, NONE, 0)
-
-// Numbers and arrays
-DEF_TYPE("number", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
-DEF_TYPE("array", LITERAL_STRUCTURED, NONE, NONE, 0)
-
-// Identifiers and variables
-DEF_TYPE("variable_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-DEF_TYPE("word", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-
-// File operations and redirections
-DEF_TYPE("file_redirect", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
-DEF_TYPE("heredoc_redirect", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
-DEF_TYPE("herestring_redirect", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
-
-// Comments
-DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
-
-// Special constructs
-DEF_TYPE("subshell", ORGANIZATION_BLOCK, NONE, NONE, 0)
-DEF_TYPE("compound_statement", ORGANIZATION_BLOCK, NONE, NONE, 0)
-DEF_TYPE("do_group", ORGANIZATION_BLOCK, NONE, NONE, 0)
+/// @brief Else clause - alternative branch in if statement
 DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Elif clause - chained conditional in if statement
 DEF_TYPE("elif_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+
+/// @brief Case item - individual pattern match in case statement
 DEF_TYPE("case_item", FLOW_CONDITIONAL, NONE, NONE, 0)
 
-// Test expressions and conditions
-DEF_TYPE("test_command", COMPUTATION_EXPRESSION, NONE, NONE, 0)
-DEF_TYPE("binary_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
-DEF_TYPE("unary_expression", OPERATOR_LOGICAL, NONE, NONE, 0)
-DEF_TYPE("postfix_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+/** @} */ // end bash_control
 
-// Operators and punctuation
-DEF_TYPE("&&", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("||", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("|", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("&", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
-DEF_TYPE(";", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
-DEF_TYPE(";;", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
-DEF_TYPE("(", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE(")", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE("{", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE("}", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE("[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE("]", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE("$", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+// ============================================================================
+// EXPANSIONS AND SUBSTITUTIONS
+// ============================================================================
 
-// Bash keywords
-DEF_TYPE("if", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("then", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("else", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("elif", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("fi", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("case", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("esac", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("for", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("until", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("do", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("done", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("in", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("function", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("return", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("break", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("continue", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("exit", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("local", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("declare", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("readonly", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("export", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/**
+ * @defgroup bash_expansions Expansions and Substitutions
+ * @brief Variable and expression expansion
+ *
+ * Bash expansion order (important for understanding behavior):
+ * 1. Brace expansion: `{a,b,c}` → `a b c`
+ * 2. Tilde expansion: `~` → home directory
+ * 3. Parameter expansion: `$var`, `${var}`, `${var:-default}`
+ * 4. Command substitution: `$(cmd)`
+ * 5. Arithmetic expansion: `$((expr))`
+ * 6. Word splitting: on unquoted results
+ * 7. Pathname expansion: glob patterns
+ *
+ * Parameter expansion modifiers:
+ * - `${var:-default}` - use default if unset
+ * - `${var:=default}` - assign default if unset
+ * - `${var:+alt}` - use alt if set
+ * - `${var:?error}` - error if unset
+ * - `${#var}` - string length
+ * - `${var%pattern}` - remove suffix
+ * - `${var#pattern}` - remove prefix
+ * @{
+ */
 
-// Special variables and built-ins
+/// @brief Complex expansion - `${var}` with modifiers
+DEF_TYPE("expansion", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Simple expansion - basic `$var` reference
+DEF_TYPE("simple_expansion", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)
+
+/// @brief String expansion - expansion within quoted string
+DEF_TYPE("string_expansion", COMPUTATION_ACCESS, NONE, NONE, 0)
+
+/// @brief Arithmetic expansion - `$((expression))`
+DEF_TYPE("arithmetic_expansion", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/// @brief Brace expression - `{a,b,c}` or `{1..10}`
+DEF_TYPE("brace_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/** @} */ // end bash_expansions
+
+// ============================================================================
+// STRING LITERALS
+// ============================================================================
+
+/**
+ * @defgroup bash_strings String Literals and Quoting
+ * @brief String representation and quoting mechanisms
+ *
+ * Bash quoting mechanisms:
+ * - Double quotes (`""`): Allow variable/command expansion
+ * - Single quotes (`''`): Literal strings, no expansion
+ * - ANSI-C quotes (`$''`): Support escape sequences like `\n`, `\t`
+ * - No quotes: Word splitting and glob expansion apply
+ *
+ * String concatenation is implicit by adjacency:
+ * `"Hello "$name` concatenates quoted and expanded parts
+ * @{
+ */
+
+/// @brief Double-quoted string - allows expansion inside
+DEF_TYPE("string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Single-quoted string - literal, no expansion
+DEF_TYPE("raw_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief ANSI-C quoted string - `$'...'` with escape sequences
+DEF_TYPE("ansii_c_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief String concatenation - adjacent strings combined
+DEF_TYPE("concatenation", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/** @} */ // end bash_strings
+
+// ============================================================================
+// NUMBERS AND ARRAYS
+// ============================================================================
+
+/**
+ * @defgroup bash_literals Numbers and Arrays
+ * @brief Numeric and structured literals
+ *
+ * Bash numeric handling:
+ * - All variables are strings, converted to integers for arithmetic
+ * - Arithmetic context: `$((expr))`, `let`, `(( ))`
+ * - Base notation: `base#number` (e.g., `2#1010`, `16#FF`)
+ *
+ * Bash arrays:
+ * - Indexed arrays: `arr=(a b c)`, access via `${arr[0]}`
+ * - Associative arrays: `declare -A arr; arr[key]=value` (Bash 4+)
+ * - All elements: `${arr[@]}` or `${arr[*]}`
+ * - Array length: `${#arr[@]}`
+ * @{
+ */
+
+/// @brief Numeric literal - integers for arithmetic context
+DEF_TYPE("number", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+
+/// @brief Array literal - `(elem1 elem2 elem3)`
+DEF_TYPE("array", LITERAL_STRUCTURED, NONE, NONE, 0)
+
+/** @} */ // end bash_literals
+
+// ============================================================================
+// IDENTIFIERS AND VARIABLES
+// ============================================================================
+
+/**
+ * @defgroup bash_identifiers Identifiers and Variables
+ * @brief Names and variable references
+ *
+ * Bash identifier rules:
+ * - Start with letter or underscore
+ * - Contain letters, digits, underscores
+ * - Case-sensitive (`VAR` ≠ `var`)
+ *
+ * Special parameters:
+ * - `$0` - script name
+ * - `$1`-`$9`, `${10}` - positional parameters
+ * - `$#` - number of parameters
+ * - `$@` - all parameters as separate words
+ * - `$*` - all parameters as single word
+ * - `$?` - last exit status
+ * - `$$` - current PID
+ * - `$!` - last background PID
+ * - `$_` - last argument of previous command
+ * @{
+ */
+
+/// @brief Variable name - identifier in assignment context
+DEF_TYPE("variable_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Word - generic token (command name, argument, etc.)
+DEF_TYPE("word", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+
+/// @brief Special variable - `$?`, `$$`, `$!`, `$@`, etc.
 DEF_TYPE("special_variable_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
-// Error handling
+/** @} */ // end bash_identifiers
+
+// ============================================================================
+// FILE OPERATIONS AND REDIRECTIONS
+// ============================================================================
+
+/**
+ * @defgroup bash_redirections File Operations and Redirections
+ * @brief I/O redirection and here documents
+ *
+ * Redirection operators:
+ * - `>` - write stdout to file (truncate)
+ * - `>>` - append stdout to file
+ * - `<` - read stdin from file
+ * - `2>` - redirect stderr
+ * - `&>` or `>&` - redirect both stdout and stderr
+ * - `2>&1` - redirect stderr to stdout
+ * - `<>` - open file for read/write
+ *
+ * Here documents:
+ * - `<<EOF` - multi-line input until delimiter
+ * - `<<-EOF` - strip leading tabs
+ * - `<<'EOF'` - no variable expansion
+ * - `<<<` - here string (single line)
+ * @{
+ */
+
+/// @brief File redirect - `>`, `<`, `>>`, `2>`, etc.
+DEF_TYPE("file_redirect", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
+
+/// @brief Here document - `<<EOF ... EOF`
+DEF_TYPE("heredoc_redirect", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
+
+/// @brief Here string - `<<<string`
+DEF_TYPE("herestring_redirect", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
+
+/** @} */ // end bash_redirections
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+/**
+ * @defgroup bash_comments Comments
+ * @brief Documentation and annotation
+ * @{
+ */
+
+/// @brief Comment - starts with `#`, extends to end of line
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+
+/** @} */ // end bash_comments
+
+// ============================================================================
+// SPECIAL CONSTRUCTS
+// ============================================================================
+
+/**
+ * @defgroup bash_blocks Special Constructs
+ * @brief Block structures and grouping
+ *
+ * Bash grouping mechanisms:
+ * - `( commands )` - subshell (new process, isolated environment)
+ * - `{ commands; }` - command group (same shell, no subshell)
+ * - `do ... done` - loop body grouping
+ *
+ * Subshell characteristics:
+ * - Runs in child process
+ * - Inherits but cannot modify parent variables
+ * - Has its own working directory, traps, options
+ * @{
+ */
+
+/// @brief Subshell - commands in `()` run in child process
+DEF_TYPE("subshell", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Compound statement - command group in `{}`
+DEF_TYPE("compound_statement", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/// @brief Do group - loop body between `do` and `done`
+DEF_TYPE("do_group", ORGANIZATION_BLOCK, NONE, NONE, 0)
+
+/** @} */ // end bash_blocks
+
+// ============================================================================
+// TEST EXPRESSIONS
+// ============================================================================
+
+/**
+ * @defgroup bash_tests Test Expressions and Conditions
+ * @brief Conditional test constructs
+ *
+ * Test command forms:
+ * - `test expr` - POSIX test command
+ * - `[ expr ]` - synonym for test
+ * - `[[ expr ]]` - Bash extended test (preferred)
+ *
+ * Test operators:
+ * - String: `-z`, `-n`, `=`, `!=`, `<`, `>`
+ * - Numeric: `-eq`, `-ne`, `-lt`, `-le`, `-gt`, `-ge`
+ * - File: `-e`, `-f`, `-d`, `-r`, `-w`, `-x`, `-s`
+ * - Logic: `!`, `-a`/`&&`, `-o`/`||`
+ *
+ * `[[ ]]` advantages over `[ ]`:
+ * - Pattern matching: `[[ $str == *.txt ]]`
+ * - Regex: `[[ $str =~ ^[0-9]+$ ]]`
+ * - No word splitting on variables
+ * - `&&` and `||` work inside
+ * @{
+ */
+
+/// @brief Test command - `[ ]` or `[[ ]]` conditional expression
+DEF_TYPE("test_command", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/// @brief Binary expression - two-operand test (e.g., `$a -eq $b`)
+DEF_TYPE("binary_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
+
+/// @brief Unary expression - single-operand test (e.g., `-f file`)
+DEF_TYPE("unary_expression", OPERATOR_LOGICAL, NONE, NONE, 0)
+
+/// @brief Postfix expression - increment/decrement in arithmetic
+DEF_TYPE("postfix_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+
+/// @brief Parenthesized expression - grouped expression `(expr)`
+DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
+
+/** @} */ // end bash_tests
+
+// ============================================================================
+// OPERATORS AND PUNCTUATION
+// ============================================================================
+
+/**
+ * @defgroup bash_operators Operators and Punctuation
+ * @brief Logical, control, and syntactic operators
+ *
+ * Control operators:
+ * - `&&` - AND list (run next if previous succeeds)
+ * - `||` - OR list (run next if previous fails)
+ * - `|` - pipe (connect stdout to stdin)
+ * - `&` - background execution
+ * - `;` - sequential execution
+ * - `;;` - case pattern terminator
+ * @{
+ */
+
+/// @brief AND operator - `cmd1 && cmd2` (run cmd2 if cmd1 succeeds)
+DEF_TYPE("&&", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief OR operator - `cmd1 || cmd2` (run cmd2 if cmd1 fails)
+DEF_TYPE("||", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
+
+/// @brief Pipe operator - connect stdout to stdin
+DEF_TYPE("|", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Background operator - run command asynchronously
+DEF_TYPE("&", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+
+/// @brief Semicolon - command separator
+DEF_TYPE(";", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Double semicolon - case pattern terminator
+DEF_TYPE(";;", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Left parenthesis - subshell or grouping
+DEF_TYPE("(", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Right parenthesis - subshell or grouping
+DEF_TYPE(")", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Left brace - command group start
+DEF_TYPE("{", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Right brace - command group end
+DEF_TYPE("}", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Left bracket - test expression start
+DEF_TYPE("[", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Right bracket - test expression end
+DEF_TYPE("]", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Dollar sign - expansion prefix
+DEF_TYPE("$", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/** @} */ // end bash_operators
+
+// ============================================================================
+// KEYWORDS
+// ============================================================================
+
+/**
+ * @defgroup bash_keywords Keywords
+ * @brief Reserved words with special meaning
+ *
+ * Bash reserved words are only recognized in specific contexts:
+ * - At the beginning of a command
+ * - After `case` or `select` keywords
+ * - After `;;` in case statements
+ *
+ * They can be used as variable names or arguments without quoting
+ * in other contexts.
+ * @{
+ */
+
+/**
+ * @name Conditional Keywords
+ * @{
+ */
+/// @brief if keyword - begins conditional statement
+DEF_TYPE("if", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief then keyword - begins if/elif body
+DEF_TYPE("then", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief else keyword - begins else body
+DEF_TYPE("else", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief elif keyword - else-if branch
+DEF_TYPE("elif", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief fi keyword - ends if statement
+DEF_TYPE("fi", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief case keyword - begins pattern matching
+DEF_TYPE("case", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief esac keyword - ends case statement
+DEF_TYPE("esac", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Loop Keywords
+ * @{
+ */
+/// @brief for keyword - begins for loop
+DEF_TYPE("for", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief while keyword - begins while loop
+DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief until keyword - begins until loop (inverse while)
+DEF_TYPE("until", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief do keyword - begins loop body
+DEF_TYPE("do", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief done keyword - ends loop body
+DEF_TYPE("done", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief in keyword - list separator in for loop
+DEF_TYPE("in", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Function and Jump Keywords
+ * @{
+ */
+/// @brief function keyword - optional function declaration prefix
+DEF_TYPE("function", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief return keyword - exit function with status
+DEF_TYPE("return", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief break keyword - exit loop
+DEF_TYPE("break", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief continue keyword - next loop iteration
+DEF_TYPE("continue", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief exit keyword - terminate script
+DEF_TYPE("exit", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/**
+ * @name Variable Declaration Keywords
+ * @{
+ */
+/// @brief local keyword - function-scoped variable
+DEF_TYPE("local", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief declare keyword - variable declaration with attributes
+DEF_TYPE("declare", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief readonly keyword - immutable variable declaration
+DEF_TYPE("readonly", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+
+/// @brief export keyword - export variable to environment
+DEF_TYPE("export", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/** @} */
+
+/** @} */ // end bash_keywords
+
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
+/**
+ * @defgroup bash_errors Error Handling
+ * @brief Parser error nodes
+ * @{
+ */
+
+/// @brief Error node - represents parse errors
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
+
+/** @} */ // end bash_errors
