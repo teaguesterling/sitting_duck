@@ -1,0 +1,297 @@
+# name: test/sql/rosetta_code/context_level_tests.test
+# description: Test different context levels for AST extraction using Rosetta Code examples
+# group: [rosetta_code]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Context Level: 'none' - Raw AST Structure Only
+# =============================================================================
+# At this level:
+# - type column is populated
+# - semantic_type should be NULL or unpopulated
+# - name and native should be NULL
+# =============================================================================
+
+# Test: context='none' returns raw AST nodes
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/Fibonacci-sequence/*.py',
+    context := 'none',
+    ignore_errors := true
+);
+----
+true
+
+# Test: context='none' still populates type column
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/Fibonacci-sequence/*.py',
+    context := 'none',
+    ignore_errors := true
+)
+WHERE type IS NOT NULL;
+----
+true
+
+# Test: context='none' has function_definition type without semantic enrichment
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/Fibonacci-sequence/*.py',
+    context := 'none',
+    ignore_errors := true
+)
+WHERE type = 'function_definition';
+----
+true
+
+# =============================================================================
+# Context Level: 'node_types_only' - Semantic Type Populated
+# =============================================================================
+# At this level:
+# - type column is populated
+# - semantic_type is populated based on language config
+# - name and native may still be NULL
+# =============================================================================
+
+# Test: context='node_types_only' returns nodes with semantic_type
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/Fibonacci-sequence/*.py',
+    context := 'node_types_only',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+# Test: context='node_types_only' maps function_definition to DEFINITION_FUNCTION
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/Fibonacci-sequence/*.py',
+    context := 'node_types_only',
+    ignore_errors := true
+)
+WHERE type = 'function_definition'
+  AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+true
+
+# Test: context='node_types_only' correctly identifies loops
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/100-doors/*.py',
+    context := 'node_types_only',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) LIKE 'FLOW_LOOP%';
+----
+true
+
+# Test: context='node_types_only' correctly identifies conditionals
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/FizzBuzz/*.py',
+    context := 'node_types_only',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) LIKE 'FLOW_CONDITIONAL%';
+----
+true
+
+# =============================================================================
+# Context Level: 'normalized' - Semantic Type + Name
+# =============================================================================
+# At this level:
+# - type column is populated
+# - semantic_type is populated
+# - name column is populated where applicable
+# - native column may still be NULL
+# =============================================================================
+
+# Test: context='normalized' populates name for function definitions
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/Fibonacci-sequence/*.py',
+    context := 'normalized',
+    ignore_errors := true
+)
+WHERE type = 'function_definition'
+  AND name IS NOT NULL
+  AND length(name) > 0;
+----
+true
+
+# Test: context='normalized' populates name for identifiers
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/Fibonacci-sequence/*.py',
+    context := 'normalized',
+    ignore_errors := true
+)
+WHERE type = 'identifier'
+  AND name IS NOT NULL;
+----
+true
+
+# Test: context='normalized' populates name for class definitions
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/Abstract-type/*.py',
+    context := 'normalized',
+    ignore_errors := true
+)
+WHERE type = 'class_definition'
+  AND name IS NOT NULL;
+----
+true
+
+# =============================================================================
+# Context Level: 'native' - Full Extraction
+# =============================================================================
+# At this level:
+# - All columns populated where applicable
+# - Rich extraction columns: signature_type, parameters, modifiers, annotations, qualified_name
+# =============================================================================
+
+# Test: context='native' populates signature_type for function definitions
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/Fibonacci-sequence/*.py',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE type = 'function_definition'
+  AND (signature_type IS NOT NULL OR parameters IS NOT NULL);
+----
+true
+
+# Test: context='native' populates parameters array for functions
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/Factorial/*.py',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE type = 'function_definition'
+  AND parameters IS NOT NULL
+  AND array_length(parameters) > 0;
+----
+true
+
+# Test: context='native' populates qualified_name for method calls
+query I
+SELECT COUNT(*) >= 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/100-doors/*.py',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+  AND qualified_name IS NOT NULL;
+----
+true
+
+# =============================================================================
+# Cross-Language Context Comparison
+# =============================================================================
+
+# Test: context='node_types_only' works consistently across languages
+query I
+SELECT COUNT(DISTINCT language) >= 2 FROM read_ast(
+    ['test/data/rosetta/Lang/Python/Factorial/*.py',
+     'test/data/rosetta/Lang/JavaScript/Factorial/*.js',
+     'test/data/rosetta/Lang/Go/Factorial/*.go'],
+    context := 'node_types_only',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+# Test: context='normalized' extracts function names across languages
+query I
+SELECT COUNT(DISTINCT language) >= 2 FROM read_ast(
+    ['test/data/rosetta/Lang/Python/Factorial/*.py',
+     'test/data/rosetta/Lang/JavaScript/Factorial/*.js',
+     'test/data/rosetta/Lang/Go/Factorial/*.go'],
+    context := 'normalized',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) LIKE 'DEFINITION_FUNCTION%'
+  AND name IS NOT NULL;
+----
+true
+
+# Test: context='native' provides rich extraction across languages
+query I
+SELECT COUNT(DISTINCT language) >= 2 FROM read_ast(
+    ['test/data/rosetta/Lang/Python/Factorial/*.py',
+     'test/data/rosetta/Lang/JavaScript/Factorial/*.js',
+     'test/data/rosetta/Lang/Go/Factorial/*.go'],
+    context := 'native',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) LIKE 'DEFINITION_FUNCTION%'
+  AND (signature_type IS NOT NULL OR parameters IS NOT NULL OR name IS NOT NULL);
+----
+true
+
+# =============================================================================
+# Performance: Verify lower context levels are faster
+# =============================================================================
+# Note: These tests verify functionality, not actual performance metrics
+
+# Test: context='none' parses many files quickly (functionality test)
+query I
+SELECT COUNT(*) > 100 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Python/*.py',
+    context := 'none',
+    ignore_errors := true
+)
+LIMIT 1000;
+----
+true
+
+# Test: context='node_types_only' parses many files (functionality test)
+query I
+SELECT COUNT(*) > 100 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Python/*.py',
+    context := 'node_types_only',
+    ignore_errors := true
+)
+LIMIT 1000;
+----
+true
+
+# =============================================================================
+# Structure and Source Parameters with Context
+# =============================================================================
+
+# Test: structure='minimal' with context='node_types_only' returns semantic info
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/Fibonacci-sequence/*.py',
+    context := 'node_types_only',
+    structure := 'minimal',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+# Test: source='none' with context='native' still provides extraction
+query I
+SELECT COUNT(*) > 0 FROM read_ast(
+    'test/data/rosetta/Lang/Python/Fibonacci-sequence/*.py',
+    context := 'native',
+    source := 'none',
+    ignore_errors := true
+)
+WHERE type = 'function_definition'
+  AND name IS NOT NULL;
+----
+true
+

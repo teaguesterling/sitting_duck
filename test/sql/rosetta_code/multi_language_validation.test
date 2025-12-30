@@ -1,0 +1,408 @@
+# name: test/sql/rosetta_code/multi_language_validation.test
+# description: Validate AST parsing across all supported languages using full Rosetta Code dataset
+# group: [rosetta_code]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Multi-Language Parsing Validation
+# =============================================================================
+# Tests parsing and semantic extraction across all supported languages
+# using the full Rosetta Code Acmeism dataset in third_party/
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Python - 2468 files
+# -----------------------------------------------------------------------------
+
+query I
+SELECT COUNT(*) > 1000 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Python/*.py',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+query I
+SELECT COUNT(*) > 100 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Python/*.py',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+true
+
+# -----------------------------------------------------------------------------
+# JavaScript - 1627 files
+# -----------------------------------------------------------------------------
+
+query I
+SELECT COUNT(*) > 500 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/JavaScript/*.js',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+query I
+SELECT COUNT(*) > 50 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/JavaScript/*.js',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+true
+
+# -----------------------------------------------------------------------------
+# Go - 1648 files
+# -----------------------------------------------------------------------------
+
+query I
+SELECT COUNT(*) > 500 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+query I
+SELECT COUNT(*) > 100 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+true
+
+# -----------------------------------------------------------------------------
+# Rust - 1202 files
+# -----------------------------------------------------------------------------
+
+query I
+SELECT COUNT(*) > 500 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Rust/*.rs',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+query I
+SELECT COUNT(*) > 50 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Rust/*.rs',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+true
+
+# -----------------------------------------------------------------------------
+# C - 1625 files
+# -----------------------------------------------------------------------------
+
+query I
+SELECT COUNT(*) > 500 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/C/*.c',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+query I
+SELECT COUNT(*) > 50 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/C/*.c',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+true
+
+# -----------------------------------------------------------------------------
+# C++ - 1562 files
+# -----------------------------------------------------------------------------
+
+query I
+SELECT COUNT(*) > 500 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/C++/*.cpp',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+query I
+SELECT COUNT(*) > 50 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/C++/*.cpp',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+true
+
+# -----------------------------------------------------------------------------
+# Java - 1829 files
+# -----------------------------------------------------------------------------
+
+query I
+SELECT COUNT(*) > 500 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Java/*.java',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+query I
+SELECT COUNT(*) > 50 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Java/*.java',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) LIKE 'DEFINITION_CLASS%';
+----
+true
+
+# -----------------------------------------------------------------------------
+# Ruby - 1559 files
+# -----------------------------------------------------------------------------
+
+query I
+SELECT COUNT(*) > 500 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Ruby/*.rb',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+query I
+SELECT COUNT(*) > 50 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Ruby/*.rb',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+true
+
+# -----------------------------------------------------------------------------
+# Lua - 1073 files
+# -----------------------------------------------------------------------------
+
+query I
+SELECT COUNT(*) > 200 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Lua/*.lua',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+query I
+SELECT COUNT(*) > 20 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Lua/*.lua',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+true
+
+# -----------------------------------------------------------------------------
+# PHP - 602 files
+# -----------------------------------------------------------------------------
+
+query I
+SELECT COUNT(*) > 100 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/PHP/*.php',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+# -----------------------------------------------------------------------------
+# C# - 1303 files
+# -----------------------------------------------------------------------------
+
+query I
+SELECT COUNT(*) > 200 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/C-sharp/*.cs',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+query I
+SELECT COUNT(*) > 20 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/C-sharp/*.cs',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) LIKE 'DEFINITION_CLASS%';
+----
+true
+
+# -----------------------------------------------------------------------------
+# Dart - 214 files
+# -----------------------------------------------------------------------------
+
+query I
+SELECT COUNT(*) > 50 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Dart/*.dart',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+# -----------------------------------------------------------------------------
+# Zig - 287 files
+# -----------------------------------------------------------------------------
+
+query I
+SELECT COUNT(*) > 50 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Zig/*.zig',
+    ignore_errors := true
+)
+WHERE semantic_type IS NOT NULL;
+----
+true
+
+query I
+SELECT COUNT(*) > 10 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Zig/*.zig',
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+true
+
+# =============================================================================
+# Cross-Language Semantic Consistency
+# =============================================================================
+
+# Test: All languages detect DEFINITION_FUNCTION semantic type
+query I
+SELECT COUNT(DISTINCT language) >= 8 FROM read_ast(
+    ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
+     'third_party/rosettacode-acmeism/Task/*/JavaScript/*.js',
+     'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+     'third_party/rosettacode-acmeism/Task/*/Rust/*.rs',
+     'third_party/rosettacode-acmeism/Task/*/C/*.c',
+     'third_party/rosettacode-acmeism/Task/*/C++/*.cpp',
+     'third_party/rosettacode-acmeism/Task/*/Java/*.java',
+     'third_party/rosettacode-acmeism/Task/*/Ruby/*.rb'],
+    ignore_errors := true
+)
+WHERE semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+true
+
+# Test: All languages have control flow detected
+query I
+SELECT COUNT(DISTINCT language) >= 6 FROM read_ast(
+    ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
+     'third_party/rosettacode-acmeism/Task/*/JavaScript/*.js',
+     'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+     'third_party/rosettacode-acmeism/Task/*/Rust/*.rs',
+     'third_party/rosettacode-acmeism/Task/*/Java/*.java',
+     'third_party/rosettacode-acmeism/Task/*/Ruby/*.rb'],
+    ignore_errors := true
+)
+WHERE is_control_flow(semantic_type);
+----
+true
+
+# Test: All languages have identifiers detected
+query I
+SELECT COUNT(DISTINCT language) >= 6 FROM read_ast(
+    ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
+     'third_party/rosettacode-acmeism/Task/*/JavaScript/*.js',
+     'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+     'third_party/rosettacode-acmeism/Task/*/Rust/*.rs',
+     'third_party/rosettacode-acmeism/Task/*/Java/*.java',
+     'third_party/rosettacode-acmeism/Task/*/Ruby/*.rb'],
+    ignore_errors := true
+)
+WHERE is_identifier(semantic_type);
+----
+true
+
+# =============================================================================
+# Name Extraction Validation
+# =============================================================================
+
+# Test: Function names are extracted correctly in Python
+query I
+SELECT COUNT(*) > 100 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Python/*.py',
+    context := 'normalized',
+    ignore_errors := true
+)
+WHERE type = 'function_definition'
+  AND name IS NOT NULL
+  AND length(name) > 0;
+----
+true
+
+# Test: Function names are extracted correctly in Go
+query I
+SELECT COUNT(*) > 100 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+    context := 'normalized',
+    ignore_errors := true
+)
+WHERE type = 'function_declaration'
+  AND name IS NOT NULL
+  AND length(name) > 0;
+----
+true
+
+# Test: Class names are extracted correctly in Java
+query I
+SELECT COUNT(*) > 50 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Java/*.java',
+    context := 'normalized',
+    ignore_errors := true
+)
+WHERE type = 'class_declaration'
+  AND name IS NOT NULL
+  AND length(name) > 0;
+----
+true
+
+# =============================================================================
+# Parameter Extraction Validation
+# =============================================================================
+
+# Test: Functions with parameters have parameters extracted in Python
+query I
+SELECT COUNT(*) > 50 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Python/*.py',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE type = 'function_definition'
+  AND parameters IS NOT NULL
+  AND array_length(parameters) > 0;
+----
+true
+
+# Test: Functions with parameters have parameters extracted in Java
+query I
+SELECT COUNT(*) > 50 FROM read_ast(
+    'third_party/rosettacode-acmeism/Task/*/Java/*.java',
+    context := 'native',
+    ignore_errors := true
+)
+WHERE type = 'method_declaration'
+  AND parameters IS NOT NULL
+  AND array_length(parameters) > 0;
+----
+true
+
