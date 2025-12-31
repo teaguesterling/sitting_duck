@@ -168,10 +168,69 @@ WHERE is_loop(semantic_type);
 
 | Function | Matches | Description |
 |----------|---------|-------------|
-| `is_assignment(st)` | Assignment ops | Assignment operations |
-| `is_comparison(st)` | Comparison ops | Comparison operations |
-| `is_arithmetic(st)` | Arithmetic ops | Arithmetic operations |
-| `is_logical(st)` | Logical ops | Logical operations |
+| `is_assignment(st)` | `OPERATOR_ASSIGNMENT` | Assignment operations |
+| `is_comparison(st)` | `OPERATOR_COMPARISON` | Comparison operations |
+| `is_arithmetic(st)` | `OPERATOR_ARITHMETIC` | Arithmetic operations |
+| `is_logical(st)` | `OPERATOR_LOGICAL` | Logical operations |
+
+### External/Import Predicates
+
+| Function | Matches | Description |
+|----------|---------|-------------|
+| `is_import(st)` | `EXTERNAL_IMPORT` | Import/require/use statements |
+| `is_export(st)` | `EXTERNAL_EXPORT` | Export statements |
+| `is_foreign(st)` | `EXTERNAL_FOREIGN` | FFI declarations |
+
+```sql
+-- Find all import statements
+SELECT type, name FROM read_ast('file.py')
+WHERE is_import(semantic_type);
+
+-- Find all exports in a JavaScript module
+SELECT name FROM read_ast('module.js')
+WHERE is_export(semantic_type);
+```
+
+### Metadata Predicates
+
+| Function | Matches | Description |
+|----------|---------|-------------|
+| `is_comment(st)` | `METADATA_COMMENT` | Comments |
+| `is_annotation(st)` | `METADATA_ANNOTATION` | Decorators/annotations |
+| `is_directive(st)` | `METADATA_DIRECTIVE` | Preprocessor directives |
+
+```sql
+-- Find all comments
+SELECT peek FROM read_ast('file.py')
+WHERE is_comment(semantic_type);
+
+-- Find all Python decorators
+SELECT name FROM read_ast('file.py')
+WHERE is_annotation(semantic_type);
+```
+
+### Organization Predicates
+
+| Function | Matches | Description |
+|----------|---------|-------------|
+| `is_block(st)` | `ORGANIZATION_BLOCK` | Block/scope structures |
+| `is_list(st)` | `ORGANIZATION_LIST` | List/array/container structures |
+
+### Type Predicates
+
+| Function | Matches | Description |
+|----------|---------|-------------|
+| `is_type_primitive(st)` | `TYPE_PRIMITIVE` | Primitive types (int, string, bool) |
+| `is_type_composite(st)` | `TYPE_COMPOSITE` | Composite types (struct, union, tuple) |
+| `is_type_reference(st)` | `TYPE_REFERENCE` | Reference/pointer types |
+| `is_type_generic(st)` | `TYPE_GENERIC` | Generic/template types |
+
+```sql
+-- Find all type annotations in TypeScript
+SELECT type, name FROM read_ast('file.ts')
+WHERE is_type_primitive(semantic_type)
+   OR is_type_generic(semantic_type);
+```
 
 ---
 

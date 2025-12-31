@@ -83,11 +83,49 @@ The extension provides several utility functions to work with semantic types mor
 - `get_super_kind(code)` - Get the super kind (DATA_STRUCTURE, COMPUTATION, etc.)
 - `get_kind(code)` - Get the full kind name
 
-### Predicate Functions  
+### Predicate Functions
+
+**Core Predicates (Native C++ functions):**
 - `is_definition(code)` - Check if it's any definition type
 - `is_call(code)` - Check if it's a function/method call
 - `is_control_flow(code)` - Check if it's control flow (if, loops, etc.)
 - `is_identifier(code)` - Check if it's an identifier/name
+
+**Specific Type Predicates (SQL macros):**
+
+*Definition predicates:*
+- `is_function_definition(st)` - Function/method definitions
+- `is_class_definition(st)` - Class/struct/interface definitions
+- `is_variable_definition(st)` - Variable declarations
+- `is_module_definition(st)` - Module/namespace definitions
+- `is_type_definition(st)` - Type aliases/typedefs
+
+*Control flow predicates:*
+- `is_conditional(st)` - If/switch/match statements
+- `is_loop(st)` - For/while/do loops
+- `is_jump(st)` - Return/break/continue/throw
+
+*Literal predicates:*
+- `is_literal(st)` - Any literal value
+- `is_string_literal(st)` - String literals
+- `is_number_literal(st)` - Numeric literals
+- `is_boolean_literal(st)` - Boolean literals
+
+*External/Import predicates:*
+- `is_import(st)` - Import/require/use statements
+- `is_export(st)` - Export statements
+- `is_foreign(st)` - FFI declarations
+
+*Metadata predicates:*
+- `is_comment(st)` - Comments
+- `is_annotation(st)` - Decorators/annotations
+- `is_directive(st)` - Preprocessor directives
+
+*Type predicates:*
+- `is_type_primitive(st)` - Primitive types (int, string, bool)
+- `is_type_composite(st)` - Struct/union/tuple types
+- `is_type_reference(st)` - Reference/pointer types
+- `is_type_generic(st)` - Generic/template types
 
 ### Example Usage
 ```sql
@@ -255,22 +293,17 @@ GROUP BY language;
 
 ## Supported Languages
 
-The extension supports **12 programming languages** with automatic detection:
+The extension supports **27 programming languages** with automatic detection:
 
-| Language | Extensions | Semantic Support |
-|----------|------------|------------------|
-| **Python** | `.py` | ✅ Full |
-| **JavaScript** | `.js`, `.jsx` | ✅ Full |
-| **TypeScript** | `.ts`, `.tsx` | ✅ Full |
-| **C++** | `.cpp`, `.hpp`, `.cc`, `.h` | ✅ Full |
-| **C** | `.c`, `.h` | ✅ Full |
-| **Java** | `.java` | ✅ Full |
-| **Go** | `.go` | ✅ Full |
-| **Ruby** | `.rb` | ✅ Full |
-| **SQL** | `.sql` | ✅ Full |
-| **CSS** | `.css` | ✅ Basic |
-| **HTML** | `.html`, `.htm` | ✅ Basic |
-| **Markdown** | `.md` | ✅ Basic |
+| Category | Languages | Semantic Support |
+|----------|-----------|------------------|
+| **Web** | JavaScript, TypeScript, HTML, CSS | ✅ Full |
+| **Systems** | C, C++, Go, Rust, Zig | ✅ Full |
+| **Scripting** | Python, Ruby, PHP, Lua, R, Bash | ✅ Full |
+| **Enterprise** | Java, C#, Kotlin, Swift, Dart, Scala | ✅ Full |
+| **Infrastructure** | HCL (Terraform), JSON, TOML, GraphQL, YAML | ✅ Full |
+| **Documentation** | Markdown | ✅ Full |
+| **Other** | F#, Haskell, Julia | ✅ Full |
 
 ### Cross-Language Function Finding
 ```sql
@@ -652,21 +685,27 @@ read_ast('**/*.*')  -- Will stop on syntax errors
 - **Semantic descriptions**: Human-readable names for semantic types
 - **Advanced graph analysis**: Call graphs, dependency analysis
 - **Incremental parsing**: Parse only changed files
-- **Language extensions**: PHP, Rust, Kotlin support
+- **Git-aware analysis**: Integration with git history for change analysis
 
 ## Current Status
 
 ✅ **Fully Implemented:**
-- 12 programming languages with full semantic support
+- 27 programming languages with full semantic support
 - 8-bit semantic type taxonomy (64 semantic categories)
 - Streaming multi-file analysis with glob patterns
 - Automatic language detection
 - Comprehensive error handling
 - Production-ready performance
+- Complete set of semantic predicate macros
 
 ✅ **Languages Supported:**
-- **Full semantic support**: Python, JavaScript, TypeScript, C++, C, Java, Go, Ruby, SQL
-- **Basic support**: CSS, HTML, Markdown
+- **Web**: JavaScript, TypeScript, HTML, CSS
+- **Systems**: C, C++, Go, Rust, Zig
+- **Scripting**: Python, Ruby, PHP, Lua, R, Bash
+- **Enterprise**: Java, C#, Kotlin, Swift, Dart, Scala
+- **Infrastructure**: HCL, JSON, TOML, GraphQL, YAML
+- **Documentation**: Markdown
+- **Other**: F#, Haskell, Julia
 
 ---
 

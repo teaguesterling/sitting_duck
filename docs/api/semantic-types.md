@@ -253,6 +253,58 @@ SELECT * FROM read_ast('file.py') WHERE is_arithmetic(semantic_type);
 SELECT * FROM read_ast('file.py') WHERE is_logical(semantic_type);
 ```
 
+### External/Import Predicates
+
+```sql
+-- Check for import statements (import, from...import, use, require)
+SELECT * FROM read_ast('file.py') WHERE is_import(semantic_type);
+
+-- Check for export statements
+SELECT * FROM read_ast('file.js') WHERE is_export(semantic_type);
+
+-- Check for foreign function interface declarations
+SELECT * FROM read_ast('file.rs') WHERE is_foreign(semantic_type);
+```
+
+### Metadata Predicates
+
+```sql
+-- Check for comments
+SELECT * FROM read_ast('file.py') WHERE is_comment(semantic_type);
+
+-- Check for annotations/decorators
+SELECT * FROM read_ast('file.py') WHERE is_annotation(semantic_type);
+
+-- Check for preprocessor directives (#include, #define)
+SELECT * FROM read_ast('file.c') WHERE is_directive(semantic_type);
+```
+
+### Organization Predicates
+
+```sql
+-- Check for blocks/scopes
+SELECT * FROM read_ast('file.py') WHERE is_block(semantic_type);
+
+-- Check for lists/arrays/containers
+SELECT * FROM read_ast('file.py') WHERE is_list(semantic_type);
+```
+
+### Type Predicates
+
+```sql
+-- Check for primitive types (int, string, bool)
+SELECT * FROM read_ast('file.go') WHERE is_type_primitive(semantic_type);
+
+-- Check for composite types (struct, union, tuple)
+SELECT * FROM read_ast('file.go') WHERE is_type_composite(semantic_type);
+
+-- Check for reference/pointer types
+SELECT * FROM read_ast('file.rs') WHERE is_type_reference(semantic_type);
+
+-- Check for generic/template types
+SELECT * FROM read_ast('file.ts') WHERE is_type_generic(semantic_type);
+```
+
 ## Filtering Patterns
 
 ### By Exact Type

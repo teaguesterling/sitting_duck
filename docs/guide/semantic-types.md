@@ -29,7 +29,7 @@ Every AST node has a `semantic_type` that represents its universal meaning, inde
 -- Convert code to readable name
 SELECT semantic_type_to_string(240);  -- 'DEFINITION_FUNCTION'
 
--- Check categories
+-- Check categories (core native functions)
 SELECT is_definition(240);     -- true
 SELECT is_call(208);          -- true
 SELECT is_control_flow(144);  -- true
@@ -38,6 +38,32 @@ SELECT is_identifier(80);     -- true
 -- Get hierarchy info
 SELECT get_super_kind(240);   -- Super kind code
 SELECT get_kind(240);         -- Kind code
+```
+
+### Specific Type Predicates
+
+For more precise filtering, use the specific type predicate macros:
+
+```sql
+-- Definition predicates
+WHERE is_function_definition(semantic_type)  -- Functions/methods
+WHERE is_class_definition(semantic_type)     -- Classes/structs
+WHERE is_variable_definition(semantic_type)  -- Variables
+
+-- Control flow predicates
+WHERE is_conditional(semantic_type)  -- If/switch/match
+WHERE is_loop(semantic_type)         -- For/while loops
+WHERE is_jump(semantic_type)         -- Return/break/continue
+
+-- Literal predicates
+WHERE is_string_literal(semantic_type)   -- Strings
+WHERE is_number_literal(semantic_type)   -- Numbers
+WHERE is_literal(semantic_type)          -- Any literal
+
+-- External predicates
+WHERE is_import(semantic_type)   -- Import statements
+WHERE is_export(semantic_type)   -- Export statements
+WHERE is_comment(semantic_type)  -- Comments
 ```
 
 ## Using Semantic Types
