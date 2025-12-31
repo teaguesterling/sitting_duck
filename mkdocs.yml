@@ -75,6 +75,45 @@ nav:
     - Scripting Languages: languages/scripting.md
     - Enterprise Languages: languages/enterprise.md
     - Infrastructure Languages: languages/infrastructure.md
+  - Node Type Reference:
+    - Overview: reference/languages/index.md
+    - Web:
+      - JavaScript: reference/languages/javascript.md
+      - TypeScript: reference/languages/typescript.md
+      - HTML: reference/languages/html.md
+      - CSS: reference/languages/css.md
+    - Systems:
+      - C: reference/languages/c.md
+      - C++: reference/languages/cpp.md
+      - Go: reference/languages/go.md
+      - Rust: reference/languages/rust.md
+      - Zig: reference/languages/zig.md
+    - Scripting:
+      - Python: reference/languages/python.md
+      - Ruby: reference/languages/ruby.md
+      - PHP: reference/languages/php.md
+      - Lua: reference/languages/lua.md
+      - R: reference/languages/r.md
+      - Bash: reference/languages/bash.md
+    - Enterprise & Mobile:
+      - Java: reference/languages/java.md
+      - C#: reference/languages/csharp.md
+      - Kotlin: reference/languages/kotlin.md
+      - Swift: reference/languages/swift.md
+      - Dart: reference/languages/dart.md
+      - Scala: reference/languages/scala.md
+    - Infrastructure:
+      - HCL: reference/languages/hcl.md
+      - JSON: reference/languages/json.md
+      - TOML: reference/languages/toml.md
+      - GraphQL: reference/languages/graphql.md
+      - YAML: reference/languages/yaml.md
+    - Documentation:
+      - Markdown: reference/languages/markdown.md
+    - Other:
+      - F#: reference/languages/fsharp.md
+      - Haskell: reference/languages/haskell.md
+      - Julia: reference/languages/julia.md
   - Development:
     - Adding Languages: development/adding-languages.md
     - Architecture: development/architecture.md

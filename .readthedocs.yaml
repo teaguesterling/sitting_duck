@@ -7,6 +7,10 @@ build:
   os: ubuntu-22.04
   tools:
     python: "3.11"
+  jobs:
+    pre_build:
+      # Generate language reference documentation from .def files
+      - python docs/scripts/generate_language_reference.py
 
 mkdocs:
   configuration: mkdocs.yml
