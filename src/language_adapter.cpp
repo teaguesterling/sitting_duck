@@ -262,6 +262,9 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
             // Try common identifier node types across languages
             string result = FindChildByType(node, content, "identifier");
             if (result.empty()) {
+                result = FindChildByType(node, content, "field_identifier");  // Go methods
+            }
+            if (result.empty()) {
                 result = FindChildByType(node, content, "qualified_identifier");  // C++
             }
             if (result.empty()) {

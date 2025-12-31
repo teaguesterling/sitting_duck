@@ -249,7 +249,7 @@ WHERE is_function_definition(semantic_type)
 GROUP BY language
 ORDER BY language;
 ----
-go	90.8
+go	100.0
 java	100.0
 python	100.0
 rust	100.0
