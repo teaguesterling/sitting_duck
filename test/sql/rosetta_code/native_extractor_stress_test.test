@@ -1,0 +1,322 @@
+# name: test/sql/rosetta_code/native_extractor_stress_test.test
+# description: Stress test native extractors across multiple languages using Rosetta Code dataset
+# group: [rosetta_code]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Native Extractor Stress Tests
+# =============================================================================
+# These tests exercise the native extraction capabilities across multiple
+# programming languages WITHOUT using ignore_errors to ensure robustness.
+#
+# Test categories:
+# 1. Function declarations across languages
+# 2. Function calls (print functions)
+# 3. Import statements
+# 4. String literals at various depths
+# 5. Class/struct definitions
+# 6. Control flow constructs
+# 7. Name and parameter extraction quality
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Test 1: Find all function declarations across 8 languages
+# -----------------------------------------------------------------------------
+# Uses is_function_definition() instead of string matching
+
+query II
+SELECT
+    language,
+    COUNT(*) as function_count
+FROM read_ast(
+    ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
+     'third_party/rosettacode-acmeism/Task/*/JavaScript/*.js',
+     'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+     'third_party/rosettacode-acmeism/Task/*/Rust/*.rs',
+     'third_party/rosettacode-acmeism/Task/*/C/*.c',
+     'third_party/rosettacode-acmeism/Task/*/Java/*.java',
+     'third_party/rosettacode-acmeism/Task/*/Ruby/*.rb',
+     'third_party/rosettacode-acmeism/Task/*/Lua/*.lua']
+)
+WHERE is_function_definition(semantic_type)
+GROUP BY language
+ORDER BY function_count DESC;
+----
+python	16107
+javascript	12161
+go	10281
+rust	8947
+java	6483
+c	4839
+lua	4725
+ruby	4099
+
+# -----------------------------------------------------------------------------
+# Test 2: Find calls to print functions using is_call()
+# -----------------------------------------------------------------------------
+# Uses is_call() native function instead of string matching
+
+query III
+SELECT
+    language,
+    name,
+    COUNT(*) as call_count
+FROM read_ast(
+    ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
+     'third_party/rosettacode-acmeism/Task/*/Rust/*.rs',
+     'third_party/rosettacode-acmeism/Task/*/Lua/*.lua',
+     'third_party/rosettacode-acmeism/Task/*/Ruby/*.rb']
+)
+WHERE is_call(semantic_type)
+  AND name IN ('print', 'println', 'printf')
+GROUP BY language, name
+HAVING COUNT(*) > 100
+ORDER BY call_count DESC;
+----
+python	print	3180
+rust	println	2516
+lua	print	1768
+rust	print	493
+ruby	print	474
+
+# -----------------------------------------------------------------------------
+# Test 3: Find import statements using is_import()
+# -----------------------------------------------------------------------------
+# Uses is_import() macro instead of string matching on semantic type
+
+query III
+SELECT
+    language,
+    type,
+    COUNT(*) as import_count
+FROM read_ast(
+    ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
+     'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+     'third_party/rosettacode-acmeism/Task/*/Rust/*.rs',
+     'third_party/rosettacode-acmeism/Task/*/Java/*.java']
+)
+WHERE is_import(semantic_type)
+GROUP BY language, type
+HAVING COUNT(*) > 100
+ORDER BY import_count DESC, language, type;
+----
+go	import_spec	3763
+java	import	3193
+java	import_declaration	3193
+python	import	2451
+python	from	1607
+go	import	1502
+go	import_declaration	1501
+python	import_from_statement	1477
+rust	use	1266
+rust	use_declaration	1265
+python	import_statement	895
+rust	crate	199
+rust	extern	197
+rust	extern_crate_declaration	190
+python	aliased_import	143
+
+# -----------------------------------------------------------------------------
+# Test 4: Find string literals using is_string_literal()
+# -----------------------------------------------------------------------------
+# Uses is_string_literal() macro
+
+query III
+SELECT
+    language,
+    depth,
+    COUNT(*) as string_count
+FROM read_ast(
+    ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
+     'third_party/rosettacode-acmeism/Task/*/JavaScript/*.js',
+     'third_party/rosettacode-acmeism/Task/*/Ruby/*.rb']
+)
+WHERE is_string_literal(semantic_type)
+  AND depth <= 4
+GROUP BY language, depth
+HAVING COUNT(*) > 100
+ORDER BY language, depth;
+----
+javascript	3	339
+javascript	4	1702
+python	2	573
+python	3	2008
+python	4	5570
+ruby	2	347
+ruby	3	2546
+ruby	4	4281
+
+# -----------------------------------------------------------------------------
+# Test 5: Find class definitions using is_class_definition()
+# -----------------------------------------------------------------------------
+# Uses is_class_definition() macro
+
+query II
+SELECT
+    language,
+    COUNT(*) as class_count
+FROM read_ast(
+    ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
+     'third_party/rosettacode-acmeism/Task/*/JavaScript/*.js',
+     'third_party/rosettacode-acmeism/Task/*/Java/*.java',
+     'third_party/rosettacode-acmeism/Task/*/Ruby/*.rb',
+     'third_party/rosettacode-acmeism/Task/*/Rust/*.rs']
+)
+WHERE is_class_definition(semantic_type)
+GROUP BY language
+ORDER BY class_count DESC;
+----
+java	3595
+rust	2778
+python	686
+ruby	673
+javascript	162
+
+# -----------------------------------------------------------------------------
+# Test 6: Find control flow constructs using is_control_flow()
+# -----------------------------------------------------------------------------
+# Uses native is_control_flow() function
+
+query II
+SELECT
+    language,
+    COUNT(*) as control_flow_count
+FROM read_ast(
+    ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
+     'third_party/rosettacode-acmeism/Task/*/JavaScript/*.js',
+     'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+     'third_party/rosettacode-acmeism/Task/*/Rust/*.rs',
+     'third_party/rosettacode-acmeism/Task/*/C/*.c',
+     'third_party/rosettacode-acmeism/Task/*/Java/*.java']
+)
+WHERE is_control_flow(semantic_type)
+GROUP BY language
+ORDER BY control_flow_count DESC;
+----
+python	40454
+go	37044
+c	35687
+java	25577
+javascript	20864
+rust	18714
+
+# -----------------------------------------------------------------------------
+# Test 7: Verify control flow breakdown using specific predicates
+# -----------------------------------------------------------------------------
+# Uses is_conditional(), is_loop(), is_jump() macros
+
+query IIII
+SELECT
+    language,
+    SUM(CASE WHEN is_conditional(semantic_type) THEN 1 ELSE 0 END) as conditionals,
+    SUM(CASE WHEN is_loop(semantic_type) THEN 1 ELSE 0 END) as loops,
+    SUM(CASE WHEN is_jump(semantic_type) THEN 1 ELSE 0 END) as jumps
+FROM read_ast(
+    ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
+     'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+     'third_party/rosettacode-acmeism/Task/*/C/*.c']
+)
+WHERE is_control_flow(semantic_type)
+GROUP BY language
+ORDER BY language;
+----
+c	15651	8823	11213
+go	13954	12705	9945
+python	14718	12041	12611
+
+# -----------------------------------------------------------------------------
+# Test 8: Name extraction quality for function definitions
+# -----------------------------------------------------------------------------
+# Verifies that function definitions have names extracted
+
+query II
+SELECT
+    language,
+    ROUND(100.0 * COUNT(CASE WHEN name IS NOT NULL AND name != '' THEN 1 END) / COUNT(*), 1) as name_extraction_pct
+FROM read_ast(
+    ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
+     'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+     'third_party/rosettacode-acmeism/Task/*/Java/*.java',
+     'third_party/rosettacode-acmeism/Task/*/Rust/*.rs'],
+    context := 'native'
+)
+WHERE is_function_definition(semantic_type)
+  AND type IN ('function_definition', 'function_declaration', 'method_declaration', 'function_item')
+GROUP BY language
+ORDER BY language;
+----
+go	90.8
+java	100.0
+python	100.0
+rust	100.0
+
+# -----------------------------------------------------------------------------
+# Test 9: Cross-language semantic type consistency
+# -----------------------------------------------------------------------------
+# Verifies that is_definition() works consistently across languages
+
+query I
+SELECT COUNT(DISTINCT language) >= 6
+FROM read_ast(
+    ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
+     'third_party/rosettacode-acmeism/Task/*/JavaScript/*.js',
+     'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+     'third_party/rosettacode-acmeism/Task/*/Rust/*.rs',
+     'third_party/rosettacode-acmeism/Task/*/Java/*.java',
+     'third_party/rosettacode-acmeism/Task/*/Ruby/*.rb']
+)
+WHERE is_definition(semantic_type);
+----
+true
+
+# -----------------------------------------------------------------------------
+# Test 10: Verify is_literal() works across types
+# -----------------------------------------------------------------------------
+# Uses is_literal() to find all literals, then breaks down by specific type
+
+query IIII
+SELECT
+    language,
+    SUM(CASE WHEN is_string_literal(semantic_type) THEN 1 ELSE 0 END) as strings,
+    SUM(CASE WHEN is_number_literal(semantic_type) THEN 1 ELSE 0 END) as numbers,
+    SUM(CASE WHEN is_boolean_literal(semantic_type) THEN 1 ELSE 0 END) as booleans
+FROM read_ast(
+    ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
+     'third_party/rosettacode-acmeism/Task/*/JavaScript/*.js',
+     'third_party/rosettacode-acmeism/Task/*/Go/*.go']
+)
+WHERE is_literal(semantic_type)
+GROUP BY language
+ORDER BY language;
+----
+go	30995	27734	0
+javascript	24057	22064	0
+python	42510	36944	0
+
+# -----------------------------------------------------------------------------
+# Test 11: Verify comments are detected using is_comment()
+# -----------------------------------------------------------------------------
+
+query II
+SELECT
+    language,
+    COUNT(*) as comment_count
+FROM read_ast(
+    ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
+     'third_party/rosettacode-acmeism/Task/*/JavaScript/*.js',
+     'third_party/rosettacode-acmeism/Task/*/Go/*.go',
+     'third_party/rosettacode-acmeism/Task/*/C/*.c']
+)
+WHERE is_comment(semantic_type)
+GROUP BY language
+ORDER BY comment_count DESC;
+----
+javascript	8874
+python	6705
+go	5630
+c	4163
+

@@ -121,6 +121,58 @@ CREATE OR REPLACE MACRO is_arithmetic(st) AS
 CREATE OR REPLACE MACRO is_logical(st) AS
     is_semantic_type(st, 'OPERATOR_LOGICAL');
 
+-- =============================================================================
+-- External/Import Predicates
+-- =============================================================================
+
+-- Check if semantic_type is an import statement
+CREATE OR REPLACE MACRO is_import(st) AS
+    is_semantic_type(st, 'EXTERNAL_IMPORT');
+
+-- Check if semantic_type is an export statement
+CREATE OR REPLACE MACRO is_export(st) AS
+    is_semantic_type(st, 'EXTERNAL_EXPORT');
+
+-- Check if semantic_type is a foreign function interface
+CREATE OR REPLACE MACRO is_foreign(st) AS
+    is_semantic_type(st, 'EXTERNAL_FOREIGN');
+
+-- =============================================================================
+-- Metadata Predicates
+-- =============================================================================
+
+-- Check if semantic_type is a comment
+CREATE OR REPLACE MACRO is_comment(st) AS
+    is_semantic_type(st, 'METADATA_COMMENT');
+
+-- Check if semantic_type is an annotation/decorator
+CREATE OR REPLACE MACRO is_annotation(st) AS
+    is_semantic_type(st, 'METADATA_ANNOTATION');
+
+-- Check if semantic_type is a preprocessor directive
+CREATE OR REPLACE MACRO is_directive(st) AS
+    is_semantic_type(st, 'METADATA_DIRECTIVE');
+
+-- =============================================================================
+-- Type Predicates
+-- =============================================================================
+
+-- Check if semantic_type is a primitive type
+CREATE OR REPLACE MACRO is_type_primitive(st) AS
+    is_semantic_type(st, 'TYPE_PRIMITIVE');
+
+-- Check if semantic_type is a composite type (struct, union, tuple)
+CREATE OR REPLACE MACRO is_type_composite(st) AS
+    is_semantic_type(st, 'TYPE_COMPOSITE');
+
+-- Check if semantic_type is a reference/pointer type
+CREATE OR REPLACE MACRO is_type_reference(st) AS
+    is_semantic_type(st, 'TYPE_REFERENCE');
+
+-- Check if semantic_type is a generic/template type
+CREATE OR REPLACE MACRO is_type_generic(st) AS
+    is_semantic_type(st, 'TYPE_GENERIC');
+
 )SQLMACRO"},
     {"file_utilities.sql", R"SQLMACRO(
 -- File Utility Macros

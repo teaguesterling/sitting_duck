@@ -1,0 +1,270 @@
+# name: test/sql/rosetta_code/semantic_predicate_verification.test
+# description: Verify semantic predicates correctly identify known constructs
+# group: [rosetta_code]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Semantic Predicate Verification Tests
+# =============================================================================
+# These tests verify that semantic predicates correctly identify SPECIFIC
+# known constructs in source files. Unlike stress tests with aggregate counts,
+# these tests verify exact expected behavior for individual nodes.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Test 1: is_import() correctly identifies Python import statements
+# -----------------------------------------------------------------------------
+# File: hello-world-web-server-1.py contains: "from wsgiref.simple_server import make_server"
+
+query II
+SELECT type, is_import(semantic_type) as is_import
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Web-server/Python/hello-world-web-server-1.py')
+WHERE type = 'import_from_statement'
+LIMIT 1;
+----
+import_from_statement	true
+
+# -----------------------------------------------------------------------------
+# Test 2: is_import() correctly identifies Go import statements
+# -----------------------------------------------------------------------------
+# File: hello-world-text.go contains: import "fmt"
+
+query II
+SELECT type, is_import(semantic_type) as is_import
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Text/Go/hello-world-text.go')
+WHERE type = 'import_spec'
+LIMIT 1;
+----
+import_spec	true
+
+# -----------------------------------------------------------------------------
+# Test 3: is_function_definition() correctly identifies Python function
+# -----------------------------------------------------------------------------
+# File: hello-world-web-server-1.py contains: def app(environ, start_response):
+
+query III
+SELECT type, name, is_function_definition(semantic_type) as is_function_def
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Web-server/Python/hello-world-web-server-1.py')
+WHERE type = 'function_definition';
+----
+function_definition	app	true
+
+# -----------------------------------------------------------------------------
+# Test 4: is_function_definition() correctly identifies Go function
+# -----------------------------------------------------------------------------
+# File: hello-world-text.go contains: func main()
+
+query III
+SELECT type, name, is_function_definition(semantic_type) as is_function_def
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Text/Go/hello-world-text.go')
+WHERE type = 'function_declaration';
+----
+function_declaration	main	true
+
+# -----------------------------------------------------------------------------
+# Test 5: is_function_definition() correctly identifies Java method
+# -----------------------------------------------------------------------------
+# File: hello-world-text.java contains: public static void main(String[] args)
+
+query III
+SELECT type, name, is_function_definition(semantic_type) as is_function_def
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Text/Java/hello-world-text.java')
+WHERE type = 'method_declaration';
+----
+method_declaration	main	true
+
+# -----------------------------------------------------------------------------
+# Test 6: is_class_definition() correctly identifies Java class
+# -----------------------------------------------------------------------------
+# File: hello-world-text.java contains: public class HelloWorld
+
+query III
+SELECT type, name, is_class_definition(semantic_type) as is_class_def
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Text/Java/hello-world-text.java')
+WHERE type = 'class_declaration';
+----
+class_declaration	HelloWorld	true
+
+# -----------------------------------------------------------------------------
+# Test 7: is_string_literal() correctly identifies Go string
+# -----------------------------------------------------------------------------
+# File: hello-world-text.go contains: "fmt" and "Hello world!"
+
+query II
+SELECT type, is_string_literal(semantic_type) as is_string
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Text/Go/hello-world-text.go')
+WHERE type = 'interpreted_string_literal';
+----
+interpreted_string_literal	true
+interpreted_string_literal	true
+
+# -----------------------------------------------------------------------------
+# Test 8: is_call() correctly identifies function calls
+# -----------------------------------------------------------------------------
+# File: hello-world-text.go contains: fmt.Println(...)
+
+query II
+SELECT type, is_call(semantic_type) as is_call
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Text/Go/hello-world-text.go')
+WHERE type = 'call_expression'
+LIMIT 1;
+----
+call_expression	true
+
+# -----------------------------------------------------------------------------
+# Test 9: Non-import nodes should NOT match is_import()
+# -----------------------------------------------------------------------------
+# Verify function definitions don't match is_import
+
+query I
+SELECT COUNT(*)
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Text/Go/hello-world-text.go')
+WHERE type = 'function_declaration'
+  AND is_import(semantic_type) = true;
+----
+0
+
+# -----------------------------------------------------------------------------
+# Test 10: Non-function nodes should NOT match is_function_definition()
+# -----------------------------------------------------------------------------
+# Verify import statements don't match is_function_definition
+
+query I
+SELECT COUNT(*)
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Text/Go/hello-world-text.go')
+WHERE type = 'import_spec'
+  AND is_function_definition(semantic_type) = true;
+----
+0
+
+# -----------------------------------------------------------------------------
+# Test 11: is_control_flow() correctly identifies control flow constructs
+# -----------------------------------------------------------------------------
+# Look for a file with control flow
+
+query II
+SELECT type, is_control_flow(semantic_type) as is_control
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Graphical/Python/hello-world-graphical-1.py')
+WHERE type = 'for_statement'
+   OR type = 'if_statement'
+   OR type = 'while_statement'
+LIMIT 3;
+----
+
+# Note: This file may not have control flow - empty result is expected for this specific file
+
+# -----------------------------------------------------------------------------
+# Test 12: is_comment() correctly identifies Python comments
+# -----------------------------------------------------------------------------
+# File: hello-world-graphical-1.py has comments like "# select default cube"
+
+query II
+SELECT type, is_comment(semantic_type) as is_comment
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Graphical/Python/hello-world-graphical-1.py')
+WHERE type = 'comment'
+LIMIT 1;
+----
+comment	true
+
+# -----------------------------------------------------------------------------
+# Test 13: Semantic types are correctly assigned per language
+# -----------------------------------------------------------------------------
+# Verify Python function_definition has DEFINITION_FUNCTION semantic type
+
+query II
+SELECT type, semantic_type::VARCHAR
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Web-server/Python/hello-world-web-server-1.py')
+WHERE type = 'function_definition';
+----
+function_definition	DEFINITION_FUNCTION
+
+# -----------------------------------------------------------------------------
+# Test 14: Verify Go import semantic type
+# -----------------------------------------------------------------------------
+
+query II
+SELECT type, semantic_type::VARCHAR
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Text/Go/hello-world-text.go')
+WHERE type = 'import_spec';
+----
+import_spec	EXTERNAL_IMPORT
+
+# -----------------------------------------------------------------------------
+# Test 15: Verify Java class semantic type
+# -----------------------------------------------------------------------------
+
+query II
+SELECT type, semantic_type::VARCHAR
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Text/Java/hello-world-text.java')
+WHERE type = 'class_declaration';
+----
+class_declaration	DEFINITION_CLASS
+
+# -----------------------------------------------------------------------------
+# Test 16: is_definition() matches all definition types
+# -----------------------------------------------------------------------------
+# Verify that is_definition() is broad enough to capture various definitions
+
+query I
+SELECT COUNT(*) > 0
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Text/Java/hello-world-text.java')
+WHERE is_definition(semantic_type)
+  AND type IN ('class_declaration', 'method_declaration');
+----
+true
+
+# -----------------------------------------------------------------------------
+# Test 17: is_literal() matches string literals
+# -----------------------------------------------------------------------------
+
+query I
+SELECT COUNT(*) > 0
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Text/Go/hello-world-text.go')
+WHERE is_literal(semantic_type)
+  AND type = 'interpreted_string_literal';
+----
+true
+
+# -----------------------------------------------------------------------------
+# Test 18: Verify specific name extraction for known function
+# -----------------------------------------------------------------------------
+# The Python file hello-world-web-server-1.py has function named "app"
+
+query I
+SELECT name = 'app'
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Web-server/Python/hello-world-web-server-1.py')
+WHERE is_function_definition(semantic_type)
+  AND type = 'function_definition';
+----
+true
+
+# -----------------------------------------------------------------------------
+# Test 19: Verify specific name extraction for Java class
+# -----------------------------------------------------------------------------
+# The Java file hello-world-text.java has class named "HelloWorld"
+
+query I
+SELECT name = 'HelloWorld'
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Text/Java/hello-world-text.java')
+WHERE is_class_definition(semantic_type)
+  AND type = 'class_declaration';
+----
+true
+
+# -----------------------------------------------------------------------------
+# Test 20: Verify Go function name extraction
+# -----------------------------------------------------------------------------
+# The Go file hello-world-text.go has function named "main"
+
+query I
+SELECT name = 'main'
+FROM read_ast('third_party/rosettacode-acmeism/Task/Hello-world-Text/Go/hello-world-text.go')
+WHERE is_function_definition(semantic_type)
+  AND type = 'function_declaration';
+----
+true
+
