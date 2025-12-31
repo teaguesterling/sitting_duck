@@ -132,12 +132,12 @@ string LanguageAdapter::ExtractNameFromQualifiedNode(TSNode qualified_node, cons
 string LanguageAdapter::ExtractNameFromDeclarator(TSNode node, const string &content) const {
     // Universal declarator extraction
     // Searches for identifiers inside declarator nodes
-    
+
     // Common declarator patterns across languages:
     // - function_declarator (C/C++): contains function name and parameters
-    // - method_declarator (Java): contains method name and parameters  
+    // - method_declarator (Java): contains method name and parameters
     // - declarator (various): general declaration pattern
-    
+
     vector<string> declarator_patterns = {
         "function_declarator",
         "method_declarator",
@@ -145,31 +145,70 @@ string LanguageAdapter::ExtractNameFromDeclarator(TSNode node, const string &con
         "procedure_declarator",  // Pascal-like languages
         "init_declarator"        // C++ initializing declarators
     };
-    
-    for (const string& pattern : declarator_patterns) {
-        TSNode declarator_node = FindChildByTypeNode(node, pattern);
-        if (!ts_node_is_null(declarator_node)) {
-            // Found a declarator, extract identifier from it
-            // First try qualified identifier (for method names like Class::method)
-            string result = ExtractQualifiedIdentifierName(declarator_node, content);
-            if (!result.empty()) {
-                return result;
-            }
-            
-            // Fallback to simple identifier
-            result = FindChildByType(declarator_node, content, "identifier");
-            if (!result.empty()) {
-                return result;
+
+    // Wrapper types that may contain the actual declarator (e.g., for pointer/array return types)
+    vector<string> wrapper_patterns = {
+        "pointer_declarator",    // char *func() - function_declarator is inside pointer_declarator
+        "array_declarator",      // int arr[]() - function_declarator is inside array_declarator
+        "reference_declarator"   // C++ references
+    };
+
+    // Helper lambda to search for declarator and extract name
+    auto tryExtractFromDeclarator = [&](TSNode search_node) -> string {
+        for (const string& pattern : declarator_patterns) {
+            TSNode declarator_node = FindChildByTypeNode(search_node, pattern);
+            if (!ts_node_is_null(declarator_node)) {
+                // Found a declarator, extract identifier from it
+                // First try qualified identifier (for method names like Class::method)
+                string result = ExtractQualifiedIdentifierName(declarator_node, content);
+                if (!result.empty()) {
+                    return result;
+                }
+
+                // Fallback to simple identifier
+                result = FindChildByType(declarator_node, content, "identifier");
+                if (!result.empty()) {
+                    return result;
+                }
             }
         }
-    }
-    
-    // Fallback: try direct identifier search on the original node
-    string result = FindChildByType(node, content, "identifier");
+        return "";
+    };
+
+    // First, try to find declarator directly under node
+    string result = tryExtractFromDeclarator(node);
     if (!result.empty()) {
         return result;
     }
-    
+
+    // If not found, check inside wrapper types (pointer_declarator, array_declarator)
+    // This handles cases like: char *sortedWord(...) where function_declarator is inside pointer_declarator
+    // Need to handle nested wrappers like: node **alloc2(...) - pointer_declarator inside pointer_declarator
+    for (const string& wrapper : wrapper_patterns) {
+        TSNode wrapper_node = FindChildByTypeNode(node, wrapper);
+        while (!ts_node_is_null(wrapper_node)) {
+            result = tryExtractFromDeclarator(wrapper_node);
+            if (!result.empty()) {
+                return result;
+            }
+            // Check for nested wrapper (e.g., pointer_declarator inside pointer_declarator)
+            TSNode nested_wrapper = {0};
+            for (const string& nested : wrapper_patterns) {
+                nested_wrapper = FindChildByTypeNode(wrapper_node, nested);
+                if (!ts_node_is_null(nested_wrapper)) {
+                    break;
+                }
+            }
+            wrapper_node = nested_wrapper;
+        }
+    }
+
+    // Fallback: try direct identifier search on the original node
+    result = FindChildByType(node, content, "identifier");
+    if (!result.empty()) {
+        return result;
+    }
+
     // Last resort: text-based extraction for malformed AST structures
     return ExtractFunctionNameFromText(node, content);
 }
