@@ -394,14 +394,12 @@ DEF_TYPE("modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 // COMMENTS
 // =============================================================================
 
-/**
- * @defgroup java_comments Comments
- * @brief Line and block comments
- *
- * Java has line comments (`//`) and block comments (`/* */`).
- * Javadoc comments (`/** */`) are a special form of block comments.
- * @{
- */
+/// @defgroup java_comments Comments
+/// @brief Line and block comments
+///
+/// Java has line comments and block comments.
+/// Javadoc comments are a special form of block comments.
+/// @{
 DEF_TYPE("line_comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 DEF_TYPE("block_comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 /** @} */

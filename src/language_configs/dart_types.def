@@ -947,16 +947,14 @@ DEF_TYPE("script_tag", METADATA_DIRECTIVE, NONE, NONE, 0)
 // COMMENTS
 // ============================================================================
 
-/**
- * @defgroup dart_comments Comments
- * @brief Documentation and comments
- *
- * Dart comment styles:
- * - `// line comment`
- * - `/* block comment */`
- * - `/// documentation comment`
- * @{
- */
+/// @defgroup dart_comments Comments
+/// @brief Documentation and comments
+///
+/// Dart comment styles:
+/// - Line comments
+/// - Block comments
+/// - Documentation comments
+/// @{
 
 /// @brief Comment
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)

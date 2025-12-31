@@ -443,14 +443,12 @@ DEF_TYPE("mutable_specifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 // COMMENTS
 // =============================================================================
 
-/**
- * @defgroup rust_comments Comments
- * @brief Line and block comments
- *
- * Rust has both line comments (`//`) and block comments (`/* */`).
- * Doc comments (`///`, `//!`, `/** */`) are also captured as comments.
- * @{
- */
+/// @defgroup rust_comments Comments
+/// @brief Line and block comments
+///
+/// Rust has both line comments and block comments.
+/// Doc comments are also captured as comments.
+/// @{
 DEF_TYPE("line_comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("block_comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 /** @} */

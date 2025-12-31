@@ -577,9 +577,7 @@ DEF_TYPE("nullptr", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
  * @{
  */
 
-/**
- * @brief Comment: `//` or `/* */`
- */
+/// @brief Comment: line or block style
 DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 
 /** @} */ // end c_comments

@@ -458,15 +458,13 @@ DEF_TYPE("heredoc_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 // COMMENTS
 // ============================================================================
 
-/**
- * @defgroup hcl_comments Comments
- * @brief HCL comment syntax
- *
- * Comment styles:
- * - Line: `# comment` or `// comment`
- * - Block: `/* comment */`
- * @{
- */
+/// @defgroup hcl_comments Comments
+/// @brief HCL comment syntax
+///
+/// Comment styles:
+/// - Line: hash or double-slash
+/// - Block comments
+/// @{
 
 /// @brief Comment
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)

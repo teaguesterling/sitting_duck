@@ -782,9 +782,7 @@ DEF_TYPE("property_signature", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, ASTNo
  * @{
  */
 
-/**
- * @brief Comment: `//` or `/* */`
- */
+/// @brief Comment: line or block style
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
 
 /**

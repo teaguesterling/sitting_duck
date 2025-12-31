@@ -395,14 +395,12 @@ DEF_TYPE("field_declaration_list", ORGANIZATION_LIST | SemanticRefinements::Orga
 // COMMENTS
 // =============================================================================
 
-/**
- * @defgroup go_comments Comments
- * @brief Line and block comments
- *
- * Go has both line comments (`//`) and block comments (`/* */`).
- * Doc comments precede declarations and use `//` style.
- * @{
- */
+/// @defgroup go_comments Comments
+/// @brief Line and block comments
+///
+/// Go has both line comments and block comments.
+/// Doc comments precede declarations and use line comment style.
+/// @{
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("line_comment", METADATA_COMMENT, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("block_comment", METADATA_COMMENT, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)

@@ -46,11 +46,11 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	// Register SQL macros for natural AST querying (depends on functions above)
 	RegisterASTSQLMacros(loader);
-	
+
 	// Short names system removed for simplicity
-	
+
 	// TODO: Re-enable once we fix the issues
-	// Register AST helper functions  
+	// Register AST helper functions
 	// RegisterASTHelperFunctions(loader);
 }
 

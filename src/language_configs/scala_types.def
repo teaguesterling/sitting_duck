@@ -361,16 +361,14 @@ DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 // COMMENTS
 // ============================================================================
 
-/**
- * @defgroup scala_comments Comments
- * @brief Documentation and annotation
- *
- * Scala comment styles:
- * - `// line comment`
- * - `/* block comment */`
- * - `/** ScalaDoc comment */`
- * @{
- */
+/// @defgroup scala_comments Comments
+/// @brief Documentation and annotation
+///
+/// Scala comment styles:
+/// - Line comments
+/// - Block comments
+/// - ScalaDoc comments
+/// @{
 
 /// @brief Comment
 DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)

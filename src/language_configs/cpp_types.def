@@ -911,9 +911,7 @@ DEF_TYPE("preproc_directive", METADATA_DIRECTIVE, NONE, NONE, 0)
  */
 DEF_TYPE("preproc_arg", METADATA_DIRECTIVE, NONE, NONE, 0)
 
-/**
- * @brief Comment: `//` or `/* */`
- */
+/// @brief Comment: line or block style
 DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
 
 /** @} */ // end cpp_preprocessor

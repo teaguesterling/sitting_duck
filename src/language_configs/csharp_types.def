@@ -375,16 +375,14 @@ DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 // COMMENTS
 // ============================================================================
 
-/**
- * @defgroup csharp_comments Comments
- * @brief Documentation and annotation
- *
- * C# comment styles:
- * - `// line comment`
- * - `/* block comment */`
- * - `/// <summary>XML doc</summary>`
- * @{
- */
+/// @defgroup csharp_comments Comments
+/// @brief Documentation and annotation
+///
+/// C# comment styles:
+/// - Line comments
+/// - Block comments
+/// - XML documentation comments
+/// @{
 
 /// @brief Comment
 DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
