@@ -92,7 +92,7 @@ DEF_TYPE("import_spec_list", ORGANIZATION_LIST | SemanticRefinements::Organizati
  */
 DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
-DEF_TYPE("func_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("func_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
 DEF_TYPE("method_elem", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
 /** @} */
 

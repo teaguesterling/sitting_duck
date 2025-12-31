@@ -93,21 +93,22 @@ DEF_TYPE("method_definition", DEFINITION_FUNCTION | SemanticRefinements::Functio
 DEF_TYPE("async_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, ASYNC_FUNCTION, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
 
 /**
- * @brief Generator function: `function* name(params) { ... }`
- * Can yield values; returns iterator
+ * @brief Generator function expression: `function*(params) { ... }`
+ * Anonymous generator assigned to variable; can yield values
  */
-DEF_TYPE("generator_function", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("generator_function", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_ASSIGNMENT_TARGET, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_EMBODIED)
 
 /**
- * @brief Generator function declaration
+ * @brief Generator function declaration: `function* name(params) { ... }`
+ * Named generator function at statement level
  */
-DEF_TYPE("generator_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("generator_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_EMBODIED)
 
 /**
- * @brief Async generator: `async function* name(params) { ... }`
- * Combines async and generator features
+ * @brief Async generator expression: `async function*(params) { ... }`
+ * Anonymous async generator assigned to variable
  */
-DEF_TYPE("async_generator_function", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("async_generator_function", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_ASSIGNMENT_TARGET, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_EMBODIED)
 
 /** @} */ // end javascript_functions
 
