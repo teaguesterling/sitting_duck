@@ -79,6 +79,25 @@ string LuaAdapter::ExtractNodeName(TSNode node, const string &content) const {
 				if (!dot_expr.empty()) {
 					return dot_expr;
 				}
+				// Try method_index_expression for method definitions (function Obj:method())
+				TSNode method_expr = FindChildByTypeNode(node, "method_index_expression");
+				if (!ts_node_is_null(method_expr)) {
+					// Extract the method name (second identifier child after the colon)
+					uint32_t child_count = ts_node_child_count(method_expr);
+					for (uint32_t i = 0; i < child_count; i++) {
+						TSNode child = ts_node_child(method_expr, i);
+						const char *child_type = ts_node_type(child);
+						// The method name is an identifier after the colon
+						if (strcmp(child_type, "identifier") == 0) {
+							// Skip the first identifier (object name), return the second (method name)
+							if (i > 0) {
+								return ExtractNodeText(child, content);
+							}
+						}
+					}
+					// Fallback: return the full expression text
+					return ExtractNodeText(method_expr, content);
+				}
 			}
 
 			return "";
