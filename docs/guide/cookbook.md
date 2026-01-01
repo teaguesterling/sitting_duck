@@ -557,6 +557,336 @@ CREATE TABLE IF NOT EXISTS analysis_meta (
 
 ---
 
+## Security Analysis
+
+### Dangerous Function Calls
+
+```sql
+-- Find eval/exec usage (code injection risk)
+SELECT language, name, file_path, start_line, LEFT(peek, 80) as context
+FROM read_ast('src/**/*.*', ignore_errors := true)
+WHERE is_call(semantic_type)
+  AND name IN ('eval', 'exec', 'compile', '__import__', 'execfile', 'system', 'popen')
+ORDER BY language, name;
+```
+
+### Shell Command Execution
+
+```sql
+-- Find subprocess/os.system usage
+SELECT file_path, start_line, LEFT(peek, 100) as context
+FROM read_ast('src/**/*.py')
+WHERE peek LIKE '%subprocess%' OR peek LIKE '%os.system%' OR peek LIKE '%os.popen%'
+ORDER BY file_path;
+```
+
+### Input Without Validation
+
+```sql
+-- Find functions that take user input but don't validate
+WITH input_functions AS (
+    SELECT file_path, name, start_line, end_line
+    FROM read_ast('src/**/*.py')
+    WHERE is_function_definition(semantic_type) AND name IS NOT NULL
+),
+uses_input AS (
+    SELECT DISTINCT f.file_path, f.name
+    FROM input_functions f
+    JOIN read_ast('src/**/*.py') i
+      ON i.file_path = f.file_path
+      AND i.start_line >= f.start_line AND i.end_line <= f.end_line
+      AND is_call(i.semantic_type) AND i.name IN ('input', 'raw_input')
+),
+has_validation AS (
+    SELECT DISTINCT f.file_path, f.name
+    FROM uses_input u
+    JOIN input_functions f ON u.file_path = f.file_path AND u.name = f.name
+    JOIN read_ast('src/**/*.py') v
+      ON v.file_path = f.file_path
+      AND v.start_line >= f.start_line AND v.end_line <= f.end_line
+      AND (v.type = 'try_statement'
+           OR (is_call(v.semantic_type) AND v.name IN ('int', 'float', 'isinstance')))
+)
+SELECT u.file_path, u.name,
+    CASE WHEN h.name IS NOT NULL THEN 'validated' ELSE 'UNVALIDATED' END as status
+FROM uses_input u
+LEFT JOIN has_validation h ON u.file_path = h.file_path AND u.name = h.name;
+```
+
+### Security Concern Summary
+
+```sql
+-- Categorize potential security issues
+SELECT
+    CASE
+        WHEN name IN ('eval', 'exec', 'compile') THEN 'Code Injection'
+        WHEN name IN ('system', 'popen', 'execvp') THEN 'Command Injection'
+        WHEN name IN ('open', 'fopen') THEN 'File Operations'
+        WHEN name IN ('socket', 'connect', 'bind') THEN 'Network Operations'
+        ELSE 'Other'
+    END as risk_category,
+    language,
+    COUNT(*) as occurrences
+FROM read_ast('src/**/*.*', ignore_errors := true)
+WHERE is_call(semantic_type)
+  AND name IN ('eval', 'exec', 'compile', 'system', 'popen', 'open', 'socket', 'connect')
+GROUP BY risk_category, language
+ORDER BY risk_category, occurrences DESC;
+```
+
+---
+
+## Structural Analysis
+
+### Functions with Multiple Return Points
+
+```sql
+-- Potential complexity indicator
+WITH function_bounds AS (
+    SELECT file_path, name, start_line, end_line
+    FROM read_ast('src/**/*.py')
+    WHERE is_function_definition(semantic_type) AND name IS NOT NULL
+)
+SELECT f.name, f.file_path, f.start_line, COUNT(*) as return_count
+FROM function_bounds f
+JOIN read_ast('src/**/*.py') r
+  ON r.file_path = f.file_path
+  AND r.start_line >= f.start_line AND r.end_line <= f.end_line
+  AND r.type = 'return_statement'
+GROUP BY f.name, f.file_path, f.start_line
+HAVING COUNT(*) > 3
+ORDER BY return_count DESC;
+```
+
+### Cyclomatic Complexity Approximation
+
+```sql
+-- Count control flow nodes within each function
+WITH function_bounds AS (
+    SELECT file_path, name, start_line, end_line,
+           end_line - start_line + 1 as lines
+    FROM read_ast('src/**/*.py')
+    WHERE is_function_definition(semantic_type)
+      AND name IS NOT NULL AND end_line - start_line > 5
+)
+SELECT
+    f.name, f.file_path, f.lines,
+    SUM(CASE WHEN is_conditional(cf.semantic_type) THEN 1 ELSE 0 END) as conditionals,
+    SUM(CASE WHEN is_loop(cf.semantic_type) THEN 1 ELSE 0 END) as loops,
+    SUM(CASE WHEN is_conditional(cf.semantic_type) THEN 1 ELSE 0 END) +
+    SUM(CASE WHEN is_loop(cf.semantic_type) THEN 1 ELSE 0 END) + 1 as cyclomatic
+FROM function_bounds f
+JOIN read_ast('src/**/*.py') cf
+  ON cf.file_path = f.file_path
+  AND cf.start_line >= f.start_line AND cf.end_line <= f.end_line
+  AND is_control_flow(cf.semantic_type)
+GROUP BY f.name, f.file_path, f.start_line, f.lines
+ORDER BY cyclomatic DESC
+LIMIT 20;
+```
+
+### Deeply Nested Code (Arrow Anti-Pattern)
+
+```sql
+-- Find callback hell / deeply nested control flow
+SELECT file_path, start_line, type, depth, LEFT(peek, 60) as context
+FROM read_ast('src/**/*.js')
+WHERE is_control_flow(semantic_type) AND depth > 10
+ORDER BY depth DESC
+LIMIT 20;
+```
+
+### Functions Without Error Handling
+
+```sql
+-- Find functions that should have try/catch but don't
+WITH functions AS (
+    SELECT file_path, name, start_line, end_line
+    FROM read_ast('src/**/*.py')
+    WHERE is_function_definition(semantic_type)
+      AND name IS NOT NULL AND end_line - start_line > 10
+),
+has_try AS (
+    SELECT DISTINCT f.file_path, f.name
+    FROM functions f
+    JOIN read_ast('src/**/*.py') t
+      ON t.file_path = f.file_path
+      AND t.start_line >= f.start_line AND t.end_line <= f.end_line
+      AND t.type = 'try_statement'
+)
+SELECT f.file_path, f.name
+FROM functions f
+LEFT JOIN has_try h ON f.file_path = h.file_path AND f.name = h.name
+WHERE h.name IS NULL
+ORDER BY f.file_path;
+```
+
+### Potential Dead Code (Uncalled Functions)
+
+```sql
+-- Functions defined but never called in same file
+WITH definitions AS (
+    SELECT DISTINCT file_path, name
+    FROM read_ast('src/**/*.py')
+    WHERE is_function_definition(semantic_type)
+      AND name IS NOT NULL AND name NOT LIKE '\\_%%' AND name != 'main'
+),
+calls AS (
+    SELECT DISTINCT file_path, name
+    FROM read_ast('src/**/*.py')
+    WHERE is_call(semantic_type) AND name IS NOT NULL
+)
+SELECT d.file_path, d.name as uncalled_function
+FROM definitions d
+LEFT JOIN calls c ON d.file_path = c.file_path AND d.name = c.name
+WHERE c.name IS NULL;
+```
+
+---
+
+## Code Analytics
+
+### Language Fingerprint (Semantic Composition)
+
+```sql
+-- Semantic composition per 1000 nodes - unique fingerprint per language
+WITH lang_totals AS (
+    SELECT language, COUNT(*) as total
+    FROM read_ast('src/**/*.*', ignore_errors := true)
+    GROUP BY language
+)
+SELECT
+    a.language,
+    ROUND(1000.0 * SUM(CASE WHEN is_function_definition(semantic_type) THEN 1 ELSE 0 END) / t.total, 1) as functions_per_1k,
+    ROUND(1000.0 * SUM(CASE WHEN is_call(semantic_type) THEN 1 ELSE 0 END) / t.total, 1) as calls_per_1k,
+    ROUND(1000.0 * SUM(CASE WHEN is_control_flow(semantic_type) THEN 1 ELSE 0 END) / t.total, 1) as control_flow_per_1k,
+    ROUND(1000.0 * SUM(CASE WHEN is_literal(semantic_type) THEN 1 ELSE 0 END) / t.total, 1) as literals_per_1k,
+    ROUND(1000.0 * SUM(CASE WHEN is_comment(semantic_type) THEN 1 ELSE 0 END) / t.total, 1) as comments_per_1k
+FROM read_ast('src/**/*.*', ignore_errors := true) a
+JOIN lang_totals t ON a.language = t.language
+GROUP BY a.language, t.total;
+```
+
+### Function Size Distribution
+
+```sql
+-- Categorize functions by size (complexity profile)
+SELECT
+    language,
+    COUNT(*) as total_functions,
+    ROUND(100.0 * COUNT(CASE WHEN end_line - start_line <= 5 THEN 1 END) / COUNT(*), 1) as tiny_pct,
+    ROUND(100.0 * COUNT(CASE WHEN end_line - start_line BETWEEN 6 AND 20 THEN 1 END) / COUNT(*), 1) as small_pct,
+    ROUND(100.0 * COUNT(CASE WHEN end_line - start_line BETWEEN 21 AND 50 THEN 1 END) / COUNT(*), 1) as medium_pct,
+    ROUND(100.0 * COUNT(CASE WHEN end_line - start_line > 50 THEN 1 END) / COUNT(*), 1) as large_pct
+FROM read_ast('src/**/*.*', ignore_errors := true)
+WHERE is_function_definition(semantic_type)
+  AND name IS NOT NULL
+GROUP BY language
+ORDER BY large_pct DESC;
+```
+
+### Nested Function Analysis (Closure Usage)
+
+```sql
+-- Detect closure/callback-heavy code
+SELECT
+    language,
+    COUNT(*) as all_functions,
+    COUNT(CASE WHEN depth > 3 THEN 1 END) as nested_functions,
+    ROUND(100.0 * COUNT(CASE WHEN depth > 3 THEN 1 END) / COUNT(*), 1) as nested_pct
+FROM read_ast('src/**/*.*', ignore_errors := true)
+WHERE is_function_definition(semantic_type)
+GROUP BY language
+ORDER BY nested_pct DESC;
+```
+
+### Definition to Call Ratio
+
+```sql
+-- Code style indicator: OOP (high ratio) vs functional (low ratio)
+SELECT
+    language,
+    SUM(CASE WHEN is_function_definition(semantic_type) THEN 1 ELSE 0 END) as definitions,
+    SUM(CASE WHEN is_call(semantic_type) THEN 1 ELSE 0 END) as calls,
+    ROUND(
+        SUM(CASE WHEN is_call(semantic_type) THEN 1.0 ELSE 0 END) /
+        NULLIF(SUM(CASE WHEN is_function_definition(semantic_type) THEN 1 ELSE 0 END), 0),
+    1) as calls_per_function
+FROM read_ast('src/**/*.*', ignore_errors := true)
+GROUP BY language
+ORDER BY calls_per_function DESC;
+```
+
+### Control Flow Style
+
+```sql
+-- Loop vs conditional ratio (algorithmic vs branching)
+SELECT
+    language,
+    SUM(CASE WHEN is_loop(semantic_type) THEN 1 ELSE 0 END) as loops,
+    SUM(CASE WHEN is_conditional(semantic_type) THEN 1 ELSE 0 END) as conditionals,
+    ROUND(
+        SUM(CASE WHEN is_loop(semantic_type) THEN 1.0 ELSE 0 END) /
+        NULLIF(SUM(CASE WHEN is_conditional(semantic_type) THEN 1 ELSE 0 END), 0),
+    2) as loop_to_conditional_ratio
+FROM read_ast('src/**/*.*', ignore_errors := true)
+WHERE is_control_flow(semantic_type)
+GROUP BY language
+ORDER BY loop_to_conditional_ratio DESC;
+```
+
+### Comment Density (Documentation Quality)
+
+```sql
+SELECT
+    language,
+    COUNT(CASE WHEN is_comment(semantic_type) THEN 1 END) as comments,
+    COUNT(CASE WHEN is_function_definition(semantic_type) THEN 1 END) as functions,
+    ROUND(
+        1.0 * COUNT(CASE WHEN is_comment(semantic_type) THEN 1 END) /
+        NULLIF(COUNT(CASE WHEN is_function_definition(semantic_type) THEN 1 END), 0),
+    2) as comments_per_function
+FROM read_ast('src/**/*.*', ignore_errors := true)
+GROUP BY language
+ORDER BY comments_per_function DESC;
+```
+
+### Common Function Names Across Languages
+
+```sql
+-- Find universal naming patterns
+SELECT
+    name,
+    COUNT(DISTINCT language) as languages,
+    COUNT(*) as occurrences,
+    STRING_AGG(DISTINCT language, ', ' ORDER BY language) as in_languages
+FROM read_ast('src/**/*.*', ignore_errors := true)
+WHERE is_function_definition(semantic_type)
+  AND name IS NOT NULL
+  AND length(name) > 2
+GROUP BY name
+HAVING COUNT(DISTINCT language) >= 2
+ORDER BY languages DESC, occurrences DESC
+LIMIT 20;
+```
+
+### Semantic Super Kind Distribution
+
+```sql
+-- High-level code composition
+SELECT
+    language,
+    ROUND(100.0 * SUM(CASE WHEN get_super_kind(semantic_type) = 'DATA_STRUCTURE' THEN 1 ELSE 0 END) / COUNT(*), 1) as data_pct,
+    ROUND(100.0 * SUM(CASE WHEN get_super_kind(semantic_type) = 'COMPUTATION' THEN 1 ELSE 0 END) / COUNT(*), 1) as compute_pct,
+    ROUND(100.0 * SUM(CASE WHEN get_super_kind(semantic_type) = 'CONTROL_EFFECTS' THEN 1 ELSE 0 END) / COUNT(*), 1) as control_pct,
+    ROUND(100.0 * SUM(CASE WHEN get_super_kind(semantic_type) = 'META_EXTERNAL' THEN 1 ELSE 0 END) / COUNT(*), 1) as meta_pct
+FROM read_ast('src/**/*.*', ignore_errors := true)
+WHERE semantic_type != 0
+GROUP BY language;
+```
+
+---
+
 ## Troubleshooting Queries
 
 ### Check What Types Exist
