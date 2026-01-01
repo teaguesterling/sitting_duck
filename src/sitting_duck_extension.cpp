@@ -14,7 +14,7 @@
 namespace duckdb {
 
 // Forward declaration of registration functions
-void RegisterReadASTFunction(ExtensionLoader &loader);           // Streaming-based implementation
+void RegisterReadASTFunction(ExtensionLoader &loader); // Streaming-based implementation
 // void RegisterReadASTStreamingFunction(ExtensionLoader &loader);  // Removed - redundant
 // void RegisterReadASTObjectsHybridFunction(ExtensionLoader &loader); // Removed - unused
 void RegisterASTSQLMacros(ExtensionLoader &loader);
@@ -81,7 +81,6 @@ DUCKDB_CPP_EXTENSION_ENTRY(sitting_duck, loader) {
 DUCKDB_EXTENSION_API const char *sitting_duck_version() {
 	return duckdb::DuckDB::LibraryVersion();
 }
-
 }
 
 #ifndef DUCKDB_EXTENSION_MAIN

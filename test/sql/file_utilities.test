@@ -1,6 +1,6 @@
 # name: test/sql/file_utilities.test
 # description: Test file utility macros for reading lines from files
-# group: [sitting_duck]
+# group: [sql]
 
 require sitting_duck
 

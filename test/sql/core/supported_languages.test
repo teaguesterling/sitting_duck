@@ -1,6 +1,6 @@
 # name: test/sql/core/supported_languages.test
 # description: Test supported languages functionality
-# group: [sitting_duck]
+# group: [core]
 
 require sitting_duck
 

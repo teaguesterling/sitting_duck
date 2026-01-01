@@ -1,6 +1,6 @@
 # name: test/sql/parameter_validation_comprehensive.test
 # description: Comprehensive parameter validation tests for all AST functions
-# group: [duckdb_ast_critical]
+# group: [sql]
 
 require sitting_duck
 

@@ -13,10 +13,10 @@ namespace duckdb {
 
 //==============================================================================
 // DuckDB Native Parser Adapter - Architecture Plan Implementation
-// 
+//
 // This adapter provides SQL parsing using DuckDB's native parser instead of
 // tree-sitter, enabling database-native accuracy for SQL AST analysis.
-// 
+//
 // Credit: Inspired by zacMode's duckdb_extension_parser_tools
 // (https://github.com/zacMode/duckdb_extension_parser_tools)
 //==============================================================================
@@ -25,68 +25,66 @@ namespace duckdb {
 class DuckDBParserManager;
 
 class DuckDBAdapter : public LanguageAdapter {
-    friend class DuckDBParserManager;
+	friend class DuckDBParserManager;
+
 public:
-    // LanguageAdapter interface implementation
-    string GetLanguageName() const override;
-    vector<string> GetAliases() const override;
-    void InitializeParser() const override;
-    unique_ptr<TSParserWrapper> CreateFreshParser() const override;
-    string GetNormalizedType(const string &node_type) const override;
-    string ExtractNodeName(TSNode node, const string &content) const override;
-    string ExtractNodeValue(TSNode node, const string &content) const override;
-    bool IsPublicNode(TSNode node, const string &content) const override;
-    ParsingFunction GetParsingFunction() const override;
-    
-    // DuckDB-specific parsing function
-    ASTResult ParseSQL(const string& sql_content) const;
-    
-    // Phase 2: Make GetNodeConfigs public for template access
-    const unordered_map<string, NodeConfig>& GetNodeConfigs() const override;
+	// LanguageAdapter interface implementation
+	string GetLanguageName() const override;
+	vector<string> GetAliases() const override;
+	void InitializeParser() const override;
+	unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+	string GetNormalizedType(const string &node_type) const override;
+	string ExtractNodeName(TSNode node, const string &content) const override;
+	string ExtractNodeValue(TSNode node, const string &content) const override;
+	bool IsPublicNode(TSNode node, const string &content) const override;
+	ParsingFunction GetParsingFunction() const override;
+
+	// DuckDB-specific parsing function
+	ASTResult ParseSQL(const string &sql_content) const;
+
+	// Phase 2: Make GetNodeConfigs public for template access
+	const unordered_map<string, NodeConfig> &GetNodeConfigs() const override;
 
 protected:
-
 private:
-    // Core conversion methods (Architecture Plan Section 4.2)
-    ASTResult ConvertStatementsToAST(const vector<unique_ptr<SQLStatement>>& statements, 
-                                     const string& content) const;
-    
-    // Statement converters (Architecture Plan Section 5.1)
-    vector<ASTNode> ConvertStatement(const SQLStatement& stmt, uint32_t& node_counter) const;
-    vector<ASTNode> ConvertSelectStatement(const SelectStatement& stmt, uint32_t& node_counter) const;
-    vector<ASTNode> ConvertSelectNode(const SelectNode& node, uint32_t& node_counter) const;
-    
-    // Expression and table reference converters
-    vector<ASTNode> ConvertExpression(const ParsedExpression& expr, uint32_t& node_counter) const;
-    vector<ASTNode> ConvertTableRef(const TableRef& table_ref, uint32_t& node_counter) const;
-    
-    // Categorical expression handlers (Architecture Plan Section 4.3)
-    vector<ASTNode> HandleColumnReference(const ParsedExpression& expr, uint32_t& node_counter) const;
-    vector<ASTNode> HandleConstant(const ParsedExpression& expr, uint32_t& node_counter) const;
-    vector<ASTNode> HandleFunction(const ParsedExpression& expr, uint32_t& node_counter) const;
-    vector<ASTNode> HandleComparison(const ParsedExpression& expr, uint32_t& node_counter) const;
-    vector<ASTNode> HandleConjunction(const ParsedExpression& expr, uint32_t& node_counter) const;
-    vector<ASTNode> HandleCast(const ParsedExpression& expr, uint32_t& node_counter) const;
-    vector<ASTNode> HandleCase(const ParsedExpression& expr, uint32_t& node_counter) const;
-    vector<ASTNode> HandleWindow(const ParsedExpression& expr, uint32_t& node_counter) const;
-    vector<ASTNode> HandleAggregate(const ParsedExpression& expr, uint32_t& node_counter) const;
-    vector<ASTNode> HandleOperator(const ParsedExpression& expr, uint32_t& node_counter) const;
-    vector<ASTNode> HandleBetween(const ParsedExpression& expr, uint32_t& node_counter) const;
-    vector<ASTNode> HandleSubquery(const ParsedExpression& expr, uint32_t& node_counter) const;
-    vector<ASTNode> HandleStar(const ParsedExpression& expr, uint32_t& node_counter) const;
-    vector<ASTNode> HandleIncompleteExpression(const ParsedExpression& expr, uint32_t& node_counter) const;
-    
-    // Utility functions (Architecture Plan Section 5.3)
-    ASTNode CreateASTNode(const string& type, const string& name, const string& value,
-                          uint8_t semantic_type, uint32_t node_id, int64_t parent_id, 
-                          uint32_t depth) const;
-    
-    ASTResult CreateErrorResult(const string& error_message) const;
-    void UpdateDescendantCounts(vector<ASTNode>& nodes) const;
-    uint32_t CalculateMaxDepth(const vector<ASTNode>& nodes) const;
-    
-    // Function name normalization
-    string NormalizeFunctionName(const string& internal_name) const;
+	// Core conversion methods (Architecture Plan Section 4.2)
+	ASTResult ConvertStatementsToAST(const vector<unique_ptr<SQLStatement>> &statements, const string &content) const;
+
+	// Statement converters (Architecture Plan Section 5.1)
+	vector<ASTNode> ConvertStatement(const SQLStatement &stmt, uint32_t &node_counter) const;
+	vector<ASTNode> ConvertSelectStatement(const SelectStatement &stmt, uint32_t &node_counter) const;
+	vector<ASTNode> ConvertSelectNode(const SelectNode &node, uint32_t &node_counter) const;
+
+	// Expression and table reference converters
+	vector<ASTNode> ConvertExpression(const ParsedExpression &expr, uint32_t &node_counter) const;
+	vector<ASTNode> ConvertTableRef(const TableRef &table_ref, uint32_t &node_counter) const;
+
+	// Categorical expression handlers (Architecture Plan Section 4.3)
+	vector<ASTNode> HandleColumnReference(const ParsedExpression &expr, uint32_t &node_counter) const;
+	vector<ASTNode> HandleConstant(const ParsedExpression &expr, uint32_t &node_counter) const;
+	vector<ASTNode> HandleFunction(const ParsedExpression &expr, uint32_t &node_counter) const;
+	vector<ASTNode> HandleComparison(const ParsedExpression &expr, uint32_t &node_counter) const;
+	vector<ASTNode> HandleConjunction(const ParsedExpression &expr, uint32_t &node_counter) const;
+	vector<ASTNode> HandleCast(const ParsedExpression &expr, uint32_t &node_counter) const;
+	vector<ASTNode> HandleCase(const ParsedExpression &expr, uint32_t &node_counter) const;
+	vector<ASTNode> HandleWindow(const ParsedExpression &expr, uint32_t &node_counter) const;
+	vector<ASTNode> HandleAggregate(const ParsedExpression &expr, uint32_t &node_counter) const;
+	vector<ASTNode> HandleOperator(const ParsedExpression &expr, uint32_t &node_counter) const;
+	vector<ASTNode> HandleBetween(const ParsedExpression &expr, uint32_t &node_counter) const;
+	vector<ASTNode> HandleSubquery(const ParsedExpression &expr, uint32_t &node_counter) const;
+	vector<ASTNode> HandleStar(const ParsedExpression &expr, uint32_t &node_counter) const;
+	vector<ASTNode> HandleIncompleteExpression(const ParsedExpression &expr, uint32_t &node_counter) const;
+
+	// Utility functions (Architecture Plan Section 5.3)
+	ASTNode CreateASTNode(const string &type, const string &name, const string &value, uint8_t semantic_type,
+	                      uint32_t node_id, int64_t parent_id, uint32_t depth) const;
+
+	ASTResult CreateErrorResult(const string &error_message) const;
+	void UpdateDescendantCounts(vector<ASTNode> &nodes) const;
+	uint32_t CalculateMaxDepth(const vector<ASTNode> &nodes) const;
+
+	// Function name normalization
+	string NormalizeFunctionName(const string &internal_name) const;
 };
 
 } // namespace duckdb

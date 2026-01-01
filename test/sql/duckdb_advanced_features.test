@@ -1,6 +1,6 @@
-# name: test/sql/duckdb_advanced_features.test  
+# name: test/sql/duckdb_advanced_features.test
 # description: Test advanced DuckDB parser features for live query debugging
-# group: [sitting_duck]
+# group: [sql]
 
 require sitting_duck
 

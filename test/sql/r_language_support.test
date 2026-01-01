@@ -1,6 +1,6 @@
 # name: test/sql/r_language_support.test
 # description: Test R language support functionality
-# group: [sitting_duck]
+# group: [sql]
 
 require sitting_duck
 

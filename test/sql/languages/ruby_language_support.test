@@ -1,6 +1,6 @@
-# name: test/sql/ruby_language_support.test
+# name: test/sql/languages/ruby_language_support.test
 # description: Test Ruby language support functionality
-# group: [sitting_duck]
+# group: [languages]
 
 require sitting_duck
 

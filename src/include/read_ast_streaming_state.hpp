@@ -13,116 +13,114 @@ class LanguageAdapter;
 
 //! Global state for streaming AST table function with parallel batch processing
 struct ReadASTStreamingGlobalState : public GlobalTableFunctionState {
-    // Traditional single-threaded streaming (for small file sets)
-    shared_ptr<MultiFileList> file_list;
-    MultiFileListScanData file_scan_state;
-    
-    // Current file processing state (used by both modes)
-    unique_ptr<ASTResult> current_file_result;
-    idx_t current_file_row_index = 0;
-    bool current_file_parsed = false;
-    bool files_exhausted = false;
-    
-    // PARALLEL PROCESSING (no batching - let DuckDB handle it!)
-    bool use_parallel_batching = false;      // Reuse flag name for compatibility
-    vector<string> all_file_paths;           // All files to process
-    vector<string> resolved_languages;       // Pre-resolved languages for all files
-    bool parallel_processing_complete = false; // True when all parsing is done
-    
-    // Result management (all results from parallel processing)
-    vector<ASTResult> current_batch_results; // All results from parallel processing
-    idx_t current_batch_result_index = 0;    // Index within results
-    idx_t current_batch_row_index = 0;       // Row index within current result
-    
-    // Configuration
-    string language;
-    bool ignore_errors;
-    int32_t peek_size;
-    string peek_mode;
-    int32_t batch_size = 1;
-    ExtractionConfig extraction_config;  // NEW: Full extraction configuration
-    
-    // Batch processing state
-    vector<string> current_batch_files;
-    bool batch_exhausted = false;
-    
-    // Pre-created language adapters (eliminates singleton contention)
-    unordered_map<string, unique_ptr<LanguageAdapter>> pre_created_adapters;
-    
-    ReadASTStreamingGlobalState() = default;
+	// Traditional single-threaded streaming (for small file sets)
+	shared_ptr<MultiFileList> file_list;
+	MultiFileListScanData file_scan_state;
+
+	// Current file processing state (used by both modes)
+	unique_ptr<ASTResult> current_file_result;
+	idx_t current_file_row_index = 0;
+	bool current_file_parsed = false;
+	bool files_exhausted = false;
+
+	// PARALLEL PROCESSING (no batching - let DuckDB handle it!)
+	bool use_parallel_batching = false;        // Reuse flag name for compatibility
+	vector<string> all_file_paths;             // All files to process
+	vector<string> resolved_languages;         // Pre-resolved languages for all files
+	bool parallel_processing_complete = false; // True when all parsing is done
+
+	// Result management (all results from parallel processing)
+	vector<ASTResult> current_batch_results; // All results from parallel processing
+	idx_t current_batch_result_index = 0;    // Index within results
+	idx_t current_batch_row_index = 0;       // Row index within current result
+
+	// Configuration
+	string language;
+	bool ignore_errors;
+	int32_t peek_size;
+	string peek_mode;
+	int32_t batch_size = 1;
+	ExtractionConfig extraction_config; // NEW: Full extraction configuration
+
+	// Batch processing state
+	vector<string> current_batch_files;
+	bool batch_exhausted = false;
+
+	// Pre-created language adapters (eliminates singleton contention)
+	unordered_map<string, unique_ptr<LanguageAdapter>> pre_created_adapters;
+
+	ReadASTStreamingGlobalState() = default;
 };
 
 //! Bind data for streaming AST table function
 struct ReadASTStreamingBindData : public TableFunctionData {
-    Value file_path_value;          // For single pattern or legacy compatibility  
-    vector<string> file_patterns;   // For array patterns (DuckDB-consistent)
-    bool use_patterns_vector;       // Flag to indicate which field to use
-    string language;
-    bool ignore_errors;
-    int32_t peek_size;
-    string peek_mode;
-    int32_t batch_size;
-    ExtractionConfig extraction_config; // NEW: Full extraction configuration
-    
-    // Constructor for Value-based input (legacy)
-    ReadASTStreamingBindData(Value file_path_value, string language, bool ignore_errors = false, 
-                           int32_t peek_size = 120, string peek_mode = "auto", int32_t batch_size = 1) 
-        : file_path_value(std::move(file_path_value)), use_patterns_vector(false),
-          language(std::move(language)), ignore_errors(ignore_errors), 
-          peek_size(peek_size), peek_mode(std::move(peek_mode)), batch_size(batch_size) {
-        // Initialize extraction_config with legacy parameters for backward compatibility
-        extraction_config.context = ContextLevel::NATIVE;  // Default to native for backward compatibility
-        extraction_config.source = SourceLevel::LINES;
-        extraction_config.structure = StructureLevel::FULL;
-        extraction_config.peek_size = peek_size;
-        
-        // Map legacy peek_mode to PeekLevel
-        if (peek_mode == "none") {
-            extraction_config.peek = PeekLevel::NONE;
-        } else if (peek_mode == "smart") {
-            extraction_config.peek = PeekLevel::SMART;
-        } else if (peek_mode == "full") {
-            extraction_config.peek = PeekLevel::FULL;
-        } else if (peek_mode == "auto") {
-            extraction_config.peek = PeekLevel::SMART; // Map auto to smart
-        } else {
-            extraction_config.peek = PeekLevel::SMART; // Default fallback
-        }
-    }
-    
-    // Constructor for vector<string> patterns (new DuckDB-consistent approach)
-    ReadASTStreamingBindData(vector<string> file_patterns, string language, bool ignore_errors = false,
-                           int32_t peek_size = 120, string peek_mode = "auto", int32_t batch_size = 1)
-        : file_patterns(std::move(file_patterns)), use_patterns_vector(true),
-          language(std::move(language)), ignore_errors(ignore_errors),
-          peek_size(peek_size), peek_mode(std::move(peek_mode)), batch_size(batch_size) {
-        // Initialize extraction_config with legacy parameters for backward compatibility
-        extraction_config.context = ContextLevel::NATIVE;  // Default to native for backward compatibility
-        extraction_config.source = SourceLevel::LINES;
-        extraction_config.structure = StructureLevel::FULL;
-        extraction_config.peek_size = peek_size;
-        
-        // Map legacy peek_mode to PeekLevel
-        if (peek_mode == "none") {
-            extraction_config.peek = PeekLevel::NONE;
-        } else if (peek_mode == "smart") {
-            extraction_config.peek = PeekLevel::SMART;
-        } else if (peek_mode == "full") {
-            extraction_config.peek = PeekLevel::FULL;
-        } else if (peek_mode == "auto") {
-            extraction_config.peek = PeekLevel::SMART; // Map auto to smart
-        } else {
-            extraction_config.peek = PeekLevel::SMART; // Default fallback
-        }
-    }
-    
-    // NEW: Constructor with full ExtractionConfig
-    ReadASTStreamingBindData(vector<string> file_patterns, string language, bool ignore_errors,
-                           const ExtractionConfig& config, int32_t batch_size = 1)
-        : file_patterns(std::move(file_patterns)), use_patterns_vector(true),
-          language(std::move(language)), ignore_errors(ignore_errors),
-          peek_size(config.peek_size), peek_mode("smart"), batch_size(batch_size),
-          extraction_config(config) {}
+	Value file_path_value;        // For single pattern or legacy compatibility
+	vector<string> file_patterns; // For array patterns (DuckDB-consistent)
+	bool use_patterns_vector;     // Flag to indicate which field to use
+	string language;
+	bool ignore_errors;
+	int32_t peek_size;
+	string peek_mode;
+	int32_t batch_size;
+	ExtractionConfig extraction_config; // NEW: Full extraction configuration
+
+	// Constructor for Value-based input (legacy)
+	ReadASTStreamingBindData(Value file_path_value, string language, bool ignore_errors = false,
+	                         int32_t peek_size = 120, string peek_mode = "auto", int32_t batch_size = 1)
+	    : file_path_value(std::move(file_path_value)), use_patterns_vector(false), language(std::move(language)),
+	      ignore_errors(ignore_errors), peek_size(peek_size), peek_mode(std::move(peek_mode)), batch_size(batch_size) {
+		// Initialize extraction_config with legacy parameters for backward compatibility
+		extraction_config.context = ContextLevel::NATIVE; // Default to native for backward compatibility
+		extraction_config.source = SourceLevel::LINES;
+		extraction_config.structure = StructureLevel::FULL;
+		extraction_config.peek_size = peek_size;
+
+		// Map legacy peek_mode to PeekLevel
+		if (peek_mode == "none") {
+			extraction_config.peek = PeekLevel::NONE;
+		} else if (peek_mode == "smart") {
+			extraction_config.peek = PeekLevel::SMART;
+		} else if (peek_mode == "full") {
+			extraction_config.peek = PeekLevel::FULL;
+		} else if (peek_mode == "auto") {
+			extraction_config.peek = PeekLevel::SMART; // Map auto to smart
+		} else {
+			extraction_config.peek = PeekLevel::SMART; // Default fallback
+		}
+	}
+
+	// Constructor for vector<string> patterns (new DuckDB-consistent approach)
+	ReadASTStreamingBindData(vector<string> file_patterns, string language, bool ignore_errors = false,
+	                         int32_t peek_size = 120, string peek_mode = "auto", int32_t batch_size = 1)
+	    : file_patterns(std::move(file_patterns)), use_patterns_vector(true), language(std::move(language)),
+	      ignore_errors(ignore_errors), peek_size(peek_size), peek_mode(std::move(peek_mode)), batch_size(batch_size) {
+		// Initialize extraction_config with legacy parameters for backward compatibility
+		extraction_config.context = ContextLevel::NATIVE; // Default to native for backward compatibility
+		extraction_config.source = SourceLevel::LINES;
+		extraction_config.structure = StructureLevel::FULL;
+		extraction_config.peek_size = peek_size;
+
+		// Map legacy peek_mode to PeekLevel
+		if (peek_mode == "none") {
+			extraction_config.peek = PeekLevel::NONE;
+		} else if (peek_mode == "smart") {
+			extraction_config.peek = PeekLevel::SMART;
+		} else if (peek_mode == "full") {
+			extraction_config.peek = PeekLevel::FULL;
+		} else if (peek_mode == "auto") {
+			extraction_config.peek = PeekLevel::SMART; // Map auto to smart
+		} else {
+			extraction_config.peek = PeekLevel::SMART; // Default fallback
+		}
+	}
+
+	// NEW: Constructor with full ExtractionConfig
+	ReadASTStreamingBindData(vector<string> file_patterns, string language, bool ignore_errors,
+	                         const ExtractionConfig &config, int32_t batch_size = 1)
+	    : file_patterns(std::move(file_patterns)), use_patterns_vector(true), language(std::move(language)),
+	      ignore_errors(ignore_errors), peek_size(config.peek_size), peek_mode("smart"), batch_size(batch_size),
+	      extraction_config(config) {
+	}
 };
 
 } // namespace duckdb

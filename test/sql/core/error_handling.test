@@ -1,6 +1,6 @@
-# name: test/sql/basic/error_handling.test
+# name: test/sql/core/error_handling.test
 # description: Test error handling for invalid inputs
-# group: [sitting_duck]
+# group: [core]
 
 require sitting_duck
 

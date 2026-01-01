@@ -1,6 +1,6 @@
 # name: test/sql/duckdb_native_parser.test
 # description: Test DuckDB native parser capabilities vs tree-sitter
-# group: [sitting_duck]
+# group: [sql]
 
 require sitting_duck
 

@@ -1,6 +1,6 @@
 # name: test/sql/edge_cases_and_robustness.test
 # description: Edge cases and robustness tests to catch unexpected failures
-# group: [duckdb_ast_critical]
+# group: [sql]
 
 require sitting_duck
 

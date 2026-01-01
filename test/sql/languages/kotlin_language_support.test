@@ -1,6 +1,6 @@
 # name: test/sql/languages/kotlin_language_support.test
 # description: Test Kotlin language support functionality
-# group: [sitting_duck]
+# group: [languages]
 
 require sitting_duck
 

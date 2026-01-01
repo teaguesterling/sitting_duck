@@ -1,6 +1,6 @@
 # name: test/sql/toml_language_support.test
 # description: Test TOML language support functionality
-# group: [sitting_duck]
+# group: [sql]
 
 require sitting_duck
 

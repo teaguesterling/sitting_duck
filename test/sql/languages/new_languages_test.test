@@ -1,3 +1,6 @@
+# name: test/sql/languages/new_languages_test.test
+# group: [languages]
+
 # Test new language support (Markdown, Java, HTML, CSS, C)
 # Note: PHP support is now enabled (scanner dependency resolved)
 

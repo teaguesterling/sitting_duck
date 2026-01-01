@@ -1,6 +1,6 @@
 # name: test/sql/languages/cpp_language_support.test
 # description: Test C++ language support functionality
-# group: [sitting_duck]
+# group: [languages]
 
 require sitting_duck
 

@@ -1,6 +1,6 @@
 # name: test/sql/languages/css_language_support.test
 # description: Test CSS language support functionality
-# group: [sitting_duck]
+# group: [languages]
 
 require sitting_duck
 

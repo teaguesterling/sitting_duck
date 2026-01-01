@@ -1,6 +1,6 @@
 # name: test/sql/languages/dart_language_support.test
 # description: Test Dart language support functionality
-# group: [sitting_duck]
+# group: [languages]
 
 require sitting_duck
 

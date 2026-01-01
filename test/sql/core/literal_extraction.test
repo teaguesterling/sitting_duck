@@ -1,6 +1,6 @@
 # name: test/sql/core/literal_extraction.test
 # description: Test that literals have their values in the name field
-# group: [sitting_duck]
+# group: [core]
 
 require sitting_duck
 

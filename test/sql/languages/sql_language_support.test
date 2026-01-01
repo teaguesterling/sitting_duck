@@ -1,6 +1,6 @@
 # name: test/sql/languages/sql_language_support.test
 # description: Test SQL language support functionality
-# group: [sitting_duck]
+# group: [languages]
 
 require sitting_duck
 

@@ -1,6 +1,6 @@
-# name: test/sql/php_language_support.test
+# name: test/sql/languages/php_language_support.test
 # description: Test PHP language support functionality
-# group: [sitting_duck]
+# group: [languages]
 
 require sitting_duck
 

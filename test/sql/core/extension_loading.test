@@ -1,6 +1,6 @@
-# name: test/sql/basic/extension_loading.test
+# name: test/sql/core/extension_loading.test
 # description: Test extension loading and basic availability
-# group: [sitting_duck]
+# group: [core]
 
 # Before we load the extension, this will fail
 statement error

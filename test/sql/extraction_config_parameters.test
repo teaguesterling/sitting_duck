@@ -1,6 +1,6 @@
 # name: test/sql/extraction_config_parameters.test
 # description: Test ExtractionConfig parameters for controlling field population in AST functions
-# group: [duckdb_ast]
+# group: [sql]
 
 require sitting_duck
 

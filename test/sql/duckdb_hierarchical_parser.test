@@ -1,6 +1,6 @@
 # name: test/sql/duckdb_hierarchical_parser.test
 # description: Test hierarchical schema functions and compare with flat parsing
-# group: [sitting_duck]
+# group: [sql]
 
 require sitting_duck
 

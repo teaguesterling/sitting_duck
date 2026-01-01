@@ -1,6 +1,6 @@
 # name: test/sql/multi_execution_stability.test
 # description: Multi-execution stability tests to prevent deadlocks and corruption
-# group: [duckdb_ast_critical]
+# group: [sql]
 
 require sitting_duck
 

@@ -1,6 +1,6 @@
 # name: test/sql/duckdb_parser_test.test
 # description: Test DuckDB native parser integration
-# group: [sitting_duck]
+# group: [sql]
 
 require sitting_duck
 

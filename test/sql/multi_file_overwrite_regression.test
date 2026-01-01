@@ -1,6 +1,6 @@
 # name: test/sql/multi_file_overwrite_regression.test
 # description: Regression test for multi-file overwrite bug (fixed in commit 02e75b5)
-# group: [sitting_duck_critical]
+# group: [sql]
 
 # =============================================================================
 # REGRESSION TEST: Multi-File Overwrite Bug

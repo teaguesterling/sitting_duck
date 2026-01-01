@@ -1,6 +1,6 @@
 # name: test/sql/multi_file_edge_cases.test
 # description: Comprehensive tests for multi-file processing edge cases and segfault prevention
-# group: [sitting_duck_critical]
+# group: [sql]
 
 require sitting_duck
 

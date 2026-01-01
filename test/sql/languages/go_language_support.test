@@ -1,6 +1,6 @@
-# name: test/sql/go_language_support.test
+# name: test/sql/languages/go_language_support.test
 # description: Test Go language support functionality
-# group: [sitting_duck]
+# group: [languages]
 
 require sitting_duck
 

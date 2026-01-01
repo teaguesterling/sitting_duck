@@ -1,6 +1,6 @@
 # name: test/sql/languages/javascript_language_support.test
 # description: Test JavaScript language support functionality
-# group: [sitting_duck]
+# group: [languages]
 
 require sitting_duck
 

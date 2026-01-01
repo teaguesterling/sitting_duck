@@ -1,6 +1,6 @@
 # name: test/sql/languages/zig_language_support.test
 # description: Test Zig language support functionality
-# group: [sitting_duck]
+# group: [languages]
 
 require sitting_duck
 

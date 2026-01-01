@@ -1,6 +1,6 @@
 # name: test/sql/languages/markdown_language_support.test
 # description: Test Markdown language support functionality
-# group: [sitting_duck]
+# group: [languages]
 
 require sitting_duck
 

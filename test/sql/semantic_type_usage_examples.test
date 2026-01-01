@@ -1,3 +1,6 @@
+# name: test/sql/semantic_type_usage_examples.test
+# group: [sql]
+
 # Practical examples of using semantic type helpers
 
 require sitting_duck

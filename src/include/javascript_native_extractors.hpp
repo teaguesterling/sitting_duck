@@ -11,487 +11,482 @@ namespace duckdb {
 //==============================================================================
 
 // Base template for JavaScript extractors - default returns empty context
-template<NativeExtractionStrategy Strategy>
+template <NativeExtractionStrategy Strategy>
 struct JavaScriptNativeExtractor {
-    static NativeContext Extract(TSNode node, const string& content) {
-        return NativeContext(); // Default: no extraction
-    }
+	static NativeContext Extract(TSNode node, const string &content) {
+		return NativeContext(); // Default: no extraction
+	}
 };
 
 // Specialization for FUNCTION_WITH_PARAMS
-template<>
+template <>
 struct JavaScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
-    static NativeContext Extract(TSNode node, const string& content) {
-        NativeContext context;
-        
-        try {
-            // Extract function parameters
-            context.parameters = ExtractJavaScriptParameters(node, content);
-            
-            // Set signature type to indicate JavaScript function
-            context.signature_type = "function";
-            
-        } catch (...) {
-            context.signature_type = "";
-            context.parameters.clear();
-        }
-        
-        return context;
-    }
-    
+	static NativeContext Extract(TSNode node, const string &content) {
+		NativeContext context;
+
+		try {
+			// Extract function parameters
+			context.parameters = ExtractJavaScriptParameters(node, content);
+
+			// Set signature type to indicate JavaScript function
+			context.signature_type = "function";
+
+		} catch (...) {
+			context.signature_type = "";
+			context.parameters.clear();
+		}
+
+		return context;
+	}
+
 public:
-    static vector<ParameterInfo> ExtractJavaScriptParameters(TSNode node, const string& content) {
-        vector<ParameterInfo> params;
-        
-        // Find formal_parameters node
-        uint32_t child_count = ts_node_child_count(node);
-        for (uint32_t i = 0; i < child_count; i++) {
-            TSNode child = ts_node_child(node, i);
-            const char* child_type = ts_node_type(child);
-            
-            if (strcmp(child_type, "formal_parameters") == 0) {
-                params = ExtractJavaScriptParametersDirect(child, content);
-                break;
-            }
-        }
-        
-        return params;
-    }
-    
-    static vector<ParameterInfo> ExtractJavaScriptParametersDirect(TSNode params_node, const string& content) {
-        vector<ParameterInfo> parameters;
-        
-        uint32_t child_count = ts_node_child_count(params_node);
-        
-        for (uint32_t i = 0; i < child_count; i++) {
-            TSNode child = ts_node_child(params_node, i);
-            const char* child_type = ts_node_type(child);
-            
-            ParameterInfo param;
-            bool is_valid_param = false;
-            
-            if (strcmp(child_type, "identifier") == 0) {
-                // Simple parameter: function func(param) {}
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    param.name = content.substr(start, end - start);
-                    is_valid_param = true;
-                }
-            } else if (strcmp(child_type, "assignment_pattern") == 0) {
-                // Parameter with default: function func(param = default) {}
-                param = ExtractDefaultParameter(child, content);
-                is_valid_param = !param.name.empty();
-            } else if (strcmp(child_type, "rest_pattern") == 0) {
-                // Rest parameter: function func(...args) {}
-                param = ExtractRestParameter(child, content);
-                is_valid_param = !param.name.empty();
-            } else if (strcmp(child_type, "object_pattern") == 0) {
-                // Destructuring parameter: function func({a, b}) {}
-                param = ExtractDestructuringParameter(child, content);
-                is_valid_param = !param.name.empty();
-            }
-            
-            if (is_valid_param) {
-                parameters.push_back(param);
-            }
-        }
-        
-        return parameters;
-    }
-    
-    static ParameterInfo ExtractDefaultParameter(TSNode node, const string& content) {
-        ParameterInfo param;
-        param.is_optional = true;
-        uint32_t child_count = ts_node_child_count(node);
-        
-        for (uint32_t i = 0; i < child_count; i++) {
-            TSNode child = ts_node_child(node, i);
-            const char* child_type = ts_node_type(child);
-            
-            if (strcmp(child_type, "identifier") == 0) {
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    param.name = content.substr(start, end - start);
-                }
-            } else if (i > 0) { // Skip the identifier, get the default value
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    param.default_value = content.substr(start, end - start);
-                }
-            }
-        }
-        
-        return param;
-    }
-    
-    static ParameterInfo ExtractRestParameter(TSNode node, const string& content) {
-        ParameterInfo param;
-        param.is_variadic = true;
-        
-        // Rest pattern contains an identifier
-        uint32_t child_count = ts_node_child_count(node);
-        for (uint32_t i = 0; i < child_count; i++) {
-            TSNode child = ts_node_child(node, i);
-            const char* child_type = ts_node_type(child);
-            
-            if (strcmp(child_type, "identifier") == 0) {
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    param.name = "..." + content.substr(start, end - start);
-                }
-                break;
-            }
-        }
-        
-        return param;
-    }
-    
-    static ParameterInfo ExtractDestructuringParameter(TSNode node, const string& content) {
-        ParameterInfo param;
-        
-        // For destructuring, use the full pattern as the name
-        uint32_t start = ts_node_start_byte(node);
-        uint32_t end = ts_node_end_byte(node);
-        if (start < content.length() && end <= content.length()) {
-            param.name = content.substr(start, end - start);
-        }
-        
-        return param;
-    }
+	static vector<ParameterInfo> ExtractJavaScriptParameters(TSNode node, const string &content) {
+		vector<ParameterInfo> params;
+
+		// Find formal_parameters node
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			const char *child_type = ts_node_type(child);
+
+			if (strcmp(child_type, "formal_parameters") == 0) {
+				params = ExtractJavaScriptParametersDirect(child, content);
+				break;
+			}
+		}
+
+		return params;
+	}
+
+	static vector<ParameterInfo> ExtractJavaScriptParametersDirect(TSNode params_node, const string &content) {
+		vector<ParameterInfo> parameters;
+
+		uint32_t child_count = ts_node_child_count(params_node);
+
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(params_node, i);
+			const char *child_type = ts_node_type(child);
+
+			ParameterInfo param;
+			bool is_valid_param = false;
+
+			if (strcmp(child_type, "identifier") == 0) {
+				// Simple parameter: function func(param) {}
+				uint32_t start = ts_node_start_byte(child);
+				uint32_t end = ts_node_end_byte(child);
+				if (start < content.length() && end <= content.length()) {
+					param.name = content.substr(start, end - start);
+					is_valid_param = true;
+				}
+			} else if (strcmp(child_type, "assignment_pattern") == 0) {
+				// Parameter with default: function func(param = default) {}
+				param = ExtractDefaultParameter(child, content);
+				is_valid_param = !param.name.empty();
+			} else if (strcmp(child_type, "rest_pattern") == 0) {
+				// Rest parameter: function func(...args) {}
+				param = ExtractRestParameter(child, content);
+				is_valid_param = !param.name.empty();
+			} else if (strcmp(child_type, "object_pattern") == 0) {
+				// Destructuring parameter: function func({a, b}) {}
+				param = ExtractDestructuringParameter(child, content);
+				is_valid_param = !param.name.empty();
+			}
+
+			if (is_valid_param) {
+				parameters.push_back(param);
+			}
+		}
+
+		return parameters;
+	}
+
+	static ParameterInfo ExtractDefaultParameter(TSNode node, const string &content) {
+		ParameterInfo param;
+		param.is_optional = true;
+		uint32_t child_count = ts_node_child_count(node);
+
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			const char *child_type = ts_node_type(child);
+
+			if (strcmp(child_type, "identifier") == 0) {
+				uint32_t start = ts_node_start_byte(child);
+				uint32_t end = ts_node_end_byte(child);
+				if (start < content.length() && end <= content.length()) {
+					param.name = content.substr(start, end - start);
+				}
+			} else if (i > 0) { // Skip the identifier, get the default value
+				uint32_t start = ts_node_start_byte(child);
+				uint32_t end = ts_node_end_byte(child);
+				if (start < content.length() && end <= content.length()) {
+					param.default_value = content.substr(start, end - start);
+				}
+			}
+		}
+
+		return param;
+	}
+
+	static ParameterInfo ExtractRestParameter(TSNode node, const string &content) {
+		ParameterInfo param;
+		param.is_variadic = true;
+
+		// Rest pattern contains an identifier
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			const char *child_type = ts_node_type(child);
+
+			if (strcmp(child_type, "identifier") == 0) {
+				uint32_t start = ts_node_start_byte(child);
+				uint32_t end = ts_node_end_byte(child);
+				if (start < content.length() && end <= content.length()) {
+					param.name = "..." + content.substr(start, end - start);
+				}
+				break;
+			}
+		}
+
+		return param;
+	}
+
+	static ParameterInfo ExtractDestructuringParameter(TSNode node, const string &content) {
+		ParameterInfo param;
+
+		// For destructuring, use the full pattern as the name
+		uint32_t start = ts_node_start_byte(node);
+		uint32_t end = ts_node_end_byte(node);
+		if (start < content.length() && end <= content.length()) {
+			param.name = content.substr(start, end - start);
+		}
+
+		return param;
+	}
 };
 
 // Specialization for ARROW_FUNCTION
-template<>
+template <>
 struct JavaScriptNativeExtractor<NativeExtractionStrategy::ARROW_FUNCTION> {
-    static NativeContext Extract(TSNode node, const string& content) {
-        NativeContext context;
-        
-        // Extract arrow function parameters
-        context.parameters = ExtractArrowFunctionParameters(node, content);
-        context.signature_type = "arrow";
-        
-        return context;
-    }
-    
+	static NativeContext Extract(TSNode node, const string &content) {
+		NativeContext context;
+
+		// Extract arrow function parameters
+		context.parameters = ExtractArrowFunctionParameters(node, content);
+		context.signature_type = "arrow";
+
+		return context;
+	}
+
 public:
-    static vector<ParameterInfo> ExtractArrowFunctionParameters(TSNode node, const string& content) {
-        vector<ParameterInfo> params;
-        
-        uint32_t child_count = ts_node_child_count(node);
-        for (uint32_t i = 0; i < child_count; i++) {
-            TSNode child = ts_node_child(node, i);
-            const char* child_type = ts_node_type(child);
-            
-            if (strcmp(child_type, "formal_parameters") == 0) {
-                // Arrow function with parentheses: (a, b) => {}
-                params = JavaScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractJavaScriptParametersDirect(child, content);
-                break;
-            } else if (strcmp(child_type, "identifier") == 0) {
-                // Single parameter arrow function: a => {}
-                ParameterInfo param;
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                if (start < content.length() && end <= content.length()) {
-                    param.name = content.substr(start, end - start);
-                    params.push_back(param);
-                }
-                break;
-            }
-        }
-        
-        return params;
-    }
+	static vector<ParameterInfo> ExtractArrowFunctionParameters(TSNode node, const string &content) {
+		vector<ParameterInfo> params;
+
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			const char *child_type = ts_node_type(child);
+
+			if (strcmp(child_type, "formal_parameters") == 0) {
+				// Arrow function with parentheses: (a, b) => {}
+				params = JavaScriptNativeExtractor<
+				    NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractJavaScriptParametersDirect(child, content);
+				break;
+			} else if (strcmp(child_type, "identifier") == 0) {
+				// Single parameter arrow function: a => {}
+				ParameterInfo param;
+				uint32_t start = ts_node_start_byte(child);
+				uint32_t end = ts_node_end_byte(child);
+				if (start < content.length() && end <= content.length()) {
+					param.name = content.substr(start, end - start);
+					params.push_back(param);
+				}
+				break;
+			}
+		}
+
+		return params;
+	}
 };
 
 // Specialization for ASYNC_FUNCTION
-template<>
+template <>
 struct JavaScriptNativeExtractor<NativeExtractionStrategy::ASYNC_FUNCTION> {
-    static NativeContext Extract(TSNode node, const string& content) {
-        // Reuse FUNCTION_WITH_PARAMS logic and add async modifier
-        auto context = JavaScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
-        context.modifiers.push_back("async");
-        return context;
-    }
+	static NativeContext Extract(TSNode node, const string &content) {
+		// Reuse FUNCTION_WITH_PARAMS logic and add async modifier
+		auto context =
+		    JavaScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
+		context.modifiers.push_back("async");
+		return context;
+	}
 };
 
 // Specialization for CLASS_WITH_METHODS
-template<>
+template <>
 struct JavaScriptNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
-    static NativeContext Extract(TSNode node, const string& content) {
-        NativeContext context;
-        context.signature_type = "class";
+	static NativeContext Extract(TSNode node, const string &content) {
+		NativeContext context;
+		context.signature_type = "class";
 
-        bool has_extends = false;
-        context.parameters = ExtractClassParents(node, content, has_extends);
-        context.modifiers = ExtractClassModifiers(node, content, has_extends);
+		bool has_extends = false;
+		context.parameters = ExtractClassParents(node, content, has_extends);
+		context.modifiers = ExtractClassModifiers(node, content, has_extends);
 
-        return context;
-    }
+		return context;
+	}
 
 public:
-    // Extract parent types from class_heritage into parameters
-    static vector<ParameterInfo> ExtractClassParents(TSNode node, const string& content,
-                                                      bool& has_extends) {
-        vector<ParameterInfo> parents;
-        has_extends = false;
+	// Extract parent types from class_heritage into parameters
+	static vector<ParameterInfo> ExtractClassParents(TSNode node, const string &content, bool &has_extends) {
+		vector<ParameterInfo> parents;
+		has_extends = false;
 
-        // Find class_heritage (extends clause)
-        uint32_t child_count = ts_node_child_count(node);
-        for (uint32_t i = 0; i < child_count; i++) {
-            TSNode child = ts_node_child(node, i);
-            const char* child_type = ts_node_type(child);
+		// Find class_heritage (extends clause)
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			const char *child_type = ts_node_type(child);
 
-            if (strcmp(child_type, "class_heritage") == 0) {
-                has_extends = true;
-                // Extract identifier from extends clause
-                uint32_t heritage_count = ts_node_child_count(child);
-                for (uint32_t j = 0; j < heritage_count; j++) {
-                    TSNode heritage_child = ts_node_child(child, j);
-                    const char* heritage_type = ts_node_type(heritage_child);
+			if (strcmp(child_type, "class_heritage") == 0) {
+				has_extends = true;
+				// Extract identifier from extends clause
+				uint32_t heritage_count = ts_node_child_count(child);
+				for (uint32_t j = 0; j < heritage_count; j++) {
+					TSNode heritage_child = ts_node_child(child, j);
+					const char *heritage_type = ts_node_type(heritage_child);
 
-                    // Skip "extends" keyword
-                    if (strcmp(heritage_type, "extends") == 0) {
-                        continue;
-                    }
+					// Skip "extends" keyword
+					if (strcmp(heritage_type, "extends") == 0) {
+						continue;
+					}
 
-                    if (strcmp(heritage_type, "identifier") == 0 ||
-                        strcmp(heritage_type, "member_expression") == 0) {
-                        string type_name = ExtractNodeText(heritage_child, content);
-                        if (!type_name.empty()) {
-                            parents.push_back({type_name, ""});
-                        }
-                    }
-                }
-                break;
-            }
-        }
+					if (strcmp(heritage_type, "identifier") == 0 || strcmp(heritage_type, "member_expression") == 0) {
+						string type_name = ExtractNodeText(heritage_child, content);
+						if (!type_name.empty()) {
+							parents.push_back({type_name, ""});
+						}
+					}
+				}
+				break;
+			}
+		}
 
-        return parents;
-    }
+		return parents;
+	}
 
-    // Extract class modifiers with "extends" keyword if applicable
-    static vector<string> ExtractClassModifiers(TSNode node, const string& content,
-                                                 bool has_extends) {
-        vector<string> modifiers;
+	// Extract class modifiers with "extends" keyword if applicable
+	static vector<string> ExtractClassModifiers(TSNode node, const string &content, bool has_extends) {
+		vector<string> modifiers;
 
-        // Add extends keyword if class extends another class
-        if (has_extends) {
-            modifiers.push_back("extends");
-        }
+		// Add extends keyword if class extends another class
+		if (has_extends) {
+			modifiers.push_back("extends");
+		}
 
-        // Check for export modifier
-        TSNode parent = ts_node_parent(node);
-        if (!ts_node_is_null(parent)) {
-            const char* parent_type = ts_node_type(parent);
-            if (strcmp(parent_type, "export_statement") == 0) {
-                modifiers.push_back("export");
-            }
-        }
+		// Check for export modifier
+		TSNode parent = ts_node_parent(node);
+		if (!ts_node_is_null(parent)) {
+			const char *parent_type = ts_node_type(parent);
+			if (strcmp(parent_type, "export_statement") == 0) {
+				modifiers.push_back("export");
+			}
+		}
 
-        return modifiers;
-    }
+		return modifiers;
+	}
 
-    static string ExtractNodeText(TSNode node, const string& content) {
-        if (ts_node_is_null(node)) {
-            return "";
-        }
+	static string ExtractNodeText(TSNode node, const string &content) {
+		if (ts_node_is_null(node)) {
+			return "";
+		}
 
-        uint32_t start = ts_node_start_byte(node);
-        uint32_t end = ts_node_end_byte(node);
+		uint32_t start = ts_node_start_byte(node);
+		uint32_t end = ts_node_end_byte(node);
 
-        if (start < content.length() && end <= content.length() && end > start) {
-            return content.substr(start, end - start);
-        }
+		if (start < content.length() && end <= content.length() && end > start) {
+			return content.substr(start, end - start);
+		}
 
-        return "";
-    }
+		return "";
+	}
 };
 
-// Specialization for VARIABLE_WITH_TYPE  
-template<>
+// Specialization for VARIABLE_WITH_TYPE
+template <>
 struct JavaScriptNativeExtractor<NativeExtractionStrategy::VARIABLE_WITH_TYPE> {
-    static NativeContext Extract(TSNode node, const string& content) {
-        NativeContext context;
-        
-        // JavaScript variables don't have explicit types (pre-TypeScript)
-        // But we can detect declaration patterns
-        context.signature_type = ExtractDeclarationType(node, content);
-        
-        return context;
-    }
-    
+	static NativeContext Extract(TSNode node, const string &content) {
+		NativeContext context;
+
+		// JavaScript variables don't have explicit types (pre-TypeScript)
+		// But we can detect declaration patterns
+		context.signature_type = ExtractDeclarationType(node, content);
+
+		return context;
+	}
+
 public:
-    static string ExtractDeclarationType(TSNode node, const string& content) {
-        // Check if this is const, let, or var declaration
-        TSNode parent = ts_node_parent(node);
-        if (!ts_node_is_null(parent)) {
-            const char* parent_type = ts_node_type(parent);
-            if (strcmp(parent_type, "lexical_declaration") == 0) {
-                // Check for const/let
-                uint32_t child_count = ts_node_child_count(parent);
-                for (uint32_t i = 0; i < child_count; i++) {
-                    TSNode child = ts_node_child(parent, i);
-                    const char* child_type = ts_node_type(child);
-                    if (strcmp(child_type, "const") == 0) {
-                        return "const";
-                    } else if (strcmp(child_type, "let") == 0) {
-                        return "let";
-                    }
-                }
-            } else if (strcmp(parent_type, "variable_declaration") == 0) {
-                return "var";
-            }
-        }
-        
-        return "";
-    }
+	static string ExtractDeclarationType(TSNode node, const string &content) {
+		// Check if this is const, let, or var declaration
+		TSNode parent = ts_node_parent(node);
+		if (!ts_node_is_null(parent)) {
+			const char *parent_type = ts_node_type(parent);
+			if (strcmp(parent_type, "lexical_declaration") == 0) {
+				// Check for const/let
+				uint32_t child_count = ts_node_child_count(parent);
+				for (uint32_t i = 0; i < child_count; i++) {
+					TSNode child = ts_node_child(parent, i);
+					const char *child_type = ts_node_type(child);
+					if (strcmp(child_type, "const") == 0) {
+						return "const";
+					} else if (strcmp(child_type, "let") == 0) {
+						return "let";
+					}
+				}
+			} else if (strcmp(parent_type, "variable_declaration") == 0) {
+				return "var";
+			}
+		}
+
+		return "";
+	}
 };
 
 // Specialization for FUNCTION_CALL (JavaScript function calls and expressions)
-template<>
+template <>
 struct JavaScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_CALL> {
-    static NativeContext Extract(TSNode node, const string& content) {
-        return UnifiedFunctionCallExtractor<JavaScriptLanguageTag>::Extract(node, content);
-    }
+	static NativeContext Extract(TSNode node, const string &content) {
+		return UnifiedFunctionCallExtractor<JavaScriptLanguageTag>::Extract(node, content);
+	}
 };
 
 // Specialization for CUSTOM (JavaScript function calls and expressions) - DEPRECATED: Use FUNCTION_CALL
-template<>
+template <>
 struct JavaScriptNativeExtractor<NativeExtractionStrategy::CUSTOM> {
-    static NativeContext Extract(TSNode node, const string& content) {
-        NativeContext context;
-        
-        try {
-            const char* node_type = ts_node_type(node);
-            
-            if (strcmp(node_type, "call_expression") == 0) {
-                context = ExtractJSCallExpression(node, content);
-            } else if (strcmp(node_type, "new_expression") == 0) {
-                context = ExtractJSNewExpression(node, content);
-            } else {
-                // Unknown node type for CUSTOM strategy
-                context.signature_type = "";
-            }
-            
-        } catch (...) {
-            context.signature_type = "";
-            context.parameters.clear();
-            context.modifiers.clear();
-        }
-        
-        return context;
-    }
-    
+	static NativeContext Extract(TSNode node, const string &content) {
+		NativeContext context;
+
+		try {
+			const char *node_type = ts_node_type(node);
+
+			if (strcmp(node_type, "call_expression") == 0) {
+				context = ExtractJSCallExpression(node, content);
+			} else if (strcmp(node_type, "new_expression") == 0) {
+				context = ExtractJSNewExpression(node, content);
+			} else {
+				// Unknown node type for CUSTOM strategy
+				context.signature_type = "";
+			}
+
+		} catch (...) {
+			context.signature_type = "";
+			context.parameters.clear();
+			context.modifiers.clear();
+		}
+
+		return context;
+	}
+
 private:
-    static NativeContext ExtractJSCallExpression(TSNode node, const string& content) {
-        NativeContext context;
-        
-        // For call_expression: extract function name and arguments
-        uint32_t child_count = ts_node_child_count(node);
-        
-        for (uint32_t i = 0; i < child_count; i++) {
-            TSNode child = ts_node_child(node, i);
-            const char* child_type = ts_node_type(child);
-            
-            // First child is usually the function identifier or member expression
-            if (i == 0) {
-                if (strcmp(child_type, "identifier") == 0 ||
-                    strcmp(child_type, "member_expression") == 0 ||
-                    strcmp(child_type, "property_identifier") == 0) {
-                    
-                    uint32_t start = ts_node_start_byte(child);
-                    uint32_t end = ts_node_end_byte(child);
-                    
-                    if (start < content.length() && end <= content.length() && end > start) {
-                        context.signature_type = content.substr(start, end - start);
-                    }
-                }
-            }
-            
-            // Extract arguments from arguments node
-            if (strcmp(child_type, "arguments") == 0) {
-                context.parameters = ExtractJSCallArguments(child, content);
-            }
-        }
-        
-        if (context.signature_type.empty()) {
-            context.signature_type = "function_call";  // Fallback
-        }
-        
-        return context;
-    }
-    
-    static NativeContext ExtractJSNewExpression(TSNode node, const string& content) {
-        NativeContext context;
-        
-        // For new_expression: extract class name and constructor arguments
-        uint32_t child_count = ts_node_child_count(node);
-        
-        for (uint32_t i = 0; i < child_count; i++) {
-            TSNode child = ts_node_child(node, i);
-            const char* child_type = ts_node_type(child);
-            
-            // Skip "new" keyword, look for identifier
-            if (strcmp(child_type, "identifier") == 0 ||
-                strcmp(child_type, "member_expression") == 0 ||
-                strcmp(child_type, "property_identifier") == 0) {
-                
-                uint32_t start = ts_node_start_byte(child);
-                uint32_t end = ts_node_end_byte(child);
-                
-                if (start < content.length() && end <= content.length() && end > start) {
-                    context.signature_type = content.substr(start, end - start);
-                }
-            }
-            
-            // Extract constructor arguments from arguments node
-            if (strcmp(child_type, "arguments") == 0) {
-                context.parameters = ExtractJSCallArguments(child, content);
-            }
-        }
-        
-        if (context.signature_type.empty()) {
-            context.signature_type = "constructor_call";  // Fallback
-        }
-        
-        return context;
-    }
-    
-    static vector<ParameterInfo> ExtractJSCallArguments(TSNode args_node, const string& content) {
-        vector<ParameterInfo> arguments;
-        
-        uint32_t child_count = ts_node_child_count(args_node);
-        
-        for (uint32_t i = 0; i < child_count; i++) {
-            TSNode child = ts_node_child(args_node, i);
-            const char* child_type = ts_node_type(child);
-            
-            // Skip punctuation like "," and "(" and ")"
-            if (strcmp(child_type, ",") == 0 || 
-                strcmp(child_type, "(") == 0 || 
-                strcmp(child_type, ")") == 0) {
-                continue;
-            }
-            
-            ParameterInfo arg;
-            
-            // Extract argument text as the "type" field
-            uint32_t start = ts_node_start_byte(child);
-            uint32_t end = ts_node_end_byte(child);
-            
-            if (start < content.length() && end <= content.length() && end > start) {
-                arg.type = content.substr(start, end - start);
-                arg.name = "";  // Arguments don't have names in calls
-                arguments.push_back(arg);
-            }
-        }
-        
-        return arguments;
-    }
+	static NativeContext ExtractJSCallExpression(TSNode node, const string &content) {
+		NativeContext context;
+
+		// For call_expression: extract function name and arguments
+		uint32_t child_count = ts_node_child_count(node);
+
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			const char *child_type = ts_node_type(child);
+
+			// First child is usually the function identifier or member expression
+			if (i == 0) {
+				if (strcmp(child_type, "identifier") == 0 || strcmp(child_type, "member_expression") == 0 ||
+				    strcmp(child_type, "property_identifier") == 0) {
+
+					uint32_t start = ts_node_start_byte(child);
+					uint32_t end = ts_node_end_byte(child);
+
+					if (start < content.length() && end <= content.length() && end > start) {
+						context.signature_type = content.substr(start, end - start);
+					}
+				}
+			}
+
+			// Extract arguments from arguments node
+			if (strcmp(child_type, "arguments") == 0) {
+				context.parameters = ExtractJSCallArguments(child, content);
+			}
+		}
+
+		if (context.signature_type.empty()) {
+			context.signature_type = "function_call"; // Fallback
+		}
+
+		return context;
+	}
+
+	static NativeContext ExtractJSNewExpression(TSNode node, const string &content) {
+		NativeContext context;
+
+		// For new_expression: extract class name and constructor arguments
+		uint32_t child_count = ts_node_child_count(node);
+
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			const char *child_type = ts_node_type(child);
+
+			// Skip "new" keyword, look for identifier
+			if (strcmp(child_type, "identifier") == 0 || strcmp(child_type, "member_expression") == 0 ||
+			    strcmp(child_type, "property_identifier") == 0) {
+
+				uint32_t start = ts_node_start_byte(child);
+				uint32_t end = ts_node_end_byte(child);
+
+				if (start < content.length() && end <= content.length() && end > start) {
+					context.signature_type = content.substr(start, end - start);
+				}
+			}
+
+			// Extract constructor arguments from arguments node
+			if (strcmp(child_type, "arguments") == 0) {
+				context.parameters = ExtractJSCallArguments(child, content);
+			}
+		}
+
+		if (context.signature_type.empty()) {
+			context.signature_type = "constructor_call"; // Fallback
+		}
+
+		return context;
+	}
+
+	static vector<ParameterInfo> ExtractJSCallArguments(TSNode args_node, const string &content) {
+		vector<ParameterInfo> arguments;
+
+		uint32_t child_count = ts_node_child_count(args_node);
+
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(args_node, i);
+			const char *child_type = ts_node_type(child);
+
+			// Skip punctuation like "," and "(" and ")"
+			if (strcmp(child_type, ",") == 0 || strcmp(child_type, "(") == 0 || strcmp(child_type, ")") == 0) {
+				continue;
+			}
+
+			ParameterInfo arg;
+
+			// Extract argument text as the "type" field
+			uint32_t start = ts_node_start_byte(child);
+			uint32_t end = ts_node_end_byte(child);
+
+			if (start < content.length() && end <= content.length() && end > start) {
+				arg.type = content.substr(start, end - start);
+				arg.name = ""; // Arguments don't have names in calls
+				arguments.push_back(arg);
+			}
+		}
+
+		return arguments;
+	}
 };
 
 } // namespace duckdb

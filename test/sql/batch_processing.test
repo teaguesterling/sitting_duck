@@ -1,6 +1,6 @@
 # name: test/sql/batch_processing.test
 # description: Test batch processing functionality for read_ast streaming function
-# group: [sitting_duck]
+# group: [sql]
 
 require sitting_duck
 

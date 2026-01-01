@@ -1,3 +1,6 @@
+# name: test/sql/kind_functions.test
+# group: [sql]
+
 # Test kind-related helper functions
 
 require sitting_duck

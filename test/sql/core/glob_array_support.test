@@ -1,6 +1,6 @@
 # name: test/sql/core/glob_array_support.test
 # description: Test DuckDB-consistent glob pattern array support
-# group: [sitting_duck]
+# group: [core]
 
 require sitting_duck
 
