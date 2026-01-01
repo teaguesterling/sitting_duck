@@ -241,7 +241,8 @@ FROM read_ast(
     ['third_party/rosettacode-acmeism/Task/*/Python/*.py',
      'third_party/rosettacode-acmeism/Task/*/Go/*.go',
      'third_party/rosettacode-acmeism/Task/*/Java/*.java',
-     'third_party/rosettacode-acmeism/Task/*/Rust/*.rs'],
+     'third_party/rosettacode-acmeism/Task/*/Rust/*.rs',
+     'third_party/rosettacode-acmeism/Task/*/C/*.c'],
     context := 'native'
 )
 WHERE is_function_definition(semantic_type)
@@ -249,6 +250,7 @@ WHERE is_function_definition(semantic_type)
 GROUP BY language
 ORDER BY language;
 ----
+c	100.0
 go	100.0
 java	100.0
 python	100.0
