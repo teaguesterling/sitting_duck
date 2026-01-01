@@ -151,3 +151,70 @@ SELECT COUNT(*) FROM ast_in_range('test_ast', 2, 3) WHERE type = 'expression_sta
 ----
 1
 
+# =============================================================================
+# Test ast_function_scope
+# =============================================================================
+
+# Create a new AST with nested functions for scope testing
+statement ok
+CREATE TEMP TABLE scope_ast AS
+SELECT * FROM parse_ast('
+def outer():
+    x = 1
+    def inner():
+        y = 2
+        return y
+    return inner() + x
+', 'python');
+
+# Get outer function info
+query III
+SELECT node_id, name, descendant_count FROM scope_ast
+WHERE type = 'function_definition' AND name = 'outer';
+----
+1	outer	38
+
+# Get inner function info
+query III
+SELECT node_id, name, descendant_count FROM scope_ast
+WHERE type = 'function_definition' AND name = 'inner';
+----
+14	inner	15
+
+# ast_function_scope should return outer's descendants MINUS inner's contents
+# 38 total - 15 inside inner = 23 nodes
+query I
+SELECT COUNT(*) FROM ast_function_scope('scope_ast', 1);
+----
+23
+
+# Verify: should see outer's return statement but NOT inner's
+query I
+SELECT COUNT(*) FROM ast_function_scope('scope_ast', 1) WHERE type = 'return_statement';
+----
+1
+
+# The return statement we see should be outer's (line 7: return inner() + x)
+query I
+SELECT start_line FROM ast_function_scope('scope_ast', 1) WHERE type = 'return_statement';
+----
+7
+
+# Verify: should see outer's assignment (x=1) but NOT inner's (y=2)
+query I
+SELECT COUNT(*) FROM ast_function_scope('scope_ast', 1) WHERE type = 'assignment';
+----
+1
+
+# The assignment should be x=1 on line 3
+query II
+SELECT name, start_line FROM ast_function_scope('scope_ast', 1) WHERE type = 'assignment';
+----
+x	3
+
+# ast_function_scope on inner should return all of inner's descendants (no nesting)
+query I
+SELECT COUNT(*) FROM ast_function_scope('scope_ast', 14);
+----
+15
+

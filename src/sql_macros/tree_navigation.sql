@@ -71,3 +71,41 @@ CREATE OR REPLACE MACRO ast_in_range(ast_table, range_start, range_end) AS TABLE
     FROM query_table(ast_table)
     WHERE start_line >= range_start AND end_line <= range_end;
 
+-- =============================================================================
+-- Scope-Aware Helpers
+-- =============================================================================
+
+-- Get all nodes inside a function, EXCLUDING nested function bodies
+-- This is essential for accurate complexity analysis - avoids double-counting
+-- nested function internals as part of the outer function's complexity.
+-- Usage: SELECT * FROM ast_function_scope(my_ast_table, function_node_id)
+CREATE OR REPLACE MACRO ast_function_scope(ast_table, func_node_id) AS TABLE
+    WITH
+        -- Get the function node itself
+        func AS (
+            SELECT node_id, descendant_count
+            FROM query_table(ast_table)
+            WHERE node_id = func_node_id
+        ),
+        -- Get all descendants of this function
+        descendants AS (
+            SELECT a.*
+            FROM query_table(ast_table) a, func f
+            WHERE a.node_id > f.node_id
+              AND a.node_id <= f.node_id + f.descendant_count
+        ),
+        -- Find nested function definitions (excluding the function itself)
+        nested_funcs AS (
+            SELECT node_id, descendant_count
+            FROM descendants
+            WHERE is_function_definition(semantic_type)
+        )
+    -- Return descendants that are NOT inside any nested function
+    SELECT d.*
+    FROM descendants d
+    WHERE NOT EXISTS (
+        SELECT 1 FROM nested_funcs nf
+        WHERE d.node_id > nf.node_id
+          AND d.node_id <= nf.node_id + nf.descendant_count
+    );
+
