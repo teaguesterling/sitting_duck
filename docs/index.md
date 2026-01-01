@@ -66,6 +66,7 @@ GROUP BY language;
 
 - **[Getting Started](getting-started/installation.md)** - Installation and basic setup
 - **[User Guide](guide/parsing-files.md)** - Detailed usage instructions
+- **[Cookbook](guide/cookbook.md)** - Practical recipes for common tasks
 - **[API Reference](api/core-functions.md)** - Complete function reference
 - **[Languages](languages/overview.md)** - Language-specific details
 - **[AI Agent Guide](ai-agent-guide.md)** - Using Sitting Duck with AI agents
