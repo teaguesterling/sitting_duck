@@ -308,6 +308,15 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		if (result.empty()) {
 			result = FindChildByType(node, content, "type_identifier"); // Swift types
 		}
+		if (result.empty()) {
+			result = FindChildByType(node, content, "operator"); // Ruby operator methods (def +, def <<, etc.)
+		}
+		if (result.empty()) {
+			result = FindChildByType(node, content, "constant"); // Ruby uppercase method names (def F, def M, etc.)
+		}
+		if (result.empty()) {
+			result = FindChildByType(node, content, "setter"); // Ruby setter methods (def name=)
+		}
 		return result;
 	}
 	case ExtractionStrategy::FIND_PROPERTY:

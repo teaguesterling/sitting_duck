@@ -242,11 +242,12 @@ FROM read_ast(
      'third_party/rosettacode-acmeism/Task/*/Go/*.go',
      'third_party/rosettacode-acmeism/Task/*/Java/*.java',
      'third_party/rosettacode-acmeism/Task/*/Rust/*.rs',
-     'third_party/rosettacode-acmeism/Task/*/C/*.c'],
+     'third_party/rosettacode-acmeism/Task/*/C/*.c',
+     'third_party/rosettacode-acmeism/Task/*/Ruby/*.rb'],
     context := 'native'
 )
 WHERE is_function_definition(semantic_type)
-  AND type IN ('function_definition', 'function_declaration', 'method_declaration', 'function_item')
+  AND type IN ('function_definition', 'function_declaration', 'method_declaration', 'function_item', 'method', 'singleton_method')
 GROUP BY language
 ORDER BY language;
 ----
@@ -254,6 +255,7 @@ c	100.0
 go	100.0
 java	100.0
 python	100.0
+ruby	100.0
 rust	100.0
 
 # -----------------------------------------------------------------------------
