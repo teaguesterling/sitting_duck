@@ -8,11 +8,13 @@
 -- WILDCARD SYNTAX:
 --   __X__      Named wildcard - captures matched node as 'X'
 --   __         Anonymous wildcard - matches any node but doesn't capture
---   __ARGS__   Variadic wildcard (ends with S) - matches zero or more nodes (TODO)
 --
 -- PARAMETERS:
 --   match_syntax := false  - Include punctuation/delimiters in matching
 --   match_by := 'type'     - Match on 'type' (tree-sitter) or 'semantic_type' (cross-language)
+--
+-- FUTURE (requires C++ implementation - see tracker/features/030-pattern-matching-cpp.md):
+--   wildcards := {}        - MAP of wildcard modifiers for variadic matching, constraints
 --
 -- EXAMPLES:
 --   -- Find all eval() calls, capture the argument
