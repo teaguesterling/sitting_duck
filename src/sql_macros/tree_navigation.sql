@@ -12,6 +12,36 @@
 CREATE OR REPLACE MACRO ast_children(ast_table, parent_node_id) AS TABLE
     SELECT * FROM query_table(ast_table) WHERE parent_id = parent_node_id;
 
+-- Get arguments of a function call node
+-- Returns the actual argument nodes (excludes punctuation like parentheses and commas)
+-- Usage: SELECT * FROM ast_call_arguments(my_ast_table, call_node_id)
+CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
+    WITH
+        -- Find the argument_list child of the call node
+        arg_list AS (
+            SELECT node_id as arg_list_id
+            FROM query_table(ast_table)
+            WHERE parent_id = call_node_id
+              AND type IN ('argument_list', 'arguments', 'actual_parameters')
+            LIMIT 1
+        ),
+        -- Get children of argument_list, excluding punctuation
+        args AS (
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY a.node_id) - 1 AS arg_position,
+                a.node_id AS arg_node_id,
+                a.name AS arg_name,
+                a.type AS arg_type,
+                a.peek AS arg_peek,
+                a.semantic_type,
+                a.start_line,
+                a.end_line
+            FROM query_table(ast_table) a, arg_list al
+            WHERE a.parent_id = al.arg_list_id
+              AND a.type NOT IN ('(', ')', ',', 'comment')
+        )
+    SELECT * FROM args;
+
 -- Get all descendants of a node (entire subtree)
 -- Uses descendant_count for O(1) range-based lookup (nodes are in DFS pre-order)
 -- Usage: SELECT * FROM ast_descendants(my_ast_table, ancestor_node_id)

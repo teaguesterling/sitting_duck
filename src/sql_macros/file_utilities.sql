@@ -6,46 +6,65 @@
 -- =============================================================================
 
 -- Read all lines from a file as rows with line numbers
--- Returns: line_number (BIGINT), line (VARCHAR)
-CREATE OR REPLACE MACRO read_lines(file_path) AS TABLE
+-- Returns: file_path (VARCHAR), line_number (BIGINT), line (VARCHAR)
+CREATE OR REPLACE MACRO read_lines(path) AS TABLE
+    WITH file_content AS (
+        SELECT filename, string_split(content, E'\n') as lines
+        FROM read_text(path)
+    ),
+    line_nums AS (
+        SELECT filename, lines, generate_series(1, len(lines)) as line_numbers
+        FROM file_content
+    )
     SELECT
-        ROW_NUMBER() OVER () AS line_number,
-        line
-    FROM (
-        SELECT UNNEST(string_split(content, E'\n')) AS line
-        FROM read_text(file_path)
-    );
+        filename AS file_path,
+        UNNEST(line_numbers) AS line_number,
+        lines[UNNEST(line_numbers)] AS line
+    FROM line_nums;
 
 -- Read specific line range from a file as rows
--- Returns: line_number (BIGINT), line (VARCHAR)
-CREATE OR REPLACE MACRO read_lines_range(file_path, start_line, end_line) AS TABLE
-    WITH numbered AS (
+-- Returns: file_path (VARCHAR), line_number (BIGINT), line (VARCHAR)
+CREATE OR REPLACE MACRO read_lines_range(path, start_line, end_line) AS TABLE
+    WITH file_content AS (
+        SELECT filename, string_split(content, E'\n') as lines
+        FROM read_text(path)
+    ),
+    line_nums AS (
+        SELECT filename, lines, generate_series(1, len(lines)) as line_numbers
+        FROM file_content
+    ),
+    all_lines AS (
         SELECT
-            ROW_NUMBER() OVER () AS line_number,
-            line
-        FROM (
-            SELECT UNNEST(string_split(content, E'\n')) AS line
-            FROM read_text(file_path)
-        )
+            filename AS file_path,
+            UNNEST(line_numbers) AS line_number,
+            lines[UNNEST(line_numbers)] AS line
+        FROM line_nums
     )
-    SELECT line_number, line
-    FROM numbered
+    SELECT file_path, line_number, line
+    FROM all_lines
     WHERE line_number >= start_line AND line_number <= end_line;
 
 -- Read lines around a specific line (context window)
 -- Useful for showing code context around a specific location
-CREATE OR REPLACE MACRO read_lines_context(file_path, center_line, context_lines) AS TABLE
-    WITH numbered AS (
+-- Returns: file_path (VARCHAR), line_number (BIGINT), line (VARCHAR)
+CREATE OR REPLACE MACRO read_lines_context(path, center_line, context_lines) AS TABLE
+    WITH file_content AS (
+        SELECT filename, string_split(content, E'\n') as lines
+        FROM read_text(path)
+    ),
+    line_nums AS (
+        SELECT filename, lines, generate_series(1, len(lines)) as line_numbers
+        FROM file_content
+    ),
+    all_lines AS (
         SELECT
-            ROW_NUMBER() OVER () AS line_number,
-            line
-        FROM (
-            SELECT UNNEST(string_split(content, E'\n')) AS line
-            FROM read_text(file_path)
-        )
+            filename AS file_path,
+            UNNEST(line_numbers) AS line_number,
+            lines[UNNEST(line_numbers)] AS line
+        FROM line_nums
     )
-    SELECT line_number, line
-    FROM numbered
+    SELECT file_path, line_number, line
+    FROM all_lines
     WHERE line_number >= (center_line - context_lines)
       AND line_number <= (center_line + context_lines);
 

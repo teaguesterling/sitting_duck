@@ -35,6 +35,42 @@ WHERE type = 'function_definition' AND name = 'inner';
 14	inner
 
 # =============================================================================
+# Test ast_call_arguments
+# =============================================================================
+
+# Create a table with function calls for testing
+statement ok
+CREATE TEMP TABLE call_test AS
+SELECT * FROM parse_ast('foo(a, b, "hello", 42)', 'python');
+
+# Find the call node_id
+query II
+SELECT node_id, name FROM call_test WHERE type = 'call';
+----
+2	foo
+
+# Get arguments of the call
+query III
+SELECT arg_position, arg_name, arg_type FROM ast_call_arguments('call_test', 2);
+----
+0	a	identifier
+1	b	identifier
+2	"hello"	string
+3	42	integer
+
+# Test with C++ call
+statement ok
+CREATE TEMP TABLE cpp_call AS
+SELECT * FROM parse_ast('loader.RegisterFunction(GetFunc())', 'cpp');
+
+# Get C++ call arguments
+query III
+SELECT arg_position, arg_name, arg_type
+FROM ast_call_arguments('cpp_call', 2);
+----
+0	GetFunc	call_expression
+
+# =============================================================================
 # Test ast_children
 # =============================================================================
 

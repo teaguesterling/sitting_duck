@@ -183,46 +183,65 @@ CREATE OR REPLACE MACRO is_type_generic(st) AS
 -- =============================================================================
 
 -- Read all lines from a file as rows with line numbers
--- Returns: line_number (BIGINT), line (VARCHAR)
-CREATE OR REPLACE MACRO read_lines(file_path) AS TABLE
+-- Returns: file_path (VARCHAR), line_number (BIGINT), line (VARCHAR)
+CREATE OR REPLACE MACRO read_lines(path) AS TABLE
+    WITH file_content AS (
+        SELECT filename, string_split(content, E'\n') as lines
+        FROM read_text(path)
+    ),
+    line_nums AS (
+        SELECT filename, lines, generate_series(1, len(lines)) as line_numbers
+        FROM file_content
+    )
     SELECT
-        ROW_NUMBER() OVER () AS line_number,
-        line
-    FROM (
-        SELECT UNNEST(string_split(content, E'\n')) AS line
-        FROM read_text(file_path)
-    );
+        filename AS file_path,
+        UNNEST(line_numbers) AS line_number,
+        lines[UNNEST(line_numbers)] AS line
+    FROM line_nums;
 
 -- Read specific line range from a file as rows
--- Returns: line_number (BIGINT), line (VARCHAR)
-CREATE OR REPLACE MACRO read_lines_range(file_path, start_line, end_line) AS TABLE
-    WITH numbered AS (
+-- Returns: file_path (VARCHAR), line_number (BIGINT), line (VARCHAR)
+CREATE OR REPLACE MACRO read_lines_range(path, start_line, end_line) AS TABLE
+    WITH file_content AS (
+        SELECT filename, string_split(content, E'\n') as lines
+        FROM read_text(path)
+    ),
+    line_nums AS (
+        SELECT filename, lines, generate_series(1, len(lines)) as line_numbers
+        FROM file_content
+    ),
+    all_lines AS (
         SELECT
-            ROW_NUMBER() OVER () AS line_number,
-            line
-        FROM (
-            SELECT UNNEST(string_split(content, E'\n')) AS line
-            FROM read_text(file_path)
-        )
+            filename AS file_path,
+            UNNEST(line_numbers) AS line_number,
+            lines[UNNEST(line_numbers)] AS line
+        FROM line_nums
     )
-    SELECT line_number, line
-    FROM numbered
+    SELECT file_path, line_number, line
+    FROM all_lines
     WHERE line_number >= start_line AND line_number <= end_line;
 
 -- Read lines around a specific line (context window)
 -- Useful for showing code context around a specific location
-CREATE OR REPLACE MACRO read_lines_context(file_path, center_line, context_lines) AS TABLE
-    WITH numbered AS (
+-- Returns: file_path (VARCHAR), line_number (BIGINT), line (VARCHAR)
+CREATE OR REPLACE MACRO read_lines_context(path, center_line, context_lines) AS TABLE
+    WITH file_content AS (
+        SELECT filename, string_split(content, E'\n') as lines
+        FROM read_text(path)
+    ),
+    line_nums AS (
+        SELECT filename, lines, generate_series(1, len(lines)) as line_numbers
+        FROM file_content
+    ),
+    all_lines AS (
         SELECT
-            ROW_NUMBER() OVER () AS line_number,
-            line
-        FROM (
-            SELECT UNNEST(string_split(content, E'\n')) AS line
-            FROM read_text(file_path)
-        )
+            filename AS file_path,
+            UNNEST(line_numbers) AS line_number,
+            lines[UNNEST(line_numbers)] AS line
+        FROM line_nums
     )
-    SELECT line_number, line
-    FROM numbered
+    SELECT file_path, line_number, line
+    FROM all_lines
     WHERE line_number >= (center_line - context_lines)
       AND line_number <= (center_line + context_lines);
 
@@ -276,6 +295,36 @@ CREATE OR REPLACE MACRO ast_get_source_numbered(file_path, start_line, end_line)
 -- Note: First argument is a table name (string), second is the parent node_id
 CREATE OR REPLACE MACRO ast_children(ast_table, parent_node_id) AS TABLE
     SELECT * FROM query_table(ast_table) WHERE parent_id = parent_node_id;
+
+-- Get arguments of a function call node
+-- Returns the actual argument nodes (excludes punctuation like parentheses and commas)
+-- Usage: SELECT * FROM ast_call_arguments(my_ast_table, call_node_id)
+CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
+    WITH
+        -- Find the argument_list child of the call node
+        arg_list AS (
+            SELECT node_id as arg_list_id
+            FROM query_table(ast_table)
+            WHERE parent_id = call_node_id
+              AND type IN ('argument_list', 'arguments', 'actual_parameters')
+            LIMIT 1
+        ),
+        -- Get children of argument_list, excluding punctuation
+        args AS (
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY a.node_id) - 1 AS arg_position,
+                a.node_id AS arg_node_id,
+                a.name AS arg_name,
+                a.type AS arg_type,
+                a.peek AS arg_peek,
+                a.semantic_type,
+                a.start_line,
+                a.end_line
+            FROM query_table(ast_table) a, arg_list al
+            WHERE a.parent_id = al.arg_list_id
+              AND a.type NOT IN ('(', ')', ',', 'comment')
+        )
+    SELECT * FROM args;
 
 -- Get all descendants of a node (entire subtree)
 -- Uses descendant_count for O(1) range-based lookup (nodes are in DFS pre-order)

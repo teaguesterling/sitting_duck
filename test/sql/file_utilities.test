@@ -8,8 +8,14 @@ statement ok
 LOAD sitting_duck;
 
 # =============================================================================
-# read_lines - Read all lines with line numbers
+# read_lines - Read all lines with line numbers and file_path
 # =============================================================================
+
+# read_lines returns file_path column
+query I
+SELECT DISTINCT file_path FROM read_lines('test/data/python/simple.py');
+----
+test/data/python/simple.py
 
 # Basic read_lines returns sequential line numbers starting at 1
 query I
@@ -46,6 +52,12 @@ true
 # read_lines_range - Read specific line range
 # =============================================================================
 
+# read_lines_range returns file_path column
+query I
+SELECT DISTINCT file_path FROM read_lines_range('test/data/python/simple.py', 1, 5);
+----
+test/data/python/simple.py
+
 # Read single line
 query II
 SELECT line_number, line FROM read_lines_range('test/data/python/simple.py', 1, 1);
@@ -74,6 +86,12 @@ SELECT COUNT(*) FROM read_lines_range('test/data/python/simple.py', 100, 105);
 # =============================================================================
 # read_lines_context - Read lines around a center point
 # =============================================================================
+
+# read_lines_context returns file_path column
+query I
+SELECT DISTINCT file_path FROM read_lines_context('test/data/python/simple.py', 5, 1);
+----
+test/data/python/simple.py
 
 # Read 1 line of context around line 5 (lines 4-6)
 query I
