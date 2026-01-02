@@ -210,10 +210,11 @@ CREATE OR REPLACE MACRO ast_definitions(ast_table) AS TABLE
 
 ---
 
-## 5. `ast_peek_contains_any(peek, patterns)` → BOOLEAN
+## 5. `ast_peek_contains_any(peek, patterns)` → BOOLEAN ✅
 
 **Priority:** P3
 **Complexity:** Low (C++ scalar function)
+**Status:** Implemented in 1bf2c2c
 
 ### Problem
 
@@ -236,7 +237,7 @@ WHERE ast_peek_contains_any(peek, ['eval', 'exec', 'system'])
 
 ### Alternative
 
-Could be a general-purpose `string_contains_any(str, patterns)` utility function, not AST-specific.
+Implemented as a general-purpose `string_contains_any(str, patterns)` utility function with `ast_peek_contains_any` as an alias. Also added `string_contains_any_i` for case-insensitive matching.
 
 ---
 
