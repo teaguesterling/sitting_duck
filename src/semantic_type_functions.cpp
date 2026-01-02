@@ -1,6 +1,7 @@
 #include "duckdb.hpp"
 #include "include/semantic_types.hpp"
 #include "include/node_config.hpp"
+#include "duckdb/common/types/vector.hpp"
 
 namespace duckdb {
 
@@ -258,6 +259,133 @@ static void IsEmbodiedFunction(DataChunk &args, ExpressionState &state, Vector &
 	HasBodyFunction(args, state, result);
 }
 
+// ============================================================================
+// String Utility Functions
+// ============================================================================
+
+// Check if a string contains any of the patterns in a list
+// string_contains_any(str, ['pattern1', 'pattern2', ...]) -> BOOLEAN
+// Case-sensitive by default
+static void StringContainsAnyFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	D_ASSERT(args.ColumnCount() == 2);
+
+	auto &str_vector = args.data[0];
+	auto &patterns_vector = args.data[1];
+	auto count = args.size();
+
+	// Get unified format for both vectors
+	UnifiedVectorFormat str_data;
+	str_vector.ToUnifiedFormat(count, str_data);
+	auto str_entries = UnifiedVectorFormat::GetData<string_t>(str_data);
+
+	UnifiedVectorFormat patterns_data;
+	patterns_vector.ToUnifiedFormat(count, patterns_data);
+	auto patterns_entries = UnifiedVectorFormat::GetData<list_entry_t>(patterns_data);
+
+	// Get the child vector containing the actual pattern strings
+	auto &patterns_child = ListVector::GetEntry(patterns_vector);
+	UnifiedVectorFormat patterns_child_data;
+	patterns_child.ToUnifiedFormat(ListVector::GetListSize(patterns_vector), patterns_child_data);
+	auto patterns_child_entries = UnifiedVectorFormat::GetData<string_t>(patterns_child_data);
+
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_validity = FlatVector::Validity(result);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto str_idx = str_data.sel->get_index(i);
+		auto patterns_idx = patterns_data.sel->get_index(i);
+
+		// Handle NULL inputs
+		if (!str_data.validity.RowIsValid(str_idx) || !patterns_data.validity.RowIsValid(patterns_idx)) {
+			result_validity.SetInvalid(i);
+			continue;
+		}
+
+		auto str = str_entries[str_idx].GetString();
+		auto &list_entry = patterns_entries[patterns_idx];
+
+		bool found = false;
+		for (idx_t j = 0; j < list_entry.length; j++) {
+			auto pattern_idx = patterns_child_data.sel->get_index(list_entry.offset + j);
+			if (!patterns_child_data.validity.RowIsValid(pattern_idx)) {
+				continue; // Skip NULL patterns
+			}
+			auto pattern = patterns_child_entries[pattern_idx].GetString();
+			if (str.find(pattern) != string::npos) {
+				found = true;
+				break;
+			}
+		}
+		result_data[i] = found;
+	}
+}
+
+// Case-insensitive version
+// string_contains_any_i(str, ['pattern1', 'pattern2', ...]) -> BOOLEAN
+static void StringContainsAnyIFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	D_ASSERT(args.ColumnCount() == 2);
+
+	auto &str_vector = args.data[0];
+	auto &patterns_vector = args.data[1];
+	auto count = args.size();
+
+	// Get unified format for both vectors
+	UnifiedVectorFormat str_data;
+	str_vector.ToUnifiedFormat(count, str_data);
+	auto str_entries = UnifiedVectorFormat::GetData<string_t>(str_data);
+
+	UnifiedVectorFormat patterns_data;
+	patterns_vector.ToUnifiedFormat(count, patterns_data);
+	auto patterns_entries = UnifiedVectorFormat::GetData<list_entry_t>(patterns_data);
+
+	// Get the child vector containing the actual pattern strings
+	auto &patterns_child = ListVector::GetEntry(patterns_vector);
+	UnifiedVectorFormat patterns_child_data;
+	patterns_child.ToUnifiedFormat(ListVector::GetListSize(patterns_vector), patterns_child_data);
+	auto patterns_child_entries = UnifiedVectorFormat::GetData<string_t>(patterns_child_data);
+
+	auto result_data = FlatVector::GetData<bool>(result);
+	auto &result_validity = FlatVector::Validity(result);
+
+	// Helper to convert string to lowercase
+	auto to_lower = [](const string &s) {
+		string result;
+		result.reserve(s.size());
+		for (char c : s) {
+			result += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+		}
+		return result;
+	};
+
+	for (idx_t i = 0; i < count; i++) {
+		auto str_idx = str_data.sel->get_index(i);
+		auto patterns_idx = patterns_data.sel->get_index(i);
+
+		// Handle NULL inputs
+		if (!str_data.validity.RowIsValid(str_idx) || !patterns_data.validity.RowIsValid(patterns_idx)) {
+			result_validity.SetInvalid(i);
+			continue;
+		}
+
+		auto str = to_lower(str_entries[str_idx].GetString());
+		auto &list_entry = patterns_entries[patterns_idx];
+
+		bool found = false;
+		for (idx_t j = 0; j < list_entry.length; j++) {
+			auto pattern_idx = patterns_child_data.sel->get_index(list_entry.offset + j);
+			if (!patterns_child_data.validity.RowIsValid(pattern_idx)) {
+				continue; // Skip NULL patterns
+			}
+			auto pattern = to_lower(patterns_child_entries[pattern_idx].GetString());
+			if (str.find(pattern) != string::npos) {
+				found = true;
+				break;
+			}
+		}
+		result_data[i] = found;
+	}
+}
+
 // Function that returns list of searchable semantic types
 static void GetSearchableTypesFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	D_ASSERT(args.ColumnCount() == 0);
@@ -377,6 +505,31 @@ void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
 	// Alias for has_body - backward compatibility
 	ScalarFunction is_embodied_func("is_embodied", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsEmbodiedFunction);
 	loader.RegisterFunction(is_embodied_func);
+
+	// ========================================================================
+	// String Utility Functions
+	// ========================================================================
+
+	// Register string_contains_any(str, patterns) -> BOOLEAN
+	// Case-sensitive substring search for any pattern in the list
+	ScalarFunction string_contains_any_func("string_contains_any",
+	                                        {LogicalType::VARCHAR, LogicalType::LIST(LogicalType::VARCHAR)},
+	                                        LogicalType::BOOLEAN, StringContainsAnyFunction);
+	loader.RegisterFunction(string_contains_any_func);
+
+	// Register string_contains_any_i(str, patterns) -> BOOLEAN
+	// Case-insensitive version
+	ScalarFunction string_contains_any_i_func("string_contains_any_i",
+	                                          {LogicalType::VARCHAR, LogicalType::LIST(LogicalType::VARCHAR)},
+	                                          LogicalType::BOOLEAN, StringContainsAnyIFunction);
+	loader.RegisterFunction(string_contains_any_i_func);
+
+	// Register ast_peek_contains_any as alias for string_contains_any
+	// For use in AST queries where you're searching peek columns
+	ScalarFunction peek_contains_any_func("ast_peek_contains_any",
+	                                      {LogicalType::VARCHAR, LogicalType::LIST(LogicalType::VARCHAR)},
+	                                      LogicalType::BOOLEAN, StringContainsAnyFunction);
+	loader.RegisterFunction(peek_contains_any_func);
 }
 
 } // namespace duckdb

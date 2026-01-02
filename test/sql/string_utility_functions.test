@@ -1,0 +1,213 @@
+# name: test/sql/string_utility_functions.test
+# description: Test string utility functions (string_contains_any, ast_peek_contains_any)
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# string_contains_any - Case-sensitive substring matching
+# =============================================================================
+
+# Basic matching - single pattern found
+query I
+SELECT string_contains_any('hello world', ['world']);
+----
+true
+
+# Basic matching - pattern not found
+query I
+SELECT string_contains_any('hello world', ['foo']);
+----
+false
+
+# Multiple patterns - first matches
+query I
+SELECT string_contains_any('hello world', ['hello', 'foo', 'bar']);
+----
+true
+
+# Multiple patterns - last matches
+query I
+SELECT string_contains_any('hello world', ['foo', 'bar', 'world']);
+----
+true
+
+# Multiple patterns - none match
+query I
+SELECT string_contains_any('hello world', ['foo', 'bar', 'baz']);
+----
+false
+
+# Empty patterns list
+query I
+SELECT string_contains_any('hello world', []);
+----
+false
+
+# Empty string
+query I
+SELECT string_contains_any('', ['foo']);
+----
+false
+
+# Case sensitivity
+query I
+SELECT string_contains_any('Hello World', ['hello']);
+----
+false
+
+query I
+SELECT string_contains_any('Hello World', ['Hello']);
+----
+true
+
+# Substring matching (not just prefix/suffix)
+query I
+SELECT string_contains_any('the quick brown fox', ['quick', 'slow']);
+----
+true
+
+# =============================================================================
+# string_contains_any_i - Case-insensitive substring matching
+# =============================================================================
+
+# Case insensitive match
+query I
+SELECT string_contains_any_i('Hello World', ['hello']);
+----
+true
+
+query I
+SELECT string_contains_any_i('Hello World', ['WORLD']);
+----
+true
+
+query I
+SELECT string_contains_any_i('HELLO WORLD', ['hello', 'world']);
+----
+true
+
+# Mixed case patterns
+query I
+SELECT string_contains_any_i('The Quick Brown Fox', ['QUICK', 'slow']);
+----
+true
+
+# No match even with case insensitivity
+query I
+SELECT string_contains_any_i('hello world', ['foo', 'bar']);
+----
+false
+
+# =============================================================================
+# ast_peek_contains_any - Alias for string_contains_any
+# =============================================================================
+
+# Verify alias works the same as string_contains_any
+query I
+SELECT ast_peek_contains_any('eval(user_input)', ['eval', 'exec']);
+----
+true
+
+query I
+SELECT ast_peek_contains_any('safe_function()', ['eval', 'exec']);
+----
+false
+
+# =============================================================================
+# NULL handling
+# =============================================================================
+
+# NULL string
+query I
+SELECT string_contains_any(NULL, ['foo']);
+----
+NULL
+
+# NULL patterns list
+query I
+SELECT string_contains_any('hello', NULL);
+----
+NULL
+
+# NULL pattern in list (should be skipped)
+query I
+SELECT string_contains_any('hello world', ['foo', NULL, 'world']);
+----
+true
+
+# =============================================================================
+# Use with AST queries
+# =============================================================================
+
+# Create a temp table with Python code containing security concerns
+statement ok
+CREATE TEMP TABLE security_test AS
+SELECT * FROM parse_ast('
+def dangerous():
+    eval(user_input)
+def safe():
+    return 42
+def also_dangerous():
+    exec(code)
+', 'python');
+
+# Find calls containing dangerous function names
+query I
+SELECT COUNT(*) FROM security_test
+WHERE type = 'call' AND string_contains_any(peek, ['eval', 'exec', 'system']);
+----
+2
+
+# Same query using ast_peek_contains_any alias
+query I
+SELECT COUNT(*) FROM security_test
+WHERE type = 'call' AND ast_peek_contains_any(peek, ['eval', 'exec', 'system']);
+----
+2
+
+# Verify which functions contain these calls
+query I
+SELECT DISTINCT name FROM security_test
+WHERE type = 'call' AND string_contains_any(peek, ['eval', 'exec'])
+ORDER BY name;
+----
+eval
+exec
+
+# =============================================================================
+# Edge cases
+# =============================================================================
+
+# Pattern that is the entire string
+query I
+SELECT string_contains_any('hello', ['hello']);
+----
+true
+
+# Pattern longer than string
+query I
+SELECT string_contains_any('hi', ['hello world']);
+----
+false
+
+# Unicode handling
+query I
+SELECT string_contains_any('café résumé', ['café']);
+----
+true
+
+# Special characters in pattern
+query I
+SELECT string_contains_any('hello.world', ['.']);
+----
+true
+
+query I
+SELECT string_contains_any('hello*world', ['*']);
+----
+true
+
