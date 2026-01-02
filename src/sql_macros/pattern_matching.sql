@@ -80,23 +80,64 @@ CREATE OR REPLACE MACRO semantic_type_base(sem_type) AS
 -- Extended Wildcard Preprocessor
 -- =============================================================================
 --
--- Handles %__NAME<rules>__% syntax for wildcards with constraints.
--- Simple __NAME__ wildcards pass through unchanged.
+-- TWO SYNTAXES SUPPORTED:
+--
+-- Legacy syntax: %__NAME<rules>__%
+--   %__BODY<*>__%     - Named variadic
+--   %__<*>__%         - Anonymous variadic
+--
+-- HTML syntax: %__<NAME modifiers attrs>__%  (Phase 1)
+--   %__<BODY*>__%                    - Named variadic
+--   %__<*>__%                        - Anonymous variadic
+--   %__<X* type=identifier>__%       - With constraints
+--   %__<BODY* max-descendants=10>__% - With numeric constraints
+--
+-- Modifiers: * (0+ siblings), + (1+ siblings), ~ (negate), ? (optional), ** (recursive)
+-- Attributes: type=, not-type=, name=, semantic=, min-descendants=, max-descendants=, etc.
 
--- Extract rules from extended wildcards in a pattern string
--- Returns a list of structs with wildcard metadata
--- Supports both named (%__NAME<rules>__%) and anonymous (%__<rules>__%) wildcards
+-- =============================================================================
+-- HTML Wildcard Parser (regex-based for macro compatibility)
+-- =============================================================================
+-- NOTE: A parse_ast_objects() scalar function would enable using tree-sitter HTML
+-- here instead of regex. See tracker/features/031-extended-wildcard-rules.md
+
+-- Parse a single HTML wildcard tag: <NAME modifiers attrs>
+-- Returns struct with all parsed fields
+CREATE OR REPLACE MACRO parse_html_wildcard(html_str) AS {
+    name: COALESCE(
+        NULLIF(regexp_extract(html_str, '<([A-Z_][A-Z0-9_]*)', 1), ''),
+        '_'
+    ),
+    variadic_star: regexp_matches(html_str, '\*') AND NOT regexp_matches(html_str, '\*\*'),
+    variadic_plus: regexp_matches(html_str, '\+'),
+    negate: regexp_matches(html_str, '~'),
+    optional: regexp_matches(html_str, '\?'),
+    recursive: regexp_matches(html_str, '\*\*'),
+    type_constraint: NULLIF(regexp_extract(html_str, '[ ]type=([A-Za-z_][A-Za-z0-9_]*)', 1), ''),
+    not_type_constraint: NULLIF(regexp_extract(html_str, 'not-type=([A-Za-z_][A-Za-z0-9_]*)', 1), ''),
+    name_constraint: NULLIF(regexp_extract(html_str, '[ ]name=([A-Za-z_][A-Za-z0-9_]*)', 1), ''),
+    name_pattern: NULLIF(regexp_extract(html_str, 'name-pattern=([^ >]+)', 1), ''),
+    semantic_constraint: NULLIF(regexp_extract(html_str, 'semantic=([A-Z_]+)', 1), ''),
+    min_descendants: TRY_CAST(NULLIF(regexp_extract(html_str, 'min-descendants=([0-9]+)', 1), '') AS INTEGER),
+    max_descendants: TRY_CAST(NULLIF(regexp_extract(html_str, 'max-descendants=([0-9]+)', 1), '') AS INTEGER),
+    min_children: TRY_CAST(NULLIF(regexp_extract(html_str, 'min-children=([0-9]+)', 1), '') AS INTEGER),
+    max_children: TRY_CAST(NULLIF(regexp_extract(html_str, 'max-children=([0-9]+)', 1), '') AS INTEGER)
+};
+
+-- =============================================================================
+-- Legacy Syntax Support
+-- =============================================================================
+
+-- Extract rules from legacy %__NAME<rules>__% syntax
 CREATE OR REPLACE MACRO extract_wildcard_rules(pattern_str) AS (
     WITH
     matches AS (
-        -- Name is optional: ([A-Z][A-Z0-9_]*)? matches empty string for anonymous
         SELECT regexp_extract_all(pattern_str, '%__([A-Z][A-Z0-9_]*)?<([^>]+)>__%') as all_matches
     ),
     unnested AS (
         SELECT unnest(all_matches) as match_text FROM matches
     )
     SELECT list({
-        -- NULL for anonymous wildcards, name for named ones
         name: NULLIF(regexp_extract(match_text, '%__([A-Z][A-Z0-9_]*)?<', 1), ''),
         rules_raw: regexp_extract(match_text, '<([^>]+)>', 1),
         is_variadic: regexp_extract(match_text, '<([^>]+)>', 1) LIKE '%*%'
@@ -112,21 +153,34 @@ CREATE OR REPLACE MACRO extract_wildcard_rules(pattern_str) AS (
     WHERE match_text IS NOT NULL AND match_text != ''
 );
 
--- Clean pattern: replace %__NAME<rules>__% with __NAME__, %__<rules>__% with __
--- Two-step: first handle named (at least one letter), then anonymous
-CREATE OR REPLACE MACRO clean_pattern(pattern_str) AS
-    regexp_replace(
-        regexp_replace(pattern_str, '%__([A-Z][A-Z0-9_]*)<[^>]+>__%', '__\1__', 'g'),
-        '%__<[^>]+>__%', '__', 'g');
+-- =============================================================================
+-- Pattern Cleaning (handles both syntaxes)
+-- =============================================================================
 
--- Check if pattern contains any variadic wildcards
-CREATE OR REPLACE MACRO pattern_has_variadic(pattern_str) AS (
-    SELECT COALESCE(
-        (SELECT bool_or(w.is_variadic)
-         FROM (SELECT unnest(extract_wildcard_rules(pattern_str)) as w)),
-        false
-    )
-);
+-- Clean pattern: convert extended wildcards to simple __NAME__ or __
+-- Handles both legacy %__NAME<rules>__% and HTML %__<NAME* attrs>__% syntax
+CREATE OR REPLACE MACRO clean_pattern(pattern_str) AS
+    -- Step 1: Handle HTML syntax %__<NAME...>__% -> __NAME__
+    -- Extract tag name from HTML-style wildcards
+    regexp_replace(
+        regexp_replace(
+            -- Step 2: Handle legacy syntax %__NAME<rules>__% -> __NAME__
+            regexp_replace(
+                regexp_replace(pattern_str, '%__([A-Z][A-Z0-9_]*)<[^>]+>__%', '__\1__', 'g'),
+                '%__<[^>]+>__%', '__', 'g'),
+            -- HTML named: %__<NAME...>__% -> __NAME__
+            '%__<([A-Z_][A-Z0-9_]*)[^>]*>__%', '__\1__', 'g'),
+        -- HTML anonymous: %__<[*+~?]...>__% -> __
+        '%__<[*+~?][^>]*>__%', '__', 'g');
+
+-- Check if pattern contains any variadic wildcards (either syntax)
+-- Legacy: %__X<*>__% or %__X<+>__%
+-- HTML: %__<X*>__% or %__<X+>__% or %__<*>__% or %__<+>__%
+CREATE OR REPLACE MACRO pattern_has_variadic(pattern_str) AS
+    -- Legacy syntax: <*> or <+> inside %__...__%
+    regexp_matches(pattern_str, '%__[A-Z]*<[^>]*[*+][^>]*>__%')
+    -- HTML syntax: * or + as modifier inside %__<...>__%
+    OR regexp_matches(pattern_str, '%__<[^>]*[*+][^>]*>__%');
 
 -- Get list of variadic wildcard names
 CREATE OR REPLACE MACRO get_variadic_names(pattern_str) AS (
@@ -232,18 +286,29 @@ CREATE OR REPLACE MACRO ast_match(
                 unnest.is_wildcard,
                 unnest.capture_name,
                 unnest.is_syntax,
-                -- Pattern-level variadic detection: pattern contains <*> or <+> in extended syntax
-                -- Supports both named (%__X<*>__%) and anonymous (%__<*>__%) variadics
-                regexp_matches(pattern_str, '%__[A-Z]*<[*+]>__%') as pattern_has_variadic,
+                -- Pattern-level variadic detection: * or + in any extended wildcard syntax
+                -- Legacy: %__X<*>__%, HTML: %__<X*>__% or %__<*>__%
+                (regexp_matches(pattern_str, '%__[A-Z]*<[^>]*[*+][^>]*>__%')
+                 OR regexp_matches(pattern_str, '%__<[^>]*[*+][^>]*>__%')) as pattern_has_variadic,
                 -- Per-wildcard variadic detection: this specific wildcard has variadic syntax
+                -- Legacy: %__NAME<*>__%, HTML: %__<NAME*>__%
                 unnest.capture_name IS NOT NULL AND (
+                    -- Legacy syntax
                     pattern_str LIKE '%' || '%__' || unnest.capture_name || '<*>__%' || '%'
                     OR pattern_str LIKE '%' || '%__' || unnest.capture_name || '<+>__%' || '%'
+                    -- HTML syntax
+                    OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '*%>__%' || '%'
+                    OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '+%>__%' || '%'
                 ) as is_variadic
             FROM (SELECT unnest(ast_pattern_list(
+                -- Clean pattern: handle both HTML and legacy syntax
                 regexp_replace(
-                    regexp_replace(pattern_str, '%__([A-Z][A-Z0-9_]*)<[^>]+>__%', '__\1__', 'g'),
-                    '%__<[^>]+>__%', '__', 'g'),
+                    regexp_replace(
+                        regexp_replace(
+                            regexp_replace(pattern_str, '%__([A-Z][A-Z0-9_]*)<[^>]+>__%', '__\1__', 'g'),
+                            '%__<[^>]+>__%', '__', 'g'),
+                        '%__<([A-Z_][A-Z0-9_]*)[^>]*>__%', '__\1__', 'g'),
+                    '%__<[*+~?][^>]*>__%', '__', 'g'),
                 lang)) as unnest)
             -- Filter out syntax nodes unless match_syntax is true
             WHERE match_syntax OR NOT unnest.is_syntax
