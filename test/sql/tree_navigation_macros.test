@@ -551,3 +551,66 @@ WHERE function_name = 'safe_function';
 ----
 0
 
+# =============================================================================
+# Test ast_dead_code
+# =============================================================================
+
+# Create an AST with used and unused code
+statement ok
+CREATE TEMP TABLE dead_code_ast AS
+SELECT * FROM parse_ast('def used_func():
+    return 1
+def unused_func():
+    return 2
+def main():
+    result = used_func()
+    return result
+class UsedClass:
+    pass
+class UnusedClass:
+    pass
+obj = UsedClass()
+def __init__(self):
+    pass
+', 'python');
+
+# Find unused code - should find unused_func and UnusedClass
+query II
+SELECT name, definition_type FROM ast_dead_code('dead_code_ast') ORDER BY name;
+----
+UnusedClass	class
+unused_func	function
+
+# Verify main is excluded (special method)
+query I
+SELECT COUNT(*) FROM ast_dead_code('dead_code_ast') WHERE name = 'main';
+----
+0
+
+# Verify dunder methods are excluded
+query I
+SELECT COUNT(*) FROM ast_dead_code('dead_code_ast') WHERE name = '__init__';
+----
+0
+
+# Verify used functions are not marked as dead
+query I
+SELECT COUNT(*) FROM ast_dead_code('dead_code_ast') WHERE name = 'used_func';
+----
+0
+
+# Test recursive function is not marked as dead
+statement ok
+CREATE TEMP TABLE recursive_ast AS
+SELECT * FROM parse_ast('def factorial(n):
+    if n == 0:
+        return 1
+    return n * factorial(n - 1)
+', 'python');
+
+# Recursive function references itself, so not dead
+query I
+SELECT COUNT(*) FROM ast_dead_code('recursive_ast');
+----
+0
+

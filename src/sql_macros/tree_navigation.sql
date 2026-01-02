@@ -516,3 +516,104 @@ CREATE OR REPLACE MACRO ast_security_audit(ast_table) AS TABLE
         CASE risk_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
         file_path, start_line;
 
+-- Find potentially dead (unused) code
+-- Identifies functions and classes that are never referenced in the codebase.
+-- Note: This is heuristic - cannot detect dynamic usage or cross-file references
+-- when analyzing a single file. Best used on entire codebase.
+-- Usage: SELECT * FROM ast_dead_code(my_ast_table)
+CREATE OR REPLACE MACRO ast_dead_code(ast_table) AS TABLE
+    WITH
+        -- All function definitions
+        function_defs AS (
+            SELECT
+                node_id,
+                name,
+                file_path,
+                language,
+                start_line,
+                end_line,
+                type,
+                'function' AS definition_type
+            FROM query_table(ast_table)
+            WHERE is_function_definition(semantic_type)
+              AND name IS NOT NULL AND name != ''
+              -- Exclude special methods (constructors, dunder methods, etc.)
+              AND name NOT LIKE '\_\_%' ESCAPE '\'
+              AND name NOT IN ('main', 'setup', 'teardown', 'init', 'constructor')
+        ),
+        -- All class definitions
+        class_defs AS (
+            SELECT
+                node_id,
+                name,
+                file_path,
+                language,
+                start_line,
+                end_line,
+                type,
+                'class' AS definition_type
+            FROM query_table(ast_table)
+            WHERE is_class_definition(semantic_type)
+              AND name IS NOT NULL AND name != ''
+        ),
+        -- All definitions combined
+        all_defs AS (
+            SELECT * FROM function_defs
+            UNION ALL
+            SELECT * FROM class_defs
+        ),
+        -- All function calls (references to functions)
+        function_calls AS (
+            SELECT DISTINCT name
+            FROM query_table(ast_table)
+            WHERE is_function_call(semantic_type)
+              AND name IS NOT NULL AND name != ''
+        ),
+        -- All identifier references (for classes and other references)
+        -- Exclude identifiers that are the name of a definition (parent is definition type)
+        identifier_refs AS (
+            SELECT DISTINCT ast.name
+            FROM query_table(ast_table) ast
+            LEFT JOIN query_table(ast_table) parent ON parent.node_id = ast.parent_id
+            WHERE is_identifier(ast.semantic_type)
+              AND ast.name IS NOT NULL AND ast.name != ''
+              -- Exclude identifiers that are names within definitions
+              AND (parent.semantic_type IS NULL
+                   OR (NOT is_function_definition(parent.semantic_type)
+                       AND NOT is_class_definition(parent.semantic_type)))
+        ),
+        -- All references combined
+        all_refs AS (
+            SELECT name FROM function_calls
+            UNION
+            SELECT name FROM identifier_refs
+        ),
+        -- Find definitions that are never referenced
+        dead_code AS (
+            SELECT
+                d.file_path,
+                d.name,
+                d.language,
+                d.start_line,
+                d.end_line,
+                d.type,
+                d.definition_type,
+                'Never referenced in codebase' AS reason
+            FROM all_defs d
+            WHERE NOT EXISTS (
+                SELECT 1 FROM all_refs r
+                WHERE r.name = d.name
+            )
+        )
+    SELECT
+        file_path,
+        name,
+        language,
+        start_line,
+        end_line,
+        type,
+        definition_type,
+        reason
+    FROM dead_code
+    ORDER BY file_path, start_line;
+
