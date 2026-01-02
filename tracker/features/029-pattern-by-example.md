@@ -259,6 +259,63 @@ print(__ARGS__)  -- matches print(), print(x), print(x, y, z)
 __X__ == __X__  -- matches: a == a, x == x, NOT: a == b
 ```
 
+### Capture Extraction
+
+Each wildcard in the pattern becomes a named capture in the output. The placeholder name (without underscores) maps to what it matched:
+
+```sql
+-- Pattern: __OBJ__.__METHOD__(__ARG__)
+-- Matches: request.get(url)
+
+SELECT
+    captures['OBJ'] as obj,      -- {node_id: 5, type: 'identifier', name: 'request', peek: 'request'}
+    captures['METHOD'] as method, -- {node_id: 7, type: 'identifier', name: 'get', peek: 'get'}
+    captures['ARG'] as arg        -- {node_id: 9, type: 'identifier', name: 'url', peek: 'url'}
+FROM ast_match('codebase', '__OBJ__.__METHOD__(__ARG__)');
+```
+
+**Capture struct fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `node_id` | BIGINT | Matched node's ID in the AST table |
+| `type` | VARCHAR | AST node type |
+| `name` | VARCHAR | Node name (if any) |
+| `peek` | VARCHAR | Code preview |
+| `start_line` | INTEGER | Start line |
+| `end_line` | INTEGER | End line |
+
+**Variadic captures** return an array of structs:
+
+```sql
+-- Pattern: print(__ARGS__)
+-- Matches: print(a, b, c)
+
+SELECT
+    captures['ARGS'] as args
+    -- [{node_id: 5, name: 'a', ...}, {node_id: 7, name: 'b', ...}, {node_id: 9, name: 'c', ...}]
+FROM ast_match('codebase', 'print(__ARGS__)');
+
+-- Access individual items
+SELECT
+    captures['ARGS'][1].name as first_arg,  -- 'a'
+    captures['ARGS'][2].name as second_arg, -- 'b'
+    len(captures['ARGS']) as arg_count      -- 3
+FROM ast_match('codebase', 'print(__ARGS__)');
+```
+
+**Same-name constraint**: When the same placeholder appears multiple times, all occurrences must match equivalent subtrees:
+
+```sql
+-- Pattern: __X__ == __X__
+-- Matches: a == a, foo() == foo()
+-- Does NOT match: a == b, x == y
+
+SELECT
+    captures['X'].peek as duplicated_expr
+FROM ast_match('codebase', '__X__ == __X__');
+```
+
 ### Example: How Parsing Works
 
 User pattern: `__OBJ__.__METHOD__(__ARG__)`
