@@ -1,3 +1,6 @@
+[![DuckDB Community Extension](https://img.shields.io/badge/webbed-DuckDB_Community_Extension-blue?logo=duckdb)](https://duckdb.org/community_extensions/extensions/sitting_duck.html)
+[![Documentation](https://img.shields.io/badge/docs-readthedocs-blue)](https://sitting-duck.readthedocs.io)
+
 # Sitting Duck 🦆
 
 **Sitting Duck** is a DuckDB extension that makes Abstract Syntax Trees (ASTs) from source code files quack like data - enabling powerful SQL-based analysis across multiple programming languages.
