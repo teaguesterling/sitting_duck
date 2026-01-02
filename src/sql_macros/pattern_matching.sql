@@ -12,8 +12,10 @@
 --     __         Anonymous wildcard - matches any node but doesn't capture
 --
 --   Extended wildcards (with rules):
---     %__X<*>__%     Variadic: matches 0 or more siblings
---     %__X<+>__%     Variadic: matches 1 or more siblings
+--     %__X<*>__%     Named variadic: matches 0 or more siblings
+--     %__X<+>__%     Named variadic: matches 1 or more siblings
+--     %__<*>__%      Anonymous variadic: matches 0 or more siblings (no capture)
+--     %__<+>__%      Anonymous variadic: matches 1 or more siblings (no capture)
 --     %__X<type=T>__%  Type constraint: only match nodes of type T
 --
 -- PARAMETERS:
@@ -83,16 +85,19 @@ CREATE OR REPLACE MACRO semantic_type_base(sem_type) AS
 
 -- Extract rules from extended wildcards in a pattern string
 -- Returns a list of structs with wildcard metadata
+-- Supports both named (%__NAME<rules>__%) and anonymous (%__<rules>__%) wildcards
 CREATE OR REPLACE MACRO extract_wildcard_rules(pattern_str) AS (
     WITH
     matches AS (
-        SELECT regexp_extract_all(pattern_str, '%__([A-Z][A-Z0-9_]*)<([^>]+)>__%') as all_matches
+        -- Name is optional: ([A-Z][A-Z0-9_]*)? matches empty string for anonymous
+        SELECT regexp_extract_all(pattern_str, '%__([A-Z][A-Z0-9_]*)?<([^>]+)>__%') as all_matches
     ),
     unnested AS (
         SELECT unnest(all_matches) as match_text FROM matches
     )
     SELECT list({
-        name: regexp_extract(match_text, '%__([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*)(?:<)', 1),
+        -- NULL for anonymous wildcards, name for named ones
+        name: NULLIF(regexp_extract(match_text, '%__([A-Z][A-Z0-9_]*)?<', 1), ''),
         rules_raw: regexp_extract(match_text, '<([^>]+)>', 1),
         is_variadic: regexp_extract(match_text, '<([^>]+)>', 1) LIKE '%*%'
                   OR regexp_extract(match_text, '<([^>]+)>', 1) LIKE '%+%',
@@ -107,9 +112,12 @@ CREATE OR REPLACE MACRO extract_wildcard_rules(pattern_str) AS (
     WHERE match_text IS NOT NULL AND match_text != ''
 );
 
--- Clean pattern: replace %__NAME<rules>__% with simple __NAME__
+-- Clean pattern: replace %__NAME<rules>__% with __NAME__, %__<rules>__% with __
+-- Two-step: first handle named (at least one letter), then anonymous
 CREATE OR REPLACE MACRO clean_pattern(pattern_str) AS
-    regexp_replace(pattern_str, '%__([A-Z][A-Z0-9_]*)<[^>]+>__%', '__\1__', 'g');
+    regexp_replace(
+        regexp_replace(pattern_str, '%__([A-Z][A-Z0-9_]*)<[^>]+>__%', '__\1__', 'g'),
+        '%__<[^>]+>__%', '__', 'g');
 
 -- Check if pattern contains any variadic wildcards
 CREATE OR REPLACE MACRO pattern_has_variadic(pattern_str) AS (
@@ -225,14 +233,17 @@ CREATE OR REPLACE MACRO ast_match(
                 unnest.capture_name,
                 unnest.is_syntax,
                 -- Pattern-level variadic detection: pattern contains <*> or <+> in extended syntax
-                regexp_matches(pattern_str, '%__[A-Z]+<[*+]>__%') as pattern_has_variadic,
+                -- Supports both named (%__X<*>__%) and anonymous (%__<*>__%) variadics
+                regexp_matches(pattern_str, '%__[A-Z]*<[*+]>__%') as pattern_has_variadic,
                 -- Per-wildcard variadic detection: this specific wildcard has variadic syntax
                 unnest.capture_name IS NOT NULL AND (
                     pattern_str LIKE '%' || '%__' || unnest.capture_name || '<*>__%' || '%'
                     OR pattern_str LIKE '%' || '%__' || unnest.capture_name || '<+>__%' || '%'
                 ) as is_variadic
             FROM (SELECT unnest(ast_pattern_list(
-                regexp_replace(pattern_str, '%__([A-Z][A-Z0-9_]*)<[^>]+>__%', '__\1__', 'g'),
+                regexp_replace(
+                    regexp_replace(pattern_str, '%__([A-Z][A-Z0-9_]*)<[^>]+>__%', '__\1__', 'g'),
+                    '%__<[^>]+>__%', '__', 'g'),
                 lang)) as unnest)
             -- Filter out syntax nodes unless match_syntax is true
             WHERE match_syntax OR NOT unnest.is_syntax

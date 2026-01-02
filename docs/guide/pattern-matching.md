@@ -38,8 +38,10 @@ Extended wildcards add rules for flexible matching:
 
 | Pattern | Description |
 |---------|-------------|
-| `%__X<*>__%` | Variadic: matches 0 or more siblings at this level |
-| `%__X<+>__%` | Variadic: matches 1 or more siblings at this level |
+| `%__X<*>__%` | Named variadic: matches 0 or more siblings at this level |
+| `%__X<+>__%` | Named variadic: matches 1 or more siblings at this level |
+| `%__<*>__%` | Anonymous variadic: matches 0+ siblings (no capture) |
+| `%__<+>__%` | Anonymous variadic: matches 1+ siblings (no capture) |
 | `%__X<type=T>__%` | Type constraint: only match nodes of type T |
 
 ```sql

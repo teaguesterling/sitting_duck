@@ -595,8 +595,8 @@ FROM ast_match('code',
 **Wildcard syntax:**
 - `__X__` - Named wildcard, captures as 'X'
 - `__` - Anonymous wildcard, matches but doesn't capture
-- `%__X<*>__%` - Variadic: matches 0+ siblings
-- `%__X<+>__%` - Variadic: matches 1+ siblings
+- `%__X<*>__%` - Named variadic: matches 0+ siblings
+- `%__<*>__%` - Anonymous variadic: matches 0+ siblings (no capture)
 
 See **[Pattern Matching Guide](docs/guide/pattern-matching.md)** for full documentation.
 
