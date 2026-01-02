@@ -373,3 +373,62 @@ ORDER BY name;
 inner	2	1	2
 outer	1	0	1
 
+# =============================================================================
+# Test ast_functions_containing
+# =============================================================================
+
+# Create AST with various node types to search for
+statement ok
+CREATE TEMP TABLE containing_ast AS
+SELECT * FROM parse_ast('def has_try():
+    try:
+        risky()
+    except:
+        pass
+def no_try():
+    safe()
+def has_eval():
+    result = eval("1+1")
+    return result
+def nested_try():
+    def inner():
+        try:
+            x = 1
+        except:
+            pass
+    inner()
+', 'python');
+
+# Find functions with try statements
+# Should find has_try and inner (not nested_try - its try is in inner's scope)
+query I
+SELECT func_name FROM ast_functions_containing('containing_ast', 'try_statement') ORDER BY func_name;
+----
+has_try
+inner
+
+# Find functions with calls named 'eval'
+query II
+SELECT func_name, match_name
+FROM ast_functions_containing('containing_ast', 'call')
+WHERE match_name = 'eval';
+----
+has_eval	eval
+
+# Find all functions with any call
+query I
+SELECT DISTINCT func_name FROM ast_functions_containing('containing_ast', 'call') ORDER BY func_name;
+----
+has_eval
+has_try
+nested_try
+no_try
+
+# Verify nested function scope isolation
+# nested_try should NOT have try_statement in its scope (it's in inner's scope)
+query I
+SELECT COUNT(*) FROM ast_functions_containing('containing_ast', 'try_statement')
+WHERE func_name = 'nested_try';
+----
+0
+
