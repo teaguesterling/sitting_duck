@@ -109,3 +109,43 @@ CREATE OR REPLACE MACRO ast_function_scope(ast_table, func_node_id) AS TABLE
           AND d.node_id <= nf.node_id + nf.descendant_count
     );
 
+-- Get direct members of a class (methods, fields, nested classes)
+-- Returns the member definition nodes themselves, not their internal contents.
+-- Useful for class structure analysis without descending into method bodies.
+-- Usage: SELECT name, type FROM ast_class_members(my_ast_table, class_node_id)
+CREATE OR REPLACE MACRO ast_class_members(ast_table, class_node_id) AS TABLE
+    WITH
+        -- Get the class node
+        class AS (
+            SELECT node_id, descendant_count
+            FROM query_table(ast_table)
+            WHERE node_id = class_node_id
+        ),
+        -- Get all descendants of the class
+        descendants AS (
+            SELECT a.*
+            FROM query_table(ast_table) a, class c
+            WHERE a.node_id > c.node_id
+              AND a.node_id <= c.node_id + c.descendant_count
+        ),
+        -- Find all named definition nodes within the class
+        -- Excludes syntactic tokens like 'class'/'def' keywords where type=name
+        all_defs AS (
+            SELECT node_id, descendant_count, name, type, semantic_type,
+                   start_line, end_line, depth, parent_id, peek, file_path, language
+            FROM descendants
+            WHERE is_definition(semantic_type)
+              AND name IS NOT NULL AND name != ''
+              AND type != name  -- Filter out keyword tokens (e.g., 'class' with name='class')
+        )
+    -- Return definitions that are NOT nested inside other definitions
+    -- (i.e., direct members of the class, not locals inside methods)
+    SELECT d.*
+    FROM all_defs d
+    WHERE NOT EXISTS (
+        SELECT 1 FROM all_defs other
+        WHERE other.node_id != d.node_id
+          AND d.node_id > other.node_id
+          AND d.node_id <= other.node_id + other.descendant_count
+    );
+

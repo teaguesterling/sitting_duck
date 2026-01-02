@@ -218,3 +218,83 @@ SELECT COUNT(*) FROM ast_function_scope('scope_ast', 14);
 ----
 15
 
+# =============================================================================
+# Test ast_class_members
+# =============================================================================
+
+# Create a Python class AST for testing
+statement ok
+CREATE TEMP TABLE py_class AS
+SELECT * FROM parse_ast('class MyClass:
+    class_var = 1
+    def __init__(self, value):
+        local_var = 10
+        self.value = value
+    def method(self):
+        temp = 5
+        return self.value
+', 'python');
+
+# Get the class node_id
+query II
+SELECT node_id, name FROM py_class WHERE type = 'class_definition';
+----
+1	MyClass
+
+# Get class members - should have 3: class_var, __init__, method
+query I
+SELECT COUNT(*) FROM ast_class_members('py_class', 1);
+----
+3
+
+# Verify member names (should NOT include local_var or temp)
+query I
+SELECT name FROM ast_class_members('py_class', 1) ORDER BY node_id;
+----
+class_var
+__init__
+method
+
+# Verify member types
+query II
+SELECT name, type FROM ast_class_members('py_class', 1) ORDER BY node_id;
+----
+class_var	assignment
+__init__	function_definition
+method	function_definition
+
+# Create a Java class AST for testing
+statement ok
+CREATE TEMP TABLE java_class AS
+SELECT * FROM parse_ast('class MyClass {
+    private int x = 1;
+    public MyClass(int value) {
+        int local = 10;
+        this.value = value;
+    }
+    public int getValue() {
+        int temp = 5;
+        return this.value;
+    }
+}', 'java');
+
+# Get the Java class node_id
+query II
+SELECT node_id, name FROM java_class WHERE type = 'class_declaration';
+----
+1	MyClass
+
+# Get Java class members - should have 3: x, MyClass (constructor), getValue
+query I
+SELECT COUNT(*) FROM ast_class_members('java_class', 1);
+----
+3
+
+# Verify Java member names (should NOT include local or temp)
+query I
+SELECT name FROM ast_class_members('java_class', 1) ORDER BY node_id;
+----
+x
+MyClass
+getValue
+
