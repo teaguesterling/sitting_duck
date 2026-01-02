@@ -10,10 +10,11 @@ Additional helper functions identified during self-analysis of sitting_duck's co
 
 ---
 
-## 1. `ast_call_arguments(table, call_node_id)` → TABLE
+## 1. `ast_call_arguments(table, call_node_id)` → TABLE ✅
 
 **Priority:** P1
 **Complexity:** Low (SQL macro)
+**Status:** Implemented in d14ed52
 
 Extract arguments from a function call node.
 
@@ -40,10 +41,11 @@ Use `ast_children` to get children of the call node, filter to argument_list, th
 
 ---
 
-## 2. `read_lines` with `file_path` column
+## 2. `read_lines` with `file_path` column ✅
 
 **Priority:** P1
 **Complexity:** Low (SQL macro change)
+**Status:** Implemented in d14ed52
 
 ### Problem
 
