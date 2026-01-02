@@ -638,108 +638,74 @@ ORDER BY risk_category, occurrences DESC;
 
 ## Structural Analysis
 
-### Functions with Multiple Return Points
+> **Tip**: Many of these patterns are now available as built-in macros. See [Structural Analysis Macros](../api/structural-analysis.md) for `ast_function_metrics`, `ast_nesting_analysis`, `ast_security_audit`, `ast_dead_code`, and more.
+
+### Using Built-in Macros (Recommended)
 
 ```sql
--- Potential complexity indicator
-WITH function_bounds AS (
-    SELECT file_path, name, start_line, end_line
-    FROM read_ast('src/**/*.py')
-    WHERE is_function_definition(semantic_type) AND name IS NOT NULL
-)
-SELECT f.name, f.file_path, f.start_line, COUNT(*) as return_count
-FROM function_bounds f
-JOIN read_ast('src/**/*.py') r
-  ON r.file_path = f.file_path
-  AND r.start_line >= f.start_line AND r.end_line <= f.end_line
-  AND r.type = 'return_statement'
-GROUP BY f.name, f.file_path, f.start_line
-HAVING COUNT(*) > 3
-ORDER BY return_count DESC;
+-- Create cached AST table
+CREATE TABLE codebase AS SELECT * FROM read_ast('src/**/*.py');
+
+-- Function complexity metrics (returns, conditionals, loops, cyclomatic)
+SELECT name, lines, cyclomatic, return_count
+FROM ast_function_metrics('codebase')
+WHERE cyclomatic > 5
+ORDER BY cyclomatic DESC;
+
+-- Nesting depth analysis
+SELECT name, max_depth, deep_nodes
+FROM ast_nesting_analysis('codebase')
+WHERE deep_nodes > 0;
+
+-- Security audit
+SELECT function_name, risk_category, risk_level, matched_pattern
+FROM ast_security_audit('codebase')
+WHERE risk_level = 'high';
+
+-- Dead code detection
+SELECT name, definition_type, file_path
+FROM ast_dead_code('codebase');
+
+-- Functions containing specific patterns
+SELECT func_name FROM ast_functions_containing('codebase', 'try_statement');
 ```
 
-### Cyclomatic Complexity Approximation
+### Tree Navigation
 
 ```sql
--- Count control flow nodes within each function
-WITH function_bounds AS (
-    SELECT file_path, name, start_line, end_line,
-           end_line - start_line + 1 as lines
-    FROM read_ast('src/**/*.py')
-    WHERE is_function_definition(semantic_type)
-      AND name IS NOT NULL AND end_line - start_line > 5
-)
-SELECT
-    f.name, f.file_path, f.lines,
-    SUM(CASE WHEN is_conditional(cf.semantic_type) THEN 1 ELSE 0 END) as conditionals,
-    SUM(CASE WHEN is_loop(cf.semantic_type) THEN 1 ELSE 0 END) as loops,
-    SUM(CASE WHEN is_conditional(cf.semantic_type) THEN 1 ELSE 0 END) +
-    SUM(CASE WHEN is_loop(cf.semantic_type) THEN 1 ELSE 0 END) + 1 as cyclomatic
-FROM function_bounds f
-JOIN read_ast('src/**/*.py') cf
-  ON cf.file_path = f.file_path
-  AND cf.start_line >= f.start_line AND cf.end_line <= f.end_line
-  AND is_control_flow(cf.semantic_type)
-GROUP BY f.name, f.file_path, f.start_line, f.lines
-ORDER BY cyclomatic DESC
-LIMIT 20;
+-- Get children of a specific node
+SELECT type, name FROM ast_children('codebase', 42);
+
+-- Get all descendants (subtree)
+SELECT * FROM ast_descendants('codebase', 42);
+
+-- Get ancestors up to root
+SELECT type, name FROM ast_ancestors('codebase', 100) ORDER BY depth;
+
+-- Find what contains line 50
+SELECT type, name FROM ast_containing_line('codebase', 50)
+ORDER BY (end_line - start_line);  -- smallest first
+
+-- Get nodes in a line range
+SELECT * FROM ast_in_range('codebase', 10, 20);
 ```
 
-### Deeply Nested Code (Arrow Anti-Pattern)
+### Scope-Aware Analysis
 
 ```sql
--- Find callback hell / deeply nested control flow
-SELECT file_path, start_line, type, depth, LEFT(peek, 60) as context
-FROM read_ast('src/**/*.js')
-WHERE is_control_flow(semantic_type) AND depth > 10
-ORDER BY depth DESC
-LIMIT 20;
-```
+-- Get function scope (excludes nested function bodies)
+SELECT * FROM ast_function_scope('codebase', 42);
 
-### Functions Without Error Handling
+-- Get class members (methods, fields)
+SELECT name, type FROM ast_class_members('codebase', 1);
 
-```sql
--- Find functions that should have try/catch but don't
-WITH functions AS (
-    SELECT file_path, name, start_line, end_line
-    FROM read_ast('src/**/*.py')
-    WHERE is_function_definition(semantic_type)
-      AND name IS NOT NULL AND end_line - start_line > 10
-),
-has_try AS (
-    SELECT DISTINCT f.file_path, f.name
-    FROM functions f
-    JOIN read_ast('src/**/*.py') t
-      ON t.file_path = f.file_path
-      AND t.start_line >= f.start_line AND t.end_line <= f.end_line
-      AND t.type = 'try_statement'
-)
-SELECT f.file_path, f.name
-FROM functions f
-LEFT JOIN has_try h ON f.file_path = h.file_path AND f.name = h.name
-WHERE h.name IS NULL
-ORDER BY f.file_path;
-```
+-- Find functions with error handling
+SELECT func_name FROM ast_functions_containing('codebase', 'try_statement');
 
-### Potential Dead Code (Uncalled Functions)
-
-```sql
--- Functions defined but never called in same file
-WITH definitions AS (
-    SELECT DISTINCT file_path, name
-    FROM read_ast('src/**/*.py')
-    WHERE is_function_definition(semantic_type)
-      AND name IS NOT NULL AND name NOT LIKE '\\_%%' AND name != 'main'
-),
-calls AS (
-    SELECT DISTINCT file_path, name
-    FROM read_ast('src/**/*.py')
-    WHERE is_call(semantic_type) AND name IS NOT NULL
-)
-SELECT d.file_path, d.name as uncalled_function
-FROM definitions d
-LEFT JOIN calls c ON d.file_path = c.file_path AND d.name = c.name
-WHERE c.name IS NULL;
+-- Find functions calling specific APIs
+SELECT func_name, match_name
+FROM ast_functions_containing('codebase', 'call')
+WHERE match_name IN ('eval', 'exec');
 ```
 
 ---
@@ -919,6 +885,7 @@ LIMIT 10;
 
 ## See Also
 
+- [Structural Analysis Macros](../api/structural-analysis.md) - Full macro reference
 - [Cross-Language Analysis](cross-language.md) - More cross-language patterns
-- [Semantic Types](semantic-types.md) - Full type reference
+- [Semantic Types](../api/semantic-types.md) - Full type reference
 - [API Reference](../api/core-functions.md) - Function documentation
