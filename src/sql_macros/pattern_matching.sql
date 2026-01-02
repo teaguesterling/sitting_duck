@@ -107,6 +107,7 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, lang) AS (
         pattern_type: pattern_type,
         pattern_name: pattern_name,
         pattern_semantic_type: pattern_semantic_type,
+        pattern_descendant_count: descendant_count,
         is_wildcard: is_wildcard,
         capture_name: capture_name,
         is_syntax: is_syntax
@@ -147,6 +148,7 @@ CREATE OR REPLACE MACRO ast_match(
                 unnest.pattern_type,
                 unnest.pattern_name,
                 unnest.pattern_semantic_type,
+                unnest.pattern_descendant_count,
                 unnest.is_wildcard,
                 unnest.capture_name,
                 unnest.is_syntax
@@ -157,7 +159,7 @@ CREATE OR REPLACE MACRO ast_match(
 
         -- Get pattern root info for candidate filtering
         pattern_root AS (
-            SELECT pattern_type, pattern_name, pattern_semantic_type, is_wildcard
+            SELECT pattern_type, pattern_name, pattern_semantic_type, pattern_descendant_count, is_wildcard
             FROM pattern
             WHERE rel_depth = 0
             LIMIT 1
@@ -176,10 +178,16 @@ CREATE OR REPLACE MACRO ast_match(
             FROM query_table(ast_table) t, pattern_root pr
             WHERE
                 -- Match on type or semantic_type based on match_by parameter
-                -- For semantic_type, compare base types (mask off language-specific bits)
-                CASE WHEN match_by = 'semantic_type'
-                     THEN semantic_type_base(t.semantic_type) = semantic_type_base(pr.pattern_semantic_type)
-                     ELSE t.type = pr.pattern_type
+                -- For semantic_type mode: use exact type for operator TOKENS (*, +, etc.)
+                -- but semantic type for operator EXPRESSIONS (binary_operator, binary_expression)
+                CASE
+                    WHEN match_by = 'semantic_type'
+                         AND is_kind(pr.pattern_semantic_type, 'OPERATOR')
+                         AND pr.pattern_descendant_count = 0  -- Token, not expression
+                         THEN t.type = pr.pattern_type  -- Exact match for operator tokens
+                    WHEN match_by = 'semantic_type'
+                         THEN semantic_type_base(t.semantic_type) = semantic_type_base(pr.pattern_semantic_type)
+                    ELSE t.type = pr.pattern_type
                 END
                 -- Name matching (for non-wildcards)
                 AND (pr.pattern_name IS NULL OR pr.pattern_name = ''
@@ -206,11 +214,17 @@ CREATE OR REPLACE MACRO ast_match(
                         -- Skip sibling_index check for root (it can be at any position)
                         AND (p.rel_depth = 0 OR t.sibling_index = p.sibling_index)
                         -- Match on type or semantic_type based on match_by parameter
-                        -- For semantic_type, compare base types (mask off language-specific bits)
-                        AND CASE WHEN match_by = 'semantic_type'
+                        -- For semantic_type mode: use exact type for operator TOKENS (*, +, etc.)
+                        -- but semantic type for operator EXPRESSIONS (binary_operator, etc.)
+                        AND CASE
+                            WHEN match_by = 'semantic_type'
+                                 AND is_kind(p.pattern_semantic_type, 'OPERATOR')
+                                 AND p.pattern_descendant_count = 0  -- Token, not expression
+                                 THEN t.type = p.pattern_type  -- Exact match for operator tokens
+                            WHEN match_by = 'semantic_type'
                                  THEN semantic_type_base(t.semantic_type) = semantic_type_base(p.pattern_semantic_type)
-                                 ELSE t.type = p.pattern_type
-                            END
+                            ELSE t.type = p.pattern_type
+                        END
                         AND (p.pattern_name IS NULL OR p.pattern_name = '' OR t.name = p.pattern_name)
                   )
             )
