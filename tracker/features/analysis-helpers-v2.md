@@ -45,7 +45,7 @@ Use `ast_children` to get children of the call node, filter to argument_list, th
 
 **Priority:** P1
 **Complexity:** Low (SQL macro change)
-**Status:** Implemented in d14ed52
+**Status:** Implemented in d14ed52, enhanced in 3f16996
 
 ### Problem
 
@@ -146,10 +146,11 @@ function_definition:not(>> try_statement)
 
 ---
 
-## 4. `ast_definitions(table)` → TABLE
+## 4. `ast_definitions(table)` → TABLE ✅
 
 **Priority:** P2
 **Complexity:** Low (SQL macro)
+**Status:** Implemented in 3f16996
 
 ### Problem
 
