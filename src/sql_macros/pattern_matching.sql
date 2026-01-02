@@ -12,6 +12,7 @@
 -- PARAMETERS:
 --   match_syntax := false  - Include punctuation/delimiters in matching
 --   match_by := 'type'     - Match on 'type' (tree-sitter) or 'semantic_type' (cross-language)
+--   depth_fuzz := 0        - Allow +/- N levels of depth flexibility for cross-language matching
 --
 -- FUTURE (requires C++ implementation - see tracker/features/030-pattern-matching-cpp.md):
 --   wildcards := {}        - MAP of wildcard modifiers for variadic matching, constraints
@@ -137,7 +138,8 @@ CREATE OR REPLACE MACRO ast_match(
     pattern_str,
     lang := 'python',
     match_syntax := false,
-    match_by := 'type'
+    match_by := 'type',
+    depth_fuzz := 0  -- Allow +/- this many levels of depth flexibility
 ) AS TABLE
     WITH
         -- Unnest the pattern list into rows
@@ -193,6 +195,9 @@ CREATE OR REPLACE MACRO ast_match(
                 AND (pr.pattern_name IS NULL OR pr.pattern_name = ''
                      OR pr.is_wildcard
                      OR t.name = pr.pattern_name)
+                -- If pattern has descendants, candidate must have descendants too
+                -- (prevents matching tokens when we want expressions)
+                AND (pr.pattern_descendant_count = 0 OR t.descendant_count > 0)
         ),
 
         -- For each candidate, verify all non-wildcard pattern nodes have matches
@@ -210,8 +215,9 @@ CREATE OR REPLACE MACRO ast_match(
                       WHERE t.file_path = c.file_path  -- Must be same file (node_ids are per-file)
                         AND t.node_id >= c.candidate_root
                         AND t.node_id <= c.candidate_root + c.candidate_descendants
-                        AND t.depth - c.candidate_depth = p.rel_depth
-                        -- Skip sibling_index check for root (it can be at any position)
+                        -- Depth matching with optional fuzz (cast to INTEGER to avoid UINT32 overflow)
+                        AND ABS((t.depth::INTEGER - c.candidate_depth::INTEGER) - p.rel_depth::INTEGER) <= depth_fuzz
+                        -- Sibling index must match (depth_fuzz affects depth, not sibling position)
                         AND (p.rel_depth = 0 OR t.sibling_index = p.sibling_index)
                         -- Match on type or semantic_type based on match_by parameter
                         -- For semantic_type mode: use exact type for operator TOKENS (*, +, etc.)
@@ -250,8 +256,9 @@ CREATE OR REPLACE MACRO ast_match(
                 t.file_path = mc.file_path  -- Must be same file (node_ids are per-file)
                 AND t.node_id >= mc.candidate_root
                 AND t.node_id <= mc.candidate_root + mc.candidate_descendants
-                AND t.depth - mc.candidate_depth = p.rel_depth
-                -- Skip sibling_index check for root (it can be at any position)
+                -- Depth matching with optional fuzz (cast to INTEGER to avoid UINT32 overflow)
+                AND ABS((t.depth::INTEGER - mc.candidate_depth::INTEGER) - p.rel_depth::INTEGER) <= depth_fuzz
+                -- Sibling index must match (depth_fuzz affects depth, not sibling position)
                 AND (p.rel_depth = 0 OR t.sibling_index = p.sibling_index)
             WHERE p.is_wildcard = true
               AND p.capture_name IS NOT NULL
