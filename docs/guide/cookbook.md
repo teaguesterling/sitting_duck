@@ -32,12 +32,21 @@ ORDER BY files DESC;
 ### Definition Inventory
 
 ```sql
+-- Using ast_definitions macro (recommended)
+CREATE TABLE codebase AS SELECT * FROM read_ast('src/**/*.*', ignore_errors := true);
+
+SELECT definition_type, COUNT(*) as count
+FROM ast_definitions('codebase')
+GROUP BY definition_type
+ORDER BY count DESC;
+
+-- Or with more detail by language
 SELECT
     language,
-    SUM(CASE WHEN is_function_definition(semantic_type) THEN 1 ELSE 0 END) as functions,
-    SUM(CASE WHEN is_class_definition(semantic_type) THEN 1 ELSE 0 END) as classes,
-    SUM(CASE WHEN is_import(semantic_type) THEN 1 ELSE 0 END) as imports
-FROM read_ast('src/**/*.*', ignore_errors := true)
+    SUM(CASE WHEN definition_type = 'function' THEN 1 ELSE 0 END) as functions,
+    SUM(CASE WHEN definition_type = 'class' THEN 1 ELSE 0 END) as classes,
+    SUM(CASE WHEN definition_type = 'variable' THEN 1 ELSE 0 END) as variables
+FROM ast_definitions('codebase')
 GROUP BY language
 ORDER BY functions DESC;
 ```
@@ -329,10 +338,7 @@ LIMIT 20;
 SELECT file_path, start_line, peek
 FROM read_ast('src/**/*.*', ignore_errors := true)
 WHERE is_string_literal(semantic_type)
-  AND (peek LIKE '%password%'
-       OR peek LIKE '%secret%'
-       OR peek LIKE '%api_key%'
-       OR peek LIKE '%token%')
+  AND string_contains_any_i(peek, ['password', 'secret', 'api_key', 'token'])
 ORDER BY file_path;
 ```
 
@@ -342,9 +348,7 @@ ORDER BY file_path;
 SELECT file_path, start_line, peek
 FROM read_ast('src/**/*.*', ignore_errors := true)
 WHERE is_string_literal(semantic_type)
-  AND (peek LIKE '%http://%'
-       OR peek LIKE '%https://%'
-       OR peek LIKE '%localhost%')
+  AND string_contains_any(peek, ['http://', 'https://', 'localhost'])
 ORDER BY file_path;
 ```
 
@@ -354,10 +358,7 @@ ORDER BY file_path;
 SELECT file_path, start_line, peek
 FROM read_ast('src/**/*.*', ignore_errors := true)
 WHERE is_string_literal(semantic_type)
-  AND (peek LIKE '%SELECT %'
-       OR peek LIKE '%INSERT %'
-       OR peek LIKE '%UPDATE %'
-       OR peek LIKE '%DELETE %')
+  AND string_contains_any(peek, ['SELECT ', 'INSERT ', 'UPDATE ', 'DELETE '])
 ORDER BY file_path;
 ```
 
@@ -562,11 +563,11 @@ CREATE TABLE IF NOT EXISTS analysis_meta (
 ### Dangerous Function Calls
 
 ```sql
--- Find eval/exec usage (code injection risk)
+-- Find eval/exec usage (code injection risk) - using string_contains_any for peek
 SELECT language, name, file_path, start_line, LEFT(peek, 80) as context
 FROM read_ast('src/**/*.*', ignore_errors := true)
 WHERE is_call(semantic_type)
-  AND name IN ('eval', 'exec', 'compile', '__import__', 'execfile', 'system', 'popen')
+  AND string_contains_any(peek, ['eval', 'exec', 'compile', '__import__', 'system', 'popen'])
 ORDER BY language, name;
 ```
 
@@ -576,7 +577,7 @@ ORDER BY language, name;
 -- Find subprocess/os.system usage
 SELECT file_path, start_line, LEFT(peek, 100) as context
 FROM read_ast('src/**/*.py')
-WHERE peek LIKE '%subprocess%' OR peek LIKE '%os.system%' OR peek LIKE '%os.popen%'
+WHERE string_contains_any(peek, ['subprocess', 'os.system', 'os.popen'])
 ORDER BY file_path;
 ```
 

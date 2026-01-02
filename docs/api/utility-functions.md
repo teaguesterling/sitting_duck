@@ -287,52 +287,61 @@ Functions for reading source code lines. These are SQL macros that wrap DuckDB's
 
 ### Table Functions (return rows)
 
-#### `read_lines(file_path)`
+#### `read_lines(path, include_file_path := false)`
 
 Read all lines from a file as rows with line numbers.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `file_path` | VARCHAR | Path to the file |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | VARCHAR | (required) | Path to the file |
+| `include_file_path` | BOOLEAN | `false` | Include file_path column with values |
 
-**Returns:** `line_number` (BIGINT), `line` (VARCHAR)
+**Returns:** `file_path` (VARCHAR, NULL unless include_file_path=true), `line_number` (BIGINT), `line` (VARCHAR)
 
 ```sql
 SELECT * FROM read_lines('file.py') LIMIT 3;
--- line_number | line
--- 1           | def hello():
--- 2           |     print("hi")
--- 3           |
+-- file_path | line_number | line
+-- NULL      | 1           | def hello():
+-- NULL      | 2           |     print("hi")
+-- NULL      | 3           |
+
+-- With file_path included:
+SELECT * FROM read_lines('file.py', include_file_path := true) LIMIT 2;
+-- file_path | line_number | line
+-- file.py   | 1           | def hello():
+-- file.py   | 2           |     print("hi")
 ```
 
-#### `read_lines_range(file_path, start_line, end_line)`
+#### `read_lines_range(path, start_line, end_line, include_file_path := false)`
 
 Read a specific line range from a file.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `file_path` | VARCHAR | Path to the file |
-| `start_line` | BIGINT | First line to read (1-based) |
-| `end_line` | BIGINT | Last line to read (inclusive) |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | VARCHAR | (required) | Path to the file |
+| `start_line` | BIGINT | (required) | First line to read (1-based) |
+| `end_line` | BIGINT | (required) | Last line to read (inclusive) |
+| `include_file_path` | BOOLEAN | `false` | Include file_path column with values |
 
-**Returns:** `line_number` (BIGINT), `line` (VARCHAR)
+**Returns:** `file_path` (VARCHAR), `line_number` (BIGINT), `line` (VARCHAR)
 
 ```sql
 SELECT * FROM read_lines_range('file.py', 10, 12);
 -- Returns lines 10, 11, 12
 ```
 
-#### `read_lines_context(file_path, center_line, context_lines)`
+#### `read_lines_context(path, center_line, context_lines, include_file_path := false)`
 
 Read lines around a specific line (context window).
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `file_path` | VARCHAR | Path to the file |
-| `center_line` | BIGINT | Center line number |
-| `context_lines` | BIGINT | Lines before and after center |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | VARCHAR | (required) | Path to the file |
+| `center_line` | BIGINT | (required) | Center line number |
+| `context_lines` | BIGINT | (required) | Lines before and after center |
+| `include_file_path` | BOOLEAN | `false` | Include file_path column with values |
 
-**Returns:** `line_number` (BIGINT), `line` (VARCHAR)
+**Returns:** `file_path` (VARCHAR), `line_number` (BIGINT), `line` (VARCHAR)
 
 ```sql
 SELECT * FROM read_lines_context('file.py', 50, 5);
@@ -385,6 +394,91 @@ SELECT ast_get_source_numbered('file.py', 10, 13) AS numbered_source;
 --   11:     x = 1
 --   12:     y = 2
 --   13:     return x + y
+```
+
+---
+
+## String Utility Functions
+
+Functions for efficient string pattern matching.
+
+### `string_contains_any(str, patterns)`
+
+Check if a string contains any of the patterns in a list (case-sensitive).
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `str` | VARCHAR | The string to search in |
+| `patterns` | VARCHAR[] | List of patterns to search for |
+
+**Returns:** BOOLEAN - `true` if any pattern is found, `false` otherwise
+
+```sql
+-- Basic usage
+SELECT string_contains_any('hello world', ['world']);  -- true
+SELECT string_contains_any('hello world', ['foo']);    -- false
+
+-- Multiple patterns
+SELECT string_contains_any('hello world', ['foo', 'bar', 'world']);  -- true
+
+-- Use with AST queries for security scanning
+SELECT name FROM read_ast('file.py')
+WHERE type = 'call'
+  AND string_contains_any(peek, ['eval', 'exec', 'system']);
+```
+
+### `string_contains_any_i(str, patterns)`
+
+Case-insensitive version of `string_contains_any`.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `str` | VARCHAR | The string to search in |
+| `patterns` | VARCHAR[] | List of patterns to search for |
+
+**Returns:** BOOLEAN
+
+```sql
+SELECT string_contains_any_i('Hello World', ['hello']);  -- true
+SELECT string_contains_any_i('HELLO WORLD', ['world']);  -- true
+```
+
+### `ast_peek_contains_any(peek, patterns)`
+
+Alias for `string_contains_any`, named for use in AST queries.
+
+```sql
+-- Find dangerous function calls
+SELECT name, peek FROM read_ast('src/**/*.py')
+WHERE type = 'call'
+  AND ast_peek_contains_any(peek, ['eval', 'exec', 'system', 'subprocess']);
+```
+
+### Comparison: Before and After
+
+These functions replace verbose OR chains:
+
+```sql
+-- Before (verbose):
+WHERE peek LIKE '%eval%'
+   OR peek LIKE '%exec%'
+   OR peek LIKE '%system%'
+   OR peek LIKE '%subprocess%'
+
+-- After (concise):
+WHERE string_contains_any(peek, ['eval', 'exec', 'system', 'subprocess'])
+```
+
+### NULL Handling
+
+- NULL string returns NULL
+- NULL patterns list returns NULL
+- NULL patterns within the list are skipped
+
+```sql
+SELECT string_contains_any(NULL, ['foo']);              -- NULL
+SELECT string_contains_any('hello', NULL);              -- NULL
+SELECT string_contains_any('hello', ['foo', NULL, 'hello']);  -- true (NULL skipped)
 ```
 
 ---

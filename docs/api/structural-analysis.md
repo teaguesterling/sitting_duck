@@ -13,6 +13,9 @@ SQL table macros for navigating and analyzing AST structure. These macros accept
 | `ast_siblings(table, node_id)` | Get siblings (same parent) |
 | `ast_containing_line(table, line)` | Find nodes containing a line |
 | `ast_in_range(table, start, end)` | Find nodes in a line range |
+| `ast_call_arguments(table, call_node_id)` | Get arguments of a function call |
+| **Definition Helpers** | |
+| `ast_definitions(table)` | Get all definitions with metadata |
 | **Scope Analysis** | |
 | `ast_function_scope(table, node_id)` | Function descendants excluding nested functions |
 | `ast_class_members(table, node_id)` | Direct members of a class |
@@ -89,6 +92,70 @@ Find all nodes within a line range.
 ```sql
 -- Get all nodes in lines 10-20
 SELECT type, name FROM ast_in_range('my_ast', 10, 20);
+```
+
+### `ast_call_arguments(table, call_node_id)`
+
+Extract arguments from a function call node.
+
+```sql
+CREATE TEMP TABLE call_ast AS SELECT * FROM parse_ast('foo(a, b, "hello", 42)', 'python');
+
+-- Find the call node
+SELECT node_id, name FROM call_ast WHERE type = 'call';
+-- node_id=2, name=foo
+
+-- Get its arguments
+SELECT arg_position, arg_name, arg_type FROM ast_call_arguments('call_ast', 2);
+```
+
+| Column | Description |
+|--------|-------------|
+| `arg_position` | 0-based position in argument list |
+| `arg_node_id` | Node ID of the argument |
+| `arg_name` | Name or text of the argument |
+| `arg_type` | AST type of the argument |
+| `arg_peek` | Preview of the argument |
+| `semantic_type` | Semantic type of the argument |
+| `start_line`, `end_line` | Location |
+
+Works across languages (Python, C++, Java, etc.) by detecting the appropriate argument list type (`argument_list`, `arguments`, `actual_parameters`).
+
+---
+
+## Definition Helpers
+
+### `ast_definitions(table)`
+
+Get all definitions (functions, classes, variables, etc.) with unified metadata.
+
+```sql
+SELECT name, definition_type, start_line
+FROM ast_definitions('my_ast')
+ORDER BY start_line;
+```
+
+| Column | Description |
+|--------|-------------|
+| `name` | Definition name |
+| `definition_type` | `function`, `class`, `variable`, `module`, `type` |
+| `language` | Source language |
+| `file_path` | Source file |
+| `start_line`, `end_line` | Location |
+| `node_id` | For joining back to AST |
+| `type` | Original AST node type |
+| `semantic_type` | Semantic type code |
+
+```sql
+-- Count definitions by type
+SELECT definition_type, COUNT(*)
+FROM ast_definitions('codebase')
+GROUP BY definition_type;
+
+-- Find all functions
+SELECT name, file_path, start_line
+FROM ast_definitions('codebase')
+WHERE definition_type = 'function';
 ```
 
 ---
