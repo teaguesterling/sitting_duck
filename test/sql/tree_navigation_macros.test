@@ -487,3 +487,67 @@ SELECT name FROM ast_nesting_analysis('nesting_ast') WHERE deep_nodes = 0;
 ----
 shallow
 
+# =============================================================================
+# Test ast_security_audit
+# =============================================================================
+
+# Create AST with various security concerns
+statement ok
+CREATE TEMP TABLE security_ast AS
+SELECT * FROM parse_ast('import os
+import pickle
+def dangerous_eval(user_input):
+    result = eval(user_input)
+    return result
+def run_command(cmd):
+    os.system(cmd)
+def load_data(filename):
+    with open(filename, "rb") as f:
+        return pickle.load(f)
+def safe_function():
+    return 42
+', 'python');
+
+# Find all high-risk security issues
+query II
+SELECT function_name, risk_category
+FROM ast_security_audit('security_ast')
+WHERE risk_level = 'high'
+ORDER BY function_name;
+----
+dangerous_eval	Code Injection
+load_data	Deserialization
+run_command	Command Injection
+
+# Verify eval is detected as Code Injection
+query III
+SELECT function_name, risk_category, matched_pattern
+FROM ast_security_audit('security_ast')
+WHERE matched_pattern = 'eval';
+----
+dangerous_eval	Code Injection	eval
+
+# Verify system is detected as Command Injection
+query III
+SELECT function_name, risk_category, matched_pattern
+FROM ast_security_audit('security_ast')
+WHERE matched_pattern = 'system';
+----
+run_command	Command Injection	system
+
+# Verify pickle.load is detected via peek context
+query II
+SELECT function_name, risk_category
+FROM ast_security_audit('security_ast')
+WHERE function_name = 'load_data';
+----
+load_data	Deserialization
+
+# safe_function should not appear in security audit
+query I
+SELECT COUNT(*)
+FROM ast_security_audit('security_ast')
+WHERE function_name = 'safe_function';
+----
+0
+

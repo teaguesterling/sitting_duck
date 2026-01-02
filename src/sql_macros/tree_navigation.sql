@@ -403,3 +403,116 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(ast_table) AS TABLE
     FROM depth_stats
     ORDER BY max_depth DESC, file_path, start_line;
 
+-- Automated security concern detection
+-- Scans for common security anti-patterns across languages.
+-- Usage: SELECT * FROM ast_security_audit(my_ast_table) WHERE risk_level = 'high'
+CREATE OR REPLACE MACRO ast_security_audit(ast_table) AS TABLE
+    WITH
+        -- Define security patterns to detect
+        security_patterns AS (
+            SELECT * FROM (VALUES
+                -- Code Injection (High Risk)
+                ('eval', 'Code Injection', 'high', 'Dynamic code evaluation'),
+                ('exec', 'Code Injection', 'high', 'Dynamic code execution'),
+                ('compile', 'Code Injection', 'high', 'Dynamic code compilation'),
+                ('Function', 'Code Injection', 'high', 'Dynamic function creation'),
+                ('setInterval', 'Code Injection', 'medium', 'Potential code injection via string'),
+                ('setTimeout', 'Code Injection', 'medium', 'Potential code injection via string'),
+                -- Command Injection (High Risk)
+                ('system', 'Command Injection', 'high', 'Shell command execution'),
+                ('popen', 'Command Injection', 'high', 'Shell command execution'),
+                ('spawn', 'Command Injection', 'high', 'Process spawning'),
+                ('execSync', 'Command Injection', 'high', 'Synchronous command execution'),
+                ('execFile', 'Command Injection', 'high', 'File execution'),
+                ('ShellExecute', 'Command Injection', 'high', 'Windows shell execution'),
+                -- Deserialization (High Risk)
+                ('pickle.load', 'Deserialization', 'high', 'Unsafe pickle deserialization'),
+                ('pickle.loads', 'Deserialization', 'high', 'Unsafe pickle deserialization'),
+                ('yaml.load', 'Deserialization', 'high', 'Unsafe YAML loading'),
+                ('unserialize', 'Deserialization', 'high', 'PHP unsafe deserialization'),
+                ('Marshal.load', 'Deserialization', 'high', 'Ruby unsafe deserialization'),
+                ('readObject', 'Deserialization', 'medium', 'Java deserialization'),
+                -- SQL Injection indicators (Medium Risk)
+                ('execute', 'SQL Injection', 'medium', 'SQL execution - verify parameterized'),
+                ('executemany', 'SQL Injection', 'medium', 'SQL execution - verify parameterized'),
+                ('raw', 'SQL Injection', 'medium', 'Raw SQL query'),
+                ('rawQuery', 'SQL Injection', 'medium', 'Raw SQL query'),
+                -- File Operations (Medium Risk)
+                ('readFile', 'Path Traversal', 'medium', 'File read - verify path sanitization'),
+                ('writeFile', 'Path Traversal', 'medium', 'File write - verify path sanitization'),
+                ('unlink', 'Path Traversal', 'medium', 'File deletion - verify path sanitization'),
+                ('rmdir', 'Path Traversal', 'medium', 'Directory deletion - verify path'),
+                -- Crypto Concerns (Medium Risk)
+                ('md5', 'Weak Crypto', 'medium', 'MD5 is cryptographically weak'),
+                ('sha1', 'Weak Crypto', 'medium', 'SHA1 is cryptographically weak'),
+                ('DES', 'Weak Crypto', 'medium', 'DES encryption is weak'),
+                ('RC4', 'Weak Crypto', 'medium', 'RC4 encryption is weak'),
+                -- Debug/Development (Low Risk)
+                ('console.log', 'Debug Code', 'low', 'Debug logging in code'),
+                ('print', 'Debug Code', 'low', 'Print statement - may leak info'),
+                ('debugger', 'Debug Code', 'low', 'Debugger statement'),
+                ('assert', 'Debug Code', 'low', 'Assert statement')
+            ) AS t(pattern_name, risk_category, risk_level, description)
+        ),
+        -- Find all function calls in the AST
+        calls AS (
+            SELECT
+                node_id,
+                file_path,
+                language,
+                name,
+                start_line,
+                peek
+            FROM query_table(ast_table)
+            WHERE is_function_call(semantic_type)
+              AND name IS NOT NULL AND name != ''
+        ),
+        -- Find the containing function for each call
+        containing_funcs AS (
+            SELECT
+                c.node_id AS call_node_id,
+                f.name AS function_name
+            FROM calls c
+            LEFT JOIN query_table(ast_table) f
+              ON f.node_id < c.node_id
+             AND c.node_id <= f.node_id + f.descendant_count
+             AND is_function_definition(f.semantic_type)
+             AND f.name IS NOT NULL AND f.name != ''
+            QUALIFY ROW_NUMBER() OVER (PARTITION BY c.node_id ORDER BY f.node_id DESC) = 1
+        ),
+        -- Match calls against security patterns
+        -- Checks call name and peek (context) for qualified names like pickle.load
+        findings AS (
+            SELECT
+                c.file_path,
+                c.language,
+                c.start_line,
+                COALESCE(cf.function_name, '<module>') AS function_name,
+                p.risk_category,
+                p.risk_level,
+                p.description AS finding,
+                c.name AS matched_pattern,
+                c.peek AS context
+            FROM calls c
+            JOIN security_patterns p
+              ON c.name = p.pattern_name
+              OR c.name LIKE '%.' || p.pattern_name
+              OR c.name LIKE p.pattern_name || '.%'
+              OR c.peek LIKE '%' || p.pattern_name || '%'
+            LEFT JOIN containing_funcs cf ON cf.call_node_id = c.node_id
+        )
+    SELECT
+        file_path,
+        language,
+        start_line,
+        function_name,
+        risk_category,
+        risk_level,
+        finding,
+        matched_pattern,
+        context
+    FROM findings
+    ORDER BY
+        CASE risk_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+        file_path, start_line;
+
