@@ -200,7 +200,8 @@ CREATE OR REPLACE MACRO ast_match(
                       WHERE t.node_id >= c.candidate_root
                         AND t.node_id <= c.candidate_root + c.candidate_descendants
                         AND t.depth - c.candidate_depth = p.rel_depth
-                        AND t.sibling_index = p.sibling_index
+                        -- Skip sibling_index check for root (it can be at any position)
+                        AND (p.rel_depth = 0 OR t.sibling_index = p.sibling_index)
                         -- Match on type or semantic_type based on match_by parameter
                         -- For semantic_type, compare base types (mask off language-specific bits)
                         AND CASE WHEN match_by = 'semantic_type'
@@ -231,7 +232,8 @@ CREATE OR REPLACE MACRO ast_match(
                 t.node_id >= mc.candidate_root
                 AND t.node_id <= mc.candidate_root + mc.candidate_descendants
                 AND t.depth - mc.candidate_depth = p.rel_depth
-                AND t.sibling_index = p.sibling_index
+                -- Skip sibling_index check for root (it can be at any position)
+                AND (p.rel_depth = 0 OR t.sibling_index = p.sibling_index)
             WHERE p.is_wildcard = true
               AND p.capture_name IS NOT NULL
         ),
