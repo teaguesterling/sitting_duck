@@ -57,6 +57,7 @@ def generate_header(sql_dir, output_file):
         'semantic_predicates.sql',
         'file_utilities.sql',
         'tree_navigation.sql',
+        'pattern_matching.sql',
     ]
     
     # Chain methods (short names) removed for simplicity

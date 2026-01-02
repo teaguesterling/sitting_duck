@@ -8,27 +8,41 @@
 
 namespace duckdb {
 
-// Simple SQL statement splitter - splits on semicolons that aren't in quotes
+// Simple SQL statement splitter - splits on semicolons that aren't in quotes or comments
 static vector<string> SplitSQLStatements(const string &sql) {
 	vector<string> statements;
 	string current_statement;
 	bool in_single_quote = false;
 	bool in_double_quote = false;
+	bool in_line_comment = false;
 
 	for (size_t i = 0; i < sql.length(); i++) {
 		char ch = sql[i];
 
-		// Handle quotes
-		if (ch == '\'' && !in_double_quote && (i == 0 || sql[i - 1] != '\\')) {
-			in_single_quote = !in_single_quote;
-		} else if (ch == '"' && !in_single_quote && (i == 0 || sql[i - 1] != '\\')) {
-			in_double_quote = !in_double_quote;
+		// Check for line comment start (-- outside of quotes)
+		if (!in_single_quote && !in_double_quote && !in_line_comment &&
+		    ch == '-' && i + 1 < sql.length() && sql[i + 1] == '-') {
+			in_line_comment = true;
+		}
+
+		// End line comment on newline
+		if (in_line_comment && (ch == '\n' || ch == '\r')) {
+			in_line_comment = false;
+		}
+
+		// Handle quotes (only when not in a comment)
+		if (!in_line_comment) {
+			if (ch == '\'' && !in_double_quote && (i == 0 || sql[i - 1] != '\\')) {
+				in_single_quote = !in_single_quote;
+			} else if (ch == '"' && !in_single_quote && (i == 0 || sql[i - 1] != '\\')) {
+				in_double_quote = !in_double_quote;
+			}
 		}
 
 		current_statement += ch;
 
-		// If we hit a semicolon outside of quotes, it's end of statement
-		if (ch == ';' && !in_single_quote && !in_double_quote) {
+		// If we hit a semicolon outside of quotes and comments, it's end of statement
+		if (ch == ';' && !in_single_quote && !in_double_quote && !in_line_comment) {
 			// Trim whitespace
 			size_t start = current_statement.find_first_not_of(" \t\n\r");
 			if (start != string::npos) {

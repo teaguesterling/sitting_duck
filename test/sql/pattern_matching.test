@@ -1,0 +1,394 @@
+# name: test/sql/pattern_matching.test
+# group: [sql]
+
+# Test pattern matching macros for AST querying
+# Pattern matching macros are embedded in the extension
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Helper Macro Tests
+# =============================================================================
+
+# Test is_pattern_wildcard
+query I
+SELECT is_pattern_wildcard('__X__');
+----
+true
+
+query I
+SELECT is_pattern_wildcard('__');
+----
+true
+
+query I
+SELECT is_pattern_wildcard('__FUNC__');
+----
+true
+
+query I
+SELECT is_pattern_wildcard('__init__');
+----
+false
+
+query I
+SELECT is_pattern_wildcard('foo');
+----
+false
+
+query I
+SELECT is_pattern_wildcard(NULL);
+----
+false
+
+# Test wildcard_capture_name
+query I
+SELECT wildcard_capture_name('__X__');
+----
+X
+
+query I
+SELECT wildcard_capture_name('__FUNC__');
+----
+FUNC
+
+query I
+SELECT wildcard_capture_name('__');
+----
+NULL
+
+query I
+SELECT wildcard_capture_name('foo');
+----
+NULL
+
+# =============================================================================
+# Pattern Cleaning Tests (Both Syntaxes)
+# =============================================================================
+
+# Legacy syntax cleaning
+query I
+SELECT clean_pattern('%__BODY<*>__%');
+----
+__BODY__
+
+query I
+SELECT clean_pattern('%__X<+>__%');
+----
+__X__
+
+query I
+SELECT clean_pattern('%__<*>__%');
+----
+__
+
+# HTML syntax cleaning
+query I
+SELECT clean_pattern('%__<BODY*>__%');
+----
+__BODY__
+
+query I
+SELECT clean_pattern('%__<X+>__%');
+----
+__X__
+
+query I
+SELECT clean_pattern('%__<*>__%');
+----
+__
+
+query I
+SELECT clean_pattern('%__<X* type=identifier>__%');
+----
+__X__
+
+# Mixed pattern cleaning
+query I
+SELECT clean_pattern('def __F__(__): %__<BODY*>__% return __Y__');
+----
+def __F__(__): __BODY__ return __Y__
+
+# =============================================================================
+# Variadic Detection Tests
+# =============================================================================
+
+# Legacy syntax variadic detection
+query I
+SELECT pattern_has_variadic('%__BODY<*>__%');
+----
+true
+
+query I
+SELECT pattern_has_variadic('%__X<+>__%');
+----
+true
+
+query I
+SELECT pattern_has_variadic('__X__');
+----
+false
+
+# HTML syntax variadic detection
+query I
+SELECT pattern_has_variadic('%__<BODY*>__%');
+----
+true
+
+query I
+SELECT pattern_has_variadic('%__<X+>__%');
+----
+true
+
+query I
+SELECT pattern_has_variadic('%__<X type=identifier>__%');
+----
+false
+
+# =============================================================================
+# HTML Wildcard Parser Tests
+# =============================================================================
+
+# Basic modifiers
+query I
+SELECT parse_html_wildcard('<BODY*>').name;
+----
+BODY
+
+query I
+SELECT parse_html_wildcard('<BODY*>').variadic_star;
+----
+true
+
+query I
+SELECT parse_html_wildcard('<ARGS+>').variadic_plus;
+----
+true
+
+query I
+SELECT parse_html_wildcard('<SKIP~>').negate;
+----
+true
+
+query I
+SELECT parse_html_wildcard('<DOCSTRING?>').optional;
+----
+true
+
+query I
+SELECT parse_html_wildcard('<BODY**>').recursive;
+----
+true
+
+# Combined modifiers
+query II
+SELECT parse_html_wildcard('<NOISE*~>').variadic_star, parse_html_wildcard('<NOISE*~>').negate;
+----
+true	true
+
+# ** should not trigger variadic_star
+query II
+SELECT parse_html_wildcard('<BODY**>').variadic_star, parse_html_wildcard('<BODY**>').recursive;
+----
+false	true
+
+# Anonymous wildcards
+query I
+SELECT parse_html_wildcard('<*>').name;
+----
+_
+
+query I
+SELECT parse_html_wildcard('<+>').name;
+----
+_
+
+query I
+SELECT parse_html_wildcard('<_ type=string>').name;
+----
+_
+
+# Attribute parsing
+query I
+SELECT parse_html_wildcard('<X* type=identifier>').type_constraint;
+----
+identifier
+
+query I
+SELECT parse_html_wildcard('<X* not-type=comment>').not_type_constraint;
+----
+comment
+
+query I
+SELECT parse_html_wildcard('<X max-descendants=10>').max_descendants;
+----
+10
+
+query I
+SELECT parse_html_wildcard('<X min-descendants=5>').min_descendants;
+----
+5
+
+query I
+SELECT parse_html_wildcard('<X* min-children=2>').min_children;
+----
+2
+
+query I
+SELECT parse_html_wildcard('<X* max-children=5>').max_children;
+----
+5
+
+query I
+SELECT parse_html_wildcard('<X* name=self>').name_constraint;
+----
+self
+
+query I
+SELECT parse_html_wildcard('<X semantic=LITERAL>').semantic_constraint;
+----
+LITERAL
+
+# =============================================================================
+# Pattern Parsing Tests
+# =============================================================================
+
+# Create test table for pattern parsing
+statement ok
+CREATE TEMP TABLE pattern_test AS
+SELECT * FROM ast_pattern('eval(__X__)', 'python');
+
+query I
+SELECT count(*) FROM pattern_test WHERE is_wildcard = true;
+----
+1
+
+query I
+SELECT capture_name FROM pattern_test WHERE is_wildcard = true;
+----
+X
+
+# =============================================================================
+# Basic Pattern Matching Tests
+# =============================================================================
+
+# Create test AST table
+statement ok
+CREATE TEMP TABLE test_code AS
+SELECT * FROM parse_ast('
+def add_numbers(x, y):
+    return x + y
+def greet(name):
+    print("Hello")
+    return name
+result = add_numbers(1, 2)
+eval(user_input)
+exec(dangerous_code)
+', 'python');
+
+# Simple pattern: find eval calls
+query I
+SELECT count(*) FROM ast_match('test_code', 'eval(__X__)', 'python');
+----
+1
+
+# Find exec calls
+query I
+SELECT count(*) FROM ast_match('test_code', 'exec(__X__)', 'python');
+----
+1
+
+# Find function calls with one argument
+query I
+SELECT count(*) FROM ast_match('test_code', '__F__(__X__)', 'python') WHERE captures['F'].name IN ('eval', 'exec', 'print');
+----
+3
+
+# =============================================================================
+# Variadic Pattern Matching Tests
+# =============================================================================
+
+# Without variadic: exact structure required
+# add_numbers has simple body so it matches, greet has print() before return so it won't
+query I
+SELECT count(*) FROM ast_match('test_code', 'def __F__(__): return __Y__', 'python');
+----
+1
+
+# With variadic (legacy syntax): find functions with statements before return
+# Note: variadic requires at least the wrapper expression_statement to exist
+# so it only matches greet() which has print() before return, not add_numbers()
+query I
+SELECT count(*) FROM ast_match('test_code',
+    'def __F__(__):
+    %__BODY<*>__%
+    return __Y__', 'python');
+----
+1
+
+# With variadic (HTML syntax): same result
+query I
+SELECT count(*) FROM ast_match('test_code',
+    'def __F__(__):
+    %__<BODY*>__%
+    return __Y__', 'python');
+----
+1
+
+# Anonymous variadic (legacy)
+query I
+SELECT count(*) FROM ast_match('test_code',
+    'def __F__(__):
+    %__<*>__%
+    return __Y__', 'python');
+----
+1
+
+# =============================================================================
+# Capture Extraction Tests
+# =============================================================================
+
+# Verify captures contain expected fields
+query I
+SELECT captures['X'].type FROM ast_match('test_code', 'eval(__X__)', 'python');
+----
+identifier
+
+query I
+SELECT captures['X'].name FROM ast_match('test_code', 'eval(__X__)', 'python');
+----
+user_input
+
+# Multiple captures - only greet matches (has statement before return)
+query II
+SELECT captures['F'].name, captures['Y'].peek
+FROM ast_match('test_code',
+    'def __F__(__):
+    %__<BODY*>__%
+    return __Y__', 'python')
+ORDER BY captures['F'].name;
+----
+greet	name
+
+# =============================================================================
+# Cross-Language Matching Tests
+# =============================================================================
+
+# Create JavaScript test code
+statement ok
+CREATE TEMP TABLE js_code AS
+SELECT * FROM parse_ast('
+function add(x, y) {
+    return x + y;
+}
+eval(userInput);
+', 'javascript');
+
+# Semantic type matching: Python pattern finds JS code
+query I
+SELECT count(*) FROM ast_match('js_code', 'eval(__X__)', 'python', match_by := 'semantic_type');
+----
+1

@@ -159,18 +159,19 @@ CREATE OR REPLACE MACRO extract_wildcard_rules(pattern_str) AS (
 
 -- Clean pattern: convert extended wildcards to simple __NAME__ or __
 -- Handles both legacy %__NAME<rules>__% and HTML %__<NAME* attrs>__% syntax
+-- Order matters: more specific patterns first, then catch-alls
 CREATE OR REPLACE MACRO clean_pattern(pattern_str) AS
-    -- Step 1: Handle HTML syntax %__<NAME...>__% -> __NAME__
-    -- Extract tag name from HTML-style wildcards
     regexp_replace(
         regexp_replace(
-            -- Step 2: Handle legacy syntax %__NAME<rules>__% -> __NAME__
             regexp_replace(
-                regexp_replace(pattern_str, '%__([A-Z][A-Z0-9_]*)<[^>]+>__%', '__\1__', 'g'),
-                '%__<[^>]+>__%', '__', 'g'),
-            -- HTML named: %__<NAME...>__% -> __NAME__
-            '%__<([A-Z_][A-Z0-9_]*)[^>]*>__%', '__\1__', 'g'),
-        -- HTML anonymous: %__<[*+~?]...>__% -> __
+                regexp_replace(pattern_str,
+                    -- Step 1: Legacy named %__NAME<rules>__% -> __NAME__
+                    '%__([A-Z][A-Z0-9_]*)<[^>]+>__%', '__\1__', 'g'),
+                -- Step 2: HTML named %__<NAME...>__% -> __NAME__ (must come before anonymous!)
+                '%__<([A-Z_][A-Z0-9_]*)[^>]*>__%', '__\1__', 'g'),
+            -- Step 3: Legacy anonymous %__<rules>__% -> __
+            '%__<[^>]+>__%', '__', 'g'),
+        -- Step 4: Catch any remaining (shouldn't be any, but safety)
         '%__<[*+~?][^>]*>__%', '__', 'g');
 
 -- Check if pattern contains any variadic wildcards (either syntax)
