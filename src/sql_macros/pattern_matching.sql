@@ -5,17 +5,21 @@
 -- Pattern-by-example matching system that allows users to write code patterns
 -- with placeholders to find matching AST structures.
 --
--- WILDCARD SYNTAX:
---   __X__      Named wildcard - captures matched node as 'X'
---   __         Anonymous wildcard - matches any node but doesn't capture
+-- WILDCARD SYNTAX (two forms):
+--
+--   Simple wildcards (exact position matching):
+--     __X__      Named wildcard - captures matched node as 'X'
+--     __         Anonymous wildcard - matches any node but doesn't capture
+--
+--   Extended wildcards (with rules):
+--     %__X<*>__%     Variadic: matches 0 or more siblings
+--     %__X<+>__%     Variadic: matches 1 or more siblings
+--     %__X<type=T>__%  Type constraint: only match nodes of type T
 --
 -- PARAMETERS:
 --   match_syntax := false  - Include punctuation/delimiters in matching
 --   match_by := 'type'     - Match on 'type' (tree-sitter) or 'semantic_type' (cross-language)
 --   depth_fuzz := 0        - Allow +/- N levels of depth flexibility for cross-language matching
---
--- FUTURE (requires C++ implementation - see tracker/features/030-pattern-matching-cpp.md):
---   wildcards := {}        - MAP of wildcard modifiers for variadic matching, constraints
 --
 -- EXAMPLES:
 --   -- Find all eval() calls, capture the argument
@@ -27,13 +31,18 @@
 --   -- Cross-language: Python pattern matches any language
 --   SELECT * FROM ast_match('code', '__F__(__X__)', 'python', match_by := 'semantic_type');
 --
+--   -- Variadic: Find functions with ANY body that ends with return
+--   SELECT * FROM ast_match('code', 'def __F__(__):
+--       %__BODY<*>__%
+--       return __Y__', 'python');
+--
 --   -- Unnest captures for flat output
 --   SELECT m.peek, c.capture, c.name
 --   FROM ast_match('code', '__F__(__X__)', 'python') m,
 --        LATERAL (SELECT unnest(map_values(m.captures)) as c) sub;
 --
--- NOTE: Wildcards use UPPERCASE (__NAME__), Python dunders use lowercase (__init__)
---       so they don't conflict.
+-- NOTE: Simple wildcards use UPPERCASE (__NAME__), Python dunders use lowercase (__init__)
+--       so they don't conflict. Extended wildcards use %__NAME<rules>__% syntax.
 --
 -- =============================================================================
 
@@ -66,9 +75,67 @@ CREATE OR REPLACE MACRO semantic_type_base(sem_type) AS
     (sem_type::INTEGER & 252)::UTINYINT;
 
 -- =============================================================================
+-- Extended Wildcard Preprocessor
+-- =============================================================================
+--
+-- Handles %__NAME<rules>__% syntax for wildcards with constraints.
+-- Simple __NAME__ wildcards pass through unchanged.
+
+-- Extract rules from extended wildcards in a pattern string
+-- Returns a list of structs with wildcard metadata
+CREATE OR REPLACE MACRO extract_wildcard_rules(pattern_str) AS (
+    WITH
+    matches AS (
+        SELECT regexp_extract_all(pattern_str, '%__([A-Z][A-Z0-9_]*)<([^>]+)>__%') as all_matches
+    ),
+    unnested AS (
+        SELECT unnest(all_matches) as match_text FROM matches
+    )
+    SELECT list({
+        name: regexp_extract(match_text, '%__([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*)(?:<)', 1),
+        rules_raw: regexp_extract(match_text, '<([^>]+)>', 1),
+        is_variadic: regexp_extract(match_text, '<([^>]+)>', 1) LIKE '%*%'
+                  OR regexp_extract(match_text, '<([^>]+)>', 1) LIKE '%+%',
+        variadic_min: CASE
+            WHEN regexp_extract(match_text, '<([^>]+)>', 1) LIKE '%+%' THEN 1
+            WHEN regexp_extract(match_text, '<([^>]+)>', 1) LIKE '%*%' THEN 0
+            ELSE NULL
+        END,
+        type_constraint: regexp_extract(match_text, 'type=([a-z_]+)', 1)
+    }) as wildcards
+    FROM unnested
+    WHERE match_text IS NOT NULL AND match_text != ''
+);
+
+-- Clean pattern: replace %__NAME<rules>__% with simple __NAME__
+CREATE OR REPLACE MACRO clean_pattern(pattern_str) AS
+    regexp_replace(pattern_str, '%__([A-Z][A-Z0-9_]*)<[^>]+>__%', '__\1__', 'g');
+
+-- Check if pattern contains any variadic wildcards
+CREATE OR REPLACE MACRO pattern_has_variadic(pattern_str) AS (
+    SELECT COALESCE(
+        (SELECT bool_or(w.is_variadic)
+         FROM (SELECT unnest(extract_wildcard_rules(pattern_str)) as w)),
+        false
+    )
+);
+
+-- Get list of variadic wildcard names
+CREATE OR REPLACE MACRO get_variadic_names(pattern_str) AS (
+    SELECT COALESCE(
+        (SELECT list(w.name)
+         FROM (SELECT unnest(extract_wildcard_rules(pattern_str)) as w)
+         WHERE w.is_variadic),
+        []::VARCHAR[]
+    )
+);
+
+-- =============================================================================
 -- Pattern Parsing (Table Macro - for inspection)
 -- =============================================================================
 
+-- Note: ast_pattern parses a CLEANED pattern (no %__X<rules>__% syntax)
+-- Use clean_pattern() before calling ast_pattern if you have extended wildcards
 CREATE OR REPLACE MACRO ast_pattern(pattern_str, lang) AS TABLE
     WITH
         pattern_raw AS (
@@ -101,6 +168,7 @@ CREATE OR REPLACE MACRO ast_pattern(pattern_str, lang) AS TABLE
 -- Returns all pattern nodes; filtering happens in ast_match based on match_syntax
 -- =============================================================================
 
+-- Note: Takes a CLEANED pattern string. Use clean_pattern() first for extended wildcards.
 CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, lang) AS (
     SELECT list({
         rel_depth: rel_depth,
@@ -143,6 +211,8 @@ CREATE OR REPLACE MACRO ast_match(
 ) AS TABLE
     WITH
         -- Unnest the pattern list into rows
+        -- Use cleaned pattern (extended wildcards converted to simple)
+        -- Detect variadics by checking if pattern contains %__*<*> or %__*<+>
         pattern AS (
             SELECT
                 unnest.rel_depth,
@@ -153,8 +223,17 @@ CREATE OR REPLACE MACRO ast_match(
                 unnest.pattern_descendant_count,
                 unnest.is_wildcard,
                 unnest.capture_name,
-                unnest.is_syntax
-            FROM (SELECT unnest(ast_pattern_list(pattern_str, lang)) as unnest)
+                unnest.is_syntax,
+                -- Pattern-level variadic detection: pattern contains <*> or <+> in extended syntax
+                regexp_matches(pattern_str, '%__[A-Z]+<[*+]>__%') as pattern_has_variadic,
+                -- Per-wildcard variadic detection: this specific wildcard has variadic syntax
+                unnest.capture_name IS NOT NULL AND (
+                    pattern_str LIKE '%' || '%__' || unnest.capture_name || '<*>__%' || '%'
+                    OR pattern_str LIKE '%' || '%__' || unnest.capture_name || '<+>__%' || '%'
+                ) as is_variadic
+            FROM (SELECT unnest(ast_pattern_list(
+                regexp_replace(pattern_str, '%__([A-Z][A-Z0-9_]*)<[^>]+>__%', '__\1__', 'g'),
+                lang)) as unnest)
             -- Filter out syntax nodes unless match_syntax is true
             WHERE match_syntax OR NOT unnest.is_syntax
         ),
@@ -201,14 +280,16 @@ CREATE OR REPLACE MACRO ast_match(
         ),
 
         -- For each candidate, verify all non-wildcard pattern nodes have matches
+        -- When variadics are present, sibling matching is relaxed (exists anywhere, not exact position)
         matched_candidates AS (
             SELECT c.*
             FROM candidates c
             WHERE NOT EXISTS (
-                -- Find any non-wildcard pattern node without a corresponding match
+                -- Find any non-wildcard, non-variadic pattern node without a corresponding match
                 SELECT 1
                 FROM pattern p
                 WHERE p.is_wildcard = false
+                  AND NOT p.is_variadic  -- Skip variadic wildcards in verification
                   AND NOT EXISTS (
                       SELECT 1
                       FROM query_table(ast_table) t
@@ -217,8 +298,10 @@ CREATE OR REPLACE MACRO ast_match(
                         AND t.node_id <= c.candidate_root + c.candidate_descendants
                         -- Depth matching with optional fuzz (cast to INTEGER to avoid UINT32 overflow)
                         AND ABS((t.depth::INTEGER - c.candidate_depth::INTEGER) - p.rel_depth::INTEGER) <= depth_fuzz
-                        -- Sibling index must match (depth_fuzz affects depth, not sibling position)
-                        AND (p.rel_depth = 0 OR t.sibling_index = p.sibling_index)
+                        -- Sibling matching: exact when no variadics, relaxed when variadics present
+                        AND (p.rel_depth = 0
+                             OR p.pattern_has_variadic  -- Skip sibling check if variadic present
+                             OR t.sibling_index = p.sibling_index)
                         -- Match on type or semantic_type based on match_by parameter
                         -- For semantic_type mode: use exact type for operator TOKENS (*, +, etc.)
                         -- but semantic type for operator EXPRESSIONS (binary_operator, etc.)
@@ -237,6 +320,7 @@ CREATE OR REPLACE MACRO ast_match(
         ),
 
         -- Extract captured nodes for each wildcard in each match
+        -- Note: variadic wildcards are not captured as single values (would need LIST)
         captures_raw AS (
             SELECT
                 mc.candidate_root,
@@ -244,6 +328,8 @@ CREATE OR REPLACE MACRO ast_match(
                 mc.candidate_depth,
                 mc.candidate_descendants,
                 p.capture_name,
+                p.sibling_index as pattern_sibling_index,
+                t.sibling_index as target_sibling_index,
                 t.node_id as captured_node_id,
                 t.type as captured_type,
                 t.name as captured_name,
@@ -258,13 +344,16 @@ CREATE OR REPLACE MACRO ast_match(
                 AND t.node_id <= mc.candidate_root + mc.candidate_descendants
                 -- Depth matching with optional fuzz (cast to INTEGER to avoid UINT32 overflow)
                 AND ABS((t.depth::INTEGER - mc.candidate_depth::INTEGER) - p.rel_depth::INTEGER) <= depth_fuzz
-                -- Sibling index must match (depth_fuzz affects depth, not sibling position)
-                AND (p.rel_depth = 0 OR t.sibling_index = p.sibling_index)
+                -- Sibling matching: exact when no variadics, relaxed when variadics present
+                AND (p.rel_depth = 0
+                     OR p.pattern_has_variadic  -- Skip sibling check if variadic present
+                     OR t.sibling_index = p.sibling_index)
             WHERE p.is_wildcard = true
               AND p.capture_name IS NOT NULL
+              AND NOT p.is_variadic  -- Don't capture variadic wildcards (would need LIST)
         ),
 
-        -- Deduplicate captures - take the deepest (most specific) node for each capture name
+        -- Deduplicate captures - prefer nodes at expected sibling position, then deepest
         captures_dedup AS (
             SELECT DISTINCT ON (candidate_file, candidate_root, capture_name)
                 candidate_file,
@@ -277,8 +366,10 @@ CREATE OR REPLACE MACRO ast_match(
                 captured_start_line,
                 captured_end_line
             FROM captures_raw
-            -- Order by node_id descending to get the deepest/most specific node
-            ORDER BY candidate_file, candidate_root, capture_name, captured_node_id DESC
+            -- Prefer exact sibling match, then closest sibling, then deepest node
+            ORDER BY candidate_file, candidate_root, capture_name,
+                     ABS(target_sibling_index::INTEGER - pattern_sibling_index::INTEGER),
+                     captured_node_id DESC
         ),
 
         -- Aggregate captures into a MAP for each match

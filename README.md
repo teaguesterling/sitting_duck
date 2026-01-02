@@ -564,6 +564,42 @@ WHERE type = 'class_specifier'
 ORDER BY complexity DESC;
 ```
 
+## Pattern Matching
+
+Find code structures using pattern-by-example matching with wildcards:
+
+```sql
+-- Load pattern matching macros
+.read src/sql_macros/pattern_matching.sql
+
+-- Create AST table
+CREATE TABLE code AS SELECT * FROM read_ast('src/**/*.py');
+
+-- Find all eval() calls and capture their arguments
+SELECT file_path, start_line, captures['X'].peek as argument
+FROM ast_match('code', 'eval(__X__)', 'python');
+
+-- Find nested calls like len(str(__X__))
+SELECT * FROM ast_match('code', 'len(str(__X__))', 'python');
+
+-- Use variadic wildcards for flexible matching
+-- %__BODY<*>__% matches 0+ siblings at that level
+SELECT captures['F'].name as func_name
+FROM ast_match('code',
+    'def __F__(__):
+        %__BODY<*>__%
+        return __Y__',
+    'python');
+```
+
+**Wildcard syntax:**
+- `__X__` - Named wildcard, captures as 'X'
+- `__` - Anonymous wildcard, matches but doesn't capture
+- `%__X<*>__%` - Variadic: matches 0+ siblings
+- `%__X<+>__%` - Variadic: matches 1+ siblings
+
+See **[Pattern Matching Guide](docs/guide/pattern-matching.md)** for full documentation.
+
 ## Limitations
 
 - **Parse-only**: This analyzes syntax, not semantics (no type checking, symbol resolution, etc.)
@@ -606,6 +642,7 @@ MIT License - see LICENSE file for details.
 
 ### Guides
 - **[AI Agent Guide](AI_AGENT_GUIDE.md)** - Comprehensive guide for AI agents using semantic types
+- **[Pattern Matching](docs/guide/pattern-matching.md)** - Find code patterns with wildcards
 - **[Language Guide](docs/languages/overview.md)** - Supported languages with nuances and quality ratings
 - **[Native Extraction Semantics](docs/native_extraction_semantics.md)** - Field semantics across languages
 - **[Adding Languages](docs/ADDING_NEW_LANGUAGES.md)** - How to add new language support
