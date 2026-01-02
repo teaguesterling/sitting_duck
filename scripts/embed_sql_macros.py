@@ -2,11 +2,15 @@
 """
 Generate a C++ header file with embedded SQL macros.
 This script reads SQL files and creates a header with raw string literals.
+Handles MSVC's 16KB string literal limit by splitting large files.
 """
 
 import os
 import sys
 from pathlib import Path
+
+# MSVC has a 16380 byte limit per string literal - use 14000 to be safe
+MAX_CHUNK_SIZE = 14000
 
 def escape_raw_string_delimiter(content):
     """Ensure the content doesn't contain )SQLMACRO" which would break our delimiter."""
@@ -14,41 +18,27 @@ def escape_raw_string_delimiter(content):
         raise ValueError("SQL content contains raw string delimiter - please use a different delimiter")
     return content
 
-def generate_chain_methods(sql_files, sql_dir):
-    """Generate short name aliases by removing 'ast_' prefix from macro names."""
-    chain_methods = ["-- Auto-generated chain methods (short names)", ""]
-    
-    for sql_file in sql_files:
-        filepath = os.path.join(sql_dir, sql_file)
-        if os.path.exists(filepath):
-            with open(filepath, 'r') as f:
-                content = f.read()
-            
-            # Find all CREATE OR REPLACE MACRO ast_* statements
-            import re
-            macro_pattern = r'CREATE OR REPLACE MACRO (ast_\w+)'
-            
-            for match in re.finditer(macro_pattern, content):
-                macro_name = match.group(1)
-                short_name = macro_name.replace('ast_', '')
-                
-                # Extract the parameter list
-                start = match.end()
-                paren_count = 0
-                param_start = content.find('(', start)
-                i = param_start
-                while i < len(content) and (paren_count > 0 or i == param_start):
-                    if content[i] == '(':
-                        paren_count += 1
-                    elif content[i] == ')':
-                        paren_count -= 1
-                    i += 1
-                param_list = content[param_start:i]
-                
-                # Create alias
-                chain_methods.append(f"CREATE OR REPLACE MACRO {short_name}{param_list} AS {macro_name}{param_list};")
-    
-    return '\n'.join(chain_methods)
+def split_content(content, max_size=MAX_CHUNK_SIZE):
+    """Split content into chunks, breaking at newlines."""
+    if len(content) <= max_size:
+        return [content]
+
+    chunks = []
+    current_chunk = ""
+
+    for line in content.split('\n'):
+        line_with_newline = line + '\n'
+        if len(current_chunk) + len(line_with_newline) > max_size and current_chunk:
+            chunks.append(current_chunk)
+            current_chunk = line_with_newline
+        else:
+            current_chunk += line_with_newline
+
+    if current_chunk:
+        # Remove trailing newline from last chunk
+        chunks.append(current_chunk.rstrip('\n'))
+
+    return chunks
 
 def generate_header(sql_dir, output_file):
     """Generate C++ header with embedded SQL macros."""
@@ -59,13 +49,11 @@ def generate_header(sql_dir, output_file):
         'tree_navigation.sql',
         'pattern_matching.sql',
     ]
-    
-    # Chain methods (short names) removed for simplicity
-    # chain_methods_content = generate_chain_methods(sql_files, sql_dir)
-    
+
     header_content = """// Auto-generated file - DO NOT EDIT
 // Generated from SQL macro files in src/sql_macros/
 // Run: python scripts/embed_sql_macros.py
+// Note: Large files are split into chunks to handle MSVC's 16KB string literal limit
 
 #pragma once
 
@@ -78,37 +66,53 @@ namespace duckdb {
 // SQL macro definitions embedded at compile time
 static const std::vector<std::pair<std::string, std::string>> EMBEDDED_SQL_MACROS = {
 """
-    
+
     for sql_file in sql_files:
         filepath = os.path.join(sql_dir, sql_file)
         if os.path.exists(filepath):
             with open(filepath, 'r') as f:
                 content = f.read()
-                
+
             # Verify content doesn't break our delimiter
             escape_raw_string_delimiter(content)
-            
-            header_content += f'''    {{"{sql_file}", R"SQLMACRO(
+
+            # Split into chunks for MSVC compatibility
+            chunks = split_content(content)
+
+            if len(chunks) == 1:
+                # Small file - use simple format
+                header_content += f'''    {{"{sql_file}", R"SQLMACRO(
 {content}
 )SQLMACRO"}},
 '''
-    
-    # Chain methods removed for simplicity
-    # escape_raw_string_delimiter(chain_methods_content)
-    # header_content += f'''    {{"02b_chain_methods.sql", R"SQLMACRO(
-    # {chain_methods_content}
-    # )SQLMACRO"}},
-    # '''
-    
+            else:
+                # Large file - concatenate chunks
+                header_content += f'    {{"{sql_file}", '
+                for i, chunk in enumerate(chunks):
+                    if i > 0:
+                        header_content += '\n        '
+                    header_content += f'R"SQLMACRO(\n{chunk}\n)SQLMACRO"'
+                header_content += '},\n'
+
     header_content += """};
 
 } // namespace duckdb
 """
-    
+
     with open(output_file, 'w') as f:
         f.write(header_content)
-    
+
     print(f"Generated {output_file}")
+
+    # Print chunk info for debugging
+    for sql_file in sql_files:
+        filepath = os.path.join(sql_dir, sql_file)
+        if os.path.exists(filepath):
+            with open(filepath, 'r') as f:
+                content = f.read()
+            chunks = split_content(content)
+            if len(chunks) > 1:
+                print(f"  {sql_file}: {len(content)} bytes -> {len(chunks)} chunks")
 
 if __name__ == "__main__":
     # Get paths relative to script location
@@ -116,5 +120,5 @@ if __name__ == "__main__":
     project_root = script_dir.parent
     sql_dir = project_root / "src" / "sql_macros"
     output_file = project_root / "src" / "include" / "embedded_sql_macros.hpp"
-    
+
     generate_header(sql_dir, output_file)

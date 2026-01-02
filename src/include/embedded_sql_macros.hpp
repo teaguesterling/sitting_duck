@@ -1,6 +1,7 @@
 // Auto-generated file - DO NOT EDIT
 // Generated from SQL macro files in src/sql_macros/
 // Run: python scripts/embed_sql_macros.py
+// Note: Large files are split into chunks to handle MSVC's 16KB string literal limit
 
 #pragma once
 
@@ -635,6 +636,9 @@ CREATE OR REPLACE MACRO ast_functions_containing(ast_table, target_type) AS TABL
                 f.func_id AS parent_func_id
             FROM functions f
             JOIN query_table(ast_table) nf
+
+)SQLMACRO"
+        R"SQLMACRO(
               ON nf.node_id > f.func_id
              AND nf.node_id <= f.func_id + f.descendant_count
              AND is_function_definition(nf.semantic_type)
@@ -971,8 +975,6 @@ CREATE OR REPLACE MACRO ast_dead_code(ast_table) AS TABLE
         reason
     FROM dead_code
     ORDER BY file_path, start_line;
-
-
 )SQLMACRO"},
     {"pattern_matching.sql", R"SQLMACRO(
 -- =============================================================================
@@ -1272,6 +1274,9 @@ CREATE OR REPLACE MACRO ast_match(
                 -- Legacy: %__NAME<*>__%, HTML: %__<NAME*>__%
                 unnest.capture_name IS NOT NULL AND (
                     -- Legacy syntax
+
+)SQLMACRO"
+        R"SQLMACRO(
                     pattern_str LIKE '%' || '%__' || unnest.capture_name || '<*>__%' || '%'
                     OR pattern_str LIKE '%' || '%__' || unnest.capture_name || '<+>__%' || '%'
                     -- HTML syntax
@@ -1459,7 +1464,6 @@ CREATE OR REPLACE MACRO ast_match(
     FROM matched_candidates mc
     LEFT JOIN captures_agg ca ON mc.file_path = ca.candidate_file
                               AND mc.candidate_root = ca.candidate_root;
-
 )SQLMACRO"},
 };
 
