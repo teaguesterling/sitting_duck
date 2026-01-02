@@ -199,7 +199,8 @@ CREATE OR REPLACE MACRO ast_match(
                   AND NOT EXISTS (
                       SELECT 1
                       FROM query_table(ast_table) t
-                      WHERE t.node_id >= c.candidate_root
+                      WHERE t.file_path = c.file_path  -- Must be same file (node_ids are per-file)
+                        AND t.node_id >= c.candidate_root
                         AND t.node_id <= c.candidate_root + c.candidate_descendants
                         AND t.depth - c.candidate_depth = p.rel_depth
                         -- Skip sibling_index check for root (it can be at any position)
@@ -219,6 +220,7 @@ CREATE OR REPLACE MACRO ast_match(
         captures_raw AS (
             SELECT
                 mc.candidate_root,
+                mc.file_path as candidate_file,
                 mc.candidate_depth,
                 mc.candidate_descendants,
                 p.capture_name,
@@ -231,7 +233,8 @@ CREATE OR REPLACE MACRO ast_match(
             FROM matched_candidates mc
             CROSS JOIN pattern p
             JOIN query_table(ast_table) t ON
-                t.node_id >= mc.candidate_root
+                t.file_path = mc.file_path  -- Must be same file (node_ids are per-file)
+                AND t.node_id >= mc.candidate_root
                 AND t.node_id <= mc.candidate_root + mc.candidate_descendants
                 AND t.depth - mc.candidate_depth = p.rel_depth
                 -- Skip sibling_index check for root (it can be at any position)
@@ -242,7 +245,8 @@ CREATE OR REPLACE MACRO ast_match(
 
         -- Deduplicate captures - take the deepest (most specific) node for each capture name
         captures_dedup AS (
-            SELECT DISTINCT ON (candidate_root, capture_name)
+            SELECT DISTINCT ON (candidate_file, candidate_root, capture_name)
+                candidate_file,
                 candidate_root,
                 capture_name,
                 captured_node_id,
@@ -253,13 +257,14 @@ CREATE OR REPLACE MACRO ast_match(
                 captured_end_line
             FROM captures_raw
             -- Order by node_id descending to get the deepest/most specific node
-            ORDER BY candidate_root, capture_name, captured_node_id DESC
+            ORDER BY candidate_file, candidate_root, capture_name, captured_node_id DESC
         ),
 
         -- Aggregate captures into a MAP for each match
         -- Include capture name in the struct for easy unnesting
         captures_agg AS (
             SELECT
+                candidate_file,
                 candidate_root,
                 map_from_entries(list((
                     capture_name,
@@ -274,11 +279,11 @@ CREATE OR REPLACE MACRO ast_match(
                     }
                 ))) as captures
             FROM captures_dedup
-            GROUP BY candidate_root
+            GROUP BY candidate_file, candidate_root
         )
 
     SELECT
-        ROW_NUMBER() OVER (ORDER BY mc.candidate_root) as match_id,
+        ROW_NUMBER() OVER (ORDER BY mc.file_path, mc.candidate_root) as match_id,
         mc.candidate_root as root_node_id,
         mc.file_path,
         mc.start_line,
@@ -286,4 +291,5 @@ CREATE OR REPLACE MACRO ast_match(
         mc.peek,
         ca.captures
     FROM matched_candidates mc
-    LEFT JOIN captures_agg ca ON mc.candidate_root = ca.candidate_root;
+    LEFT JOIN captures_agg ca ON mc.file_path = ca.candidate_file
+                              AND mc.candidate_root = ca.candidate_root;
