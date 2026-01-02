@@ -414,6 +414,108 @@ CREATE OR REPLACE MACRO ast_class_members(ast_table, class_node_id) AS TABLE
           AND d.node_id <= other.node_id + other.descendant_count
     );
 
+-- =============================================================================
+-- Analysis Macros
+-- =============================================================================
+
+-- Compute metrics for all functions in the AST
+-- Returns one row per function with complexity metrics.
+-- Uses function scope (excludes nested function internals) for accurate counts.
+-- Usage: SELECT * FROM ast_function_metrics(my_ast_table) WHERE cyclomatic > 10
+CREATE OR REPLACE MACRO ast_function_metrics(ast_table) AS TABLE
+    WITH
+        -- All function definitions
+        functions AS (
+            SELECT
+                node_id AS func_id,
+                name,
+                file_path,
+                language,
+                start_line,
+                end_line,
+                depth AS func_depth,
+                descendant_count
+            FROM query_table(ast_table)
+            WHERE is_function_definition(semantic_type)
+              AND name IS NOT NULL AND name != ''
+        ),
+        -- For each function, identify nested functions within it
+        nested_funcs AS (
+            SELECT
+                nf.node_id AS nested_id,
+                nf.descendant_count AS nested_count,
+                f.func_id AS parent_func_id
+            FROM functions f
+            JOIN query_table(ast_table) nf
+              ON nf.node_id > f.func_id
+             AND nf.node_id <= f.func_id + f.descendant_count
+             AND is_function_definition(nf.semantic_type)
+        ),
+        -- Compute metrics for each function
+        -- Counts only nodes in function scope (excludes nested function internals)
+        function_metrics AS (
+            SELECT
+                f.func_id,
+                f.file_path,
+                f.name,
+                f.language,
+                f.start_line,
+                f.end_line,
+                f.func_depth,
+                -- Count return statements (not the 'return' keyword, just the statement)
+                COUNT(CASE
+                    WHEN n.type = 'return_statement'
+                    THEN 1
+                END) AS return_count,
+                -- Count conditionals: statements/clauses only, not keywords
+                -- (if_statement, elif_clause, switch_statement, match_arm, etc.)
+                COUNT(CASE
+                    WHEN is_conditional(n.semantic_type)
+                     AND (n.type LIKE '%_statement' OR n.type LIKE '%_clause'
+                          OR n.type LIKE '%_expression' OR n.type LIKE '%_arm'
+                          OR n.type LIKE '%_case' OR n.type LIKE '%_branch')
+                    THEN 1
+                END) AS conditionals,
+                -- Count loops: statements only, not keywords
+                -- (for_statement, while_statement, etc.)
+                COUNT(CASE
+                    WHEN is_loop(n.semantic_type)
+                     AND (n.type LIKE '%_statement' OR n.type LIKE '%_expression'
+                          OR n.type LIKE '%_loop')
+                    THEN 1
+                END) AS loops,
+                -- Max depth of any node in scope
+                MAX(n.depth) AS max_node_depth
+            FROM functions f
+            LEFT JOIN query_table(ast_table) n
+              ON n.node_id > f.func_id
+             AND n.node_id <= f.func_id + f.descendant_count
+            WHERE
+                -- Exclude nodes inside nested functions
+                NOT EXISTS (
+                    SELECT 1 FROM nested_funcs nf
+                    WHERE nf.parent_func_id = f.func_id
+                      AND n.node_id > nf.nested_id
+                      AND n.node_id <= nf.nested_id + nf.nested_count
+                )
+            GROUP BY f.func_id, f.file_path, f.name, f.language,
+                     f.start_line, f.end_line, f.func_depth
+        )
+    SELECT
+        file_path,
+        name,
+        language,
+        start_line,
+        end_line,
+        end_line - start_line + 1 AS lines,
+        return_count,
+        conditionals,
+        loops,
+        conditionals + loops + 1 AS cyclomatic,
+        COALESCE(max_node_depth - func_depth, 0) AS max_depth
+    FROM function_metrics
+    ORDER BY file_path, start_line;
+
 
 )SQLMACRO"},
 };

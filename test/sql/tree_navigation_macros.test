@@ -298,3 +298,78 @@ x
 MyClass
 getValue
 
+# =============================================================================
+# Test ast_function_metrics
+# =============================================================================
+
+# Create a Python AST with functions of varying complexity
+statement ok
+CREATE TEMP TABLE metrics_ast AS
+SELECT * FROM parse_ast('def simple():
+    return 1
+def with_loop(n):
+    for i in range(n):
+        print(i)
+    return n
+def with_conditional(x):
+    if x > 0:
+        return 1
+    else:
+        return -1
+def complex_func(x):
+    if x > 0:
+        for i in range(x):
+            if i % 2 == 0:
+                print(i)
+    else:
+        while x < 0:
+            x += 1
+    return x
+', 'python');
+
+# Get metrics for all functions
+query IIIIII
+SELECT name, lines, return_count, conditionals, loops, cyclomatic
+FROM ast_function_metrics('metrics_ast')
+ORDER BY name;
+----
+complex_func	9	1	3	2	6
+simple	2	1	0	0	1
+with_conditional	5	2	2	0	3
+with_loop	4	1	0	1	2
+
+# Verify simple function has cyclomatic complexity of 1
+query II
+SELECT name, cyclomatic FROM ast_function_metrics('metrics_ast') WHERE name = 'simple';
+----
+simple	1
+
+# Verify complex function has higher cyclomatic complexity
+query II
+SELECT name, cyclomatic FROM ast_function_metrics('metrics_ast') WHERE name = 'complex_func';
+----
+complex_func	6
+
+# Test with nested functions - nested function metrics should be separate
+statement ok
+CREATE TEMP TABLE nested_metrics AS
+SELECT * FROM parse_ast('def outer():
+    x = 1
+    def inner():
+        if True:
+            return 1
+        return 0
+    return inner()
+', 'python');
+
+# Both functions should appear with correct metrics
+# outer: 1 return, 0 conditionals (inner's if excluded)
+# inner: 2 returns, 1 conditional
+query IIII
+SELECT name, return_count, conditionals, cyclomatic
+FROM ast_function_metrics('nested_metrics')
+ORDER BY name;
+----
+inner	2	1	2
+outer	1	0	1
+
