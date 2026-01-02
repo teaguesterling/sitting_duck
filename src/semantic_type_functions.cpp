@@ -201,6 +201,28 @@ static void IsIdentifierFunction(DataChunk &args, ExpressionState &state, Vector
 	});
 }
 
+static void IsParserSpecificFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	D_ASSERT(args.ColumnCount() == 1);
+
+	auto &semantic_type_vector = args.data[0];
+	auto count = args.size();
+
+	UnaryExecutor::Execute<uint8_t, bool>(semantic_type_vector, result, count, [&](uint8_t semantic_type) {
+		return SemanticTypes::IsParserSpecific(semantic_type);
+	});
+}
+
+static void IsPunctuationFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	D_ASSERT(args.ColumnCount() == 1);
+
+	auto &semantic_type_vector = args.data[0];
+	auto count = args.size();
+
+	UnaryExecutor::Execute<uint8_t, bool>(semantic_type_vector, result, count, [&](uint8_t semantic_type) {
+		return SemanticTypes::IsPunctuation(semantic_type);
+	});
+}
+
 // ============================================================================
 // Flag Helper Functions
 // ============================================================================
@@ -459,6 +481,14 @@ void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
 	ScalarFunction is_identifier_func("is_identifier", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
 	                                  IsIdentifierFunction);
 	loader.RegisterFunction(is_identifier_func);
+
+	ScalarFunction is_parser_specific_func("is_parser_specific", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
+	                                       IsParserSpecificFunction);
+	loader.RegisterFunction(is_parser_specific_func);
+
+	ScalarFunction is_punctuation_func("is_punctuation", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
+	                                   IsPunctuationFunction);
+	loader.RegisterFunction(is_punctuation_func);
 
 	// Register get_searchable_types() -> LIST<UTINYINT>
 	ScalarFunction get_searchable_types_func("get_searchable_types", {}, LogicalType::LIST(LogicalType::UTINYINT),

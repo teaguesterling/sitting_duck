@@ -432,6 +432,15 @@ bool IsMetadata(uint8_t semantic_type) {
 	return (semantic_type & 0xF0) == METADATA;
 }
 
+bool IsParserSpecific(uint8_t semantic_type) {
+	return (semantic_type & 0xF0) == PARSER_SPECIFIC;
+}
+
+bool IsPunctuation(uint8_t semantic_type) {
+	uint8_t base_type = semantic_type & 0xFC; // Mask refinement bits
+	return base_type == PARSER_DELIMITER || base_type == PARSER_PUNCTUATION;
+}
+
 // Get all types in a category
 vector<uint8_t> GetDefinitionTypes() {
 	return {DEFINITION_FUNCTION, DEFINITION_VARIABLE, DEFINITION_CLASS, DEFINITION_MODULE};

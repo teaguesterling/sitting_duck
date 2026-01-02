@@ -193,6 +193,8 @@ bool IsType(uint8_t semantic_type);
 bool IsExternal(uint8_t semantic_type);
 bool IsError(uint8_t semantic_type);
 bool IsMetadata(uint8_t semantic_type);
+bool IsParserSpecific(uint8_t semantic_type);
+bool IsPunctuation(uint8_t semantic_type);
 
 // Get all types in a category
 vector<uint8_t> GetDefinitionTypes();
