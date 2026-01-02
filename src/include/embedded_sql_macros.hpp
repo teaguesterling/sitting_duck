@@ -183,25 +183,9 @@ CREATE OR REPLACE MACRO is_type_generic(st) AS
 -- =============================================================================
 
 -- Read all lines from a file as rows with line numbers
--- Returns: file_path (VARCHAR), line_number (BIGINT), line (VARCHAR)
-CREATE OR REPLACE MACRO read_lines(path) AS TABLE
-    WITH file_content AS (
-        SELECT filename, string_split(content, E'\n') as lines
-        FROM read_text(path)
-    ),
-    line_nums AS (
-        SELECT filename, lines, generate_series(1, len(lines)) as line_numbers
-        FROM file_content
-    )
-    SELECT
-        filename AS file_path,
-        UNNEST(line_numbers) AS line_number,
-        lines[UNNEST(line_numbers)] AS line
-    FROM line_nums;
-
--- Read specific line range from a file as rows
--- Returns: file_path (VARCHAR), line_number (BIGINT), line (VARCHAR)
-CREATE OR REPLACE MACRO read_lines_range(path, start_line, end_line) AS TABLE
+-- Returns: line_number (BIGINT), line (VARCHAR)
+-- Use include_file_path := true to add file_path column
+CREATE OR REPLACE MACRO read_lines(path, include_file_path := false) AS TABLE
     WITH file_content AS (
         SELECT filename, string_split(content, E'\n') as lines
         FROM read_text(path)
@@ -217,14 +201,43 @@ CREATE OR REPLACE MACRO read_lines_range(path, start_line, end_line) AS TABLE
             lines[UNNEST(line_numbers)] AS line
         FROM line_nums
     )
-    SELECT file_path, line_number, line
+    SELECT
+        CASE WHEN include_file_path THEN file_path END AS file_path,
+        line_number,
+        line
+    FROM all_lines;
+
+-- Read specific line range from a file as rows
+-- Returns: line_number (BIGINT), line (VARCHAR)
+-- Use include_file_path := true to add file_path column
+CREATE OR REPLACE MACRO read_lines_range(path, start_line, end_line, include_file_path := false) AS TABLE
+    WITH file_content AS (
+        SELECT filename, string_split(content, E'\n') as lines
+        FROM read_text(path)
+    ),
+    line_nums AS (
+        SELECT filename, lines, generate_series(1, len(lines)) as line_numbers
+        FROM file_content
+    ),
+    all_lines AS (
+        SELECT
+            filename AS file_path,
+            UNNEST(line_numbers) AS line_number,
+            lines[UNNEST(line_numbers)] AS line
+        FROM line_nums
+    )
+    SELECT
+        CASE WHEN include_file_path THEN file_path END AS file_path,
+        line_number,
+        line
     FROM all_lines
     WHERE line_number >= start_line AND line_number <= end_line;
 
 -- Read lines around a specific line (context window)
 -- Useful for showing code context around a specific location
--- Returns: file_path (VARCHAR), line_number (BIGINT), line (VARCHAR)
-CREATE OR REPLACE MACRO read_lines_context(path, center_line, context_lines) AS TABLE
+-- Returns: line_number (BIGINT), line (VARCHAR)
+-- Use include_file_path := true to add file_path column
+CREATE OR REPLACE MACRO read_lines_context(path, center_line, context_lines, include_file_path := false) AS TABLE
     WITH file_content AS (
         SELECT filename, string_split(content, E'\n') as lines
         FROM read_text(path)
@@ -240,7 +253,10 @@ CREATE OR REPLACE MACRO read_lines_context(path, center_line, context_lines) AS 
             lines[UNNEST(line_numbers)] AS line
         FROM line_nums
     )
-    SELECT file_path, line_number, line
+    SELECT
+        CASE WHEN include_file_path THEN file_path END AS file_path,
+        line_number,
+        line
     FROM all_lines
     WHERE line_number >= (center_line - context_lines)
       AND line_number <= (center_line + context_lines);
@@ -325,6 +341,31 @@ CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
               AND a.type NOT IN ('(', ')', ',', 'comment')
         )
     SELECT * FROM args;
+
+-- Get all definitions (functions, classes, variables, etc.) with unified categories
+-- Usage: SELECT * FROM ast_definitions(my_ast_table)
+CREATE OR REPLACE MACRO ast_definitions(ast_table) AS TABLE
+    SELECT
+        name,
+        CASE
+            WHEN is_function_definition(semantic_type) THEN 'function'
+            WHEN is_class_definition(semantic_type) THEN 'class'
+            WHEN is_variable_definition(semantic_type) THEN 'variable'
+            WHEN is_module_definition(semantic_type) THEN 'module'
+            WHEN is_type_definition(semantic_type) THEN 'type'
+            ELSE 'other'
+        END AS definition_type,
+        language,
+        file_path,
+        start_line,
+        end_line,
+        node_id,
+        type,
+        semantic_type
+    FROM query_table(ast_table)
+    WHERE is_definition(semantic_type)
+      AND name IS NOT NULL AND name != ''
+    ORDER BY file_path, start_line;
 
 -- Get all descendants of a node (entire subtree)
 -- Uses descendant_count for O(1) range-based lookup (nodes are in DFS pre-order)

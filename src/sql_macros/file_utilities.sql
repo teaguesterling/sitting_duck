@@ -6,25 +6,9 @@
 -- =============================================================================
 
 -- Read all lines from a file as rows with line numbers
--- Returns: file_path (VARCHAR), line_number (BIGINT), line (VARCHAR)
-CREATE OR REPLACE MACRO read_lines(path) AS TABLE
-    WITH file_content AS (
-        SELECT filename, string_split(content, E'\n') as lines
-        FROM read_text(path)
-    ),
-    line_nums AS (
-        SELECT filename, lines, generate_series(1, len(lines)) as line_numbers
-        FROM file_content
-    )
-    SELECT
-        filename AS file_path,
-        UNNEST(line_numbers) AS line_number,
-        lines[UNNEST(line_numbers)] AS line
-    FROM line_nums;
-
--- Read specific line range from a file as rows
--- Returns: file_path (VARCHAR), line_number (BIGINT), line (VARCHAR)
-CREATE OR REPLACE MACRO read_lines_range(path, start_line, end_line) AS TABLE
+-- Returns: line_number (BIGINT), line (VARCHAR)
+-- Use include_file_path := true to add file_path column
+CREATE OR REPLACE MACRO read_lines(path, include_file_path := false) AS TABLE
     WITH file_content AS (
         SELECT filename, string_split(content, E'\n') as lines
         FROM read_text(path)
@@ -40,14 +24,43 @@ CREATE OR REPLACE MACRO read_lines_range(path, start_line, end_line) AS TABLE
             lines[UNNEST(line_numbers)] AS line
         FROM line_nums
     )
-    SELECT file_path, line_number, line
+    SELECT
+        CASE WHEN include_file_path THEN file_path END AS file_path,
+        line_number,
+        line
+    FROM all_lines;
+
+-- Read specific line range from a file as rows
+-- Returns: line_number (BIGINT), line (VARCHAR)
+-- Use include_file_path := true to add file_path column
+CREATE OR REPLACE MACRO read_lines_range(path, start_line, end_line, include_file_path := false) AS TABLE
+    WITH file_content AS (
+        SELECT filename, string_split(content, E'\n') as lines
+        FROM read_text(path)
+    ),
+    line_nums AS (
+        SELECT filename, lines, generate_series(1, len(lines)) as line_numbers
+        FROM file_content
+    ),
+    all_lines AS (
+        SELECT
+            filename AS file_path,
+            UNNEST(line_numbers) AS line_number,
+            lines[UNNEST(line_numbers)] AS line
+        FROM line_nums
+    )
+    SELECT
+        CASE WHEN include_file_path THEN file_path END AS file_path,
+        line_number,
+        line
     FROM all_lines
     WHERE line_number >= start_line AND line_number <= end_line;
 
 -- Read lines around a specific line (context window)
 -- Useful for showing code context around a specific location
--- Returns: file_path (VARCHAR), line_number (BIGINT), line (VARCHAR)
-CREATE OR REPLACE MACRO read_lines_context(path, center_line, context_lines) AS TABLE
+-- Returns: line_number (BIGINT), line (VARCHAR)
+-- Use include_file_path := true to add file_path column
+CREATE OR REPLACE MACRO read_lines_context(path, center_line, context_lines, include_file_path := false) AS TABLE
     WITH file_content AS (
         SELECT filename, string_split(content, E'\n') as lines
         FROM read_text(path)
@@ -63,7 +76,10 @@ CREATE OR REPLACE MACRO read_lines_context(path, center_line, context_lines) AS 
             lines[UNNEST(line_numbers)] AS line
         FROM line_nums
     )
-    SELECT file_path, line_number, line
+    SELECT
+        CASE WHEN include_file_path THEN file_path END AS file_path,
+        line_number,
+        line
     FROM all_lines
     WHERE line_number >= (center_line - context_lines)
       AND line_number <= (center_line + context_lines);

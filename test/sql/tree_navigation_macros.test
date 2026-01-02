@@ -35,6 +35,46 @@ WHERE type = 'function_definition' AND name = 'inner';
 14	inner
 
 # =============================================================================
+# Test ast_definitions
+# =============================================================================
+
+# Create a table with various definitions
+statement ok
+CREATE TEMP TABLE def_test AS
+SELECT * FROM parse_ast('
+class MyClass:
+    def method(self):
+        x = 1
+        return x
+def standalone():
+    pass
+MY_CONST = 42
+', 'python');
+
+# Get all definitions
+query II
+SELECT name, definition_type FROM ast_definitions('def_test') ORDER BY start_line;
+----
+MyClass	class
+method	function
+x	variable
+standalone	function
+MY_CONST	variable
+
+# Filter by definition type
+query I
+SELECT name FROM ast_definitions('def_test') WHERE definition_type = 'function' ORDER BY name;
+----
+method
+standalone
+
+# Definitions include language column
+query I
+SELECT DISTINCT language FROM ast_definitions('def_test');
+----
+python
+
+# =============================================================================
 # Test ast_call_arguments
 # =============================================================================
 

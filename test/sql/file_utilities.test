@@ -8,14 +8,20 @@ statement ok
 LOAD sitting_duck;
 
 # =============================================================================
-# read_lines - Read all lines with line numbers and file_path
+# read_lines - Read all lines with line numbers
 # =============================================================================
 
-# read_lines returns file_path column
+# read_lines with include_file_path returns file_path column
 query I
-SELECT DISTINCT file_path FROM read_lines('test/data/python/simple.py');
+SELECT DISTINCT file_path FROM read_lines('test/data/python/simple.py', include_file_path := true);
 ----
 test/data/python/simple.py
+
+# Default read_lines has NULL file_path
+query I
+SELECT DISTINCT file_path IS NULL FROM read_lines('test/data/python/simple.py');
+----
+true
 
 # Basic read_lines returns sequential line numbers starting at 1
 query I
@@ -52,9 +58,9 @@ true
 # read_lines_range - Read specific line range
 # =============================================================================
 
-# read_lines_range returns file_path column
+# read_lines_range with include_file_path returns file_path column
 query I
-SELECT DISTINCT file_path FROM read_lines_range('test/data/python/simple.py', 1, 5);
+SELECT DISTINCT file_path FROM read_lines_range('test/data/python/simple.py', 1, 5, include_file_path := true);
 ----
 test/data/python/simple.py
 
@@ -87,9 +93,9 @@ SELECT COUNT(*) FROM read_lines_range('test/data/python/simple.py', 100, 105);
 # read_lines_context - Read lines around a center point
 # =============================================================================
 
-# read_lines_context returns file_path column
+# read_lines_context with include_file_path returns file_path column
 query I
-SELECT DISTINCT file_path FROM read_lines_context('test/data/python/simple.py', 5, 1);
+SELECT DISTINCT file_path FROM read_lines_context('test/data/python/simple.py', 5, 1, include_file_path := true);
 ----
 test/data/python/simple.py
 

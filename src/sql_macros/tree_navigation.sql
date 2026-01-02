@@ -42,6 +42,31 @@ CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
         )
     SELECT * FROM args;
 
+-- Get all definitions (functions, classes, variables, etc.) with unified categories
+-- Usage: SELECT * FROM ast_definitions(my_ast_table)
+CREATE OR REPLACE MACRO ast_definitions(ast_table) AS TABLE
+    SELECT
+        name,
+        CASE
+            WHEN is_function_definition(semantic_type) THEN 'function'
+            WHEN is_class_definition(semantic_type) THEN 'class'
+            WHEN is_variable_definition(semantic_type) THEN 'variable'
+            WHEN is_module_definition(semantic_type) THEN 'module'
+            WHEN is_type_definition(semantic_type) THEN 'type'
+            ELSE 'other'
+        END AS definition_type,
+        language,
+        file_path,
+        start_line,
+        end_line,
+        node_id,
+        type,
+        semantic_type
+    FROM query_table(ast_table)
+    WHERE is_definition(semantic_type)
+      AND name IS NOT NULL AND name != ''
+    ORDER BY file_path, start_line;
+
 -- Get all descendants of a node (entire subtree)
 -- Uses descendant_count for O(1) range-based lookup (nodes are in DFS pre-order)
 -- Usage: SELECT * FROM ast_descendants(my_ast_table, ancestor_node_id)
