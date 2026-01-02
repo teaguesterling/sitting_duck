@@ -432,3 +432,58 @@ WHERE func_name = 'nested_try';
 ----
 0
 
+# =============================================================================
+# Test ast_nesting_analysis
+# =============================================================================
+
+# Create AST with functions of varying nesting depth
+statement ok
+CREATE TEMP TABLE nesting_ast AS
+SELECT * FROM parse_ast('def shallow():
+    return 1
+def medium():
+    if x:
+        for i in range(10):
+            print(i)
+def deep():
+    if x:
+        if y:
+            if z:
+                for i in range(10):
+                    for j in range(10):
+                        if i == j:
+                            print(i, j)
+', 'python');
+
+# Get nesting analysis for all functions
+query III
+SELECT name, max_depth, deep_nodes
+FROM ast_nesting_analysis('nesting_ast')
+ORDER BY name;
+----
+deep	17	46
+medium	9	12
+shallow	3	0
+
+# Shallow function should have no deep nodes
+query II
+SELECT name, deep_nodes FROM ast_nesting_analysis('nesting_ast') WHERE name = 'shallow';
+----
+shallow	0
+
+# Deep function should have highest max_depth
+query II
+SELECT name, max_depth FROM ast_nesting_analysis('nesting_ast')
+ORDER BY max_depth DESC LIMIT 1;
+----
+deep	17
+
+# Verify deep_nodes counts nodes with relative depth > 5
+# shallow: max_depth=3, so 0 deep nodes
+# medium: max_depth=9, some nodes at depth > 5
+# deep: max_depth=17, many nodes at depth > 5
+query I
+SELECT name FROM ast_nesting_analysis('nesting_ast') WHERE deep_nodes = 0;
+----
+shallow
+
