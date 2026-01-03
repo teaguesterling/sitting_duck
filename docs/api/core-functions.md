@@ -38,26 +38,34 @@ read_ast(file_patterns LIST(VARCHAR), language VARCHAR) -> TABLE
 | `peek_mode` | VARCHAR | `'smart'` | Peek extraction mode |
 | `batch_size` | INTEGER | - | Batch size for streaming |
 
-### Output Schema
+### Output Schema (20 columns default, 22 with `source := 'full'`)
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `node_id` | BIGINT | Unique node identifier |
-| `type` | VARCHAR | AST node type |
-| `name` | VARCHAR | Extracted name (if applicable) |
+| `type` | VARCHAR | Tree-sitter AST node type |
+| `semantic_type` | SEMANTIC_TYPE | Universal semantic category |
+| `flags` | UTINYINT | Node property flags |
+| `name` | VARCHAR | Extracted identifier name |
+| `signature_type` | VARCHAR | Type/return type information |
+| `parameters` | STRUCT[] | Function parameters (name and type) |
+| `modifiers` | VARCHAR[] | Access modifiers and keywords |
+| `annotations` | VARCHAR | Decorator/annotation text |
+| `qualified_name` | VARCHAR | Fully qualified name |
 | `file_path` | VARCHAR | Source file path |
 | `language` | VARCHAR | Detected language |
 | `start_line` | UINTEGER | Starting line (1-based) |
-| `start_column` | UINTEGER | Starting column (1-based) |
 | `end_line` | UINTEGER | Ending line (1-based) |
-| `end_column` | UINTEGER | Ending column (1-based) |
+| `start_column` | UINTEGER | Starting column (**only with `source := 'full'`**) |
+| `end_column` | UINTEGER | Ending column (**only with `source := 'full'`**) |
 | `parent_id` | BIGINT | Parent node ID (NULL for root) |
 | `depth` | UINTEGER | Tree depth (0 for root) |
 | `sibling_index` | UINTEGER | Position among siblings |
 | `children_count` | UINTEGER | Direct children count |
 | `descendant_count` | UINTEGER | Total descendants |
 | `peek` | VARCHAR | Source code snippet |
-| `semantic_type` | SEMANTIC_TYPE | Semantic category |
+
+See [Output Schema](output-schema.md) for detailed column documentation and parameter effects.
 
 ### Examples
 

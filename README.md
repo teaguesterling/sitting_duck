@@ -225,26 +225,34 @@ SELECT * FROM read_ast(['file1.py', 'file2.py'], batch_size := 2);
 
 ## Table Schema
 
-The `read_ast()` function returns this schema:
+The `read_ast()` function returns 20 columns by default (22 with `source := 'full'`):
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `node_id` | BIGINT | Unique node identifier |
-| `type` | VARCHAR | AST node type (e.g., 'function_definition') |
-| `name` | VARCHAR | Node name if applicable |
+| `type` | VARCHAR | Tree-sitter AST node type (e.g., 'function_definition') |
+| `semantic_type` | SEMANTIC_TYPE | Universal semantic category |
+| `flags` | UTINYINT | Node property flags (use `has_body()`, `is_declaration_only()`) |
+| `name` | VARCHAR | Extracted identifier name |
+| `signature_type` | VARCHAR | Type/return type information |
+| `parameters` | STRUCT[] | Function parameters with names and types |
+| `modifiers` | VARCHAR[] | Access modifiers and keywords |
+| `annotations` | VARCHAR | Decorator/annotation text |
+| `qualified_name` | VARCHAR | Fully qualified name |
 | `file_path` | VARCHAR | Source file path |
 | `language` | VARCHAR | Detected programming language |
 | `start_line` | UINTEGER | Starting line number (1-based) |
-| `start_column` | UINTEGER | Starting column (1-based) |  
 | `end_line` | UINTEGER | Ending line number (1-based) |
-| `end_column` | UINTEGER | Ending column (1-based) |
+| `start_column` | UINTEGER | Starting column (**only with `source := 'full'`**) |
+| `end_column` | UINTEGER | Ending column (**only with `source := 'full'`**) |
 | `parent_id` | BIGINT | Parent node ID (NULL for root) |
 | `depth` | UINTEGER | Tree depth (0 for root) |
 | `sibling_index` | UINTEGER | Position among siblings (0-based) |
 | `children_count` | UINTEGER | Number of direct children |
 | `descendant_count` | UINTEGER | Total descendants (useful for complexity) |
 | `peek` | VARCHAR | Source code snippet for this node |
-| `semantic_type` | VARCHAR | Language-specific semantic type (native context) or universal type |
+
+See [Output Schema](docs/api/output-schema.md) for detailed column documentation.
 
 ### Context Extraction Levels
 

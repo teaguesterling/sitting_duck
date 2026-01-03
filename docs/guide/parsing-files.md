@@ -72,51 +72,46 @@ SELECT * FROM read_ast('src/*');
 SELECT * FROM read_ast('**/*.py');
 ```
 
-### Pattern Syntax
-
-| Pattern | Matches |
-|---------|---------|
-| `*` | Any characters except `/` |
-| `**` | Any characters including `/` (recursive) |
-| `?` | Single character |
-| `[abc]` | One of the characters |
-| `{a,b}` | Either `a` or `b` |
-
 ### Examples
 
 ```sql
 -- All .py and .js files
-SELECT * FROM read_ast('**/*.{py,js}', ignore_errors := true);
+SELECT * FROM read_ast(['**/*.py', '**/*.js'], ignore_errors := true);
 
 -- Files starting with 'test_'
 SELECT * FROM read_ast('**/test_*.py');
-
--- All files in src or lib directories
-SELECT * FROM read_ast('{src,lib}/**/*.*', ignore_errors := true);
 ```
 
 ## Output Columns
 
-The `read_ast()` function returns these columns:
+The `read_ast()` function returns 20 columns by default (22 with `source := 'full'`):
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `node_id` | BIGINT | Unique node identifier |
-| `type` | VARCHAR | AST node type |
-| `name` | VARCHAR | Extracted name (if applicable) |
+| `type` | VARCHAR | Tree-sitter AST node type |
+| `semantic_type` | SEMANTIC_TYPE | Universal semantic category |
+| `flags` | UTINYINT | Node property flags |
+| `name` | VARCHAR | Extracted identifier name |
+| `signature_type` | VARCHAR | Type/return type information |
+| `parameters` | STRUCT[] | Function parameters (name and type) |
+| `modifiers` | VARCHAR[] | Access modifiers and keywords |
+| `annotations` | VARCHAR | Decorator/annotation text |
+| `qualified_name` | VARCHAR | Fully qualified name |
 | `file_path` | VARCHAR | Source file path |
 | `language` | VARCHAR | Detected language |
 | `start_line` | UINTEGER | Starting line (1-based) |
-| `start_column` | UINTEGER | Starting column (1-based) |
 | `end_line` | UINTEGER | Ending line (1-based) |
-| `end_column` | UINTEGER | Ending column (1-based) |
+| `start_column` | UINTEGER | Starting column (**only with `source := 'full'`**) |
+| `end_column` | UINTEGER | Ending column (**only with `source := 'full'`**) |
 | `parent_id` | BIGINT | Parent node ID |
 | `depth` | UINTEGER | Tree depth (0 for root) |
 | `sibling_index` | UINTEGER | Position among siblings |
 | `children_count` | UINTEGER | Direct children count |
 | `descendant_count` | UINTEGER | Total descendants |
 | `peek` | VARCHAR | Source code snippet |
-| `semantic_type` | SEMANTIC_TYPE | Semantic category |
+
+See [Output Schema](../api/output-schema.md) for detailed column documentation.
 
 ## Parameters
 
