@@ -78,7 +78,7 @@ SELECT filter_by_kind(ast.nodes, 4) FROM parse_ast_objects('code', 'python');
 - Performance benchmarks
 
 ## Documentation
-- ✅ `docs/UNIFIED_FUNCTION_ARCHITECTURE.md` - Complete architectural plan
-- [ ] Update `docs/FUNCTION_ARCHITECTURE.md` - Function purposes
-- [ ] Update API documentation
-- [ ] Create migration guide for users
+- ✅ `docs/internal/archive/UNIFIED_FUNCTION_ARCHITECTURE.md` - Archived architectural plan (superseded)
+- ✅ `docs/internal/archive/FUNCTION_ARCHITECTURE.md` - Archived (superseded)
+- [x] Current API docs in `docs/api/core-functions.md` and `docs/api/output-schema.md`
+- [ ] Create migration guide for users (if needed)
