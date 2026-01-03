@@ -300,10 +300,10 @@ The extension supports **27 programming languages** with automatic detection:
 | **Web** | JavaScript, TypeScript, HTML, CSS | ✅ Full |
 | **Systems** | C, C++, Go, Rust, Zig | ✅ Full |
 | **Scripting** | Python, Ruby, PHP, Lua, R, Bash | ✅ Full |
-| **Enterprise** | Java, C#, Kotlin, Swift, Dart, Scala | ✅ Full |
-| **Infrastructure** | HCL (Terraform), JSON, TOML, GraphQL, YAML | ✅ Full |
-| **Documentation** | Markdown | ✅ Full |
-| **Other** | F#, Haskell, Julia | ✅ Full |
+| **Enterprise** | Java, C#, Kotlin, Swift, Dart | ✅ Full |
+| **Data/Query** | SQL, DuckDB, GraphQL, JSON | ✅ Full |
+| **Config** | HCL (Terraform), TOML | ✅ Full |
+| **Docs** | Markdown | ✅ Full |
 
 ### Cross-Language Function Finding
 ```sql
@@ -709,10 +709,10 @@ read_ast('**/*.*')  -- Will stop on syntax errors
 - **Web**: JavaScript, TypeScript, HTML, CSS
 - **Systems**: C, C++, Go, Rust, Zig
 - **Scripting**: Python, Ruby, PHP, Lua, R, Bash
-- **Enterprise**: Java, C#, Kotlin, Swift, Dart, Scala
-- **Infrastructure**: HCL, JSON, TOML, GraphQL, YAML
-- **Documentation**: Markdown
-- **Other**: F#, Haskell, Julia
+- **Enterprise**: Java, C#, Kotlin, Swift, Dart
+- **Data/Query**: SQL, DuckDB, GraphQL, JSON
+- **Config**: HCL (Terraform), TOML
+- **Docs**: Markdown
 
 ---
 
