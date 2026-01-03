@@ -104,8 +104,8 @@ Each doc includes extraction quality ratings, implementation notes, and known li
 
 ```bash
 # Clone with submodules (required for Tree-Sitter and Tree-Sitter grammars)
-git clone --recursive https://github.com/your-repo/sitting_duck.git
-cd sitting-duck
+git clone --recursive https://github.com/teaguesterling/sitting_duck.git
+cd sitting_duck
 
 # Build the extension
 make
