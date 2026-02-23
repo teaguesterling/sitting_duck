@@ -29,3 +29,25 @@ clean-parsers:
 
 # Regenerate parsers (clean first, then generate)
 regenerate-parsers: clean-parsers generate-parsers
+
+############################
+# Format Target Overrides
+############################
+# Override format targets from extension-ci-tools to exclude test/data/.
+# Test data files are parsed as AST fixtures with exact line numbers and node
+# counts asserted in tests. Formatting them shifts lines and adds nodes,
+# breaking those assertions.
+
+FORMAT_DIRS := src test/sql test/unittest
+
+format-check:
+	python3 duckdb/scripts/format.py --all --check --directories $(FORMAT_DIRS)
+
+format:
+	python3 duckdb/scripts/format.py --all --fix --noconfirm --directories $(FORMAT_DIRS)
+
+format-fix:
+	python3 duckdb/scripts/format.py --all --fix --noconfirm --directories $(FORMAT_DIRS)
+
+format-main:
+	python3 duckdb/scripts/format.py main --fix --noconfirm --directories $(FORMAT_DIRS)
