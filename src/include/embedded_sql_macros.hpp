@@ -638,7 +638,7 @@ CREATE OR REPLACE MACRO ast_functions_containing(ast_table, target_type) AS TABL
             JOIN query_table(ast_table) nf
 
 )SQLMACRO"
-        R"SQLMACRO(
+                            R"SQLMACRO(
               ON nf.node_id > f.func_id
              AND nf.node_id <= f.func_id + f.descendant_count
              AND is_function_definition(nf.semantic_type)
@@ -1276,7 +1276,7 @@ CREATE OR REPLACE MACRO ast_match(
                     -- Legacy syntax
 
 )SQLMACRO"
-        R"SQLMACRO(
+                             R"SQLMACRO(
                     pattern_str LIKE '%' || '%__' || unnest.capture_name || '<*>__%' || '%'
                     OR pattern_str LIKE '%' || '%__' || unnest.capture_name || '<+>__%' || '%'
                     -- HTML syntax

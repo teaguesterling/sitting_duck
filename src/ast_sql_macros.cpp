@@ -20,8 +20,8 @@ static vector<string> SplitSQLStatements(const string &sql) {
 		char ch = sql[i];
 
 		// Check for line comment start (-- outside of quotes)
-		if (!in_single_quote && !in_double_quote && !in_line_comment &&
-		    ch == '-' && i + 1 < sql.length() && sql[i + 1] == '-') {
+		if (!in_single_quote && !in_double_quote && !in_line_comment && ch == '-' && i + 1 < sql.length() &&
+		    sql[i + 1] == '-') {
 			in_line_comment = true;
 		}
 

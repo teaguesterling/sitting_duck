@@ -930,7 +930,6 @@ private:
 			if (i == 0) {
 				if (strcmp(child_type, "identifier") == 0 || strcmp(child_type, "qualified_identifier") == 0 ||
 				    strcmp(child_type, "field_expression") == 0) {
-
 					uint32_t start = ts_node_start_byte(child);
 					uint32_t end = ts_node_end_byte(child);
 
@@ -966,7 +965,6 @@ private:
 			// Skip "new" keyword, look for type identifier
 			if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "identifier") == 0 ||
 			    strcmp(child_type, "qualified_identifier") == 0) {
-
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
 
@@ -1001,7 +999,6 @@ private:
 			// Skip "delete" keyword, look for identifier
 			if (strcmp(child_type, "identifier") == 0 || strcmp(child_type, "qualified_identifier") == 0 ||
 			    strcmp(child_type, "field_expression") == 0) {
-
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
 

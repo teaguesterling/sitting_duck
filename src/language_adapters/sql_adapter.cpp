@@ -440,31 +440,43 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
                                                                                                                        NODE_TEXT, NONE,
                                                                                                                        ASTNodeFlags::
                                                                                                                            IS_KEYWORD)
-                                                                                                DEF_TYPE("window_"
-                                                                                                         "clause",
-                                                                                                         TRANSFORM_QUERY,
-                                                                                                         NONE, NONE,
-                                                                                                         0)
+                                                                                                DEF_TYPE(
+                                                                                                    "window_"
+                                                                                                    "clause",
+                                                                                                    TRANSFORM_QUERY,
+                                                                                                    NONE,
+                                                                                                    NONE, 0) DEF_TYPE("op_unary_"
+                                                                                                                      "other",
+                                                                                                                      OPERATOR_ARITHMETIC,
+                                                                                                                      NONE,
+                                                                                                                      NONE,
+                                                                                                                      0)
                                                                                                     DEF_TYPE(
-                                                                                                        "op_unary_"
-                                                                                                        "other",
-                                                                                                        OPERATOR_ARITHMETIC,
-                                                                                                        NONE, NONE,
-                                                                                                        0)
+                                                                                                        "keyword_"
+                                                                                                        "commit",
+                                                                                                        EXECUTION_STATEMENT,
+                                                                                                        NODE_TEXT, NONE,
+                                                                                                        ASTNodeFlags::
+                                                                                                            IS_KEYWORD)
                                                                                                         DEF_TYPE(
-                                                                                                            "keyword_"
-                                                                                                            "commit",
-                                                                                                            EXECUTION_STATEMENT,
+                                                                                                            "keywor"
+                                                                                                            "d_"
+                                                                                                            "sequen"
+                                                                                                            "ce",
+                                                                                                            DEFINITION_VARIABLE,
                                                                                                             NODE_TEXT,
                                                                                                             NONE,
                                                                                                             ASTNodeFlags::
                                                                                                                 IS_KEYWORD)
                                                                                                             DEF_TYPE(
-                                                                                                                "keywor"
+                                                                                                                "ke"
+                                                                                                                "yw"
+                                                                                                                "or"
                                                                                                                 "d_"
-                                                                                                                "sequen"
-                                                                                                                "ce",
-                                                                                                                DEFINITION_VARIABLE,
+                                                                                                                "uu"
+                                                                                                                "i"
+                                                                                                                "d",
+                                                                                                                TYPE_PRIMITIVE,
                                                                                                                 NODE_TEXT,
                                                                                                                 NONE,
                                                                                                                 ASTNodeFlags::
@@ -474,21 +486,16 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
                                                                                                                     "yw"
                                                                                                                     "or"
                                                                                                                     "d_"
-                                                                                                                    "uu"
-                                                                                                                    "i"
-                                                                                                                    "d",
-                                                                                                                    TYPE_PRIMITIVE,
+                                                                                                                    "co"
+                                                                                                                    "nf"
+                                                                                                                    "li"
+                                                                                                                    "c"
+                                                                                                                    "t",
+                                                                                                                    METADATA_ANNOTATION,
                                                                                                                     NODE_TEXT,
                                                                                                                     NONE,
                                                                                                                     ASTNodeFlags::
-                                                                                                                        IS_KEYWORD)
-                                                                                                                    DEF_TYPE(
-                                                                                                                        "keyword_conflict",
-                                                                                                                        METADATA_ANNOTATION,
-                                                                                                                        NODE_TEXT,
-                                                                                                                        NONE,
-                                                                                                                        ASTNodeFlags::
-                                                                                                                            IS_KEYWORD)};
+                                                                                                                        IS_KEYWORD)};
 
 #undef DEF_TYPE
 

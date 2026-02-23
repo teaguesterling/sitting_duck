@@ -560,7 +560,6 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
 			// Check if we need to process a new batch
 			if (global_state.current_batch_results.empty() ||
 			    global_state.current_batch_result_index >= global_state.current_batch_results.size()) {
-
 				// Collect next batch of files
 				vector<string> batch_files;
 				batch_files.reserve(global_state.batch_size);
@@ -585,7 +584,6 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
 			// Output nodes from current batch results using flat projection
 			while (output_index < STANDARD_VECTOR_SIZE &&
 			       global_state.current_batch_result_index < global_state.current_batch_results.size()) {
-
 				auto &result = global_state.current_batch_results[global_state.current_batch_result_index];
 
 				if (global_state.current_batch_row_index < result.nodes.size()) {
@@ -609,7 +607,6 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
 		// Check if we need to parse a new file
 		if (!global_state.current_file_parsed || !global_state.current_file_result ||
 		    global_state.current_file_row_index >= global_state.current_file_result->nodes.size()) {
-
 			// Try to get next file that matches our language criteria
 			OpenFileInfo file;
 			bool found_valid_file = false;
@@ -745,7 +742,6 @@ static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadAST
 	// Stream results from all completed parsing
 	while (output_index < STANDARD_VECTOR_SIZE &&
 	       global_state.current_batch_result_index < global_state.current_batch_results.size()) {
-
 		const auto &current_result = global_state.current_batch_results[global_state.current_batch_result_index];
 
 		// Check if we've exhausted this result
@@ -911,7 +907,6 @@ static void ReadASTHierarchicalFunctionSequential(ClientContext &context, ReadAS
 			// Process batches and use streaming projection
 			if (global_state.current_batch_results.empty() ||
 			    global_state.current_batch_result_index >= global_state.current_batch_results.size()) {
-
 				vector<string> batch_files;
 				batch_files.reserve(global_state.batch_size);
 
@@ -964,7 +959,6 @@ static void ReadASTHierarchicalFunctionSequential(ClientContext &context, ReadAS
 			// Check if we need to parse a new file
 			if (!global_state.current_file_parsed || !global_state.current_file_result ||
 			    global_state.current_file_row_index >= global_state.current_file_result->nodes.size()) {
-
 				// Try to get next file
 				OpenFileInfo file;
 				bool found_valid_file = false;
@@ -1060,7 +1054,6 @@ static void ReadASTHierarchicalFunctionParallel(ClientContext &context, ReadASTS
 	// Stream results from all completed parsing using hierarchical streaming projection
 	while (output_index < STANDARD_VECTOR_SIZE &&
 	       global_state.current_batch_result_index < global_state.current_batch_results.size()) {
-
 		const auto &current_result = global_state.current_batch_results[global_state.current_batch_result_index];
 
 		if (global_state.current_batch_row_index >= current_result.nodes.size()) {

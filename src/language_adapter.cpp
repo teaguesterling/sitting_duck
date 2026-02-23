@@ -377,7 +377,6 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		    first_child_type == "field_expression" || first_child_type == "selector_expression" ||
 		    first_child_type == "field_access" || first_child_type == "scoped_identifier" ||
 		    first_child_type == "qualified_identifier") {
-
 			// Find the last identifier child (the method/function name)
 			uint32_t child_count = ts_node_child_count(first_child);
 			for (int i = child_count - 1; i >= 0; i--) {

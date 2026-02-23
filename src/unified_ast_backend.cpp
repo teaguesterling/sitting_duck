@@ -21,7 +21,6 @@ namespace duckdb {
 
 ASTResult UnifiedASTBackend::ParseToASTResult(const string &content, const string &language, const string &file_path,
                                               const ExtractionConfig &config) {
-
 	// Phase 2: Use template-based parsing with ZERO virtual calls!
 	auto &registry = LanguageAdapterRegistry::GetInstance();
 	return registry.ParseContentTemplated(content, language, file_path, config);
@@ -30,7 +29,6 @@ ASTResult UnifiedASTBackend::ParseToASTResult(const string &content, const strin
 // Legacy function for backward compatibility
 ASTResult UnifiedASTBackend::ParseToASTResult(const string &content, const string &language, const string &file_path,
                                               int32_t peek_size, const string &peek_mode) {
-
 	// Convert legacy parameters to ExtractionConfig
 	ExtractionConfig config;
 	config.peek_size = peek_size;
@@ -680,7 +678,6 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult &result, DataChunk &outpu
 
 void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk &output, idx_t &current_row,
                                               idx_t &output_index, const ExtractionConfig &config) {
-
 	//==============================================================================
 	// CRITICAL WARNING TO FUTURE DEVELOPERS: DuckDB Table Function Indexing
 	//==============================================================================
@@ -1155,7 +1152,6 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult &result, Data
 void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode> &nodes, DataChunk &output,
                                                             idx_t start_row, idx_t &output_index,
                                                             const ASTSource &source_info) {
-
 	// EXPERIMENTAL: Remove ListVector reset to test if DuckDB handles this automatically
 	// The issue might be that we're interfering with DuckDB's natural DataChunk lifecycle
 

@@ -675,7 +675,6 @@ string CPPLanguageHandler::ExtractNodeName(TSNode node, const string &content) c
 	// Extract names for declaration types
 	if (normalized == NormalizedTypes::FUNCTION_DECLARATION || normalized == NormalizedTypes::CLASS_DECLARATION ||
 	    normalized == NormalizedTypes::METHOD_DECLARATION) {
-
 		// For function_definition, ALWAYS look for function_declarator first
 		if (node_type == "function_definition") {
 			uint32_t child_count = ts_node_child_count(node);

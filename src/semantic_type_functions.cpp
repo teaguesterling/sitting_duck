@@ -441,7 +441,6 @@ static void GetSearchableTypesFunction(DataChunk &args, ExpressionState &state, 
 }
 
 void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
-
 	// Register semantic_type_to_string(semantic_type) -> VARCHAR
 	ScalarFunction semantic_type_to_string_func("semantic_type_to_string", {LogicalType::UTINYINT},
 	                                            LogicalType::VARCHAR, SemanticTypeToStringFunction);

@@ -1072,7 +1072,6 @@ private:
 			if (i == 0) {
 				if (strcmp(child_type, "identifier") == 0 || strcmp(child_type, "member_expression") == 0 ||
 				    strcmp(child_type, "property_identifier") == 0) {
-
 					uint32_t start = ts_node_start_byte(child);
 					uint32_t end = ts_node_end_byte(child);
 
@@ -1108,7 +1107,6 @@ private:
 			// Skip "new" keyword, look for identifier
 			if (strcmp(child_type, "identifier") == 0 || strcmp(child_type, "member_expression") == 0 ||
 			    strcmp(child_type, "property_identifier") == 0) {
-
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
 

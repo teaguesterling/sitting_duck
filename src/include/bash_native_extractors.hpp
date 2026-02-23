@@ -148,7 +148,6 @@ private:
 
 		// Check for variable expansions that might be parameters
 		if (strcmp(node_type, "simple_expansion") == 0 || strcmp(node_type, "expansion") == 0) {
-
 			uint32_t start = ts_node_start_byte(node);
 			uint32_t end = ts_node_end_byte(node);
 

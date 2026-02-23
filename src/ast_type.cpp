@@ -8,7 +8,6 @@
 namespace duckdb {
 
 Value ASTNode::ToValue() const {
-
 	child_list_t<Value> struct_values;
 
 	// FLAT STRUCTURE: All fields as direct struct members (no nesting except native)
