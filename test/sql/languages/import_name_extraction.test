@@ -1,0 +1,218 @@
+# name: test/sql/languages/import_name_extraction.test
+# description: Test import name extraction across all languages (#23)
+# group: [languages]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Cross-language import name extraction tests
+# =============================================================================
+#
+# Verifies that import/include/use statements extract meaningful names
+# instead of returning empty strings or full statement text.
+#
+# Issue: https://github.com/teaguesterling/sitting_duck/issues/23
+# =============================================================================
+
+# =============================================================================
+# PYTHON
+# =============================================================================
+
+# Test: import statement extracts module name
+query TT
+SELECT type, name
+FROM read_ast('test/data/python/imports.py', context := 'native')
+WHERE type = 'import_statement'
+LIMIT 1;
+----
+import_statement	os
+
+# Test: import with dotted module name
+query TT
+SELECT type, name
+FROM read_ast('test/data/python/imports.py', context := 'native')
+WHERE type = 'import_statement' AND name = 'os.path';
+----
+import_statement	os.path
+
+# Test: from-import extracts source module name
+query TT
+SELECT type, name
+FROM read_ast('test/data/python/imports.py', context := 'native')
+WHERE type = 'import_from_statement' AND name = 'pathlib';
+----
+import_from_statement	pathlib
+
+# Test: from-import with dotted source module
+query TT
+SELECT type, name
+FROM read_ast('test/data/python/imports.py', context := 'native')
+WHERE type = 'import_from_statement' AND name = 'collections.abc';
+----
+import_from_statement	collections.abc
+
+# Test: relative import falls back to identifier
+query TT
+SELECT type, name
+FROM read_ast('test/data/python/imports.py', context := 'native')
+WHERE type = 'import_from_statement' AND name = 'utils';
+----
+import_from_statement	utils
+
+# =============================================================================
+# JAVASCRIPT
+# =============================================================================
+
+# Test: import statement extracts module source string
+query TT
+SELECT type, name
+FROM read_ast('test/data/javascript/imports.js', context := 'native')
+WHERE type = 'import_statement'
+ORDER BY start_line
+LIMIT 1;
+----
+import_statement	"react"
+
+# Test: all JS imports extract module source
+query TT
+SELECT type, name
+FROM read_ast('test/data/javascript/imports.js', context := 'native')
+WHERE type = 'import_statement'
+ORDER BY start_line;
+----
+import_statement	"react"
+import_statement	"react"
+import_statement	"path"
+import_statement	"side-effect"
+
+# =============================================================================
+# TYPESCRIPT
+# =============================================================================
+
+# Test: TypeScript imports also extract module source
+query TT
+SELECT type, name
+FROM read_ast('test/data/javascript/imports.ts', 'typescript', context := 'native')
+WHERE type = 'import_statement'
+ORDER BY start_line
+LIMIT 1;
+----
+import_statement	"react"
+
+# =============================================================================
+# C
+# =============================================================================
+
+# Test: #include extracts just the path, not the full directive
+query TT
+SELECT type, name
+FROM read_ast('test/data/c/imports.c', context := 'native')
+WHERE type = 'preproc_include'
+ORDER BY start_line;
+----
+preproc_include	<stdio.h>
+preproc_include	"myheader.h"
+
+# =============================================================================
+# C++
+# =============================================================================
+
+# Test: C++ #include extracts the path
+query TT
+SELECT type, name
+FROM read_ast('test/data/cpp/imports.cpp', context := 'native')
+WHERE type = 'preproc_include'
+ORDER BY start_line;
+----
+preproc_include	<iostream>
+preproc_include	"myheader.h"
+
+# Test: C++ using declarations extract namespace/type name
+query TT
+SELECT type, name
+FROM read_ast('test/data/cpp/imports.cpp', context := 'native')
+WHERE type = 'using_declaration'
+ORDER BY start_line;
+----
+using_declaration	std
+using_declaration	std::vector
+
+# =============================================================================
+# RUST
+# =============================================================================
+
+# Test: use declaration extracts just the path, not full statement
+query TT
+SELECT type, name
+FROM read_ast('test/data/rust/imports.rs', context := 'native')
+WHERE type = 'use_declaration'
+ORDER BY start_line;
+----
+use_declaration	std::collections::HashMap
+use_declaration	std::io
+use_declaration	std::io::*
+
+# =============================================================================
+# DART
+# =============================================================================
+
+# Test: import_specification extracts URI
+query TT
+SELECT type, name
+FROM read_ast('test/data/dart/imports.dart', context := 'native')
+WHERE type = 'import_specification'
+ORDER BY start_line;
+----
+import_specification	'dart:core'
+import_specification	'dart:async'
+import_specification	'package:flutter/material.dart'
+
+# Test: part directive extracts URI
+query TT
+SELECT type, name
+FROM read_ast('test/data/dart/imports.dart', context := 'native')
+WHERE type = 'part_directive'
+ORDER BY start_line;
+----
+part_directive	'part_file.dart'
+
+# Test: wrapper nodes (library_import) also get names via delegation
+query TT
+SELECT type, name
+FROM read_ast('test/data/dart/imports.dart', context := 'native')
+WHERE type = 'library_import' AND name IS NOT NULL AND name != ''
+ORDER BY start_line
+LIMIT 1;
+----
+library_import	'dart:core'
+
+# =============================================================================
+# PHP
+# =============================================================================
+
+# Test: require expression extracts the string argument
+query TT
+SELECT type, name
+FROM read_ast('test/data/php/imports.php', context := 'native')
+WHERE type = 'require_expression';
+----
+require_expression	'vendor/autoload.php'
+
+# Test: include expression extracts the string argument
+query TT
+SELECT type, name
+FROM read_ast('test/data/php/imports.php', context := 'native')
+WHERE type = 'include_expression';
+----
+include_expression	'config.php'
+
+# Test: namespace use declaration extracts the class/namespace name
+query TT
+SELECT type, name
+FROM read_ast('test/data/php/imports.php', context := 'native')
+WHERE type = 'namespace_use_declaration';
+----
+namespace_use_declaration	App\Core\BaseClass

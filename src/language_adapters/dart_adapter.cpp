@@ -62,6 +62,48 @@ string DartAdapter::ExtractNodeName(TSNode node, const string &content) const {
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config) {
+		// Import specifications: URI is in configurable_uri or uri child
+		if (strcmp(node_type_str, "import_specification") == 0) {
+			string name = FindChildByType(node, content, "configurable_uri");
+			if (name.empty()) {
+				name = FindChildByType(node, content, "uri");
+			}
+			return name;
+		}
+		// Part directives: URI is a direct child
+		if (strcmp(node_type_str, "part_directive") == 0) {
+			return FindChildByType(node, content, "uri");
+		}
+		// Part-of directives: either dotted identifier or URI
+		if (strcmp(node_type_str, "part_of_directive") == 0) {
+			string name = FindChildByType(node, content, "dotted_identifier_list");
+			if (name.empty()) {
+				name = FindChildByType(node, content, "uri");
+			}
+			return name;
+		}
+		// Wrapper nodes: delegate to inner import_specification or library_import
+		if (strcmp(node_type_str, "library_import") == 0 || strcmp(node_type_str, "library_export") == 0) {
+			uint32_t child_count = ts_node_child_count(node);
+			for (uint32_t i = 0; i < child_count; i++) {
+				TSNode child = ts_node_child(node, i);
+				if (strcmp(ts_node_type(child), "import_specification") == 0) {
+					return ExtractNodeName(child, content);
+				}
+			}
+			return "";
+		}
+		if (strcmp(node_type_str, "import_or_export") == 0) {
+			uint32_t child_count = ts_node_child_count(node);
+			for (uint32_t i = 0; i < child_count; i++) {
+				TSNode child = ts_node_child(node, i);
+				const char *child_type = ts_node_type(child);
+				if (strcmp(child_type, "library_import") == 0 || strcmp(child_type, "library_export") == 0) {
+					return ExtractNodeName(child, content);
+				}
+			}
+			return "";
+		}
 		return ExtractByStrategy(node, content, config->name_strategy);
 	}
 

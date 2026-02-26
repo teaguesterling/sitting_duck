@@ -61,6 +61,26 @@ string RustAdapter::ExtractNodeName(TSNode node, const string &content) const {
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config && config->name_strategy != ExtractionStrategy::CUSTOM) {
+		// Use declarations: extract just the path, not full "use path;" text
+		if (strcmp(node_type_str, "use_declaration") == 0) {
+			string name = FindChildByType(node, content, "scoped_identifier");
+			if (name.empty()) {
+				name = FindChildByType(node, content, "identifier");
+			}
+			if (name.empty()) {
+				name = FindChildByType(node, content, "scoped_use_list");
+			}
+			if (name.empty()) {
+				name = FindChildByType(node, content, "use_list");
+			}
+			if (name.empty()) {
+				name = FindChildByType(node, content, "use_wildcard");
+			}
+			if (name.empty()) {
+				name = FindChildByType(node, content, "use_as_clause");
+			}
+			return name;
+		}
 		return ExtractByStrategy(node, content, config->name_strategy);
 	}
 

@@ -114,10 +114,10 @@ GROUP BY language
 HAVING COUNT(*) > 0
 ORDER BY language;
 ----
-cpp	498	1
+cpp	534	2
 go	104	2
-javascript	347	2
-python	1197	10
+javascript	392	3
+python	1232	11
 
 # Test 13: Consistent ordering (DuckDB convention)
 # ===============================================

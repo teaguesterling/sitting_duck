@@ -61,6 +61,30 @@ string PHPAdapter::ExtractNodeName(TSNode node, const string &content) const {
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config && config->name_strategy != ExtractionStrategy::CUSTOM) {
+		// Require/include expressions: extract the string argument, not full expression
+		if (strcmp(node_type_str, "require_expression") == 0 || strcmp(node_type_str, "require_once_expression") == 0 ||
+		    strcmp(node_type_str, "include_expression") == 0 || strcmp(node_type_str, "include_once_expression") == 0) {
+			return FindChildByType(node, content, "string");
+		}
+		// Namespace use declarations: extract the qualified name from first clause
+		if (strcmp(node_type_str, "namespace_use_declaration") == 0) {
+			uint32_t child_count = ts_node_child_count(node);
+			for (uint32_t i = 0; i < child_count; i++) {
+				TSNode child = ts_node_child(node, i);
+				if (strcmp(ts_node_type(child), "namespace_use_clause") == 0) {
+					string name = FindChildByType(child, content, "qualified_name");
+					if (name.empty()) {
+						name = FindChildByType(child, content, "name");
+					}
+					return name;
+				}
+				// Grouped imports: use Foo\{Bar, Baz}
+				if (strcmp(ts_node_type(child), "namespace_name") == 0) {
+					return ExtractNodeText(child, content);
+				}
+			}
+			return "";
+		}
 		return ExtractByStrategy(node, content, config->name_strategy);
 	}
 

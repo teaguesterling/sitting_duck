@@ -61,6 +61,22 @@ string CPPAdapter::ExtractNodeName(TSNode node, const string &content) const {
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config) {
+		// Include directives: extract just the path child, not full directive text
+		if (strcmp(node_type_str, "preproc_include") == 0) {
+			string name = FindChildByType(node, content, "system_lib_string");
+			if (name.empty()) {
+				name = FindChildByType(node, content, "string_literal");
+			}
+			return name;
+		}
+		// Using declarations: extract the namespace/type being imported
+		if (strcmp(node_type_str, "using_declaration") == 0) {
+			string name = FindChildByType(node, content, "qualified_identifier");
+			if (name.empty()) {
+				name = FindChildByType(node, content, "identifier");
+			}
+			return name;
+		}
 		if (config->name_strategy == ExtractionStrategy::CUSTOM) {
 			// Custom C++ name extraction logic
 			return ExtractCppCustomName(node, content, node_type_str);

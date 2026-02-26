@@ -5,6 +5,7 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/helper.hpp"
+#include <cstring>
 
 // Tree-sitter language declaration
 extern "C" {
@@ -61,6 +62,10 @@ string JavaScriptAdapter::ExtractNodeName(TSNode node, const string &content) co
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config) {
+		// Import statements: module source is in a string child
+		if (strcmp(node_type_str, "import_statement") == 0) {
+			return FindChildByType(node, content, "string");
+		}
 		return ExtractByStrategy(node, content, config->name_strategy);
 	}
 

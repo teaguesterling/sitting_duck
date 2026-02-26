@@ -59,6 +59,14 @@ string CAdapter::ExtractNodeName(TSNode node, const string &content) const {
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config) {
+		// Include directives: extract just the path child, not full directive text
+		if (strcmp(node_type_str, "preproc_include") == 0) {
+			string name = FindChildByType(node, content, "system_lib_string");
+			if (name.empty()) {
+				name = FindChildByType(node, content, "string_literal");
+			}
+			return name;
+		}
 		if (config->name_strategy == ExtractionStrategy::CUSTOM) {
 			// C-specific custom extraction
 			string node_type = string(node_type_str);

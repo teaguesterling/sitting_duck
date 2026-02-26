@@ -63,6 +63,10 @@ string TypeScriptAdapter::ExtractNodeName(TSNode node, const string &content) co
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config) {
+		// Import statements: module source is in a string child
+		if (strcmp(node_type_str, "import_statement") == 0 || strcmp(node_type_str, "import_require_clause") == 0) {
+			return FindChildByType(node, content, "string");
+		}
 		return ExtractByStrategy(node, content, config->name_strategy);
 	}
 
