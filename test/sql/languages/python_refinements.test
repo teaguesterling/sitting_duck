@@ -122,6 +122,56 @@ LIMIT 1;
 ----
 from	EXTERNAL_IMPORT
 
+# Test: import_from_statement should extract module name from dotted_name child
+query TT
+SELECT type, name
+FROM read_ast('test/data/python/typed_example.py', context := 'native')
+WHERE type = 'import_from_statement'
+LIMIT 1;
+----
+import_from_statement	typing
+
+# Test: import_statement should extract module name (simple)
+query TT
+SELECT type, name
+FROM read_ast('test/data/python/imports.py', context := 'native')
+WHERE type = 'import_statement'
+LIMIT 1;
+----
+import_statement	os
+
+# Test: import_statement with dotted module name
+query TT
+SELECT type, name
+FROM read_ast('test/data/python/imports.py', context := 'native')
+WHERE type = 'import_statement' AND name = 'os.path';
+----
+import_statement	os.path
+
+# Test: import_from_statement should extract source module name
+query TT
+SELECT type, name
+FROM read_ast('test/data/python/imports.py', context := 'native')
+WHERE type = 'import_from_statement' AND name = 'pathlib';
+----
+import_from_statement	pathlib
+
+# Test: import_from_statement with dotted source module
+query TT
+SELECT type, name
+FROM read_ast('test/data/python/imports.py', context := 'native')
+WHERE type = 'import_from_statement' AND name = 'collections.abc';
+----
+import_from_statement	collections.abc
+
+# Test: relative import (from . import name) falls back to identifier
+query TT
+SELECT type, name
+FROM read_ast('test/data/python/imports.py', context := 'native')
+WHERE type = 'import_from_statement' AND name = 'utils';
+----
+import_from_statement	utils
+
 # =============================================================================
 # CALL REFINEMENTS
 # =============================================================================

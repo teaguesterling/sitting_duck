@@ -4,6 +4,7 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/helper.hpp"
+#include <cstring>
 
 // Tree-sitter language declaration
 extern "C" {
@@ -60,6 +61,15 @@ string PythonAdapter::ExtractNodeName(TSNode node, const string &content) const 
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config) {
+		// Import statements: module name is in dotted_name child, not identifier
+		if (strcmp(node_type_str, "import_statement") == 0 || strcmp(node_type_str, "import_from_statement") == 0) {
+			string name = FindChildByType(node, content, "dotted_name");
+			if (name.empty()) {
+				// Relative imports (e.g., "from . import name") have no dotted_name
+				name = FindChildByType(node, content, "identifier");
+			}
+			return name;
+		}
 		return ExtractByStrategy(node, content, config->name_strategy);
 	}
 
