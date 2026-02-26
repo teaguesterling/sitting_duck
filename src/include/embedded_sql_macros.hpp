@@ -177,124 +177,69 @@ CREATE OR REPLACE MACRO is_type_generic(st) AS
 )SQLMACRO"},
     {"file_utilities.sql", R"SQLMACRO(
 -- File Utility Macros
--- Functions for reading and extracting portions of files
+-- Scalar functions for extracting source code from files
+--
+-- For full-featured line reading (globs, line specs, context windows, lateral joins),
+-- use the duckdb_read_lines extension: https://github.com/teaguesterling/duckdb_read_lines
 
 -- =============================================================================
--- Line Reading - Table Macros (return rows)
--- =============================================================================
-
--- Read all lines from a file as rows with line numbers
--- Returns: line_number (BIGINT), line (VARCHAR)
--- Use include_file_path := true to add file_path column
-CREATE OR REPLACE MACRO read_lines(path, include_file_path := false) AS TABLE
-    WITH file_content AS (
-        SELECT filename, string_split(content, E'\n') as lines
-        FROM read_text(path)
-    ),
-    line_nums AS (
-        SELECT filename, lines, generate_series(1, len(lines)) as line_numbers
-        FROM file_content
-    ),
-    all_lines AS (
-        SELECT
-            filename AS file_path,
-            UNNEST(line_numbers) AS line_number,
-            lines[UNNEST(line_numbers)] AS line
-        FROM line_nums
-    )
-    SELECT
-        CASE WHEN include_file_path THEN file_path END AS file_path,
-        line_number,
-        line
-    FROM all_lines;
-
--- Read specific line range from a file as rows
--- Returns: line_number (BIGINT), line (VARCHAR)
--- Use include_file_path := true to add file_path column
-CREATE OR REPLACE MACRO read_lines_range(path, start_line, end_line, include_file_path := false) AS TABLE
-    WITH file_content AS (
-        SELECT filename, string_split(content, E'\n') as lines
-        FROM read_text(path)
-    ),
-    line_nums AS (
-        SELECT filename, lines, generate_series(1, len(lines)) as line_numbers
-        FROM file_content
-    ),
-    all_lines AS (
-        SELECT
-            filename AS file_path,
-            UNNEST(line_numbers) AS line_number,
-            lines[UNNEST(line_numbers)] AS line
-        FROM line_nums
-    )
-    SELECT
-        CASE WHEN include_file_path THEN file_path END AS file_path,
-        line_number,
-        line
-    FROM all_lines
-    WHERE line_number >= start_line AND line_number <= end_line;
-
--- Read lines around a specific line (context window)
--- Useful for showing code context around a specific location
--- Returns: line_number (BIGINT), line (VARCHAR)
--- Use include_file_path := true to add file_path column
-CREATE OR REPLACE MACRO read_lines_context(path, center_line, context_lines, include_file_path := false) AS TABLE
-    WITH file_content AS (
-        SELECT filename, string_split(content, E'\n') as lines
-        FROM read_text(path)
-    ),
-    line_nums AS (
-        SELECT filename, lines, generate_series(1, len(lines)) as line_numbers
-        FROM file_content
-    ),
-    all_lines AS (
-        SELECT
-            filename AS file_path,
-            UNNEST(line_numbers) AS line_number,
-            lines[UNNEST(line_numbers)] AS line
-        FROM line_nums
-    )
-    SELECT
-        CASE WHEN include_file_path THEN file_path END AS file_path,
-        line_number,
-        line
-    FROM all_lines
-    WHERE line_number >= (center_line - context_lines)
-      AND line_number <= (center_line + context_lines);
-
--- =============================================================================
--- Line Reading - Scalar Macros (return single string)
--- =============================================================================
-
--- Get a specific line range as a single string (newline-joined)
-CREATE OR REPLACE MACRO get_lines_text(file_path, start_line, end_line) AS (
-    SELECT string_agg(line, E'\n' ORDER BY line_number)
-    FROM read_lines_range(file_path, start_line, end_line)
-);
-
--- Get a single line from a file
-CREATE OR REPLACE MACRO get_line(file_path, line_num) AS (
-    SELECT line
-    FROM read_lines_range(file_path, line_num, line_num)
-    LIMIT 1
-);
-
--- =============================================================================
--- Source Extraction Helpers (for use with read_ast results)
+-- Source Extraction - Scalar Macros (return single value)
 -- =============================================================================
 
 -- Extract source code for an AST node given file_path, start_line, end_line
--- This is useful when you've already parsed and want to get the source
-CREATE OR REPLACE MACRO ast_get_source(file_path, start_line, end_line) AS
-    get_lines_text(file_path, start_line, end_line);
+-- Returns lines as a single newline-joined string
+CREATE OR REPLACE MACRO ast_get_source(file_path, start_line, end_line) AS (
+    WITH file_content AS (
+        SELECT string_split(content, E'\n') as lines
+        FROM read_text(file_path)
+    ),
+    line_nums AS (
+        SELECT lines, generate_series(1, len(lines)) as line_numbers
+        FROM file_content
+    ),
+    all_lines AS (
+        SELECT
+            UNNEST(line_numbers) AS line_number,
+            lines[UNNEST(line_numbers)] AS line
+        FROM line_nums
+    )
+    SELECT string_agg(line, E'\n' ORDER BY line_number)
+    FROM all_lines
+    WHERE line_number >= start_line AND line_number <= end_line
+);
 
 -- Get source with line numbers prefixed (useful for display)
 CREATE OR REPLACE MACRO ast_get_source_numbered(file_path, start_line, end_line) AS (
+    WITH file_content AS (
+        SELECT string_split(content, E'\n') as lines
+        FROM read_text(file_path)
+    ),
+    line_nums AS (
+        SELECT lines, generate_series(1, len(lines)) as line_numbers
+        FROM file_content
+    ),
+    all_lines AS (
+        SELECT
+            UNNEST(line_numbers) AS line_number,
+            lines[UNNEST(line_numbers)] AS line
+        FROM line_nums
+    )
     SELECT string_agg(
         printf('%4d: %s', line_number, line),
         E'\n' ORDER BY line_number
     )
-    FROM read_lines_range(file_path, start_line, end_line)
+    FROM all_lines
+    WHERE line_number >= start_line AND line_number <= end_line
+);
+
+-- Get a single line from a file
+CREATE OR REPLACE MACRO ast_get_source_line(file_path, line_num) AS (
+    WITH file_content AS (
+        SELECT string_split(content, E'\n') as lines
+        FROM read_text(file_path)
+    )
+    SELECT lines[line_num]
+    FROM file_content
 );
 
 )SQLMACRO"},
@@ -638,7 +583,7 @@ CREATE OR REPLACE MACRO ast_functions_containing(ast_table, target_type) AS TABL
             JOIN query_table(ast_table) nf
 
 )SQLMACRO"
-                            R"SQLMACRO(
+        R"SQLMACRO(
               ON nf.node_id > f.func_id
              AND nf.node_id <= f.func_id + f.descendant_count
              AND is_function_definition(nf.semantic_type)
@@ -1276,7 +1221,7 @@ CREATE OR REPLACE MACRO ast_match(
                     -- Legacy syntax
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
                     pattern_str LIKE '%' || '%__' || unnest.capture_name || '<*>__%' || '%'
                     OR pattern_str LIKE '%' || '%__' || unnest.capture_name || '<+>__%' || '%'
                     -- HTML syntax

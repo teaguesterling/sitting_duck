@@ -480,24 +480,27 @@ WHERE is_function_call(semantic_type);
 
 Available predicates: `is_function_definition`, `is_class_definition`, `is_variable_definition`, `is_function_call`, `is_member_access`, `is_string_literal`, `is_number_literal`, `is_conditional`, `is_loop`, `is_jump`, `is_assignment`, and more.
 
-### File Line Utilities
+### Source Extraction
 
-Extract specific lines from files:
+Extract source code from files:
 
 ```sql
--- Get lines 10-25 from a file
-SELECT * FROM read_lines_range('file.py', 10, 25);
-
--- Get context around line 50 (5 lines before and after)
-SELECT * FROM read_lines_context('file.py', 50, 5);
-
 -- Extract source code for a function
 SELECT
     name,
     ast_get_source(file_path, start_line, end_line) AS source
 FROM read_ast('file.py')
 WHERE is_function_definition(semantic_type);
+
+-- Get a single line
+SELECT ast_get_source_line('file.py', 42);
+
+-- Get source with line numbers
+SELECT ast_get_source_numbered('file.py', 10, 25);
 ```
+
+> For full-featured line reading (globs, line specs, context windows, lateral joins),
+> see the [`duckdb_read_lines`](https://github.com/teaguesterling/duckdb_read_lines) extension.
 
 ## Advanced Features
 
