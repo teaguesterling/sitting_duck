@@ -1,0 +1,78 @@
+# name: test/sql/bugs/definition_noise.test
+# description: Test that definition queries return clean results without noise (#25, #26)
+# group: [bugs]
+
+require sitting_duck
+
+# =============================================================================
+# Bug #26: Go package_clause should extract "main" as name
+# =============================================================================
+
+# The package_clause node should extract "main" via package_identifier child
+query IT
+SELECT name, semantic_type FROM read_ast('test/data/go/simple.go')
+WHERE type = 'package_clause';
+----
+main	DEFINITION_MODULE
+
+# There should be exactly 1 named DEFINITION_MODULE entry (the package)
+# The source_file node is also DEFINITION_MODULE but has no name
+query I
+SELECT COUNT(*) FROM read_ast('test/data/go/simple.go')
+WHERE semantic_type = 'DEFINITION_MODULE' AND name IS NOT NULL AND name != '';
+----
+1
+
+# ast_definitions() should return exactly one module definition for Go
+statement ok
+CREATE TEMP TABLE go_ast AS SELECT * FROM read_ast('test/data/go/simple.go');
+
+query II
+SELECT name, definition_type FROM ast_definitions('go_ast')
+WHERE definition_type = 'module';
+----
+main	module
+
+# =============================================================================
+# Bug #25: Keyword tokens should not appear in ast_definitions()
+# =============================================================================
+
+# Rust definitions should not include keyword text like "fn", "struct", "impl"
+statement ok
+CREATE TEMP TABLE rust_ast AS SELECT * FROM read_ast('test/data/rust/simple.rs');
+
+query I
+SELECT COUNT(*) FROM ast_definitions('rust_ast')
+WHERE name IN ('fn', 'struct', 'impl', 'let', 'pub', 'mod', 'use', 'enum', 'trait');
+----
+0
+
+# Go definitions should not include keyword text
+query I
+SELECT COUNT(*) FROM ast_definitions('go_ast')
+WHERE name IN ('func', 'var', 'const', 'type', 'package', 'import');
+----
+0
+
+# JS definitions should not include "program" root node
+statement ok
+CREATE TEMP TABLE js_ast AS SELECT * FROM read_ast('test/data/javascript/simple.js');
+
+query I
+SELECT COUNT(*) FROM ast_definitions('js_ast')
+WHERE name = 'program';
+----
+0
+
+# =============================================================================
+# Verify ast_definitions() returns only meaningful definitions
+# =============================================================================
+
+# Go definitions should be clean: package and functions only
+query II
+SELECT name, definition_type FROM ast_definitions('go_ast')
+ORDER BY start_line;
+----
+main	module
+Hello	function
+main	function

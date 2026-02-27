@@ -66,7 +66,7 @@
  * @{
  */
 DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, 0)
-DEF_TYPE("package_clause", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("package_clause", DEFINITION_MODULE, CUSTOM, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("package_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("import_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
 DEF_TYPE("import_spec", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
