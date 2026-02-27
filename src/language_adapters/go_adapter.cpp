@@ -59,6 +59,12 @@ string GoAdapter::ExtractNodeName(TSNode node, const string &content) const {
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config) {
+		if (config->name_strategy == ExtractionStrategy::CUSTOM) {
+			string node_type = string(node_type_str);
+			if (node_type == "package_clause") {
+				return FindChildByType(node, content, "package_identifier");
+			}
+		}
 		return ExtractByStrategy(node, content, config->name_strategy);
 	}
 
@@ -68,8 +74,6 @@ string GoAdapter::ExtractNodeName(TSNode node, const string &content) const {
 		return FindChildByType(node, content, "identifier");
 	} else if (node_type.find("_spec") != string::npos) {
 		return FindChildByType(node, content, "identifier");
-	} else if (node_type == "package_clause") {
-		return FindChildByType(node, content, "package_identifier");
 	}
 
 	return "";

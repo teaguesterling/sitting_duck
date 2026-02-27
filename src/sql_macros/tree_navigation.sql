@@ -64,6 +64,7 @@ CREATE OR REPLACE MACRO ast_definitions(ast_table) AS TABLE
         semantic_type
     FROM query_table(ast_table)
     WHERE is_definition(semantic_type)
+      AND is_construct(flags)
       AND name IS NOT NULL AND name != ''
     ORDER BY file_path, start_line;
 
@@ -184,14 +185,14 @@ CREATE OR REPLACE MACRO ast_class_members(ast_table, class_node_id) AS TABLE
               AND a.node_id <= c.node_id + c.descendant_count
         ),
         -- Find all named definition nodes within the class
-        -- Excludes syntactic tokens like 'class'/'def' keywords where type=name
+        -- Excludes syntactic tokens like 'class'/'def' keywords via flag check
         all_defs AS (
             SELECT node_id, descendant_count, name, type, semantic_type,
                    start_line, end_line, depth, parent_id, peek, file_path, language
             FROM descendants
             WHERE is_definition(semantic_type)
+              AND is_construct(flags)
               AND name IS NOT NULL AND name != ''
-              AND type != name  -- Filter out keyword tokens (e.g., 'class' with name='class')
         )
     -- Return definitions that are NOT nested inside other definitions
     -- (i.e., direct members of the class, not locals inside methods)
