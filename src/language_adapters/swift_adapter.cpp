@@ -103,19 +103,8 @@ string SwiftAdapter::ExtractNodeName(TSNode node, const string &content) const {
 
 	// Swift-specific fallbacks for unknown types
 	string node_type = string(node_type_str);
-	if (node_type == "function_declaration") {
+	if (node_type == "function_declaration" || node_type == "init_declaration") {
 		return FindChildByType(node, content, "simple_identifier");
-	}
-	if (node_type == "init_declaration") {
-		string identifier = FindChildByType(node, content, "simple_identifier");
-		return identifier.empty() ? "init" : identifier;
-	}
-	if (node_type == "deinit_declaration") {
-		return "deinit";
-	}
-	if (node_type == "subscript_declaration") {
-		string identifier = FindChildByType(node, content, "simple_identifier");
-		return identifier.empty() ? "subscript" : identifier;
 	}
 	if (node_type == "class_declaration" || node_type == "struct_declaration" || node_type == "enum_declaration" ||
 	    node_type == "protocol_declaration") {
