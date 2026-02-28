@@ -61,36 +61,36 @@ string BashAdapter::ExtractNodeName(TSNode node, const string &content) const {
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config) {
+		if (config->name_strategy == ExtractionStrategy::CUSTOM) {
+			string node_type = string(node_type_str);
+			if (node_type == "declaration_command") {
+				// declaration_command nests the variable name 2 levels deep:
+				// declaration_command -> variable_assignment -> variable_name
+				TSNode var_assign = FindChildByTypeNode(node, "variable_assignment");
+				if (!ts_node_is_null(var_assign)) {
+					return FindChildByType(var_assign, content, "variable_name");
+				}
+				// Fallback: direct variable_name child (e.g., `local var`)
+				string result = FindChildByType(node, content, "variable_name");
+				if (!result.empty()) {
+					return result;
+				}
+				// Last resort: find first word child that isn't a flag
+				// e.g., `declare -a FILES_PROCESSED` has word children: "-a", "FILES_PROCESSED"
+				uint32_t child_count = ts_node_child_count(node);
+				for (uint32_t i = 0; i < child_count; i++) {
+					TSNode child = ts_node_child(node, i);
+					if (string(ts_node_type(child)) == "word") {
+						string text = ExtractNodeText(child, content);
+						if (!text.empty() && text[0] != '-') {
+							return text;
+						}
+					}
+				}
+				return "";
+			}
+		}
 		return ExtractByStrategy(node, content, config->name_strategy);
-	}
-
-	// Bash-specific fallbacks
-	string node_type = string(node_type_str);
-	if (node_type == "function_definition") {
-		// Extract function name
-		return FindChildByType(node, content, "word");
-	}
-	if (node_type == "variable_assignment") {
-		// Extract variable name from assignment
-		uint32_t child_count = ts_node_child_count(node);
-		for (uint32_t i = 0; i < child_count; i++) {
-			TSNode child = ts_node_child(node, i);
-			string child_type = ts_node_type(child);
-			if (child_type == "variable_name") {
-				return ExtractNodeText(child, content);
-			}
-		}
-	}
-	if (node_type == "simple_command" || node_type == "command") {
-		// Extract command name (first word)
-		uint32_t child_count = ts_node_child_count(node);
-		for (uint32_t i = 0; i < child_count; i++) {
-			TSNode child = ts_node_child(node, i);
-			string child_type = ts_node_type(child);
-			if (child_type == "word") {
-				return ExtractNodeText(child, content);
-			}
-		}
 	}
 
 	return "";
