@@ -63,6 +63,19 @@ string KotlinAdapter::ExtractNodeName(TSNode node, const string &content) const 
 		if (config->name_strategy == ExtractionStrategy::CUSTOM) {
 			// Kotlin-specific custom extraction
 			string node_type = string(node_type_str);
+			if (node_type == "property_declaration") {
+				// Kotlin wraps property names in variable_declaration → simple_identifier
+				string identifier = FindChildByType(node, content, "simple_identifier");
+				if (!identifier.empty()) {
+					return identifier;
+				}
+				// Search inside variable_declaration child
+				TSNode var_decl = FindChildByTypeNode(node, "variable_declaration");
+				if (!ts_node_is_null(var_decl)) {
+					return FindChildByType(var_decl, content, "simple_identifier");
+				}
+				return FindChildByType(node, content, "identifier");
+			}
 			if (node_type.find("declaration") != string::npos || node_type.find("definition") != string::npos) {
 				// Try simple_identifier first (Kotlin-specific)
 				string identifier = FindChildByType(node, content, "simple_identifier");
@@ -79,6 +92,19 @@ string KotlinAdapter::ExtractNodeName(TSNode node, const string &content) const 
 
 	// Fallback: try to find identifier child for common declaration types
 	string node_type = string(node_type_str);
+	if (node_type == "property_declaration") {
+		// Kotlin wraps property names in variable_declaration → simple_identifier
+		string identifier = FindChildByType(node, content, "simple_identifier");
+		if (!identifier.empty()) {
+			return identifier;
+		}
+		// Search inside variable_declaration child
+		TSNode var_decl = FindChildByTypeNode(node, "variable_declaration");
+		if (!ts_node_is_null(var_decl)) {
+			return FindChildByType(var_decl, content, "simple_identifier");
+		}
+		return FindChildByType(node, content, "identifier");
+	}
 	if (node_type.find("declaration") != string::npos || node_type.find("definition") != string::npos) {
 		// Try simple_identifier first (Kotlin-specific)
 		string identifier = FindChildByType(node, content, "simple_identifier");

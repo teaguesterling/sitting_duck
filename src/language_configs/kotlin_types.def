@@ -145,7 +145,7 @@ DEF_TYPE("anonymous_initializer", DEFINITION_FUNCTION | SemanticRefinements::Fun
  */
 
 /// @brief Property declaration - `val`/`var` in class
-DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, CUSTOM, VARIABLE_WITH_TYPE, 0)
 
 /// @brief Variable declaration - local `val`/`var`
 DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)

@@ -169,7 +169,7 @@ DEF_TYPE("extension_declaration", DEFINITION_CLASS | SemanticRefinements::Class:
  */
 
 /// @brief Property declaration - class/struct property
-DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, CUSTOM, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 
 /// @brief Variable declaration - local or global `let`/`var`
 DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
