@@ -110,19 +110,19 @@ DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAM
  */
 
 /// @brief Struct declaration - `const S = struct { }`
-DEF_TYPE("struct_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("struct_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, NONE, 0)
 
 /// @brief Enum declaration - `const E = enum { }`
-DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, CUSTOM, NONE, 0)
 
 /// @brief Union declaration - `const U = union { }`
-DEF_TYPE("union_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("union_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, NONE, 0)
 
 /// @brief Opaque declaration - for C interop
-DEF_TYPE("opaque_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("opaque_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, CUSTOM, NONE, 0)
 
 /// @brief Error set declaration - `const E = error { }`
-DEF_TYPE("error_set_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("error_set_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, CUSTOM, NONE, 0)
 
 /** @} */ // end zig_types
 
@@ -149,7 +149,7 @@ DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Vari
 DEF_TYPE("comptime_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, 0)
 
 /// @brief Test declaration - `test "name" { }`
-DEF_TYPE("test_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("test_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, NONE, 0)
 
 /// @brief Using namespace declaration - `usingnamespace @import("...")`
 DEF_TYPE("using_namespace_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0)
