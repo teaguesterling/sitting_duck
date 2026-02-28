@@ -1,0 +1,254 @@
+# name: test/sql/audit/name_extraction_audit.test
+# description: Comprehensive audit of name extraction across all languages
+# group: [sitting_duck_audit]
+
+require sitting_duck
+
+# Export all definitions and imports across all languages to CSV for analysis
+statement ok
+COPY (
+  SELECT 'python' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/python/simple.py')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'python_imports' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/python/imports.py')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'python_decorators' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/python/decorators.py')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'python_inheritance' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/python/inheritance.py')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'javascript' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/javascript/simple.js')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'javascript_imports' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/javascript/imports.js')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'typescript' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/javascript/typed_example.ts', 'typescript')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'typescript_imports' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/javascript/imports.ts', 'typescript')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'go' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/go/simple.go')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'go_visibility' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/go/visibility.go')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'rust' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/rust/simple.rs')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'rust_imports' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/rust/imports.rs')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'c' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/c/imports.c')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'cpp' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/cpp/simple.cpp')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'cpp_imports' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/cpp/imports.cpp')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'csharp' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/csharp/simple.cs')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'kotlin' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/kotlin/simple.kt')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'swift' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/swift/simple.swift')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'dart' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/dart/sample.dart')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'dart_imports' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/dart/imports.dart')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'ruby' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/ruby/simple.rb')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'php' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/php/test.php')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'php_imports' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/php/imports.php')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'bash' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/bash/simple.sh')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'r' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/r/simple.r')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'zig' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/zig/sample.zig')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'lua' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/lua/simple.lua')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'hcl' AS lang, type, semantic_type, name, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/hcl/simple.tf')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+) TO 'workspace/design/audit-reports/all_definitions.csv' WITH (HEADER, DELIMITER ',');
+
+# Export root nodes
+statement ok
+COPY (
+  SELECT 'python' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/python/simple.py') WHERE depth = 0
+  UNION ALL
+  SELECT 'javascript' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/javascript/simple.js') WHERE depth = 0
+  UNION ALL
+  SELECT 'go' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/go/simple.go') WHERE depth = 0
+  UNION ALL
+  SELECT 'rust' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/rust/simple.rs') WHERE depth = 0
+  UNION ALL
+  SELECT 'c' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/c/imports.c') WHERE depth = 0
+  UNION ALL
+  SELECT 'cpp' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/cpp/simple.cpp') WHERE depth = 0
+  UNION ALL
+  SELECT 'csharp' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/csharp/simple.cs') WHERE depth = 0
+  UNION ALL
+  SELECT 'kotlin' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/kotlin/simple.kt') WHERE depth = 0
+  UNION ALL
+  SELECT 'swift' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/swift/simple.swift') WHERE depth = 0
+  UNION ALL
+  SELECT 'dart' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/dart/sample.dart') WHERE depth = 0
+  UNION ALL
+  SELECT 'ruby' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/ruby/simple.rb') WHERE depth = 0
+  UNION ALL
+  SELECT 'php' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/php/test.php') WHERE depth = 0
+  UNION ALL
+  SELECT 'bash' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/bash/simple.sh') WHERE depth = 0
+  UNION ALL
+  SELECT 'r' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/r/simple.r') WHERE depth = 0
+  UNION ALL
+  SELECT 'zig' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/zig/sample.zig') WHERE depth = 0
+  UNION ALL
+  SELECT 'lua' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/lua/simple.lua') WHERE depth = 0
+  UNION ALL
+  SELECT 'hcl' AS lang, type, semantic_type, name, depth
+  FROM read_ast('test/data/hcl/simple.tf') WHERE depth = 0
+) TO 'workspace/design/audit-reports/root_nodes.csv' WITH (HEADER, DELIMITER ',');
+
+# Export keyword-named definitions (potential noise)
+statement ok
+COPY (
+  SELECT 'python' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/python/simple.py')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('def', 'class', 'lambda', 'function', 'import', 'from')
+  UNION ALL
+  SELECT 'javascript' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/javascript/simple.js')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('function', 'class', 'const', 'let', 'var', 'import', 'export')
+  UNION ALL
+  SELECT 'go' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/go/simple.go')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('func', 'var', 'const', 'type', 'package', 'import')
+  UNION ALL
+  SELECT 'rust' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/rust/simple.rs')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('fn', 'struct', 'impl', 'enum', 'trait', 'mod', 'use', 'let', 'pub')
+  UNION ALL
+  SELECT 'c' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/c/imports.c')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('struct', 'enum', 'typedef', 'int', 'void', 'char')
+  UNION ALL
+  SELECT 'cpp' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/cpp/simple.cpp')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('struct', 'class', 'enum', 'namespace', 'void', 'int')
+  UNION ALL
+  SELECT 'csharp' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/csharp/simple.cs')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('class', 'struct', 'interface', 'enum', 'namespace', 'void', 'int')
+  UNION ALL
+  SELECT 'kotlin' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/kotlin/simple.kt')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('fun', 'class', 'val', 'var', 'object')
+  UNION ALL
+  SELECT 'swift' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/swift/simple.swift')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('func', 'class', 'struct', 'enum', 'protocol', 'var', 'let')
+  UNION ALL
+  SELECT 'ruby' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/ruby/simple.rb')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('def', 'class', 'module', 'end')
+  UNION ALL
+  SELECT 'php' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/php/test.php')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('function', 'class', 'namespace', 'public', 'private', 'protected')
+  UNION ALL
+  SELECT 'bash' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/bash/simple.sh')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('function', 'local', 'export', 'declare')
+  UNION ALL
+  SELECT 'r' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/r/simple.r')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('function', 'library', 'require')
+  UNION ALL
+  SELECT 'zig' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/zig/sample.zig')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('fn', 'const', 'var', 'pub')
+  UNION ALL
+  SELECT 'dart' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/dart/sample.dart')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('class', 'void', 'var', 'final', 'const', 'int', 'String')
+  UNION ALL
+  SELECT 'lua' AS lang, type, semantic_type, name, LEFT(peek, 60) AS peek
+  FROM read_ast('test/data/lua/simple.lua')
+  WHERE semantic_type LIKE 'DEFINITION%' AND name IN ('function', 'local', 'end')
+) TO 'workspace/design/audit-reports/keyword_definitions.csv' WITH (HEADER, DELIMITER ',');
+
+# Export child node analysis for Go import_spec
+statement ok
+COPY (
+  SELECT 'go_import_children' AS analysis, a.type AS parent_type, b.type AS child_type, b.name AS child_name, LEFT(b.peek, 60) AS child_peek
+  FROM read_ast('test/data/go/simple.go') a
+  JOIN read_ast('test/data/go/simple.go') b ON b.parent_id = a.node_id
+  WHERE a.type = 'import_spec'
+  ORDER BY a.node_id, b.node_id
+) TO 'workspace/design/audit-reports/go_import_children.csv' WITH (HEADER, DELIMITER ',');

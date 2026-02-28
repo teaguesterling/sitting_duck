@@ -1,0 +1,167 @@
+# name: test/sql/audit/name_extraction_flags.test
+# description: Audit flags and keyword filtering
+# group: [sitting_duck_audit]
+
+require sitting_duck
+
+# Export definitions WITH flags to see if keywords have IS_SYNTAX_ONLY set
+statement ok
+COPY (
+  SELECT 'rust' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/rust/simple.rs')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'kotlin' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/kotlin/simple.kt')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'swift' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/swift/simple.swift')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'bash' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/bash/simple.sh')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'zig' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/zig/sample.zig')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'lua' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/lua/simple.lua')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'go' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/go/simple.go')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'python' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/python/simple.py')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'javascript' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/javascript/simple.js')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'c' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/c/imports.c')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'cpp' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/cpp/simple.cpp')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'csharp' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/csharp/simple.cs')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'ruby' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/ruby/simple.rb')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'php' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/php/test.php')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'dart' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/dart/sample.dart')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'r' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/r/simple.r')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+  UNION ALL
+  SELECT 'hcl' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/hcl/simple.tf')
+  WHERE semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%'
+) TO 'workspace/design/audit-reports/definitions_with_flags.csv' WITH (HEADER, DELIMITER ',');
+
+# Now check: which definitions survive is_construct filtering?
+# is_construct should filter out IS_SYNTAX_ONLY (flag & 0x01 == 0)
+statement ok
+COPY (
+  SELECT 'rust' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/rust/simple.rs')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'kotlin' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/kotlin/simple.kt')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'swift' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/swift/simple.swift')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'bash' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/bash/simple.sh')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'zig' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/zig/sample.zig')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'lua' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/lua/simple.lua')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'go' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/go/simple.go')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'python' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/python/simple.py')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'javascript' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/javascript/simple.js')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'c' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/c/imports.c')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'cpp' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/cpp/simple.cpp')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'csharp' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/csharp/simple.cs')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'ruby' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/ruby/simple.rb')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'php' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/php/test.php')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'dart' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/dart/sample.dart')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'r' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/r/simple.r')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+  UNION ALL
+  SELECT 'hcl' AS lang, type, semantic_type, name, flags, LEFT(peek, 80) AS peek
+  FROM read_ast('test/data/hcl/simple.tf')
+  WHERE (semantic_type LIKE 'DEFINITION%' OR semantic_type LIKE 'EXTERNAL%')
+    AND (flags & 1) = 0
+) TO 'workspace/design/audit-reports/filtered_definitions.csv' WITH (HEADER, DELIMITER ',');
