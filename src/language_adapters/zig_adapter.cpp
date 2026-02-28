@@ -62,6 +62,42 @@ string ZigAdapter::ExtractNodeName(TSNode node, const string &content) const {
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config) {
+		if (config->name_strategy == ExtractionStrategy::CUSTOM) {
+			string node_type = string(node_type_str);
+
+			// Type declarations: name lives in parent variable_declaration
+			// Pattern: `const Point = struct { }` -> name is "Point"
+			if (node_type == "struct_declaration" || node_type == "enum_declaration" ||
+			    node_type == "union_declaration" || node_type == "opaque_declaration" ||
+			    node_type == "error_set_declaration") {
+				TSNode parent = ts_node_parent(node);
+				if (!ts_node_is_null(parent)) {
+					const char *parent_type = ts_node_type(parent);
+					if (strcmp(parent_type, "variable_declaration") == 0) {
+						return FindChildByType(parent, content, "identifier");
+					}
+				}
+				return "";
+			}
+
+			// Test declarations: name is a string literal
+			// Pattern: `test "basic test" { }` -> name is "basic test"
+			if (node_type == "test_declaration") {
+				// Try string_content first (the inner text without quotes)
+				string name = FindChildByType(node, content, "string_content");
+				if (!name.empty()) {
+					return name;
+				}
+				// Fall back to string child and strip quotes
+				name = FindChildByType(node, content, "string");
+				if (name.size() >= 2 && name.front() == '"' && name.back() == '"') {
+					return name.substr(1, name.size() - 2);
+				}
+				return name;
+			}
+
+			return "";
+		}
 		return ExtractByStrategy(node, content, config->name_strategy);
 	}
 

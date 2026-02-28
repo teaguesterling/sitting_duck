@@ -171,3 +171,55 @@ WHERE type = 'comptime_statement';
 ----
 1
 
+# Test 25: Struct name extraction
+query I
+SELECT name FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'struct_declaration' AND name != ''
+ORDER BY name;
+----
+Point
+
+# Test 26: Enum name extraction
+query I
+SELECT name FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'enum_declaration' AND name != '';
+----
+Color
+
+# Test 27: Union name extraction
+query I
+SELECT name FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'union_declaration' AND name != '';
+----
+Shape
+
+# Test 28: Error set name extraction
+query I
+SELECT name FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'error_set_declaration' AND name != '';
+----
+FileError
+
+# Test 29: Test declaration name extraction
+query I
+SELECT name FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'test_declaration' AND name != ''
+ORDER BY name;
+----
+basic test
+point operations
+
+# Test 30: Function name extraction still works
+query I
+SELECT name FROM read_ast('test/data/zig/sample.zig')
+WHERE type = 'function_declaration'
+ORDER BY name;
+----
+add
+area
+asyncOperation
+distanceFromOrigin
+main
+swap
+toRGB
+
