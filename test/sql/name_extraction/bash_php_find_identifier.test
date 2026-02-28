@@ -1,0 +1,101 @@
+# name: test/sql/name_extraction/bash_php_find_identifier.test
+# description: Test FIND_IDENTIFIER extracts variable_name and word child types (#28)
+# group: [name_extraction]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# FIND_IDENTIFIER fix: variable_name and word child node types
+# =============================================================================
+#
+# The FIND_IDENTIFIER extraction strategy was missing two tree-sitter node
+# types used by Bash and PHP grammars:
+#   - variable_name: Bash variable assignments, PHP parameters
+#   - word: Bash function names
+#
+# This caused definition nodes to produce NULL/empty names.
+#
+# Issue: https://github.com/teaguesterling/sitting_duck/issues/28
+# =============================================================================
+
+# =============================================================================
+# BASH: function_definition (uses "word" child type)
+# =============================================================================
+
+# Test: All 5 bash function definitions now have non-NULL names
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/bash/simple.sh', context := 'native')
+WHERE type = 'function_definition' AND name IS NOT NULL AND name != '';
+----
+5
+
+# Test: Specific bash function names are extracted correctly
+query TT
+SELECT type, name
+FROM read_ast('test/data/bash/simple.sh', context := 'native')
+WHERE type = 'function_definition'
+ORDER BY start_line;
+----
+function_definition	show_usage
+function_definition	process_file
+function_definition	run_system_checks
+function_definition	analyze_files
+function_definition	main
+
+# =============================================================================
+# BASH: variable_assignment (uses "variable_name" child type)
+# =============================================================================
+
+# Test: 27 of 28 bash variable assignments have names
+# (1 uses subscript syntax: CONFIG_MAP["$basename"]="$file_size" where
+#  variable_name is nested inside a subscript node, not a direct child)
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/bash/simple.sh', context := 'native')
+WHERE type = 'variable_assignment' AND name IS NOT NULL AND name != '';
+----
+27
+
+# Test: Global variable names are extracted correctly
+query TT
+SELECT type, name
+FROM read_ast('test/data/bash/simple.sh', context := 'native')
+WHERE type = 'variable_assignment' AND depth = 1
+ORDER BY start_line;
+----
+variable_assignment	SCRIPT_NAME
+variable_assignment	VERSION
+variable_assignment	DEBUG
+
+# =============================================================================
+# PHP: simple_parameter (uses "variable_name" child type)
+# =============================================================================
+
+# Test: All 9 PHP simple_parameter nodes now have non-NULL names
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/languages/php/test.php', context := 'native')
+WHERE type = 'simple_parameter' AND name IS NOT NULL AND name != '';
+----
+9
+
+# Test: PHP parameter names are extracted correctly
+query TT
+SELECT type, name
+FROM read_ast('test/data/languages/php/test.php', context := 'native')
+WHERE type = 'simple_parameter'
+ORDER BY start_line, name;
+----
+simple_parameter	$name
+simple_parameter	$input
+simple_parameter	$items
+simple_parameter	$item
+simple_parameter	$data
+simple_parameter	$message
+simple_parameter	$input
+simple_parameter	$a
+simple_parameter	$b
