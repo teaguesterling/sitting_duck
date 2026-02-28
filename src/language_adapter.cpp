@@ -317,6 +317,12 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		if (result.empty()) {
 			result = FindChildByType(node, content, "setter"); // Ruby setter methods (def name=)
 		}
+		if (result.empty()) {
+			result = FindChildByType(node, content, "variable_name"); // Bash vars, PHP params/properties
+		}
+		if (result.empty()) {
+			result = FindChildByType(node, content, "word"); // Bash function names
+		}
 		return result;
 	}
 	case ExtractionStrategy::FIND_PROPERTY:
