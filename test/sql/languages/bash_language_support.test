@@ -128,3 +128,82 @@ SELECT COUNT(*) FROM read_ast('test/data/bash/simple.sh', 'bash')
 WHERE type IN ('array', 'subscript');
 ----
 14
+
+# Test 14: Function definition name extraction
+# =============================================
+# Verifies that all 5 function names are correctly extracted
+
+query IT
+SELECT name, type FROM read_ast('test/data/bash/simple.sh', 'bash')
+WHERE type = 'function_definition'
+ORDER BY start_line;
+----
+show_usage	function_definition
+process_file	function_definition
+run_system_checks	function_definition
+analyze_files	function_definition
+main	function_definition
+
+# Test 15: Variable assignment name extraction
+# =============================================
+# Verifies that variable_assignment nodes have their variable names extracted
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/bash/simple.sh', 'bash')
+WHERE type = 'variable_assignment' AND name != '';
+----
+27
+
+# Test 16: Declaration command name extraction
+# =============================================
+# Verifies that declare/local/readonly commands extract the variable name,
+# handling both nested variable_assignment and bare declarations with flags
+
+query IT
+SELECT name, type FROM read_ast('test/data/bash/simple.sh', 'bash')
+WHERE type = 'declaration_command'
+ORDER BY start_line;
+----
+FILES_PROCESSED	declaration_command
+CONFIG_MAP	declaration_command
+file_path	declaration_command
+backup_dir	declaration_command
+counter	declaration_command
+file_size	declaration_command
+line_count	declaration_command
+filename	declaration_command
+extension	declaration_command
+basename	declaration_command
+system_ok	declaration_command
+git_version	declaration_command
+disk_usage	declaration_command
+pattern	declaration_command
+files	declaration_command
+verbose	declaration_command
+config_file	declaration_command
+input_files	declaration_command
+
+# Test 17: Redirect semantic types
+# =================================
+# Redirects should be EXECUTION_STATEMENT, not EXTERNAL_IMPORT
+
+query IT
+SELECT DISTINCT semantic_type, type FROM read_ast('test/data/bash/simple.sh', 'bash')
+WHERE type IN ('file_redirect', 'heredoc_redirect')
+ORDER BY type;
+----
+EXECUTION_STATEMENT	file_redirect
+EXECUTION_STATEMENT	heredoc_redirect
+
+# Test 18: Minimal empty names for definition nodes
+# ==================================================
+# Nearly all definition nodes should have names extracted.
+# The one remaining case is `counter=$((counter + 1))` where the
+# variable_assignment contains an arithmetic expansion without a
+# variable_name child node.
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/bash/simple.sh', 'bash')
+WHERE semantic_type LIKE 'DEFINITION%' AND type NOT IN ('program') AND name = '';
+----
+1

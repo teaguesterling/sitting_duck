@@ -108,7 +108,7 @@ DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_W
 DEF_TYPE("variable_assignment", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 
 /// @brief Declaration command - `declare`, `local`, `readonly`, `typeset`, `export`
-DEF_TYPE("declaration_command", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("declaration_command", DEFINITION_VARIABLE, CUSTOM, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 
 /// @brief Unset command - removes variable or function definition
 DEF_TYPE("unset_command", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
@@ -385,13 +385,13 @@ DEF_TYPE("special_variable_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
  */
 
 /// @brief File redirect - `>`, `<`, `>>`, `2>`, etc.
-DEF_TYPE("file_redirect", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
+DEF_TYPE("file_redirect", EXECUTION_STATEMENT, NONE, NONE, 0)
 
 /// @brief Here document - `<<EOF ... EOF`
-DEF_TYPE("heredoc_redirect", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
+DEF_TYPE("heredoc_redirect", EXECUTION_STATEMENT, NONE, NONE, 0)
 
 /// @brief Here string - `<<<string`
-DEF_TYPE("herestring_redirect", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
+DEF_TYPE("herestring_redirect", EXECUTION_STATEMENT, NONE, NONE, 0)
 
 /** @} */ // end bash_redirections
 
