@@ -137,13 +137,13 @@ DEF_TYPE("function_signature", DEFINITION_FUNCTION | SemanticRefinements::Functi
 DEF_TYPE("function_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 /// @brief Function expression - anonymous function
-DEF_TYPE("function_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
+DEF_TYPE("function_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, 0)
 
 /// @brief Function expression body
 DEF_TYPE("function_expression_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 /// @brief Lambda expression - `(x) => expr`
-DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, 0)
+DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, 0)
 
 /// @brief Method signature - class method declaration
 DEF_TYPE("method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)

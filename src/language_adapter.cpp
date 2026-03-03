@@ -397,16 +397,13 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 			    parent_type == "init_declarator" ||               // C++: auto name = lambda
 			    parent_type == "assignment" ||                    // Python: x = lambda
 			    parent_type == "named_expression" ||              // Python: (x := lambda)
+			    parent_type == "initialized_variable_definition" || // Dart: var name = () => ...
 			    parent_type.find("declarator") != string::npos) { // Other declarator patterns
 
-				// Look for the first child which should be the identifier
-				TSNode first_child = ts_node_child(parent, 0);
-				if (!ts_node_is_null(first_child)) {
-					string first_child_type = ts_node_type(first_child);
-					if (first_child_type == "identifier") {
-						return ExtractNodeText(first_child, content);
-					}
-				}
+				// Find identifier among parent's children
+				// In most languages (JS, Python, C++) the identifier is the first child,
+				// but in Dart initialized_variable_definition the type annotation comes first
+				return FindChildByType(parent, content, "identifier");
 			}
 		}
 		return "";
