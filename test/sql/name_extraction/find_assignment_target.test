@@ -1,0 +1,77 @@
+# name: test/sql/name_extraction/find_assignment_target.test
+# description: Test FIND_ASSIGNMENT_TARGET infers names for anonymous functions (#41)
+# group: [name_extraction]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# FIND_ASSIGNMENT_TARGET: Anonymous function name inference
+# =============================================================================
+#
+# Anonymous functions (lambdas, arrow functions, function expressions) should
+# infer their name from the assignment context, e.g.:
+#   var greet = (name) { ... };    →  name = "greet"
+#   square = lambda x: x * x      →  name = "square"
+#
+# Issue: https://github.com/teaguesterling/sitting_duck/issues/41
+# =============================================================================
+
+# =============================================================================
+# PYTHON: lambda name inference (verify existing behavior)
+# =============================================================================
+
+# Test: Python lambdas assigned to variables get names
+# (lambda nodes appear twice due to IS_KEYWORD_IF_LEAF — expression + keyword)
+query TT
+SELECT type, name
+FROM read_ast('test/data/python/lambdas.py', context := 'native')
+WHERE type = 'lambda' AND name IS NOT NULL AND name != ''
+ORDER BY start_line;
+----
+lambda	square
+lambda	add
+lambda	greet
+lambda	filtered
+
+# Test: Python lambda used inline (as argument) has no inferred name
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/python/lambdas.py', context := 'native')
+WHERE type = 'lambda' AND start_line = 16 AND (name IS NULL OR name = '');
+----
+2
+
+# =============================================================================
+# DART: function_expression name inference (new fix)
+# =============================================================================
+
+# Test: Dart function expressions assigned to variables get names
+query TT
+SELECT type, name
+FROM read_ast('test/data/dart/anonymous_functions.dart', context := 'native')
+WHERE type = 'function_expression' AND name IS NOT NULL AND name != ''
+ORDER BY start_line;
+----
+function_expression	greet
+function_expression	square
+function_expression	add
+function_expression	doubler
+
+# Test: Dart function expression used inline (sort callback) has no name
+query TI
+SELECT type, start_line
+FROM read_ast('test/data/dart/anonymous_functions.dart', context := 'native')
+WHERE type = 'function_expression' AND (name IS NULL OR name = '');
+----
+function_expression	22
+
+# Test: Total count of Dart function_expression nodes
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/dart/anonymous_functions.dart', context := 'native')
+WHERE type = 'function_expression';
+----
+5
