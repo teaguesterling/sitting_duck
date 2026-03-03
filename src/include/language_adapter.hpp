@@ -92,6 +92,10 @@ protected:
 	string ExtractNameFromQualifiedNode(TSNode qualified_node, const string &content) const;
 	string ExtractNameFromDeclarator(TSNode node, const string &content) const;
 	string ExtractFunctionNameFromText(TSNode node, const string &content) const;
+
+	// FIND_IDENTIFIER helpers for searching through wrapper nodes
+	string FindIdentifierInChildren(TSNode node, const string &content) const;
+	string FindIdentifierInWrappers(TSNode node, const string &content, int depth) const;
 };
 
 // Python language adapter

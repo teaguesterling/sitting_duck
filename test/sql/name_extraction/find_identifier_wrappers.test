@@ -1,0 +1,209 @@
+# name: test/sql/name_extraction/find_identifier_wrappers.test
+# description: Test FIND_IDENTIFIER searches through intermediate wrapper nodes (#30)
+# group: [name_extraction]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# FIND_IDENTIFIER wrapper traversal fix
+# =============================================================================
+#
+# Many tree-sitter grammars wrap identifiers inside intermediate structural
+# nodes (declarators, lists, expressions). The FIND_IDENTIFIER strategy now
+# searches through known wrapper types when the identifier is not a direct child.
+#
+# Issue: https://github.com/teaguesterling/sitting_duck/issues/30
+# =============================================================================
+
+# =============================================================================
+# JAVASCRIPT: lexical_declaration (wrapper: variable_declarator)
+# =============================================================================
+
+# Test: All 7 JS lexical_declaration nodes have non-NULL names
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/javascript/simple.js', context := 'native')
+WHERE type = 'lexical_declaration' AND name IS NOT NULL AND name != '';
+----
+7
+
+# Test: Specific JS variable names extracted correctly
+query TT
+SELECT type, name
+FROM read_ast('test/data/javascript/simple.js', context := 'native')
+WHERE type = 'lexical_declaration'
+ORDER BY start_line;
+----
+lexical_declaration	calc
+lexical_declaration	sum
+lexical_declaration	multiply
+lexical_declaration	person
+lexical_declaration	numbers
+lexical_declaration	doubled
+lexical_declaration	response
+
+# =============================================================================
+# C#: variable_declaration (wrapper: variable_declarator)
+# =============================================================================
+
+# Test: All 8 C# variable_declaration nodes have non-NULL names
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/csharp/simple.cs', context := 'native')
+WHERE type = 'variable_declaration' AND name IS NOT NULL AND name != '';
+----
+8
+
+# Test: Specific C# variable names extracted correctly
+query TT
+SELECT type, name
+FROM read_ast('test/data/csharp/simple.cs', context := 'native')
+WHERE type = 'variable_declaration'
+ORDER BY start_line;
+----
+variable_declaration	_items
+variable_declaration	calc
+variable_declaration	numbers
+variable_declaration	evens
+variable_declaration	result
+variable_declaration	nullable
+variable_declaration	length
+variable_declaration	person
+
+# =============================================================================
+# LUA: variable_declaration (wrappers: assignment_statement -> variable_list)
+# =============================================================================
+
+# Test: All 12 Lua variable_declaration nodes have non-NULL names
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'variable_declaration' AND name IS NOT NULL AND name != '';
+----
+12
+
+# Test: Specific Lua variable names extracted correctly
+query TT
+SELECT type, name
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'variable_declaration'
+ORDER BY start_line;
+----
+variable_declaration	M
+variable_declaration	name
+variable_declaration	version
+variable_declaration	active
+variable_declaration	transform
+variable_declaration	config
+variable_declaration	Animal
+variable_declaration	self
+variable_declaration	results
+variable_declaration	count
+variable_declaration	co
+variable_declaration	total
+
+# =============================================================================
+# HCL: object_elem (wrappers: expression -> variable_expr)
+# =============================================================================
+
+# Test: All 14 HCL object_elem nodes have non-NULL names
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/hcl/simple.tf', context := 'native')
+WHERE type = 'object_elem' AND name IS NOT NULL AND name != '';
+----
+14
+
+# Test: Specific HCL object element names extracted correctly
+query TT
+SELECT type, name
+FROM read_ast('test/data/hcl/simple.tf', context := 'native')
+WHERE type = 'object_elem'
+ORDER BY start_line;
+----
+object_elem	Environment
+object_elem	Team
+object_elem	ManagedBy
+object_elem	Name
+object_elem	Name
+object_elem	Name
+object_elem	port
+object_elem	protocol
+object_elem	cidr_blocks
+object_elem	port
+object_elem	protocol
+object_elem	cidr_blocks
+object_elem	source
+object_elem	version
+
+# =============================================================================
+# DART: local_variable_declaration (wrapper: initialized_variable_definition)
+# =============================================================================
+
+# Test: 21 of 23 Dart local_variable_declaration nodes have non-NULL names
+# (2 use destructuring patterns without simple identifiers)
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'local_variable_declaration' AND name IS NOT NULL AND name != '';
+----
+21
+
+# Test: Specific Dart variable names extracted correctly
+query TT
+SELECT type, name
+FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'local_variable_declaration' AND name IS NOT NULL AND name != ''
+ORDER BY start_line;
+----
+local_variable_declaration	dx
+local_variable_declaration	dy
+local_variable_declaration	message
+local_variable_declaration	pi
+local_variable_declaration	maxSize
+local_variable_declaration	lateVar
+local_variable_declaration	nullableString
+local_variable_declaration	nonNullable
+local_variable_declaration	i
+local_variable_declaration	numbers
+local_variable_declaration	counter
+local_variable_declaration	colorName
+local_variable_declaration	point
+local_variable_declaration	list
+local_variable_declaration	listLiteral
+local_variable_declaration	setLiteral
+local_variable_declaration	mapLiteral
+local_variable_declaration	combined
+local_variable_declaration	record
+local_variable_declaration	i
+local_variable_declaration	k
+
+# =============================================================================
+# C++: declaration (wrapper: init_declarator)
+# =============================================================================
+
+# Test: All 7 C++ declaration nodes have non-NULL names
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/cpp/simple.cpp', context := 'native')
+WHERE type = 'declaration' AND name IS NOT NULL AND name != '';
+----
+7
+
+# Test: Specific C++ variable names extracted correctly
+query TT
+SELECT type, name
+FROM read_ast('test/data/cpp/simple.cpp', context := 'native')
+WHERE type = 'declaration'
+ORDER BY start_line;
+----
+declaration	calc
+declaration	sum
+declaration	numbers
+declaration	maxInt
+declaration	maxDouble
+declaration	multiply
+declaration	product

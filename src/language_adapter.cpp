@@ -273,6 +273,87 @@ string LanguageAdapter::ExtractFunctionNameFromText(TSNode node, const string &c
 	return function_name;
 }
 
+string LanguageAdapter::FindIdentifierInChildren(TSNode node, const string &content) const {
+	// Try common identifier node types across languages
+	string result = FindChildByType(node, content, "identifier");
+	if (result.empty()) {
+		result = FindChildByType(node, content, "property_identifier"); // JS methods
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "field_identifier"); // Go methods
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "qualified_identifier"); // C++
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "name"); // PHP
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "simple_identifier"); // Swift, Kotlin
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "type_identifier"); // Swift types
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "operator"); // Ruby operator methods (def +, def <<, etc.)
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "constant"); // Ruby uppercase method names (def F, def M, etc.)
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "setter"); // Ruby setter methods (def name=)
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "variable_name"); // Bash vars, PHP params/properties
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "word"); // Bash function names
+	}
+	return result;
+}
+
+string LanguageAdapter::FindIdentifierInWrappers(TSNode node, const string &content, int depth) const {
+	if (depth <= 0) {
+		return "";
+	}
+
+	// Known intermediate wrapper types that may contain identifiers at a deeper level
+	static const vector<string> wrapper_types = {
+	    "variable_declarator",              // JS, C#, TypeScript
+	    "variable_list",                    // Lua (inside assignment_statement)
+	    "assignment_statement",             // Lua (inside variable_declaration)
+	    "init_declarator",                  // C++
+	    "initialized_variable_definition",  // Dart (inside local_variable_declaration)
+	    "expression",                       // HCL (object_elem key expressions)
+	    "variable_expr",                    // HCL (inside expression)
+	};
+
+	uint32_t child_count = ts_node_child_count(node);
+	for (uint32_t i = 0; i < child_count; i++) {
+		TSNode child = ts_node_child(node, i);
+		const char *child_type = ts_node_type(child);
+
+		for (const string &wrapper : wrapper_types) {
+			if (wrapper == child_type) {
+				// Found a wrapper — search for identifier types in its children
+				string result = FindIdentifierInChildren(child, content);
+				if (!result.empty()) {
+					return result;
+				}
+				// Recurse into the wrapper's children looking for more wrappers
+				if (depth > 1) {
+					result = FindIdentifierInWrappers(child, content, depth - 1);
+					if (!result.empty()) {
+						return result;
+					}
+				}
+				break; // Only match one wrapper type per child node
+			}
+		}
+	}
+	return "";
+}
+
 string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, ExtractionStrategy strategy) const {
 	switch (strategy) {
 	case ExtractionStrategy::NONE:
@@ -288,40 +369,9 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		return "";
 	}
 	case ExtractionStrategy::FIND_IDENTIFIER: {
-		// Try common identifier node types across languages
-		string result = FindChildByType(node, content, "identifier");
+		string result = FindIdentifierInChildren(node, content);
 		if (result.empty()) {
-			result = FindChildByType(node, content, "property_identifier"); // JS methods
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "field_identifier"); // Go methods
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "qualified_identifier"); // C++
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "name"); // PHP
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "simple_identifier"); // Swift, Kotlin
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "type_identifier"); // Swift types
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "operator"); // Ruby operator methods (def +, def <<, etc.)
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "constant"); // Ruby uppercase method names (def F, def M, etc.)
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "setter"); // Ruby setter methods (def name=)
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "variable_name"); // Bash vars, PHP params/properties
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "word"); // Bash function names
+			result = FindIdentifierInWrappers(node, content, 2);
 		}
 		return result;
 	}
