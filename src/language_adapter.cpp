@@ -317,7 +317,11 @@ string LanguageAdapter::FindIdentifierInWrappers(TSNode node, const string &cont
 		return "";
 	}
 
-	// Known intermediate wrapper types that may contain identifiers at a deeper level
+	// Known intermediate wrapper types that may contain identifiers at a deeper level.
+	// NOTE: "expression" is intentionally generic — it's currently only reached via HCL's
+	// object_elem pattern (object_elem -> expression -> variable_expr -> identifier).
+	// The depth limit and identifier-type filter constrain what gets matched, but if
+	// false positives appear in other languages, consider qualifying it further.
 	static const vector<string> wrapper_types = {
 	    "variable_declarator",              // JS, C#, TypeScript
 	    "variable_list",                    // Lua (inside assignment_statement)
