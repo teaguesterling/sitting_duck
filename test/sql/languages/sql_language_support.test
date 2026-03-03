@@ -96,3 +96,83 @@ SELECT COUNT(*) FROM read_ast('test/data/sql/example.sql')
 WHERE type = 'object_reference';
 ----
 15
+
+# =============================================================================
+# CREATE FUNCTION/MACRO name extraction (#37)
+# =============================================================================
+
+# Test 11: create_function nodes get DEFINITION_FUNCTION semantic type
+# ====================================================================
+
+query TT
+SELECT type, semantic_type
+FROM read_ast('test/data/sql/create_function_example.sql')
+WHERE type = 'create_function'
+ORDER BY node_id
+LIMIT 1;
+----
+create_function	DEFINITION_FUNCTION
+
+# Test 12: Function names are correctly extracted (not "CREATE")
+# ==============================================================
+
+query TT
+SELECT name, type
+FROM read_ast('test/data/sql/create_function_example.sql')
+WHERE type = 'create_function'
+ORDER BY start_line;
+----
+get_user_name	create_function
+calculate_total	create_function
+
+# Test 13: keyword_create has PARSER_SYNTAX, not DEFINITION_CLASS
+# ===============================================================
+
+query TT
+SELECT type, semantic_type
+FROM read_ast('test/data/sql/create_function_example.sql')
+WHERE type = 'keyword_create'
+ORDER BY node_id
+LIMIT 1;
+----
+keyword_create	PARSER_SYNTAX
+
+# Test 14: keyword_function has PARSER_SYNTAX, not DEFINITION_FUNCTION
+# ====================================================================
+
+query TT
+SELECT type, semantic_type
+FROM read_ast('test/data/sql/create_function_example.sql')
+WHERE type = 'keyword_function'
+ORDER BY node_id
+LIMIT 1;
+----
+keyword_function	PARSER_SYNTAX
+
+# Test 15: CREATE TABLE and CREATE VIEW also extract names correctly
+# ==================================================================
+
+query TT
+SELECT name, type
+FROM read_ast('test/data/sql/create_function_example.sql')
+WHERE type IN ('create_table', 'create_view')
+ORDER BY start_line;
+----
+products	create_table
+active_users	create_view
+
+# Test 16: ast_definitions returns correct SQL definitions without duplicates
+# ===========================================================================
+
+statement ok
+CREATE TEMP TABLE sql_fn_ast AS SELECT * FROM read_ast('test/data/sql/create_function_example.sql');
+
+query TT
+SELECT name, definition_type FROM ast_definitions('sql_fn_ast')
+WHERE definition_type IN ('function', 'class')
+ORDER BY start_line;
+----
+get_user_name	function
+calculate_total	function
+products	class
+active_users	class

@@ -290,6 +290,11 @@ CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
 
 -- Get all definitions (functions, classes, variables, etc.) with unified categories
 -- Usage: SELECT * FROM ast_definitions(my_ast_table)
+--
+-- IMPORTANT: When querying definitions from raw read_ast() output, always use the
+-- full filter chain: is_definition(semantic_type) AND is_construct(flags) AND name != ''
+-- Using is_definition() alone will include keyword tokens (def, class, CREATE, etc.)
+-- as duplicates, since keywords share the semantic type of their parent construct.
 CREATE OR REPLACE MACRO ast_definitions(ast_table) AS TABLE
     SELECT
         name,
@@ -574,6 +579,9 @@ CREATE OR REPLACE MACRO ast_functions_containing(ast_table, target_type) AS TABL
             WHERE is_function_definition(semantic_type)
               AND name IS NOT NULL AND name != ''
         ),
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- For each function, identify nested functions within it
         nested_funcs AS (
             SELECT
@@ -583,9 +591,6 @@ CREATE OR REPLACE MACRO ast_functions_containing(ast_table, target_type) AS TABL
             FROM functions f
             JOIN query_table(ast_table) nf
               ON nf.node_id > f.func_id
-
-)SQLMACRO"
-        R"SQLMACRO(
              AND nf.node_id <= f.func_id + f.descendant_count
              AND is_function_definition(nf.semantic_type)
         ),
@@ -912,6 +917,9 @@ CREATE OR REPLACE MACRO ast_dead_code(ast_table) AS TABLE
         )
     SELECT
         file_path,
+
+)SQLMACRO"
+        R"SQLMACRO(
         name,
         language,
         start_line,
