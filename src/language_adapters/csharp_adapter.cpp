@@ -63,6 +63,20 @@ string CSharpAdapter::ExtractNodeName(TSNode node, const string &content) const 
 		if (config->name_strategy == ExtractionStrategy::CUSTOM) {
 			// C#-specific custom extraction
 			string node_type = string(node_type_str);
+
+			if (node_type == "using_directive") {
+				// using System; → identifier child
+				// using System.Collections.Generic; → qualified_name child
+				string name = FindChildByType(node, content, "qualified_name");
+				if (name.empty()) {
+					name = FindChildByType(node, content, "identifier");
+				}
+				if (name.empty()) {
+					name = FindChildByType(node, content, "name");
+				}
+				return name;
+			}
+
 			if (node_type.find("declaration") != string::npos || node_type.find("definition") != string::npos) {
 				// Try to find identifier child
 				return FindChildByType(node, content, "identifier");

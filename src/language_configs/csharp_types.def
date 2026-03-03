@@ -84,8 +84,9 @@ DEF_TYPE("namespace_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTN
  * @{
  */
 
-/// @brief Using directive - `using System;`
-DEF_TYPE("using_directive", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, FIND_IDENTIFIER, NONE, 0)
+/// @brief Using directive - `using System;` or `using System.Collections.Generic;`
+/// Uses CUSTOM because dotted imports have `qualified_name` child, not bare `identifier`
+DEF_TYPE("using_directive", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, CUSTOM, NONE, 0)
 
 /** @} */ // end csharp_using
 

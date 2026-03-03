@@ -2,6 +2,7 @@
 #include "duckdb/parser/parser.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/connection.hpp"
+#include "duckdb/main/extension_helper.hpp"
 #include "embedded_sql_macros.hpp"
 #include <sstream>
 #include <vector>
@@ -62,6 +63,9 @@ static vector<string> SplitSQLStatements(const string &sql) {
 }
 
 void RegisterASTSQLMacros(ExtensionLoader &loader) {
+	// Ensure core_functions extension is loaded - needed for bitwise operators (&, |) used in SQL macros
+	ExtensionHelper::TryAutoLoadExtension(loader.GetDatabaseInstance(), "core_functions");
+
 	// Get a connection to execute SQL
 	auto conn = make_uniq<Connection>(loader.GetDatabaseInstance());
 
