@@ -303,6 +303,15 @@ void PopulateSemanticFieldsTemplated(ASTNode &node, const AdapterType *adapter, 
 		node.semantic_type = node_config->semantic_type;
 		node.universal_flags = node_config->flags;
 
+		// Bug #009: Auto-set IS_SYNTAX_ONLY for delimiter/punctuation nodes
+		// These are always pure syntax tokens regardless of what flags say in the .def files.
+		// This matches the scope of IsPunctuation() in semantic_types.cpp.
+		uint8_t base_type = node.semantic_type & 0xFC;
+		if (base_type == SemanticTypes::PARSER_DELIMITER ||
+		    base_type == SemanticTypes::PARSER_PUNCTUATION) {
+			node.universal_flags |= ASTNodeFlags::IS_SYNTAX_ONLY;
+		}
+
 		// RUNTIME DETECTION: Check if function/method definitions have a body
 		// This handles languages like Java where method_declaration is used for both
 		// concrete methods (with body) and abstract/interface methods (without body)

@@ -220,9 +220,8 @@ CREATE OR REPLACE MACRO ast_pattern(pattern_str, lang) AS TABLE
         descendant_count,
         is_pattern_wildcard(name) as is_wildcard,
         wildcard_capture_name(name) as capture_name,
-        -- Use is_punctuation(semantic_type) instead of is_syntax_only(flags)
-        -- See bug 009: is_syntax_only doesn't work for PARSER_DELIMITER nodes
-        is_punctuation(semantic_type) as is_syntax
+        -- Bug #009 fixed: IS_SYNTAX_ONLY is now auto-set for PARSER_DELIMITER/PUNCTUATION
+        is_syntax_only(flags) as is_syntax
     FROM pattern_raw
     WHERE depth >= (SELECT min_depth FROM root_depth);
 
