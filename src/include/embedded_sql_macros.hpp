@@ -1363,6 +1363,7 @@ CREATE OR REPLACE MACRO ast_match(
                 mc.candidate_depth,
                 mc.candidate_descendants,
                 p.capture_name,
+                p.rel_depth as pattern_rel_depth,
                 p.sibling_index as pattern_sibling_index,
                 t.sibling_index as target_sibling_index,
                 t.node_id as captured_node_id,
@@ -1498,10 +1499,10 @@ CREATE OR REPLACE MACRO ast_match(
               AND NOT EXISTS (
                   SELECT 1 FROM captures_single_dedup sd
                   WHERE sd.candidate_file = vs.candidate_file
-                    AND sd.candidate_root = vs.candidate_root
 
 )SQLMACRO"
         R"SQLMACRO(
+                    AND sd.candidate_root = vs.candidate_root
                     AND sd.captured_node_id = t.node_id
               )
         ),
@@ -1594,6 +1595,50 @@ CREATE OR REPLACE MACRO ast_match(
                       AND vl.capture_name = plus_vars.capture_name
                 )
             )
+        ),
+
+        -- =====================================================================
+        -- Same-name constraint validation
+        -- =====================================================================
+        -- When __X__ appears multiple times in the pattern, all positions must
+        -- capture nodes with the same peek (source text) value.
+        -- This CTE finds (candidate, capture_name) pairs that FAIL the check.
+        -- Uses MIN/MAX on peek across all raw captures (simpler than per-position dedup).
+        -- Per-position best matches for same-name capture checking.
+        -- Uses ROW_NUMBER to pick best match per (candidate, capture_name, position),
+        -- then checks if different positions for the same name have different peeks.
+        same_name_ranked AS (
+            SELECT
+                candidate_file, candidate_root, capture_name,
+                pattern_rel_depth, pattern_sibling_index,
+                captured_peek,
+                ROW_NUMBER() OVER (
+                    PARTITION BY candidate_file, candidate_root, capture_name,
+                                 pattern_rel_depth, pattern_sibling_index
+                    ORDER BY ABS(target_sibling_index::INTEGER - pattern_sibling_index::INTEGER),
+                             captured_node_id DESC
+                ) as rn
+            FROM captures_single_raw
+            -- Exclude root-level captures: tree-sitter propagates names to parent
+            -- nodes (e.g., function_definition gets name __F__ from function name),
+            -- creating unintended duplicate capture names at depth 0.
+            WHERE pattern_rel_depth > 0
+              -- Only check captures that actually appear >1 time in the pattern
+              AND capture_name IN (
+                  SELECT p.capture_name FROM pattern p
+                  WHERE p.is_wildcard AND p.capture_name IS NOT NULL
+                    AND NOT p.is_variadic AND p.rel_depth > 0
+                  GROUP BY p.capture_name HAVING count(*) > 1
+              )
+        ),
+
+        -- Find (candidate, capture_name) pairs where different positions disagree
+        same_name_inconsistent AS (
+            SELECT candidate_file, candidate_root, capture_name
+            FROM same_name_ranked
+            WHERE rn = 1
+            GROUP BY candidate_file, candidate_root, capture_name
+            HAVING COUNT(DISTINCT captured_peek) > 1
         )
 
     SELECT
@@ -1611,6 +1656,12 @@ CREATE OR REPLACE MACRO ast_match(
         SELECT 1 FROM variadic_plus_valid vpv
         WHERE vpv.file_path = mc.file_path
           AND vpv.candidate_root = mc.candidate_root
+    )
+    -- Same-name constraint: reject matches where any same-name capture has inconsistent peeks
+    AND NOT EXISTS (
+        SELECT 1 FROM same_name_inconsistent sni
+        WHERE sni.candidate_file = mc.file_path
+          AND sni.candidate_root = mc.candidate_root
     );
 
 -- =============================================================================

@@ -491,3 +491,45 @@ FROM ast_match('star_test',
     return __Y__', 'python');
 ----
 multi
+
+# =============================================================================
+# Same-Name Constraint Tests
+# =============================================================================
+
+# Create test code with equality expressions
+statement ok
+CREATE TEMP TABLE eq_code AS
+SELECT * FROM parse_ast('
+a == a
+a == b
+b + b
+c + d
+x == x
+', 'python');
+
+# __X__ == __X__ should match only self-equality (a==a, x==x)
+query I
+SELECT count(*)
+FROM ast_match('eq_code', '__X__ == __X__', 'python');
+----
+2
+
+# __X__ + __X__ should match only b+b
+query I
+SELECT count(*)
+FROM ast_match('eq_code', '__X__ + __X__', 'python');
+----
+1
+
+query I
+SELECT captures['X'][1].peek
+FROM ast_match('eq_code', '__X__ + __X__', 'python');
+----
+b
+
+# __X__ == __Y__ (different names = no constraint) should match all equality exprs
+query I
+SELECT count(*)
+FROM ast_match('eq_code', '__X__ == __Y__', 'python');
+----
+3
