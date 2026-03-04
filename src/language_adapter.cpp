@@ -338,6 +338,7 @@ string LanguageAdapter::FindIdentifierInWrappers(TSNode node, const string &cont
 	    "getter_signature",                 // Dart (inside declaration)
 	    "setter_signature",                 // Dart (inside declaration)
 	    "function_signature",               // Dart (inside declaration)
+	    "operator_signature",               // Dart (inside declaration)
 	};
 
 	uint32_t child_count = ts_node_child_count(node);

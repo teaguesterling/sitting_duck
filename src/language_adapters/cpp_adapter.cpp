@@ -110,7 +110,7 @@ string CPPAdapter::ExtractCppCustomName(TSNode node, const string &content, cons
 		// e.g., Calculator& operator+=(int value) has function_declarator inside reference_declarator
 
 		// Helper: extract name from a function_declarator node
-		auto extractFromFuncDecl = [&](TSNode func_decl) -> string {
+		auto ExtractFromFuncDecl = [&](TSNode func_decl) -> string {
 			uint32_t decl_child_count = ts_node_child_count(func_decl);
 			for (uint32_t j = 0; j < decl_child_count; j++) {
 				TSNode decl_child = ts_node_child(func_decl, j);
@@ -131,7 +131,7 @@ string CPPAdapter::ExtractCppCustomName(TSNode node, const string &content, cons
 					// Qualified name like ClassName::methodName
 					// Extract just the last identifier (the function name part)
 					uint32_t qual_child_count = ts_node_child_count(decl_child);
-					for (int k = qual_child_count - 1; k >= 0; k--) {
+					for (int32_t k = qual_child_count - 1; k >= 0; k--) {
 						TSNode qual_child = ts_node_child(decl_child, k);
 						const char *qual_child_type = ts_node_type(qual_child);
 
@@ -154,7 +154,7 @@ string CPPAdapter::ExtractCppCustomName(TSNode node, const string &content, cons
 			const char *child_type = ts_node_type(child);
 
 			if (strcmp(child_type, "function_declarator") == 0) {
-				string result = extractFromFuncDecl(child);
+				string result = ExtractFromFuncDecl(child);
 				if (!result.empty()) {
 					return result;
 				}
@@ -164,15 +164,16 @@ string CPPAdapter::ExtractCppCustomName(TSNode node, const string &content, cons
 			if (strcmp(child_type, "reference_declarator") == 0 ||
 			    strcmp(child_type, "pointer_declarator") == 0) {
 				// Search for function_declarator inside the wrapper (may be nested)
+				constexpr int32_t MAX_DECLARATOR_WRAPPER_DEPTH = 3;
 				TSNode wrapper = child;
-				for (int depth = 0; depth < 3; depth++) {
+				for (int32_t depth = 0; depth < MAX_DECLARATOR_WRAPPER_DEPTH; depth++) {
 					uint32_t wrapper_child_count = ts_node_child_count(wrapper);
 					bool found_deeper = false;
 					for (uint32_t w = 0; w < wrapper_child_count; w++) {
 						TSNode wchild = ts_node_child(wrapper, w);
 						const char *wchild_type = ts_node_type(wchild);
 						if (strcmp(wchild_type, "function_declarator") == 0) {
-							string result = extractFromFuncDecl(wchild);
+							string result = ExtractFromFuncDecl(wchild);
 							if (!result.empty()) {
 								return result;
 							}
