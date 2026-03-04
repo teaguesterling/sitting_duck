@@ -1256,14 +1256,7 @@ CREATE OR REPLACE MACRO ast_match(
                     ELSE NULL
                 END as variadic_min
             FROM (SELECT unnest(ast_pattern_list(
-                -- Clean pattern: handle both HTML and legacy syntax
-                regexp_replace(
-                    regexp_replace(
-                        regexp_replace(
-                            regexp_replace(pattern_str, '%__([A-Z][A-Z0-9_]*)<[^>]+>__%', '__\1__', 'g'),
-                            '%__<[^>]+>__%', '__', 'g'),
-                        '%__<([A-Z_][A-Z0-9_]*)[^>]*>__%', '__\1__', 'g'),
-                    '%__<[*+~?][^>]*>__%', '__', 'g'),
+                clean_pattern(pattern_str),
                 lang)) as unnest)
             -- Filter out syntax nodes unless match_syntax is true
             WHERE match_syntax OR NOT unnest.is_syntax
@@ -1427,9 +1420,14 @@ CREATE OR REPLACE MACRO ast_match(
         -- Variadic capture pipeline
         -- =====================================================================
 
-        -- Find the parent scope for variadic captures by matching a non-wildcard,
-        -- non-wrapper sibling in the pattern (e.g., return_statement) to a target node,
-        -- then using that target node's parent_id to scope the variadic capture.
+        -- Find the parent scope for variadic captures by matching a structural
+        -- anchor node to a target, then using that target's parent_id to scope capture.
+        -- Variadic wildcards are parsed as identifiers INSIDE expression_statement
+        -- wrappers, so the actual sibling level is at rel_depth - 1 (the wrapper's
+        -- depth, not the wildcard identifier's depth).
+        -- NOTE: If no anchor sibling exists at the wrapper level (variadic is the only
+        -- non-syntax child), this produces zero rows — * variadics get empty lists,
+        -- + variadics are filtered out. This is a known limitation.
         variadic_scope AS (
             SELECT DISTINCT
                 mc.candidate_root,
@@ -1440,7 +1438,7 @@ CREATE OR REPLACE MACRO ast_match(
                 t.parent_id as scope_parent_id
             FROM matched_candidates mc
             CROSS JOIN pattern p
-            -- Find a non-wildcard, non-wrapper sibling at the same depth
+            -- Find a non-wildcard, non-wrapper anchor at the wrapper's depth
             JOIN pattern p2 ON
                 p2.rel_depth = p.rel_depth - 1
                 AND NOT p2.is_wildcard
@@ -1499,10 +1497,10 @@ CREATE OR REPLACE MACRO ast_match(
               AND NOT EXISTS (
                   SELECT 1 FROM captures_single_dedup sd
                   WHERE sd.candidate_file = vs.candidate_file
+                    AND sd.candidate_root = vs.candidate_root
 
 )SQLMACRO"
         R"SQLMACRO(
-                    AND sd.candidate_root = vs.candidate_root
                     AND sd.captured_node_id = t.node_id
               )
         ),
@@ -1576,12 +1574,15 @@ CREATE OR REPLACE MACRO ast_match(
             GROUP BY candidate_file, candidate_root
         ),
 
-        -- Reject matches where + variadics have 0 captures
+        -- Reject matches where named + variadics have 0 captures.
+        -- NOTE: Anonymous + variadics (%__<+>__%) are not enforced here because
+        -- is_variadic requires capture_name IS NOT NULL. This is a known limitation;
+        -- anonymous + variadics currently behave like * (0+).
         variadic_plus_valid AS (
             SELECT mc.file_path, mc.candidate_root
             FROM matched_candidates mc
             WHERE NOT EXISTS (
-                -- Find any + variadic that has no captures for this match
+                -- Find any named + variadic that has no captures for this match
                 SELECT 1
                 FROM (
                     SELECT DISTINCT capture_name
@@ -1605,8 +1606,10 @@ CREATE OR REPLACE MACRO ast_match(
         -- This CTE finds (candidate, capture_name) pairs that FAIL the check.
         -- Uses MIN/MAX on peek across all raw captures (simpler than per-position dedup).
         -- Per-position best matches for same-name capture checking.
-        -- Uses ROW_NUMBER to pick best match per (candidate, capture_name, position),
-        -- then checks if different positions for the same name have different peeks.
+        -- Reads from captures_single_raw (pre-dedup) intentionally: we need per-position
+        -- matches, whereas captures_single_dedup collapses to one capture per name.
+        -- ROW_NUMBER picks the best match per (candidate, capture_name, position) using
+        -- the same ranking logic as captures_single_dedup (sibling proximity, then node_id).
         same_name_ranked AS (
             SELECT
                 candidate_file, candidate_root, capture_name,
