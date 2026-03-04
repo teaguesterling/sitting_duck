@@ -67,9 +67,9 @@
 
 /**
  * @brief Function definition: `ReturnType name(params) { body }`
- * Uses FIND_QUALIFIED_IDENTIFIER for namespace-qualified names
+ * Uses CUSTOM for handling qualified names, operator overloads, and destructor names
  */
-DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_QUALIFIED_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
 
 /**
  * @brief Function declarator (forward declaration): `ReturnType name(params);`

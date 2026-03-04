@@ -69,8 +69,10 @@ string HCLAdapter::ExtractNodeName(TSNode node, const string &content) const {
 			if (node_type == "block") {
 				// For HCL blocks, extract the labels (not the block type)
 				// e.g., resource "aws_instance" "example" -> "aws_instance.example"
+				// For labelless blocks like locals {}, terraform {}, return the block type
 				uint32_t child_count = ts_node_named_child_count(node);
 				string result;
+				string block_type_name;
 				bool found_type = false;
 
 				for (uint32_t i = 0; i < child_count; i++) {
@@ -79,8 +81,11 @@ string HCLAdapter::ExtractNodeName(TSNode node, const string &content) const {
 
 					if (strcmp(child_type, "identifier") == 0) {
 						if (!found_type) {
-							// Skip the block type identifier (resource, variable, etc.)
+							// Remember the block type identifier (resource, variable, locals, etc.)
 							found_type = true;
+							uint32_t start = ts_node_start_byte(child);
+							uint32_t end = ts_node_end_byte(child);
+							block_type_name = content.substr(start, end - start);
 							continue;
 						}
 						// Additional identifiers are labels
@@ -113,6 +118,11 @@ string HCLAdapter::ExtractNodeName(TSNode node, const string &content) const {
 						// Stop when we hit the body or block start
 						break;
 					}
+				}
+
+				// For labelless blocks (locals, terraform, etc.), use the block type as name
+				if (result.empty() && !block_type_name.empty()) {
+					return block_type_name;
 				}
 				return result;
 			}

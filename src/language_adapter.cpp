@@ -330,6 +330,15 @@ string LanguageAdapter::FindIdentifierInWrappers(TSNode node, const string &cont
 	    "initialized_variable_definition",  // Dart (inside local_variable_declaration)
 	    "expression",                       // HCL (object_elem key expressions)
 	    "variable_expr",                    // HCL (inside expression)
+	    "constructor_param",                // Dart (inside formal_parameter for this.x)
+	    "simple_formal_parameter",          // Dart (inside formal_parameter)
+	    "label",                            // Dart (record_field named labels)
+	    "constructor_signature",            // Dart (inside declaration)
+	    "constant_constructor_signature",   // Dart (inside declaration)
+	    "getter_signature",                 // Dart (inside declaration)
+	    "setter_signature",                 // Dart (inside declaration)
+	    "function_signature",               // Dart (inside declaration)
+	    "operator_signature",               // Dart (inside declaration)
 	};
 
 	uint32_t child_count = ts_node_child_count(node);

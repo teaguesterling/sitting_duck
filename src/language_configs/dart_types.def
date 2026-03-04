@@ -146,7 +146,8 @@ DEF_TYPE("function_expression_body", ORGANIZATION_BLOCK | SemanticRefinements::O
 DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, 0)
 
 /// @brief Method signature - class method declaration
-DEF_TYPE("method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+/// Uses CUSTOM because identifier is inside wrapper nodes (function_signature, getter_signature, operator_signature)
+DEF_TYPE("method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
 
 /// @brief Getter signature - `get name => value`
 DEF_TYPE("getter_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
@@ -876,8 +877,8 @@ DEF_TYPE("set_or_map_literal", LITERAL_STRUCTURED | SemanticRefinements::Structu
 /// @brief Record literal - `(value1, name: value2)` (Dart 3.0+)
 DEF_TYPE("record_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
 
-/// @brief Record field
-DEF_TYPE("record_field", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, NONE, NONE, 0)
+/// @brief Record field - named `(name: value)` or positional `(expr)`
+DEF_TYPE("record_field", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
 
 /// @brief Pair - map entry `key: value`
 DEF_TYPE("pair", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, NONE, NONE, 0)
