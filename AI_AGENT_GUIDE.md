@@ -31,7 +31,8 @@ SELECT * FROM ast_match('src/**/*.py', '__F__(__X__)');
 
 2. **Node-specific macros** take a table name + node_id (for pre-parsed ASTs):
    `ast_children`, `ast_descendants`, `ast_ancestors`, `ast_siblings`,
-   `ast_function_scope`, `ast_class_members`, `ast_call_arguments`
+   `ast_function_scope`, `ast_class_members`, `ast_call_arguments`,
+   `ast_definition_parent`
 
 ```sql
 -- Node-specific macros require materializing first
@@ -287,6 +288,16 @@ Returns argument nodes with positional info, excluding punctuation.
 ```sql
 SELECT arg_position, arg_name, arg_type, arg_peek
 FROM ast_call_arguments('ast', 200);
+```
+
+#### `ast_definition_parent(table)` — Nearest definition ancestor for each definition
+
+Resolves the nearest definition ancestor for every definition node, skipping organizational/structural nodes (blocks, bodies). Returns `node_id`, `def_name`, `kind`, `parent_def_name`, `parent_def_kind`, `parent_def_node_id`. Useful for building stable structural identity keys like `(name, kind, parent_name, parent_kind)`.
+
+```sql
+-- Get parent definitions for all definitions in the table
+SELECT def_name, kind, parent_def_name, parent_def_kind
+FROM ast_definition_parent('ast');
 ```
 
 ### Whole-File Macros (file path or glob)
