@@ -2,7 +2,6 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
-#include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/parallel/task_executor.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "unified_ast_backend.hpp"
@@ -323,22 +322,11 @@ static unique_ptr<GlobalTableFunctionState> ReadASTStreamingInit(ClientContext &
 			}
 		} else {
 			// Use traditional single-threaded streaming for small file sets
+			// Store paths directly to preserve URI components (e.g., @rev suffixes)
+			// that would be stripped by MultiFileReader path normalization
 			result->use_parallel_batching = false;
-
-			// Create file list using DuckDB's pattern for backward compatibility
-			auto multi_file_reader = MultiFileReader::CreateDefault("read_ast");
-			vector<Value> file_values;
-			for (const auto &file_path : expanded_files) {
-				file_values.push_back(Value(file_path));
-			}
-
-			auto files_list_value = Value::LIST(LogicalType::VARCHAR, file_values);
-			result->file_list = multi_file_reader->CreateFileList(context, files_list_value);
-			if (result->file_list) {
-				result->file_list->InitializeScan(result->file_scan_state);
-			} else {
-				throw InternalException("Failed to create file list");
-			}
+			result->sequential_file_paths = std::move(expanded_files);
+			result->sequential_file_index = 0;
 		}
 
 	} catch (const Exception &e) {
@@ -560,17 +548,17 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
 			// Check if we need to process a new batch
 			if (global_state.current_batch_results.empty() ||
 			    global_state.current_batch_result_index >= global_state.current_batch_results.size()) {
-				// Collect next batch of files
+				// Collect next batch of files from direct path list
 				vector<string> batch_files;
 				batch_files.reserve(global_state.batch_size);
 
-				OpenFileInfo file;
 				for (int32_t i = 0; i < global_state.batch_size; i++) {
-					if (!global_state.file_list->Scan(global_state.file_scan_state, file)) {
+					if (global_state.sequential_file_index >= global_state.sequential_file_paths.size()) {
 						global_state.files_exhausted = true;
 						break;
 					}
-					batch_files.push_back(file.path);
+					batch_files.push_back(
+					    global_state.sequential_file_paths[global_state.sequential_file_index++]);
 				}
 
 				if (batch_files.empty()) {
@@ -607,31 +595,17 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
 		// Check if we need to parse a new file
 		if (!global_state.current_file_parsed || !global_state.current_file_result ||
 		    global_state.current_file_row_index >= global_state.current_file_result->nodes.size()) {
-			// Try to get next file that matches our language criteria
-			OpenFileInfo file;
-			bool found_valid_file = false;
-
-			while (!found_valid_file) {
-				if (!global_state.file_list->Scan(global_state.file_scan_state, file)) {
-					// No more files
-					global_state.files_exhausted = true;
-					break;
-				}
-
-				// Only check file extensions when using auto-detection
-				// If a language is explicitly provided, allow parsing any file
-				// (even if it might result in 0 nodes due to parse failure)
-
-				found_valid_file = true;
+			// Get next file from direct path list
+			if (global_state.sequential_file_index >= global_state.sequential_file_paths.size()) {
+				global_state.files_exhausted = true;
+				break;
 			}
 
-			if (!found_valid_file) {
-				break; // No more valid files
-			}
+			auto &file_path = global_state.sequential_file_paths[global_state.sequential_file_index++];
 
 			// Parse this single file with ExtractionConfig
 			global_state.current_file_result = UnifiedASTBackend::ParseSingleFileToASTResult(
-			    context, file.path, global_state.language, global_state.ignore_errors, global_state.extraction_config);
+			    context, file_path, global_state.language, global_state.ignore_errors, global_state.extraction_config);
 
 			if (!global_state.current_file_result) {
 				// File was skipped due to errors, continue to next file
@@ -907,15 +881,16 @@ static void ReadASTHierarchicalFunctionSequential(ClientContext &context, ReadAS
 			// Process batches and use streaming projection
 			if (global_state.current_batch_results.empty() ||
 			    global_state.current_batch_result_index >= global_state.current_batch_results.size()) {
+				// Collect next batch of files from direct path list
 				vector<string> batch_files;
 				batch_files.reserve(global_state.batch_size);
 
-				OpenFileInfo file;
 				for (int32_t i = 0; i < global_state.batch_size; i++) {
-					if (!global_state.file_list->Scan(global_state.file_scan_state, file)) {
+					if (global_state.sequential_file_index >= global_state.sequential_file_paths.size()) {
 						break;
 					}
-					batch_files.push_back(file.path);
+					batch_files.push_back(
+					    global_state.sequential_file_paths[global_state.sequential_file_index++]);
 				}
 
 				if (batch_files.empty()) {
@@ -959,26 +934,17 @@ static void ReadASTHierarchicalFunctionSequential(ClientContext &context, ReadAS
 			// Check if we need to parse a new file
 			if (!global_state.current_file_parsed || !global_state.current_file_result ||
 			    global_state.current_file_row_index >= global_state.current_file_result->nodes.size()) {
-				// Try to get next file
-				OpenFileInfo file;
-				bool found_valid_file = false;
-
-				while (!found_valid_file) {
-					if (!global_state.file_list->Scan(global_state.file_scan_state, file)) {
-						// No more files
-						global_state.files_exhausted = true;
-						break;
-					}
-					found_valid_file = true;
+				// Get next file from direct path list
+				if (global_state.sequential_file_index >= global_state.sequential_file_paths.size()) {
+					global_state.files_exhausted = true;
+					break;
 				}
 
-				if (!found_valid_file) {
-					break; // No more valid files
-				}
+				auto &file_path = global_state.sequential_file_paths[global_state.sequential_file_index++];
 
 				// Parse this single file with ExtractionConfig
 				global_state.current_file_result = UnifiedASTBackend::ParseSingleFileToASTResult(
-				    context, file.path, global_state.language, global_state.ignore_errors,
+				    context, file_path, global_state.language, global_state.ignore_errors,
 				    global_state.extraction_config);
 
 				if (!global_state.current_file_result) {
