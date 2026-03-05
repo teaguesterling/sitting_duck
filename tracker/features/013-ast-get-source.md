@@ -2,60 +2,43 @@
 
 **Source**: Peer Review Feedback
 **Priority**: P1 (High - Critical for practical use)
-**Status**: Ready for Implementation
+**Status**: Implemented
 
-## Overview
+## What's Implemented
 
-Extract source code for any AST node with surrounding context lines. This is the #1 feature from peer review that would make the extension immediately more practical.
+### Core source extraction macros (in `file_utilities.sql`)
+- `ast_get_source(file_path, start_line, end_line)` — Extract lines as a single string
+- `ast_get_source_numbered(file_path, start_line, end_line)` — Extract with line numbers prefixed
+- `ast_get_source_line(file_path, line_num)` — Get a single line
 
-## API Design
-
-```sql
--- Function signature
-ast_get_source(node_id, context_lines := 0) → TEXT
-
--- Macro version for chaining
-.get_source(context_lines := 0)
-```
-
-## Usage Examples
+### High-level lookup macro
+- `ast_source_of(file_patterns, target_name, language := NULL, kind := NULL)` — Find a definition by name and return numbered source
 
 ```sql
--- Get source code for a specific function
-SELECT 
-    name,
-    ast_get_source(node_id, 3) as source_with_context
-FROM read_ast_objects('file.py', 'python')
-WHERE type = 'function_definition'
-  AND name = 'process_payment';
+-- Simple usage
+SELECT * FROM ast_source_of('src/**/*.py', 'process_payment');
 
--- Chain syntax
-SELECT ast(nodes)
-    .filter_pattern('%test%')
-    .get_source(2) as test_functions
-FROM read_ast_objects('tests/*.py', 'python');
+-- With kind filter
+SELECT * FROM ast_source_of('src/**/*.py', 'MyClass', kind := 'class');
+
+-- With explicit language
+SELECT * FROM ast_source_of('src/**/*.py', 'handler', language := 'python', kind := 'function');
 ```
 
-## Implementation Strategy
+Returns: `file_path`, `name`, `definition_kind`, `start_line`, `end_line`, `source`
 
-We already have everything needed:
-1. Source code is available during parsing
-2. Node positions (start_row, end_row) are in our AST
-3. Just need to:
-   - Store source content during parse
-   - Extract lines based on position
-   - Add context lines before/after
+### Test coverage
+- `test/sql/file_utilities.test` — covers all macros including multi-file glob patterns
 
-## Benefits
+## Remaining Gaps
 
-- **Immediate Value**: Users can see actual code, not just metadata
-- **AI/LLM Friendly**: Perfect for code analysis workflows  
-- **Simple Implementation**: Leverages existing position data
-- **High Impact**: Transforms usability of the extension
+- **Context lines parameter**: No `context_lines` option to show N lines before/after a node
+- **Node-level integration**: Can't pass a `node_id` directly — requires `file_path, start_line, end_line`
+- **Lateral join limitation**: `read_text()` doesn't support lateral joins, so `ast_get_source()` can't be called with column references from a query (must use literal path). `ast_source_of()` works around this by joining file contents differently.
+- **Method chaining**: `.get_source()` chain syntax not yet available (depends on #023)
 
-## Next Steps
+## Implementation History
 
-1. Add source storage to parser context
-2. Implement line extraction logic
-3. Create both function and macro versions
-4. Add tests with various context sizes
+- Initial `ast_get_source/numbered/line` macros — added as scalar macros
+- `ast_source_of` table macro — added 2026-03-04 (commit ef823da)
+- NULL language fallback in `read_ast` two-arg form — same commit
