@@ -303,7 +303,7 @@ CREATE OR REPLACE MACRO ast_function_metrics(ast_table) AS TABLE
         conditionals,
         loops,
         conditionals + loops + 1 AS cyclomatic,
-        COALESCE(max_node_depth - func_depth, 0) AS max_depth
+        COALESCE(max_node_depth::INTEGER - func_depth::INTEGER, 0) AS max_depth
     FROM function_metrics
     ORDER BY file_path, start_line;
 
@@ -423,12 +423,12 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(ast_table) AS TABLE
                 f.start_line,
                 f.end_line,
                 f.func_depth,
-                -- Max relative depth
-                MAX(n.depth - f.func_depth) AS max_depth,
+                -- Max relative depth (cast to INTEGER to avoid UINT32 overflow)
+                MAX(n.depth::INTEGER - f.func_depth::INTEGER) AS max_depth,
                 -- Average relative depth
-                ROUND(AVG(n.depth - f.func_depth), 2) AS avg_depth,
+                ROUND(AVG(n.depth::INTEGER - f.func_depth::INTEGER), 2) AS avg_depth,
                 -- Count of deeply nested nodes (relative depth > 5)
-                COUNT(CASE WHEN n.depth - f.func_depth > 5 THEN 1 END) AS deep_nodes,
+                COUNT(CASE WHEN n.depth::INTEGER - f.func_depth::INTEGER > 5 THEN 1 END) AS deep_nodes,
                 -- Total nodes in scope
                 COUNT(*) AS total_nodes
             FROM functions f
