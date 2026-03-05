@@ -519,3 +519,63 @@ query I
 SELECT COUNT(*) FROM ast_dead_code('test/data/python/macros/recursive.py');
 ----
 0
+
+# =============================================================================
+# Test ast_definition_parent (table-name signature)
+# =============================================================================
+
+# Create a temp table with nested definitions for parent resolution testing
+statement ok
+CREATE TEMP TABLE dp_ast AS
+SELECT * FROM read_ast('test/data/python/macros/definition_parent.py');
+
+# All definitions should have a resolved parent
+query I
+SELECT COUNT(*) FROM ast_definition_parent('dp_ast');
+----
+9
+
+# Top-level definitions resolve to the module (root)
+query III
+SELECT def_name, parent_def_kind, parent_def_node_id
+FROM ast_definition_parent('dp_ast')
+WHERE parent_def_kind = 'DEFINITION_MODULE'
+ORDER BY def_name;
+----
+MODULE_VAR	DEFINITION_MODULE	0
+OuterClass	DEFINITION_MODULE	0
+standalone	DEFINITION_MODULE	0
+
+# Class members resolve to the class (skipping ORGANIZATION_BLOCK)
+query III
+SELECT def_name, kind, parent_def_name
+FROM ast_definition_parent('dp_ast')
+WHERE parent_def_name = 'OuterClass'
+ORDER BY def_name;
+----
+class_var	DEFINITION_VARIABLE	OuterClass
+method	DEFINITION_FUNCTION	OuterClass
+
+# Nested function resolves to its enclosing function
+query III
+SELECT def_name, kind, parent_def_name
+FROM ast_definition_parent('dp_ast')
+WHERE def_name = 'nested';
+----
+nested	DEFINITION_FUNCTION	method
+
+# Deeply nested variable resolves to the nearest enclosing function
+query III
+SELECT def_name, kind, parent_def_name
+FROM ast_definition_parent('dp_ast')
+WHERE def_name = 'inner_var';
+----
+inner_var	DEFINITION_VARIABLE	nested
+
+# Variable inside standalone function
+query III
+SELECT def_name, kind, parent_def_name
+FROM ast_definition_parent('dp_ast')
+WHERE def_name = 'x';
+----
+x	DEFINITION_VARIABLE	standalone
