@@ -17,6 +17,11 @@ struct ReadASTStreamingGlobalState : public GlobalTableFunctionState {
 	shared_ptr<MultiFileList> file_list;
 	MultiFileListScanData file_scan_state;
 
+	// Direct file path list for sequential processing (avoids MultiFileReader normalization
+	// which strips URI components like @rev suffixes from git:// URIs)
+	vector<string> sequential_file_paths;
+	idx_t sequential_file_index = 0;
+
 	// Current file processing state (used by both modes)
 	unique_ptr<ASTResult> current_file_result;
 	idx_t current_file_row_index = 0;
