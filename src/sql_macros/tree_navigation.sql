@@ -43,30 +43,34 @@ CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
     SELECT * FROM args;
 
 -- Get all definitions (functions, classes, variables, etc.) with unified categories
--- Usage: SELECT * FROM ast_definitions(my_ast_table)
-CREATE OR REPLACE MACRO ast_definitions(ast_table) AS TABLE
+-- Usage: SELECT * FROM ast_definitions('src/**/*.py')
+-- Usage: SELECT * FROM ast_definitions('src/main.py', language := 'python')
+CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
+    WITH ast AS (
+        SELECT * FROM read_ast(source, language)
+    )
     SELECT
-        name,
+        a.name,
         CASE
-            WHEN is_function_definition(semantic_type) THEN 'function'
-            WHEN is_class_definition(semantic_type) THEN 'class'
-            WHEN is_variable_definition(semantic_type) THEN 'variable'
-            WHEN is_module_definition(semantic_type) THEN 'module'
-            WHEN is_type_definition(semantic_type) THEN 'type'
+            WHEN is_function_definition(a.semantic_type) THEN 'function'
+            WHEN is_class_definition(a.semantic_type) THEN 'class'
+            WHEN is_variable_definition(a.semantic_type) THEN 'variable'
+            WHEN is_module_definition(a.semantic_type) THEN 'module'
+            WHEN is_type_definition(a.semantic_type) THEN 'type'
             ELSE 'other'
         END AS definition_type,
-        language,
-        file_path,
-        start_line,
-        end_line,
-        node_id,
-        type,
-        semantic_type
-    FROM query_table(ast_table)
-    WHERE is_definition(semantic_type)
-      AND is_construct(flags)
-      AND name IS NOT NULL AND name != ''
-    ORDER BY file_path, start_line;
+        a.language,
+        a.file_path,
+        a.start_line,
+        a.end_line,
+        a.node_id,
+        a.type,
+        a.semantic_type
+    FROM ast a
+    WHERE is_definition(a.semantic_type)
+      AND is_construct(a.flags)
+      AND a.name IS NOT NULL AND a.name != ''
+    ORDER BY a.file_path, a.start_line;
 
 -- Get all descendants of a node (entire subtree)
 -- Uses descendant_count for O(1) range-based lookup (nodes are in DFS pre-order)
@@ -113,19 +117,25 @@ CREATE OR REPLACE MACRO ast_siblings(ast_table, target_node_id) AS TABLE
 
 -- Find all nodes that contain a specific line
 -- Returns nodes ordered by specificity (smallest span first)
--- Usage: SELECT * FROM ast_containing_line(my_ast_table, line_number)
-CREATE OR REPLACE MACRO ast_containing_line(ast_table, line_num) AS TABLE
-    SELECT *
-    FROM query_table(ast_table)
-    WHERE start_line <= line_num AND end_line >= line_num
-    ORDER BY (end_line - start_line), start_line;
+-- Usage: SELECT * FROM ast_containing_line('src/main.py', 42)
+CREATE OR REPLACE MACRO ast_containing_line(source, line_num, language := NULL) AS TABLE
+    WITH ast AS (
+        SELECT * FROM read_ast(source, language)
+    )
+    SELECT a.*
+    FROM ast a
+    WHERE a.start_line <= line_num AND a.end_line >= line_num
+    ORDER BY (a.end_line - a.start_line), a.start_line;
 
 -- Get all nodes within a line range
--- Usage: SELECT * FROM ast_in_range(my_ast_table, start_line, end_line)
-CREATE OR REPLACE MACRO ast_in_range(ast_table, range_start, range_end) AS TABLE
-    SELECT *
-    FROM query_table(ast_table)
-    WHERE start_line >= range_start AND end_line <= range_end;
+-- Usage: SELECT * FROM ast_in_range('src/main.py', 10, 20)
+CREATE OR REPLACE MACRO ast_in_range(source, range_start, range_end, language := NULL) AS TABLE
+    WITH ast AS (
+        SELECT * FROM read_ast(source, language)
+    )
+    SELECT a.*
+    FROM ast a
+    WHERE a.start_line >= range_start AND a.end_line <= range_end;
 
 -- =============================================================================
 -- Scope-Aware Helpers
@@ -212,23 +222,26 @@ CREATE OR REPLACE MACRO ast_class_members(ast_table, class_node_id) AS TABLE
 -- Compute metrics for all functions in the AST
 -- Returns one row per function with complexity metrics.
 -- Uses function scope (excludes nested function internals) for accurate counts.
--- Usage: SELECT * FROM ast_function_metrics(my_ast_table) WHERE cyclomatic > 10
-CREATE OR REPLACE MACRO ast_function_metrics(ast_table) AS TABLE
+-- Usage: SELECT * FROM ast_function_metrics('src/**/*.py') WHERE cyclomatic > 10
+CREATE OR REPLACE MACRO ast_function_metrics(source, language := NULL) AS TABLE
     WITH
+        ast AS (
+            SELECT * FROM read_ast(source, language)
+        ),
         -- All function definitions
         functions AS (
             SELECT
-                node_id AS func_id,
-                name,
-                file_path,
-                language,
-                start_line,
-                end_line,
-                depth AS func_depth,
-                descendant_count
-            FROM query_table(ast_table)
-            WHERE is_function_definition(semantic_type)
-              AND name IS NOT NULL AND name != ''
+                a.node_id AS func_id,
+                a.name,
+                a.file_path,
+                a.language,
+                a.start_line,
+                a.end_line,
+                a.depth AS func_depth,
+                a.descendant_count
+            FROM ast a
+            WHERE is_function_definition(a.semantic_type)
+              AND a.name IS NOT NULL AND a.name != ''
         ),
         -- For each function, identify nested functions within it
         nested_funcs AS (
@@ -237,7 +250,7 @@ CREATE OR REPLACE MACRO ast_function_metrics(ast_table) AS TABLE
                 nf.descendant_count AS nested_count,
                 f.func_id AS parent_func_id
             FROM functions f
-            JOIN query_table(ast_table) nf
+            JOIN ast nf
               ON nf.node_id > f.func_id
              AND nf.node_id <= f.func_id + f.descendant_count
              AND is_function_definition(nf.semantic_type)
@@ -278,7 +291,7 @@ CREATE OR REPLACE MACRO ast_function_metrics(ast_table) AS TABLE
                 -- Max depth of any node in scope
                 MAX(n.depth) AS max_node_depth
             FROM functions f
-            LEFT JOIN query_table(ast_table) n
+            LEFT JOIN ast n
               ON n.node_id > f.func_id
              AND n.node_id <= f.func_id + f.descendant_count
             WHERE
@@ -293,40 +306,43 @@ CREATE OR REPLACE MACRO ast_function_metrics(ast_table) AS TABLE
                      f.start_line, f.end_line, f.func_depth
         )
     SELECT
-        file_path,
-        name,
-        language,
-        start_line,
-        end_line,
-        end_line - start_line + 1 AS lines,
-        return_count,
-        conditionals,
-        loops,
-        conditionals + loops + 1 AS cyclomatic,
-        COALESCE(max_node_depth::INTEGER - func_depth::INTEGER, 0) AS max_depth
-    FROM function_metrics
-    ORDER BY file_path, start_line;
+        fm.file_path,
+        fm.name,
+        fm.language,
+        fm.start_line,
+        fm.end_line,
+        fm.end_line - fm.start_line + 1 AS lines,
+        fm.return_count,
+        fm.conditionals,
+        fm.loops,
+        fm.conditionals + fm.loops + 1 AS cyclomatic,
+        COALESCE(fm.max_node_depth::INTEGER - fm.func_depth::INTEGER, 0) AS max_depth
+    FROM function_metrics fm
+    ORDER BY fm.file_path, fm.start_line;
 
 -- Find functions that contain a specific node type
 -- Returns functions with at least one matching node in their scope.
 -- Uses function scope (excludes nested function internals).
--- Usage: SELECT * FROM ast_functions_containing(my_ast_table, 'try_statement')
--- Usage: SELECT * FROM ast_functions_containing(my_ast_table, 'call') WHERE match_name = 'eval'
-CREATE OR REPLACE MACRO ast_functions_containing(ast_table, target_type) AS TABLE
+-- Usage: SELECT * FROM ast_functions_containing('src/**/*.py', 'try_statement')
+-- Usage: SELECT * FROM ast_functions_containing('src/**/*.py', 'call') WHERE match_name = 'eval'
+CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language := NULL) AS TABLE
     WITH
+        ast AS (
+            SELECT * FROM read_ast(source, language)
+        ),
         -- All function definitions
         functions AS (
             SELECT
-                node_id AS func_id,
-                name AS func_name,
-                file_path,
-                language,
-                start_line,
-                end_line,
-                descendant_count
-            FROM query_table(ast_table)
-            WHERE is_function_definition(semantic_type)
-              AND name IS NOT NULL AND name != ''
+                a.node_id AS func_id,
+                a.name AS func_name,
+                a.file_path,
+                a.language,
+                a.start_line,
+                a.end_line,
+                a.descendant_count
+            FROM ast a
+            WHERE is_function_definition(a.semantic_type)
+              AND a.name IS NOT NULL AND a.name != ''
         ),
         -- For each function, identify nested functions within it
         nested_funcs AS (
@@ -335,7 +351,7 @@ CREATE OR REPLACE MACRO ast_functions_containing(ast_table, target_type) AS TABL
                 nf.descendant_count AS nested_count,
                 f.func_id AS parent_func_id
             FROM functions f
-            JOIN query_table(ast_table) nf
+            JOIN ast nf
               ON nf.node_id > f.func_id
              AND nf.node_id <= f.func_id + f.descendant_count
              AND is_function_definition(nf.semantic_type)
@@ -355,7 +371,7 @@ CREATE OR REPLACE MACRO ast_functions_containing(ast_table, target_type) AS TABL
                 n.start_line AS match_line,
                 n.peek AS match_peek
             FROM functions f
-            JOIN query_table(ast_table) n
+            JOIN ast n
               ON n.node_id > f.func_id
              AND n.node_id <= f.func_id + f.descendant_count
              AND n.type = target_type
@@ -369,37 +385,40 @@ CREATE OR REPLACE MACRO ast_functions_containing(ast_table, target_type) AS TABL
                 )
         )
     SELECT
-        file_path,
-        func_name,
-        language,
-        start_line AS func_start_line,
-        end_line AS func_end_line,
-        match_name,
-        match_line,
-        match_peek
-    FROM matches
-    ORDER BY file_path, func_start_line, match_line;
+        m.file_path,
+        m.func_name,
+        m.language,
+        m.start_line AS func_start_line,
+        m.end_line AS func_end_line,
+        m.match_name,
+        m.match_line,
+        m.match_peek
+    FROM matches m
+    ORDER BY m.file_path, func_start_line, m.match_line;
 
 -- Analyze nesting depth per function
 -- Returns depth statistics for identifying deeply nested code.
 -- Uses function scope (excludes nested function internals).
--- Usage: SELECT * FROM ast_nesting_analysis(my_ast_table) WHERE max_depth > 5
-CREATE OR REPLACE MACRO ast_nesting_analysis(ast_table) AS TABLE
+-- Usage: SELECT * FROM ast_nesting_analysis('src/**/*.py') WHERE max_depth > 5
+CREATE OR REPLACE MACRO ast_nesting_analysis(source, language := NULL) AS TABLE
     WITH
+        ast AS (
+            SELECT * FROM read_ast(source, language)
+        ),
         -- All function definitions
         functions AS (
             SELECT
-                node_id AS func_id,
-                name,
-                file_path,
-                language,
-                start_line,
-                end_line,
-                depth AS func_depth,
-                descendant_count
-            FROM query_table(ast_table)
-            WHERE is_function_definition(semantic_type)
-              AND name IS NOT NULL AND name != ''
+                a.node_id AS func_id,
+                a.name,
+                a.file_path,
+                a.language,
+                a.start_line,
+                a.end_line,
+                a.depth AS func_depth,
+                a.descendant_count
+            FROM ast a
+            WHERE is_function_definition(a.semantic_type)
+              AND a.name IS NOT NULL AND a.name != ''
         ),
         -- For each function, identify nested functions within it
         nested_funcs AS (
@@ -408,7 +427,7 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(ast_table) AS TABLE
                 nf.descendant_count AS nested_count,
                 f.func_id AS parent_func_id
             FROM functions f
-            JOIN query_table(ast_table) nf
+            JOIN ast nf
               ON nf.node_id > f.func_id
              AND nf.node_id <= f.func_id + f.descendant_count
              AND is_function_definition(nf.semantic_type)
@@ -432,7 +451,7 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(ast_table) AS TABLE
                 -- Total nodes in scope
                 COUNT(*) AS total_nodes
             FROM functions f
-            LEFT JOIN query_table(ast_table) n
+            LEFT JOIN ast n
               ON n.node_id > f.func_id
              AND n.node_id <= f.func_id + f.descendant_count
             WHERE
@@ -447,23 +466,26 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(ast_table) AS TABLE
                      f.start_line, f.end_line, f.func_depth
         )
     SELECT
-        file_path,
-        name,
-        language,
-        start_line,
-        end_line,
-        max_depth,
-        avg_depth,
-        deep_nodes,
-        total_nodes
-    FROM depth_stats
-    ORDER BY max_depth DESC, file_path, start_line;
+        ds.file_path,
+        ds.name,
+        ds.language,
+        ds.start_line,
+        ds.end_line,
+        ds.max_depth,
+        ds.avg_depth,
+        ds.deep_nodes,
+        ds.total_nodes
+    FROM depth_stats ds
+    ORDER BY ds.max_depth DESC, ds.file_path, ds.start_line;
 
 -- Automated security concern detection
 -- Scans for common security anti-patterns across languages.
--- Usage: SELECT * FROM ast_security_audit(my_ast_table) WHERE risk_level = 'high'
-CREATE OR REPLACE MACRO ast_security_audit(ast_table) AS TABLE
+-- Usage: SELECT * FROM ast_security_audit('src/**/*.py') WHERE risk_level = 'high'
+CREATE OR REPLACE MACRO ast_security_audit(source, language := NULL) AS TABLE
     WITH
+        ast AS (
+            SELECT * FROM read_ast(source, language)
+        ),
         -- Define security patterns to detect
         security_patterns AS (
             SELECT * FROM (VALUES
@@ -513,15 +535,15 @@ CREATE OR REPLACE MACRO ast_security_audit(ast_table) AS TABLE
         -- Find all function calls in the AST
         calls AS (
             SELECT
-                node_id,
-                file_path,
-                language,
-                name,
-                start_line,
-                peek
-            FROM query_table(ast_table)
-            WHERE is_function_call(semantic_type)
-              AND name IS NOT NULL AND name != ''
+                a.node_id,
+                a.file_path,
+                a.language,
+                a.name,
+                a.start_line,
+                a.peek
+            FROM ast a
+            WHERE is_function_call(a.semantic_type)
+              AND a.name IS NOT NULL AND a.name != ''
         ),
         -- Find the containing function for each call
         containing_funcs AS (
@@ -529,7 +551,7 @@ CREATE OR REPLACE MACRO ast_security_audit(ast_table) AS TABLE
                 c.node_id AS call_node_id,
                 f.name AS function_name
             FROM calls c
-            LEFT JOIN query_table(ast_table) f
+            LEFT JOIN ast f
               ON f.node_id < c.node_id
              AND c.node_id <= f.node_id + f.descendant_count
              AND is_function_definition(f.semantic_type)
@@ -558,59 +580,62 @@ CREATE OR REPLACE MACRO ast_security_audit(ast_table) AS TABLE
             LEFT JOIN containing_funcs cf ON cf.call_node_id = c.node_id
         )
     SELECT
-        file_path,
-        language,
-        start_line,
-        function_name,
-        risk_category,
-        risk_level,
-        finding,
-        matched_pattern,
-        context
-    FROM findings
+        fi.file_path,
+        fi.language,
+        fi.start_line,
+        fi.function_name,
+        fi.risk_category,
+        fi.risk_level,
+        fi.finding,
+        fi.matched_pattern,
+        fi.context
+    FROM findings fi
     ORDER BY
-        CASE risk_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
-        file_path, start_line;
+        CASE fi.risk_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+        fi.file_path, fi.start_line;
 
 -- Find potentially dead (unused) code
 -- Identifies functions and classes that are never referenced in the codebase.
 -- Note: This is heuristic - cannot detect dynamic usage or cross-file references
 -- when analyzing a single file. Best used on entire codebase.
--- Usage: SELECT * FROM ast_dead_code(my_ast_table)
-CREATE OR REPLACE MACRO ast_dead_code(ast_table) AS TABLE
+-- Usage: SELECT * FROM ast_dead_code('src/**/*.py')
+CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
     WITH
+        ast AS (
+            SELECT * FROM read_ast(source, language)
+        ),
         -- All function definitions
         function_defs AS (
             SELECT
-                node_id,
-                name,
-                file_path,
-                language,
-                start_line,
-                end_line,
-                type,
+                a.node_id,
+                a.name,
+                a.file_path,
+                a.language,
+                a.start_line,
+                a.end_line,
+                a.type,
                 'function' AS definition_type
-            FROM query_table(ast_table)
-            WHERE is_function_definition(semantic_type)
-              AND name IS NOT NULL AND name != ''
+            FROM ast a
+            WHERE is_function_definition(a.semantic_type)
+              AND a.name IS NOT NULL AND a.name != ''
               -- Exclude special methods (constructors, dunder methods, etc.)
-              AND name NOT LIKE '\_\_%' ESCAPE '\'
-              AND name NOT IN ('main', 'setup', 'teardown', 'init', 'constructor')
+              AND a.name NOT LIKE '\_\_%' ESCAPE '\'
+              AND a.name NOT IN ('main', 'setup', 'teardown', 'init', 'constructor')
         ),
         -- All class definitions
         class_defs AS (
             SELECT
-                node_id,
-                name,
-                file_path,
-                language,
-                start_line,
-                end_line,
-                type,
+                a.node_id,
+                a.name,
+                a.file_path,
+                a.language,
+                a.start_line,
+                a.end_line,
+                a.type,
                 'class' AS definition_type
-            FROM query_table(ast_table)
-            WHERE is_class_definition(semantic_type)
-              AND name IS NOT NULL AND name != ''
+            FROM ast a
+            WHERE is_class_definition(a.semantic_type)
+              AND a.name IS NOT NULL AND a.name != ''
         ),
         -- All definitions combined
         all_defs AS (
@@ -620,19 +645,19 @@ CREATE OR REPLACE MACRO ast_dead_code(ast_table) AS TABLE
         ),
         -- All function calls (references to functions)
         function_calls AS (
-            SELECT DISTINCT name
-            FROM query_table(ast_table)
-            WHERE is_function_call(semantic_type)
-              AND name IS NOT NULL AND name != ''
+            SELECT DISTINCT a.name
+            FROM ast a
+            WHERE is_function_call(a.semantic_type)
+              AND a.name IS NOT NULL AND a.name != ''
         ),
         -- All identifier references (for classes and other references)
         -- Exclude identifiers that are the name of a definition (parent is definition type)
         identifier_refs AS (
-            SELECT DISTINCT ast.name
-            FROM query_table(ast_table) ast
-            LEFT JOIN query_table(ast_table) parent ON parent.node_id = ast.parent_id
-            WHERE is_identifier(ast.semantic_type)
-              AND ast.name IS NOT NULL AND ast.name != ''
+            SELECT DISTINCT a.name
+            FROM ast a
+            LEFT JOIN ast parent ON parent.node_id = a.parent_id
+            WHERE is_identifier(a.semantic_type)
+              AND a.name IS NOT NULL AND a.name != ''
               -- Exclude identifiers that are names within definitions
               AND (parent.semantic_type IS NULL
                    OR (NOT is_function_definition(parent.semantic_type)
@@ -662,14 +687,14 @@ CREATE OR REPLACE MACRO ast_dead_code(ast_table) AS TABLE
             )
         )
     SELECT
-        file_path,
-        name,
-        language,
-        start_line,
-        end_line,
-        type,
-        definition_type,
-        reason
-    FROM dead_code
-    ORDER BY file_path, start_line;
+        dc.file_path,
+        dc.name,
+        dc.language,
+        dc.start_line,
+        dc.end_line,
+        dc.type,
+        dc.definition_type,
+        dc.reason
+    FROM dead_code dc
+    ORDER BY dc.file_path, dc.start_line;
 
