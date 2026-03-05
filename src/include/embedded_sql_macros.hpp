@@ -963,10 +963,12 @@ CREATE OR REPLACE MACRO ast_dead_code(ast_table) AS TABLE
 --       %__BODY<*>__%
 --       return __Y__', 'python');
 --
---   -- Unnest captures for flat output
---   SELECT m.peek, c.capture, c.name
---   FROM ast_match('code', '__F__(__X__)', 'python') m,
---        LATERAL (SELECT unnest(map_values(m.captures)) as c) sub;
+--   -- Access captures (LIST-valued, use [1] for single wildcards)
+--   SELECT ast_capture(captures, 'X').name FROM ast_match(...);
+--   SELECT captures['X'][1].name FROM ast_match(...);  -- equivalent
+--
+--   -- Variadic captures return multi-element lists
+--   SELECT captures['BODY'] FROM ast_match(...);  -- list of matched nodes
 --
 -- NOTE: Simple wildcards use UPPERCASE (__NAME__), Python dunders use lowercase (__init__)
 --       so they don't conflict. Extended wildcards use %__NAME<rules>__% syntax.
@@ -1145,9 +1147,19 @@ CREATE OR REPLACE MACRO ast_pattern(pattern_str, lang) AS TABLE
         descendant_count,
         is_pattern_wildcard(name) as is_wildcard,
         wildcard_capture_name(name) as capture_name,
-        -- Use is_punctuation(semantic_type) instead of is_syntax_only(flags)
-        -- See bug 009: is_syntax_only doesn't work for PARSER_DELIMITER nodes
-        is_punctuation(semantic_type) as is_syntax
+        -- Bug #009 fixed: IS_SYNTAX_ONLY is now auto-set for PARSER_DELIMITER/PUNCTUATION
+        is_syntax_only(flags) as is_syntax,
+        -- Is this node a parsing artifact wrapper around a wildcard?
+        -- When wildcards are parsed as code, they produce expression_statement wrappers.
+        -- These wrappers should be ignored when determining which siblings to exclude
+        -- from variadic capture. Only expression_statement-type wrappers qualify.
+        NOT is_pattern_wildcard(name)
+        AND type IN ('expression_statement', 'expression')
+        AND EXISTS (
+            SELECT 1 FROM pattern_raw p2
+            WHERE p2.parent_id = pattern_raw.node_id
+              AND is_pattern_wildcard(p2.name)
+        ) as wraps_wildcard
     FROM pattern_raw
     WHERE depth >= (SELECT min_depth FROM root_depth);
 
@@ -1167,7 +1179,8 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, lang) AS (
         pattern_descendant_count: descendant_count,
         is_wildcard: is_wildcard,
         capture_name: capture_name,
-        is_syntax: is_syntax
+        is_syntax: is_syntax,
+        wraps_wildcard: wraps_wildcard
     })
     FROM ast_pattern(pattern_str, lang)
 );
@@ -1210,8 +1223,12 @@ CREATE OR REPLACE MACRO ast_match(
                 unnest.pattern_semantic_type,
                 unnest.pattern_descendant_count,
                 unnest.is_wildcard,
+
+)SQLMACRO"
+        R"SQLMACRO(
                 unnest.capture_name,
                 unnest.is_syntax,
+                unnest.wraps_wildcard,
                 -- Pattern-level variadic detection: * or + in any extended wildcard syntax
                 -- Legacy: %__X<*>__%, HTML: %__<X*>__% or %__<*>__%
                 (regexp_matches(pattern_str, '%__[A-Z]*<[^>]*[*+][^>]*>__%')
@@ -1220,24 +1237,26 @@ CREATE OR REPLACE MACRO ast_match(
                 -- Legacy: %__NAME<*>__%, HTML: %__<NAME*>__%
                 unnest.capture_name IS NOT NULL AND (
                     -- Legacy syntax
-
-)SQLMACRO"
-        R"SQLMACRO(
                     pattern_str LIKE '%' || '%__' || unnest.capture_name || '<*>__%' || '%'
                     OR pattern_str LIKE '%' || '%__' || unnest.capture_name || '<+>__%' || '%'
                     -- HTML syntax
                     OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '*%>__%' || '%'
                     OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '+%>__%' || '%'
-                ) as is_variadic
+                ) as is_variadic,
+                -- Variadic minimum count: 0 for *, 1 for +
+                CASE
+                    WHEN unnest.capture_name IS NOT NULL AND (
+                        pattern_str LIKE '%' || '%__' || unnest.capture_name || '<+>__%' || '%'
+                        OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '+%>__%' || '%'
+                    ) THEN 1
+                    WHEN unnest.capture_name IS NOT NULL AND (
+                        pattern_str LIKE '%' || '%__' || unnest.capture_name || '<*>__%' || '%'
+                        OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '*%>__%' || '%'
+                    ) THEN 0
+                    ELSE NULL
+                END as variadic_min
             FROM (SELECT unnest(ast_pattern_list(
-                -- Clean pattern: handle both HTML and legacy syntax
-                regexp_replace(
-                    regexp_replace(
-                        regexp_replace(
-                            regexp_replace(pattern_str, '%__([A-Z][A-Z0-9_]*)<[^>]+>__%', '__\1__', 'g'),
-                            '%__<[^>]+>__%', '__', 'g'),
-                        '%__<([A-Z_][A-Z0-9_]*)[^>]*>__%', '__\1__', 'g'),
-                    '%__<[*+~?][^>]*>__%', '__', 'g'),
+                clean_pattern(pattern_str),
                 lang)) as unnest)
             -- Filter out syntax nodes unless match_syntax is true
             WHERE match_syntax OR NOT unnest.is_syntax
@@ -1295,6 +1314,7 @@ CREATE OR REPLACE MACRO ast_match(
                 FROM pattern p
                 WHERE p.is_wildcard = false
                   AND NOT p.is_variadic  -- Skip variadic wildcards in verification
+                  AND NOT p.wraps_wildcard  -- Skip wrapper nodes (e.g., expression_statement around __X__)
                   AND NOT EXISTS (
                       SELECT 1
                       FROM query_table(ast_table) t
@@ -1324,15 +1344,19 @@ CREATE OR REPLACE MACRO ast_match(
             )
         ),
 
-        -- Extract captured nodes for each wildcard in each match
-        -- Note: variadic wildcards are not captured as single values (would need LIST)
-        captures_raw AS (
+        -- =====================================================================
+        -- Single (non-variadic) capture pipeline
+        -- =====================================================================
+
+        -- Extract captured nodes for each non-variadic wildcard
+        captures_single_raw AS (
             SELECT
                 mc.candidate_root,
                 mc.file_path as candidate_file,
                 mc.candidate_depth,
                 mc.candidate_descendants,
                 p.capture_name,
+                p.rel_depth as pattern_rel_depth,
                 p.sibling_index as pattern_sibling_index,
                 t.sibling_index as target_sibling_index,
                 t.node_id as captured_node_id,
@@ -1344,22 +1368,20 @@ CREATE OR REPLACE MACRO ast_match(
             FROM matched_candidates mc
             CROSS JOIN pattern p
             JOIN query_table(ast_table) t ON
-                t.file_path = mc.file_path  -- Must be same file (node_ids are per-file)
+                t.file_path = mc.file_path
                 AND t.node_id >= mc.candidate_root
                 AND t.node_id <= mc.candidate_root + mc.candidate_descendants
-                -- Depth matching with optional fuzz (cast to INTEGER to avoid UINT32 overflow)
                 AND ABS((t.depth::INTEGER - mc.candidate_depth::INTEGER) - p.rel_depth::INTEGER) <= depth_fuzz
-                -- Sibling matching: exact when no variadics, relaxed when variadics present
                 AND (p.rel_depth = 0
-                     OR p.pattern_has_variadic  -- Skip sibling check if variadic present
+                     OR p.pattern_has_variadic
                      OR t.sibling_index = p.sibling_index)
             WHERE p.is_wildcard = true
               AND p.capture_name IS NOT NULL
-              AND NOT p.is_variadic  -- Don't capture variadic wildcards (would need LIST)
+              AND NOT p.is_variadic
         ),
 
-        -- Deduplicate captures - prefer nodes at expected sibling position, then deepest
-        captures_dedup AS (
+        -- Deduplicate single captures - prefer nodes at expected sibling position
+        captures_single_dedup AS (
             SELECT DISTINCT ON (candidate_file, candidate_root, capture_name)
                 candidate_file,
                 candidate_root,
@@ -1370,33 +1392,256 @@ CREATE OR REPLACE MACRO ast_match(
                 captured_peek,
                 captured_start_line,
                 captured_end_line
-            FROM captures_raw
-            -- Prefer exact sibling match, then closest sibling, then deepest node
+            FROM captures_single_raw
             ORDER BY candidate_file, candidate_root, capture_name,
                      ABS(target_sibling_index::INTEGER - pattern_sibling_index::INTEGER),
                      captured_node_id DESC
         ),
 
-        -- Aggregate captures into a MAP for each match
-        -- Include capture name in the struct for easy unnesting
+        -- Wrap single captures as 1-element lists
+        captures_single_listed AS (
+            SELECT
+                candidate_file,
+                candidate_root,
+                capture_name,
+                [{
+                    capture: capture_name,
+                    node_id: captured_node_id,
+                    type: captured_type,
+                    name: captured_name,
+                    peek: captured_peek,
+                    start_line: captured_start_line,
+                    end_line: captured_end_line
+                }] as capture_list
+            FROM captures_single_dedup
+        ),
+
+        -- =====================================================================
+        -- Variadic capture pipeline
+        -- =====================================================================
+
+        -- Find the parent scope for variadic captures by matching a structural
+        -- anchor node to a target, then using that target's parent_id to scope capture.
+        -- Variadic wildcards are parsed as identifiers INSIDE expression_statement
+        -- wrappers, so the actual sibling level is at rel_depth - 1 (the wrapper's
+        -- depth, not the wildcard identifier's depth).
+        -- NOTE: If no anchor sibling exists at the wrapper level (variadic is the only
+        -- non-syntax child), this produces zero rows — * variadics get empty lists,
+        -- + variadics are filtered out. This is a known limitation.
+        variadic_scope AS (
+            SELECT DISTINCT
+                mc.candidate_root,
+                mc.file_path as candidate_file,
+                p.capture_name,
+                p.variadic_min,
+                p.rel_depth as variadic_depth,
+                t.parent_id as scope_parent_id
+            FROM matched_candidates mc
+            CROSS JOIN pattern p
+            -- Find a non-wildcard, non-wrapper anchor at the wrapper's depth
+            JOIN pattern p2 ON
+                p2.rel_depth = p.rel_depth - 1
+                AND NOT p2.is_wildcard
+                AND NOT p2.wraps_wildcard
+            JOIN query_table(ast_table) t ON
+                t.file_path = mc.file_path
+                AND t.node_id >= mc.candidate_root
+                AND t.node_id <= mc.candidate_root + mc.candidate_descendants
+                AND ABS((t.depth::INTEGER - mc.candidate_depth::INTEGER) - p2.rel_depth::INTEGER) <= depth_fuzz
+                AND (CASE
+                    WHEN match_by = 'semantic_type'
+                         THEN semantic_type_base(t.semantic_type) = semantic_type_base(p2.pattern_semantic_type)
+                    ELSE t.type = p2.pattern_type
+                END)
+                AND (p2.pattern_name IS NULL OR p2.pattern_name = '' OR t.name = p2.pattern_name)
+            WHERE p.is_variadic = true
+              AND p.capture_name IS NOT NULL
+        ),
+
+        -- Collect target nodes that are siblings within the scoped parent
+        captures_variadic_raw AS (
+            SELECT
+                vs.candidate_root,
+                vs.candidate_file,
+                vs.capture_name,
+                vs.variadic_min,
+                t.sibling_index as target_sibling_index,
+                t.node_id as captured_node_id,
+                t.type as captured_type,
+                t.name as captured_name,
+                t.peek as captured_peek,
+                t.start_line as captured_start_line,
+                t.end_line as captured_end_line
+            FROM variadic_scope vs
+            JOIN query_table(ast_table) t ON
+                t.file_path = vs.candidate_file
+                AND t.parent_id = vs.scope_parent_id
+            WHERE
+              -- Exclude syntax/punctuation nodes (when match_syntax = false)
+              (match_syntax OR NOT is_syntax_only(t.flags))
+              -- Exclude nodes matched by non-variadic, non-wildcard pattern nodes
+              AND NOT EXISTS (
+                  SELECT 1 FROM pattern p2
+                  WHERE p2.is_wildcard = false
+                    AND NOT p2.is_variadic
+                    AND NOT p2.wraps_wildcard
+                    AND p2.rel_depth = vs.variadic_depth - 1
+                    AND (CASE
+                        WHEN match_by = 'semantic_type'
+                             THEN semantic_type_base(t.semantic_type) = semantic_type_base(p2.pattern_semantic_type)
+                        ELSE t.type = p2.pattern_type
+                    END)
+                    AND (p2.pattern_name IS NULL OR p2.pattern_name = '' OR t.name = p2.pattern_name)
+              )
+              -- Exclude nodes already claimed by single wildcard captures
+              AND NOT EXISTS (
+                  SELECT 1 FROM captures_single_dedup sd
+                  WHERE sd.candidate_file = vs.candidate_file
+                    AND sd.candidate_root = vs.candidate_root
+
+)SQLMACRO"
+        R"SQLMACRO(
+                    AND sd.captured_node_id = t.node_id
+              )
+        ),
+
+        -- Aggregate variadic nodes into ordered lists
+        captures_variadic_listed AS (
+            SELECT
+                candidate_file,
+                candidate_root,
+                capture_name,
+                list({
+                    capture: capture_name,
+                    node_id: captured_node_id,
+                    type: captured_type,
+                    name: captured_name,
+                    peek: captured_peek,
+                    start_line: captured_start_line,
+                    end_line: captured_end_line
+                } ORDER BY target_sibling_index) as capture_list
+            FROM captures_variadic_raw
+            GROUP BY candidate_file, candidate_root, capture_name
+        ),
+
+        -- Handle * variadics that match zero nodes (produce empty list)
+        captures_variadic_empty AS (
+            SELECT
+                mc.file_path as candidate_file,
+                mc.candidate_root,
+                p.capture_name,
+                []::STRUCT(capture VARCHAR, node_id BIGINT, "type" VARCHAR, name VARCHAR, peek VARCHAR, start_line BIGINT, end_line BIGINT)[] as capture_list
+            FROM matched_candidates mc
+            CROSS JOIN (
+                SELECT DISTINCT capture_name, variadic_min
+                FROM pattern
+                WHERE is_variadic = true AND capture_name IS NOT NULL
+            ) p
+            WHERE p.variadic_min = 0  -- Only * (0+) variadics can be empty
+              AND NOT EXISTS (
+                  SELECT 1 FROM captures_variadic_listed vl
+                  WHERE vl.candidate_file = mc.file_path
+                    AND vl.candidate_root = mc.candidate_root
+                    AND vl.capture_name = p.capture_name
+              )
+        ),
+
+        -- =====================================================================
+        -- Combine and aggregate all captures
+        -- =====================================================================
+
+        captures_all AS (
+            SELECT candidate_file, candidate_root, capture_name, capture_list
+            FROM captures_single_listed
+            UNION ALL
+            SELECT candidate_file, candidate_root, capture_name, capture_list
+            FROM captures_variadic_listed
+            UNION ALL
+            SELECT candidate_file, candidate_root, capture_name, capture_list
+            FROM captures_variadic_empty
+        ),
+
+        -- Aggregate captures into MAP(VARCHAR, LIST(STRUCT{...}))
         captures_agg AS (
             SELECT
                 candidate_file,
                 candidate_root,
                 map_from_entries(list((
                     capture_name,
-                    {
-                        capture: capture_name,
-                        node_id: captured_node_id,
-                        type: captured_type,
-                        name: captured_name,
-                        peek: captured_peek,
-                        start_line: captured_start_line,
-                        end_line: captured_end_line
-                    }
+                    capture_list
                 ))) as captures
-            FROM captures_dedup
+            FROM captures_all
             GROUP BY candidate_file, candidate_root
+        ),
+
+        -- Reject matches where named + variadics have 0 captures.
+        -- NOTE: Anonymous + variadics (%__<+>__%) are not enforced here because
+        -- is_variadic requires capture_name IS NOT NULL. This is a known limitation;
+        -- anonymous + variadics currently behave like * (0+).
+        variadic_plus_valid AS (
+            SELECT mc.file_path, mc.candidate_root
+            FROM matched_candidates mc
+            WHERE NOT EXISTS (
+                -- Find any named + variadic that has no captures for this match
+                SELECT 1
+                FROM (
+                    SELECT DISTINCT capture_name
+                    FROM pattern
+                    WHERE is_variadic = true AND capture_name IS NOT NULL AND variadic_min = 1
+                ) plus_vars
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM captures_variadic_listed vl
+                    WHERE vl.candidate_file = mc.file_path
+                      AND vl.candidate_root = mc.candidate_root
+                      AND vl.capture_name = plus_vars.capture_name
+                )
+            )
+        ),
+
+        -- =====================================================================
+        -- Same-name constraint validation
+        -- =====================================================================
+        -- When __X__ appears multiple times in the pattern, all positions must
+        -- capture nodes with the same peek (source text) value.
+        -- This CTE finds (candidate, capture_name) pairs that FAIL the check.
+        -- Uses MIN/MAX on peek across all raw captures (simpler than per-position dedup).
+        -- Per-position best matches for same-name capture checking.
+        -- Reads from captures_single_raw (pre-dedup) intentionally: we need per-position
+        -- matches, whereas captures_single_dedup collapses to one capture per name.
+        -- ROW_NUMBER picks the best match per (candidate, capture_name, position) using
+        -- the same ranking logic as captures_single_dedup (sibling proximity, then node_id).
+        same_name_ranked AS (
+            SELECT
+                candidate_file, candidate_root, capture_name,
+                pattern_rel_depth, pattern_sibling_index,
+                captured_peek,
+                ROW_NUMBER() OVER (
+                    PARTITION BY candidate_file, candidate_root, capture_name,
+                                 pattern_rel_depth, pattern_sibling_index
+                    ORDER BY ABS(target_sibling_index::INTEGER - pattern_sibling_index::INTEGER),
+                             captured_node_id DESC
+                ) as rn
+            FROM captures_single_raw
+            -- Exclude root-level captures: tree-sitter propagates names to parent
+            -- nodes (e.g., function_definition gets name __F__ from function name),
+            -- creating unintended duplicate capture names at depth 0.
+            WHERE pattern_rel_depth > 0
+              -- Only check captures that actually appear >1 time in the pattern
+              AND capture_name IN (
+                  SELECT p.capture_name FROM pattern p
+                  WHERE p.is_wildcard AND p.capture_name IS NOT NULL
+                    AND NOT p.is_variadic AND p.rel_depth > 0
+                  GROUP BY p.capture_name HAVING count(*) > 1
+              )
+        ),
+
+        -- Find (candidate, capture_name) pairs where different positions disagree
+        same_name_inconsistent AS (
+            SELECT candidate_file, candidate_root, capture_name
+            FROM same_name_ranked
+            WHERE rn = 1
+            GROUP BY candidate_file, candidate_root, capture_name
+            HAVING COUNT(DISTINCT captured_peek) > 1
         )
 
     SELECT
@@ -1409,7 +1654,27 @@ CREATE OR REPLACE MACRO ast_match(
         ca.captures
     FROM matched_candidates mc
     LEFT JOIN captures_agg ca ON mc.file_path = ca.candidate_file
-                              AND mc.candidate_root = ca.candidate_root;
+                              AND mc.candidate_root = ca.candidate_root
+    WHERE EXISTS (
+        SELECT 1 FROM variadic_plus_valid vpv
+        WHERE vpv.file_path = mc.file_path
+          AND vpv.candidate_root = mc.candidate_root
+    )
+    -- Same-name constraint: reject matches where any same-name capture has inconsistent peeks
+    AND NOT EXISTS (
+        SELECT 1 FROM same_name_inconsistent sni
+        WHERE sni.candidate_file = mc.file_path
+          AND sni.candidate_root = mc.candidate_root
+    );
+
+-- =============================================================================
+-- Convenience Macro for Capture Access
+-- =============================================================================
+-- Since captures are now LIST-valued, use this to get the first (usually only)
+-- element for single wildcard captures.
+-- Usage: ast_capture(captures, 'X').name instead of captures['X'][1].name
+CREATE OR REPLACE MACRO ast_capture(captures_map, capture_name) AS
+    captures_map[capture_name][1];
 )SQLMACRO"},
 };
 

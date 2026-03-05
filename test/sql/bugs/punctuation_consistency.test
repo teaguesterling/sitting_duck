@@ -1,0 +1,77 @@
+# name: test/sql/bugs/punctuation_consistency.test
+# description: Bug #010 - Consistent DELIMITER/PUNCTUATION classification across languages
+# group: [bugs]
+
+require sitting_duck
+
+# =============================================================================
+# Bug #010: JavaScript had DELIMITER and PUNCTUATION inverted compared to
+# Python and Go. Brackets/parens/braces should be PARSER_DELIMITER (structural
+# delimiters), while comma/semicolon/dot should be PARSER_PUNCTUATION
+# (separators/terminators).
+# =============================================================================
+
+# Parentheses should be PARSER_DELIMITER across all languages
+
+query I
+SELECT semantic_type
+FROM parse_ast('f(x)', 'python')
+WHERE type = '(';
+----
+PARSER_DELIMITER
+
+query I
+SELECT semantic_type
+FROM parse_ast('f(x)', 'javascript')
+WHERE type = '(';
+----
+PARSER_DELIMITER
+
+query I
+SELECT semantic_type
+FROM parse_ast('package main
+func f(x int) {}', 'go')
+WHERE type = '(' LIMIT 1;
+----
+PARSER_DELIMITER
+
+# Comma should be PARSER_PUNCTUATION across all languages
+
+query I
+SELECT semantic_type
+FROM parse_ast('f(x, y)', 'python')
+WHERE type = ',';
+----
+PARSER_PUNCTUATION
+
+query I
+SELECT semantic_type
+FROM parse_ast('f(x, y)', 'javascript')
+WHERE type = ',';
+----
+PARSER_PUNCTUATION
+
+# Semicolons in JavaScript should be PARSER_PUNCTUATION
+query I
+SELECT semantic_type
+FROM parse_ast('var x = 1;', 'javascript')
+WHERE type = ';';
+----
+PARSER_PUNCTUATION
+
+# Braces should be PARSER_DELIMITER in JavaScript
+query I
+SELECT semantic_type
+FROM parse_ast('function f() {}', 'javascript')
+WHERE type = '{';
+----
+PARSER_DELIMITER
+
+# Quotes should be PARSER_DELIMITER (Go fix)
+query I
+SELECT semantic_type
+FROM parse_ast('package main
+var x = "hello"', 'go')
+WHERE type = '"' LIMIT 1;
+----
+PARSER_DELIMITER

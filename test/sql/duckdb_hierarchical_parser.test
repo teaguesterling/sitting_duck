@@ -97,7 +97,8 @@ ORDER BY node_id;
 program	DEFINITION_MODULE
 insert_statement	EXECUTION_MUTATION
 
-# Test 7: Test context flags access (IS_SYNTAX_ONLY for keywords)
+# Test 7: Test context flags access (IS_SYNTAX_ONLY for keywords and punctuation)
+# Bug #009: IS_SYNTAX_ONLY is now auto-set for PARSER_DELIMITER/PUNCTUATION nodes
 # ================================================================
 
 query II
@@ -110,6 +111,9 @@ ORDER BY node_id
 LIMIT 5;
 ----
 def	1
+(	1
+)	1
+:	1
 pass	1
 
 # Test 8: Complex query with window functions (hierarchical)

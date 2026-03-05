@@ -1,0 +1,67 @@
+# name: test/sql/bugs/syntax_only_flags.test
+# description: Bug #009 - is_syntax_only(flags) should return true for delimiter/punctuation nodes
+# group: [bugs]
+
+require sitting_duck
+
+# =============================================================================
+# Bug #009: IS_SYNTAX_ONLY was not auto-set for PARSER_DELIMITER/PUNCTUATION
+# nodes, causing is_syntax_only(flags) to always return false for them.
+# Fix: Auto-set IS_SYNTAX_ONLY in unified_ast_backend_impl.hpp when
+# semantic type base is PARSER_DELIMITER or PARSER_PUNCTUATION.
+# =============================================================================
+
+# Test Python: parentheses should have IS_SYNTAX_ONLY set
+query IT
+SELECT is_syntax_only(flags), semantic_type
+FROM parse_ast('f(x)', 'python')
+WHERE type = '(';
+----
+true	PARSER_DELIMITER
+
+query IT
+SELECT is_syntax_only(flags), semantic_type
+FROM parse_ast('f(x)', 'python')
+WHERE type = ')';
+----
+true	PARSER_DELIMITER
+
+# Test Python: comma should have IS_SYNTAX_ONLY set
+query IT
+SELECT is_syntax_only(flags), semantic_type
+FROM parse_ast('f(x, y)', 'python')
+WHERE type = ',';
+----
+true	PARSER_PUNCTUATION
+
+# Test JavaScript: parentheses should have IS_SYNTAX_ONLY set
+# (Bug #010 fixed: JavaScript parens are now PARSER_DELIMITER like other languages)
+query IT
+SELECT is_syntax_only(flags), semantic_type
+FROM parse_ast('f(x)', 'javascript')
+WHERE type = '(';
+----
+true	PARSER_DELIMITER
+
+query IT
+SELECT is_syntax_only(flags), semantic_type
+FROM parse_ast('f(x)', 'javascript')
+WHERE type = ')';
+----
+true	PARSER_DELIMITER
+
+# Test that is_construct correctly excludes syntax-only nodes
+query I
+SELECT is_construct(flags)
+FROM parse_ast('f(x)', 'python')
+WHERE type = '(';
+----
+false
+
+# Test that keywords also remain IS_SYNTAX_ONLY (they already had it via IS_KEYWORD)
+query I
+SELECT is_syntax_only(flags)
+FROM parse_ast('def f(): pass', 'python')
+WHERE type = 'def';
+----
+true

@@ -924,40 +924,40 @@ DEF_TYPE("of", OPERATOR_COMPARISON, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
  */
 
 /** @brief Opening parenthesis */
-DEF_TYPE("(", PARSER_PUNCTUATION, NONE, NONE, 0)
+DEF_TYPE("(", PARSER_DELIMITER, NONE, NONE, 0)
 
 /** @brief Closing parenthesis */
-DEF_TYPE(")", PARSER_PUNCTUATION, NONE, NONE, 0)
+DEF_TYPE(")", PARSER_DELIMITER, NONE, NONE, 0)
 
 /** @brief Opening bracket */
-DEF_TYPE("[", PARSER_PUNCTUATION, NONE, NONE, 0)
+DEF_TYPE("[", PARSER_DELIMITER, NONE, NONE, 0)
 
 /** @brief Closing bracket */
-DEF_TYPE("]", PARSER_PUNCTUATION, NONE, NONE, 0)
+DEF_TYPE("]", PARSER_DELIMITER, NONE, NONE, 0)
 
 /** @brief Opening brace */
-DEF_TYPE("{", PARSER_PUNCTUATION, NONE, NONE, 0)
+DEF_TYPE("{", PARSER_DELIMITER, NONE, NONE, 0)
 
 /** @brief Closing brace */
-DEF_TYPE("}", PARSER_PUNCTUATION, NONE, NONE, 0)
+DEF_TYPE("}", PARSER_DELIMITER, NONE, NONE, 0)
 
 /** @brief Colon */
 DEF_TYPE(":", PARSER_PUNCTUATION, NONE, NONE, 0)
 
 /** @brief Single quote */
-DEF_TYPE("'", PARSER_PUNCTUATION, NONE, NONE, 0)
+DEF_TYPE("'", PARSER_DELIMITER, NONE, NONE, 0)
 
 /** @brief Double quote */
 DEF_TYPE("\"", PARSER_DELIMITER, NONE, NONE, 0)
 
-/** @brief Comma delimiter */
-DEF_TYPE(",", PARSER_DELIMITER, NONE, NONE, 0)
+/** @brief Comma */
+DEF_TYPE(",", PARSER_PUNCTUATION, NONE, NONE, 0)
 
-/** @brief Semicolon delimiter */
-DEF_TYPE(";", PARSER_DELIMITER, NONE, NONE, 0)
+/** @brief Semicolon */
+DEF_TYPE(";", PARSER_PUNCTUATION, NONE, NONE, 0)
 
-/** @brief Dot delimiter */
-DEF_TYPE(".", PARSER_DELIMITER, NONE, NONE, 0)
+/** @brief Dot */
+DEF_TYPE(".", PARSER_PUNCTUATION, NONE, NONE, 0)
 
 /** @brief Backtick for template literals */
 DEF_TYPE("`", PARSER_DELIMITER, NONE, NONE, 0)

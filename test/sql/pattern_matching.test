@@ -303,7 +303,7 @@ SELECT count(*) FROM ast_match('test_code', 'exec(__X__)', 'python');
 
 # Find function calls with one argument
 query I
-SELECT count(*) FROM ast_match('test_code', '__F__(__X__)', 'python') WHERE captures['F'].name IN ('eval', 'exec', 'print');
+SELECT count(*) FROM ast_match('test_code', '__F__(__X__)', 'python') WHERE captures['F'][1].name IN ('eval', 'exec', 'print');
 ----
 3
 
@@ -318,16 +318,14 @@ SELECT count(*) FROM ast_match('test_code', 'def __F__(__): return __Y__', 'pyth
 ----
 1
 
-# With variadic (legacy syntax): find functions with statements before return
-# Note: variadic requires at least the wrapper expression_statement to exist
-# so it only matches greet() which has print() before return, not add_numbers()
+# With variadic (* = 0 or more): matches ALL functions with return (both add_numbers and greet)
 query I
 SELECT count(*) FROM ast_match('test_code',
     'def __F__(__):
     %__BODY<*>__%
     return __Y__', 'python');
 ----
-1
+2
 
 # With variadic (HTML syntax): same result
 query I
@@ -336,7 +334,7 @@ SELECT count(*) FROM ast_match('test_code',
     %__<BODY*>__%
     return __Y__', 'python');
 ----
-1
+2
 
 # Anonymous variadic (legacy)
 query I
@@ -345,7 +343,7 @@ SELECT count(*) FROM ast_match('test_code',
     %__<*>__%
     return __Y__', 'python');
 ----
-1
+2
 
 # =============================================================================
 # Capture Extraction Tests
@@ -353,24 +351,25 @@ SELECT count(*) FROM ast_match('test_code',
 
 # Verify captures contain expected fields
 query I
-SELECT captures['X'].type FROM ast_match('test_code', 'eval(__X__)', 'python');
+SELECT captures['X'][1].type FROM ast_match('test_code', 'eval(__X__)', 'python');
 ----
 identifier
 
 query I
-SELECT captures['X'].name FROM ast_match('test_code', 'eval(__X__)', 'python');
+SELECT captures['X'][1].name FROM ast_match('test_code', 'eval(__X__)', 'python');
 ----
 user_input
 
-# Multiple captures - only greet matches (has statement before return)
+# Multiple captures - both functions match with * variadic
 query II
-SELECT captures['F'].name, captures['Y'].peek
+SELECT captures['F'][1].name, captures['Y'][1].peek
 FROM ast_match('test_code',
     'def __F__(__):
     %__<BODY*>__%
     return __Y__', 'python')
-ORDER BY captures['F'].name;
+ORDER BY captures['F'][1].name;
 ----
+add_numbers	x + y
 greet	name
 
 # =============================================================================
@@ -392,3 +391,145 @@ query I
 SELECT count(*) FROM ast_match('js_code', 'eval(__X__)', 'python', match_by := 'semantic_type');
 ----
 1
+
+# =============================================================================
+# ast_capture Convenience Macro Tests
+# =============================================================================
+
+# ast_capture should work like captures['X'][1]
+query I
+SELECT ast_capture(captures, 'X').name FROM ast_match('test_code', 'eval(__X__)', 'python');
+----
+user_input
+
+# =============================================================================
+# LIST-Valued Capture Tests
+# =============================================================================
+
+# Single wildcard captures should be 1-element lists
+query I
+SELECT length(captures['X']) FROM ast_match('test_code', 'eval(__X__)', 'python');
+----
+1
+
+# =============================================================================
+# Variadic Capture Tests
+# =============================================================================
+
+# Create test code with multiple statements in function body
+statement ok
+CREATE TEMP TABLE variadic_test AS
+SELECT * FROM parse_ast('
+def process(data):
+    validate(data)
+    transform(data)
+    return data
+', 'python');
+
+# Variadic capture should return list of matched body nodes
+# add_numbers: 0 (only return), greet: 1 (print before return)
+query II
+SELECT captures['F'][1].name, length(captures['BODY'])
+FROM ast_match('test_code',
+    'def __F__(__):
+    %__BODY<*>__%
+    return __Y__', 'python')
+ORDER BY captures['F'][1].name;
+----
+add_numbers	0
+greet	1
+
+# process() has validate() and transform() before return - BODY captures both
+query I
+SELECT length(captures['BODY'])
+FROM ast_match('variadic_test',
+    'def __F__(__):
+    %__BODY<*>__%
+    return __Y__', 'python');
+----
+2
+
+# * variadic with zero matches should produce empty list
+statement ok
+CREATE TEMP TABLE star_test AS
+SELECT * FROM parse_ast('
+def simple(x):
+    return x
+def multi(x):
+    print(x)
+    return x
+', 'python');
+
+# simple() should match with empty BODY list (only has return, nothing before it)
+query II
+SELECT captures['F'][1].name, length(captures['BODY'])
+FROM ast_match('star_test',
+    'def __F__(__):
+    %__BODY<*>__%
+    return __Y__', 'python')
+ORDER BY captures['F'][1].name;
+----
+multi	1
+simple	0
+
+# + variadic should NOT match zero nodes
+# Only multi() should match (has statement before return)
+query I
+SELECT count(*)
+FROM ast_match('star_test',
+    'def __F__(__):
+    %__BODY<+>__%
+    return __Y__', 'python');
+----
+1
+
+query I
+SELECT captures['F'][1].name
+FROM ast_match('star_test',
+    'def __F__(__):
+    %__BODY<+>__%
+    return __Y__', 'python');
+----
+multi
+
+# =============================================================================
+# Same-Name Constraint Tests
+# =============================================================================
+
+# Create test code with equality expressions
+statement ok
+CREATE TEMP TABLE eq_code AS
+SELECT * FROM parse_ast('
+a == a
+a == b
+b + b
+c + d
+x == x
+', 'python');
+
+# __X__ == __X__ should match only self-equality (a==a, x==x)
+query I
+SELECT count(*)
+FROM ast_match('eq_code', '__X__ == __X__', 'python');
+----
+2
+
+# __X__ + __X__ should match only b+b
+query I
+SELECT count(*)
+FROM ast_match('eq_code', '__X__ + __X__', 'python');
+----
+1
+
+query I
+SELECT captures['X'][1].peek
+FROM ast_match('eq_code', '__X__ + __X__', 'python');
+----
+b
+
+# __X__ == __Y__ (different names = no constraint) should match all equality exprs
+query I
+SELECT count(*)
+FROM ast_match('eq_code', '__X__ == __Y__', 'python');
+----
+3
