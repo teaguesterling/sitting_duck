@@ -24,19 +24,19 @@
 --   depth_fuzz := 0        - Allow +/- N levels of depth flexibility for cross-language matching
 --
 -- EXAMPLES:
---   -- Find all eval() calls, capture the argument
---   SELECT * FROM ast_match('code', 'eval(__X__)', 'python');
+--   -- Find all func() calls in Python files, capture the argument
+--   SELECT * FROM ast_match('src/**/*.py', 'my_func(__X__)');
 --
 --   -- Find 3-arg calls with literal 2 in middle, capture func and last arg
---   SELECT * FROM ast_match('code', '__F__(__, 2, __X__)', 'python');
+--   SELECT * FROM ast_match('src/**/*.py', '__F__(__, 2, __X__)');
 --
---   -- Cross-language: Python pattern matches any language
---   SELECT * FROM ast_match('code', '__F__(__X__)', 'python', match_by := 'semantic_type');
+--   -- Explicit language (also used for pattern parsing)
+--   SELECT * FROM ast_match('src/**/*.py', '__F__(__X__)', language := 'python', match_by := 'semantic_type');
 --
 --   -- Variadic: Find functions with ANY body that ends with return
---   SELECT * FROM ast_match('code', 'def __F__(__):
+--   SELECT * FROM ast_match('src/**/*.py', 'def __F__(__):
 --       %__BODY<*>__%
---       return __Y__', 'python');
+--       return __Y__');
 --
 --   -- Access captures (LIST-valued, use [1] for single wildcards)
 --   SELECT ast_capture(captures, 'X').name FROM ast_match(...);
@@ -201,10 +201,10 @@ CREATE OR REPLACE MACRO get_variadic_names(pattern_str) AS (
 
 -- Note: ast_pattern parses a CLEANED pattern (no %__X<rules>__% syntax)
 -- Use clean_pattern() before calling ast_pattern if you have extended wildcards
-CREATE OR REPLACE MACRO ast_pattern(pattern_str, lang) AS TABLE
+CREATE OR REPLACE MACRO ast_pattern(pattern_str, language) AS TABLE
     WITH
         pattern_raw AS (
-            SELECT * FROM parse_ast(pattern_str, lang)
+            SELECT * FROM parse_ast(pattern_str, language)
         ),
         root_depth AS (
             SELECT MIN(depth) as min_depth
@@ -244,7 +244,7 @@ CREATE OR REPLACE MACRO ast_pattern(pattern_str, lang) AS TABLE
 -- =============================================================================
 
 -- Note: Takes a CLEANED pattern string. Use clean_pattern() first for extended wildcards.
-CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, lang) AS (
+CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
     SELECT list({
         rel_depth: rel_depth,
         sibling_index: sibling_index,
@@ -257,7 +257,7 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, lang) AS (
         is_syntax: is_syntax,
         wraps_wildcard: wraps_wildcard
     })
-    FROM ast_pattern(pattern_str, lang)
+    FROM ast_pattern(pattern_str, language)
 );
 
 -- =============================================================================
@@ -266,26 +266,29 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, lang) AS (
 
 -- Find AST nodes matching a pattern
 -- Usage:
---   SELECT * FROM ast_match('my_ast_table', 'eval(__X__)', 'python');
---   SELECT * FROM ast_match('my_ast_table', 'eval(__X__)', 'python', match_syntax := true);
---   SELECT * FROM ast_match('my_ast_table', '__F__(__X__)', 'python', match_by := 'semantic_type');
+--   SELECT * FROM ast_match('src/**/*.py', 'my_func(__X__)');
+--   SELECT * FROM ast_match('src/main.py', 'my_func(__X__)', match_syntax := true);
+--   SELECT * FROM ast_match('src/**/*.py', '__F__(__X__)', match_by := 'semantic_type');
 --
 -- Parameters:
---   ast_table    - Name of table containing AST data (from read_ast)
---   pattern_str  - Code pattern with __WILDCARDS__ (e.g., 'eval(__X__)')
---   lang         - Language for parsing pattern (default: 'python')
+--   source       - File path or glob pattern to parse
+--   pattern_str  - Code pattern with __WILDCARDS__ (e.g., 'my_func(__X__)')
+--   language     - Language for parsing source and pattern (default: 'python')
 --   match_syntax - If true, punctuation must match exactly (default: false)
 --   match_by     - 'type' for tree-sitter types, 'semantic_type' for cross-language (default: 'type')
 --
 CREATE OR REPLACE MACRO ast_match(
-    ast_table,
+    source,
     pattern_str,
-    lang := 'python',
+    language := 'python',
     match_syntax := false,
     match_by := 'type',
     depth_fuzz := 0  -- Allow +/- this many levels of depth flexibility
 ) AS TABLE
     WITH
+        ast AS (
+            SELECT * FROM read_ast(source, language)
+        ),
         -- Unnest the pattern list into rows
         -- Use cleaned pattern (extended wildcards converted to simple)
         -- Detect variadics by checking if pattern contains %__*<*> or %__*<+>
@@ -329,7 +332,7 @@ CREATE OR REPLACE MACRO ast_match(
                 END as variadic_min
             FROM (SELECT unnest(ast_pattern_list(
                 clean_pattern(pattern_str),
-                lang)) as unnest)
+                language)) as unnest)
             -- Filter out syntax nodes unless match_syntax is true
             WHERE match_syntax OR NOT unnest.is_syntax
         ),
@@ -352,7 +355,7 @@ CREATE OR REPLACE MACRO ast_match(
                 t.start_line,
                 t.end_line,
                 t.peek
-            FROM query_table(ast_table) t, pattern_root pr
+            FROM ast t, pattern_root pr
             WHERE
                 -- Match on type or semantic_type based on match_by parameter
                 -- For semantic_type mode: use exact type for operator TOKENS (*, +, etc.)
@@ -389,7 +392,7 @@ CREATE OR REPLACE MACRO ast_match(
                   AND NOT p.wraps_wildcard  -- Skip wrapper nodes (e.g., expression_statement around __X__)
                   AND NOT EXISTS (
                       SELECT 1
-                      FROM query_table(ast_table) t
+                      FROM ast t
                       WHERE t.file_path = c.file_path  -- Must be same file (node_ids are per-file)
                         AND t.node_id >= c.candidate_root
                         AND t.node_id <= c.candidate_root + c.candidate_descendants
@@ -439,7 +442,7 @@ CREATE OR REPLACE MACRO ast_match(
                 t.end_line as captured_end_line
             FROM matched_candidates mc
             CROSS JOIN pattern p
-            JOIN query_table(ast_table) t ON
+            JOIN ast t ON
                 t.file_path = mc.file_path
                 AND t.node_id >= mc.candidate_root
                 AND t.node_id <= mc.candidate_root + mc.candidate_descendants
@@ -515,7 +518,7 @@ CREATE OR REPLACE MACRO ast_match(
                 p2.rel_depth = p.rel_depth - 1
                 AND NOT p2.is_wildcard
                 AND NOT p2.wraps_wildcard
-            JOIN query_table(ast_table) t ON
+            JOIN ast t ON
                 t.file_path = mc.file_path
                 AND t.node_id >= mc.candidate_root
                 AND t.node_id <= mc.candidate_root + mc.candidate_descendants
@@ -545,7 +548,7 @@ CREATE OR REPLACE MACRO ast_match(
                 t.start_line as captured_start_line,
                 t.end_line as captured_end_line
             FROM variadic_scope vs
-            JOIN query_table(ast_table) t ON
+            JOIN ast t ON
                 t.file_path = vs.candidate_file
                 AND t.parent_id = vs.scope_parent_id
             WHERE

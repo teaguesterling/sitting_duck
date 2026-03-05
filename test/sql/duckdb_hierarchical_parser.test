@@ -106,7 +106,7 @@ SELECT
     type as node_type,
     flags as flags_value
 FROM parse_ast('def foo(): pass', 'python')
-WHERE flags > 0
+WHERE is_syntax_only(flags)
 ORDER BY node_id
 LIMIT 5;
 ----

@@ -1,110 +1,39 @@
 # ast_get_parent_chain() - Navigate Scope Hierarchy
 
 **Source**: Peer Review Feedback
-**Priority**: P1 (High - Enables scope understanding)  
-**Status**: Ready for Implementation
+**Priority**: P1 (High - Enables scope understanding)
+**Status**: Implemented (as `ast_ancestors`)
 
-## Overview
+## What's Implemented
 
-Get all ancestors of a node up to the root, critical for understanding scope and context of any code element.
-
-## API Design
-
-```sql
--- Function signature
-ast_get_parent_chain(node_id, max_depth := NULL) → JSON[]
-
--- Macro version for chaining
-.get_parent_chain(max_depth := NULL)
-```
-
-## Usage Examples
+### `ast_ancestors(ast_table, child_node_id)` (in `tree_navigation.sql`)
+Recursive CTE macro that follows `parent_id` upward from any node to the root. Returns full AST rows for each ancestor.
 
 ```sql
+-- Get all ancestors of a node
+SELECT * FROM ast_ancestors('my_ast', 42);
+
 -- Find the class containing a method
-SELECT 
-    node->>'name' as method_name,
-    parent->>'name' as class_name
-FROM read_ast_objects('models.py', 'python') ast,
-     LATERAL json_array_elements(
-         ast_get_parent_chain(node_id)
-     ) as parent
-WHERE node->>'type' = 'function_definition'
-  AND parent->>'type' = 'class_definition';
-
--- Get full scope path
-WITH method_ast AS (
-    SELECT * FROM read_ast_objects('api.py', 'python')
-    WHERE type = 'function_definition' 
-      AND name = 'handle_request'
-)
-SELECT 
-    name,
-    array_agg(
-        parent->>'name' 
-        ORDER BY ordinality DESC
-    ) as scope_path
-FROM method_ast,
-     LATERAL json_array_elements_with_ordinality(
-         ast_get_parent_chain(node_id)
-     ) as t(parent, ordinality)
-WHERE parent->>'name' IS NOT NULL;
--- Returns: ['module_name', 'ClassName', 'handle_request']
+SELECT a.name, a.type
+FROM ast_ancestors('my_ast', method_node_id) a
+WHERE a.type = 'class_definition';
 ```
 
-## Implementation Strategy
+### Related macros already implemented
+- `ast_children(ast_table, parent_node_id)` — immediate children
+- `ast_descendants(ast_table, ancestor_node_id)` — entire subtree (O(1) via descendant_count)
+- `ast_siblings(ast_table, target_node_id)` — same-parent nodes
+- `ast_class_members(ast_table, class_node_id)` — direct members of a class
+- `ast_function_scope(ast_table, func_node_id)` — function body excluding nested functions
 
-### Option 1: Recursive CTE Macro (Simpler)
-```sql
-CREATE OR REPLACE MACRO ast_get_parent_chain(nodes, node_id, max_depth) AS (
-    WITH RECURSIVE parents AS (
-        -- Start with the node itself
-        SELECT node, 0 as depth
-        FROM json_array_elements(nodes) as node
-        WHERE node->>'id' = node_id::VARCHAR
-        
-        UNION ALL
-        
-        -- Recursively find parents
-        SELECT parent.node, p.depth + 1
-        FROM parents p,
-             json_array_elements(nodes) as parent(node)
-        WHERE parent.node->>'id' = p.node->>'parent_id'
-          AND (max_depth IS NULL OR p.depth < max_depth)
-    )
-    SELECT json_agg(node ORDER BY depth) FROM parents
-);
-```
+## Remaining Gaps
 
-### Option 2: With Parent ID Tracking (Better Performance)
-- During parsing, store parent_id in each node
-- Simple array scan to build parent chain
-- O(depth) instead of O(n*depth)
+- **Scope path convenience**: No `ast_scope_path(ast_table, node_id)` that returns just the chain of named ancestors as a list (e.g., `['module', 'ClassName', 'method']`)
+- **Qualified name**: No `ast_qualified_name(ast_table, node_id)` that returns `module.ClassName.method`
+- **Max depth parameter**: The original design included `max_depth` limiting — current `ast_ancestors` always goes to root
+- **Method chaining**: `.get_parent_chain()` syntax not yet available (depends on #023)
 
-## Benefits
+## Implementation History
 
-- **Scope Understanding**: Know where any code element lives
-- **Navigation**: Jump between related elements
-- **Context**: Understand full hierarchical context
-- **Filtering**: Find all methods in specific classes
-
-## Integration with Annotations
-
-Could be computed as annotation during parse:
-```json
-{
-    "type": "function_definition",
-    "name": "process",
-    "annotations": {
-        "parent_chain": ["module", "PaymentService", "process"],
-        "scope_path": "payments.PaymentService.process"
-    }
-}
-```
-
-## Next Steps
-
-1. Add parent_id tracking during parse
-2. Implement recursive CTE version first
-3. Optimize with direct parent lookup
-4. Consider adding as default annotation
+- `ast_ancestors` macro — implemented in tree_navigation.sql
+- Full tree navigation suite (13 macros) — implemented

@@ -1,8 +1,9 @@
 # Bug: is_syntax_only Flag Not Set for PARSER_DELIMITER Nodes
 
-**Status:** Open
+**Status:** Fixed
 **Priority:** Medium
 **Discovered:** 2025-01-01
+**Fixed:** 2026 (PR #43 - pattern matching integration)
 
 ## Description
 

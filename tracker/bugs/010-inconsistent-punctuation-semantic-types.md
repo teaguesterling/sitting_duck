@@ -1,8 +1,9 @@
 # Bug: Inconsistent Semantic Types for Punctuation Across Languages
 
-**Status:** Open
+**Status:** Fixed
 **Priority:** Medium
 **Discovered:** 2025-01-01
+**Fixed:** 2026 (PR #43 - punctuation type standardization)
 
 ## Description
 
