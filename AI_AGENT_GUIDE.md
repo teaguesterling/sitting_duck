@@ -69,11 +69,15 @@ SELECT * FROM read_ast('**/*.*', ignore_errors := true, peek_size := 200);
 | `flags` | UTINYINT | Semantic flags (IS_CONSTRUCT, IS_EMBODIED) |
 | `parent_id` | BIGINT | Parent node ID |
 | `depth` | UINTEGER | Tree depth (0 = root) |
+| `sibling_index` | UINTEGER | Position among siblings (0-based) |
+| `children_count` | UINTEGER | Number of direct children |
 | `descendant_count` | UINTEGER | Total descendants (subtree size) |
 | `file_path` | VARCHAR | Source file |
 | `language` | VARCHAR | Detected language |
 | `start_line`, `end_line` | UINTEGER | Location (1-based) |
 | `peek` | VARCHAR | Source code snippet |
+| `qualified_name` | VARCHAR | Fully qualified name (e.g., `Class.method`) |
+| `parameters` | VARCHAR | Parameter list text (for functions) |
 
 ### `parse_ast(source_code, language)`
 
@@ -276,9 +280,9 @@ FROM ast_definitions('ast')
 WHERE definition_type = 'function';
 ```
 
-#### `ast_class_members(table, class_node_id)` — Direct members of a class
+#### `ast_class_members(table, class_node_id)` — Direct definition members of a class
 
-Returns methods, fields, and nested classes that are direct members (not locals inside method bodies).
+Returns definition nodes (methods, nested classes) that are direct members of the class, excluding locals inside method bodies. Note: only returns nodes classified as definitions — plain field assignments without declaration syntax may not appear.
 
 ```sql
 -- Get members of a specific class
@@ -456,17 +460,17 @@ FROM ast_match('ast',
 ### Source Code Extraction
 
 ```sql
--- Get source code for a node (pass file_path, start_line, end_line)
-SELECT ast_get_source(file_path, start_line, end_line) AS source
-FROM ast WHERE name = 'my_function' AND is_function_definition(semantic_type);
+-- Get source code with literal values
+SELECT ast_get_source('src/main.py', 10, 25) AS source;
 
 -- With line numbers
-SELECT ast_get_source_numbered(file_path, start_line, end_line) AS source
-FROM ast WHERE name = 'my_function';
+SELECT ast_get_source_numbered('src/main.py', 10, 25) AS source;
 
 -- Single line
 SELECT ast_get_source_line('src/main.py', 42);
 ```
+
+> **Note:** `ast_get_source` and `ast_get_source_numbered` use `read_text()` internally and do not support column references (lateral joins). Pass literal values, or use `ast_source_of` for name-based lookup.
 
 ### Definition Lookup
 
