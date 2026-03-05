@@ -314,15 +314,18 @@ void PopulateSemanticFieldsTemplated(ASTNode &node, const AdapterType *adapter, 
 			node.universal_flags |= ASTNodeFlags::IS_SYNTAX_ONLY;
 		}
 
-		// RUNTIME DETECTION: Check if function/method definitions have a body
-		// This handles languages like Java where method_declaration is used for both
-		// concrete methods (with body) and abstract/interface methods (without body)
-		if (base_semantic == SemanticTypes::DEFINITION_FUNCTION &&
-		    (node.universal_flags & ASTNodeFlags::IS_SYNTAX_ONLY) == 0 &&
+		// RUNTIME DETECTION: Set IS_DECLARATION_ONLY for nodes without substantive children.
+		// A node is "embodied" (has_body) if it has at least one named child that isn't
+		// purely punctuation. This covers:
+		//   - Function definitions: abstract methods vs concrete methods with body blocks
+		//   - Class definitions: empty vs populated class bodies
+		//   - Any construct: leaf tokens vs compound nodes
+		// Skip nodes already marked as syntax-only (they're tokens, not constructs).
+		if ((node.universal_flags & ASTNodeFlags::IS_SYNTAX_ONLY) == 0 &&
 		    (node.universal_flags & ASTNodeFlags::IS_DECLARATION_ONLY) == 0) {
-			// This is a function definition (not a keyword token) that's not already marked as declaration-only
-			// Check at runtime if it actually has a body
-			if (!HasBodyChild(ts_node)) {
+			uint32_t named_child_count = ts_node_named_child_count(ts_node);
+			if (named_child_count == 0) {
+				// No named children at all — this is a leaf construct (e.g., identifier, keyword)
 				node.universal_flags |= ASTNodeFlags::IS_DECLARATION_ONLY;
 			}
 		}
