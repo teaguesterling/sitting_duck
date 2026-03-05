@@ -158,7 +158,7 @@ SELECT COUNT(*) >= 5 as has_minimum_nodes FROM parse_ast('SELECT COUNT(*) FROM u
 # ===========================================
 
 query II
-SELECT 
+SELECT
     get_super_kind(semantic_type) as super_kind,
     COUNT(*) as count
 FROM parse_ast('
@@ -172,5 +172,4 @@ CREATE TABLE products (
 GROUP BY super_kind
 ORDER BY super_kind;
 ----
-COMPUTATION	1
-CONTROL_EFFECTS	1
+COMPUTATION	2

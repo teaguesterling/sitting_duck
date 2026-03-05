@@ -16,6 +16,15 @@
 #include "duckdb/parser/expression/window_expression.hpp"
 #include "duckdb/parser/expression/comparison_expression.hpp"
 #include "duckdb/parser/expression/conjunction_expression.hpp"
+#include "duckdb/parser/statement/create_statement.hpp"
+#include "duckdb/parser/parsed_data/create_macro_info.hpp"
+#include "duckdb/parser/parsed_data/create_table_info.hpp"
+#include "duckdb/parser/parsed_data/create_view_info.hpp"
+#include "duckdb/parser/parsed_data/create_sequence_info.hpp"
+#include "duckdb/parser/parsed_data/create_type_info.hpp"
+#include "duckdb/parser/parsed_data/create_index_info.hpp"
+#include "duckdb/parser/parsed_data/create_schema_info.hpp"
+#include "duckdb/common/enums/catalog_type.hpp"
 #include <cstring>
 #include <mutex>
 #include <numeric>   // for std::iota
@@ -219,6 +228,11 @@ vector<ASTNode> DuckDBAdapter::ConvertStatement(const SQLStatement &stmt, uint32
 		nodes = ConvertSelectStatement(select_stmt, node_counter);
 		break;
 	}
+	case StatementType::CREATE_STATEMENT: {
+		const auto &create_stmt = stmt.Cast<CreateStatement>();
+		nodes = ConvertCreateStatement(create_stmt, node_counter);
+		break;
+	}
 	case StatementType::INSERT_STATEMENT: {
 		auto node = CreateASTNode("insert_statement", "", stmt.ToString(), SemanticTypes::EXECUTION_MUTATION,
 		                          node_counter++, -1, 1);
@@ -245,6 +259,103 @@ vector<ASTNode> DuckDBAdapter::ConvertStatement(const SQLStatement &stmt, uint32
 	}
 	}
 
+	return nodes;
+}
+
+//==============================================================================
+// CREATE Statement Processing (#44)
+//==============================================================================
+vector<ASTNode> DuckDBAdapter::ConvertCreateStatement(const CreateStatement &stmt, uint32_t &node_counter) const {
+	vector<ASTNode> nodes;
+
+	if (!stmt.info) {
+		// Fallback if info is null
+		auto node = CreateASTNode("sql_statement", "", stmt.ToString(), SemanticTypes::EXECUTION_STATEMENT,
+		                          node_counter++, -1, 1);
+		nodes.push_back(node);
+		return nodes;
+	}
+
+	const auto &info = *stmt.info;
+	string name;
+	string node_type;
+	uint8_t semantic_type;
+
+	switch (info.type) {
+	case CatalogType::MACRO_ENTRY: {
+		const auto &macro_info = info.Cast<CreateFunctionInfo>();
+		name = macro_info.name;
+		node_type = "create_macro";
+		semantic_type = SemanticTypes::DEFINITION_FUNCTION;
+		break;
+	}
+	case CatalogType::TABLE_MACRO_ENTRY: {
+		const auto &macro_info = info.Cast<CreateFunctionInfo>();
+		name = macro_info.name;
+		node_type = "create_table_macro";
+		semantic_type = SemanticTypes::DEFINITION_FUNCTION;
+		break;
+	}
+	case CatalogType::TABLE_ENTRY: {
+		const auto &table_info = info.Cast<CreateTableInfo>();
+		name = table_info.table;
+		node_type = "create_table";
+		semantic_type = SemanticTypes::DEFINITION_CLASS;
+		break;
+	}
+	case CatalogType::VIEW_ENTRY: {
+		const auto &view_info = info.Cast<CreateViewInfo>();
+		name = view_info.view_name;
+		node_type = "create_view";
+		semantic_type = SemanticTypes::DEFINITION_CLASS;
+		break;
+	}
+	case CatalogType::SEQUENCE_ENTRY: {
+		const auto &seq_info = info.Cast<CreateSequenceInfo>();
+		name = seq_info.name;
+		node_type = "create_sequence";
+		semantic_type = SemanticTypes::DEFINITION_VARIABLE;
+		break;
+	}
+	case CatalogType::TYPE_ENTRY: {
+		const auto &type_info = info.Cast<CreateTypeInfo>();
+		name = type_info.name;
+		node_type = "create_type";
+		semantic_type = SemanticTypes::DEFINITION_CLASS;
+		break;
+	}
+	case CatalogType::INDEX_ENTRY: {
+		const auto &idx_info = info.Cast<CreateIndexInfo>();
+		name = idx_info.index_name;
+		node_type = "create_index";
+		semantic_type = SemanticTypes::DEFINITION_VARIABLE;
+		break;
+	}
+	case CatalogType::SCALAR_FUNCTION_ENTRY:
+	case CatalogType::TABLE_FUNCTION_ENTRY:
+	case CatalogType::AGGREGATE_FUNCTION_ENTRY:
+	case CatalogType::PRAGMA_FUNCTION_ENTRY: {
+		const auto &func_info = info.Cast<CreateFunctionInfo>();
+		name = func_info.name;
+		node_type = "create_function";
+		semantic_type = SemanticTypes::DEFINITION_FUNCTION;
+		break;
+	}
+	case CatalogType::SCHEMA_ENTRY: {
+		node_type = "create_schema";
+		name = info.schema;
+		semantic_type = SemanticTypes::DEFINITION_MODULE;
+		break;
+	}
+	default: {
+		node_type = "sql_statement";
+		semantic_type = SemanticTypes::EXECUTION_STATEMENT;
+		break;
+	}
+	}
+
+	auto node = CreateASTNode(node_type, name, stmt.ToString(), semantic_type, node_counter++, -1, 1);
+	nodes.push_back(node);
 	return nodes;
 }
 
