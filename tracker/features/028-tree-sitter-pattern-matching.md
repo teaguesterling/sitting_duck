@@ -2,7 +2,7 @@
 
 **Priority:** P2
 **Complexity:** Medium-High
-**Status:** Design Phase
+**Status:** Partially Implemented (SQL macro approach shipped; native tree-sitter query API not yet implemented)
 
 ## Summary
 

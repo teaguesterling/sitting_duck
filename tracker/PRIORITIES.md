@@ -1,176 +1,118 @@
 # DuckDB AST Extension - Development Priorities
 
-**Last Updated:** 2025-05-27
+**Last Updated:** 2026-03-04
 
 ## Priority Levels
 
 - **P0 (Critical)**: Blocking issues that prevent basic functionality
-- **P1 (High)**: Important features or bugs affecting user experience  
+- **P1 (High)**: Important features or bugs affecting user experience
 - **P2 (Medium)**: Nice-to-have features or minor bugs
 - **P3 (Low)**: Future enhancements or cosmetic issues
 
 ## Current Status
 
-✅ **Completed:**
-- Clean API implementation (13 core macros)
-- Test suite fixes for DuckDB 1.3
-- All tests passing (19 test cases, 387 assertions)
-- `parse_ast()` function implementation
-- Python, JavaScript, C++ language support
-- Rust temporarily disabled (ABI issues)
+### Completed (since last update)
+- 27 language support (Bash, C, C++, C#, CSS, Dart, Go, GraphQL, HCL, HTML, Java, JavaScript, JSON, Kotlin, Lua, Markdown, PHP, Python, R, Ruby, Rust, SQL, Swift, TOML, TypeScript, YAML, Zig)
+- Semantic type system with cross-language type codes
+- 50+ SQL macros (tree navigation, pattern matching, analysis)
+- SQL-based pattern matching with `ast_match()` / `ast_pattern()` / `ast_capture()`
+- Wildcard capture system (named, anonymous, variadic with LIST return)
+- Semantic predicates (40+ is_*() macros)
+- Source extraction (`ast_get_source()`, `ast_get_source_numbered()`)
+- Children/descendant counts for O(1) subtree operations
+- Parser ownership refactor, KIND taxonomy integration
+- 75 test files covering all languages and features
+- Bugs #001-005, #007-013 all fixed (12 of 13 total)
+- IS_SYNTAX_ONLY flags, punctuation consistency, comparison type fixes
 
-🚧 **In Design:**
-- Annotation system architecture
-- Columnar native AST implementation
+### In Progress
+- #023 Unified function architecture (Phase 1: unified backend)
 
-## Immediate Priorities (Phase 1)
+### Only Open Bug
+- #006 Performance tests slow (26s vs 0.1s for basic tests) - Medium priority
 
-### P0 - Critical Fixes
-1. **[BUG] Rust Parser ABI Compatibility** - Fix tree-sitter-rust integration
-   - Currently causes system freeze
-   - Temporarily disabled
-   
-### P1 - Core Functionality (Peer Review Priority)
-1. **[FEATURE] ast_get_source()** - Extract source code with context (#013)
-   - HIGHEST PRIORITY from peer review
-   - Extract code snippets with surrounding lines
-   - Immediate value for users
-   
-2. **[FEATURE] Parse-Time Filtering** - Performance at scale (#014)
-   - Add `only_types` parameter to read_ast functions  
-   - Essential for large codebases
-   - 5-50x memory reduction
-   
-3. **[FEATURE] ast_get_parent_chain()** - Navigate scope hierarchy (#015)
-   - Get all ancestors of a node
-   - Critical for scope understanding
-   - Enables qualified name extraction
-   
-4. **[FEATURE] ast_find_references()** - Find symbol usage (#016)
-   - Find all uses of a variable/function
+## Immediate Priorities
+
+### P1 - Core Analysis Functions
+1. **[FEATURE] Parse-Time Filtering** (#014)
+   - Add `only_types`, `max_depth` parameters to read_ast
+   - Essential for large codebases, 5-50x memory reduction
+
+2. **[FEATURE] ast_get_parent_chain()** (#015)
+   - Get all ancestors of a node up to root
+   - Critical for scope understanding and qualified names
+
+3. **[FEATURE] ast_find_references()** (#016)
+   - Find all uses of a variable/function within scope
    - Core navigation feature
-   - Scope-aware search
-   
-5. **[FEATURE] ast_get_calls()** - Extract function calls (#017)
-   - Find dependencies within functions
+
+4. **[FEATURE] ast_get_calls()** (#017)
+   - Extract function/method calls within a node
    - Essential for call graph analysis
-   - Complexity metrics
 
-### P1 - Architecture Foundation
-1. **[FEATURE] Annotation System Implementation** - Flexible enrichment framework
-   - Separate pure AST from enrichments
-   - Enable lazy evaluation
-   - Support user-defined annotations
-   
-2. **[FEATURE] Core Annotations** - Essential enrichments
-   - `ast_get_locations()` - Extract position info
-   - `ast_get_signatures()` - Function/method signatures  
-   - `ast_get_definitions()` - Combined location + signature
+### P1 - Architecture
+1. **[FEATURE] Unified Function Architecture** (#023) - IN PROGRESS
+   - Single parsing backend for all 5 AST functions
+   - Enables method chaining and consistent behavior
 
-### P2 - Performance & Quality
-1. **[FEATURE] Parse-time Filtering** - Reduce memory usage
-   - Add node_filter parameter to read_ast functions
-   - Support include/exclude patterns
-   - Language-specific presets
-   
-2. **[FEATURE] Source Code Extraction** - ast_get_source with annotations
-   - Extract code snippets with context
-   - Leverage position annotations
+### P2 - Pattern Matching Evolution
+1. **[FEATURE] Native Tree-sitter Query API** (#028)
+   - Expose tree-sitter S-expression queries via C++ (current impl is SQL macros)
+   - Would be significantly faster for complex patterns
 
-## Medium-term Priorities (Phase 2)
+2. **[FEATURE] Pattern by Example** (#029)
+   - Write patterns as actual code with `__WILDCARD__` placeholders
 
-### P1 - Columnar Native Implementation
-1. **[FEATURE] Columnar AST Type** - High-performance native type
-   - Implement ast_flat columnar structure
-   - 10-100x faster type filtering
-   - Memory-efficient for large ASTs
-   - See design: `/workspace/design/columnar_ast_design.md`
-   
-2. **[FEATURE] Vectorized Operations** - Leverage DuckDB's columnar engine
-   - SIMD-optimized filtering
-   - Cache-friendly access patterns
-   - Null column optimization
+3. **[FEATURE] Pattern Matching C++ Implementation** (#030)
+   - Move pattern engine from SQL to C++ for performance
 
-### P2 - Advanced Annotations
-1. **[FEATURE] Semantic Annotations** - Higher-level analysis
-   - Complexity metrics
-   - Dependency tracking
-   - Scope resolution
-   
-2. **[FEATURE] User-defined Annotations** - Extensibility
-   - Macro-based annotation functions
-   - Composable annotation pipeline
-   - Domain-specific enrichments
+### P2 - Language & Extraction
+1. **[FEATURE] Missing Native Extractors** (#027)
+   - Add native extractors for 9 languages (C#, Lua, HCL, Zig, etc.)
 
-## Long-term Vision (Phase 3)
+2. **[FEATURE] Standardized Semantic Extraction API** (#026)
+   - Universal SQL functions: extract_functions, extract_classes, etc.
 
-### P2 - Integration Features  
-1. **[FEATURE] Incremental Parsing** - Parse only changes
-   - Track file modifications
-   - Update AST incrementally
-   - Cache invalidation
-   
-2. **[FEATURE] Cross-file Analysis** - Repository-wide queries
-   - Module dependency graphs
-   - Call flow analysis
-   - Impact assessment
+3. **[FEATURE] Taxonomy Exposure Audit** (#020)
+   - Audit which functions expose kind/universal_flags/semantic_id fields
 
-### P3 - Ecosystem
-1. **[FEATURE] Language Server Protocol** - IDE integration
-   - Real-time AST updates
-   - Code navigation support
-   - Refactoring assistance
-   
-2. **[FEATURE] Cloud Deployment** - Distributed processing
-   - Handle massive codebases
-   - Parallel parsing
-   - Result aggregation
+## Medium-term Priorities
 
-## Implementation Roadmap
+### P2 - Performance & Architecture
+1. **[FEATURE] Columnar AST Implementation** (#012-columnar)
+   - Parallel array representation for 10-100x faster type filtering
 
-### Sprint 1 (Current): Annotation Foundation
-- [x] Design annotation system architecture
-- [x] Design columnar AST implementation
-- [ ] Implement base annotation infrastructure
-- [ ] Add ast_get_locations() macro
-- [ ] Test with existing languages
+2. **[FEATURE] Performance Optimization Roadmap** (#009)
+   - Three-tier strategy: C++ hot-path, structural, architectural
 
-### Sprint 2: Core Annotations
-- [ ] Implement signature extraction
-- [ ] Add scope calculation
-- [ ] Create annotation presets
-- [ ] Update documentation
+3. **[BUG] Performance Tests Slow** (#006)
+   - 26 seconds is too long; optimize or split test suite
 
-### Sprint 3: Columnar Prototype
-- [ ] Implement ast_flat type
-- [ ] Create columnar parser output
-- [ ] Add vectorized filtering
-- [ ] Benchmark vs JSON
+### P2 - User Experience
+1. **[FEATURE] Concise CLI Syntax** (#022)
+   - Streamlined CLI for AST queries with method chaining
 
-### Sprint 4: Integration
-- [ ] Migration utilities
-- [ ] Compatibility layer
-- [ ] Performance testing
-- [ ] User documentation
+2. **[FEATURE] Self-Analysis Dogfooding** (#021)
+   - Use extension to analyze its own C++ codebase
+
+3. **[FEATURE] Native DuckDB Parser Integration** (#024)
+   - Use DuckDB's own parser for true SQL semantic analysis
+
+## Long-term Priorities
+
+### P3 - Future Enhancements
+1. **[FEATURE] Native AST Type** (#011) - Custom DuckDB type
+2. **[FEATURE] AI Agent UX Optimization** (#010) - Simplified entry points
+3. **[FEATURE] AST Diff Analysis** (planned/005) - Code evolution
+4. **[FEATURE] Performance Caching** (planned/008) - Session-level AST cache
+5. **[FEATURE] Error Context Tracking** (planned/007) - Enhanced error messages
+6. **[FEATURE] Extended Wildcard Rules** (#031) - HTML/XML DSL for constraints
+7. **[FEATURE] Smart Pointer Refactor** (#018) - Memory safety improvement
+8. **[FEATURE] Grammar Adapter Refactor** (#025) - Consolidate language handling
 
 ## Success Metrics
 
-1. **Performance**: 
-   - <100ms query on 100K node files
-   - 10x improvement in type filtering
-   - 50% memory reduction
-
-2. **Usability**: 
-   - 90% queries use chainable API
-   - Annotation system adopted by users
-   - Clear migration path
-
-3. **Reliability**: 
-   - All languages working (including Rust)
-   - Zero regression in test suite
-   - Comprehensive error handling
-
-4. **Extensibility**:
-   - User-created annotations in use
-   - Community language handlers
-   - Integration with other tools
+1. **Performance**: <100ms query on 100K node files, 10x improvement in type filtering
+2. **Usability**: Chainable API, clear documentation, intuitive macros
+3. **Reliability**: All 27 languages working, zero regressions, comprehensive error handling
+4. **Extensibility**: User-defined patterns, community language handlers

@@ -33,7 +33,12 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
 	}
 
 	auto file_path_value = input.inputs[0];
-	auto language = input.inputs[1].GetValue<string>();
+
+	// If language is NULL, treat as auto-detect
+	string language = "auto";
+	if (!input.inputs[1].IsNull()) {
+		language = input.inputs[1].GetValue<string>();
+	}
 
 	// Handle both VARCHAR and LIST(VARCHAR) inputs (DuckDB-consistent pattern)
 	vector<string> file_patterns;

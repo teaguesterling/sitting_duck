@@ -1,8 +1,9 @@
 # Bug: Comparison expressions have wrong semantic type in JS/Go
 
-**Status:** Open
+**Status:** Fixed
 **Priority:** Medium
 **Discovered:** 2025-01-02
+**Fixed:** 2026 (PR #43 - semantic type corrections for JS/Go comparison operators)
 
 ## Description
 
