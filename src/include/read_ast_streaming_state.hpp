@@ -2,7 +2,7 @@
 
 #include "duckdb.hpp"
 #include "duckdb/function/table_function.hpp"
-#include "duckdb/common/multi_file/multi_file_reader.hpp"
+#include "duckdb/common/file_system.hpp"
 #include "unified_ast_backend.hpp"
 #include <unordered_map>
 
@@ -13,12 +13,8 @@ class LanguageAdapter;
 
 //! Global state for streaming AST table function with parallel batch processing
 struct ReadASTStreamingGlobalState : public GlobalTableFunctionState {
-	// Traditional single-threaded streaming (for small file sets)
-	shared_ptr<MultiFileList> file_list;
-	MultiFileListScanData file_scan_state;
-
-	// Direct file path list for sequential processing (avoids MultiFileReader normalization
-	// which strips URI components like @rev suffixes from git:// URIs)
+	// Direct file path list for sequential processing (preserves full URIs
+	// including @rev suffixes that MultiFileReader would strip)
 	vector<string> sequential_file_paths;
 	idx_t sequential_file_index = 0;
 
