@@ -283,6 +283,7 @@ vector<ASTNode> DuckDBAdapter::ConvertCreateStatement(const CreateStatement &stm
 
 	switch (info.type) {
 	case CatalogType::MACRO_ENTRY: {
+		// CreateMacroInfo inherits from CreateFunctionInfo, so we can cast to the base
 		const auto &macro_info = info.Cast<CreateFunctionInfo>();
 		name = macro_info.name;
 		node_type = "create_macro";
@@ -290,6 +291,7 @@ vector<ASTNode> DuckDBAdapter::ConvertCreateStatement(const CreateStatement &stm
 		break;
 	}
 	case CatalogType::TABLE_MACRO_ENTRY: {
+		// CreateMacroInfo inherits from CreateFunctionInfo, so we can cast to the base
 		const auto &macro_info = info.Cast<CreateFunctionInfo>();
 		name = macro_info.name;
 		node_type = "create_table_macro";
@@ -342,13 +344,15 @@ vector<ASTNode> DuckDBAdapter::ConvertCreateStatement(const CreateStatement &stm
 		break;
 	}
 	case CatalogType::SCHEMA_ENTRY: {
+		// For CREATE SCHEMA, the schema name is stored in the base CreateInfo::schema field
 		node_type = "create_schema";
 		name = info.schema;
 		semantic_type = SemanticTypes::DEFINITION_MODULE;
 		break;
 	}
 	default: {
-		node_type = "sql_statement";
+		// Preserve CREATE context for unhandled catalog types (e.g., SECRET_ENTRY)
+		node_type = "create_statement";
 		semantic_type = SemanticTypes::EXECUTION_STATEMENT;
 		break;
 	}

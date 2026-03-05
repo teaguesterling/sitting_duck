@@ -100,3 +100,14 @@ WHERE type != 'program'
 ORDER BY node_id;
 ----
 create_index	idx_users_name	DEFINITION_VARIABLE
+
+# Test 9: CREATE SCHEMA name extraction
+# ======================================
+
+query III
+SELECT type, name, semantic_type_to_string(semantic_type) as semantic
+FROM parse_ast('CREATE SCHEMA my_schema', 'duckdb')
+WHERE type != 'program'
+ORDER BY node_id;
+----
+create_schema	my_schema	DEFINITION_MODULE
