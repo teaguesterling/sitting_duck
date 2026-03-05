@@ -17,16 +17,27 @@ SELECT * FROM read_ast('src/**/*.py');
 -- Parse a code string directly
 SELECT * FROM parse_ast('def hello(): pass', 'python');
 
--- Materialize for reuse with macros
-CREATE TABLE ast AS SELECT * FROM read_ast('src/**/*.py', ignore_errors := true);
+-- Use analysis macros directly with file paths
+SELECT * FROM ast_definitions('src/**/*.py');
+SELECT * FROM ast_function_metrics('src/**/*.py');
+SELECT * FROM ast_match('src/**/*.py', '__F__(__X__)');
 ```
 
-Most macro functions take a **table name** (string) as their first argument. Materialize your AST first, then pass the table name:
+**Two kinds of macros:**
+
+1. **Whole-file macros** take a file path or glob pattern directly (like `read_ast`):
+   `ast_definitions`, `ast_function_metrics`, `ast_nesting_analysis`, `ast_functions_containing`,
+   `ast_security_audit`, `ast_dead_code`, `ast_containing_line`, `ast_in_range`, `ast_match`
+
+2. **Node-specific macros** take a table name + node_id (for pre-parsed ASTs):
+   `ast_children`, `ast_descendants`, `ast_ancestors`, `ast_siblings`,
+   `ast_function_scope`, `ast_class_members`, `ast_call_arguments`
 
 ```sql
+-- Node-specific macros require materializing first
 CREATE TABLE ast AS SELECT * FROM read_ast('src/**/*.py');
-SELECT * FROM ast_function_metrics('ast');
-SELECT * FROM ast_definitions('ast');
+SELECT * FROM ast_descendants('ast', 42);
+SELECT * FROM ast_class_members('ast', 15);
 ```
 
 ---
@@ -213,13 +224,13 @@ For the complete type hierarchy, see [API_REFERENCE.md](API_REFERENCE.md#semanti
 
 ## Tree Navigation Macros
 
-All navigation macros take a **table name** (string) as the first argument. Materialize your AST first:
+### Node-Specific Macros (table name + node_id)
+
+These macros operate on individual nodes within a pre-parsed AST table. Materialize your AST first:
 
 ```sql
 CREATE TABLE ast AS SELECT * FROM read_ast('src/**/*.py', ignore_errors := true);
 ```
-
-### Subtree and Ancestor Queries
 
 #### `ast_descendants(table, node_id)` — Get all descendants of a node
 
@@ -251,33 +262,13 @@ SELECT * FROM ast_children('ast', 42);
 SELECT * FROM ast_siblings('ast', 42);
 ```
 
-### Line-Based Navigation
+#### `ast_function_scope(table, function_node_id)` — Nodes inside a function, excluding nested functions
 
-#### `ast_containing_line(table, line_number)` — All nodes containing a line
-
-Returns nodes ordered by specificity (smallest span first).
+Critical for accurate analysis. Without this, metrics for an outer function would include inner function internals.
 
 ```sql
--- What's on line 25?
-SELECT type, name, depth FROM ast_containing_line('ast', 25);
-```
-
-#### `ast_in_range(table, start_line, end_line)` — All nodes within a line range
-
-```sql
-SELECT * FROM ast_in_range('ast', 10, 50);
-```
-
-### Definition-Aware Queries
-
-#### `ast_definitions(table)` — All named definitions with unified categories
-
-Returns definitions with a `definition_type` column ('function', 'class', 'variable', 'module', 'type'). Filters to construct nodes with non-empty names.
-
-```sql
-SELECT name, definition_type, file_path, start_line
-FROM ast_definitions('ast')
-WHERE definition_type = 'function';
+-- Get only this function's body, not nested function bodies
+SELECT * FROM ast_function_scope('ast', 42);
 ```
 
 #### `ast_class_members(table, class_node_id)` — Direct definition members of a class
@@ -298,18 +289,36 @@ SELECT arg_position, arg_name, arg_type, arg_peek
 FROM ast_call_arguments('ast', 200);
 ```
 
-### Scope-Aware Analysis
+### Whole-File Macros (file path or glob)
 
-#### `ast_function_scope(table, function_node_id)` — Nodes inside a function, excluding nested functions
+These macros take a file path or glob pattern directly. No need to materialize first.
 
-Critical for accurate analysis. Without this, metrics for an outer function would include inner function internals.
+#### `ast_containing_line(source, line_num, [language])` — All nodes containing a line
+
+Returns nodes ordered by specificity (smallest span first).
 
 ```sql
--- Get only this function's body, not nested function bodies
-SELECT * FROM ast_function_scope('ast', 42);
+-- What's on line 25?
+SELECT type, name, depth FROM ast_containing_line('src/main.py', 25);
 ```
 
-#### `ast_function_metrics(table)` — Complexity metrics for all functions
+#### `ast_in_range(source, start_line, end_line, [language])` — All nodes within a line range
+
+```sql
+SELECT * FROM ast_in_range('src/main.py', 10, 50);
+```
+
+#### `ast_definitions(source, [language])` — All named definitions with unified categories
+
+Returns definitions with a `definition_type` column ('function', 'class', 'variable', 'module', 'type'). Filters to construct nodes with non-empty names.
+
+```sql
+SELECT name, definition_type, file_path, start_line
+FROM ast_definitions('src/**/*.py')
+WHERE definition_type = 'function';
+```
+
+#### `ast_function_metrics(source, [language])` — Complexity metrics for all functions
 
 Returns one row per function with scope-aware metrics that exclude nested function internals.
 
@@ -321,50 +330,48 @@ SELECT
     conditionals, loops, -- individual counts
     return_count,
     max_depth            -- relative to function
-FROM ast_function_metrics('ast')
+FROM ast_function_metrics('src/**/*.py')
 WHERE cyclomatic > 10
 ORDER BY cyclomatic DESC;
 ```
 
-#### `ast_nesting_analysis(table)` — Depth statistics per function
+#### `ast_nesting_analysis(source, [language])` — Depth statistics per function
 
 ```sql
 SELECT name, max_depth, avg_depth, deep_nodes, total_nodes
-FROM ast_nesting_analysis('ast')
+FROM ast_nesting_analysis('src/**/*.py')
 WHERE max_depth > 5;
 ```
 
-### Search and Audit
-
-#### `ast_functions_containing(table, target_type)` — Find functions containing a node type
+#### `ast_functions_containing(source, target_type, [language])` — Find functions containing a node type
 
 ```sql
 -- Which functions use try/except?
 SELECT func_name, file_path, match_line, match_peek
-FROM ast_functions_containing('ast', 'try_statement');
+FROM ast_functions_containing('src/**/*.py', 'try_statement');
 
 -- Which functions call a specific name?
-SELECT * FROM ast_functions_containing('ast', 'call')
+SELECT * FROM ast_functions_containing('src/**/*.py', 'call')
 WHERE match_name = 'dangerous_func';
 ```
 
-#### `ast_security_audit(table)` — Automated security concern detection
+#### `ast_security_audit(source, [language])` — Automated security concern detection
 
 Scans for common security anti-patterns (code injection, command injection, deserialization, weak crypto, etc.) across languages.
 
 ```sql
 SELECT file_path, start_line, function_name, risk_category, risk_level, finding
-FROM ast_security_audit('ast')
+FROM ast_security_audit('src/**/*.py')
 WHERE risk_level = 'high';
 ```
 
-#### `ast_dead_code(table)` — Find potentially unreferenced definitions
+#### `ast_dead_code(source, [language])` — Find potentially unreferenced definitions
 
 Heuristic dead code detection. Best used on the entire codebase (cross-file analysis).
 
 ```sql
 SELECT name, definition_type, file_path, start_line
-FROM ast_dead_code('ast');
+FROM ast_dead_code('src/**/*.py');
 ```
 
 ---
@@ -376,16 +383,14 @@ The `ast_match` macro enables pattern-by-example matching: write a code snippet 
 ### Basic Usage
 
 ```sql
-CREATE TABLE ast AS SELECT * FROM read_ast('src/**/*.py');
-
 -- Find all calls to a dangerous function, capture the argument
-SELECT * FROM ast_match('ast', 'dangerous_func(__X__)', 'python');
+SELECT * FROM ast_match('src/**/*.py', 'dangerous_func(__X__)');
 
 -- Access captured nodes
 SELECT
     ast_capture(captures, 'X').name AS arg_name,
     ast_capture(captures, 'X').peek AS arg_code
-FROM ast_match('ast', 'dangerous_func(__X__)', 'python');
+FROM ast_match('src/**/*.py', 'dangerous_func(__X__)');
 ```
 
 ### Wildcard Syntax
@@ -403,9 +408,9 @@ Named wildcards use UPPERCASE (`__NAME__`). Python dunders like `__init__` use l
 
 ```sql
 ast_match(
-    ast_table,              -- Table name (string)
+    source,                 -- File path or glob pattern
     pattern_str,            -- Code pattern with wildcards
-    lang := 'python',       -- Language for parsing the pattern
+    language := 'python',   -- Language for parsing source AND pattern
     match_syntax := false,  -- If true, punctuation must also match
     match_by := 'type',     -- 'type' (language-specific) or 'semantic_type' (cross-language)
     depth_fuzz := 0         -- Allow +/- N depth levels (for cross-language matching)
@@ -416,20 +421,19 @@ ast_match(
 
 ```sql
 -- Find 3-arg calls with literal 2 in the middle
-SELECT * FROM ast_match('ast', '__F__(__, 2, __X__)', 'python');
+SELECT * FROM ast_match('src/**/*.py', '__F__(__, 2, __X__)');
 
 -- Cross-language: match by semantic type instead of tree-sitter type
-SELECT * FROM ast_match('ast', '__F__(__X__)', 'python', match_by := 'semantic_type');
+SELECT * FROM ast_match('src/**/*.py', '__F__(__X__)', match_by := 'semantic_type');
 
 -- Find functions whose body ends with a return
-SELECT * FROM ast_match('ast',
+SELECT * FROM ast_match('src/**/*.py',
     'def __F__(__):
         %__BODY<*>__%
-        return __Y__',
-    'python');
+        return __Y__');
 
 -- Same-name constraint: __X__ appears twice, both must match the same source text
-SELECT * FROM ast_match('ast', '__X__ + __X__', 'python');
+SELECT * FROM ast_match('src/**/*.py', '__X__ + __X__');
 ```
 
 ### Working with Captures
@@ -439,18 +443,17 @@ Captures are `MAP(VARCHAR, LIST(STRUCT))`. Each capture name maps to a list of m
 ```sql
 -- Single wildcard capture (list of 1 element, use [1] or ast_capture)
 SELECT ast_capture(captures, 'F').name AS func_name
-FROM ast_match('ast', '__F__(__X__)', 'python');
+FROM ast_match('src/**/*.py', '__F__(__X__)');
 
 -- Equivalent:
-SELECT captures['F'][1].name FROM ast_match('ast', '__F__(__X__)', 'python');
+SELECT captures['F'][1].name FROM ast_match('src/**/*.py', '__F__(__X__)');
 
 -- Variadic capture (list of 0+ elements)
 SELECT captures['BODY'] AS body_statements
-FROM ast_match('ast',
+FROM ast_match('src/**/*.py',
     'def __F__(__):
         %__BODY<*>__%
-        return __Y__',
-    'python');
+        return __Y__');
 ```
 
 ---
@@ -512,12 +515,10 @@ Languages are auto-detected from file extensions. Override with `read_ast('file'
 ### Codebase Inventory
 
 ```sql
-CREATE TABLE ast AS SELECT * FROM read_ast('**/*.*', ignore_errors := true);
-
 SELECT language, COUNT(DISTINCT file_path) AS files,
        COUNT(*) FILTER (WHERE is_function_definition(semantic_type)) AS functions,
        COUNT(*) FILTER (WHERE is_class_definition(semantic_type)) AS classes
-FROM ast
+FROM read_ast('**/*.*', ignore_errors := true)
 GROUP BY language
 ORDER BY files DESC;
 ```
@@ -526,7 +527,7 @@ ORDER BY files DESC;
 
 ```sql
 SELECT name, file_path, cyclomatic, lines, max_depth
-FROM ast_function_metrics('ast')
+FROM ast_function_metrics('src/**/*.py')
 WHERE cyclomatic > 10 OR max_depth > 6
 ORDER BY cyclomatic DESC;
 ```
@@ -535,7 +536,7 @@ ORDER BY cyclomatic DESC;
 
 ```sql
 SELECT file_path, language, name, peek
-FROM ast
+FROM read_ast('src/**/*.*', ignore_errors := true)
 WHERE is_import(semantic_type)
 ORDER BY file_path;
 ```
@@ -544,7 +545,7 @@ ORDER BY file_path;
 
 ```sql
 SELECT name, file_path, start_line
-FROM ast_definitions('ast')
+FROM ast_definitions('src/**/*.py')
 WHERE definition_type = 'function'
   AND (name LIKE 'test_%' OR name LIKE '%_test' OR name LIKE '%Test%')
 ORDER BY file_path, start_line;
@@ -554,7 +555,7 @@ ORDER BY file_path, start_line;
 
 ```sql
 SELECT risk_level, risk_category, file_path, start_line, function_name, finding
-FROM ast_security_audit('ast')
+FROM ast_security_audit('src/**/*.py')
 ORDER BY
     CASE risk_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END;
 ```
@@ -564,11 +565,11 @@ ORDER BY
 ```sql
 -- Find bare except clauses (Python anti-pattern)
 SELECT file_path, start_line, peek
-FROM ast_match('ast', 'except: __', 'python');
+FROM ast_match('src/**/*.py', 'except: __');
 
 -- Find functions that call themselves (potential recursion)
 SELECT ast_capture(captures, 'F').name AS func_name, file_path, start_line
-FROM ast_match('ast', 'def __F__(__): %__<*>__% __F__(__)', 'python');
+FROM ast_match('src/**/*.py', 'def __F__(__): %__<*>__% __F__(__)');
 ```
 
 ### Source Code Lookup
@@ -578,15 +579,27 @@ FROM ast_match('ast', 'def __F__(__): %__<*>__% __F__(__)', 'python');
 SELECT source FROM ast_source_of('src/**/*.py', 'process_payment');
 ```
 
+### Advanced: Node-Specific Analysis
+
+```sql
+-- For queries that need node_ids (descendants, ancestors, scope), materialize first
+CREATE TABLE ast AS SELECT * FROM read_ast('src/**/*.py', ignore_errors := true);
+
+-- Then use node-specific macros
+SELECT * FROM ast_descendants('ast', 42);
+SELECT * FROM ast_function_scope('ast', 42);
+SELECT name, type FROM ast_class_members('ast', 15);
+```
+
 ---
 
 ## Best Practices
 
-1. **Materialize for macro use.** `read_ast` returns a table; macros like `ast_function_metrics` need a table name. Create a table first.
+1. **Whole-file macros work directly with file paths.** No need to materialize for `ast_definitions`, `ast_function_metrics`, `ast_match`, etc. Only materialize when using node-specific macros (`ast_descendants`, `ast_ancestors`, `ast_function_scope`, etc.) that require a node_id.
 
 2. **Use predicate macros over raw codes.** `is_function_definition(semantic_type)` is portable and readable. Use raw codes (240) only for performance-critical queries.
 
-3. **Always use `ignore_errors := true` for globs.** A single file with a syntax error will halt the entire query otherwise.
+3. **Always use `ignore_errors := true` for globs.** A single file with a syntax error will halt the entire query otherwise. Note: `ignore_errors` is a `read_ast` parameter — whole-file macros don't expose it, so for error-tolerant glob analysis with macros, use `read_ast` directly.
 
 4. **Use `is_construct(flags)` when listing definitions.** Filters out syntax tokens that happen to share a semantic type with definitions.
 
