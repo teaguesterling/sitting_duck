@@ -1,0 +1,508 @@
+# name: test/sql/languages/php_refinements.test
+# description: Test PHP semantic refinements
+# group: [languages]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# PHP Refinement Tests
+# =============================================================================
+#
+# Tests that semantic refinements are correctly applied to PHP code.
+# Refinements are 2-bit values in the lower bits of semantic_type that provide
+# finer-grained classification within each semantic category.
+# =============================================================================
+
+# =============================================================================
+# CLASS AND INTERFACE DEFINITIONS
+# =============================================================================
+
+# Test: Class declaration should be DEFINITION_CLASS (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'class_declaration'
+LIMIT 1;
+----
+class_declaration	DEFINITION_CLASS
+
+# Test: Interface declaration should be DEFINITION_CLASS (with ABSTRACT refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'interface_declaration'
+LIMIT 1;
+----
+interface_declaration	DEFINITION_CLASS
+
+# Test: Trait declaration should be DEFINITION_CLASS (with ABSTRACT refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'trait_declaration'
+LIMIT 1;
+----
+trait_declaration	DEFINITION_CLASS
+
+# Test: Enum declaration should be DEFINITION_CLASS (with ENUM refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'enum_declaration'
+LIMIT 1;
+----
+enum_declaration	DEFINITION_CLASS
+
+# =============================================================================
+# FUNCTION AND METHOD DEFINITIONS
+# =============================================================================
+
+# Test: Function definition should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'function_definition'
+LIMIT 1;
+----
+function_definition	DEFINITION_FUNCTION
+
+# Test: function keyword should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'function'
+LIMIT 1;
+----
+function	DEFINITION_FUNCTION
+
+# Test: Method declaration should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'method_declaration'
+LIMIT 1;
+----
+method_declaration	DEFINITION_FUNCTION
+
+# Test: Arrow function should be DEFINITION_FUNCTION (with LAMBDA refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'arrow_function'
+LIMIT 1;
+----
+arrow_function	DEFINITION_FUNCTION
+
+# =============================================================================
+# MODULE DEFINITIONS
+# =============================================================================
+
+# Test: Program root should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'program'
+LIMIT 1;
+----
+program	DEFINITION_MODULE
+
+# Test: Namespace definition should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'namespace_definition'
+LIMIT 1;
+----
+namespace_definition	DEFINITION_MODULE
+
+# =============================================================================
+# VARIABLE DEFINITIONS
+# =============================================================================
+
+# Test: Property declaration should be DEFINITION_VARIABLE (with FIELD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'property_declaration'
+LIMIT 1;
+----
+property_declaration	DEFINITION_VARIABLE
+
+# Test: Const declaration should be DEFINITION_VARIABLE (with IMMUTABLE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'const_declaration'
+LIMIT 1;
+----
+const_declaration	DEFINITION_VARIABLE
+
+# Test: Simple parameter should be DEFINITION_VARIABLE (with PARAMETER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'simple_parameter'
+LIMIT 1;
+----
+simple_parameter	DEFINITION_VARIABLE
+
+# =============================================================================
+# IMPORT DEFINITIONS
+# =============================================================================
+
+# Test: Namespace use declaration should be EXTERNAL_IMPORT (with MODULE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'namespace_use_declaration'
+LIMIT 1;
+----
+namespace_use_declaration	EXTERNAL_IMPORT
+
+# =============================================================================
+# CALL EXPRESSIONS
+# =============================================================================
+
+# Test: Function call expression should be COMPUTATION_CALL (with FUNCTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'function_call_expression'
+LIMIT 1;
+----
+function_call_expression	COMPUTATION_CALL
+
+# Test: Method call expression should be COMPUTATION_CALL (with METHOD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'member_call_expression'
+LIMIT 1;
+----
+member_call_expression	COMPUTATION_CALL
+
+# Test: Static call expression should be COMPUTATION_CALL (with METHOD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'scoped_call_expression'
+LIMIT 1;
+----
+scoped_call_expression	COMPUTATION_CALL
+
+# Test: Object creation should be COMPUTATION_CALL (with CONSTRUCTOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'object_creation_expression'
+LIMIT 1;
+----
+object_creation_expression	COMPUTATION_CALL
+
+# Test: Member access expression should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'member_access_expression'
+LIMIT 1;
+----
+member_access_expression	COMPUTATION_ACCESS
+
+# Test: Subscript expression should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'subscript_expression'
+LIMIT 1;
+----
+subscript_expression	COMPUTATION_ACCESS
+
+# =============================================================================
+# CONTROL FLOW - CONDITIONALS
+# =============================================================================
+
+# Test: If statement should be FLOW_CONDITIONAL (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'if_statement'
+LIMIT 1;
+----
+if_statement	FLOW_CONDITIONAL
+
+# Test: Match expression should be FLOW_CONDITIONAL (with MULTIWAY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'match_expression'
+LIMIT 1;
+----
+match_expression	FLOW_CONDITIONAL
+
+# =============================================================================
+# CONTROL FLOW - LOOPS
+# =============================================================================
+
+# Test: Foreach statement should be FLOW_LOOP (with ITERATOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'foreach_statement'
+LIMIT 1;
+----
+foreach_statement	FLOW_LOOP
+
+# =============================================================================
+# CONTROL FLOW - JUMPS
+# =============================================================================
+
+# Test: Return statement should be FLOW_JUMP (with RETURN refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'return_statement'
+LIMIT 1;
+----
+return_statement	FLOW_JUMP
+
+# =============================================================================
+# EXCEPTION HANDLING
+# =============================================================================
+
+# Test: Try statement should be ERROR_TRY
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'try_statement'
+LIMIT 1;
+----
+try_statement	ERROR_TRY
+
+# Test: Catch clause should be ERROR_CATCH
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'catch_clause'
+LIMIT 1;
+----
+catch_clause	ERROR_CATCH
+
+# Test: Finally clause should be ERROR_FINALLY
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'finally_clause'
+LIMIT 1;
+----
+finally_clause	ERROR_FINALLY
+
+# =============================================================================
+# OPERATORS
+# =============================================================================
+
+# Test: Binary expression should be OPERATOR_ARITHMETIC (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'binary_expression'
+LIMIT 1;
+----
+binary_expression	OPERATOR_ARITHMETIC
+
+# Test: Unary expression should be OPERATOR_ARITHMETIC (with UNARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'unary_op_expression'
+LIMIT 1;
+----
+unary_op_expression	OPERATOR_ARITHMETIC
+
+# Test: Assignment expression should be OPERATOR_ASSIGNMENT (with SIMPLE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'assignment_expression'
+LIMIT 1;
+----
+assignment_expression	OPERATOR_ASSIGNMENT
+
+# =============================================================================
+# LITERALS
+# =============================================================================
+
+# Test: Integer literal should be LITERAL_NUMBER (with INTEGER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'integer'
+LIMIT 1;
+----
+integer	LITERAL_NUMBER
+
+# Test: String literal should be LITERAL_STRING (with LITERAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'string'
+LIMIT 1;
+----
+string	LITERAL_STRING
+
+# Test: Encapsed string should be LITERAL_STRING (with TEMPLATE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'encapsed_string'
+LIMIT 1;
+----
+encapsed_string	LITERAL_STRING
+
+# Test: Heredoc should be LITERAL_STRING (with RAW refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'heredoc'
+LIMIT 1;
+----
+heredoc	LITERAL_STRING
+
+# Test: Shell command expression should be LITERAL_STRING (with TEMPLATE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'shell_command_expression'
+LIMIT 1;
+----
+shell_command_expression	LITERAL_STRING
+
+# Test: Null literal should be LITERAL_ATOMIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'null'
+LIMIT 1;
+----
+null	LITERAL_ATOMIC
+
+# Test: Array creation expression should be LITERAL_STRUCTURED (with SEQUENCE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'array_creation_expression'
+LIMIT 1;
+----
+array_creation_expression	LITERAL_STRUCTURED
+
+# =============================================================================
+# IDENTIFIERS
+# =============================================================================
+
+# Test: Name should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'name'
+LIMIT 1;
+----
+name	NAME_IDENTIFIER
+
+# Test: Variable name should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'variable_name'
+LIMIT 1;
+----
+variable_name	NAME_IDENTIFIER
+
+# =============================================================================
+# TYPE SYSTEM
+# =============================================================================
+
+# Test: Named type should be TYPE_REFERENCE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'named_type'
+LIMIT 1;
+----
+named_type	TYPE_REFERENCE
+
+# Test: Primitive type should be TYPE_PRIMITIVE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'primitive_type'
+LIMIT 1;
+----
+primitive_type	TYPE_PRIMITIVE
+
+# Test: Optional type should be TYPE_COMPOSITE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'optional_type'
+LIMIT 1;
+----
+optional_type	TYPE_COMPOSITE
+
+# =============================================================================
+# METADATA
+# =============================================================================
+
+# Test: Visibility modifier should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'visibility_modifier'
+LIMIT 1;
+----
+visibility_modifier	METADATA_ANNOTATION
+
+# Test: Static modifier should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'static_modifier'
+LIMIT 1;
+----
+static_modifier	METADATA_ANNOTATION
+
+# Test: Comment should be METADATA_COMMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'comment'
+LIMIT 1;
+----
+comment	METADATA_COMMENT
+
+# =============================================================================
+# STATEMENTS
+# =============================================================================
+
+# Test: Echo statement should be EXECUTION_STATEMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'echo_statement'
+LIMIT 1;
+----
+echo_statement	EXECUTION_STATEMENT
+
+# =============================================================================
+# STRUCTURAL ELEMENTS
+# =============================================================================
+
+# Test: Formal parameters should be ORGANIZATION_LIST (with COLLECTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/languages/php/test.php')
+WHERE type = 'formal_parameters'
+LIMIT 1;
+----
+formal_parameters	ORGANIZATION_LIST

@@ -81,7 +81,7 @@ DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
  */
 
 /// @brief Function definition - both POSIX `name()` and Bash `function name` styles
-DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
 
 /** @} */ // end bash_functions
 
@@ -105,13 +105,13 @@ DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_W
  */
 
 /// @brief Variable assignment - `name=value` or `name+=value`
-DEF_TYPE("variable_assignment", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("variable_assignment", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 
 /// @brief Declaration command - `declare`, `local`, `readonly`, `typeset`, `export`
-DEF_TYPE("declaration_command", DEFINITION_VARIABLE, CUSTOM, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("declaration_command", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, CUSTOM, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
 
 /// @brief Unset command - removes variable or function definition
-DEF_TYPE("unset_command", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("unset_command", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
 
 /** @} */ // end bash_variables
 
@@ -148,10 +148,10 @@ DEF_TYPE("simple_command", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("pipeline", EXECUTION_STATEMENT, NONE, NONE, 0)
 
 /// @brief Command substitution - `$(cmd)` captures command output as string
-DEF_TYPE("command_substitution", COMPUTATION_CALL, NONE, NONE, 0)
+DEF_TYPE("command_substitution", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, NONE, NONE, 0)
 
 /// @brief Process substitution - `<(cmd)` or `>(cmd)` provides file descriptor
-DEF_TYPE("process_substitution", COMPUTATION_CALL, NONE, NONE, 0)
+DEF_TYPE("process_substitution", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, NONE, NONE, 0)
 
 /** @} */ // end bash_commands
 
@@ -178,40 +178,40 @@ DEF_TYPE("process_substitution", COMPUTATION_CALL, NONE, NONE, 0)
  */
 
 /// @brief If statement - `if cmd; then ...; fi`
-DEF_TYPE("if_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
 
 /// @brief Case statement - pattern matching `case $var in pattern) ...; esac`
-DEF_TYPE("case_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("case_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 
 /// @brief While loop - `while cmd; do ...; done`
-DEF_TYPE("while_statement", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
 
 /// @brief For loop - `for var in list; do ...; done`
-DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
 
 /// @brief C-style for loop - `for ((i=0; i<n; i++)); do ...; done`
-DEF_TYPE("c_style_for_statement", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("c_style_for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, 0)
 
 /// @brief Break statement - exit from enclosing loop
-DEF_TYPE("break_statement", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
 
 /// @brief Continue statement - skip to next loop iteration
-DEF_TYPE("continue_statement", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("continue_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
 
 /// @brief Return statement - exit function with status code
-DEF_TYPE("return_statement", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
 
 /// @brief Exit statement - terminate script with status code
-DEF_TYPE("exit_statement", FLOW_JUMP, NONE, NONE, 0)
+DEF_TYPE("exit_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
 
 /// @brief Else clause - alternative branch in if statement
-DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("else_clause", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
 
 /// @brief Elif clause - chained conditional in if statement
-DEF_TYPE("elif_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("elif_clause", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
 
 /// @brief Case item - individual pattern match in case statement
-DEF_TYPE("case_item", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("case_item", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 
 /** @} */ // end bash_control
 
@@ -279,17 +279,17 @@ DEF_TYPE("brace_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
  * @{
  */
 
-/// @brief Double-quoted string - allows expansion inside
-DEF_TYPE("string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+/// @brief Double-quoted string - allows expansion inside (template-like)
+DEF_TYPE("string", LITERAL_STRING | SemanticRefinements::String::TEMPLATE, NODE_TEXT, NONE, 0)
 
 /// @brief Single-quoted string - literal, no expansion
-DEF_TYPE("raw_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("raw_string", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
 
 /// @brief ANSI-C quoted string - `$'...'` with escape sequences
-DEF_TYPE("ansii_c_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("ansii_c_string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 
 /// @brief String concatenation - adjacent strings combined
-DEF_TYPE("concatenation", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("concatenation", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 
 /** @} */ // end bash_strings
 
@@ -315,10 +315,10 @@ DEF_TYPE("concatenation", LITERAL_STRING, NODE_TEXT, NONE, 0)
  */
 
 /// @brief Numeric literal - integers for arithmetic context
-DEF_TYPE("number", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
+DEF_TYPE("number", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
 
 /// @brief Array literal - `(elem1 elem2 elem3)`
-DEF_TYPE("array", LITERAL_STRUCTURED, NONE, NONE, 0)
+DEF_TYPE("array", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
 
 /** @} */ // end bash_literals
 
@@ -431,13 +431,13 @@ DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUC
  */
 
 /// @brief Subshell - commands in `()` run in child process
-DEF_TYPE("subshell", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("subshell", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 /// @brief Compound statement - command group in `{}`
-DEF_TYPE("compound_statement", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("compound_statement", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 /// @brief Do group - loop body between `do` and `done`
-DEF_TYPE("do_group", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("do_group", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 /** @} */ // end bash_blocks
 
@@ -472,13 +472,13 @@ DEF_TYPE("do_group", ORGANIZATION_BLOCK, NONE, NONE, 0)
 DEF_TYPE("test_command", COMPUTATION_EXPRESSION, NONE, NONE, 0)
 
 /// @brief Binary expression - two-operand test (e.g., `$a -eq $b`)
-DEF_TYPE("binary_expression", OPERATOR_COMPARISON, NONE, NONE, 0)
+DEF_TYPE("binary_expression", OPERATOR_COMPARISON | SemanticRefinements::Comparison::RELATIONAL, NONE, NONE, 0)
 
 /// @brief Unary expression - single-operand test (e.g., `-f file`)
-DEF_TYPE("unary_expression", OPERATOR_LOGICAL, NONE, NONE, 0)
+DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
 
 /// @brief Postfix expression - increment/decrement in arithmetic
-DEF_TYPE("postfix_expression", OPERATOR_ARITHMETIC, NONE, NONE, 0)
+DEF_TYPE("postfix_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
 
 /// @brief Parenthesized expression - grouped expression `(expr)`
 DEF_TYPE("parenthesized_expression", COMPUTATION_EXPRESSION, NONE, NONE, 0)
@@ -513,7 +513,7 @@ DEF_TYPE("||", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
 DEF_TYPE("|", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 
 /// @brief Background operator - run command asynchronously
-DEF_TYPE("&", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, 0)
+DEF_TYPE("&", EXECUTION_STATEMENT, NODE_TEXT, NONE, 0)
 
 /// @brief Semicolon - command separator
 DEF_TYPE(";", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
@@ -636,16 +636,16 @@ DEF_TYPE("exit", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
  * @{
  */
 /// @brief local keyword - function-scoped variable
-DEF_TYPE("local", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("local", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /// @brief declare keyword - variable declaration with attributes
-DEF_TYPE("declare", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("declare", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /// @brief readonly keyword - immutable variable declaration
-DEF_TYPE("readonly", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("readonly", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /// @brief export keyword - export variable to environment
-DEF_TYPE("export", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("export", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 /** @} */
 
 /** @} */ // end bash_keywords
