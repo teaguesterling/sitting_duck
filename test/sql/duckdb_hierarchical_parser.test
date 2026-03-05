@@ -227,7 +227,7 @@ true
 # ====================================================
 
 query II
-SELECT 
+SELECT
     get_super_kind(semantic_type) as super_kind,
     COUNT(*) as count
 FROM parse_ast('
@@ -241,8 +241,7 @@ CREATE TABLE products (
 GROUP BY get_super_kind(semantic_type)
 ORDER BY super_kind;
 ----
-COMPUTATION	1
-CONTROL_EFFECTS	1
+COMPUTATION	2
 
 # Test 15: Test parse_ast live query debugging
 # ==============================================

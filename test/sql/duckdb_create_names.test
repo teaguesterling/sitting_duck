@@ -1,0 +1,113 @@
+# name: test/sql/duckdb_create_names.test
+# description: Test that DuckDB parser extracts names from CREATE statements (#44)
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: CREATE MACRO name extraction
+# =====================================
+
+query III
+SELECT type, name, semantic_type_to_string(semantic_type) as semantic
+FROM parse_ast('CREATE MACRO resolve(p) AS concat(p, ''/suffix'')', 'duckdb')
+WHERE type != 'program'
+ORDER BY node_id;
+----
+create_macro	resolve	DEFINITION_FUNCTION
+
+# Test 2: CREATE OR REPLACE MACRO name extraction
+# ================================================
+
+query II
+SELECT type, name
+FROM parse_ast('CREATE OR REPLACE MACRO recent_changes(n := 10) AS TABLE SELECT * FROM changes LIMIT n', 'duckdb')
+WHERE type != 'program'
+ORDER BY node_id;
+----
+create_table_macro	recent_changes
+
+# Test 3: CREATE TABLE name extraction
+# =====================================
+
+query III
+SELECT type, name, semantic_type_to_string(semantic_type) as semantic
+FROM parse_ast('CREATE TABLE users (id INTEGER, name VARCHAR)', 'duckdb')
+WHERE type != 'program'
+ORDER BY node_id;
+----
+create_table	users	DEFINITION_CLASS
+
+# Test 4: CREATE VIEW name extraction
+# ====================================
+
+query III
+SELECT type, name, semantic_type_to_string(semantic_type) as semantic
+FROM parse_ast('CREATE VIEW active_users AS SELECT * FROM users WHERE active = true', 'duckdb')
+WHERE type != 'program'
+ORDER BY node_id;
+----
+create_view	active_users	DEFINITION_CLASS
+
+# Test 5: CREATE SEQUENCE name extraction
+# ========================================
+
+query III
+SELECT type, name, semantic_type_to_string(semantic_type) as semantic
+FROM parse_ast('CREATE SEQUENCE user_id_seq START 1', 'duckdb')
+WHERE type != 'program'
+ORDER BY node_id;
+----
+create_sequence	user_id_seq	DEFINITION_VARIABLE
+
+# Test 6: CREATE TYPE name extraction
+# ====================================
+
+query III
+SELECT type, name, semantic_type_to_string(semantic_type) as semantic
+FROM parse_ast('CREATE TYPE mood AS ENUM (''happy'', ''sad'', ''neutral'')', 'duckdb')
+WHERE type != 'program'
+ORDER BY node_id;
+----
+create_type	mood	DEFINITION_CLASS
+
+# Test 7: Multiple CREATE statements in one parse
+# =================================================
+
+query II
+SELECT type, name
+FROM parse_ast('
+CREATE MACRO greet(name) AS ''Hello '' || name;
+CREATE TABLE employees (id INTEGER, name VARCHAR, dept VARCHAR);
+CREATE VIEW managers AS SELECT * FROM employees WHERE role = ''manager'';
+', 'duckdb')
+WHERE type != 'program'
+ORDER BY node_id;
+----
+create_macro	greet
+create_table	employees
+create_view	managers
+
+# Test 8: CREATE INDEX name extraction
+# =====================================
+
+query III
+SELECT type, name, semantic_type_to_string(semantic_type) as semantic
+FROM parse_ast('CREATE INDEX idx_users_name ON users (name)', 'duckdb')
+WHERE type != 'program'
+ORDER BY node_id;
+----
+create_index	idx_users_name	DEFINITION_VARIABLE
+
+# Test 9: CREATE SCHEMA name extraction
+# ======================================
+
+query III
+SELECT type, name, semantic_type_to_string(semantic_type) as semantic
+FROM parse_ast('CREATE SCHEMA my_schema', 'duckdb')
+WHERE type != 'program'
+ORDER BY node_id;
+----
+create_schema	my_schema	DEFINITION_MODULE
