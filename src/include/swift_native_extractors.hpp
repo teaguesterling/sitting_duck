@@ -42,31 +42,19 @@ struct SwiftNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 
 public:
 	static string ExtractSwiftReturnType(TSNode node, const string &content) {
-		// Look for return type after -> in function signature
+		// Swift AST: return type appears after "->" as a direct child (user_type, optional_type, etc.)
 		uint32_t child_count = ts_node_child_count(node);
+		bool found_arrow = false;
 		for (uint32_t i = 0; i < child_count; i++) {
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
-			if (strcmp(child_type, "type_annotation") == 0) {
-				// Find type after ->
-				uint32_t type_child_count = ts_node_child_count(child);
-				for (uint32_t j = 0; j < type_child_count; j++) {
-					TSNode type_child = ts_node_child(child, j);
-					const char *type_child_type = ts_node_type(type_child);
+			if (strcmp(child_type, "->") == 0) {
+				found_arrow = true;
+				continue;
+			}
 
-					if (strcmp(type_child_type, "type_identifier") == 0 ||
-					    strcmp(type_child_type, "optional_type") == 0 || strcmp(type_child_type, "array_type") == 0 ||
-					    strcmp(type_child_type, "dictionary_type") == 0 || strcmp(type_child_type, "tuple_type") == 0) {
-						uint32_t start = ts_node_start_byte(type_child);
-						uint32_t end = ts_node_end_byte(type_child);
-						if (start < content.length() && end <= content.length()) {
-							return content.substr(start, end - start);
-						}
-					}
-				}
-			} else if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "optional_type") == 0) {
-				// Direct return type annotation
+			if (found_arrow && IsSwiftTypeNode(child_type)) {
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
 				if (start < content.length() && end <= content.length()) {
@@ -77,52 +65,37 @@ public:
 		return ""; // Void or inferred return type
 	}
 
+	static bool IsSwiftTypeNode(const char *type) {
+		return strcmp(type, "user_type") == 0 || strcmp(type, "type_identifier") == 0 ||
+		       strcmp(type, "optional_type") == 0 || strcmp(type, "array_type") == 0 ||
+		       strcmp(type, "dictionary_type") == 0 || strcmp(type, "tuple_type") == 0 ||
+		       strcmp(type, "function_type") == 0;
+	}
+
 	static vector<ParameterInfo> ExtractSwiftParameters(TSNode node, const string &content) {
 		vector<ParameterInfo> params;
 
-		// Find parameter_list or function_value_parameters node
+		// Swift AST: parameters are direct children of function_declaration/init_declaration
+		// (no wrapper node like parameter_list)
 		uint32_t child_count = ts_node_child_count(node);
 		for (uint32_t i = 0; i < child_count; i++) {
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
-			if (strcmp(child_type, "parameter_list") == 0 || strcmp(child_type, "function_value_parameters") == 0) {
-				params = ExtractSwiftParametersDirect(child, content);
-				break;
+			if (strcmp(child_type, "parameter") == 0) {
+				ParameterInfo param = ExtractSwiftParameter(child, content);
+				if (!param.name.empty()) {
+					params.push_back(param);
+				}
+			} else if (strcmp(child_type, "variadic_parameter") == 0) {
+				ParameterInfo param = ExtractSwiftVariadicParameter(child, content);
+				if (!param.name.empty()) {
+					params.push_back(param);
+				}
 			}
 		}
 
 		return params;
-	}
-
-	static vector<ParameterInfo> ExtractSwiftParametersDirect(TSNode params_node, const string &content) {
-		vector<ParameterInfo> parameters;
-
-		uint32_t child_count = ts_node_child_count(params_node);
-
-		for (uint32_t i = 0; i < child_count; i++) {
-			TSNode child = ts_node_child(params_node, i);
-			const char *child_type = ts_node_type(child);
-
-			ParameterInfo param;
-			bool is_valid_param = false;
-
-			if (strcmp(child_type, "parameter") == 0) {
-				// Standard parameter: label name: Type or name: Type = default
-				param = ExtractSwiftParameter(child, content);
-				is_valid_param = !param.name.empty();
-			} else if (strcmp(child_type, "variadic_parameter") == 0) {
-				// Variadic parameter: args: Type...
-				param = ExtractSwiftVariadicParameter(child, content);
-				is_valid_param = !param.name.empty();
-			}
-
-			if (is_valid_param) {
-				parameters.push_back(param);
-			}
-		}
-
-		return parameters;
 	}
 
 	static ParameterInfo ExtractSwiftParameter(TSNode node, const string &content) {
@@ -136,7 +109,7 @@ public:
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
-			if (strcmp(child_type, "identifier") == 0) {
+			if (strcmp(child_type, "simple_identifier") == 0) {
 				// Could be external name or internal name
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
@@ -148,8 +121,18 @@ public:
 						internal_name = name;
 					}
 				}
+			} else if (strcmp(child_type, "user_type") == 0 || strcmp(child_type, "type_identifier") == 0 ||
+			           strcmp(child_type, "optional_type") == 0 || strcmp(child_type, "array_type") == 0 ||
+			           strcmp(child_type, "dictionary_type") == 0 || strcmp(child_type, "tuple_type") == 0 ||
+			           strcmp(child_type, "function_type") == 0) {
+				// Parameter type (direct child, not wrapped in type_annotation)
+				uint32_t start = ts_node_start_byte(child);
+				uint32_t end = ts_node_end_byte(child);
+				if (start < content.length() && end <= content.length()) {
+					param.type = content.substr(start, end - start);
+				}
 			} else if (strcmp(child_type, "type_annotation") == 0) {
-				// Parameter type
+				// Fallback: some versions may use type_annotation
 				param.type = ExtractSwiftTypeAnnotation(child, content);
 			} else if (strcmp(child_type, "default_parameter_clause") == 0) {
 				// Default value
@@ -184,11 +167,17 @@ public:
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
-			if (strcmp(child_type, "identifier") == 0) {
+			if (strcmp(child_type, "simple_identifier") == 0) {
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
 				if (start < content.length() && end <= content.length()) {
 					param.name = content.substr(start, end - start);
+				}
+			} else if (IsSwiftTypeNode(child_type)) {
+				uint32_t start = ts_node_start_byte(child);
+				uint32_t end = ts_node_end_byte(child);
+				if (start < content.length() && end <= content.length()) {
+					param.type = content.substr(start, end - start) + "...";
 				}
 			} else if (strcmp(child_type, "type_annotation") == 0) {
 				param.type = ExtractSwiftTypeAnnotation(child, content) + "...";
@@ -205,9 +194,7 @@ public:
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
-			if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "optional_type") == 0 ||
-			    strcmp(child_type, "array_type") == 0 || strcmp(child_type, "dictionary_type") == 0 ||
-			    strcmp(child_type, "tuple_type") == 0 || strcmp(child_type, "function_type") == 0) {
+			if (IsSwiftTypeNode(child_type)) {
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
 				if (start < content.length() && end <= content.length()) {
@@ -222,23 +209,34 @@ public:
 	static vector<string> ExtractSwiftModifiers(TSNode node, const string &content) {
 		vector<string> modifiers;
 
-		// Check for function modifiers
-		TSNode parent = ts_node_parent(node);
-		if (!ts_node_is_null(parent)) {
-			uint32_t parent_count = ts_node_child_count(parent);
-			for (uint32_t i = 0; i < parent_count; i++) {
-				TSNode sibling = ts_node_child(parent, i);
-				const char *sibling_type = ts_node_type(sibling);
+		// Swift AST: modifiers are in a "modifiers" child node of the function_declaration
+		// modifiers > {mutation_modifier, member_modifier, property_modifier, etc.} > keyword
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			const char *child_type = ts_node_type(child);
 
-				if (strcmp(sibling_type, "access_level_modifier") == 0 ||
-				    strcmp(sibling_type, "member_modifier") == 0 || strcmp(sibling_type, "mutation_modifier") == 0 ||
-				    strcmp(sibling_type, "override_modifier") == 0) {
-					uint32_t start = ts_node_start_byte(sibling);
-					uint32_t end = ts_node_end_byte(sibling);
-					if (start < content.length() && end <= content.length()) {
-						modifiers.push_back(content.substr(start, end - start));
+			if (strcmp(child_type, "modifiers") == 0) {
+				uint32_t mod_count = ts_node_child_count(child);
+				for (uint32_t j = 0; j < mod_count; j++) {
+					TSNode mod = ts_node_child(child, j);
+					const char *mod_type = ts_node_type(mod);
+
+					if (strcmp(mod_type, "mutation_modifier") == 0 ||
+					    strcmp(mod_type, "member_modifier") == 0 ||
+					    strcmp(mod_type, "property_modifier") == 0 ||
+					    strcmp(mod_type, "access_level_modifier") == 0 ||
+					    strcmp(mod_type, "inheritance_modifier") == 0 ||
+					    strcmp(mod_type, "attribute") == 0) {
+						// Extract the text of the modifier (e.g., "mutating", "override", "static")
+						uint32_t start = ts_node_start_byte(mod);
+						uint32_t end = ts_node_end_byte(mod);
+						if (start < content.length() && end <= content.length()) {
+							modifiers.push_back(content.substr(start, end - start));
+						}
 					}
 				}
+				break;
 			}
 		}
 
@@ -274,8 +272,9 @@ public:
 			const char *child_type = ts_node_type(child);
 
 			if (strcmp(child_type, "closure_parameters") == 0) {
+				// Extract parameters from closure_parameters node (same structure as function params)
 				params =
-				    SwiftNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractSwiftParametersDirect(
+				    SwiftNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractSwiftParameters(
 				        child, content);
 				break;
 			}
@@ -491,42 +490,38 @@ public:
 	static vector<string> ExtractSwiftVariableModifiers(TSNode node, const string &content) {
 		vector<string> modifiers;
 
-		// Check for variable declaration modifiers
+		// Swift AST: property_declaration children include modifiers, value_binding_pattern, etc.
 		uint32_t child_count = ts_node_child_count(node);
 		for (uint32_t i = 0; i < child_count; i++) {
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
-			if (strcmp(child_type, "access_level_modifier") == 0 || strcmp(child_type, "member_modifier") == 0 ||
-			    strcmp(child_type, "ownership_modifier") == 0) {
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				if (start < content.length() && end <= content.length()) {
-					modifiers.push_back(content.substr(start, end - start));
+			if (strcmp(child_type, "modifiers") == 0) {
+				// Extract modifiers from wrapper (same as function modifiers)
+				uint32_t mod_count = ts_node_child_count(child);
+				for (uint32_t j = 0; j < mod_count; j++) {
+					TSNode mod = ts_node_child(child, j);
+					const char *mod_type = ts_node_type(mod);
+					if (strcmp(mod_type, "access_level_modifier") == 0 ||
+					    strcmp(mod_type, "member_modifier") == 0 ||
+					    strcmp(mod_type, "property_modifier") == 0 ||
+					    strcmp(mod_type, "ownership_modifier") == 0 ||
+					    strcmp(mod_type, "attribute") == 0) {
+						uint32_t start = ts_node_start_byte(mod);
+						uint32_t end = ts_node_end_byte(mod);
+						if (start < content.length() && end <= content.length()) {
+							modifiers.push_back(content.substr(start, end - start));
+						}
+					}
 				}
-			} else if (strcmp(child_type, "attribute") == 0) {
-				// @objc, @IBOutlet, etc.
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				if (start < content.length() && end <= content.length()) {
-					modifiers.push_back(content.substr(start, end - start));
-				}
-			}
-		}
-
-		// Check if this is var or let
-		TSNode parent = ts_node_parent(node);
-		if (!ts_node_is_null(parent)) {
-			const char *parent_type = ts_node_type(parent);
-			if (strcmp(parent_type, "property_declaration") == 0) {
-				// Check for var/let keyword
-				uint32_t parent_count = ts_node_child_count(parent);
-				for (uint32_t i = 0; i < parent_count; i++) {
-					TSNode sibling = ts_node_child(parent, i);
-					const char *sibling_type = ts_node_type(sibling);
-
-					if (strcmp(sibling_type, "var") == 0 || strcmp(sibling_type, "let") == 0) {
-						modifiers.push_back(sibling_type);
+			} else if (strcmp(child_type, "value_binding_pattern") == 0) {
+				// Extract var/let from value_binding_pattern child
+				uint32_t vbp_count = ts_node_child_count(child);
+				for (uint32_t j = 0; j < vbp_count; j++) {
+					TSNode vbp_child = ts_node_child(child, j);
+					const char *vbp_type = ts_node_type(vbp_child);
+					if (strcmp(vbp_type, "var") == 0 || strcmp(vbp_type, "let") == 0) {
+						modifiers.push_back(vbp_type);
 						break;
 					}
 				}
@@ -577,6 +572,19 @@ public:
 		modifiers.insert(modifiers.end(), regular_modifiers.begin(), regular_modifiers.end());
 
 		return modifiers;
+	}
+};
+
+// Specialization for CONSTRUCTOR_DEFINITION (Swift init declarations)
+// Constructors are like functions but have no return type
+template <>
+struct SwiftNativeExtractor<NativeExtractionStrategy::CONSTRUCTOR_DEFINITION> {
+	static NativeContext Extract(TSNode node, const string &content) {
+		// Reuse FUNCTION_WITH_PARAMS for parameter and modifier extraction
+		auto context =
+		    SwiftNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
+		context.signature_type = ""; // Constructors have no return type
+		return context;
 	}
 };
 
