@@ -260,18 +260,28 @@ private:
 		// The full call expression (obj.method) goes in qualified_name instead
 
 		uint32_t child_count = ts_node_child_count(node);
+		string object_part;
+		string method_name;
 
 		for (uint32_t i = 0; i < child_count; i++) {
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
-			// Extract qualified call target from first matching child -> qualified_name
+			// Extract qualified call target from first matching child
 			if (i == 0 && context.qualified_name.empty()) {
 				for (const char *name_type : types.function_name_types) {
 					if (strcmp(child_type, name_type) == 0) {
-						context.qualified_name = ExtractNodeText(child, content);
+						object_part = ExtractNodeText(child, content);
+						context.qualified_name = object_part;
 						break;
 					}
+				}
+			} else if (!object_part.empty() && method_name.empty()) {
+				// Java method_invocation pattern: object.method(args)
+				// The method name is a separate identifier sibling after the object
+				if (strcmp(child_type, "identifier") == 0 || strcmp(child_type, "simple_identifier") == 0) {
+					method_name = ExtractNodeText(child, content);
+					context.qualified_name = object_part + "." + method_name;
 				}
 			}
 
@@ -280,8 +290,6 @@ private:
 				context.parameters = ExtractCallArguments(child, content, types);
 			}
 		}
-
-		// No fallback for qualified_name - empty is fine if we couldn't extract it
 
 		return context;
 	}

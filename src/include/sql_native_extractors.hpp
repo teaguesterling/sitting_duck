@@ -20,7 +20,9 @@ class SQLAdapter;
 
 template <NativeExtractionStrategy Strategy>
 struct SQLNativeExtractor {
-	static NativeContext Extract(TSNode node, const string &content);
+	static NativeContext Extract(TSNode node, const string &content) {
+		return NativeContext();
+	}
 };
 
 //==============================================================================

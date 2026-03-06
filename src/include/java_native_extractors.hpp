@@ -10,6 +10,15 @@ namespace duckdb {
 // Java-Specific Native Context Extractors
 //==============================================================================
 
+// Helper to check if a node type is a Java type node (return type, parameter type, etc.)
+// Covers all Java tree-sitter type nodes: reference types, primitives, generics, arrays
+inline bool IsJavaTypeNode(const char *child_type) {
+	return strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "primitive_type") == 0 ||
+	       strcmp(child_type, "integral_type") == 0 || strcmp(child_type, "floating_point_type") == 0 ||
+	       strcmp(child_type, "boolean_type") == 0 || strcmp(child_type, "generic_type") == 0 ||
+	       strcmp(child_type, "array_type") == 0 || strcmp(child_type, "void_type") == 0;
+}
+
 // Base template for Java extractors - default returns empty context
 template <NativeExtractionStrategy Strategy>
 struct JavaNativeExtractor {
@@ -49,9 +58,7 @@ private:
 			const char *child_type = ts_node_type(child);
 
 			// Look for any return type (primitive types like int, or reference types like String)
-			if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "primitive_type") == 0 ||
-			    strcmp(child_type, "generic_type") == 0 || strcmp(child_type, "array_type") == 0 ||
-			    strcmp(child_type, "void_type") == 0) {
+			if (IsJavaTypeNode(child_type)) {
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
 				if (start < content.length() && end <= content.length() && end > start) {
@@ -70,9 +77,7 @@ private:
 				const char *child_type = ts_node_type(child);
 
 				// Look for any return type in parent
-				if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "primitive_type") == 0 ||
-				    strcmp(child_type, "generic_type") == 0 || strcmp(child_type, "array_type") == 0 ||
-				    strcmp(child_type, "void_type") == 0) {
+				if (IsJavaTypeNode(child_type)) {
 					uint32_t start = ts_node_start_byte(child);
 					uint32_t end = ts_node_end_byte(child);
 					if (start < content.length() && end <= content.length() && end > start) {
@@ -141,8 +146,7 @@ private:
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
-			if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "primitive_type") == 0 ||
-			    strcmp(child_type, "generic_type") == 0 || strcmp(child_type, "array_type") == 0) {
+			if (IsJavaTypeNode(child_type)) {
 				// Parameter type
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
@@ -178,8 +182,7 @@ private:
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
-			if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "primitive_type") == 0 ||
-			    strcmp(child_type, "generic_type") == 0) {
+			if (IsJavaTypeNode(child_type)) {
 				// Varargs type (without the ...)
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
@@ -712,14 +715,13 @@ struct JavaNativeExtractor<NativeExtractionStrategy::VARIABLE_WITH_TYPE> {
 
 private:
 	static string ExtractJavaVariableType(TSNode node, const string &content) {
-		// Look for type in variable declarator
+		// Look for type in variable declarator or field declaration
 		uint32_t child_count = ts_node_child_count(node);
 		for (uint32_t i = 0; i < child_count; i++) {
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
-			if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "primitive_type") == 0 ||
-			    strcmp(child_type, "generic_type") == 0 || strcmp(child_type, "array_type") == 0) {
+			if (IsJavaTypeNode(child_type)) {
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
 				if (start < content.length() && end <= content.length()) {
@@ -832,8 +834,7 @@ private:
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
-			if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "primitive_type") == 0 ||
-			    strcmp(child_type, "generic_type") == 0 || strcmp(child_type, "array_type") == 0) {
+			if (IsJavaTypeNode(child_type)) {
 				return ExtractNodeText(child, content);
 			}
 		}
@@ -994,6 +995,19 @@ private:
 		}
 
 		return "";
+	}
+};
+
+// Specialization for CONSTRUCTOR_DEFINITION (Java constructors)
+// Constructors are like methods but have no return type
+template <>
+struct JavaNativeExtractor<NativeExtractionStrategy::CONSTRUCTOR_DEFINITION> {
+	static NativeContext Extract(TSNode node, const string &content) {
+		// Reuse FUNCTION_WITH_PARAMS for parameter and modifier extraction
+		// Constructors have no return type, so signature_type stays empty
+		auto context = JavaNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
+		context.signature_type = ""; // Constructors have no return type
+		return context;
 	}
 };
 
