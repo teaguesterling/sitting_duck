@@ -1,0 +1,144 @@
+# name: test/sql/qualified_name.test
+# description: Test qualified_name column for definition node disambiguation
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Test 1: Basic qualified_name format for top-level definitions
+# =============================================================================
+
+# Top-level variable gets V/name
+query II
+SELECT name, qualified_name
+FROM read_ast('test/data/python/qualified_names.py', 'python')
+WHERE name = 'MY_CONST' AND is_definition(semantic_type);
+----
+MY_CONST	V/MY_CONST
+
+# Top-level function gets F/name
+query II
+SELECT name, qualified_name
+FROM read_ast('test/data/python/qualified_names.py', 'python')
+WHERE name = 'top_level_function' AND is_definition(semantic_type);
+----
+top_level_function	F/top_level_function
+
+# =============================================================================
+# Test 2: Class-scoped definitions
+# =============================================================================
+
+# Classes get C/name
+query II
+SELECT name, qualified_name
+FROM read_ast('test/data/python/qualified_names.py', 'python')
+WHERE name IN ('User', 'Account') AND is_definition(semantic_type)
+ORDER BY start_line;
+----
+User	C/User
+Account	C/Account
+
+# =============================================================================
+# Test 3: Disambiguation of same-named methods (__init__)
+# =============================================================================
+
+# This is the KEY use case: three __init__ methods, all disambiguated
+query I
+SELECT qualified_name
+FROM read_ast('test/data/python/qualified_names.py', 'python')
+WHERE name = '__init__' AND is_definition(semantic_type)
+ORDER BY start_line;
+----
+C/User F/__init__
+C/Account F/__init__
+C/Account C/Settings F/__init__
+
+# =============================================================================
+# Test 4: Nested class scoping
+# =============================================================================
+
+# Settings is nested inside Account
+query II
+SELECT name, qualified_name
+FROM read_ast('test/data/python/qualified_names.py', 'python')
+WHERE name = 'Settings' AND is_definition(semantic_type);
+----
+Settings	C/Account C/Settings
+
+# =============================================================================
+# Test 5: Nested function scoping
+# =============================================================================
+
+query II
+SELECT name, qualified_name
+FROM read_ast('test/data/python/qualified_names.py', 'python')
+WHERE name = 'nested_helper' AND is_definition(semantic_type);
+----
+nested_helper	F/top_level_function F/nested_helper
+
+# =============================================================================
+# Test 6: Method in class
+# =============================================================================
+
+query II
+SELECT name, qualified_name
+FROM read_ast('test/data/python/qualified_names.py', 'python')
+WHERE name = 'validate' AND is_definition(semantic_type);
+----
+validate	C/User F/validate
+
+# =============================================================================
+# Test 7: Non-definition nodes get NULL qualified_name
+# =============================================================================
+
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/python/qualified_names.py', 'python')
+WHERE qualified_name IS NOT NULL AND NOT is_definition(semantic_type);
+----
+0
+
+# =============================================================================
+# Test 8: parse_ast inline also produces qualified_name
+# =============================================================================
+
+query II
+SELECT name, qualified_name
+FROM parse_ast('
+class Foo:
+    def bar(self):
+        pass
+', 'python')
+WHERE qualified_name IS NOT NULL
+ORDER BY start_line;
+----
+Foo	C/Foo
+bar	C/Foo F/bar
+
+# =============================================================================
+# Test 9: Partial matching with LIKE
+# =============================================================================
+
+# All members of User class
+query I
+SELECT qualified_name
+FROM read_ast('test/data/python/qualified_names.py', 'python')
+WHERE qualified_name LIKE 'C/User %'
+ORDER BY start_line;
+----
+C/User F/__init__
+C/User F/validate
+
+# =============================================================================
+# Test 10: All definitions have qualified_name (no definition left NULL)
+# =============================================================================
+
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/python/qualified_names.py', 'python')
+WHERE is_definition(semantic_type) AND name != '' AND qualified_name IS NULL;
+----
+0
