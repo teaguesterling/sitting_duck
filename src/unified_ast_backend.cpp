@@ -180,7 +180,8 @@ vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
 	    LogicalType::VARCHAR,  // peek (source_text)
 	    // Semantic type fields
 	    LogicalType::UTINYINT, // semantic_type
-	    LogicalType::UTINYINT  // flags (renamed from universal_flags, removed arity_bin)
+	    LogicalType::UTINYINT, // flags (renamed from universal_flags, removed arity_bin)
+	    LogicalType::VARCHAR   // qualified_name
 	};
 }
 
@@ -188,7 +189,7 @@ vector<string> UnifiedASTBackend::GetFlatTableColumnNames() {
 	return {"node_id", "type", "name", "file_path", "language", "start_line", "start_column", "end_line", "end_column",
 	        "parent_id", "depth", "sibling_index", "children_count", "descendant_count", "peek",
 	        // Semantic type fields
-	        "semantic_type", "flags"};
+	        "semantic_type", "flags", "qualified_name"};
 }
 
 LogicalType UnifiedASTBackend::GetASTStructSchema() {
@@ -201,6 +202,7 @@ LogicalType UnifiedASTBackend::GetASTStructSchema() {
 	node_children.push_back(make_pair("node_id", LogicalType::BIGINT));
 	node_children.push_back(make_pair("type", LogicalType::VARCHAR));
 	node_children.push_back(make_pair("name", LogicalType::VARCHAR));
+	node_children.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
 	node_children.push_back(make_pair("start_line", LogicalType::UINTEGER));
 	node_children.push_back(make_pair("end_line", LogicalType::UINTEGER));
 	node_children.push_back(make_pair("start_column", LogicalType::UINTEGER));
@@ -247,6 +249,7 @@ vector<LogicalType> UnifiedASTBackend::GetHierarchicalTableSchema() {
 	// Context Information STRUCT (including native context)
 	child_list_t<LogicalType> context_children;
 	context_children.push_back(make_pair("name", LogicalType::VARCHAR));
+	context_children.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
 	context_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
 	context_children.push_back(make_pair("flags", LogicalType::UTINYINT));
 
@@ -261,7 +264,6 @@ vector<LogicalType> UnifiedASTBackend::GetHierarchicalTableSchema() {
 	                                                                   {"is_variadic", LogicalType::BOOLEAN},
 	                                                                   {"annotations", LogicalType::VARCHAR}}))));
 	native_children.push_back(make_pair("modifiers", LogicalType::LIST(LogicalType::VARCHAR)));
-	native_children.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
 	native_children.push_back(make_pair("annotations", LogicalType::VARCHAR));
 
 	context_children.push_back(make_pair("native", LogicalType::STRUCT(native_children)));
@@ -344,6 +346,7 @@ vector<LogicalType> UnifiedASTBackend::GetDynamicTableSchema(const ExtractionCon
 		}
 
 		if (config.context >= ContextLevel::NORMALIZED) {
+			context_children.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
 			context_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
 			context_children.push_back(make_pair("flags", LogicalType::UTINYINT));
 		}
@@ -360,7 +363,6 @@ vector<LogicalType> UnifiedASTBackend::GetDynamicTableSchema(const ExtractionCon
 			                                                         {"is_variadic", LogicalType::BOOLEAN},
 			                                                         {"annotations", LogicalType::VARCHAR}}))));
 			native_children.push_back(make_pair("modifiers", LogicalType::LIST(LogicalType::VARCHAR)));
-			native_children.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
 			native_children.push_back(make_pair("annotations", LogicalType::VARCHAR));
 
 			context_children.push_back(make_pair("native", LogicalType::STRUCT(native_children)));
@@ -426,6 +428,7 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
 		}
 		if (config.context >= ContextLevel::NORMALIZED) {
 			schema.push_back(LogicalType::VARCHAR); // name
+			schema.push_back(LogicalType::VARCHAR); // qualified_name
 		}
 		if (config.context >= ContextLevel::NATIVE) {
 			schema.push_back(LogicalType::VARCHAR); // signature_type
@@ -434,7 +437,6 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
 			    LogicalType::STRUCT({{"name", LogicalType::VARCHAR}, {"type", LogicalType::VARCHAR}})));
 			schema.push_back(LogicalType::LIST(LogicalType::VARCHAR)); // modifiers (array of strings)
 			schema.push_back(LogicalType::VARCHAR);                    // annotations
-			schema.push_back(LogicalType::VARCHAR);                    // qualified_name
 		}
 	}
 
@@ -491,13 +493,13 @@ vector<string> UnifiedASTBackend::GetFlatDynamicTableColumnNames(const Extractio
 		}
 		if (config.context >= ContextLevel::NORMALIZED) {
 			names.push_back("name");
+			names.push_back("qualified_name");
 		}
 		if (config.context >= ContextLevel::NATIVE) {
 			names.push_back("signature_type");
 			names.push_back("parameters");
 			names.push_back("modifiers");
 			names.push_back("annotations");
-			names.push_back("qualified_name");
 		}
 	}
 
@@ -562,6 +564,7 @@ LogicalType UnifiedASTBackend::GetHierarchicalStructSchema() {
 	// Context Information group (semantic information only)
 	child_list_t<LogicalType> context_info_children;
 	context_info_children.push_back(make_pair("name", LogicalType::VARCHAR));
+	context_info_children.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
 	context_info_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
 	context_info_children.push_back(make_pair("flags", LogicalType::UTINYINT));
 
@@ -590,9 +593,9 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult &result, DataChunk &outpu
                                        idx_t &output_index) {
 	// DuckDB automatically handles vector reset via VectorCache system - no manual reset needed
 
-	// Verify output chunk has correct number of columns (17 with language, removed arity_bin)
-	if (output.ColumnCount() != 17) {
-		throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 17");
+	// Verify output chunk has correct number of columns (18 with qualified_name)
+	if (output.ColumnCount() != 18) {
+		throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 18");
 	}
 
 	// Get output vectors
@@ -614,11 +617,13 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult &result, DataChunk &outpu
 	// Semantic type fields
 	auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[15]);
 	auto flags_vec = FlatVector::GetData<uint8_t>(output.data[16]);
+	auto qualified_name_vec = FlatVector::GetData<string_t>(output.data[17]);
 
 	// Get validity masks for nullable fields
 	auto &name_validity = FlatVector::Validity(output.data[2]);
 	auto &parent_validity = FlatVector::Validity(output.data[9]);
 	auto &peek_validity = FlatVector::Validity(output.data[14]);
+	auto &qualified_name_validity = FlatVector::Validity(output.data[17]);
 
 	idx_t count = 0;
 	idx_t max_count = STANDARD_VECTOR_SIZE;
@@ -668,6 +673,13 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult &result, DataChunk &outpu
 		// Semantic type fields
 		semantic_type_vec[count] = node.semantic_type;
 		flags_vec[count] = node.universal_flags;
+
+		// Qualified name
+		if (node.name_qualified.empty()) {
+			qualified_name_validity.SetInvalid(count);
+		} else {
+			qualified_name_vec[count] = StringVector::AddString(output.data[17], node.name_qualified);
+		}
 
 		count++;
 		current_row++; // Track which row we're on
@@ -735,6 +747,11 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 	uint8_t *flags_vec = nullptr;
 	string_t *name_vec = nullptr;
 
+	// Qualified name column (at NORMALIZED level, not NATIVE)
+	idx_t qualified_name_col = 0;
+	string_t *qualified_name_vec = nullptr;
+	ValidityMask *qualified_name_validity = nullptr;
+
 	if (config.context != ContextLevel::NONE) {
 		if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
 			semantic_type_col = col_idx++;
@@ -745,30 +762,28 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 		if (config.context >= ContextLevel::NORMALIZED) {
 			name_col = col_idx++;
 			name_vec = FlatVector::GetData<string_t>(output.data[name_col]);
+			qualified_name_col = col_idx++;
+			qualified_name_vec = FlatVector::GetData<string_t>(output.data[qualified_name_col]);
+			qualified_name_validity = &FlatVector::Validity(output.data[qualified_name_col]);
 		}
 	}
 
 	// Native context columns based on config.context
-	idx_t signature_type_col = 0, parameters_col = 0, modifiers_col = 0, annotations_col = 0, qualified_name_col = 0;
+	idx_t signature_type_col = 0, parameters_col = 0, modifiers_col = 0, annotations_col = 0;
 	string_t *signature_type_vec = nullptr;
 	string_t *annotations_vec = nullptr;
-	string_t *qualified_name_vec = nullptr;
 	ValidityMask *signature_type_validity = nullptr;
 	ValidityMask *annotations_validity = nullptr;
-	ValidityMask *qualified_name_validity = nullptr;
 
 	if (config.context >= ContextLevel::NATIVE) {
 		signature_type_col = col_idx++;
 		parameters_col = col_idx++;
 		modifiers_col = col_idx++;
 		annotations_col = col_idx++;
-		qualified_name_col = col_idx++;
 		signature_type_vec = FlatVector::GetData<string_t>(output.data[signature_type_col]);
 		annotations_vec = FlatVector::GetData<string_t>(output.data[annotations_col]);
-		qualified_name_vec = FlatVector::GetData<string_t>(output.data[qualified_name_col]);
 		signature_type_validity = &FlatVector::Validity(output.data[signature_type_col]);
 		annotations_validity = &FlatVector::Validity(output.data[annotations_col]);
-		qualified_name_validity = &FlatVector::Validity(output.data[qualified_name_col]);
 		// Note: parameters and modifiers columns are LIST types, handled separately
 	}
 
@@ -863,6 +878,13 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 				// AGENT J FIX: Ensure string is properly copied to avoid dangling pointers
 				string name_copy = string(node.name_raw.c_str());
 				name_vec[count] = StringVector::AddString(output.data[name_col], name_copy);
+				// Qualified name (top-level, not inside native)
+				if (!node.name_qualified.empty()) {
+					qualified_name_vec[count] =
+					    StringVector::AddString(output.data[qualified_name_col], node.name_qualified);
+				} else {
+					qualified_name_validity->SetInvalid(count);
+				}
 			}
 			if (config.context >= ContextLevel::NATIVE) {
 				// Check if native extraction was attempted and has meaningful data
@@ -917,19 +939,10 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 					} else {
 						annotations_validity->SetInvalid(count);
 					}
-
-					// qualified_name: set NULL if empty, otherwise set value
-					if (!node.native.qualified_name.empty()) {
-						qualified_name_vec[count] =
-						    StringVector::AddString(output.data[qualified_name_col], node.native.qualified_name);
-					} else {
-						qualified_name_validity->SetInvalid(count);
-					}
 				} else {
 					// No native extraction attempted - set all native fields to NULL
 					signature_type_validity->SetInvalid(count);
 					annotations_validity->SetInvalid(count);
-					qualified_name_validity->SetInvalid(count);
 
 					// For LIST types, create empty lists with proper indexing
 					auto list_data = FlatVector::GetData<list_entry_t>(output.data[parameters_col]);
@@ -1012,6 +1025,8 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult &result) {
 		node_children.push_back(make_pair("node_id", Value::BIGINT(node.node_id)));
 		node_children.push_back(make_pair("type", Value(node.type_raw)));
 		node_children.push_back(make_pair("name", Value(node.name_raw)));
+		node_children.push_back(
+		    make_pair("qualified_name", node.name_qualified.empty() ? Value() : Value(node.name_qualified)));
 		node_children.push_back(make_pair("start_line", Value::UINTEGER(node.start_line)));
 		node_children.push_back(make_pair("end_line", Value::UINTEGER(node.end_line)));
 		node_children.push_back(make_pair("start_column", Value::UINTEGER(node.start_column)));
@@ -1035,6 +1050,7 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult &result) {
 	node_schema.push_back(make_pair("node_id", LogicalType::BIGINT));
 	node_schema.push_back(make_pair("type", LogicalType::VARCHAR));
 	node_schema.push_back(make_pair("name", LogicalType::VARCHAR));
+	node_schema.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
 	node_schema.push_back(make_pair("start_line", LogicalType::UINTEGER));
 	node_schema.push_back(make_pair("end_line", LogicalType::UINTEGER));
 	node_schema.push_back(make_pair("start_column", LogicalType::UINTEGER));
@@ -1130,6 +1146,8 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult &result, Data
 		} else {
 			context_values.push_back(make_pair("name", Value())); // NULL
 		}
+		context_values.push_back(
+		    make_pair("qualified_name", node.name_qualified.empty() ? Value() : Value(node.name_qualified)));
 		context_values.push_back(make_pair("semantic_type", Value::UTINYINT(node.semantic_type)));
 		context_values.push_back(make_pair("flags", Value::UTINYINT(node.universal_flags)));
 		Value context_struct = Value::STRUCT(context_values);
@@ -1243,6 +1261,10 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 		row_data.semantic_type = node.semantic_type;
 		row_data.flags = node.universal_flags;
 
+		// Qualified name (top-level, from name_qualified field)
+		row_data.has_qualified_name = !node.name_qualified.empty();
+		row_data.qualified_name = node.name_qualified;
+
 		// Native context fields
 		row_data.has_native_context = node.native_extraction_attempted;
 		if (row_data.has_native_context) {
@@ -1252,9 +1274,6 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 			// Copy parameters and modifiers to local vectors (NO DuckDB vector operations)
 			row_data.parameters = node.native.parameters;
 			row_data.modifiers = node.native.modifiers;
-
-			row_data.has_qualified_name = !node.native.qualified_name.empty();
-			row_data.qualified_name = node.native.qualified_name;
 
 			row_data.has_annotations = !node.native.annotations.empty();
 			row_data.annotations = node.native.annotations;
@@ -1299,20 +1318,20 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 	// Context STRUCT child vectors
 	auto context_name_vec = FlatVector::GetData<string_t>(*context_entries[0]);
 	auto &context_name_validity = FlatVector::Validity(*context_entries[0]);
-	auto context_semantic_type_vec = FlatVector::GetData<uint8_t>(*context_entries[1]);
-	auto context_flags_vec = FlatVector::GetData<uint8_t>(*context_entries[2]);
+	auto context_qualified_name_vec = FlatVector::GetData<string_t>(*context_entries[1]);
+	auto &context_qualified_name_validity = FlatVector::Validity(*context_entries[1]);
+	auto context_semantic_type_vec = FlatVector::GetData<uint8_t>(*context_entries[2]);
+	auto context_flags_vec = FlatVector::GetData<uint8_t>(*context_entries[3]);
 
 	// Native context STRUCT child vectors
-	auto &native_entries = StructVector::GetEntries(*context_entries[3]);
-	auto &native_validity = FlatVector::Validity(*context_entries[3]);
+	auto &native_entries = StructVector::GetEntries(*context_entries[4]);
+	auto &native_validity = FlatVector::Validity(*context_entries[4]);
 
 	// Get native field vectors
 	auto native_signature_type_vec = FlatVector::GetData<string_t>(*native_entries[0]);
 	auto &native_signature_type_validity = FlatVector::Validity(*native_entries[0]);
-	auto native_qualified_name_vec = FlatVector::GetData<string_t>(*native_entries[3]);
-	auto &native_qualified_name_validity = FlatVector::Validity(*native_entries[3]);
-	auto native_annotations_vec = FlatVector::GetData<string_t>(*native_entries[4]);
-	auto &native_annotations_validity = FlatVector::Validity(*native_entries[4]);
+	auto native_annotations_vec = FlatVector::GetData<string_t>(*native_entries[3]);
+	auto &native_annotations_validity = FlatVector::Validity(*native_entries[3]);
 
 	// Get ListVectors for separate processing - TODO: restore when implementing parameter/modifier arrays
 	// auto &parameters_list_vector = *native_entries[1];
@@ -1355,6 +1374,13 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 		} else {
 			context_name_validity.SetInvalid(row_idx);
 		}
+		// Qualified name (top-level context field, not native)
+		if (row_data.has_qualified_name) {
+			context_qualified_name_vec[row_idx] =
+			    string_t(row_data.qualified_name.c_str(), row_data.qualified_name.length());
+		} else {
+			context_qualified_name_validity.SetInvalid(row_idx);
+		}
 		context_semantic_type_vec[row_idx] = row_data.semantic_type;
 		context_flags_vec[row_idx] = row_data.flags;
 
@@ -1366,13 +1392,6 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 				    string_t(row_data.signature_type.c_str(), row_data.signature_type.length());
 			} else {
 				native_signature_type_validity.SetInvalid(row_idx);
-			}
-
-			if (row_data.has_qualified_name) {
-				native_qualified_name_vec[row_idx] =
-				    string_t(row_data.qualified_name.c_str(), row_data.qualified_name.length());
-			} else {
-				native_qualified_name_validity.SetInvalid(row_idx);
 			}
 
 			if (row_data.has_annotations) {
@@ -1436,6 +1455,8 @@ Value UnifiedASTBackend::CreateHierarchicalASTStruct(const ASTResult &result) {
 		// Context Information struct (semantic information only)
 		child_list_t<Value> context_children;
 		context_children.push_back(make_pair("name", Value(node.name_raw)));
+		context_children.push_back(
+		    make_pair("qualified_name", node.name_qualified.empty() ? Value() : Value(node.name_qualified)));
 		context_children.push_back(make_pair("semantic_type", Value::UTINYINT(node.semantic_type)));
 		context_children.push_back(make_pair("flags", Value::UTINYINT(node.universal_flags)));
 		Value context_value = Value::STRUCT(context_children);
@@ -1472,6 +1493,7 @@ Value UnifiedASTBackend::CreateHierarchicalASTStruct(const ASTResult &result) {
 	child_list_t<LogicalType> context_info_children;
 	context_info_children.push_back(make_pair("type", LogicalType::VARCHAR));
 	context_info_children.push_back(make_pair("name", LogicalType::VARCHAR));
+	context_info_children.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
 	context_info_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
 	context_info_children.push_back(make_pair("flags", LogicalType::UTINYINT));
 
