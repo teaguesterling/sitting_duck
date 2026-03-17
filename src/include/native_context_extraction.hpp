@@ -255,6 +255,9 @@ NativeContext ExtractNativeContextTemplated(TSNode node, const string &content, 
 	case NativeExtractionStrategy::FUNCTION_CALL:
 		return NativeExtractionTraits<AdapterType>::template ExtractorType<
 		    NativeExtractionStrategy::FUNCTION_CALL>::Extract(node, content);
+	case NativeExtractionStrategy::CONSTRUCTOR_DEFINITION:
+		return NativeExtractionTraits<AdapterType>::template ExtractorType<
+		    NativeExtractionStrategy::CONSTRUCTOR_DEFINITION>::Extract(node, content);
 	case NativeExtractionStrategy::CUSTOM:
 		return NativeExtractionTraits<AdapterType>::template ExtractorType<NativeExtractionStrategy::CUSTOM>::Extract(
 		    node, content);

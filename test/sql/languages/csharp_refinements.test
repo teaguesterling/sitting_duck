@@ -1,0 +1,290 @@
+# name: test/sql/languages/csharp_refinements.test
+# description: Test C# semantic refinements
+# group: [languages]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# C# Refinement Tests
+# =============================================================================
+#
+# Tests that semantic refinements are correctly applied to C# code.
+# Refinements are 2-bit values in the lower bits of semantic_type that provide
+# finer-grained classification within each semantic category.
+# =============================================================================
+
+# =============================================================================
+# CLASS AND TYPE DEFINITION REFINEMENTS
+# =============================================================================
+
+# Test: Class declaration should be DEFINITION_CLASS (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'class_declaration'
+LIMIT 1;
+----
+class_declaration	DEFINITION_CLASS
+
+# Test: Struct declaration should be DEFINITION_CLASS (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'struct_declaration'
+LIMIT 1;
+----
+struct_declaration	DEFINITION_CLASS
+
+# Test: Interface declaration should be DEFINITION_CLASS (with ABSTRACT refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'interface_declaration'
+LIMIT 1;
+----
+interface_declaration	DEFINITION_CLASS
+
+# Test: Enum declaration should be DEFINITION_CLASS (with ENUM refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'enum_declaration'
+LIMIT 1;
+----
+enum_declaration	DEFINITION_CLASS
+
+# Test: Record declaration should be DEFINITION_CLASS (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'record_declaration'
+LIMIT 1;
+----
+record_declaration	DEFINITION_CLASS
+
+# =============================================================================
+# FUNCTION REFINEMENTS
+# =============================================================================
+
+# Test: Method declaration should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'method_declaration'
+LIMIT 1;
+----
+method_declaration	DEFINITION_FUNCTION
+
+# Test: Constructor declaration should be DEFINITION_FUNCTION (with CONSTRUCTOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'constructor_declaration'
+LIMIT 1;
+----
+constructor_declaration	DEFINITION_FUNCTION
+
+# Test: Lambda expression should be DEFINITION_FUNCTION (with LAMBDA refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'lambda_expression'
+LIMIT 1;
+----
+lambda_expression	DEFINITION_FUNCTION
+
+# =============================================================================
+# MODULE REFINEMENTS
+# =============================================================================
+
+# Test: Compilation unit should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'compilation_unit'
+LIMIT 1;
+----
+compilation_unit	DEFINITION_MODULE
+
+# Test: Namespace declaration should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'namespace_declaration'
+LIMIT 1;
+----
+namespace_declaration	DEFINITION_MODULE
+
+# =============================================================================
+# VARIABLE REFINEMENTS
+# =============================================================================
+
+# Test: Field declaration should be DEFINITION_VARIABLE (with FIELD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'field_declaration'
+LIMIT 1;
+----
+field_declaration	DEFINITION_VARIABLE
+
+# Test: Property declaration should be DEFINITION_VARIABLE (with FIELD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'property_declaration'
+LIMIT 1;
+----
+property_declaration	DEFINITION_VARIABLE
+
+# Test: Variable declaration should be DEFINITION_VARIABLE (with MUTABLE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'variable_declaration'
+LIMIT 1;
+----
+variable_declaration	DEFINITION_VARIABLE
+
+# Test: Parameter should be DEFINITION_VARIABLE (with PARAMETER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'parameter'
+LIMIT 1;
+----
+parameter	DEFINITION_VARIABLE
+
+# =============================================================================
+# IMPORT REFINEMENTS
+# =============================================================================
+
+# Test: Using directive should be EXTERNAL_IMPORT (with MODULE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'using_directive'
+LIMIT 1;
+----
+using_directive	EXTERNAL_IMPORT
+
+# =============================================================================
+# CALL REFINEMENTS
+# =============================================================================
+
+# Test: Invocation expression should be COMPUTATION_CALL (with METHOD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'invocation_expression'
+LIMIT 1;
+----
+invocation_expression	COMPUTATION_CALL
+
+# Test: Object creation expression should be COMPUTATION_CALL (with CONSTRUCTOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'object_creation_expression'
+LIMIT 1;
+----
+object_creation_expression	COMPUTATION_CALL
+
+# =============================================================================
+# CONTROL FLOW REFINEMENTS
+# =============================================================================
+
+# Test: Foreach statement should be FLOW_LOOP (with ITERATOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'foreach_statement'
+LIMIT 1;
+----
+foreach_statement	FLOW_LOOP
+
+# =============================================================================
+# JUMP REFINEMENTS
+# =============================================================================
+
+# Test: Return statement should be FLOW_JUMP (with RETURN refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'return_statement'
+LIMIT 1;
+----
+return_statement	FLOW_JUMP
+
+# =============================================================================
+# ASYNC REFINEMENTS
+# =============================================================================
+
+# Test: Await expression should be FLOW_SYNC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'await_expression'
+LIMIT 1;
+----
+await_expression	FLOW_SYNC
+
+# =============================================================================
+# LITERAL REFINEMENTS
+# =============================================================================
+
+# Test: Integer literal should be LITERAL_NUMBER (with INTEGER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'integer_literal'
+LIMIT 1;
+----
+integer_literal	LITERAL_NUMBER
+
+# Test: String literal should be LITERAL_STRING (with LITERAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'string_literal'
+LIMIT 1;
+----
+string_literal	LITERAL_STRING
+
+# Test: Null literal should be LITERAL_ATOMIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'null_literal'
+LIMIT 1;
+----
+null_literal	LITERAL_ATOMIC
+
+# =============================================================================
+# IDENTIFIERS
+# =============================================================================
+
+# Test: Identifier should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'identifier'
+LIMIT 1;
+----
+identifier	NAME_IDENTIFIER
+
+# =============================================================================
+# COMMENTS
+# =============================================================================
+
+# Test: Comment should be METADATA_COMMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/csharp/simple.cs')
+WHERE type = 'comment'
+LIMIT 1;
+----
+comment	METADATA_COMMENT

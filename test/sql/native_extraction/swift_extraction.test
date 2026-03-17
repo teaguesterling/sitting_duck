@@ -109,3 +109,189 @@ WHERE type = 'class_declaration' AND name = 'DogBreed';
 ----
 DogBreed	[{'name': String, 'type': extends}, {'name': CaseIterable, 'type': extends}]	[]
 
+# =============================================================================
+# DEFINITION_FUNCTION - Function Declarations
+# =============================================================================
+
+# Test: Simple function with no parameters or return type
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'function_declaration' AND name = 'draw'
+ORDER BY start_line
+LIMIT 1;
+----
+draw	NULL	[]	[]
+
+# Test: Function with external/internal parameter names and mutating modifier
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'function_declaration' AND name = 'move'
+ORDER BY start_line
+LIMIT 1;
+----
+move	[{'name': to point, 'type': CGPoint}]	[mutating]
+
+# Test: Static function with return type
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'function_declaration' AND name = 'random';
+----
+random	Rectangle	[static]
+
+# Test: Function with underscore external name (suppressed label)
+query IT
+SELECT name, parameters FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'function_declaration' AND name = 'append';
+----
+append	[{'name': _ item, 'type': Element}]
+
+# Test: Function with optional return type
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'function_declaration' AND name = 'pop';
+----
+pop	Element?	[mutating]
+
+# Test: Function with function-type parameter
+query ITT
+SELECT name, signature_type, parameters FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'function_declaration' AND name = 'filter';
+----
+filter	[T]	[{'name': _ transform, 'type': '(Element) -> T?'}]
+
+# Test: Final method modifier
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'function_declaration' AND name = 'getId';
+----
+getId	UUID	[final]
+
+# Test: Override modifier
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'function_declaration' AND name = 'describe'
+ORDER BY start_line
+LIMIT 1 OFFSET 1;
+----
+describe	String	[override]
+
+# Test: Multiple parameters with mixed external names and defaults
+query IT
+SELECT name, parameters FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'function_declaration' AND name = 'truncated';
+----
+truncated	[{'name': to length, 'type': Int}, {'name': trailing, 'type': String}]
+
+# Test: Complex function with multiple parameter types including closures
+query IT
+SELECT name, parameters FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'function_declaration' AND name = 'addTask';
+----
+addTask	[{'name': _ title, 'type': String}, {'name': priority, 'type': Priority}, {'name': dueDate, 'type': Date?}]
+
+# Test: Function with higher-order parameter (closure with result type)
+query IT
+SELECT name, parameters FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'function_declaration' AND name = 'getTasks';
+----
+getTasks	[{'name': sortedBy sortCriteria, 'type': '(Task, Task) -> Bool'}]
+
+# =============================================================================
+# DEFINITION_FUNCTION - Init Declarations (Constructors)
+# =============================================================================
+
+# Test: Init with typed parameters
+query ITT
+SELECT name, signature_type, parameters FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'init_declaration' AND name IS NOT NULL
+ORDER BY start_line
+LIMIT 1;
+----
+init	NULL	[{'name': width, 'type': Double}, {'name': height, 'type': Double}]
+
+# Test: Init with external/internal parameter names
+query IT
+SELECT name, parameters FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'init_declaration' AND name IS NOT NULL
+ORDER BY start_line
+LIMIT 1 OFFSET 1;
+----
+init	[{'name': square side, 'type': Double}]
+
+# Test: Convenience init modifier
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'init_declaration' AND name IS NOT NULL
+ORDER BY start_line
+LIMIT 1 OFFSET 4;
+----
+init	[{'name': radius, 'type': Double}]	[convenience]
+
+# =============================================================================
+# DEFINITION_VARIABLE - Property Declarations
+# =============================================================================
+
+# Test: Properties with type annotations extract correctly
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'property_declaration' AND name = 'width'
+ORDER BY start_line
+LIMIT 1;
+----
+width	Double	[var]
+
+# Test: Let binding detected as modifier
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'property_declaration' AND name = '_id';
+----
+_id	UUID	[var]
+
+# Test: Properties with complex types (generic array)
+query IT
+SELECT name, signature_type FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'property_declaration' AND name = 'items'
+ORDER BY start_line
+LIMIT 1;
+----
+items	[Element]
+
+# Test: Computed property with return type
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'property_declaration' AND name = 'area'
+ORDER BY start_line
+LIMIT 1;
+----
+area	Double	[var]
+
+# =============================================================================
+# Semantic Type Validation
+# =============================================================================
+
+# Test: Functions have DEFINITION_FUNCTION semantic type
+query I
+SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'function_declaration'
+  AND name IS NOT NULL
+  AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+26
+
+# Test: Init declarations have DEFINITION_FUNCTION semantic type
+query I
+SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'init_declaration'
+  AND name IS NOT NULL
+  AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+8
+
+# Test: Property declarations have DEFINITION_VARIABLE semantic type
+query I
+SELECT COUNT(*) FROM read_ast('test/data/swift/simple.swift', context := 'native')
+WHERE type = 'property_declaration'
+  AND name IS NOT NULL
+  AND semantic_type_to_string(semantic_type) = 'DEFINITION_VARIABLE';
+----
+75

@@ -106,3 +106,101 @@ WHERE type = 'class_definition' AND name = 'Runnable';
 ----
 Runnable	abstract_class	[]	[abstract]
 
+# =============================================================================
+# FUNCTION_SIGNATURE - Function Declarations
+# =============================================================================
+# Note: Dart emits both method_signature (outer) and function_signature (inner)
+# for class methods. function_signature is the one with full extraction data.
+
+# Test: Method with return type and parameters
+query ITT
+SELECT name, signature_type, parameters FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'function_signature' AND name = 'distanceTo';
+----
+distanceTo	double	[{'name': other, 'type': Point}]
+
+# Test: Override method with return type
+query IT
+SELECT name, signature_type FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'function_signature' AND name = 'toString';
+----
+toString	String
+
+# Test: Void function
+query IT
+SELECT name, signature_type FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'function_signature' AND name = 'printInfo';
+----
+printInfo	void
+
+# Test: Async function with Future return type
+query IT
+SELECT name, signature_type FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'function_signature' AND name = 'main';
+----
+main	Future
+
+# Test: Stream generator function with parameter
+query ITT
+SELECT name, signature_type, parameters FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'function_signature' AND name = 'countStream';
+----
+countStream	Stream	[{'name': max, 'type': int}]
+
+# Test: Iterable generator function with parameter
+query ITT
+SELECT name, signature_type, parameters FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'function_signature' AND name = 'naturals';
+----
+naturals	Iterable	[{'name': n, 'type': int}]
+
+# Test: Private function
+query IT
+SELECT name, signature_type FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'function_signature' AND name = '_privateHelper';
+----
+_privateHelper	void
+
+# =============================================================================
+# CONSTRUCTOR_SIGNATURE - Constructor Declarations
+# =============================================================================
+
+# Test: Const constructor
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'constant_constructor_signature' AND name = 'Point';
+----
+Point	NULL	[const]
+
+# Test: Factory constructor with parameters
+query ITT
+SELECT name, signature_type, parameters FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'factory_constructor_signature' AND name = 'Point';
+----
+Point	NULL	[{'name': map, 'type': Map}]
+
+# =============================================================================
+# METHOD_SIGNATURE - Method Declarations (outer wrapper)
+# =============================================================================
+
+# Test: Method with @override annotation
+query ITT
+SELECT name, modifiers, parameters FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'method_signature' AND name = 'area'
+ORDER BY start_line
+LIMIT 1;
+----
+area	[@override]	[]
+
+# =============================================================================
+# Semantic Type Validation
+# =============================================================================
+
+# Test: function_signature nodes have DEFINITION_FUNCTION semantic type
+query I
+SELECT COUNT(*) FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'function_signature'
+  AND name IS NOT NULL
+  AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+10

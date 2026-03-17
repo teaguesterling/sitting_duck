@@ -1,0 +1,564 @@
+# name: test/sql/languages/lua_refinements.test
+# description: Test Lua semantic refinements
+# group: [languages]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Lua Refinement Tests
+# =============================================================================
+#
+# Tests that semantic refinements are correctly applied to Lua code.
+# Refinements are 2-bit values in the lower bits of semantic_type that provide
+# finer-grained classification within each semantic category.
+# =============================================================================
+
+# =============================================================================
+# PROGRAM STRUCTURE
+# =============================================================================
+
+# Test: Chunk (root node) should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'chunk'
+LIMIT 1;
+----
+chunk	DEFINITION_MODULE
+
+# Test: Block should be ORGANIZATION_BLOCK (with SEQUENTIAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'block'
+LIMIT 1;
+----
+block	ORGANIZATION_BLOCK
+
+# =============================================================================
+# FUNCTION DEFINITIONS
+# =============================================================================
+
+# Test: Named function declaration should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'function_declaration'
+LIMIT 1;
+----
+function_declaration	DEFINITION_FUNCTION
+
+# Test: Anonymous function (function_definition) should be DEFINITION_FUNCTION (with LAMBDA refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'function_definition'
+LIMIT 1;
+----
+function_definition	DEFINITION_FUNCTION
+
+# Test: Parameters should be ORGANIZATION_LIST (with COLLECTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'parameters'
+LIMIT 1;
+----
+parameters	ORGANIZATION_LIST
+
+# Test: function keyword should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'function'
+LIMIT 1;
+----
+function	DEFINITION_FUNCTION
+
+# =============================================================================
+# FUNCTION CALLS
+# =============================================================================
+
+# Test: Function call should be COMPUTATION_CALL (with FUNCTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'function_call'
+LIMIT 1;
+----
+function_call	COMPUTATION_CALL
+
+# Test: Method index expression should be COMPUTATION_CALL (with METHOD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'method_index_expression'
+LIMIT 1;
+----
+method_index_expression	COMPUTATION_CALL
+
+# =============================================================================
+# VARIABLE DECLARATIONS
+# =============================================================================
+
+# Test: Assignment statement should be OPERATOR_ASSIGNMENT (with SIMPLE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'assignment_statement'
+LIMIT 1;
+----
+assignment_statement	OPERATOR_ASSIGNMENT
+
+# Test: Expression list should be ORGANIZATION_LIST (with COLLECTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'expression_list'
+LIMIT 1;
+----
+expression_list	ORGANIZATION_LIST
+
+# Test: local keyword should be DEFINITION_VARIABLE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'local'
+LIMIT 1;
+----
+local	DEFINITION_VARIABLE
+
+# =============================================================================
+# TABLE CONSTRUCTS
+# =============================================================================
+
+# Test: Table constructor should be LITERAL_STRUCTURED (with MAPPING refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'table_constructor'
+LIMIT 1;
+----
+table_constructor	LITERAL_STRUCTURED
+
+# Test: Field in table should be DEFINITION_VARIABLE (with FIELD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'field'
+LIMIT 1;
+----
+field	DEFINITION_VARIABLE
+
+# =============================================================================
+# IDENTIFIERS AND REFERENCES
+# =============================================================================
+
+# Test: Identifier should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'identifier'
+LIMIT 1;
+----
+identifier	NAME_IDENTIFIER
+
+# Test: Dot index expression should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'dot_index_expression'
+LIMIT 1;
+----
+dot_index_expression	COMPUTATION_ACCESS
+
+# Test: Bracket index expression should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'bracket_index_expression'
+LIMIT 1;
+----
+bracket_index_expression	COMPUTATION_ACCESS
+
+# =============================================================================
+# LITERALS
+# =============================================================================
+
+# Test: Number literal should be LITERAL_NUMBER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'number'
+LIMIT 1;
+----
+number	LITERAL_NUMBER
+
+# Test: String literal should be LITERAL_STRING (with LITERAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'string'
+LIMIT 1;
+----
+string	LITERAL_STRING
+
+# Test: Boolean true should be LITERAL_ATOMIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'true'
+LIMIT 1;
+----
+true	LITERAL_ATOMIC
+
+# Test: Boolean false should be LITERAL_ATOMIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'false'
+LIMIT 1;
+----
+false	LITERAL_ATOMIC
+
+# =============================================================================
+# CONTROL FLOW - CONDITIONALS
+# =============================================================================
+
+# Test: If statement should be FLOW_CONDITIONAL (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'if_statement'
+LIMIT 1;
+----
+if_statement	FLOW_CONDITIONAL
+
+# Test: Elseif statement should be FLOW_CONDITIONAL (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'elseif_statement'
+LIMIT 1;
+----
+elseif_statement	FLOW_CONDITIONAL
+
+# Test: Else statement should be FLOW_CONDITIONAL (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'else_statement'
+LIMIT 1;
+----
+else_statement	FLOW_CONDITIONAL
+
+# Test: if keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'if'
+LIMIT 1;
+----
+if	FLOW_CONDITIONAL
+
+# Test: then keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'then'
+LIMIT 1;
+----
+then	FLOW_CONDITIONAL
+
+# Test: else keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'else'
+LIMIT 1;
+----
+else	FLOW_CONDITIONAL
+
+# Test: elseif keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'elseif'
+LIMIT 1;
+----
+elseif	FLOW_CONDITIONAL
+
+# =============================================================================
+# CONTROL FLOW - LOOPS
+# =============================================================================
+
+# Test: For statement should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'for_statement'
+LIMIT 1;
+----
+for_statement	FLOW_LOOP
+
+# Test: Generic for clause should be FLOW_LOOP (with ITERATOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'for_generic_clause'
+LIMIT 1;
+----
+for_generic_clause	FLOW_LOOP
+
+# Test: Numeric for clause should be FLOW_LOOP (with COUNTER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'for_numeric_clause'
+LIMIT 1;
+----
+for_numeric_clause	FLOW_LOOP
+
+# Test: While statement should be FLOW_LOOP (with CONDITIONAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'while_statement'
+LIMIT 1;
+----
+while_statement	FLOW_LOOP
+
+# Test: Repeat statement should be FLOW_LOOP (with CONDITIONAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'repeat_statement'
+LIMIT 1;
+----
+repeat_statement	FLOW_LOOP
+
+# Test: for keyword should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'for'
+LIMIT 1;
+----
+for	FLOW_LOOP
+
+# Test: while keyword should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'while'
+LIMIT 1;
+----
+while	FLOW_LOOP
+
+# Test: repeat keyword should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'repeat'
+LIMIT 1;
+----
+repeat	FLOW_LOOP
+
+# Test: until keyword should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'until'
+LIMIT 1;
+----
+until	FLOW_LOOP
+
+# Test: in keyword should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'in'
+LIMIT 1;
+----
+in	FLOW_LOOP
+
+# Test: do keyword should be ORGANIZATION_BLOCK
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'do'
+LIMIT 1;
+----
+do	ORGANIZATION_BLOCK
+
+# Test: end keyword should be ORGANIZATION_BLOCK
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'end'
+LIMIT 1;
+----
+end	ORGANIZATION_BLOCK
+
+# =============================================================================
+# JUMP STATEMENTS
+# =============================================================================
+
+# Test: Return statement should be FLOW_JUMP (with RETURN refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'return_statement'
+LIMIT 1;
+----
+return_statement	FLOW_JUMP
+
+# Test: return keyword should be FLOW_JUMP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'return'
+LIMIT 1;
+----
+return	FLOW_JUMP
+
+# =============================================================================
+# EXPRESSIONS
+# =============================================================================
+
+# Test: Binary expression should be OPERATOR_ARITHMETIC (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'binary_expression'
+LIMIT 1;
+----
+binary_expression	OPERATOR_ARITHMETIC
+
+# Test: Unary expression should be OPERATOR_ARITHMETIC (with UNARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'unary_expression'
+LIMIT 1;
+----
+unary_expression	OPERATOR_ARITHMETIC
+
+# =============================================================================
+# OPERATORS
+# =============================================================================
+
+# Test: + operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = '+'
+LIMIT 1;
+----
++	OPERATOR_ARITHMETIC
+
+# Test: - operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = '-'
+LIMIT 1;
+----
+-	OPERATOR_ARITHMETIC
+
+# Test: * operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = '*'
+LIMIT 1;
+----
+*	OPERATOR_ARITHMETIC
+
+# Test: / operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = '/'
+LIMIT 1;
+----
+/	OPERATOR_ARITHMETIC
+
+# Test: % operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = '%'
+LIMIT 1;
+----
+%	OPERATOR_ARITHMETIC
+
+# Test: .. (concat) operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = '..'
+LIMIT 1;
+----
+..	OPERATOR_ARITHMETIC
+
+# Test: # (length) operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = '#'
+LIMIT 1;
+----
+#	OPERATOR_ARITHMETIC
+
+# Test: == operator should be OPERATOR_COMPARISON
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = '=='
+LIMIT 1;
+----
+==	OPERATOR_COMPARISON
+
+# Test: <= operator should be OPERATOR_COMPARISON
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = '<='
+LIMIT 1;
+----
+<=	OPERATOR_COMPARISON
+
+# Test: > operator should be OPERATOR_COMPARISON
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = '>'
+LIMIT 1;
+----
+>	OPERATOR_COMPARISON
+
+# Test: = assignment operator should be OPERATOR_ASSIGNMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = '='
+LIMIT 1;
+----
+=	OPERATOR_ASSIGNMENT
+
+# =============================================================================
+# COMMENTS AND METADATA
+# =============================================================================
+
+# Test: Comment should be METADATA_COMMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/lua/simple.lua', context := 'native')
+WHERE type = 'comment'
+LIMIT 1;
+----
+comment	METADATA_COMMENT

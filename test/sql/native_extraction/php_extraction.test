@@ -106,3 +106,82 @@ WHERE type = 'enum_declaration' AND name = 'DogBreed';
 ----
 DogBreed	[{'name': Serializable, 'type': implements}]	[]
 
+# =============================================================================
+# DEFINITION_FUNCTION - Method Declarations
+# =============================================================================
+
+# Test: Constructor with typed parameter and public modifier
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/php/test.php', context := 'native')
+WHERE type = 'method_declaration' AND name = '__construct';
+----
+__construct	[{'name': $name, 'type': string}]	[public]
+
+# Test: Destructor with no parameters
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/languages/php/test.php', context := 'native')
+WHERE type = 'method_declaration' AND name = '__destruct';
+----
+__destruct	NULL	[public]
+
+# Test: Public method with return type
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/languages/php/test.php', context := 'native')
+WHERE type = 'method_declaration' AND name = 'getName'
+ORDER BY start_line
+LIMIT 1;
+----
+getName	string	[public]
+
+# Test: Private method with typed parameters and return type
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/php/test.php', context := 'native')
+WHERE type = 'method_declaration' AND name = 'validate';
+----
+validate	bool	[{'name': $input, 'type': mixed}]	[private]
+
+# Test: Protected method with array type
+query ITTT
+SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/php/test.php', context := 'native')
+WHERE type = 'method_declaration' AND name = 'process';
+----
+process	array	[{'name': $items, 'type': array}]	[protected]
+
+# Test: Static method with public modifier
+query ITT
+SELECT name, parameters, modifiers FROM read_ast('test/data/languages/php/test.php', context := 'native')
+WHERE type = 'method_declaration' AND name = 'createFromArray';
+----
+createFromArray	[{'name': $data, 'type': array}]	[public, static]
+
+# Test: Void return type method
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/languages/php/test.php', context := 'native')
+WHERE type = 'method_declaration' AND name = 'log';
+----
+log	void	[public]
+
+# =============================================================================
+# DEFINITION_VARIABLE - Property Declarations
+# =============================================================================
+
+# Test: Property modifiers are extracted correctly
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/php/test.php', context := 'native')
+WHERE type = 'property_declaration'
+  AND array_length(modifiers) > 0;
+----
+3
+
+# =============================================================================
+# Semantic Type Validation
+# =============================================================================
+
+# Test: Methods have DEFINITION_FUNCTION semantic type
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/php/test.php', context := 'native')
+WHERE type = 'method_declaration'
+  AND name IS NOT NULL
+  AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+8

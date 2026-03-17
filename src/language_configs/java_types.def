@@ -142,8 +142,8 @@ DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Functio
  * - `enum_constant`: Enum values (FIELD refinement)
  * @{
  */
-DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("local_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IN_DECLARATOR, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("local_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IN_DECLARATOR, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("variable_declarator", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("formal_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("spread_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
