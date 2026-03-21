@@ -248,7 +248,10 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 				ast_node.native_extraction_attempted = false;
 			}
 
-			// Build qualified_name for named definition nodes
+			// Build qualified_name for named definition nodes.
+			// All four definition types (F/C/V/M) push scopes so that nested definitions
+			// within them get properly scoped paths. For example, a variable assignment
+			// self.name inside __init__ produces C/User F/__init__ V/name.
 			if (config.context >= ContextLevel::NORMALIZED) {
 				char type_code = SemanticTypes::GetDefinitionTypeCode(ast_node.semantic_type);
 				if (type_code != '\0' && !ast_node.name_raw.empty()) {
@@ -292,7 +295,10 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			// Update legacy fields after descendant count change
 			result.nodes[entry.node_index].UpdateComputedLegacyFields();
 
-			// Pop scope stack if this node pushed a scope
+			// Pop scope stack if this node pushed a scope.
+			// The scope stack should always match: if the top entry's node_index
+			// is ahead of the current node, something went wrong with the DFS ordering.
+			D_ASSERT(scope_stack.empty() || scope_stack.back().first <= entry.node_index);
 			if (!scope_stack.empty() && scope_stack.back().first == entry.node_index) {
 				scope_stack.pop_back();
 			}

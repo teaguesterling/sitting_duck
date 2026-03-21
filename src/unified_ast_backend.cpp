@@ -284,7 +284,7 @@ vector<string> UnifiedASTBackend::GetHierarchicalTableColumnNames() {
 	    "type",      // VARCHAR (moved to base level)
 	    "source",    // STRUCT(file_path, language, start_line, start_column, end_line, end_column)
 	    "structure", // STRUCT(parent_id, depth, sibling_index, children_count, descendant_count)
-	    "context",   // STRUCT(name, semantic_type, flags, native)
+	    "context",   // STRUCT(name, qualified_name, semantic_type, flags, native)
 	    "peek"       // VARCHAR
 	};
 }
@@ -1375,6 +1375,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 			context_name_validity.SetInvalid(row_idx);
 		}
 		// Qualified name (top-level context field, not native)
+		// Uses raw string_t assignment (matching existing STRUCT child vector pattern above)
 		if (row_data.has_qualified_name) {
 			context_qualified_name_vec[row_idx] =
 			    string_t(row_data.qualified_name.c_str(), row_data.qualified_name.length());
