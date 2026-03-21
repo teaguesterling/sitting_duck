@@ -143,28 +143,21 @@ FROM read_ast('test/data/python/simple.py', 'python', context := 'native');
 ----
 110
 
-# Test 6: Large file stability
+# Test 6: Large file stability (consistent across 3 executions)
 # ============================
+# Verify that parsing a large file produces the same node count each time
+# without hardcoding a specific count that breaks on every code change
 query I
-SELECT COUNT(*) as large_file_exec_1
-FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
-LIMIT 1;
+SELECT COUNT(DISTINCT node_count) = 1 as is_stable
+FROM (
+    SELECT COUNT(*) as node_count FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+    UNION ALL
+    SELECT COUNT(*) as node_count FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+    UNION ALL
+    SELECT COUNT(*) as node_count FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
+);
 ----
-19114
-
-query I
-SELECT COUNT(*) as large_file_exec_2
-FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
-LIMIT 1;
-----
-19114
-
-query I
-SELECT COUNT(*) as large_file_exec_3
-FROM read_ast('src/unified_ast_backend.cpp', 'cpp', context := 'native')
-LIMIT 1;
-----
-19114
+1
 
 # Test 7: Mixed extraction config stability
 # =========================================

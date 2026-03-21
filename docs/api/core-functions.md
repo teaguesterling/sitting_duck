@@ -51,7 +51,7 @@ read_ast(file_patterns LIST(VARCHAR), language VARCHAR) -> TABLE
 | `parameters` | STRUCT[] | Function parameters (name and type) |
 | `modifiers` | VARCHAR[] | Access modifiers and keywords |
 | `annotations` | VARCHAR | Decorator/annotation text |
-| `qualified_name` | VARCHAR | Fully qualified name |
+| `qualified_name` | VARCHAR | Scope-based definition path (e.g., `C/User F/__init__`) |
 | `file_path` | VARCHAR | Source file path |
 | `language` | VARCHAR | Detected language |
 | `start_line` | UINTEGER | Starting line (1-based) |

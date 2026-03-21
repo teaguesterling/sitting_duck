@@ -182,6 +182,24 @@ inline uint8_t KindCode(const string &name) {
 	return GetKindCode(name);
 }
 
+// Get single-letter type code for definition types: F, C, V, M
+// Returns '\0' for non-definition types
+inline char GetDefinitionTypeCode(uint8_t semantic_type) {
+	uint8_t base = semantic_type & 0xFC; // Mask off language-specific bits
+	switch (base) {
+	case DEFINITION_FUNCTION:
+		return 'F';
+	case DEFINITION_VARIABLE:
+		return 'V';
+	case DEFINITION_CLASS:
+		return 'C';
+	case DEFINITION_MODULE:
+		return 'M';
+	default:
+		return '\0';
+	}
+}
+
 // Helper predicates for common queries
 bool IsDefinition(uint8_t semantic_type);
 bool IsCall(uint8_t semantic_type);

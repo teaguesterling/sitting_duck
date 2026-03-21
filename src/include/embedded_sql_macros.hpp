@@ -929,6 +929,50 @@ CREATE OR REPLACE MACRO ast_security_audit(source, language := NULL) AS TABLE
         CASE fi.risk_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
         fi.file_path, fi.start_line;
 
+-- Resolve nearest definition ancestor for each definition node
+-- Walks up parent_id, skipping organizational/structural nodes (e.g., blocks),
+-- until it finds an ancestor that is itself a definition.
+-- Returns (node_id, def_name, kind, parent_def_name, parent_def_kind, parent_def_node_id)
+-- Usage: SELECT * FROM ast_definition_parent('my_ast_table')
+CREATE OR REPLACE MACRO ast_definition_parent(ast_table) AS TABLE
+    WITH RECURSIVE def_parent AS (
+        -- Start: each definition node with its immediate parent
+        SELECT
+            d.node_id,
+            d.name AS def_name,
+            d.semantic_type AS def_type,
+            d.parent_id AS current_parent_id,
+            0 AS hops
+        FROM query_table(ast_table) d
+        WHERE is_definition(d.semantic_type)
+          AND is_construct(d.flags)
+          AND d.name IS NOT NULL AND d.name != ''
+          AND d.depth >= 1
+
+        UNION ALL
+
+        -- Walk up: if current parent isn't a definition, go to its parent
+        SELECT
+            dp.node_id,
+            dp.def_name,
+            dp.def_type,
+            p.parent_id AS current_parent_id,
+            dp.hops + 1
+        FROM def_parent dp
+        JOIN query_table(ast_table) p ON dp.current_parent_id = p.node_id
+        WHERE NOT is_definition(p.semantic_type) AND dp.hops < 10
+    )
+    SELECT
+        dp.node_id,
+        dp.def_name,
+        semantic_type_to_string(dp.def_type) AS kind,
+        p.name AS parent_def_name,
+        semantic_type_to_string(p.semantic_type) AS parent_def_kind,
+        p.node_id AS parent_def_node_id
+    FROM def_parent dp
+    JOIN query_table(ast_table) p ON dp.current_parent_id = p.node_id
+    WHERE is_definition(p.semantic_type);
+
 -- Find potentially dead (unused) code
 -- Identifies functions and classes that are never referenced in the codebase.
 -- Note: This is heuristic - cannot detect dynamic usage or cross-file references
@@ -958,6 +1002,9 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
               AND a.name NOT IN ('main', 'setup', 'teardown', 'init', 'constructor')
         ),
         -- All class definitions
+
+)SQLMACRO"
+        R"SQLMACRO(
         class_defs AS (
             SELECT
                 a.node_id,
@@ -1003,9 +1050,6 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
             SELECT name FROM function_calls
             UNION
             SELECT name FROM identifier_refs
-
-)SQLMACRO"
-        R"SQLMACRO(
         ),
         -- Find definitions that are never referenced
         dead_code AS (

@@ -17,7 +17,7 @@ Complete reference for `read_ast()` output columns.
 | `parameters` | STRUCT[] | Function parameters with names and types |
 | `modifiers` | VARCHAR[] | Access modifiers and keywords |
 | `annotations` | VARCHAR | Decorator/annotation text |
-| `qualified_name` | VARCHAR | Fully qualified name |
+| `qualified_name` | VARCHAR | Scope-based definition path (e.g., `C/User F/__init__`) |
 | `file_path` | VARCHAR | Source file path |
 | `language` | VARCHAR | Programming language |
 | `start_line` | UINTEGER | Starting line (1-based) |
@@ -262,15 +262,34 @@ WHERE is_function_definition(semantic_type)
 
 **Type:** `VARCHAR` (nullable)
 
-Fully qualified name including namespace/module path.
+Scope-based definition path that disambiguates nodes with the same `name`. Built during AST traversal by tracking nested definition scopes. Format: space-separated `type_code/name` segments.
+
+**Type codes:** `F` (function), `C` (class), `V` (variable), `M` (module)
 
 ```sql
-SELECT qualified_name, name
-FROM read_ast('src/**/*.java')
-WHERE is_class_definition(semantic_type);
+-- Disambiguate same-named methods across classes
+SELECT name, qualified_name, file_path
+FROM read_ast('src/**/*.py')
+WHERE name = '__init__' AND is_definition(semantic_type);
+-- Results:
+-- __init__  C/User F/__init__       src/models.py
+-- __init__  C/Account F/__init__    src/models.py
+
+-- Use as a composite join key
+SELECT a.qualified_name, a.start_line, b.start_line
+FROM read_ast('v1/**/*.py') a
+JOIN read_ast('v2/**/*.py') b USING (file_path, qualified_name);
+
+-- Find all definitions under a class
+SELECT qualified_name
+FROM read_ast('src/**/*.py')
+WHERE qualified_name LIKE 'C/MyClass %';
 ```
 
-Note: This field is not fully populated for all languages yet.
+- NULL for non-definition nodes
+- Only populated for named definition nodes (functions, classes, variables, modules)
+- Available at `context := 'normalized'` and above
+- Excludes `file_path` — use `USING (file_path, qualified_name)` for cross-file joins
 
 ---
 
@@ -451,7 +470,7 @@ WHERE type = 'function_definition';
 | `parameters` | No | No | No | Yes |
 | `modifiers` | No | No | No | Yes |
 | `annotations` | No | No | No | Yes |
-| `qualified_name` | No | No | No | Yes |
+| `qualified_name` | No | No | Yes | Yes |
 | `file_path` | Yes | Yes | Yes | Yes |
 | `language` | Yes | Yes | Yes | Yes |
 | `start_line` | Yes | Yes | Yes | Yes |

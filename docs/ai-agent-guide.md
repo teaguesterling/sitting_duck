@@ -385,7 +385,7 @@ read_ast(['script.py'], peek_mode := 'lines')
 - `parameters`: Function parameters (STRUCT array with name and type)
 - `modifiers`: Access modifiers and keywords (VARCHAR array)
 - `annotations`: Decorator/annotation text
-- `qualified_name`: Fully qualified name
+- `qualified_name`: Scope-based definition path (e.g., `C/User F/__init__`)
 - `file_path`: Source file path
 - `language`: Detected or specified language
 - `start_line`, `end_line`: Position info (line numbers)
