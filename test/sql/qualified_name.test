@@ -122,7 +122,7 @@ bar	C/Foo F/bar
 # Test 9: Partial matching with LIKE
 # =============================================================================
 
-# All members of User class
+# All definitions scoped under User class
 query I
 SELECT qualified_name
 FROM read_ast('test/data/python/qualified_names.py', 'python')
@@ -130,6 +130,7 @@ WHERE qualified_name LIKE 'C/User %'
 ORDER BY start_line;
 ----
 C/User F/__init__
+C/User F/__init__ V/name
 C/User F/validate
 
 # =============================================================================

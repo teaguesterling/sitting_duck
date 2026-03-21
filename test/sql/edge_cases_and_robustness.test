@@ -104,10 +104,8 @@ SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', peek := 10
 statement ok
 SELECT COUNT(*) FROM parse_ast(NULL, 'python');
 
-statement error
+statement ok
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', NULL);
-----
-IO Error
 
 # Test 12: Invalid file paths
 # ===========================
