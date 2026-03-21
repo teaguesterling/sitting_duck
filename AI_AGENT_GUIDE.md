@@ -87,7 +87,7 @@ SELECT * FROM read_ast('**/*.*', ignore_errors := true, peek_size := 200);
 | `language` | VARCHAR | Detected language |
 | `start_line`, `end_line` | UINTEGER | Location (1-based) |
 | `peek` | VARCHAR | Source code snippet |
-| `qualified_name` | VARCHAR | Fully qualified name (e.g., `Class.method`) |
+| `qualified_name` | VARCHAR | Scope-based definition path (e.g., `C/User F/__init__`) |
 | `parameters` | VARCHAR | Parameter list text (for functions) |
 
 ### `parse_ast(source_code, language)`
