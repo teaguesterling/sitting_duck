@@ -97,6 +97,9 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 	vector<StackEntry> stack;
 	stack.push_back({root, -1, 0, 0, false, 0});
 
+	// Scope stack for qualified_name: tracks (node_index, "T/name") segments
+	vector<pair<idx_t, string>> scope_stack;
+
 	while (!stack.empty()) {
 		// Check if the top entry is processed before copying
 		if (!stack.back().processed) {
@@ -245,6 +248,23 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 				ast_node.native_extraction_attempted = false;
 			}
 
+			// Build qualified_name for named definition nodes
+			if (config.context >= ContextLevel::NORMALIZED) {
+				char type_code = SemanticTypes::GetDefinitionTypeCode(ast_node.semantic_type);
+				if (type_code != '\0' && !ast_node.name_raw.empty()) {
+					string segment = string(1, type_code) + "/" + ast_node.name_raw;
+					// Build qualified_name from scope_stack + this segment
+					string qname;
+					for (auto &scope : scope_stack) {
+						qname += scope.second;
+						qname += ' ';
+					}
+					qname += segment;
+					ast_node.name_qualified = qname;
+					scope_stack.push_back({entry.node_index, segment});
+				}
+			}
+
 			// Update legacy fields for backward compatibility
 			ast_node.UpdateComputedLegacyFields();
 
@@ -271,6 +291,11 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 
 			// Update legacy fields after descendant count change
 			result.nodes[entry.node_index].UpdateComputedLegacyFields();
+
+			// Pop scope stack if this node pushed a scope
+			if (!scope_stack.empty() && scope_stack.back().first == entry.node_index) {
+				scope_stack.pop_back();
+			}
 
 			stack.pop_back();
 		}

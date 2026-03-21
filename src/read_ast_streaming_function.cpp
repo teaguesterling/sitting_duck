@@ -391,6 +391,8 @@ static void PopulateDynamicColumns(DataChunk &output, idx_t output_idx, const AS
 		if (config.context >= ContextLevel::NORMALIZED) {
 			output.SetValue(column_idx++, output_idx,
 			                node.name_raw.empty() ? Value(LogicalType::VARCHAR) : Value(node.name_raw));
+			output.SetValue(column_idx++, output_idx,
+			                node.name_qualified.empty() ? Value(LogicalType::VARCHAR) : Value(node.name_qualified));
 		}
 		if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
 			output.SetValue(column_idx++, output_idx, Value::UTINYINT(node.semantic_type));
@@ -430,7 +432,6 @@ static void PopulateDynamicColumns(DataChunk &output, idx_t output_idx, const AS
 				}
 				native_values.emplace_back("modifiers", Value::LIST(LogicalType::VARCHAR, modifier_values));
 
-				native_values.emplace_back("qualified_name", Value(node.native.qualified_name));
 				native_values.emplace_back("annotations", Value(node.native.annotations));
 
 				output.SetValue(column_idx++, output_idx, Value::STRUCT(native_values));
@@ -446,7 +447,6 @@ static void PopulateDynamicColumns(DataChunk &output, idx_t output_idx, const AS
 				                                                         {"is_variadic", LogicalType::BOOLEAN},
 				                                                         {"annotations", LogicalType::VARCHAR}}))));
 				native_schema.push_back(make_pair("modifiers", LogicalType::LIST(LogicalType::VARCHAR)));
-				native_schema.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
 				native_schema.push_back(make_pair("annotations", LogicalType::VARCHAR));
 				output.SetValue(column_idx++, output_idx, Value(LogicalType::STRUCT(native_schema)));
 			}

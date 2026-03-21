@@ -132,7 +132,7 @@ WHERE is_class_definition(semantic_type);
 
 ```sql
 -- Find all function calls
-SELECT name, qualified_name FROM read_ast('file.py', context := 'native')
+SELECT name, signature_type, peek FROM read_ast('file.py', context := 'native')
 WHERE is_function_call(semantic_type);
 ```
 
