@@ -29,6 +29,14 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
                 DEF_TYPE("drop_statement", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
                     DEF_TYPE("alter_table", EXECUTION_MUTATION, FIND_IDENTIFIER, NONE, 0)
 
+    // Additional CREATE statement types
+    DEF_TYPE("create_function", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+        DEF_TYPE("create_materialized_view", DEFINITION_CLASS, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+            DEF_TYPE("create_database", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
+                DEF_TYPE("create_role", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+                    DEF_TYPE("create_extension", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
+                        DEF_TYPE("create_trigger", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 0)
+
     // DML statements - queries and transforms
     DEF_TYPE("select_statement", TRANSFORM_QUERY, NONE, FUNCTION_WITH_PARAMS, 0)
         DEF_TYPE("insert_statement", EXECUTION_MUTATION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
@@ -87,7 +95,7 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
                     DEF_TYPE("keyword_values", LITERAL_STRUCTURED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
     // Schema definition operations
-    DEF_TYPE("keyword_create", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+    DEF_TYPE("keyword_create", PARSER_SYNTAX, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
         DEF_TYPE("keyword_drop", EXECUTION_STATEMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
             DEF_TYPE("keyword_alter", EXECUTION_MUTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
                 DEF_TYPE("keyword_table", TYPE_COMPOSITE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -176,7 +184,7 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
                     "keyword_case", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
                     DEF_TYPE("keyword_else", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD) DEF_TYPE(
                         "case", FLOW_CONDITIONAL, NONE, NONE,
-                        ASTNodeFlags::IS_KEYWORD) DEF_TYPE("create_query", DEFINITION_CLASS, NONE, NONE, 0)
+                        ASTNodeFlags::IS_KEYWORD) DEF_TYPE("create_query", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
                         DEF_TYPE("keyword_limit", TRANSFORM_QUERY, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
                             DEF_TYPE("keyword_between", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
                                 DEF_TYPE("between_expression", OPERATOR_COMPARISON, NONE, NONE, 0) DEF_TYPE(
@@ -233,7 +241,6 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
                     "keyword_any", OPERATOR_COMPARISON, NODE_TEXT,
                     NONE, ASTNodeFlags::IS_KEYWORD) DEF_TYPE("keyword_some", OPERATOR_COMPARISON, NODE_TEXT, NONE,
                                                              ASTNodeFlags::IS_KEYWORD)
-                    DEF_TYPE("keyword_unique", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
                         DEF_TYPE("keyword_last", ORGANIZATION_LIST, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD) DEF_TYPE(
                             "keyword_asc", ORGANIZATION_LIST, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
                             DEF_TYPE("keyword_nulls", ORGANIZATION_LIST, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -280,7 +287,7 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
                                                     DEF_TYPE("%", OPERATOR_ARITHMETIC, NONE, NONE, 0)
                                                         DEF_TYPE("keyword_time", TYPE_PRIMITIVE, NODE_TEXT, NONE,
                                                                  ASTNodeFlags::IS_KEYWORD)
-                                                            DEF_TYPE("keyword_function", DEFINITION_FUNCTION, NODE_TEXT,
+                                                            DEF_TYPE("keyword_function", PARSER_SYNTAX, NODE_TEXT,
                                                                      NONE, ASTNodeFlags::IS_KEYWORD)
                                                                 DEF_TYPE("keyword_without", METADATA_ANNOTATION,
                                                                          NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -533,13 +540,30 @@ string SQLAdapter::ExtractNodeName(TSNode node, const string &content) const {
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config) {
-		return ExtractByStrategy(node, content, config->name_strategy);
+		string result = ExtractByStrategy(node, content, config->name_strategy);
+		if (!result.empty()) {
+			return result;
+		}
+		// SQL-specific: FIND_IDENTIFIER doesn't know about object_reference,
+		// which is how the SQL grammar stores names in CREATE statements
+		if (config->name_strategy == ExtractionStrategy::FIND_IDENTIFIER) {
+			result = FindChildByType(node, content, "object_reference");
+			if (!result.empty()) {
+				return result;
+			}
+		}
+		return "";
 	}
 
-	// SQL-specific fallbacks
+	// SQL-specific fallbacks for unconfigured node types
 	string node_type = string(node_type_str);
-	if (node_type.find("table") != string::npos || node_type.find("view") != string::npos) {
-		return FindChildByType(node, content, "identifier");
+	if (node_type.find("create") != string::npos ||
+	    node_type.find("table") != string::npos || node_type.find("view") != string::npos) {
+		string result = FindChildByType(node, content, "identifier");
+		if (result.empty()) {
+			result = FindChildByType(node, content, "object_reference");
+		}
+		return result;
 	}
 
 	return "";

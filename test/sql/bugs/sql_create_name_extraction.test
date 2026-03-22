@@ -1,0 +1,64 @@
+# name: test/sql/bugs/sql_create_name_extraction.test
+# description: Regression test for SQL CREATE name extraction and duplicate definitions (#37)
+# group: [bugs]
+
+require sitting_duck
+
+# =============================================================================
+# Bug #37: SQL CREATE FUNCTION names extracted as "CREATE" instead of actual name
+# =============================================================================
+
+# Verify create_function extracts function names, not "CREATE"
+query TT
+SELECT name, type
+FROM read_ast('test/data/sql/create_function_example.sql')
+WHERE type = 'create_function'
+ORDER BY start_line;
+----
+get_user_name	create_function
+calculate_total	create_function
+
+# Verify keyword_create does NOT have a definition semantic type
+# (it should be PARSER_SYNTAX, not DEFINITION_CLASS)
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/sql/create_function_example.sql')
+WHERE type = 'keyword_create' AND is_definition(semantic_type);
+----
+0
+
+# =============================================================================
+# Bug #37: Duplicate definition entries from keyword tokens
+# =============================================================================
+
+# ast_definitions() should return each SQL definition exactly once
+statement ok
+CREATE TEMP TABLE sql_ast AS SELECT * FROM read_ast('test/data/sql/create_function_example.sql');
+
+query IT
+SELECT COUNT(*) as cnt, name FROM ast_definitions('sql_ast')
+WHERE definition_type IN ('function', 'class')
+GROUP BY name
+HAVING COUNT(*) > 1;
+----
+
+# Verify no keyword text appears as definition names
+query I
+SELECT COUNT(*) FROM ast_definitions('sql_ast')
+WHERE name IN ('CREATE', 'FUNCTION', 'TABLE', 'VIEW', 'OR', 'REPLACE');
+----
+0
+
+# =============================================================================
+# Cross-language: verify ast_definitions() still filters keyword duplicates
+# =============================================================================
+
+# Python definitions should not include keyword text
+statement ok
+CREATE TEMP TABLE py_ast AS SELECT * FROM read_ast('test/data/python/typed_example.py');
+
+query I
+SELECT COUNT(*) FROM ast_definitions('py_ast')
+WHERE name IN ('def', 'class', 'import', 'from');
+----
+0

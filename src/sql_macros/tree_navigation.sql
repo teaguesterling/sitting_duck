@@ -45,6 +45,11 @@ CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
 -- Get all definitions (functions, classes, variables, etc.) with unified categories
 -- Usage: SELECT * FROM ast_definitions('src/**/*.py')
 -- Usage: SELECT * FROM ast_definitions('src/main.py', language := 'python')
+--
+-- IMPORTANT: When querying definitions from raw read_ast() output, always use the
+-- full filter chain: is_definition(semantic_type) AND is_construct(flags) AND name != ''
+-- Using is_definition() alone will include keyword tokens (def, class, CREATE, etc.)
+-- as duplicates, since keywords share the semantic type of their parent construct.
 CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
     WITH ast AS (
         SELECT * FROM read_ast(source, language)
