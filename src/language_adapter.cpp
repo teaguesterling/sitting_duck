@@ -134,7 +134,8 @@ string LanguageAdapter::ExtractNameFromDeclarator(TSNode node, const string &con
 	vector<string> declarator_patterns = {
 	    "function_declarator", "method_declarator", "declarator",
 	    "procedure_declarator", // Pascal-like languages
-	    "init_declarator"       // C++ initializing declarators
+	    "init_declarator",      // C++ initializing declarators
+	    "variable_declarator"   // Java field/variable declarations
 	};
 
 	// Wrapper types that may contain the actual declarator (e.g., for pointer/array return types)
@@ -432,7 +433,23 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		string first_child_type = ts_node_type(first_child);
 
 		// Simple function call: first child is identifier
+		// But in Java method_invocation, the first identifier is the object, not the method.
+		// Check if there's a later identifier sibling (before argument_list) which would be the method name.
 		if (first_child_type == "identifier") {
+			uint32_t node_child_count = ts_node_child_count(node);
+			for (uint32_t i = 1; i < node_child_count; i++) {
+				TSNode sibling = ts_node_child(node, i);
+				string sibling_type = ts_node_type(sibling);
+				// Stop at argument containers
+				if (sibling_type == "argument_list" || sibling_type == "arguments") {
+					break;
+				}
+				if (sibling_type == "identifier" || sibling_type == "property_identifier" ||
+				    sibling_type == "field_identifier" || sibling_type == "simple_identifier") {
+					return ExtractNodeText(sibling, content);
+				}
+			}
+			// No later identifier found — this IS the function name (Python, etc.)
 			return ExtractNodeText(first_child, content);
 		}
 
@@ -443,7 +460,23 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		    first_child_type == "field_expression" || first_child_type == "selector_expression" ||
 		    first_child_type == "field_access" || first_child_type == "scoped_identifier" ||
 		    first_child_type == "qualified_identifier") {
-			// Find the last identifier child (the method/function name)
+
+			// Java method_invocation has a special structure: the method name is a sibling
+			// of field_access, not inside it. E.g., System.out.println():
+			//   method_invocation -> field_access("System.out"), ".", identifier("println"), argument_list
+			// Check for an identifier sibling after the first child (the object expression)
+			uint32_t node_child_count = ts_node_child_count(node);
+			for (uint32_t i = 1; i < node_child_count; i++) {
+				TSNode sibling = ts_node_child(node, i);
+				string sibling_type = ts_node_type(sibling);
+				if (sibling_type == "identifier" || sibling_type == "property_identifier" ||
+				    sibling_type == "field_identifier" || sibling_type == "simple_identifier") {
+					return ExtractNodeText(sibling, content);
+				}
+			}
+
+			// Fallback: find the last identifier inside the first child
+			// (Python attribute, JS member_expression, etc.)
 			uint32_t child_count = ts_node_child_count(first_child);
 			for (int i = child_count - 1; i >= 0; i--) {
 				TSNode child = ts_node_child(first_child, i);

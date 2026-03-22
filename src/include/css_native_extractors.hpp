@@ -20,7 +20,9 @@ class CSSAdapter;
 
 template <NativeExtractionStrategy Strategy>
 struct CSSNativeExtractor {
-	static NativeContext Extract(TSNode node, const string &content);
+	static NativeContext Extract(TSNode node, const string &content) {
+		return NativeContext();
+	}
 };
 
 //==============================================================================
