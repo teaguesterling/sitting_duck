@@ -377,6 +377,11 @@ CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
 -- Get all definitions (functions, classes, variables, etc.) with unified categories
 -- Usage: SELECT * FROM ast_definitions('src/**/*.py')
 -- Usage: SELECT * FROM ast_definitions('src/main.py', language := 'python')
+--
+-- IMPORTANT: When querying definitions from raw read_ast() output, always use the
+-- full filter chain: is_definition(semantic_type) AND is_construct(flags) AND name != ''
+-- Using is_definition() alone will include keyword tokens (def, class, CREATE, etc.)
+-- as duplicates, since keywords share the semantic type of their parent construct.
 CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
     WITH ast AS (
         SELECT * FROM read_ast(source, language)
@@ -659,6 +664,9 @@ CREATE OR REPLACE MACRO ast_function_metrics(source, language := NULL) AS TABLE
 -- Usage: SELECT * FROM ast_functions_containing('src/**/*.py', 'call') WHERE match_name = 'eval'
 CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language := NULL) AS TABLE
     WITH
+
+)SQLMACRO"
+        R"SQLMACRO(
         ast AS (
             SELECT * FROM read_ast(source, language)
         ),
@@ -670,9 +678,6 @@ CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language :
                 a.file_path,
                 a.language,
                 a.start_line,
-
-)SQLMACRO"
-        R"SQLMACRO(
                 a.end_line,
                 a.descendant_count
             FROM ast a
@@ -995,6 +1000,9 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
                 a.type,
                 'function' AS definition_type
             FROM ast a
+
+)SQLMACRO"
+        R"SQLMACRO(
             WHERE is_function_definition(a.semantic_type)
               AND a.name IS NOT NULL AND a.name != ''
               -- Exclude special methods (constructors, dunder methods, etc.)
@@ -1002,9 +1010,6 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
               AND a.name NOT IN ('main', 'setup', 'teardown', 'init', 'constructor')
         ),
         -- All class definitions
-
-)SQLMACRO"
-        R"SQLMACRO(
         class_defs AS (
             SELECT
                 a.node_id,
