@@ -97,7 +97,8 @@ ORDER BY node_id;
 program	DEFINITION_MODULE
 insert_statement	EXECUTION_MUTATION
 
-# Test 7: Test context flags access (IS_SYNTAX_ONLY for keywords)
+# Test 7: Test context flags access (IS_SYNTAX_ONLY for keywords and punctuation)
+# Bug #009: IS_SYNTAX_ONLY is now auto-set for PARSER_DELIMITER/PUNCTUATION nodes
 # ================================================================
 
 query II
@@ -105,11 +106,14 @@ SELECT
     type as node_type,
     flags as flags_value
 FROM parse_ast('def foo(): pass', 'python')
-WHERE flags > 0
+WHERE is_syntax_only(flags)
 ORDER BY node_id
 LIMIT 5;
 ----
 def	1
+(	1
+)	1
+:	1
 pass	1
 
 # Test 8: Complex query with window functions (hierarchical)
@@ -223,7 +227,7 @@ true
 # ====================================================
 
 query II
-SELECT 
+SELECT
     get_super_kind(semantic_type) as super_kind,
     COUNT(*) as count
 FROM parse_ast('
@@ -237,8 +241,7 @@ CREATE TABLE products (
 GROUP BY get_super_kind(semantic_type)
 ORDER BY super_kind;
 ----
-COMPUTATION	1
-CONTROL_EFFECTS	1
+COMPUTATION	2
 
 # Test 15: Test parse_ast live query debugging
 # ==============================================

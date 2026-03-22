@@ -256,10 +256,10 @@ LITERAL
 # Pattern Parsing Tests
 # =============================================================================
 
-# Create test table for pattern parsing
+# Create test table for pattern parsing (uses parse_ast for inline patterns)
 statement ok
 CREATE TEMP TABLE pattern_test AS
-SELECT * FROM ast_pattern('eval(__X__)', 'python');
+SELECT * FROM ast_pattern('foo(__X__)', 'python');
 
 query I
 SELECT count(*) FROM pattern_test WHERE is_wildcard = true;
@@ -272,40 +272,14 @@ SELECT capture_name FROM pattern_test WHERE is_wildcard = true;
 X
 
 # =============================================================================
-# Basic Pattern Matching Tests
+# Basic Pattern Matching Tests (file-path signature)
 # =============================================================================
 
-# Create test AST table
-statement ok
-CREATE TEMP TABLE test_code AS
-SELECT * FROM parse_ast('
-def add_numbers(x, y):
-    return x + y
-def greet(name):
-    print("Hello")
-    return name
-result = add_numbers(1, 2)
-eval(user_input)
-exec(dangerous_code)
-', 'python');
-
-# Simple pattern: find eval calls
+# Simple pattern: find single-arg function calls (print, eval, exec, add_numbers)
 query I
-SELECT count(*) FROM ast_match('test_code', 'eval(__X__)', 'python');
+SELECT count(*) FROM ast_match('test/data/python/macros/pattern_test.py', '__F__(__X__)');
 ----
-1
-
-# Find exec calls
-query I
-SELECT count(*) FROM ast_match('test_code', 'exec(__X__)', 'python');
-----
-1
-
-# Find function calls with one argument
-query I
-SELECT count(*) FROM ast_match('test_code', '__F__(__X__)', 'python') WHERE captures['F'].name IN ('eval', 'exec', 'print');
-----
-3
+4
 
 # =============================================================================
 # Variadic Pattern Matching Tests
@@ -314,81 +288,171 @@ SELECT count(*) FROM ast_match('test_code', '__F__(__X__)', 'python') WHERE capt
 # Without variadic: exact structure required
 # add_numbers has simple body so it matches, greet has print() before return so it won't
 query I
-SELECT count(*) FROM ast_match('test_code', 'def __F__(__): return __Y__', 'python');
+SELECT count(*) FROM ast_match('test/data/python/macros/pattern_test.py', 'def __F__(__): return __Y__');
 ----
 1
 
-# With variadic (legacy syntax): find functions with statements before return
-# Note: variadic requires at least the wrapper expression_statement to exist
-# so it only matches greet() which has print() before return, not add_numbers()
+# With variadic (* = 0 or more): matches ALL functions with return (both add_numbers and greet)
 query I
-SELECT count(*) FROM ast_match('test_code',
+SELECT count(*) FROM ast_match('test/data/python/macros/pattern_test.py',
     'def __F__(__):
     %__BODY<*>__%
-    return __Y__', 'python');
+    return __Y__');
 ----
-1
+2
 
 # With variadic (HTML syntax): same result
 query I
-SELECT count(*) FROM ast_match('test_code',
+SELECT count(*) FROM ast_match('test/data/python/macros/pattern_test.py',
     'def __F__(__):
     %__<BODY*>__%
-    return __Y__', 'python');
+    return __Y__');
 ----
-1
+2
 
 # Anonymous variadic (legacy)
 query I
-SELECT count(*) FROM ast_match('test_code',
+SELECT count(*) FROM ast_match('test/data/python/macros/pattern_test.py',
     'def __F__(__):
     %__<*>__%
-    return __Y__', 'python');
+    return __Y__');
 ----
-1
+2
 
 # =============================================================================
 # Capture Extraction Tests
 # =============================================================================
 
-# Verify captures contain expected fields
-query I
-SELECT captures['X'].type FROM ast_match('test_code', 'eval(__X__)', 'python');
-----
-identifier
-
-query I
-SELECT captures['X'].name FROM ast_match('test_code', 'eval(__X__)', 'python');
-----
-user_input
-
-# Multiple captures - only greet matches (has statement before return)
+# Multiple captures - both functions match with * variadic
 query II
-SELECT captures['F'].name, captures['Y'].peek
-FROM ast_match('test_code',
+SELECT captures['F'][1].name, captures['Y'][1].peek
+FROM ast_match('test/data/python/macros/pattern_test.py',
     'def __F__(__):
     %__<BODY*>__%
-    return __Y__', 'python')
-ORDER BY captures['F'].name;
+    return __Y__')
+ORDER BY captures['F'][1].name;
 ----
+add_numbers	x + y
 greet	name
 
 # =============================================================================
 # Cross-Language Matching Tests
 # =============================================================================
 
-# Create JavaScript test code
-statement ok
-CREATE TEMP TABLE js_code AS
-SELECT * FROM parse_ast('
-function add(x, y) {
-    return x + y;
-}
-eval(userInput);
-', 'javascript');
-
-# Semantic type matching: Python pattern finds JS code
+# Semantic type matching within a single language
 query I
-SELECT count(*) FROM ast_match('js_code', 'eval(__X__)', 'python', match_by := 'semantic_type');
+SELECT count(*) FROM ast_match('test/data/python/macros/pattern_test.py', '__F__(__X__)', match_by := 'semantic_type')
+WHERE captures['F'][1].name = 'print';
 ----
 1
+
+# =============================================================================
+# ast_capture Convenience Macro Tests
+# =============================================================================
+
+# ast_capture should work like captures['X'][1]
+query I
+SELECT ast_capture(captures, 'F').name FROM ast_match('test/data/python/macros/star_test.py', 'def __F__(__): return __Y__');
+----
+simple
+
+# =============================================================================
+# LIST-Valued Capture Tests
+# =============================================================================
+
+# Single wildcard captures should be 1-element lists
+query I
+SELECT length(captures['F']) FROM ast_match('test/data/python/macros/star_test.py', 'def __F__(__): return __Y__');
+----
+1
+
+# =============================================================================
+# Variadic Capture Tests
+# =============================================================================
+
+# Variadic capture should return list of matched body nodes
+# add_numbers: 0 (only return), greet: 1 (print before return)
+query II
+SELECT captures['F'][1].name, length(captures['BODY'])
+FROM ast_match('test/data/python/macros/pattern_test.py',
+    'def __F__(__):
+    %__BODY<*>__%
+    return __Y__')
+ORDER BY captures['F'][1].name;
+----
+add_numbers	0
+greet	1
+
+# process() has validate() and transform() before return - BODY captures both
+query I
+SELECT length(captures['BODY'])
+FROM ast_match('test/data/python/macros/variadic_test.py',
+    'def __F__(__):
+    %__BODY<*>__%
+    return __Y__');
+----
+2
+
+# * variadic with zero matches should produce empty list
+# simple() should match with empty BODY list (only has return, nothing before it)
+query II
+SELECT captures['F'][1].name, length(captures['BODY'])
+FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__BODY<*>__%
+    return __Y__')
+ORDER BY captures['F'][1].name;
+----
+multi	1
+simple	0
+
+# + variadic should NOT match zero nodes
+# Only multi() should match (has statement before return)
+query I
+SELECT count(*)
+FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__BODY<+>__%
+    return __Y__');
+----
+1
+
+query I
+SELECT captures['F'][1].name
+FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__BODY<+>__%
+    return __Y__');
+----
+multi
+
+# =============================================================================
+# Same-Name Constraint Tests
+# =============================================================================
+
+# __X__ == __X__ should match only self-equality (a==a, x==x)
+query I
+SELECT count(*)
+FROM ast_match('test/data/python/macros/equality_test.py', '__X__ == __X__');
+----
+2
+
+# __X__ + __X__ should match only b+b
+query I
+SELECT count(*)
+FROM ast_match('test/data/python/macros/equality_test.py', '__X__ + __X__');
+----
+1
+
+query I
+SELECT captures['X'][1].peek
+FROM ast_match('test/data/python/macros/equality_test.py', '__X__ + __X__');
+----
+b
+
+# __X__ == __Y__ (different names = no constraint) should match all equality exprs
+query I
+SELECT count(*)
+FROM ast_match('test/data/python/macros/equality_test.py', '__X__ == __Y__');
+----
+3

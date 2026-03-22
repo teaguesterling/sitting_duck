@@ -2,7 +2,6 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
-#include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/parallel/task_executor.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "unified_ast_backend.hpp"
@@ -21,9 +20,6 @@ static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadAST
                                                  DataChunk &output);
 static void ProcessBatchOfFiles(ClientContext &context, ReadASTStreamingGlobalState &global_state,
                                 const vector<string> &batch_files);
-static void PopulateDynamicColumns(DataChunk &output, idx_t output_idx, const ASTNode &node,
-                                   const ExtractionConfig &config);
-
 // Bind function for flat streaming two-argument version (explicit language)
 static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &context, TableFunctionBindInput &input,
                                                                vector<LogicalType> &return_types,
@@ -33,7 +29,12 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
 	}
 
 	auto file_path_value = input.inputs[0];
-	auto language = input.inputs[1].GetValue<string>();
+
+	// If language is NULL, treat as auto-detect
+	string language = "auto";
+	if (!input.inputs[1].IsNull()) {
+		language = input.inputs[1].GetValue<string>();
+	}
 
 	// Handle both VARCHAR and LIST(VARCHAR) inputs (DuckDB-consistent pattern)
 	vector<string> file_patterns;
@@ -323,22 +324,11 @@ static unique_ptr<GlobalTableFunctionState> ReadASTStreamingInit(ClientContext &
 			}
 		} else {
 			// Use traditional single-threaded streaming for small file sets
+			// Store paths directly to preserve URI components (e.g., @rev suffixes)
+			// that would be stripped by MultiFileReader path normalization
 			result->use_parallel_batching = false;
-
-			// Create file list using DuckDB's pattern for backward compatibility
-			auto multi_file_reader = MultiFileReader::CreateDefault("read_ast");
-			vector<Value> file_values;
-			for (const auto &file_path : expanded_files) {
-				file_values.push_back(Value(file_path));
-			}
-
-			auto files_list_value = Value::LIST(LogicalType::VARCHAR, file_values);
-			result->file_list = multi_file_reader->CreateFileList(context, files_list_value);
-			if (result->file_list) {
-				result->file_list->InitializeScan(result->file_scan_state);
-			} else {
-				throw InternalException("Failed to create file list");
-			}
+			result->sequential_file_paths = std::move(expanded_files);
+			result->sequential_file_index = 0;
 		}
 
 	} catch (const Exception &e) {
@@ -349,120 +339,6 @@ static unique_ptr<GlobalTableFunctionState> ReadASTStreamingInit(ClientContext &
 	}
 
 	return std::move(result);
-}
-
-// Streaming execution function with parallel batch processing
-// Helper function to populate columns dynamically based on ExtractionConfig - DIRECT FIELD ACCESS
-static void PopulateDynamicColumns(DataChunk &output, idx_t output_idx, const ASTNode &node,
-                                   const ExtractionConfig &config) {
-	idx_t column_idx = 0;
-
-	// DIRECT FIELD ACCESS: No Value struct conversion, no hardcoded indices
-
-	// Always include core columns
-	output.SetValue(column_idx++, output_idx, Value::UBIGINT(node.node_id));
-	output.SetValue(column_idx++, output_idx, Value(node.type_raw));
-
-	// Conditionally include columns based on config
-	if (config.source != SourceLevel::NONE) {
-		if (config.source >= SourceLevel::PATH) {
-			output.SetValue(column_idx++, output_idx,
-			                node.file_path.empty() ? Value(LogicalType::VARCHAR) : Value(node.file_path));
-			output.SetValue(column_idx++, output_idx,
-			                node.language.empty() ? Value(LogicalType::VARCHAR) : Value(node.language));
-		}
-		if (config.source >= SourceLevel::LINES_ONLY) {
-			output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.source_start_line));
-			output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.source_end_line));
-		}
-		if (config.source >= SourceLevel::FULL) {
-			output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.source_start_column));
-			output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.source_end_column));
-		}
-	}
-
-	if (config.structure != StructureLevel::NONE) {
-		if (config.structure >= StructureLevel::MINIMAL) {
-			output.SetValue(column_idx++, output_idx,
-			                node.parent_id < 0 ? Value(LogicalType::BIGINT) : Value::BIGINT(node.parent_id));
-			output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.depth));
-			output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.sibling_index));
-		}
-		if (config.structure >= StructureLevel::FULL) {
-			output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.children_count));
-			output.SetValue(column_idx++, output_idx, Value::UINTEGER(node.descendant_count));
-		}
-	}
-
-	if (config.context != ContextLevel::NONE) {
-		if (config.context >= ContextLevel::NORMALIZED) {
-			output.SetValue(column_idx++, output_idx,
-			                node.name_raw.empty() ? Value(LogicalType::VARCHAR) : Value(node.name_raw));
-		}
-		if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
-			output.SetValue(column_idx++, output_idx, Value::UTINYINT(node.semantic_type));
-			output.SetValue(column_idx++, output_idx, Value::UTINYINT(node.universal_flags));
-		}
-		if (config.context >= ContextLevel::NATIVE) {
-			// Only create native Value struct if extraction was attempted and data exists
-			if (node.native_extraction_attempted && !node.native.signature_type.empty()) {
-				child_list_t<Value> native_values;
-				native_values.emplace_back("signature_type", Value(node.native.signature_type));
-
-				// Create parameters list
-				vector<Value> parameter_values;
-				for (const auto &param : node.native.parameters) {
-					child_list_t<Value> param_struct;
-					param_struct.emplace_back("name", Value(param.name));
-					param_struct.emplace_back("type", Value(param.type));
-					param_struct.emplace_back("default_value", Value(param.default_value));
-					param_struct.emplace_back("is_optional", Value::BOOLEAN(param.is_optional));
-					param_struct.emplace_back("is_variadic", Value::BOOLEAN(param.is_variadic));
-					param_struct.emplace_back("annotations", Value(param.annotations));
-					parameter_values.push_back(Value::STRUCT(param_struct));
-				}
-				native_values.emplace_back("parameters",
-				                           Value::LIST(LogicalType::STRUCT({{"name", LogicalType::VARCHAR},
-				                                                            {"type", LogicalType::VARCHAR},
-				                                                            {"default_value", LogicalType::VARCHAR},
-				                                                            {"is_optional", LogicalType::BOOLEAN},
-				                                                            {"is_variadic", LogicalType::BOOLEAN},
-				                                                            {"annotations", LogicalType::VARCHAR}}),
-				                                       parameter_values));
-
-				// Create modifiers list
-				vector<Value> modifier_values;
-				for (const auto &modifier : node.native.modifiers) {
-					modifier_values.push_back(Value(modifier));
-				}
-				native_values.emplace_back("modifiers", Value::LIST(LogicalType::VARCHAR, modifier_values));
-
-				native_values.emplace_back("qualified_name", Value(node.native.qualified_name));
-				native_values.emplace_back("annotations", Value(node.native.annotations));
-
-				output.SetValue(column_idx++, output_idx, Value::STRUCT(native_values));
-			} else {
-				// No native context available - use NULL struct
-				child_list_t<LogicalType> native_schema;
-				native_schema.push_back(make_pair("signature_type", LogicalType::VARCHAR));
-				native_schema.push_back(make_pair(
-				    "parameters", LogicalType::LIST(LogicalType::STRUCT({{"name", LogicalType::VARCHAR},
-				                                                         {"type", LogicalType::VARCHAR},
-				                                                         {"default_value", LogicalType::VARCHAR},
-				                                                         {"is_optional", LogicalType::BOOLEAN},
-				                                                         {"is_variadic", LogicalType::BOOLEAN},
-				                                                         {"annotations", LogicalType::VARCHAR}}))));
-				native_schema.push_back(make_pair("modifiers", LogicalType::LIST(LogicalType::VARCHAR)));
-				native_schema.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
-				native_schema.push_back(make_pair("annotations", LogicalType::VARCHAR));
-				output.SetValue(column_idx++, output_idx, Value(LogicalType::STRUCT(native_schema)));
-			}
-		}
-	}
-
-	if (config.peek != PeekLevel::NONE) {
-		output.SetValue(column_idx++, output_idx, Value(node.peek));
-	}
 }
 
 static void ReadASTFlatStreamingFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
@@ -550,9 +426,7 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
                                                    DataChunk &output) {
 	idx_t output_index = 0;
 
-	// Use flat projection for individual columns
-	// Columns: node_id, type, name, file_path, language, start_line, start_column, end_line, end_column, parent_id,
-	// depth, sibling_index, children_count, descendant_count, peek, semantic_type, flags
+	// Use flat projection for individual columns (dynamic schema based on ExtractionConfig)
 
 	while (output_index < STANDARD_VECTOR_SIZE) {
 		// Handle batch processing if enabled
@@ -560,17 +434,17 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
 			// Check if we need to process a new batch
 			if (global_state.current_batch_results.empty() ||
 			    global_state.current_batch_result_index >= global_state.current_batch_results.size()) {
-				// Collect next batch of files
+				// Collect next batch of files from direct path list
 				vector<string> batch_files;
 				batch_files.reserve(global_state.batch_size);
 
-				OpenFileInfo file;
 				for (int32_t i = 0; i < global_state.batch_size; i++) {
-					if (!global_state.file_list->Scan(global_state.file_scan_state, file)) {
+					if (global_state.sequential_file_index >= global_state.sequential_file_paths.size()) {
 						global_state.files_exhausted = true;
 						break;
 					}
-					batch_files.push_back(file.path);
+					batch_files.push_back(
+					    global_state.sequential_file_paths[global_state.sequential_file_index++]);
 				}
 
 				if (batch_files.empty()) {
@@ -607,31 +481,17 @@ static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadA
 		// Check if we need to parse a new file
 		if (!global_state.current_file_parsed || !global_state.current_file_result ||
 		    global_state.current_file_row_index >= global_state.current_file_result->nodes.size()) {
-			// Try to get next file that matches our language criteria
-			OpenFileInfo file;
-			bool found_valid_file = false;
-
-			while (!found_valid_file) {
-				if (!global_state.file_list->Scan(global_state.file_scan_state, file)) {
-					// No more files
-					global_state.files_exhausted = true;
-					break;
-				}
-
-				// Only check file extensions when using auto-detection
-				// If a language is explicitly provided, allow parsing any file
-				// (even if it might result in 0 nodes due to parse failure)
-
-				found_valid_file = true;
+			// Get next file from direct path list
+			if (global_state.sequential_file_index >= global_state.sequential_file_paths.size()) {
+				global_state.files_exhausted = true;
+				break;
 			}
 
-			if (!found_valid_file) {
-				break; // No more valid files
-			}
+			auto &file_path = global_state.sequential_file_paths[global_state.sequential_file_index++];
 
 			// Parse this single file with ExtractionConfig
 			global_state.current_file_result = UnifiedASTBackend::ParseSingleFileToASTResult(
-			    context, file.path, global_state.language, global_state.ignore_errors, global_state.extraction_config);
+			    context, file_path, global_state.language, global_state.ignore_errors, global_state.extraction_config);
 
 			if (!global_state.current_file_result) {
 				// File was skipped due to errors, continue to next file
@@ -735,9 +595,7 @@ static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadAST
 	// Now just stream the results using flat projection
 	idx_t output_index = 0;
 
-	// Use flat projection for individual columns
-	// Columns: node_id, type, name, file_path, language, start_line, start_column, end_line, end_column, parent_id,
-	// depth, sibling_index, children_count, descendant_count, peek, semantic_type, flags
+	// Use flat projection for individual columns (dynamic schema based on ExtractionConfig)
 
 	// Stream results from all completed parsing
 	while (output_index < STANDARD_VECTOR_SIZE &&
@@ -907,15 +765,16 @@ static void ReadASTHierarchicalFunctionSequential(ClientContext &context, ReadAS
 			// Process batches and use streaming projection
 			if (global_state.current_batch_results.empty() ||
 			    global_state.current_batch_result_index >= global_state.current_batch_results.size()) {
+				// Collect next batch of files from direct path list
 				vector<string> batch_files;
 				batch_files.reserve(global_state.batch_size);
 
-				OpenFileInfo file;
 				for (int32_t i = 0; i < global_state.batch_size; i++) {
-					if (!global_state.file_list->Scan(global_state.file_scan_state, file)) {
+					if (global_state.sequential_file_index >= global_state.sequential_file_paths.size()) {
 						break;
 					}
-					batch_files.push_back(file.path);
+					batch_files.push_back(
+					    global_state.sequential_file_paths[global_state.sequential_file_index++]);
 				}
 
 				if (batch_files.empty()) {
@@ -959,26 +818,17 @@ static void ReadASTHierarchicalFunctionSequential(ClientContext &context, ReadAS
 			// Check if we need to parse a new file
 			if (!global_state.current_file_parsed || !global_state.current_file_result ||
 			    global_state.current_file_row_index >= global_state.current_file_result->nodes.size()) {
-				// Try to get next file
-				OpenFileInfo file;
-				bool found_valid_file = false;
-
-				while (!found_valid_file) {
-					if (!global_state.file_list->Scan(global_state.file_scan_state, file)) {
-						// No more files
-						global_state.files_exhausted = true;
-						break;
-					}
-					found_valid_file = true;
+				// Get next file from direct path list
+				if (global_state.sequential_file_index >= global_state.sequential_file_paths.size()) {
+					global_state.files_exhausted = true;
+					break;
 				}
 
-				if (!found_valid_file) {
-					break; // No more valid files
-				}
+				auto &file_path = global_state.sequential_file_paths[global_state.sequential_file_index++];
 
 				// Parse this single file with ExtractionConfig
 				global_state.current_file_result = UnifiedASTBackend::ParseSingleFileToASTResult(
-				    context, file.path, global_state.language, global_state.ignore_errors,
+				    context, file_path, global_state.language, global_state.ignore_errors,
 				    global_state.extraction_config);
 
 				if (!global_state.current_file_result) {

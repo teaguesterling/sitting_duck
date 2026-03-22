@@ -24,11 +24,8 @@ WHERE semantic_type = 'DEFINITION_MODULE' AND name IS NOT NULL AND name != '';
 1
 
 # ast_definitions() should return exactly one module definition for Go
-statement ok
-CREATE TEMP TABLE go_ast AS SELECT * FROM read_ast('test/data/go/simple.go');
-
 query II
-SELECT name, definition_type FROM ast_definitions('go_ast')
+SELECT name, definition_type FROM ast_definitions('test/data/go/simple.go')
 WHERE definition_type = 'module';
 ----
 main	module
@@ -38,28 +35,22 @@ main	module
 # =============================================================================
 
 # Rust definitions should not include keyword text like "fn", "struct", "impl"
-statement ok
-CREATE TEMP TABLE rust_ast AS SELECT * FROM read_ast('test/data/rust/simple.rs');
-
 query I
-SELECT COUNT(*) FROM ast_definitions('rust_ast')
+SELECT COUNT(*) FROM ast_definitions('test/data/rust/simple.rs')
 WHERE name IN ('fn', 'struct', 'impl', 'let', 'pub', 'mod', 'use', 'enum', 'trait');
 ----
 0
 
 # Go definitions should not include keyword text
 query I
-SELECT COUNT(*) FROM ast_definitions('go_ast')
+SELECT COUNT(*) FROM ast_definitions('test/data/go/simple.go')
 WHERE name IN ('func', 'var', 'const', 'type', 'package', 'import');
 ----
 0
 
 # JS definitions should not include "program" root node
-statement ok
-CREATE TEMP TABLE js_ast AS SELECT * FROM read_ast('test/data/javascript/simple.js');
-
 query I
-SELECT COUNT(*) FROM ast_definitions('js_ast')
+SELECT COUNT(*) FROM ast_definitions('test/data/javascript/simple.js')
 WHERE name = 'program';
 ----
 0
@@ -70,7 +61,7 @@ WHERE name = 'program';
 
 # Go definitions should be clean: package and functions only
 query II
-SELECT name, definition_type FROM ast_definitions('go_ast')
+SELECT name, definition_type FROM ast_definitions('test/data/go/simple.go')
 ORDER BY start_line;
 ----
 main	module

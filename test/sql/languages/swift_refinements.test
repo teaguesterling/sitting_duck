@@ -1,0 +1,809 @@
+# name: test/sql/languages/swift_refinements.test
+# description: Test Swift semantic refinements
+# group: [languages]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Swift Refinement Tests
+# =============================================================================
+#
+# Tests that semantic refinements are correctly applied to Swift code.
+# Refinements are 2-bit values in the lower bits of semantic_type that provide
+# finer-grained classification within each semantic category.
+# =============================================================================
+
+# =============================================================================
+# TYPE DEFINITION REFINEMENTS
+# =============================================================================
+
+# Test: Class declaration should be DEFINITION_CLASS (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'class_declaration'
+LIMIT 1;
+----
+class_declaration	DEFINITION_CLASS
+
+# Test: Protocol declaration should be DEFINITION_CLASS (with ABSTRACT refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'protocol_declaration'
+LIMIT 1;
+----
+protocol_declaration	DEFINITION_CLASS
+
+# Test: Associated type declaration should be DEFINITION_CLASS (with ABSTRACT refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'associatedtype_declaration'
+LIMIT 1;
+----
+associatedtype_declaration	DEFINITION_CLASS
+
+# Test: class keyword should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'class'
+LIMIT 1;
+----
+class	DEFINITION_CLASS
+
+# Test: struct keyword should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'struct'
+LIMIT 1;
+----
+struct	DEFINITION_CLASS
+
+# Test: enum keyword should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'enum'
+LIMIT 1;
+----
+enum	DEFINITION_CLASS
+
+# Test: protocol keyword should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'protocol'
+LIMIT 1;
+----
+protocol	DEFINITION_CLASS
+
+# Test: extension keyword should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'extension'
+LIMIT 1;
+----
+extension	DEFINITION_CLASS
+
+# Test: actor keyword should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'actor'
+LIMIT 1;
+----
+actor	DEFINITION_CLASS
+
+# Test: associatedtype keyword should be DEFINITION_CLASS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'associatedtype'
+LIMIT 1;
+----
+associatedtype	DEFINITION_CLASS
+
+# =============================================================================
+# FUNCTION REFINEMENTS
+# =============================================================================
+
+# Test: Function declarations should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'function_declaration'
+LIMIT 1;
+----
+function_declaration	DEFINITION_FUNCTION
+
+# Test: Initializer declarations should be DEFINITION_FUNCTION (with CONSTRUCTOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'init_declaration'
+LIMIT 1;
+----
+init_declaration	DEFINITION_FUNCTION
+
+# Test: Deinitializer declarations should be DEFINITION_FUNCTION (with CONSTRUCTOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'deinit_declaration'
+LIMIT 1;
+----
+deinit_declaration	DEFINITION_FUNCTION
+
+# Test: Subscript declarations should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'subscript_declaration'
+LIMIT 1;
+----
+subscript_declaration	DEFINITION_FUNCTION
+
+# Test: Lambda literals should be DEFINITION_FUNCTION (with LAMBDA refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'lambda_literal'
+LIMIT 1;
+----
+lambda_literal	DEFINITION_FUNCTION
+
+# Test: func keyword should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'func'
+LIMIT 1;
+----
+func	DEFINITION_FUNCTION
+
+# Test: init keyword should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'init'
+LIMIT 1;
+----
+init	DEFINITION_FUNCTION
+
+# Test: deinit keyword should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'deinit'
+LIMIT 1;
+----
+deinit	DEFINITION_FUNCTION
+
+# Test: subscript keyword should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'subscript'
+LIMIT 1;
+----
+subscript	DEFINITION_FUNCTION
+
+# =============================================================================
+# MODULE REFINEMENTS
+# =============================================================================
+
+# Test: Source file should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'source_file'
+LIMIT 1;
+----
+source_file	DEFINITION_MODULE
+
+# =============================================================================
+# VARIABLE REFINEMENTS
+# =============================================================================
+
+# Test: Property declarations should be DEFINITION_VARIABLE (with FIELD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'property_declaration'
+LIMIT 1;
+----
+property_declaration	DEFINITION_VARIABLE
+
+# Test: Parameter should be DEFINITION_VARIABLE (with PARAMETER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'parameter'
+LIMIT 1;
+----
+parameter	DEFINITION_VARIABLE
+
+# Test: let keyword should be DEFINITION_VARIABLE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'let'
+LIMIT 1;
+----
+let	DEFINITION_VARIABLE
+
+# Test: var keyword should be DEFINITION_VARIABLE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'var'
+LIMIT 1;
+----
+var	DEFINITION_VARIABLE
+
+# =============================================================================
+# IMPORT REFINEMENTS
+# =============================================================================
+
+# Test: Import declaration should be EXTERNAL_IMPORT (with MODULE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'import_declaration'
+LIMIT 1;
+----
+import_declaration	EXTERNAL_IMPORT
+
+# Test: import keyword should be EXTERNAL_IMPORT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'import'
+LIMIT 1;
+----
+import	EXTERNAL_IMPORT
+
+# =============================================================================
+# CALL REFINEMENTS
+# =============================================================================
+
+# Test: Call expressions should be COMPUTATION_CALL (with FUNCTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'call_expression'
+LIMIT 1;
+----
+call_expression	COMPUTATION_CALL
+
+# Test: Postfix expression should be COMPUTATION_CALL (with METHOD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'postfix_expression'
+LIMIT 1;
+----
+postfix_expression	COMPUTATION_CALL
+
+# Test: Navigation expression should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'navigation_expression'
+LIMIT 1;
+----
+navigation_expression	COMPUTATION_ACCESS
+
+# =============================================================================
+# CONTROL FLOW REFINEMENTS
+# =============================================================================
+
+# Test: If statement should be FLOW_CONDITIONAL (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'if_statement'
+LIMIT 1;
+----
+if_statement	FLOW_CONDITIONAL
+
+# Test: Guard statement should be FLOW_CONDITIONAL (with GUARD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'guard_statement'
+LIMIT 1;
+----
+guard_statement	FLOW_CONDITIONAL
+
+# Test: Switch statement should be FLOW_CONDITIONAL (with MULTIWAY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'switch_statement'
+LIMIT 1;
+----
+switch_statement	FLOW_CONDITIONAL
+
+# Test: Ternary expression should be FLOW_CONDITIONAL (with TERNARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'ternary_expression'
+LIMIT 1;
+----
+ternary_expression	FLOW_CONDITIONAL
+
+# Test: if keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'if'
+LIMIT 1;
+----
+if	FLOW_CONDITIONAL
+
+# Test: guard keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'guard'
+LIMIT 1;
+----
+guard	FLOW_CONDITIONAL
+
+# Test: switch keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'switch'
+LIMIT 1;
+----
+switch	FLOW_CONDITIONAL
+
+# Test: else keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'else'
+LIMIT 1;
+----
+else	FLOW_CONDITIONAL
+
+# Test: case keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'case'
+LIMIT 1;
+----
+case	FLOW_CONDITIONAL
+
+# =============================================================================
+# LOOP REFINEMENTS
+# =============================================================================
+
+# Test: For statement should be FLOW_LOOP (with ITERATOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'for_statement'
+LIMIT 1;
+----
+for_statement	FLOW_LOOP
+
+# Test: for keyword should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'for'
+LIMIT 1;
+----
+for	FLOW_LOOP
+
+# Test: in keyword should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'in'
+LIMIT 1;
+----
+in	FLOW_LOOP
+
+# =============================================================================
+# JUMP REFINEMENTS
+# =============================================================================
+
+# Test: return keyword should be FLOW_JUMP (with RETURN refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'return'
+LIMIT 1;
+----
+return	FLOW_JUMP
+
+# =============================================================================
+# ASYNC/AWAIT AND CONCURRENCY
+# =============================================================================
+
+# Test: Await expression should be FLOW_SYNC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'await_expression'
+LIMIT 1;
+----
+await_expression	FLOW_SYNC
+
+# Test: Do statement should be FLOW_SYNC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'do_statement'
+LIMIT 1;
+----
+do_statement	FLOW_SYNC
+
+# Test: async keyword should be FLOW_SYNC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'async'
+LIMIT 1;
+----
+async	FLOW_SYNC
+
+# Test: await keyword should be FLOW_SYNC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'await'
+LIMIT 1;
+----
+await	FLOW_SYNC
+
+# Test: do keyword should be FLOW_SYNC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'do'
+LIMIT 1;
+----
+do	FLOW_SYNC
+
+# =============================================================================
+# ERROR HANDLING
+# =============================================================================
+
+# Test: Try expression should be ERROR_TRY
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'try_expression'
+LIMIT 1;
+----
+try_expression	ERROR_TRY
+
+# Test: try keyword should be ERROR_TRY
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'try'
+LIMIT 1;
+----
+try	ERROR_TRY
+
+# Test: throws keyword should be ERROR_THROW
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'throws'
+LIMIT 1;
+----
+throws	ERROR_THROW
+
+# =============================================================================
+# OPERATOR REFINEMENTS
+# =============================================================================
+
+# Test: Custom operator should be OPERATOR_ARITHMETIC (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'custom_operator'
+LIMIT 1;
+----
+custom_operator	OPERATOR_ARITHMETIC
+
+# Test: as keyword should be OPERATOR_COMPARISON
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'as'
+LIMIT 1;
+----
+as	OPERATOR_COMPARISON
+
+# =============================================================================
+# LITERAL REFINEMENTS
+# =============================================================================
+
+# Test: Integer literal should be LITERAL_NUMBER (with INTEGER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'integer_literal'
+LIMIT 1;
+----
+integer_literal	LITERAL_NUMBER
+
+# Test: Real literal should be LITERAL_NUMBER (with FLOAT refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'real_literal'
+LIMIT 1;
+----
+real_literal	LITERAL_NUMBER
+
+# Test: Boolean literal should be LITERAL_ATOMIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'boolean_literal'
+LIMIT 1;
+----
+boolean_literal	LITERAL_ATOMIC
+
+# Test: true keyword should be LITERAL_ATOMIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'true'
+LIMIT 1;
+----
+true	LITERAL_ATOMIC
+
+# Test: false keyword should be LITERAL_ATOMIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'false'
+LIMIT 1;
+----
+false	LITERAL_ATOMIC
+
+# Test: nil keyword should be LITERAL_ATOMIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'nil'
+LIMIT 1;
+----
+nil	LITERAL_ATOMIC
+
+# Test: Array literal should be LITERAL_STRUCTURED (with SEQUENCE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'array_literal'
+LIMIT 1;
+----
+array_literal	LITERAL_STRUCTURED
+
+# Test: Dictionary literal should be LITERAL_STRUCTURED (with MAPPING refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'dictionary_literal'
+LIMIT 1;
+----
+dictionary_literal	LITERAL_STRUCTURED
+
+# Test: Tuple expression should be LITERAL_STRUCTURED (with SEQUENCE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'tuple_expression'
+LIMIT 1;
+----
+tuple_expression	LITERAL_STRUCTURED
+
+# =============================================================================
+# TYPE SYSTEM
+# =============================================================================
+
+# Test: Type identifier should be TYPE_PRIMITIVE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'type_identifier'
+LIMIT 1;
+----
+type_identifier	TYPE_PRIMITIVE
+
+# Test: User type should be TYPE_COMPOSITE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'user_type'
+LIMIT 1;
+----
+user_type	TYPE_COMPOSITE
+
+# Test: Array type should be TYPE_COMPOSITE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'array_type'
+LIMIT 1;
+----
+array_type	TYPE_COMPOSITE
+
+# Test: Dictionary type should be TYPE_COMPOSITE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'dictionary_type'
+LIMIT 1;
+----
+dictionary_type	TYPE_COMPOSITE
+
+# Test: Function type should be TYPE_COMPOSITE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'function_type'
+LIMIT 1;
+----
+function_type	TYPE_COMPOSITE
+
+# Test: Tuple type should be TYPE_COMPOSITE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'tuple_type'
+LIMIT 1;
+----
+tuple_type	TYPE_COMPOSITE
+
+# Test: Optional type should be TYPE_REFERENCE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'optional_type'
+LIMIT 1;
+----
+optional_type	TYPE_REFERENCE
+
+# =============================================================================
+# STRUCTURAL ELEMENTS
+# =============================================================================
+
+# Test: Statements block should be ORGANIZATION_BLOCK (with SEQUENTIAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'statements'
+LIMIT 1;
+----
+statements	ORGANIZATION_BLOCK
+
+# =============================================================================
+# IDENTIFIERS
+# =============================================================================
+
+# Test: Simple identifier should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'simple_identifier'
+LIMIT 1;
+----
+simple_identifier	NAME_IDENTIFIER
+
+# Test: Identifier should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'identifier'
+LIMIT 1;
+----
+identifier	NAME_IDENTIFIER
+
+# Test: self keyword should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'self'
+LIMIT 1;
+----
+self	NAME_IDENTIFIER
+
+# Test: super keyword should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'super'
+LIMIT 1;
+----
+super	NAME_IDENTIFIER
+
+# =============================================================================
+# METADATA AND ANNOTATIONS
+# =============================================================================
+
+# Test: Attribute should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'attribute'
+LIMIT 1;
+----
+attribute	METADATA_ANNOTATION
+
+# Test: Visibility modifier should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'visibility_modifier'
+LIMIT 1;
+----
+visibility_modifier	METADATA_ANNOTATION
+
+# Test: Mutation modifier should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'mutation_modifier'
+LIMIT 1;
+----
+mutation_modifier	METADATA_ANNOTATION
+
+# Test: Modifiers should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'modifiers'
+LIMIT 1;
+----
+modifiers	METADATA_ANNOTATION
+
+# Test: private keyword should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'private'
+LIMIT 1;
+----
+private	METADATA_ANNOTATION
+
+# Test: static keyword should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'static'
+LIMIT 1;
+----
+static	METADATA_ANNOTATION
+
+# =============================================================================
+# COMMENTS
+# =============================================================================
+
+# Test: Comment should be METADATA_COMMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/swift/simple.swift')
+WHERE type = 'comment'
+LIMIT 1;
+----
+comment	METADATA_COMMENT

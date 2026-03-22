@@ -1,0 +1,814 @@
+# name: test/sql/languages/dart_refinements.test
+# description: Test Dart semantic refinements
+# group: [languages]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Dart Refinement Tests
+# =============================================================================
+#
+# Tests that semantic refinements are correctly applied to Dart code.
+# Refinements are 2-bit values in the lower bits of semantic_type that provide
+# finer-grained classification within each semantic category.
+# =============================================================================
+
+# =============================================================================
+# CLASS DEFINITION REFINEMENTS
+# =============================================================================
+
+# Test: Class definition should be DEFINITION_CLASS (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'class_definition'
+LIMIT 1;
+----
+class_definition	DEFINITION_CLASS
+
+# Test: Enum declaration should be DEFINITION_CLASS (with ENUM refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'enum_declaration'
+LIMIT 1;
+----
+enum_declaration	DEFINITION_CLASS
+
+# Test: Mixin declaration should be DEFINITION_CLASS (with ABSTRACT refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'mixin_declaration'
+LIMIT 1;
+----
+mixin_declaration	DEFINITION_CLASS
+
+# Test: Extension declaration should be DEFINITION_CLASS (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'extension_declaration'
+LIMIT 1;
+----
+extension_declaration	DEFINITION_CLASS
+
+# Test: Type alias should be DEFINITION_CLASS (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'type_alias'
+LIMIT 1;
+----
+type_alias	DEFINITION_CLASS
+
+# =============================================================================
+# FUNCTION REFINEMENTS
+# =============================================================================
+
+# Test: Function signature should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'function_signature'
+LIMIT 1;
+----
+function_signature	DEFINITION_FUNCTION
+
+# Test: Method signature should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'method_signature'
+LIMIT 1;
+----
+method_signature	DEFINITION_FUNCTION
+
+# Test: Getter signature should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'getter_signature'
+LIMIT 1;
+----
+getter_signature	DEFINITION_FUNCTION
+
+# Test: Setter signature should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'setter_signature'
+LIMIT 1;
+----
+setter_signature	DEFINITION_FUNCTION
+
+# Test: Operator signature should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'operator_signature'
+LIMIT 1;
+----
+operator_signature	DEFINITION_FUNCTION
+
+# Test: Constructor signature should be DEFINITION_FUNCTION (with CONSTRUCTOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'constructor_signature'
+LIMIT 1;
+----
+constructor_signature	DEFINITION_FUNCTION
+
+# Test: Constant constructor signature should be DEFINITION_FUNCTION (with CONSTRUCTOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'constant_constructor_signature'
+LIMIT 1;
+----
+constant_constructor_signature	DEFINITION_FUNCTION
+
+# Test: Factory constructor signature should be DEFINITION_FUNCTION (with CONSTRUCTOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'factory_constructor_signature'
+LIMIT 1;
+----
+factory_constructor_signature	DEFINITION_FUNCTION
+
+# =============================================================================
+# MODULE REFINEMENTS
+# =============================================================================
+
+# Test: Program (source file) should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'program'
+LIMIT 1;
+----
+program	DEFINITION_MODULE
+
+# =============================================================================
+# VARIABLE REFINEMENTS
+# =============================================================================
+
+# Test: Local variable declaration should be DEFINITION_VARIABLE (with MUTABLE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'local_variable_declaration'
+LIMIT 1;
+----
+local_variable_declaration	DEFINITION_VARIABLE
+
+# Test: Initialized variable definition should be DEFINITION_VARIABLE (with MUTABLE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'initialized_variable_definition'
+LIMIT 1;
+----
+initialized_variable_definition	DEFINITION_VARIABLE
+
+# Test: Formal parameter should be DEFINITION_VARIABLE (with PARAMETER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'formal_parameter'
+LIMIT 1;
+----
+formal_parameter	DEFINITION_VARIABLE
+
+# Test: Constructor param should be DEFINITION_VARIABLE (with PARAMETER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'constructor_param'
+LIMIT 1;
+----
+constructor_param	DEFINITION_VARIABLE
+
+# Test: Enum constant should be DEFINITION_VARIABLE (with FIELD refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'enum_constant'
+LIMIT 1;
+----
+enum_constant	DEFINITION_VARIABLE
+
+# Test: Declaration should be DEFINITION_VARIABLE (with MUTABLE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'declaration'
+LIMIT 1;
+----
+declaration	DEFINITION_VARIABLE
+
+# =============================================================================
+# IMPORT REFINEMENTS
+# =============================================================================
+
+# Test: Library import should be EXTERNAL_IMPORT (with MODULE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'library_import'
+LIMIT 1;
+----
+library_import	EXTERNAL_IMPORT
+
+# Test: Import specification should be EXTERNAL_IMPORT (with MODULE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'import_specification'
+LIMIT 1;
+----
+import_specification	EXTERNAL_IMPORT
+
+# Test: Import or export should be EXTERNAL_IMPORT (with MODULE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'import_or_export'
+LIMIT 1;
+----
+import_or_export	EXTERNAL_IMPORT
+
+# =============================================================================
+# CONTROL FLOW REFINEMENTS
+# =============================================================================
+
+# Test: If statement should be FLOW_CONDITIONAL (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'if_statement'
+LIMIT 1;
+----
+if_statement	FLOW_CONDITIONAL
+
+# Test: Switch expression should be FLOW_CONDITIONAL (with MULTIWAY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'switch_expression'
+LIMIT 1;
+----
+switch_expression	FLOW_CONDITIONAL
+
+# Test: Switch expression case should be FLOW_CONDITIONAL (with MULTIWAY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'switch_expression_case'
+LIMIT 1;
+----
+switch_expression_case	FLOW_CONDITIONAL
+
+# Test: If-null expression should be FLOW_CONDITIONAL (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'if_null_expression'
+LIMIT 1;
+----
+if_null_expression	FLOW_CONDITIONAL
+
+# =============================================================================
+# LOOP REFINEMENTS
+# =============================================================================
+
+# Test: For statement should be FLOW_LOOP (with ITERATOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'for_statement'
+LIMIT 1;
+----
+for_statement	FLOW_LOOP
+
+# Test: While statement should be FLOW_LOOP (with CONDITIONAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'while_statement'
+LIMIT 1;
+----
+while_statement	FLOW_LOOP
+
+# Test: Do statement should be FLOW_LOOP (with CONDITIONAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'do_statement'
+LIMIT 1;
+----
+do_statement	FLOW_LOOP
+
+# =============================================================================
+# JUMP REFINEMENTS
+# =============================================================================
+
+# Test: Return statement should be FLOW_JUMP (with RETURN refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'return_statement'
+LIMIT 1;
+----
+return_statement	FLOW_JUMP
+
+# Test: Break statement should be FLOW_JUMP (with BREAK refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'break_statement'
+LIMIT 1;
+----
+break_statement	FLOW_JUMP
+
+# Test: Continue statement should be FLOW_JUMP (with CONTINUE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'continue_statement'
+LIMIT 1;
+----
+continue_statement	FLOW_JUMP
+
+# Test: break_builtin keyword should be FLOW_JUMP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'break_builtin'
+LIMIT 1;
+----
+break_builtin	FLOW_JUMP
+
+# =============================================================================
+# OPERATOR REFINEMENTS
+# =============================================================================
+
+# Test: Assignment expression should be OPERATOR_ASSIGNMENT (with SIMPLE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'assignment_expression'
+LIMIT 1;
+----
+assignment_expression	OPERATOR_ASSIGNMENT
+
+# Test: Additive expression should be OPERATOR_ARITHMETIC (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'additive_expression'
+LIMIT 1;
+----
+additive_expression	OPERATOR_ARITHMETIC
+
+# Test: Multiplicative expression should be OPERATOR_ARITHMETIC (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'multiplicative_expression'
+LIMIT 1;
+----
+multiplicative_expression	OPERATOR_ARITHMETIC
+
+# Test: Unary expression should be OPERATOR_ARITHMETIC (with UNARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'unary_expression'
+LIMIT 1;
+----
+unary_expression	OPERATOR_ARITHMETIC
+
+# Test: Postfix expression should be OPERATOR_ARITHMETIC (with UNARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'postfix_expression'
+LIMIT 1;
+----
+postfix_expression	OPERATOR_ARITHMETIC
+
+# Test: Additive operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'additive_operator'
+LIMIT 1;
+----
+additive_operator	OPERATOR_ARITHMETIC
+
+# Test: Multiplicative operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'multiplicative_operator'
+LIMIT 1;
+----
+multiplicative_operator	OPERATOR_ARITHMETIC
+
+# Test: Increment operator should be OPERATOR_ARITHMETIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'increment_operator'
+LIMIT 1;
+----
+increment_operator	OPERATOR_ARITHMETIC
+
+# Test: Equality expression should be OPERATOR_COMPARISON
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'equality_expression'
+LIMIT 1;
+----
+equality_expression	OPERATOR_COMPARISON
+
+# Test: Equality operator should be OPERATOR_COMPARISON
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'equality_operator'
+LIMIT 1;
+----
+equality_operator	OPERATOR_COMPARISON
+
+# Test: Relational expression should be OPERATOR_COMPARISON
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'relational_expression'
+LIMIT 1;
+----
+relational_expression	OPERATOR_COMPARISON
+
+# Test: Relational operator should be OPERATOR_COMPARISON
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'relational_operator'
+LIMIT 1;
+----
+relational_operator	OPERATOR_COMPARISON
+
+# =============================================================================
+# LITERAL REFINEMENTS
+# =============================================================================
+
+# Test: String literal should be LITERAL_STRING (with LITERAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'string_literal'
+LIMIT 1;
+----
+string_literal	LITERAL_STRING
+
+# Test: Template substitution should be LITERAL_STRING (with TEMPLATE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'template_substitution'
+LIMIT 1;
+----
+template_substitution	LITERAL_STRING
+
+# Test: URI should be LITERAL_STRING
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'uri'
+LIMIT 1;
+----
+uri	LITERAL_STRING
+
+# Test: Decimal integer literal should be LITERAL_NUMBER (with INTEGER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'decimal_integer_literal'
+LIMIT 1;
+----
+decimal_integer_literal	LITERAL_NUMBER
+
+# Test: Hex integer literal should be LITERAL_NUMBER (with INTEGER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'hex_integer_literal'
+LIMIT 1;
+----
+hex_integer_literal	LITERAL_NUMBER
+
+# Test: Decimal floating point literal should be LITERAL_NUMBER (with FLOAT refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'decimal_floating_point_literal'
+LIMIT 1;
+----
+decimal_floating_point_literal	LITERAL_NUMBER
+
+# Test: Null literal should be LITERAL_ATOMIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'null_literal'
+LIMIT 1;
+----
+null_literal	LITERAL_ATOMIC
+
+# Test: List literal should be LITERAL_STRUCTURED (with SEQUENCE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'list_literal'
+LIMIT 1;
+----
+list_literal	LITERAL_STRUCTURED
+
+# Test: Set or map literal should be LITERAL_STRUCTURED (with MAPPING refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'set_or_map_literal'
+LIMIT 1;
+----
+set_or_map_literal	LITERAL_STRUCTURED
+
+# Test: Record literal should be LITERAL_STRUCTURED (with SEQUENCE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'record_literal'
+LIMIT 1;
+----
+record_literal	LITERAL_STRUCTURED
+
+# =============================================================================
+# IDENTIFIER REFINEMENTS
+# =============================================================================
+
+# Test: Identifier should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'identifier'
+LIMIT 1;
+----
+identifier	NAME_IDENTIFIER
+
+# Test: this keyword should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'this'
+LIMIT 1;
+----
+this	NAME_IDENTIFIER
+
+# Test: Qualified identifier should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'qualified'
+LIMIT 1;
+----
+qualified	NAME_IDENTIFIER
+
+# =============================================================================
+# ERROR HANDLING REFINEMENTS
+# =============================================================================
+
+# Test: Try statement should be ERROR_TRY
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'try_statement'
+LIMIT 1;
+----
+try_statement	ERROR_TRY
+
+# Test: Catch clause should be ERROR_CATCH
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'catch_clause'
+LIMIT 1;
+----
+catch_clause	ERROR_CATCH
+
+# Test: Finally clause should be ERROR_FINALLY
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'finally_clause'
+LIMIT 1;
+----
+finally_clause	ERROR_FINALLY
+
+# Test: Assert statement should be ERROR_THROW
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'assert_statement'
+LIMIT 1;
+----
+assert_statement	ERROR_THROW
+
+# =============================================================================
+# ASYNC REFINEMENTS
+# =============================================================================
+
+# Test: Await expression should be FLOW_SYNC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'await_expression'
+LIMIT 1;
+----
+await_expression	FLOW_SYNC
+
+# Test: Yield statement should be FLOW_SYNC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'yield_statement'
+LIMIT 1;
+----
+yield_statement	FLOW_SYNC
+
+# =============================================================================
+# METADATA REFINEMENTS
+# =============================================================================
+
+# Test: Annotation should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'annotation'
+LIMIT 1;
+----
+annotation	METADATA_ANNOTATION
+
+# Test: sealed keyword should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'sealed'
+LIMIT 1;
+----
+sealed	METADATA_ANNOTATION
+
+# Test: final_builtin should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'final_builtin'
+LIMIT 1;
+----
+final_builtin	METADATA_ANNOTATION
+
+# Test: const_builtin should be METADATA_ANNOTATION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'const_builtin'
+LIMIT 1;
+----
+const_builtin	METADATA_ANNOTATION
+
+# Test: Comment should be METADATA_COMMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'comment'
+LIMIT 1;
+----
+comment	METADATA_COMMENT
+
+# Test: Documentation comment should be METADATA_COMMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'documentation_comment'
+LIMIT 1;
+----
+documentation_comment	METADATA_COMMENT
+
+# =============================================================================
+# TYPE SYSTEM
+# =============================================================================
+
+# Test: Type identifier should be TYPE_REFERENCE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'type_identifier'
+LIMIT 1;
+----
+type_identifier	TYPE_REFERENCE
+
+# Test: Void type should be TYPE_PRIMITIVE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'void_type'
+LIMIT 1;
+----
+void_type	TYPE_PRIMITIVE
+
+# Test: Function type should be TYPE_COMPOSITE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'function_type'
+LIMIT 1;
+----
+function_type	TYPE_COMPOSITE
+
+# Test: Type arguments should be TYPE_GENERIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'type_arguments'
+LIMIT 1;
+----
+type_arguments	TYPE_GENERIC
+
+# Test: Type parameters should be TYPE_GENERIC
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'type_parameters'
+LIMIT 1;
+----
+type_parameters	TYPE_GENERIC
+
+# =============================================================================
+# STRUCTURAL ELEMENTS
+# =============================================================================
+
+# Test: Block should be ORGANIZATION_BLOCK (with SEQUENTIAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'block'
+LIMIT 1;
+----
+block	ORGANIZATION_BLOCK
+
+# Test: Formal parameter list should be ORGANIZATION_LIST (with COLLECTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'formal_parameter_list'
+LIMIT 1;
+----
+formal_parameter_list	ORGANIZATION_LIST
+
+# Test: Arguments should be ORGANIZATION_LIST (with COLLECTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'arguments'
+LIMIT 1;
+----
+arguments	ORGANIZATION_LIST
+
+# =============================================================================
+# ACCESS REFINEMENTS
+# =============================================================================
+
+# Test: Selector should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'selector'
+LIMIT 1;
+----
+selector	COMPUTATION_ACCESS
+
+# Test: Cascade section should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/dart/sample.dart')
+WHERE type = 'cascade_section'
+LIMIT 1;
+----
+cascade_section	COMPUTATION_ACCESS

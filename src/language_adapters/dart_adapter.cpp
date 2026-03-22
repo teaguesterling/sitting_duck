@@ -82,6 +82,52 @@ string DartAdapter::ExtractNodeName(TSNode node, const string &content) const {
 			}
 			return name;
 		}
+		// Method signatures: identifier is inside wrapper nodes (function_signature, getter_signature, etc.)
+		if (strcmp(node_type_str, "method_signature") == 0) {
+			// Search through signature wrapper children for identifiers
+			static const vector<string> signature_wrappers = {
+			    "function_signature",
+			    "getter_signature",
+			    "setter_signature",
+			    "operator_signature",
+			    "factory_constructor_signature",
+			    "constructor_signature",
+			    "constant_constructor_signature",
+			};
+			uint32_t child_count = ts_node_child_count(node);
+			for (uint32_t i = 0; i < child_count; i++) {
+				TSNode child = ts_node_child(node, i);
+				const char *child_type = ts_node_type(child);
+				for (const string &wrapper : signature_wrappers) {
+					if (wrapper == child_type) {
+						// For operator_signature, extract the operator text
+						if (wrapper == "operator_signature") {
+							string op = FindChildByType(child, content, "binary_operator");
+							if (op.empty()) {
+								op = FindChildByType(child, content, "unary_prefix_operator");
+							}
+							if (op.empty()) {
+								op = FindChildByType(child, content, "index_operator");
+							}
+							if (!op.empty()) {
+								return "operator" + op;
+							}
+						}
+						// Search for identifier inside the wrapper
+						string result = FindIdentifierInChildren(child, content);
+						if (!result.empty()) {
+							return result;
+						}
+						break;
+					}
+				}
+				// Also check if the child itself is an identifier
+				if (strcmp(child_type, "identifier") == 0) {
+					return ExtractNodeText(child, content);
+				}
+			}
+			return "";
+		}
 		// Wrapper nodes: delegate to inner import_specification or library_import
 		if (strcmp(node_type_str, "library_import") == 0 || strcmp(node_type_str, "library_export") == 0) {
 			uint32_t child_count = ts_node_child_count(node);

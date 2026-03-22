@@ -70,3 +70,118 @@ query I
 SELECT ast_get_source('test/data/python/simple.py', 1, 3) LIKE 'def hello()%';
 ----
 true
+
+# =============================================================================
+# ast_source_of - Look up definition by name and return numbered source
+# =============================================================================
+
+# Find a function by name
+query IIIIII
+SELECT file_path LIKE '%simple.py', name, definition_kind, start_line, end_line,
+       source LIKE '%def hello()%'
+FROM ast_source_of('test/data/python/simple.py', 'hello');
+----
+true	hello	function	1	3	true
+
+# Find a class by name
+query IIIIII
+SELECT file_path LIKE '%simple.py', name, definition_kind, start_line, end_line,
+       source LIKE '%class MyClass%'
+FROM ast_source_of('test/data/python/simple.py', 'MyClass');
+----
+true	MyClass	class	5	11	true
+
+# Filter with kind parameter
+query II
+SELECT name, definition_kind
+FROM ast_source_of('test/data/python/simple.py', 'hello', kind := 'function');
+----
+hello	function
+
+# kind filter excludes non-matching definitions
+query I
+SELECT count(*)
+FROM ast_source_of('test/data/python/simple.py', 'hello', kind := 'class');
+----
+0
+
+# Name that doesn't exist returns no rows
+query I
+SELECT count(*)
+FROM ast_source_of('test/data/python/simple.py', 'nonexistent');
+----
+0
+
+# Multiple matches (hello and main are both functions)
+query II
+SELECT name, definition_kind
+FROM ast_source_of('test/data/python/simple.py', 'main');
+----
+main	function
+
+# Source output includes line numbers
+query I
+SELECT source LIKE '%13:%def main()%'
+FROM ast_source_of('test/data/python/simple.py', 'main');
+----
+true
+
+# With explicit language parameter
+query II
+SELECT name, definition_kind
+FROM ast_source_of('test/data/python/simple.py', 'hello', language := 'python');
+----
+hello	function
+
+# =============================================================================
+# ast_source_of - Multi-file glob patterns
+# =============================================================================
+
+# Find a function that exists in one file out of many
+query III
+SELECT file_path LIKE '%test_classes.py', name, definition_kind
+FROM ast_source_of('test/data/python/*.py', 'calculate_sum');
+----
+true	calculate_sum	function
+
+# Find a class across multiple files
+query III
+SELECT file_path LIKE '%decorators.py', name, definition_kind
+FROM ast_source_of('test/data/python/*.py', 'Point');
+----
+true	Point	class
+
+# Find a class with kind filter across glob
+query III
+SELECT file_path LIKE '%typed_example.py', name, definition_kind
+FROM ast_source_of('test/data/python/*.py', 'Person', kind := 'class');
+----
+true	Person	class
+
+# Source is correctly extracted from the right file
+query I
+SELECT source LIKE '%def add_numbers%'
+FROM ast_source_of('test/data/python/*.py', 'add_numbers');
+----
+true
+
+# No matches across all files returns empty
+query I
+SELECT count(*)
+FROM ast_source_of('test/data/python/*.py', 'this_function_does_not_exist');
+----
+0
+
+# Find a function defined inside a class (from test_classes.py)
+query III
+SELECT file_path LIKE '%test_classes.py', name, definition_kind
+FROM ast_source_of('test/data/python/*.py', 'process', kind := 'function');
+----
+true	process	function
+
+# Kind filter works with glob - asking for 'class' when only function exists
+query I
+SELECT count(*)
+FROM ast_source_of('test/data/python/*.py', 'calculate_sum', kind := 'class');
+----
+0

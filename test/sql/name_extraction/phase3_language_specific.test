@@ -1,0 +1,165 @@
+# name: test/sql/name_extraction/phase3_language_specific.test
+# description: Phase 3 language-specific name extraction fixes (#40)
+# group: [name_extraction]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# PHASE 3: Language-specific custom handlers for remaining NULL names
+# =============================================================================
+#
+# Phase 1 (#28) fixed FIND_IDENTIFIER child type coverage.
+# Phase 2 (#30) fixed FIND_IDENTIFIER wrapper traversal.
+# Phase 3 (#40) adds language-specific custom handlers for nodes whose
+# identifiers are buried in language-unique structural patterns.
+#
+# Issue: https://github.com/teaguesterling/sitting_duck/issues/40
+# =============================================================================
+
+# =============================================================================
+# C#: using_directive (CUSTOM handler for qualified_name children)
+# =============================================================================
+
+# Test: All 4 C# using_directive nodes have non-NULL names
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/csharp/simple.cs', context := 'native')
+WHERE type = 'using_directive' AND name IS NOT NULL AND name != '';
+----
+4
+
+# Test: C# using_directive names extracted correctly (including dotted names)
+query TT
+SELECT type, name
+FROM read_ast('test/data/csharp/simple.cs', context := 'native')
+WHERE type = 'using_directive'
+ORDER BY start_line;
+----
+using_directive	System
+using_directive	System.Collections.Generic
+using_directive	System.Linq
+using_directive	System.Threading.Tasks
+
+# =============================================================================
+# HCL: block names (including labelless blocks like locals, terraform)
+# =============================================================================
+
+# Test: All 16 HCL block nodes have non-NULL names
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/hcl/simple.tf', context := 'native')
+WHERE type = 'block' AND name IS NOT NULL AND name != '';
+----
+16
+
+# Test: Labelless blocks use block type as name
+query TT
+SELECT type, name
+FROM read_ast('test/data/hcl/simple.tf', context := 'native')
+WHERE type = 'block' AND name IN ('locals', 'filter', 'terraform', 'required_providers')
+ORDER BY start_line;
+----
+block	locals
+block	filter
+block	terraform
+block	required_providers
+
+# =============================================================================
+# DART: method_signature (CUSTOM handler for signature wrappers)
+# =============================================================================
+
+# Test: All 12 Dart method_signature nodes have non-NULL names
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'method_signature' AND name IS NOT NULL AND name != '';
+----
+12
+
+# Test: Specific Dart method_signature names (includes operator overload)
+query TT
+SELECT type, name
+FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'method_signature'
+ORDER BY start_line;
+----
+method_signature	Point
+method_signature	distanceTo
+method_signature	operator+
+method_signature	toString
+method_signature	rgbValue
+method_signature	area
+method_signature	area
+method_signature	printInfo
+method_signature	capitalize
+method_signature	value
+method_signature	value
+method_signature	isEmpty
+
+# =============================================================================
+# DART: formal_parameter (wrapper: constructor_param, simple_formal_parameter)
+# =============================================================================
+
+# Test: All 12 Dart formal_parameter nodes have non-NULL names
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'formal_parameter' AND name IS NOT NULL AND name != '';
+----
+12
+
+# Test: Specific Dart formal_parameter names (includes this.x constructor params)
+query TT
+SELECT type, name
+FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'formal_parameter'
+ORDER BY start_line;
+----
+formal_parameter	x
+formal_parameter	y
+formal_parameter	map
+formal_parameter	other
+formal_parameter	other
+formal_parameter	radius
+formal_parameter	width
+formal_parameter	height
+formal_parameter	newValue
+formal_parameter	max
+formal_parameter	n
+formal_parameter	value
+
+# =============================================================================
+# DART: record_field (wrapper: label for named fields)
+# =============================================================================
+
+# Test: All 4 Dart record_field nodes have non-NULL names
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/dart/sample.dart', context := 'native')
+WHERE type = 'record_field' AND name IS NOT NULL AND name != '';
+----
+4
+
+# =============================================================================
+# C++: function_definition (CUSTOM handler for operator/destructor/wrappers)
+# =============================================================================
+
+# Test: All 11 C++ function_definition nodes have non-NULL names
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/cpp/simple.cpp', context := 'native')
+WHERE type = 'function_definition' AND name IS NOT NULL AND name != '';
+----
+11
+
+# Test: C++ operator overload is extracted correctly
+query TT
+SELECT type, name
+FROM read_ast('test/data/cpp/simple.cpp', context := 'native')
+WHERE type = 'function_definition' AND name LIKE 'operator%'
+ORDER BY start_line;
+----
+function_definition	operator+=

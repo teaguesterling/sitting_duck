@@ -134,7 +134,8 @@ string LanguageAdapter::ExtractNameFromDeclarator(TSNode node, const string &con
 	vector<string> declarator_patterns = {
 	    "function_declarator", "method_declarator", "declarator",
 	    "procedure_declarator", // Pascal-like languages
-	    "init_declarator"       // C++ initializing declarators
+	    "init_declarator",      // C++ initializing declarators
+	    "variable_declarator"   // Java field/variable declarations
 	};
 
 	// Wrapper types that may contain the actual declarator (e.g., for pointer/array return types)
@@ -273,6 +274,100 @@ string LanguageAdapter::ExtractFunctionNameFromText(TSNode node, const string &c
 	return function_name;
 }
 
+string LanguageAdapter::FindIdentifierInChildren(TSNode node, const string &content) const {
+	// Try common identifier node types across languages
+	string result = FindChildByType(node, content, "identifier");
+	if (result.empty()) {
+		result = FindChildByType(node, content, "property_identifier"); // JS methods
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "field_identifier"); // Go methods
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "qualified_identifier"); // C++
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "name"); // PHP
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "simple_identifier"); // Swift, Kotlin
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "type_identifier"); // Swift types
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "operator"); // Ruby operator methods (def +, def <<, etc.)
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "constant"); // Ruby uppercase method names (def F, def M, etc.)
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "setter"); // Ruby setter methods (def name=)
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "variable_name"); // Bash vars, PHP params/properties
+	}
+	if (result.empty()) {
+		result = FindChildByType(node, content, "word"); // Bash function names
+	}
+	return result;
+}
+
+string LanguageAdapter::FindIdentifierInWrappers(TSNode node, const string &content, int depth) const {
+	if (depth <= 0) {
+		return "";
+	}
+
+	// Known intermediate wrapper types that may contain identifiers at a deeper level.
+	// NOTE: "expression" is intentionally generic — it's currently only reached via HCL's
+	// object_elem pattern (object_elem -> expression -> variable_expr -> identifier).
+	// The depth limit and identifier-type filter constrain what gets matched, but if
+	// false positives appear in other languages, consider qualifying it further.
+	static const vector<string> wrapper_types = {
+	    "variable_declarator",              // JS, C#, TypeScript
+	    "variable_list",                    // Lua (inside assignment_statement)
+	    "assignment_statement",             // Lua (inside variable_declaration)
+	    "init_declarator",                  // C++
+	    "initialized_variable_definition",  // Dart (inside local_variable_declaration)
+	    "expression",                       // HCL (object_elem key expressions)
+	    "variable_expr",                    // HCL (inside expression)
+	    "constructor_param",                // Dart (inside formal_parameter for this.x)
+	    "simple_formal_parameter",          // Dart (inside formal_parameter)
+	    "label",                            // Dart (record_field named labels)
+	    "constructor_signature",            // Dart (inside declaration)
+	    "constant_constructor_signature",   // Dart (inside declaration)
+	    "getter_signature",                 // Dart (inside declaration)
+	    "setter_signature",                 // Dart (inside declaration)
+	    "function_signature",               // Dart (inside declaration)
+	    "operator_signature",               // Dart (inside declaration)
+	};
+
+	uint32_t child_count = ts_node_child_count(node);
+	for (uint32_t i = 0; i < child_count; i++) {
+		TSNode child = ts_node_child(node, i);
+		const char *child_type = ts_node_type(child);
+
+		for (const string &wrapper : wrapper_types) {
+			if (wrapper == child_type) {
+				// Found a wrapper — search for identifier types in its children
+				string result = FindIdentifierInChildren(child, content);
+				if (!result.empty()) {
+					return result;
+				}
+				// Recurse into the wrapper's children looking for more wrappers
+				if (depth > 1) {
+					result = FindIdentifierInWrappers(child, content, depth - 1);
+					if (!result.empty()) {
+						return result;
+					}
+				}
+				break; // Only match one wrapper type per child node
+			}
+		}
+	}
+	return "";
+}
+
 string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, ExtractionStrategy strategy) const {
 	switch (strategy) {
 	case ExtractionStrategy::NONE:
@@ -288,40 +383,9 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		return "";
 	}
 	case ExtractionStrategy::FIND_IDENTIFIER: {
-		// Try common identifier node types across languages
-		string result = FindChildByType(node, content, "identifier");
+		string result = FindIdentifierInChildren(node, content);
 		if (result.empty()) {
-			result = FindChildByType(node, content, "property_identifier"); // JS methods
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "field_identifier"); // Go methods
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "qualified_identifier"); // C++
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "name"); // PHP
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "simple_identifier"); // Swift, Kotlin
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "type_identifier"); // Swift types
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "operator"); // Ruby operator methods (def +, def <<, etc.)
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "constant"); // Ruby uppercase method names (def F, def M, etc.)
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "setter"); // Ruby setter methods (def name=)
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "variable_name"); // Bash vars, PHP params/properties
-		}
-		if (result.empty()) {
-			result = FindChildByType(node, content, "word"); // Bash function names
+			result = FindIdentifierInWrappers(node, content, 2);
 		}
 		return result;
 	}
@@ -343,16 +407,13 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 			    parent_type == "init_declarator" ||               // C++: auto name = lambda
 			    parent_type == "assignment" ||                    // Python: x = lambda
 			    parent_type == "named_expression" ||              // Python: (x := lambda)
+			    parent_type == "initialized_variable_definition" || // Dart: var name = () => ...
 			    parent_type.find("declarator") != string::npos) { // Other declarator patterns
 
-				// Look for the first child which should be the identifier
-				TSNode first_child = ts_node_child(parent, 0);
-				if (!ts_node_is_null(first_child)) {
-					string first_child_type = ts_node_type(first_child);
-					if (first_child_type == "identifier") {
-						return ExtractNodeText(first_child, content);
-					}
-				}
+				// Find identifier among parent's children
+				// In most languages (JS, Python, C++) the identifier is the first child,
+				// but in Dart initialized_variable_definition the type annotation comes first
+				return FindChildByType(parent, content, "identifier");
 			}
 		}
 		return "";
@@ -372,7 +433,23 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		string first_child_type = ts_node_type(first_child);
 
 		// Simple function call: first child is identifier
+		// But in Java method_invocation, the first identifier is the object, not the method.
+		// Check if there's a later identifier sibling (before argument_list) which would be the method name.
 		if (first_child_type == "identifier") {
+			uint32_t node_child_count = ts_node_child_count(node);
+			for (uint32_t i = 1; i < node_child_count; i++) {
+				TSNode sibling = ts_node_child(node, i);
+				string sibling_type = ts_node_type(sibling);
+				// Stop at argument containers
+				if (sibling_type == "argument_list" || sibling_type == "arguments") {
+					break;
+				}
+				if (sibling_type == "identifier" || sibling_type == "property_identifier" ||
+				    sibling_type == "field_identifier" || sibling_type == "simple_identifier") {
+					return ExtractNodeText(sibling, content);
+				}
+			}
+			// No later identifier found — this IS the function name (Python, etc.)
 			return ExtractNodeText(first_child, content);
 		}
 
@@ -383,7 +460,23 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		    first_child_type == "field_expression" || first_child_type == "selector_expression" ||
 		    first_child_type == "field_access" || first_child_type == "scoped_identifier" ||
 		    first_child_type == "qualified_identifier") {
-			// Find the last identifier child (the method/function name)
+
+			// Java method_invocation has a special structure: the method name is a sibling
+			// of field_access, not inside it. E.g., System.out.println():
+			//   method_invocation -> field_access("System.out"), ".", identifier("println"), argument_list
+			// Check for an identifier sibling after the first child (the object expression)
+			uint32_t node_child_count = ts_node_child_count(node);
+			for (uint32_t i = 1; i < node_child_count; i++) {
+				TSNode sibling = ts_node_child(node, i);
+				string sibling_type = ts_node_type(sibling);
+				if (sibling_type == "identifier" || sibling_type == "property_identifier" ||
+				    sibling_type == "field_identifier" || sibling_type == "simple_identifier") {
+					return ExtractNodeText(sibling, content);
+				}
+			}
+
+			// Fallback: find the last identifier inside the first child
+			// (Python attribute, JS member_expression, etc.)
 			uint32_t child_count = ts_node_child_count(first_child);
 			for (int i = child_count - 1; i >= 0; i--) {
 				TSNode child = ts_node_child(first_child, i);

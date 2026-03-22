@@ -249,21 +249,19 @@ public:
 	static vector<string> ExtractPHPModifiers(TSNode node, const string &content) {
 		vector<string> modifiers;
 
-		// Check for function modifiers
-		TSNode parent = ts_node_parent(node);
-		if (!ts_node_is_null(parent)) {
-			uint32_t parent_count = ts_node_child_count(parent);
-			for (uint32_t i = 0; i < parent_count; i++) {
-				TSNode sibling = ts_node_child(parent, i);
-				const char *sibling_type = ts_node_type(sibling);
+		// PHP AST: visibility_modifier, static_modifier, etc. are direct children
+		// of method_declaration/function_definition
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			const char *child_type = ts_node_type(child);
 
-				if (strcmp(sibling_type, "visibility_modifier") == 0 || strcmp(sibling_type, "static_modifier") == 0 ||
-				    strcmp(sibling_type, "abstract_modifier") == 0 || strcmp(sibling_type, "final_modifier") == 0) {
-					uint32_t start = ts_node_start_byte(sibling);
-					uint32_t end = ts_node_end_byte(sibling);
-					if (start < content.length() && end <= content.length()) {
-						modifiers.push_back(content.substr(start, end - start));
-					}
+			if (strcmp(child_type, "visibility_modifier") == 0 || strcmp(child_type, "static_modifier") == 0 ||
+			    strcmp(child_type, "abstract_modifier") == 0 || strcmp(child_type, "final_modifier") == 0) {
+				uint32_t start = ts_node_start_byte(child);
+				uint32_t end = ts_node_end_byte(child);
+				if (start < content.length() && end <= content.length()) {
+					modifiers.push_back(content.substr(start, end - start));
 				}
 			}
 		}

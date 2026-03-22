@@ -134,6 +134,15 @@ vector<string> ASTFileUtils::ProcessSinglePath(ClientContext &context, const str
 	auto &fs = FileSystem::GetFileSystem(context);
 	vector<string> result;
 
+	// URI paths (e.g., "git://file.py@HEAD") are passed through directly
+	// to let DuckDB's virtual filesystem handle them without local fs checks
+	if (HasURIScheme(path)) {
+		if (supported_extensions.empty() || IsFileExtensionSupported(path, supported_extensions)) {
+			result.push_back(path);
+		}
+		return result;
+	}
+
 	// Single file
 	if (fs.FileExists(path)) {
 		// Check if file extension is supported
@@ -206,14 +215,59 @@ vector<string> ASTFileUtils::GetGlobFiles(ClientContext &context, const string &
 	return result;
 }
 
+bool ASTFileUtils::HasURIScheme(const string &path) {
+	auto scheme_pos = path.find("://");
+	if (scheme_pos == string::npos || scheme_pos == 0) {
+		return false;
+	}
+	// Verify the scheme contains only valid characters (letters, digits, +, -, .)
+	for (size_t i = 0; i < scheme_pos; i++) {
+		char c = path[i];
+		if (!std::isalnum(c) && c != '+' && c != '-' && c != '.') {
+			return false;
+		}
+	}
+	return true;
+}
+
+string ASTFileUtils::GetBarePathForExtension(const string &path) {
+	string bare = path;
+
+	// Strip URI scheme (e.g., "git://")
+	auto scheme_pos = bare.find("://");
+	if (scheme_pos != string::npos && HasURIScheme(bare)) {
+		bare = bare.substr(scheme_pos + 3);
+	}
+
+	// Strip leading "./" if present
+	if (bare.size() >= 2 && bare[0] == '.' && bare[1] == '/') {
+		bare = bare.substr(2);
+	}
+
+	// Strip @rev suffix (e.g., "@HEAD", "@HEAD~15", "@abc123")
+	// Only strip if the @ comes after the last dot (i.e., it's after the extension)
+	auto last_dot = bare.find_last_of('.');
+	if (last_dot != string::npos) {
+		auto at_pos = bare.find('@', last_dot);
+		if (at_pos != string::npos) {
+			bare = bare.substr(0, at_pos);
+		}
+	}
+
+	return bare;
+}
+
 string ASTFileUtils::DetectLanguageFromPath(const string &file_path) {
+	// Use bare path for extension extraction (handles URIs with @rev suffixes)
+	string bare_path = GetBarePathForExtension(file_path);
+
 	// Extract file extension
-	auto last_dot = file_path.find_last_of('.');
+	auto last_dot = bare_path.find_last_of('.');
 	if (last_dot == string::npos) {
 		return "auto"; // No extension found
 	}
 
-	string extension = file_path.substr(last_dot + 1);
+	string extension = bare_path.substr(last_dot + 1);
 
 	// Convert to lowercase for case-insensitive matching
 	std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
@@ -242,13 +296,16 @@ vector<string> ASTFileUtils::GetSupportedExtensions(const string &language) {
 
 // Helper function to check if a file extension is in the supported list
 bool ASTFileUtils::IsFileExtensionSupported(const string &file_path, const vector<string> &supported_extensions) {
+	// Use bare path for extension extraction (handles URIs with @rev suffixes)
+	string bare_path = GetBarePathForExtension(file_path);
+
 	// Extract file extension
-	auto last_dot = file_path.find_last_of('.');
+	auto last_dot = bare_path.find_last_of('.');
 	if (last_dot == string::npos) {
 		return false; // No extension found
 	}
 
-	string extension = file_path.substr(last_dot + 1);
+	string extension = bare_path.substr(last_dot + 1);
 
 	// Convert to lowercase for case-insensitive matching
 	std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);

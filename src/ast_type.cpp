@@ -67,7 +67,6 @@ Value ASTNode::ToValue() const {
 		}
 		native_values.emplace_back("modifiers", Value::LIST(LogicalType::VARCHAR, modifier_values));
 
-		native_values.emplace_back("qualified_name", Value(native.qualified_name));
 		native_values.emplace_back("annotations", Value(native.annotations));
 
 		struct_values.emplace_back("native", Value::STRUCT(native_values));
@@ -83,7 +82,6 @@ Value ASTNode::ToValue() const {
 		                                                                   {"is_variadic", LogicalType::BOOLEAN},
 		                                                                   {"annotations", LogicalType::VARCHAR}}))));
 		native_schema.push_back(make_pair("modifiers", LogicalType::LIST(LogicalType::VARCHAR)));
-		native_schema.push_back(make_pair("qualified_name", LogicalType::VARCHAR));
 		native_schema.push_back(make_pair("annotations", LogicalType::VARCHAR));
 		struct_values.emplace_back("native", Value(LogicalType::STRUCT(native_schema)));
 	}

@@ -16,8 +16,8 @@ C, C++, Go, Rust, and Zig support in Sitting Duck.
 
 ### Implementation Notes
 
-- **C++ Method Calls**: Supports both dot notation (`obj.method()`) and arrow notation (`ptr->method()`). The `qualified_name` field contains the full expression.
-- **Go Package Calls**: Package-qualified calls like `fmt.Println` have empty `name` but full path in `qualified_name`.
+- **C++ Method Calls**: Supports both dot notation (`obj.method()`) and arrow notation (`ptr->method()`). The `signature_type` field contains the full call expression.
+- **Go Package Calls**: Package-qualified calls like `fmt.Println` have empty `name` but full path in `signature_type`.
 - **Rust Trait Signatures**: Trait method signatures (without bodies) are marked with `IS_DECLARATION_ONLY` via `function_signature_item`.
 - **Return Type Extraction**: Go and Rust provide excellent return type extraction including complex types (`*big.Int`, `Result<T, E>`).
 

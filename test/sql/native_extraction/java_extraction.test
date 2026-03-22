@@ -94,3 +94,141 @@ WHERE type = 'enum_declaration' AND name = 'DogBreed';
 ----
 DogBreed	[{'name': Serializable, 'type': implements}]	[enum]
 
+# =============================================================================
+# DEFINITION_FUNCTION - Method Declarations
+# =============================================================================
+
+# Test: Method return types are extracted correctly (includes inner interface method)
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'method_declaration' AND name IS NOT NULL
+ORDER BY start_line;
+----
+toString	String	[@Override, public]
+increment	void	[public]
+getCounter	int	[protected]
+reset	void	[private]
+main	void	[public, static]
+processData	String	[private, static]
+process	void	[]
+
+# Test: Method parameters are extracted
+query IT
+SELECT name, parameters FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'method_declaration' AND name IS NOT NULL
+  AND array_length(parameters) > 0
+ORDER BY start_line;
+----
+main	[{'name': args, 'type': 'String[]'}]
+processData	[{'name': input, 'type': String}]
+process	[{'name': data, 'type': String}]
+
+# Test: Abstract method in Inheritance.java (has no body)
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
+WHERE type = 'method_declaration' AND name = 'speak'
+ORDER BY start_line
+LIMIT 1;
+----
+speak	String	[public, abstract]
+
+# =============================================================================
+# DEFINITION_FUNCTION - Constructor Declarations
+# =============================================================================
+
+# Test: Constructor parameters are extracted (constructor has no return type)
+query ITT
+SELECT name, signature_type, parameters FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'constructor_declaration' AND name IS NOT NULL
+ORDER BY start_line;
+----
+Test	NULL	[]
+Test	NULL	[{'name': initialValue, 'type': int}]
+InnerClass	NULL	[{'name': name, 'type': String}]
+
+# Test: Constructors with parameters in Inheritance.java
+query IT
+SELECT name, parameters FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
+WHERE type = 'constructor_declaration' AND name IS NOT NULL
+ORDER BY start_line;
+----
+Animal	[{'name': name, 'type': String}]
+Dog	[{'name': name, 'type': String}]
+Cat	[{'name': name, 'type': String}]
+Pet	[{'name': name, 'type': String}, {'name': owner, 'type': String}]
+ServiceAnimal	[{'name': name, 'type': String}]
+
+# =============================================================================
+# DEFINITION_VARIABLE - Field Declarations
+# =============================================================================
+
+# Test: Field names and types are extracted correctly
+query ITT
+SELECT name, signature_type, modifiers FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'field_declaration' AND name IS NOT NULL
+ORDER BY start_line;
+----
+CONSTANT	String	[]
+counter	int	[]
+name	String	[]
+
+# Test: Field names in Inheritance.java
+query IT
+SELECT name, signature_type FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
+WHERE type = 'field_declaration' AND name IS NOT NULL
+ORDER BY start_line;
+----
+name	String
+owner	String
+
+# =============================================================================
+# COMPUTATION_CALL - Method Invocations
+# =============================================================================
+
+# Test: Simple method calls have correct name and qualified_name
+query ITT
+SELECT name, qualified_name, parameters FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'method_invocation' AND name IS NOT NULL AND length(name) > 0
+ORDER BY start_line;
+----
+increment	test.increment	[]
+add	numbers.add	[{'name': '', 'type': i}]
+collect	NULL	[{'name': '', 'type': 'Collectors.toList()'}]
+filter	NULL	[{'name': '', 'type': 'n -> n % 2 == 0'}]
+stream	numbers.stream	[]
+toList	Collectors.toList	[]
+println	System.out.println	[{'name': '', 'type': '"Even numbers: " + evenNumbers'}]
+processData	processData	[{'name': '', 'type': 'null'}]
+println	System.err.println	[{'name': '', 'type': '"Error: " + e.getMessage()'}]
+getMessage	e.getMessage	[]
+toUpperCase	input.toUpperCase	[]
+
+# =============================================================================
+# Semantic Type Validation
+# =============================================================================
+
+# Test: Methods have DEFINITION_FUNCTION semantic type
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'method_declaration'
+  AND name IS NOT NULL
+  AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+7
+
+# Test: Constructors have DEFINITION_FUNCTION semantic type
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'constructor_declaration'
+  AND name IS NOT NULL
+  AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
+----
+3
+
+# Test: Method invocations have COMPUTATION_CALL semantic type
+query I
+SELECT COUNT(*) FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+WHERE type = 'method_invocation'
+  AND semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL';
+----
+11

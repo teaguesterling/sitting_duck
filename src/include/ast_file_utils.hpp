@@ -52,10 +52,34 @@ public:
 	/**
 	 * @brief Auto-detect language from file extension
 	 *
-	 * @param file_path Path to the file
+	 * Handles URI paths like "git://path/to/file.py@HEAD" by stripping
+	 * the scheme prefix and @rev suffix before extracting the extension.
+	 *
+	 * @param file_path Path to the file (may be a URI)
 	 * @return string Language identifier or "auto" if not detected
 	 */
 	static string DetectLanguageFromPath(const string &file_path);
+
+	/**
+	 * @brief Check if a path has a URI scheme (e.g., "git://", "s3://", "http://")
+	 *
+	 * @param path Path to check
+	 * @return bool True if the path starts with a scheme followed by "://"
+	 */
+	static bool HasURIScheme(const string &path);
+
+	/**
+	 * @brief Extract the bare file path from a URI for extension detection
+	 *
+	 * Strips URI scheme prefix and @rev suffix:
+	 *   "git://./path/to/file.py@HEAD~3" → "path/to/file.py"
+	 *   "s3://bucket/file.js" → "bucket/file.js"
+	 *   "path/to/file.py" → "path/to/file.py" (unchanged)
+	 *
+	 * @param path Path or URI to process
+	 * @return string Bare path suitable for extension extraction
+	 */
+	static string GetBarePathForExtension(const string &path);
 
 	/**
 	 * @brief Check if a file extension is supported for a given language

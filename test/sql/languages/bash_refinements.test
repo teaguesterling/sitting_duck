@@ -1,0 +1,381 @@
+# name: test/sql/languages/bash_refinements.test
+# description: Test Bash semantic refinements
+# group: [languages]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Bash Refinement Tests
+# =============================================================================
+#
+# Tests that semantic refinements are correctly applied to Bash code.
+# Refinements are 2-bit values in the lower bits of semantic_type that provide
+# finer-grained classification within each semantic category.
+# =============================================================================
+
+# =============================================================================
+# FUNCTION REFINEMENTS
+# =============================================================================
+
+# Test: Function definition should be DEFINITION_FUNCTION (with REGULAR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'function_definition'
+LIMIT 1;
+----
+function_definition	DEFINITION_FUNCTION
+
+# Test: function keyword should be DEFINITION_FUNCTION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'function'
+LIMIT 1;
+----
+function	DEFINITION_FUNCTION
+
+# =============================================================================
+# VARIABLE REFINEMENTS
+# =============================================================================
+
+# Test: Variable assignment should be DEFINITION_VARIABLE (with MUTABLE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'variable_assignment'
+LIMIT 1;
+----
+variable_assignment	DEFINITION_VARIABLE
+
+# Test: Declaration command should be DEFINITION_VARIABLE (with MUTABLE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'declaration_command'
+LIMIT 1;
+----
+declaration_command	DEFINITION_VARIABLE
+
+# Test: local keyword should be DEFINITION_VARIABLE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'local'
+LIMIT 1;
+----
+local	DEFINITION_VARIABLE
+
+# Test: declare keyword should be DEFINITION_VARIABLE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'declare'
+LIMIT 1;
+----
+declare	DEFINITION_VARIABLE
+
+
+# =============================================================================
+# CONTROL FLOW - CONDITIONALS
+# =============================================================================
+
+# Test: If statement should be FLOW_CONDITIONAL (with BINARY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'if_statement'
+LIMIT 1;
+----
+if_statement	FLOW_CONDITIONAL
+
+# Test: Case statement should be FLOW_CONDITIONAL (with MULTIWAY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'case_statement'
+LIMIT 1;
+----
+case_statement	FLOW_CONDITIONAL
+
+# Test: Case item should be FLOW_CONDITIONAL (with MULTIWAY refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'case_item'
+LIMIT 1;
+----
+case_item	FLOW_CONDITIONAL
+
+# Test: Elif clause should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'elif_clause'
+LIMIT 1;
+----
+elif_clause	FLOW_CONDITIONAL
+
+# Test: Else clause should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'else_clause'
+LIMIT 1;
+----
+else_clause	FLOW_CONDITIONAL
+
+# Test: if keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'if'
+LIMIT 1;
+----
+if	FLOW_CONDITIONAL
+
+# Test: case keyword should be FLOW_CONDITIONAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'case'
+LIMIT 1;
+----
+case	FLOW_CONDITIONAL
+
+# =============================================================================
+# CONTROL FLOW - LOOPS
+# =============================================================================
+
+# Test: While loop should be FLOW_LOOP (with CONDITIONAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'while_statement'
+LIMIT 1;
+----
+while_statement	FLOW_LOOP
+
+# Test: For loop should be FLOW_LOOP (with ITERATOR refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'for_statement'
+LIMIT 1;
+----
+for_statement	FLOW_LOOP
+
+# Test: for keyword should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'for'
+LIMIT 1;
+----
+for	FLOW_LOOP
+
+# Test: while keyword should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'while'
+LIMIT 1;
+----
+while	FLOW_LOOP
+
+# Test: do keyword should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'do'
+LIMIT 1;
+----
+do	FLOW_LOOP
+
+# Test: done keyword should be FLOW_LOOP
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'done'
+LIMIT 1;
+----
+done	FLOW_LOOP
+
+# =============================================================================
+# JUMP STATEMENTS
+# =============================================================================
+
+# =============================================================================
+# STRING REFINEMENTS
+# =============================================================================
+
+# Test: Double-quoted strings should be LITERAL_STRING (with TEMPLATE refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'string'
+LIMIT 1;
+----
+string	LITERAL_STRING
+
+# Test: Single-quoted strings should be LITERAL_STRING (with RAW refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'raw_string'
+LIMIT 1;
+----
+raw_string	LITERAL_STRING
+
+# =============================================================================
+# NUMBER AND STRUCTURED LITERAL REFINEMENTS
+# =============================================================================
+
+# Test: Number literal should be LITERAL_NUMBER (with INTEGER refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'number'
+LIMIT 1;
+----
+number	LITERAL_NUMBER
+
+# =============================================================================
+# COMMAND AND CALL REFINEMENTS
+# =============================================================================
+
+# Test: Command substitution should be COMPUTATION_CALL (with FUNCTION refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'command_substitution'
+LIMIT 1;
+----
+command_substitution	COMPUTATION_CALL
+
+
+# =============================================================================
+# ORGANIZATION REFINEMENTS
+# =============================================================================
+
+# Test: Compound statement should be ORGANIZATION_BLOCK (with SEQUENTIAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'compound_statement'
+LIMIT 1;
+----
+compound_statement	ORGANIZATION_BLOCK
+
+# Test: Do group should be ORGANIZATION_BLOCK (with SEQUENTIAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'do_group'
+LIMIT 1;
+----
+do_group	ORGANIZATION_BLOCK
+
+# Test: Subshell should be ORGANIZATION_BLOCK (with SEQUENTIAL refinement)
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'subshell'
+LIMIT 1;
+----
+subshell	ORGANIZATION_BLOCK
+
+# =============================================================================
+# OPERATOR REFINEMENTS
+# =============================================================================
+
+# Test: && operator should be OPERATOR_LOGICAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = '&&'
+LIMIT 1;
+----
+&&	OPERATOR_LOGICAL
+
+# Test: || operator should be OPERATOR_LOGICAL
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = '||'
+LIMIT 1;
+----
+||	OPERATOR_LOGICAL
+
+# =============================================================================
+# IDENTIFIER AND EXPANSION REFINEMENTS
+# =============================================================================
+
+# Test: Variable name should be NAME_IDENTIFIER
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'variable_name'
+LIMIT 1;
+----
+variable_name	NAME_IDENTIFIER
+
+# Test: Simple expansion should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'simple_expansion'
+LIMIT 1;
+----
+simple_expansion	COMPUTATION_ACCESS
+
+# Test: Complex expansion should be COMPUTATION_ACCESS
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'expansion'
+LIMIT 1;
+----
+expansion	COMPUTATION_ACCESS
+
+# =============================================================================
+# MODULE REFINEMENTS
+# =============================================================================
+
+# Test: Program root should be DEFINITION_MODULE
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'program'
+LIMIT 1;
+----
+program	DEFINITION_MODULE
+
+# =============================================================================
+# COMMENT REFINEMENTS
+# =============================================================================
+
+# Test: Comment should be METADATA_COMMENT
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'comment'
+LIMIT 1;
+----
+comment	METADATA_COMMENT
+
+# =============================================================================
+# TEST EXPRESSION REFINEMENTS
+# =============================================================================
+
+# Test: Test command should be COMPUTATION_EXPRESSION
+query IT
+SELECT type, semantic_type_to_string(semantic_type) as sem_type
+FROM read_ast('test/data/bash/simple.sh')
+WHERE type = 'test_command'
+LIMIT 1;
+----
+test_command	COMPUTATION_EXPRESSION

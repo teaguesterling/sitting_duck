@@ -97,6 +97,9 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 	vector<StackEntry> stack;
 	stack.push_back({root, -1, 0, 0, false, 0});
 
+	// Scope stack for qualified_name: tracks (node_index, "T/name") segments
+	vector<pair<idx_t, string>> scope_stack;
+
 	while (!stack.empty()) {
 		// Check if the top entry is processed before copying
 		if (!stack.back().processed) {
@@ -245,6 +248,26 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 				ast_node.native_extraction_attempted = false;
 			}
 
+			// Build qualified_name for named definition nodes.
+			// All four definition types (F/C/V/M) push scopes so that nested definitions
+			// within them get properly scoped paths. For example, a variable assignment
+			// self.name inside __init__ produces C/User F/__init__ V/name.
+			if (config.context >= ContextLevel::NORMALIZED) {
+				char type_code = SemanticTypes::GetDefinitionTypeCode(ast_node.semantic_type);
+				if (type_code != '\0' && !ast_node.name_raw.empty()) {
+					string segment = string(1, type_code) + "/" + ast_node.name_raw;
+					// Build qualified_name from scope_stack + this segment
+					string qname;
+					for (auto &scope : scope_stack) {
+						qname += scope.second;
+						qname += ' ';
+					}
+					qname += segment;
+					ast_node.name_qualified = qname;
+					scope_stack.push_back({entry.node_index, segment});
+				}
+			}
+
 			// Update legacy fields for backward compatibility
 			ast_node.UpdateComputedLegacyFields();
 
@@ -271,6 +294,14 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 
 			// Update legacy fields after descendant count change
 			result.nodes[entry.node_index].UpdateComputedLegacyFields();
+
+			// Pop scope stack if this node pushed a scope.
+			// The scope stack should always match: if the top entry's node_index
+			// is ahead of the current node, something went wrong with the DFS ordering.
+			D_ASSERT(scope_stack.empty() || scope_stack.back().first <= entry.node_index);
+			if (!scope_stack.empty() && scope_stack.back().first == entry.node_index) {
+				scope_stack.pop_back();
+			}
 
 			stack.pop_back();
 		}
@@ -303,16 +334,29 @@ void PopulateSemanticFieldsTemplated(ASTNode &node, const AdapterType *adapter, 
 		node.semantic_type = node_config->semantic_type;
 		node.universal_flags = node_config->flags;
 
-		// RUNTIME DETECTION: Check if function/method definitions have a body
-		// This handles languages like Java where method_declaration is used for both
-		// concrete methods (with body) and abstract/interface methods (without body)
-		uint8_t base_semantic = node.semantic_type & 0xFC; // Mask refinement bits
-		if (base_semantic == SemanticTypes::DEFINITION_FUNCTION &&
-		    (node.universal_flags & ASTNodeFlags::IS_SYNTAX_ONLY) == 0 &&
+		// Mask off language-specific refinement bits for semantic type comparison
+		uint8_t base_semantic = node.semantic_type & 0xFC;
+
+		// Bug #009: Auto-set IS_SYNTAX_ONLY for delimiter/punctuation nodes
+		// These are always pure syntax tokens regardless of what flags say in the .def files.
+		// This matches the scope of IsPunctuation() in semantic_types.cpp.
+		if (base_semantic == SemanticTypes::PARSER_DELIMITER ||
+		    base_semantic == SemanticTypes::PARSER_PUNCTUATION) {
+			node.universal_flags |= ASTNodeFlags::IS_SYNTAX_ONLY;
+		}
+
+		// RUNTIME DETECTION: Set IS_DECLARATION_ONLY for nodes without substantive children.
+		// A node is "embodied" (has_body) if it has at least one named child that isn't
+		// purely punctuation. This covers:
+		//   - Function definitions: abstract methods vs concrete methods with body blocks
+		//   - Class definitions: empty vs populated class bodies
+		//   - Any construct: leaf tokens vs compound nodes
+		// Skip nodes already marked as syntax-only (they're tokens, not constructs).
+		if ((node.universal_flags & ASTNodeFlags::IS_SYNTAX_ONLY) == 0 &&
 		    (node.universal_flags & ASTNodeFlags::IS_DECLARATION_ONLY) == 0) {
-			// This is a function definition (not a keyword token) that's not already marked as declaration-only
-			// Check at runtime if it actually has a body
-			if (!HasBodyChild(ts_node)) {
+			uint32_t named_child_count = ts_node_named_child_count(ts_node);
+			if (named_child_count == 0) {
+				// No named children at all — this is a leaf construct (e.g., identifier, keyword)
 				node.universal_flags |= ASTNodeFlags::IS_DECLARATION_ONLY;
 			}
 		}

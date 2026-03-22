@@ -11,7 +11,7 @@ This document describes the semantic meaning of each native extraction field acr
 | `parameters` | VARCHAR[] | Parameter names for functions, argument values for calls |
 | `modifiers` | VARCHAR[] | Access modifiers, keywords, inheritance info |
 | `annotations` | VARCHAR | Decorator/annotation text |
-| `qualified_name` | VARCHAR | Fully qualified name (currently not populated for most languages) |
+| `qualified_name` | VARCHAR | Scope-based definition path (e.g., `C/User F/__init__`). Top-level column, not part of native struct. |
 
 ---
 
@@ -225,25 +225,24 @@ Lua functions show `parameters = []` even when they have parameters:
 
 **Expected:** `parameters` should be `['n']` and `['n', 'acc']`
 
-### 4. qualified_name Never Populated
+### 4. qualified_name — Scope-Based Definition Path
 
-The `qualified_name` field is always NULL/empty across all languages.
+The `qualified_name` field is populated for all named definition nodes across all languages. It provides a scope-based path that disambiguates nodes with the same `name`.
 
-**Expected semantics by language:**
+**Format:** Space-separated `type_code/name` segments. Type codes: `F` (function), `C` (class), `V` (variable), `M` (module).
 
-| Language | Expected qualified_name Format | Example |
-|----------|-------------------------------|---------|
-| Python | `module.ClassName.method` | `mymodule.MyClass.__init__` |
-| Java | `package.ClassName.method` | `com.example.MyClass.doSomething` |
-| C++ | `namespace::Class::method` | `std::vector::push_back` |
-| Rust | `crate::module::function` | `std::io::read` |
-| Go | `package.Function` | `fmt.Println` |
-| JavaScript | `Class.method` or `module.export` | `Array.prototype.map` |
+| Example Code | qualified_name |
+|--------------|----------------|
+| Top-level `def process():` | `F/process` |
+| `class User: def __init__():` | `C/User F/__init__` |
+| Nested `class Account: class Settings: def __init__():` | `C/Account C/Settings F/__init__` |
+| `def outer(): def inner():` | `F/outer F/inner` |
 
-**Implementation approach:**
-- Track parent class/module during AST traversal
-- Build qualified name by concatenating parent names with language-appropriate separator
-- For calls, use `signature_type` as fallback (already contains `obj.method` pattern)
+**Key properties:**
+- NULL for non-definition nodes (calls, identifiers, operators, etc.)
+- Available at `context := 'normalized'` and above (not just `native`)
+- Excludes `file_path` — use `USING (file_path, qualified_name)` for cross-file joins
+- Language-agnostic format (same type codes across all 27 languages)
 
 ---
 

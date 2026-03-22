@@ -52,6 +52,7 @@ private:
 
 	// Statement converters (Architecture Plan Section 5.1)
 	vector<ASTNode> ConvertStatement(const SQLStatement &stmt, uint32_t &node_counter) const;
+	vector<ASTNode> ConvertCreateStatement(const CreateStatement &stmt, uint32_t &node_counter) const;
 	vector<ASTNode> ConvertSelectStatement(const SelectStatement &stmt, uint32_t &node_counter) const;
 	vector<ASTNode> ConvertSelectNode(const SelectNode &node, uint32_t &node_counter) const;
 

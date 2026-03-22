@@ -16,6 +16,7 @@ SQL table macros for navigating and analyzing AST structure. These macros accept
 | `ast_call_arguments(table, call_node_id)` | Get arguments of a function call |
 | **Definition Helpers** | |
 | `ast_definitions(table)` | Get all definitions with metadata |
+| `ast_definition_parent(table)` | Nearest definition ancestor per definition |
 | **Scope Analysis** | |
 | `ast_function_scope(table, node_id)` | Function descendants excluding nested functions |
 | `ast_class_members(table, node_id)` | Direct members of a class |
@@ -156,6 +157,32 @@ GROUP BY definition_type;
 SELECT name, file_path, start_line
 FROM ast_definitions('codebase')
 WHERE definition_type = 'function';
+```
+
+### `ast_definition_parent(table)`
+
+Resolve the nearest definition ancestor for each definition node, skipping organizational/structural nodes (blocks, bodies). Useful for building stable structural identity keys like `(name, kind, parent_name, parent_kind)` for cross-revision diffs.
+
+```sql
+SELECT def_name, kind, parent_def_name, parent_def_kind
+FROM ast_definition_parent('my_ast');
+```
+
+| Column | Description |
+|--------|-------------|
+| `node_id` | Definition node ID |
+| `def_name` | Definition name |
+| `kind` | Semantic type string (e.g., `DEFINITION_FUNCTION`) |
+| `parent_def_name` | Name of nearest definition ancestor |
+| `parent_def_kind` | Semantic type of nearest definition ancestor |
+| `parent_def_node_id` | Node ID of nearest definition ancestor |
+
+Example resolution chain for Python:
+```
+inner_var  (DEFINITION_VARIABLE) → nested     (DEFINITION_FUNCTION)
+nested     (DEFINITION_FUNCTION) → method     (DEFINITION_FUNCTION)
+method     (DEFINITION_FUNCTION) → OuterClass (DEFINITION_CLASS)
+OuterClass (DEFINITION_CLASS)    → <module>   (DEFINITION_MODULE)
 ```
 
 ---
