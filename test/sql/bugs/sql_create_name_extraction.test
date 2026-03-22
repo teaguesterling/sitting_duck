@@ -32,11 +32,8 @@ WHERE type = 'keyword_create' AND is_definition(semantic_type);
 # =============================================================================
 
 # ast_definitions() should return each SQL definition exactly once
-statement ok
-CREATE TEMP TABLE sql_ast AS SELECT * FROM read_ast('test/data/sql/create_function_example.sql');
-
 query IT
-SELECT COUNT(*) as cnt, name FROM ast_definitions('sql_ast')
+SELECT COUNT(*) as cnt, name FROM ast_definitions('test/data/sql/create_function_example.sql')
 WHERE definition_type IN ('function', 'class')
 GROUP BY name
 HAVING COUNT(*) > 1;
@@ -44,7 +41,7 @@ HAVING COUNT(*) > 1;
 
 # Verify no keyword text appears as definition names
 query I
-SELECT COUNT(*) FROM ast_definitions('sql_ast')
+SELECT COUNT(*) FROM ast_definitions('test/data/sql/create_function_example.sql')
 WHERE name IN ('CREATE', 'FUNCTION', 'TABLE', 'VIEW', 'OR', 'REPLACE');
 ----
 0
@@ -54,11 +51,8 @@ WHERE name IN ('CREATE', 'FUNCTION', 'TABLE', 'VIEW', 'OR', 'REPLACE');
 # =============================================================================
 
 # Python definitions should not include keyword text
-statement ok
-CREATE TEMP TABLE py_ast AS SELECT * FROM read_ast('test/data/python/typed_example.py');
-
 query I
-SELECT COUNT(*) FROM ast_definitions('py_ast')
+SELECT COUNT(*) FROM ast_definitions('test/data/python/typed_example.py')
 WHERE name IN ('def', 'class', 'import', 'from');
 ----
 0

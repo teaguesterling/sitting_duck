@@ -164,11 +164,8 @@ active_users	create_view
 # Test 16: ast_definitions returns correct SQL definitions without duplicates
 # ===========================================================================
 
-statement ok
-CREATE TEMP TABLE sql_fn_ast AS SELECT * FROM read_ast('test/data/sql/create_function_example.sql');
-
 query TT
-SELECT name, definition_type FROM ast_definitions('sql_fn_ast')
+SELECT name, definition_type FROM ast_definitions('test/data/sql/create_function_example.sql')
 WHERE definition_type IN ('function', 'class')
 ORDER BY start_line;
 ----
