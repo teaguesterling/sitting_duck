@@ -94,7 +94,7 @@ Pet	class	[{'name': Dog, 'type': extends}, {'name': Cat, 'type': extends}]	[has_
 #   - signature_type: NULL (no return type info)
 #   - parameters: Actual argument values - for positional args: name='', type=value
 
-# Test: Simple function calls have name but no qualified_name (scope-based, definitions only)
+# Test: Simple function calls have name (qualified_name is NULL for calls)
 query ITT
 SELECT name, qualified_name, peek FROM read_ast('test/data/python/simple.py', context := 'native', peek := 40)
 WHERE type = 'call' AND name IS NOT NULL AND length(name) > 0

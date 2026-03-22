@@ -185,23 +185,23 @@ owner	String
 # COMPUTATION_CALL - Method Invocations
 # =============================================================================
 
-# Test: Simple method calls have correct name and qualified_name
+# Test: Method calls have correct name and parameters (qualified_name is NULL for calls)
 query ITT
 SELECT name, qualified_name, parameters FROM read_ast('test/data/languages/java/Test.java', context := 'native')
 WHERE type = 'method_invocation' AND name IS NOT NULL AND length(name) > 0
 ORDER BY start_line;
 ----
-increment	test.increment	[]
-add	numbers.add	[{'name': '', 'type': i}]
+increment	NULL	[]
+add	NULL	[{'name': '', 'type': i}]
 collect	NULL	[{'name': '', 'type': 'Collectors.toList()'}]
 filter	NULL	[{'name': '', 'type': 'n -> n % 2 == 0'}]
-stream	numbers.stream	[]
-toList	Collectors.toList	[]
-println	System.out.println	[{'name': '', 'type': '"Even numbers: " + evenNumbers'}]
-processData	processData	[{'name': '', 'type': 'null'}]
-println	System.err.println	[{'name': '', 'type': '"Error: " + e.getMessage()'}]
-getMessage	e.getMessage	[]
-toUpperCase	input.toUpperCase	[]
+stream	NULL	[]
+toList	NULL	[]
+println	NULL	[{'name': '', 'type': '"Even numbers: " + evenNumbers'}]
+processData	NULL	[{'name': '', 'type': 'null'}]
+println	NULL	[{'name': '', 'type': '"Error: " + e.getMessage()'}]
+getMessage	NULL	[]
+toUpperCase	NULL	[]
 
 # =============================================================================
 # Semantic Type Validation
