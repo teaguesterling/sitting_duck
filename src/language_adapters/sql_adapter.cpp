@@ -241,7 +241,6 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
                     "keyword_any", OPERATOR_COMPARISON, NODE_TEXT,
                     NONE, ASTNodeFlags::IS_KEYWORD) DEF_TYPE("keyword_some", OPERATOR_COMPARISON, NODE_TEXT, NONE,
                                                              ASTNodeFlags::IS_KEYWORD)
-                    DEF_TYPE("keyword_unique", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
                         DEF_TYPE("keyword_last", ORGANIZATION_LIST, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD) DEF_TYPE(
                             "keyword_asc", ORGANIZATION_LIST, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
                             DEF_TYPE("keyword_nulls", ORGANIZATION_LIST, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
