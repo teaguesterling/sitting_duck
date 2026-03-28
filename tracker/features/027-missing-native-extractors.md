@@ -1,6 +1,6 @@
 # Feature: Add Native Extractors for Remaining Languages
 
-## Status: Open
+## Status: Partially Complete
 
 ## Priority: Medium
 
@@ -99,6 +99,15 @@ For each language:
 
 - Commit `e03ae29`: Updated all language configs to use FIND_CALL_TARGET
 - Commit `a8878a6`: Redesign native extraction model for calls
+
+## Progress
+
+**Fixed in PR #54 (March 2026):**
+- Java — type recognition, constructors, fields, calls
+- Swift — return types, parameters, modifiers, properties
+- PHP — method modifier extraction
+
+These languages now have working native extractors with qualified_name and parameters.
 
 ## Notes
 

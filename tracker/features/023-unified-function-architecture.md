@@ -1,9 +1,10 @@
 # Unified Function Architecture Implementation
 
-## Status: IN PROGRESS 🚧
-**Branch:** `unified-function-architecture`  
-**Started:** Current session  
-**Priority:** Critical - Foundational architecture
+## Status: STALLED
+**Branch:** `unified-function-architecture`
+**Started:** Late 2025
+**Last Activity:** January 2026
+**Priority:** Deprioritized — current flat-table + SQL macro approach is working well
 
 ## Overview
 Unify all 5 AST functions around a single parsing backend while providing clean input/output matrix:

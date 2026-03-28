@@ -1,6 +1,6 @@
 # DuckDB AST Extension - Development Priorities
 
-**Last Updated:** 2026-03-04
+**Last Updated:** 2026-03-28
 
 ## Priority Levels
 
@@ -11,22 +11,34 @@
 
 ## Current Status
 
-### Completed (since last update)
+### Completed (since last update on 2026-03-04)
+- `detect_language()` scalar function (#56) — expose language detection for downstream tools
+- `qualified_name` column with scoped definition paths (PR #55) — e.g., `MyClass.method`
+- `ast_definition_parent` macro (PR #53) — nearest definition ancestor resolution
+- Native extractor fixes for Java, Swift, PHP (PR #54) — return types, parameters, modifiers
+- Bash semantic refinements and refinement tests for 8 languages (PR #42)
+- File-path macro signature migration (PRs #48, #39) — whole-file macros now take source path
+- SQL CREATE FUNCTION name extraction (PR #50)
+- Pattern matching: variadic capture, same-name constraints, bug fixes (PR #47)
+- NULL name extraction fixes across C#, HCL, Dart, C++ (PR #46)
+- Bugs #009 (is_syntax_only for delimiters), #010 (punctuation consistency), #011 (comparison types) — all fixed in PR #43
+
+### Previously Completed
 - 27 language support (Bash, C, C++, C#, CSS, Dart, Go, GraphQL, HCL, HTML, Java, JavaScript, JSON, Kotlin, Lua, Markdown, PHP, Python, R, Ruby, Rust, SQL, Swift, TOML, TypeScript, YAML, Zig)
 - Semantic type system with cross-language type codes
 - 50+ SQL macros (tree navigation, pattern matching, analysis)
 - SQL-based pattern matching with `ast_match()` / `ast_pattern()` / `ast_capture()`
 - Wildcard capture system (named, anonymous, variadic with LIST return)
 - Semantic predicates (40+ is_*() macros)
-- Source extraction (`ast_get_source()`, `ast_get_source_numbered()`)
+- Source extraction (`ast_get_source()`, `ast_get_source_numbered()`, `ast_source_of()`)
 - Children/descendant counts for O(1) subtree operations
 - Parser ownership refactor, KIND taxonomy integration
-- 75 test files covering all languages and features
-- Bugs #001-005, #007-013 all fixed (12 of 13 total)
+- 87 test files covering all languages and features
+- Bugs #001-005, #007-013 all fixed (13 of 13 total)
 - IS_SYNTAX_ONLY flags, punctuation consistency, comparison type fixes
 
-### In Progress
-- #023 Unified function architecture (Phase 1: unified backend)
+### Stalled
+- #023 Unified function architecture — no activity since January 2026, deprioritized
 
 ### Only Open Bug
 - #006 Performance tests slow (26s vs 0.1s for basic tests) - Medium priority
@@ -38,22 +50,13 @@
    - Add `only_types`, `max_depth` parameters to read_ast
    - Essential for large codebases, 5-50x memory reduction
 
-2. **[FEATURE] ast_get_parent_chain()** (#015)
-   - Get all ancestors of a node up to root
-   - Critical for scope understanding and qualified names
-
-3. **[FEATURE] ast_find_references()** (#016)
+2. **[FEATURE] ast_find_references()** (#016)
    - Find all uses of a variable/function within scope
    - Core navigation feature
 
-4. **[FEATURE] ast_get_calls()** (#017)
+3. **[FEATURE] ast_get_calls()** (#017)
    - Extract function/method calls within a node
    - Essential for call graph analysis
-
-### P1 - Architecture
-1. **[FEATURE] Unified Function Architecture** (#023) - IN PROGRESS
-   - Single parsing backend for all 5 AST functions
-   - Enables method chaining and consistent behavior
 
 ### P2 - Pattern Matching Evolution
 1. **[FEATURE] Native Tree-sitter Query API** (#028)
@@ -68,7 +71,8 @@
 
 ### P2 - Language & Extraction
 1. **[FEATURE] Missing Native Extractors** (#027)
-   - Add native extractors for 9 languages (C#, Lua, HCL, Zig, etc.)
+   - Add native extractors for remaining languages (C#, Lua, HCL, Zig, etc.)
+   - Java, Swift, PHP extractors fixed in PR #54
 
 2. **[FEATURE] Standardized Semantic Extraction API** (#026)
    - Universal SQL functions: extract_functions, extract_classes, etc.

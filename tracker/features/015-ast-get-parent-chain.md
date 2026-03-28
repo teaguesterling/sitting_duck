@@ -29,7 +29,7 @@ WHERE a.type = 'class_definition';
 ## Remaining Gaps
 
 - **Scope path convenience**: No `ast_scope_path(ast_table, node_id)` that returns just the chain of named ancestors as a list (e.g., `['module', 'ClassName', 'method']`)
-- **Qualified name**: No `ast_qualified_name(ast_table, node_id)` that returns `module.ClassName.method`
+- ~~**Qualified name**: No `ast_qualified_name(ast_table, node_id)` that returns `module.ClassName.method`~~ — **Resolved:** `qualified_name` is now a column in all AST tables (PR #55, March 2026), populated with scoped definition paths using type codes (e.g., `C:MyClass/F:method`)
 - **Max depth parameter**: The original design included `max_depth` limiting — current `ast_ancestors` always goes to root
 - **Method chaining**: `.get_parent_chain()` syntax not yet available (depends on #023)
 
