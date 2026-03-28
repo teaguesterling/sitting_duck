@@ -1,6 +1,7 @@
 #include "duckdb.hpp"
 #include "include/semantic_types.hpp"
 #include "include/node_config.hpp"
+#include "include/ast_file_utils.hpp"
 #include "duckdb/common/types/vector.hpp"
 
 namespace duckdb {
@@ -440,6 +441,31 @@ static void GetSearchableTypesFunction(DataChunk &args, ExpressionState &state, 
 	ListVector::SetListSize(list_vector, offset);
 }
 
+// ============================================================================
+// Language Detection Functions
+// ============================================================================
+
+// detect_language(file_path) -> VARCHAR or NULL
+// Exposes the internal filename-to-language detection used by read_ast
+static void DetectLanguageFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	D_ASSERT(args.ColumnCount() == 1);
+
+	auto &path_vector = args.data[0];
+	auto count = args.size();
+
+	UnaryExecutor::ExecuteWithNulls<string_t, string_t>(
+	    path_vector, result, count, [&](string_t path_str, ValidityMask &mask, idx_t idx) {
+		    string file_path = path_str.GetString();
+		    string language = ASTFileUtils::DetectLanguageFromPath(file_path);
+		    if (language == "auto") {
+			    // "auto" means unrecognized - return NULL
+			    mask.SetInvalid(idx);
+			    return string_t();
+		    }
+		    return StringVector::AddString(result, language);
+	    });
+}
+
 void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
 	// Register semantic_type_to_string(semantic_type) -> VARCHAR
 	ScalarFunction semantic_type_to_string_func("semantic_type_to_string", {LogicalType::UTINYINT},
@@ -559,6 +585,16 @@ void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
 	                                      {LogicalType::VARCHAR, LogicalType::LIST(LogicalType::VARCHAR)},
 	                                      LogicalType::BOOLEAN, StringContainsAnyFunction);
 	loader.RegisterFunction(peek_contains_any_func);
+
+	// ========================================================================
+	// Language Detection Functions
+	// ========================================================================
+
+	// Register detect_language(file_path) -> VARCHAR
+	// Returns language name or NULL if extension not recognized
+	ScalarFunction detect_language_func("detect_language", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
+	                                    DetectLanguageFunction);
+	loader.RegisterFunction(detect_language_func);
 }
 
 } // namespace duckdb

@@ -1,0 +1,101 @@
+# name: test/sql/detect_language.test
+# group: [sql]
+
+# Test detect_language() scalar function
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Basic language detection from file extensions
+query I
+SELECT detect_language('src/main.py');
+----
+python
+
+query I
+SELECT detect_language('lib/parser.rs');
+----
+rust
+
+query I
+SELECT detect_language('app/index.js');
+----
+javascript
+
+query I
+SELECT detect_language('styles.css');
+----
+css
+
+query I
+SELECT detect_language('config.json');
+----
+json
+
+query I
+SELECT detect_language('Makefile.sh');
+----
+bash
+
+query I
+SELECT detect_language('main.go');
+----
+go
+
+query I
+SELECT detect_language('App.java');
+----
+java
+
+query I
+SELECT detect_language('query.sql');
+----
+sql
+
+# Case-insensitive extension matching
+query I
+SELECT detect_language('README.PY');
+----
+python
+
+# Unrecognized extensions return NULL
+query I
+SELECT detect_language('data.csv');
+----
+NULL
+
+query I
+SELECT detect_language('notes.txt');
+----
+NULL
+
+# No extension returns NULL
+query I
+SELECT detect_language('Makefile');
+----
+NULL
+
+# URI paths are handled (git:// scheme stripped)
+query I
+SELECT detect_language('git://./src/main.py@HEAD');
+----
+python
+
+# Works with column values - detect language for each file
+query II
+SELECT path, detect_language(path) as lang
+FROM (VALUES ('a.py'), ('b.rs'), ('c.csv'), ('d.ts')) t(path)
+ORDER BY path;
+----
+a.py	python
+b.rs	rust
+c.csv	NULL
+d.ts	typescript
+
+# Values match ast_supported_languages
+query I
+SELECT detect_language('test.py') IN (SELECT language FROM ast_supported_languages());
+----
+true
