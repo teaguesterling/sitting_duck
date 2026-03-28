@@ -76,6 +76,8 @@ SELECT * FROM read_ast(['**/*.txt'], 'javascript');
 | Dart | `'dart'` | `.dart` |
 | Zig | `'zig'` | `.zig` |
 | SQL | `'sql'` | `.sql` |
+| DuckDB | `'duckdb'` | `.duckdb` |
+| Dart | `'dart'` | `.dart` |
 | Markdown | `'markdown'` | `.md`, `.markdown` |
 | HTML | `'html'` | `.html`, `.htm` |
 | CSS | `'css'` | `.css` |

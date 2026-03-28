@@ -327,6 +327,44 @@ SELECT ast_get_source_line('file.py', 42) AS line;
 
 ---
 
+## Language Detection
+
+### `detect_language(file_path)`
+
+Detect programming language from a file path or filename. Uses the same logic as `read_ast()` for auto-detection.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `file_path` | VARCHAR | File path, filename, or URI |
+
+**Returns:** VARCHAR - language name, or NULL if not recognized
+
+```sql
+-- Basic detection
+SELECT detect_language('src/main.py');      -- 'python'
+SELECT detect_language('lib/parser.rs');    -- 'rust'
+SELECT detect_language('app/index.js');     -- 'javascript'
+
+-- Unrecognized extensions return NULL
+SELECT detect_language('data.csv');         -- NULL
+SELECT detect_language('Makefile');         -- NULL
+
+-- Case-insensitive
+SELECT detect_language('README.PY');        -- 'python'
+
+-- Handles URIs (git://, @rev suffixes)
+SELECT detect_language('git://./src/main.py@HEAD');  -- 'python'
+
+-- Use with file listings to check what's parseable
+SELECT path, detect_language(path) AS lang
+FROM glob('src/**/*')
+WHERE detect_language(path) IS NOT NULL;
+```
+
+Values match those returned by `ast_supported_languages()`.
+
+---
+
 ## String Utility Functions
 
 Functions for efficient string pattern matching.

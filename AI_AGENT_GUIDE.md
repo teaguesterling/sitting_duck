@@ -103,6 +103,15 @@ SELECT * FROM parse_ast('if x > 0: print(x)', 'python');
 
 List all supported languages with their file extensions.
 
+### `detect_language(file_path)` → VARCHAR
+
+Detect programming language from a file path. Returns language name or NULL if not recognized. Uses the same detection as `read_ast()`.
+
+```sql
+SELECT detect_language('main.py');    -- 'python'
+SELECT detect_language('data.csv');   -- NULL
+```
+
 ---
 
 ## Semantic Type System

@@ -170,6 +170,22 @@ FROM ast_supported_languages()
 ORDER BY language;
 ```
 
+### `detect_language(file_path)`
+
+**Language detection** - Detect programming language from a file path. Uses the same detection logic as `read_ast()`.
+
+**Parameters:**
+- `file_path` (VARCHAR): File path, filename, or URI
+
+**Returns:** VARCHAR - language name, or NULL if not recognized
+
+**Example:**
+```sql
+SELECT detect_language('src/main.py');     -- 'python'
+SELECT detect_language('data.csv');        -- NULL (not a known language)
+SELECT detect_language('lib/parser.rs');   -- 'rust'
+```
+
 ---
 
 ## Semantic Type System
