@@ -60,16 +60,19 @@ SELECT COUNT(*) > 0 FROM ast_supported_languages() WHERE language = 'sql';
 ----
 true
 
-# Test 8: Function returns proper table structure
-# ===============================================
+# Test 8: Function returns proper table structure with all columns
+# ================================================================
 
 statement ok
 CREATE TABLE lang_test AS SELECT * FROM ast_supported_languages();
 
 query I
-SELECT column_name FROM (DESCRIBE lang_test) WHERE column_name = 'language';
+SELECT column_name FROM (DESCRIBE lang_test) ORDER BY column_name;
 ----
+extensions
 language
+node_type_count
+parser_type
 
 # Test 9: No duplicate languages
 # ==============================
@@ -83,7 +86,49 @@ true
 # =======================================
 
 query I
-SELECT COUNT(*) FROM ast_supported_languages() 
+SELECT COUNT(*) FROM ast_supported_languages()
 WHERE language IN ('cpp', 'python', 'javascript', 'typescript', 'go', 'ruby', 'sql');
 ----
 7
+
+# Test 11: Extensions column returns lists
+# =========================================
+
+query I
+SELECT list_contains(extensions, 'py') FROM ast_supported_languages() WHERE language = 'python';
+----
+true
+
+query I
+SELECT list_contains(extensions, 'ts') FROM ast_supported_languages() WHERE language = 'typescript';
+----
+true
+
+# Test 12: Parser type is correct
+# ================================
+
+query I
+SELECT parser_type FROM ast_supported_languages() WHERE language = 'python';
+----
+tree-sitter
+
+query I
+SELECT parser_type FROM ast_supported_languages() WHERE language = 'duckdb';
+----
+native
+
+# Test 13: Node type count is positive for tree-sitter languages
+# ===============================================================
+
+query I
+SELECT COUNT(*) = 0 FROM ast_supported_languages() WHERE parser_type = 'tree-sitter' AND node_type_count <= 0;
+----
+true
+
+# Test 14: Languages with no file extensions (duckdb) return empty list
+# =====================================================================
+
+query I
+SELECT extensions FROM ast_supported_languages() WHERE language = 'duckdb';
+----
+[]
