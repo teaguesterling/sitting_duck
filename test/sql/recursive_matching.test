@@ -167,3 +167,59 @@ query I
 SELECT pattern_has_recursive('__X__');
 ----
 false
+
+# =============================================================================
+# <**> Recursive Matching in ast_match
+# =============================================================================
+
+# <*> with db.execute: only matches where call is a direct body statement
+# direct_execute, inner (x2) — nested_execute NOT matched (call is inside if/try)
+query I
+SELECT count(*)
+FROM ast_match(
+    'test/data/python/macros/recursive_match.py',
+    'def __F__(__):
+    %__<*>__%
+    db.execute(__Y__)');
+----
+3
+
+# <**> with db.execute: matches at ANY depth including inside if/try/except
+# All 6 functions that contain db.execute somewhere in their subtree
+query I
+SELECT count(*)
+FROM ast_match(
+    'test/data/python/macros/recursive_match.py',
+    'def __F__(__):
+    %__<**>__%
+    db.execute(__Y__)');
+----
+6
+
+# Named <**> captures the function name correctly
+query I
+SELECT captures['F'][1].name
+FROM ast_match(
+    'test/data/python/macros/recursive_match.py',
+    'def __F__(__):
+    %__DEEP<**>__%
+    db.execute(__Y__)')
+ORDER BY captures['F'][1].name;
+----
+direct_execute
+inner
+inner
+nested_execute
+outer_no_execute
+outer_with_execute
+
+# <**> with return: same as <*> since returns exist at body level in all cases
+query I
+SELECT count(*)
+FROM ast_match(
+    'test/data/python/macros/recursive_match.py',
+    'def __F__(__):
+    %__<**>__%
+    return __X__');
+----
+3
