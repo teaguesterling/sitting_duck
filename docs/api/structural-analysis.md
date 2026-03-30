@@ -14,6 +14,12 @@ SQL table macros for navigating and analyzing AST structure. These macros accept
 | `ast_containing_line(table, line)` | Find nodes containing a line |
 | `ast_in_range(table, start, end)` | Find nodes in a line range |
 | `ast_call_arguments(table, call_node_id)` | Get arguments of a function call |
+| **Relational Operators** | |
+| `ast_has(source, ancestor_type, desc_type, desc_name)` | Ancestors containing a descendant at any depth |
+| `ast_not_has(source, ancestor_type, desc_type, desc_name)` | Ancestors NOT containing a descendant |
+| `ast_inside(source, desc_type, anc_type, anc_name, desc_name)` | Descendants within an ancestor type |
+| `ast_precedes(source, node_type, before_type, before_name)` | Nodes preceding a sibling of given type |
+| `ast_follows(source, node_type, after_type, after_name)` | Nodes following a sibling of given type |
 | **Definition Helpers** | |
 | `ast_definitions(table)` | Get all definitions with metadata |
 | `ast_definition_parent(table)` | Nearest definition ancestor per definition |
@@ -121,6 +127,75 @@ SELECT arg_position, arg_name, arg_type FROM ast_call_arguments('call_ast', 2);
 | `start_line`, `end_line` | Location |
 
 Works across languages (Python, C++, Java, etc.) by detecting the appropriate argument list type (`argument_list`, `arguments`, `actual_parameters`).
+
+---
+
+## Relational Operators
+
+These macros use the `descendant_count` range-check for O(1) subtree membership queries. Unlike tree navigation macros that take a table name, these take a source file path or glob and call `read_ast()` internally.
+
+### `ast_has(source, ancestor_type, descendant_type, descendant_name, language)`
+
+Find nodes of `ancestor_type` that contain a descendant of `descendant_type` at any depth.
+
+```sql
+-- Functions containing a return statement
+SELECT name, start_line
+FROM ast_has('src/**/*.py', 'function_definition', 'return_statement');
+
+-- Functions containing a call to 'execute'
+SELECT name, start_line
+FROM ast_has('src/**/*.py', 'function_definition', 'call', 'execute');
+
+-- If statements containing a return (unnamed ancestor type works)
+SELECT start_line FROM ast_has('src/**/*.py', 'if_statement', 'return_statement');
+```
+
+### `ast_not_has(source, ancestor_type, descendant_type, descendant_name, language)`
+
+Inverse of `ast_has` — find nodes that do NOT contain a descendant.
+
+```sql
+-- Functions WITHOUT return statements
+SELECT name, start_line
+FROM ast_not_has('src/**/*.py', 'function_definition', 'return_statement');
+```
+
+### `ast_inside(source, descendant_type, ancestor_type, ancestor_name, descendant_name, language)`
+
+Find descendant nodes that are inside an ancestor of a given type.
+
+```sql
+-- Return statements inside function 'process_data'
+SELECT peek, start_line
+FROM ast_inside('src/**/*.py', 'return_statement', 'function_definition', 'process_data');
+
+-- All calls to 'execute' inside any function
+SELECT name, start_line
+FROM ast_inside('src/**/*.py', 'call', 'function_definition', descendant_name := 'execute');
+```
+
+### `ast_precedes(source, node_type, before_type, before_name, language)`
+
+Find nodes that come before (lower `sibling_index`) a sibling of given type.
+
+```sql
+-- Comments that appear before function definitions
+SELECT peek, start_line
+FROM ast_precedes('src/**/*.py', 'comment', 'function_definition');
+```
+
+### `ast_follows(source, node_type, after_type, after_name, language)`
+
+Find nodes that come after (higher `sibling_index`) a sibling of given type.
+
+```sql
+-- Return statements that follow an if statement (same parent)
+SELECT peek, start_line
+FROM ast_follows('src/**/*.py', 'return_statement', 'if_statement');
+```
+
+> **Note:** `ast_has`/`ast_not_has` use AST subtree ranges, not function-scope-aware regions. A function containing a nested function will include the nested function's descendants. Use `ast_function_scope()` for scope-aware queries.
 
 ---
 
