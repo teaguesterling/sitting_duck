@@ -223,3 +223,41 @@ FROM ast_match(
     return __X__');
 ----
 3
+
+# =============================================================================
+# Integration Tests — composing ast_has with ast_match
+# =============================================================================
+
+# ast_has and <**> should find the same set of functions (by name + line)
+query I
+SELECT count(*) FROM (
+    SELECT name, start_line FROM ast_has(
+        'test/data/python/macros/recursive_match.py',
+        'function_definition', 'call', 'execute')
+    INTERSECT
+    SELECT captures['F'][1].name, start_line FROM ast_match(
+        'test/data/python/macros/recursive_match.py',
+        'def __F__(__):
+    %__<**>__%
+    db.execute(__Y__)')
+);
+----
+6
+
+# <*> results should be a strict subset of <**> results
+query I
+SELECT count(*) FROM (
+    SELECT captures['F'][1].name, start_line FROM ast_match(
+        'test/data/python/macros/recursive_match.py',
+        'def __F__(__):
+    %__<*>__%
+    db.execute(__Y__)')
+    EXCEPT
+    SELECT captures['F'][1].name, start_line FROM ast_match(
+        'test/data/python/macros/recursive_match.py',
+        'def __F__(__):
+    %__<**>__%
+    db.execute(__Y__)')
+);
+----
+0
