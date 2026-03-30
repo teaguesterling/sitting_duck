@@ -177,14 +177,14 @@ CREATE OR REPLACE MACRO clean_pattern(pattern_str) AS
         '%__<[*+~?][^>]*>__%', '__', 'g');
 
 -- Check if pattern contains any variadic wildcards (either syntax)
--- Legacy: %__X<*>__% or %__X<+>__%
--- HTML: %__<X*>__% or %__<X+>__% or %__<*>__% or %__<+>__%
+-- Legacy: %__X<*>__%, %__X<+>__%, %__X<?>__%, %__X<~>__%
+-- HTML: %__<X*>__%, %__<X+>__%, %__<X?>__%, %__<X~>__%
 -- NOTE: This intentionally matches <**> too — callers must check recursive separately
 CREATE OR REPLACE MACRO pattern_has_variadic(pattern_str) AS
-    -- Legacy syntax: <*> or <+> inside %__...__%
-    regexp_matches(pattern_str, '%__[A-Z]*<[^>]*[*+][^>]*>__%')
-    -- HTML syntax: * or + as modifier inside %__<...>__%
-    OR regexp_matches(pattern_str, '%__<[^>]*[*+][^>]*>__%');
+    -- Legacy syntax: <*>, <+>, <?>, <~> inside %__...__%
+    regexp_matches(pattern_str, '%__[A-Z]*<[^>]*[*+?~][^>]*>__%')
+    -- HTML syntax: *, +, ?, ~ as modifier inside %__<...>__%
+    OR regexp_matches(pattern_str, '%__<[^>]*[*+?~][^>]*>__%');
 
 -- Check if pattern contains any recursive wildcards (<**> syntax)
 -- Legacy: %__X<**>__% or HTML: %__<X**>__%
@@ -313,10 +313,8 @@ CREATE OR REPLACE MACRO ast_match(
                 unnest.capture_name,
                 unnest.is_syntax,
                 unnest.wraps_wildcard,
-                -- Pattern-level variadic detection: * or + in any extended wildcard syntax
-                -- Legacy: %__X<*>__%, HTML: %__<X*>__% or %__<*>__%
-                (regexp_matches(pattern_str, '%__[A-Z]*<[^>]*[*+][^>]*>__%')
-                 OR regexp_matches(pattern_str, '%__<[^>]*[*+][^>]*>__%')) as pattern_has_variadic,
+                -- Pattern-level variadic detection: *, +, ?, ~ in any extended wildcard syntax
+                pattern_has_variadic(pattern_str) as pattern_has_variadic,
                 -- Pattern-level recursive detection: ** in any extended wildcard syntax
                 pattern_has_recursive(pattern_str) as pattern_has_recursive,
                 -- Per-wildcard recursive detection: <**> or HTML <NAME**>
@@ -326,8 +324,8 @@ CREATE OR REPLACE MACRO ast_match(
                 -- (wrapped by expression_statement, not a parameter/name wildcard)
                 (CASE
                     WHEN unnest.capture_name IS NOT NULL THEN
-                        pattern_str LIKE '%' || '%__' || unnest.capture_name || '<**>__%' || '%'
-                        OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '**%>__%' || '%'
+                        position('%__' || unnest.capture_name || '<**>__%' IN pattern_str) > 0
+                        OR regexp_matches(pattern_str, '%__<' || unnest.capture_name || '\*\*[^>]*>__%')
                     WHEN unnest.is_wildcard AND unnest.capture_name IS NULL
                          AND pattern_has_recursive(pattern_str) THEN
                         -- Anonymous recursive: only if at a body-level position
@@ -343,32 +341,47 @@ CREATE OR REPLACE MACRO ast_match(
                     ELSE false
                 END) as is_recursive,
                 -- Per-wildcard variadic detection: this specific wildcard has variadic syntax
-                -- Legacy: %__NAME<*>__%, HTML: %__<NAME*>__%
-                -- Excludes recursive wildcards (<**>) which use a separate pipeline
+                -- Uses position() for exact substring matching (LIKE _ is a wildcard, causing false matches)
+                -- Includes <*>, <+>, <?>, <~> — excludes <**> (recursive pipeline)
                 unnest.capture_name IS NOT NULL AND (
-                    -- Legacy syntax
-                    pattern_str LIKE '%' || '%__' || unnest.capture_name || '<*>__%' || '%'
-                    OR pattern_str LIKE '%' || '%__' || unnest.capture_name || '<+>__%' || '%'
-                    -- HTML syntax
-                    OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '*%>__%' || '%'
-                    OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '+%>__%' || '%'
+                    -- Legacy syntax: %__NAME<modifier>__%
+                    position('%__' || unnest.capture_name || '<*>__%' IN pattern_str) > 0
+                    OR position('%__' || unnest.capture_name || '<+>__%' IN pattern_str) > 0
+                    OR position('%__' || unnest.capture_name || '<?>__%' IN pattern_str) > 0
+                    OR position('%__' || unnest.capture_name || '<~>__%' IN pattern_str) > 0
+                    -- HTML syntax: %__<NAME modifier>__%
+                    OR regexp_matches(pattern_str, '%__<' || unnest.capture_name || '[*+?~][^>]*>__%')
                 ) AND NOT (
                     -- Exclude recursive wildcards
-                    pattern_str LIKE '%' || '%__' || unnest.capture_name || '<**>__%' || '%'
-                    OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '**%>__%' || '%'
+                    position('%__' || unnest.capture_name || '<**>__%' IN pattern_str) > 0
+                    OR regexp_matches(pattern_str, '%__<' || unnest.capture_name || '\*\*[^>]*>__%')
                 ) as is_variadic,
-                -- Variadic minimum count: 0 for *, 1 for +
+                -- Variadic minimum count: 0 for *, <?>, <~>; 1 for +
                 CASE
                     WHEN unnest.capture_name IS NOT NULL AND (
-                        pattern_str LIKE '%' || '%__' || unnest.capture_name || '<+>__%' || '%'
-                        OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '+%>__%' || '%'
+                        position('%__' || unnest.capture_name || '<+>__%' IN pattern_str) > 0
+                        OR regexp_matches(pattern_str, '%__<' || unnest.capture_name || '\+[^>]*>__%')
                     ) THEN 1
                     WHEN unnest.capture_name IS NOT NULL AND (
-                        pattern_str LIKE '%' || '%__' || unnest.capture_name || '<*>__%' || '%'
-                        OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '*%>__%' || '%'
+                        position('%__' || unnest.capture_name || '<*>__%' IN pattern_str) > 0
+                        OR position('%__' || unnest.capture_name || '<?>__%' IN pattern_str) > 0
+                        OR position('%__' || unnest.capture_name || '<~>__%' IN pattern_str) > 0
+                        OR regexp_matches(pattern_str, '%__<' || unnest.capture_name || '[*?~][^>]*>__%')
                     ) THEN 0
                     ELSE NULL
-                END as variadic_min
+                END as variadic_min,
+                -- Variadic maximum count: 1 for <?>; 0 for <~>; NULL (unlimited) for <*>, <+>
+                CASE
+                    WHEN unnest.capture_name IS NOT NULL AND (
+                        position('%__' || unnest.capture_name || '<?>__%' IN pattern_str) > 0
+                        OR regexp_matches(pattern_str, '%__<' || unnest.capture_name || '\?[^>]*>__%')
+                    ) THEN 1
+                    WHEN unnest.capture_name IS NOT NULL AND (
+                        position('%__' || unnest.capture_name || '<~>__%' IN pattern_str) > 0
+                        OR regexp_matches(pattern_str, '%__<' || unnest.capture_name || '~[^>]*>__%')
+                    ) THEN 0
+                    ELSE NULL
+                END as variadic_max
             FROM (SELECT unnest(ast_pattern_list(
                 clean_pattern(pattern_str),
                 language)) as unnest)
@@ -575,6 +588,7 @@ CREATE OR REPLACE MACRO ast_match(
                 mc.file_path as candidate_file,
                 p.capture_name,
                 p.variadic_min,
+                p.variadic_max,
                 p.rel_depth as variadic_depth,
                 t.parent_id as scope_parent_id
             FROM matched_candidates mc
@@ -854,6 +868,27 @@ CREATE OR REPLACE MACRO ast_match(
             )
         ),
 
+        -- Reject matches where variadic captures exceed variadic_max.
+        -- <?> has max=1 (optional), <~> has max=0 (negation/absence).
+        variadic_max_valid AS (
+            SELECT mc.file_path, mc.candidate_root
+            FROM matched_candidates mc
+            WHERE NOT EXISTS (
+                -- Find any variadic with a max constraint that is exceeded
+                SELECT 1
+                FROM (
+                    SELECT DISTINCT capture_name, variadic_max
+                    FROM pattern
+                    WHERE is_variadic = true AND capture_name IS NOT NULL AND variadic_max IS NOT NULL
+                ) max_vars
+                JOIN captures_variadic_listed vl
+                  ON vl.candidate_file = mc.file_path
+                 AND vl.candidate_root = mc.candidate_root
+                 AND vl.capture_name = max_vars.capture_name
+                WHERE length(vl.capture_list) > max_vars.variadic_max
+            )
+        ),
+
         -- =====================================================================
         -- Same-name constraint validation
         -- =====================================================================
@@ -915,6 +950,12 @@ CREATE OR REPLACE MACRO ast_match(
         SELECT 1 FROM variadic_plus_valid vpv
         WHERE vpv.file_path = mc.file_path
           AND vpv.candidate_root = mc.candidate_root
+    )
+    -- Variadic max constraint: reject matches where captures exceed max (<?> max=1, <~> max=0)
+    AND EXISTS (
+        SELECT 1 FROM variadic_max_valid vmv
+        WHERE vmv.file_path = mc.file_path
+          AND vmv.candidate_root = mc.candidate_root
     )
     -- Same-name constraint: reject matches where any same-name capture has inconsistent peeks
     AND NOT EXISTS (

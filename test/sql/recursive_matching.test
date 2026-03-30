@@ -261,3 +261,127 @@ SELECT count(*) FROM (
 );
 ----
 0
+
+# =============================================================================
+# <?> Optional Wildcard Tests (#58)
+# =============================================================================
+
+# <?> matches 0 or 1 siblings (optional)
+# simple (0 body) and multi (1 body) should match; process (2 body) should not
+query II
+SELECT captures['F'][1].name, length(captures['BODY'])
+FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__BODY<?>__%
+    return __Y__')
+ORDER BY captures['F'][1].name;
+----
+multi	1
+simple	0
+
+# <?> should reject when 2+ siblings exist
+query I
+SELECT count(*)
+FROM ast_match('test/data/python/macros/variadic_test.py',
+    'def __F__(__):
+    %__BODY<?>__%
+    return __Y__');
+----
+0
+
+# =============================================================================
+# <~> Negation Wildcard Tests (#59)
+# =============================================================================
+
+# <~> matches only when 0 siblings exist (nothing at that position)
+# Only simple (0 body before return) should match
+query I
+SELECT captures['F'][1].name
+FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__BODY<~>__%
+    return __Y__');
+----
+simple
+
+# <~> should reject when any siblings exist
+query I
+SELECT count(*)
+FROM ast_match('test/data/python/macros/variadic_test.py',
+    'def __F__(__):
+    %__BODY<~>__%
+    return __Y__');
+----
+0
+
+# =============================================================================
+# ast_not_has Tests (#59)
+# =============================================================================
+
+# Functions WITHOUT return statements
+query II
+SELECT name, start_line
+FROM ast_not_has(
+    'test/data/python/macros/recursive_match.py',
+    'function_definition',
+    'return_statement'
+)
+ORDER BY start_line;
+----
+direct_execute	18
+nested_execute	21
+no_execute	28
+outer_with_execute	32
+inner	33
+outer_no_execute	37
+inner	38
+
+# Functions WITHOUT execute calls
+query II
+SELECT name, start_line
+FROM ast_not_has(
+    'test/data/python/macros/recursive_match.py',
+    'function_definition',
+    'call',
+    'execute'
+)
+ORDER BY start_line;
+----
+shallow_return	2
+return_in_if	5
+deeply_nested_return	10
+no_execute	28
+
+# Wildcard summary: <*> 0+, <+> 1+, <?> 0-1, <~> 0 only
+# Compare all four on star_test.py (simple=0 body, multi=1 body)
+query I
+SELECT count(*) FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__X<*>__%
+    return __Y__');
+----
+2
+
+query I
+SELECT count(*) FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__X<+>__%
+    return __Y__');
+----
+1
+
+query I
+SELECT count(*) FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__X<?>__%
+    return __Y__');
+----
+2
+
+query I
+SELECT count(*) FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__X<~>__%
+    return __Y__');
+----
+1

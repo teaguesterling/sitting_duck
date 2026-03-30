@@ -674,6 +674,32 @@ CREATE OR REPLACE MACRO ast_has(
             AND (descendant_name IS NULL OR d.name = descendant_name)
       );
 
+-- Negation of ast_has: find ancestor nodes that do NOT contain a descendant type.
+-- Usage: SELECT * FROM ast_not_has('src/**/*.py', 'function_definition', 'return_statement')
+-- Usage: SELECT * FROM ast_not_has('src/main.py', 'function_definition', 'call', 'execute')
+CREATE OR REPLACE MACRO ast_not_has(
+    source,
+    ancestor_type,
+    descendant_type,
+    descendant_name := NULL,
+    language := NULL
+) AS TABLE
+    WITH ast AS (
+        SELECT * FROM read_ast(source, language)
+    )
+    SELECT a.*
+    FROM ast a
+    WHERE a.type = ancestor_type
+      AND a.name IS NOT NULL AND a.name != ''
+      AND NOT EXISTS (
+          SELECT 1
+          FROM ast d
+          WHERE d.node_id > a.node_id
+            AND d.node_id <= a.node_id + a.descendant_count
+            AND d.type = descendant_type
+            AND (descendant_name IS NULL OR d.name = descendant_name)
+      );
+
 -- Find descendant nodes that are inside an ancestor of a given type.
 -- Inverse of ast_has: returns the descendants, not the ancestors.
 -- Uses descendant_count range-check for O(1) subtree membership.
