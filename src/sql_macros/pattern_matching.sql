@@ -177,13 +177,22 @@ CREATE OR REPLACE MACRO clean_pattern(pattern_str) AS
         '%__<[*+~?][^>]*>__%', '__', 'g');
 
 -- Check if pattern contains any variadic wildcards (either syntax)
--- Legacy: %__X<*>__% or %__X<+>__%
--- HTML: %__<X*>__% or %__<X+>__% or %__<*>__% or %__<+>__%
+-- Legacy: %__X<*>__%, %__X<+>__%, %__X<?>__%, %__X<~>__%
+-- HTML: %__<X*>__%, %__<X+>__%, %__<X?>__%, %__<X~>__%
+-- NOTE: This intentionally matches <**> too — callers must check recursive separately
 CREATE OR REPLACE MACRO pattern_has_variadic(pattern_str) AS
-    -- Legacy syntax: <*> or <+> inside %__...__%
-    regexp_matches(pattern_str, '%__[A-Z]*<[^>]*[*+][^>]*>__%')
-    -- HTML syntax: * or + as modifier inside %__<...>__%
-    OR regexp_matches(pattern_str, '%__<[^>]*[*+][^>]*>__%');
+    -- Legacy syntax: <*>, <+>, <?>, <~> inside %__...__%
+    regexp_matches(pattern_str, '%__[A-Z]*<[^>]*[*+?~][^>]*>__%')
+    -- HTML syntax: *, +, ?, ~ as modifier inside %__<...>__%
+    OR regexp_matches(pattern_str, '%__<[^>]*[*+?~][^>]*>__%');
+
+-- Check if pattern contains any recursive wildcards (<**> syntax)
+-- Legacy: %__X<**>__% or HTML: %__<X**>__%
+CREATE OR REPLACE MACRO pattern_has_recursive(pattern_str) AS
+    -- Legacy syntax: <**> inside %__...__%
+    regexp_matches(pattern_str, '%__[A-Z]*<\*\*>__%')
+    -- HTML syntax: ** as modifier inside %__<...>__%
+    OR regexp_matches(pattern_str, '%__<[A-Z_]*\*\*[^*>]*>__%');
 
 -- Get list of variadic wildcard names
 CREATE OR REPLACE MACRO get_variadic_names(pattern_str) AS (
@@ -234,7 +243,11 @@ CREATE OR REPLACE MACRO ast_pattern(pattern_str, language) AS TABLE
             SELECT 1 FROM pattern_raw p2
             WHERE p2.parent_id = pattern_raw.node_id
               AND is_pattern_wildcard(p2.name)
-        ) as wraps_wildcard
+        ) as wraps_wildcard,
+        -- Note: is_recursive is always false here because the cleaned pattern
+        -- has no <**> syntax. Actual detection happens in ast_match's pattern CTE
+        -- using the original pattern_str. This field exists for struct completeness.
+        false as is_recursive
     FROM pattern_raw
     WHERE depth >= (SELECT min_depth FROM root_depth);
 
@@ -255,7 +268,8 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
         is_wildcard: is_wildcard,
         capture_name: capture_name,
         is_syntax: is_syntax,
-        wraps_wildcard: wraps_wildcard
+        wraps_wildcard: wraps_wildcard,
+        is_recursive: is_recursive
     })
     FROM ast_pattern(pattern_str, language)
 );
@@ -304,32 +318,74 @@ CREATE OR REPLACE MACRO ast_match(
                 unnest.capture_name,
                 unnest.is_syntax,
                 unnest.wraps_wildcard,
-                -- Pattern-level variadic detection: * or + in any extended wildcard syntax
-                -- Legacy: %__X<*>__%, HTML: %__<X*>__% or %__<*>__%
-                (regexp_matches(pattern_str, '%__[A-Z]*<[^>]*[*+][^>]*>__%')
-                 OR regexp_matches(pattern_str, '%__<[^>]*[*+][^>]*>__%')) as pattern_has_variadic,
+                -- Pattern-level variadic detection: *, +, ?, ~ in any extended wildcard syntax
+                pattern_has_variadic(pattern_str) as pattern_has_variadic,
+                -- Pattern-level recursive detection: ** in any extended wildcard syntax
+                pattern_has_recursive(pattern_str) as pattern_has_recursive,
+                -- Per-wildcard recursive detection: <**> or HTML <NAME**>
+                -- Named: match capture_name against pattern string
+                -- Anonymous: use pattern-level flag + check this wildcard is body-level
+                -- (wrapped by expression_statement, not a parameter/name wildcard)
+                (CASE
+                    WHEN unnest.capture_name IS NOT NULL THEN
+                        position('%__' || unnest.capture_name || '<**>__%' IN pattern_str) > 0
+                        OR regexp_matches(pattern_str, '%__<' || unnest.capture_name || '\*\*[^>]*>__%')
+                    WHEN unnest.is_wildcard AND unnest.capture_name IS NULL
+                         AND pattern_has_recursive(pattern_str) THEN
+                        -- Anonymous recursive: only if at a body-level position
+                        -- (i.e., wrapped by an expression_statement)
+                        unnest.wraps_wildcard = false  -- the wildcard itself is not a wrapper
+                        AND unnest.rel_depth > 0
+                        AND EXISTS (
+                            SELECT 1 FROM (SELECT unnest(ast_pattern_list(
+                                clean_pattern(pattern_str), language)) as pw)
+                            WHERE pw.wraps_wildcard = true
+                              AND pw.rel_depth = unnest.rel_depth::INTEGER - 1
+                        )
+                    ELSE false
+                END) as is_recursive,
                 -- Per-wildcard variadic detection: this specific wildcard has variadic syntax
-                -- Legacy: %__NAME<*>__%, HTML: %__<NAME*>__%
+                -- Uses position() for exact substring matching (LIKE _ is a wildcard, causing false matches)
+                -- Includes <*>, <+>, <?>, <~> — excludes <**> (recursive pipeline)
                 unnest.capture_name IS NOT NULL AND (
-                    -- Legacy syntax
-                    pattern_str LIKE '%' || '%__' || unnest.capture_name || '<*>__%' || '%'
-                    OR pattern_str LIKE '%' || '%__' || unnest.capture_name || '<+>__%' || '%'
-                    -- HTML syntax
-                    OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '*%>__%' || '%'
-                    OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '+%>__%' || '%'
+                    -- Legacy syntax: %__NAME<modifier>__%
+                    position('%__' || unnest.capture_name || '<*>__%' IN pattern_str) > 0
+                    OR position('%__' || unnest.capture_name || '<+>__%' IN pattern_str) > 0
+                    OR position('%__' || unnest.capture_name || '<?>__%' IN pattern_str) > 0
+                    OR position('%__' || unnest.capture_name || '<~>__%' IN pattern_str) > 0
+                    -- HTML syntax: %__<NAME modifier>__%
+                    OR regexp_matches(pattern_str, '%__<' || unnest.capture_name || '[*+?~][^>]*>__%')
+                ) AND NOT (
+                    -- Exclude recursive wildcards
+                    position('%__' || unnest.capture_name || '<**>__%' IN pattern_str) > 0
+                    OR regexp_matches(pattern_str, '%__<' || unnest.capture_name || '\*\*[^>]*>__%')
                 ) as is_variadic,
-                -- Variadic minimum count: 0 for *, 1 for +
+                -- Variadic minimum count: 0 for *, <?>, <~>; 1 for +
                 CASE
                     WHEN unnest.capture_name IS NOT NULL AND (
-                        pattern_str LIKE '%' || '%__' || unnest.capture_name || '<+>__%' || '%'
-                        OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '+%>__%' || '%'
+                        position('%__' || unnest.capture_name || '<+>__%' IN pattern_str) > 0
+                        OR regexp_matches(pattern_str, '%__<' || unnest.capture_name || '\+[^>]*>__%')
                     ) THEN 1
                     WHEN unnest.capture_name IS NOT NULL AND (
-                        pattern_str LIKE '%' || '%__' || unnest.capture_name || '<*>__%' || '%'
-                        OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '*%>__%' || '%'
+                        position('%__' || unnest.capture_name || '<*>__%' IN pattern_str) > 0
+                        OR position('%__' || unnest.capture_name || '<?>__%' IN pattern_str) > 0
+                        OR position('%__' || unnest.capture_name || '<~>__%' IN pattern_str) > 0
+                        OR regexp_matches(pattern_str, '%__<' || unnest.capture_name || '[*?~][^>]*>__%')
                     ) THEN 0
                     ELSE NULL
-                END as variadic_min
+                END as variadic_min,
+                -- Variadic maximum count: 1 for <?>; 0 for <~>; NULL (unlimited) for <*>, <+>
+                CASE
+                    WHEN unnest.capture_name IS NOT NULL AND (
+                        position('%__' || unnest.capture_name || '<?>__%' IN pattern_str) > 0
+                        OR regexp_matches(pattern_str, '%__<' || unnest.capture_name || '\?[^>]*>__%')
+                    ) THEN 1
+                    WHEN unnest.capture_name IS NOT NULL AND (
+                        position('%__' || unnest.capture_name || '<~>__%' IN pattern_str) > 0
+                        OR regexp_matches(pattern_str, '%__<' || unnest.capture_name || '~[^>]*>__%')
+                    ) THEN 0
+                    ELSE NULL
+                END as variadic_max
             FROM (SELECT unnest(ast_pattern_list(
                 clean_pattern(pattern_str),
                 language)) as unnest)
@@ -343,6 +399,23 @@ CREATE OR REPLACE MACRO ast_match(
             FROM pattern
             WHERE rel_depth = 0
             LIMIT 1
+        ),
+
+        -- Precompute recursive wildcard depth threshold.
+        -- When <**> is present, pattern nodes at or below this depth use flexible
+        -- depth/sibling matching. The threshold is the rel_depth of the wrapper
+        -- (expression_statement) that contains the recursive wildcard.
+        recursive_threshold AS (
+            SELECT COALESCE(
+                MIN(p3.rel_depth),
+                999  -- No recursive wildcard: threshold never triggers
+            ) as depth
+            FROM pattern p3
+            WHERE p3.wraps_wildcard
+              AND EXISTS (
+                  SELECT 1 FROM pattern p4
+                  WHERE p4.is_recursive AND p4.rel_depth = p3.rel_depth + 1
+              )
         ),
 
         -- Find candidate roots in target (nodes matching pattern root)
@@ -389,6 +462,7 @@ CREATE OR REPLACE MACRO ast_match(
                 FROM pattern p
                 WHERE p.is_wildcard = false
                   AND NOT p.is_variadic  -- Skip variadic wildcards in verification
+                  AND NOT p.is_recursive  -- Skip recursive wildcards in verification
                   AND NOT p.wraps_wildcard  -- Skip wrapper nodes (e.g., expression_statement around __X__)
                   AND NOT EXISTS (
                       SELECT 1
@@ -397,10 +471,19 @@ CREATE OR REPLACE MACRO ast_match(
                         AND t.node_id >= c.candidate_root
                         AND t.node_id <= c.candidate_root + c.candidate_descendants
                         -- Depth matching with optional fuzz (cast to INTEGER to avoid UINT32 overflow)
-                        AND ABS((t.depth::INTEGER - c.candidate_depth::INTEGER) - p.rel_depth::INTEGER) <= depth_fuzz
+                        -- When recursive wildcards present: nodes at/below the wrapper depth
+                        -- of the recursive wildcard use >= matching (any depth deeper than expected)
+                        AND CASE
+                            WHEN p.pattern_has_recursive
+                                 AND p.rel_depth >= (SELECT depth FROM recursive_threshold)
+                            THEN (t.depth::INTEGER - c.candidate_depth::INTEGER) >= p.rel_depth::INTEGER
+                            ELSE ABS((t.depth::INTEGER - c.candidate_depth::INTEGER) - p.rel_depth::INTEGER) <= depth_fuzz
+                        END
                         -- Sibling matching: exact when no variadics, relaxed when variadics present
                         AND (p.rel_depth = 0
                              OR p.pattern_has_variadic  -- Skip sibling check if variadic present
+                             OR (p.pattern_has_recursive
+                                 AND p.rel_depth >= (SELECT depth FROM recursive_threshold))
                              OR t.sibling_index = p.sibling_index)
                         -- Match on type or semantic_type based on match_by parameter
                         -- For semantic_type mode: use exact type for operator TOKENS (*, +, etc.)
@@ -446,13 +529,22 @@ CREATE OR REPLACE MACRO ast_match(
                 t.file_path = mc.file_path
                 AND t.node_id >= mc.candidate_root
                 AND t.node_id <= mc.candidate_root + mc.candidate_descendants
-                AND ABS((t.depth::INTEGER - mc.candidate_depth::INTEGER) - p.rel_depth::INTEGER) <= depth_fuzz
+                -- Depth matching: flexible when at/below recursive wildcard wrapper depth
+                AND CASE
+                    WHEN p.pattern_has_recursive
+                         AND p.rel_depth >= (SELECT depth FROM recursive_threshold)
+                    THEN (t.depth::INTEGER - mc.candidate_depth::INTEGER) >= p.rel_depth::INTEGER
+                    ELSE ABS((t.depth::INTEGER - mc.candidate_depth::INTEGER) - p.rel_depth::INTEGER) <= depth_fuzz
+                END
                 AND (p.rel_depth = 0
                      OR p.pattern_has_variadic
+                     OR (p.pattern_has_recursive
+                         AND p.rel_depth >= (SELECT depth FROM recursive_threshold))
                      OR t.sibling_index = p.sibling_index)
             WHERE p.is_wildcard = true
               AND p.capture_name IS NOT NULL
               AND NOT p.is_variadic
+              AND NOT p.is_recursive
         ),
 
         -- Deduplicate single captures - prefer nodes at expected sibling position
@@ -509,6 +601,7 @@ CREATE OR REPLACE MACRO ast_match(
                 mc.file_path as candidate_file,
                 p.capture_name,
                 p.variadic_min,
+                p.variadic_max,
                 p.rel_depth as variadic_depth,
                 t.parent_id as scope_parent_id
             FROM matched_candidates mc
@@ -619,6 +712,118 @@ CREATE OR REPLACE MACRO ast_match(
         ),
 
         -- =====================================================================
+        -- Recursive (<**>) capture pipeline
+        -- =====================================================================
+        -- Recursive wildcards capture ALL descendants at any depth within the
+        -- scope region. Uses descendant_count range-check (not recursive CTE)
+        -- since nodes are in DFS pre-order.
+
+        -- Find scope for recursive captures (same approach as variadic_scope)
+        recursive_scope AS (
+            SELECT DISTINCT
+                mc.candidate_root,
+                mc.file_path as candidate_file,
+                p.capture_name,
+                p.rel_depth as recursive_depth,
+                t.parent_id as scope_parent_id,
+                t_parent.node_id as scope_node_id,
+                t_parent.descendant_count as scope_descendant_count
+            FROM matched_candidates mc
+            CROSS JOIN pattern p
+            -- Find a non-wildcard, non-wrapper anchor at the wrapper's depth
+            JOIN pattern p2 ON
+                p2.rel_depth = p.rel_depth - 1
+                AND NOT p2.is_wildcard
+                AND NOT p2.wraps_wildcard
+            JOIN ast t ON
+                t.file_path = mc.file_path
+                AND t.node_id >= mc.candidate_root
+                AND t.node_id <= mc.candidate_root + mc.candidate_descendants
+                AND ABS((t.depth::INTEGER - mc.candidate_depth::INTEGER) - p2.rel_depth::INTEGER) <= depth_fuzz
+                AND (CASE
+                    WHEN match_by = 'semantic_type'
+                         THEN semantic_type_base(t.semantic_type) = semantic_type_base(p2.pattern_semantic_type)
+                    ELSE t.type = p2.pattern_type
+                END)
+                AND (p2.pattern_name IS NULL OR p2.pattern_name = '' OR t.name = p2.pattern_name)
+            -- Get the scope parent node for descendant range
+            JOIN ast t_parent ON
+                t_parent.file_path = mc.file_path
+                AND t_parent.node_id = t.parent_id
+            WHERE p.is_recursive = true
+              AND p.capture_name IS NOT NULL
+        ),
+
+        -- Collect ALL descendants within the scope (any depth)
+        captures_recursive_raw AS (
+            SELECT
+                rs.candidate_root,
+                rs.candidate_file,
+                rs.capture_name,
+                t.node_id as captured_node_id,
+                t.type as captured_type,
+                t.name as captured_name,
+                t.peek as captured_peek,
+                t.start_line as captured_start_line,
+                t.end_line as captured_end_line
+            FROM recursive_scope rs
+            JOIN ast t ON
+                t.file_path = rs.candidate_file
+                AND t.node_id > rs.scope_node_id
+                AND t.node_id <= rs.scope_node_id + rs.scope_descendant_count
+            WHERE
+              -- Exclude syntax/punctuation nodes (when match_syntax = false)
+              (match_syntax OR NOT is_syntax_only(t.flags))
+              -- Exclude nodes already claimed by single wildcard captures
+              AND NOT EXISTS (
+                  SELECT 1 FROM captures_single_dedup sd
+                  WHERE sd.candidate_file = rs.candidate_file
+                    AND sd.candidate_root = rs.candidate_root
+                    AND sd.captured_node_id = t.node_id
+              )
+        ),
+
+        -- Aggregate recursive captures into ordered lists (DFS order = node_id order)
+        captures_recursive_listed AS (
+            SELECT
+                candidate_file,
+                candidate_root,
+                capture_name,
+                list({
+                    capture: capture_name,
+                    node_id: captured_node_id,
+                    type: captured_type,
+                    name: captured_name,
+                    peek: captured_peek,
+                    start_line: captured_start_line,
+                    end_line: captured_end_line
+                } ORDER BY captured_node_id) as capture_list
+            FROM captures_recursive_raw
+            GROUP BY candidate_file, candidate_root, capture_name
+        ),
+
+        -- Handle recursive wildcards that match zero descendants (empty list)
+        captures_recursive_empty AS (
+            SELECT
+                mc.file_path as candidate_file,
+                mc.candidate_root,
+                p.capture_name,
+                []::STRUCT(capture VARCHAR, node_id BIGINT, "type" VARCHAR, name VARCHAR, peek VARCHAR, start_line BIGINT, end_line BIGINT)[] as capture_list
+            FROM matched_candidates mc
+            CROSS JOIN (
+                SELECT DISTINCT capture_name
+                FROM pattern
+                WHERE is_recursive = true AND capture_name IS NOT NULL
+            ) p
+            WHERE NOT EXISTS (
+                SELECT 1 FROM captures_recursive_listed rl
+                WHERE rl.candidate_file = mc.file_path
+                  AND rl.candidate_root = mc.candidate_root
+                  AND rl.capture_name = p.capture_name
+            )
+        ),
+
+        -- =====================================================================
         -- Combine and aggregate all captures
         -- =====================================================================
 
@@ -631,6 +836,12 @@ CREATE OR REPLACE MACRO ast_match(
             UNION ALL
             SELECT candidate_file, candidate_root, capture_name, capture_list
             FROM captures_variadic_empty
+            UNION ALL
+            SELECT candidate_file, candidate_root, capture_name, capture_list
+            FROM captures_recursive_listed
+            UNION ALL
+            SELECT candidate_file, candidate_root, capture_name, capture_list
+            FROM captures_recursive_empty
         ),
 
         -- Aggregate captures into MAP(VARCHAR, LIST(STRUCT{...}))
@@ -667,6 +878,27 @@ CREATE OR REPLACE MACRO ast_match(
                       AND vl.candidate_root = mc.candidate_root
                       AND vl.capture_name = plus_vars.capture_name
                 )
+            )
+        ),
+
+        -- Reject matches where variadic captures exceed variadic_max.
+        -- <?> has max=1 (optional), <~> has max=0 (negation/absence).
+        variadic_max_valid AS (
+            SELECT mc.file_path, mc.candidate_root
+            FROM matched_candidates mc
+            WHERE NOT EXISTS (
+                -- Find any variadic with a max constraint that is exceeded
+                SELECT 1
+                FROM (
+                    SELECT DISTINCT capture_name, variadic_max
+                    FROM pattern
+                    WHERE is_variadic = true AND capture_name IS NOT NULL AND variadic_max IS NOT NULL
+                ) max_vars
+                JOIN captures_variadic_listed vl
+                  ON vl.candidate_file = mc.file_path
+                 AND vl.candidate_root = mc.candidate_root
+                 AND vl.capture_name = max_vars.capture_name
+                WHERE length(vl.capture_list) > max_vars.variadic_max
             )
         ),
 
@@ -731,6 +963,12 @@ CREATE OR REPLACE MACRO ast_match(
         SELECT 1 FROM variadic_plus_valid vpv
         WHERE vpv.file_path = mc.file_path
           AND vpv.candidate_root = mc.candidate_root
+    )
+    -- Variadic max constraint: reject matches where captures exceed max (<?> max=1, <~> max=0)
+    AND EXISTS (
+        SELECT 1 FROM variadic_max_valid vmv
+        WHERE vmv.file_path = mc.file_path
+          AND vmv.candidate_root = mc.candidate_root
     )
     -- Same-name constraint: reject matches where any same-name capture has inconsistent peeks
     AND NOT EXISTS (

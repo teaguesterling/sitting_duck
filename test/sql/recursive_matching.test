@@ -1,0 +1,438 @@
+# name: test/sql/recursive_matching.test
+# group: [sql]
+
+# Test recursive/any-depth pattern matching macros
+# Issue #57: <**> wildcards and relational operators
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# ast_has Tests — ancestor nodes containing a descendant at any depth
+# =============================================================================
+
+# Functions that contain a return_statement at any depth
+# shallow_return (direct), return_in_if (depth 2), deeply_nested_return (depth 4)
+query II
+SELECT name, start_line
+FROM ast_has(
+    'test/data/python/macros/recursive_match.py',
+    'function_definition',
+    'return_statement'
+)
+ORDER BY start_line;
+----
+shallow_return	2
+return_in_if	5
+deeply_nested_return	10
+
+# Functions that contain a call to 'execute' at any depth
+# direct_execute, nested_execute, outer_with_execute (via inner), inner (x2), outer_no_execute (via inner)
+query II
+SELECT name, start_line
+FROM ast_has(
+    'test/data/python/macros/recursive_match.py',
+    'function_definition',
+    'call',
+    'execute'
+)
+ORDER BY start_line;
+----
+direct_execute	18
+nested_execute	21
+outer_with_execute	32
+inner	33
+outer_no_execute	37
+inner	38
+
+# Negative case: no function contains a call to 'nonexistent'
+query I
+SELECT count(*)
+FROM ast_has(
+    'test/data/python/macros/recursive_match.py',
+    'function_definition',
+    'call',
+    'nonexistent'
+);
+----
+0
+
+# =============================================================================
+# ast_inside Tests — descendant nodes inside an ancestor at any depth
+# =============================================================================
+
+# All return_statements inside function 'deeply_nested_return'
+# Has two returns: `return i` (deeply nested) and `return -1` (top level of function)
+query II
+SELECT peek, start_line
+FROM ast_inside(
+    'test/data/python/macros/recursive_match.py',
+    'return_statement',
+    'function_definition',
+    'deeply_nested_return'
+)
+ORDER BY start_line;
+----
+return i	14
+return -1	15
+
+# All calls to 'execute' inside function 'nested_execute'
+query I
+SELECT count(*)
+FROM ast_inside(
+    'test/data/python/macros/recursive_match.py',
+    'call',
+    'function_definition',
+    'nested_execute'
+)
+WHERE name = 'execute';
+----
+1
+
+# All return_statements inside ANY function (no name filter)
+query I
+SELECT count(*)
+FROM ast_inside(
+    'test/data/python/macros/recursive_match.py',
+    'return_statement',
+    'function_definition'
+);
+----
+5
+
+# =============================================================================
+# ast_follows / ast_precedes Tests — sibling ordering constraints
+# =============================================================================
+
+# return_statements that follow an if_statement (same parent)
+# return_in_if: return 0 follows if; deeply_nested_return: return -1 follows if
+query I
+SELECT count(*)
+FROM ast_follows(
+    'test/data/python/macros/recursive_match.py',
+    'return_statement',
+    'if_statement'
+);
+----
+2
+
+# if_statements that precede a return_statement (same parent)
+query I
+SELECT count(*)
+FROM ast_precedes(
+    'test/data/python/macros/recursive_match.py',
+    'if_statement',
+    'return_statement'
+);
+----
+2
+
+# =============================================================================
+# <**> Preprocessing Tests
+# =============================================================================
+
+# clean_pattern should strip <**> like other extended syntax
+query I
+SELECT clean_pattern('%__BODY<**>__%');
+----
+__BODY__
+
+# HTML syntax: <BODY**> should also clean
+query I
+SELECT clean_pattern('%__<BODY**>__%');
+----
+__BODY__
+
+# pattern_has_recursive detection
+query I
+SELECT pattern_has_recursive('%__BODY<**>__%');
+----
+true
+
+query I
+SELECT pattern_has_recursive('%__<BODY**>__%');
+----
+true
+
+# Single * should NOT be recursive
+query I
+SELECT pattern_has_recursive('%__BODY<*>__%');
+----
+false
+
+# Non-extended pattern should NOT be recursive
+query I
+SELECT pattern_has_recursive('__X__');
+----
+false
+
+# =============================================================================
+# <**> Recursive Matching in ast_match
+# =============================================================================
+
+# <*> with db.execute: only matches where call is a direct body statement
+# direct_execute, inner (x2) — nested_execute NOT matched (call is inside if/try)
+query I
+SELECT count(*)
+FROM ast_match(
+    'test/data/python/macros/recursive_match.py',
+    'def __F__(__):
+    %__<*>__%
+    db.execute(__Y__)');
+----
+3
+
+# <**> with db.execute: matches at ANY depth including inside if/try/except
+# All 6 functions that contain db.execute somewhere in their subtree
+query I
+SELECT count(*)
+FROM ast_match(
+    'test/data/python/macros/recursive_match.py',
+    'def __F__(__):
+    %__<**>__%
+    db.execute(__Y__)');
+----
+6
+
+# Named <**> captures the function name correctly
+query I
+SELECT captures['F'][1].name
+FROM ast_match(
+    'test/data/python/macros/recursive_match.py',
+    'def __F__(__):
+    %__DEEP<**>__%
+    db.execute(__Y__)')
+ORDER BY captures['F'][1].name;
+----
+direct_execute
+inner
+inner
+nested_execute
+outer_no_execute
+outer_with_execute
+
+# <**> with return: same as <*> since returns exist at body level in all cases
+query I
+SELECT count(*)
+FROM ast_match(
+    'test/data/python/macros/recursive_match.py',
+    'def __F__(__):
+    %__<**>__%
+    return __X__');
+----
+3
+
+# =============================================================================
+# Integration Tests — composing ast_has with ast_match
+# =============================================================================
+
+# ast_has and <**> should find the same set of functions (by name + line)
+query I
+SELECT count(*) FROM (
+    SELECT name, start_line FROM ast_has(
+        'test/data/python/macros/recursive_match.py',
+        'function_definition', 'call', 'execute')
+    INTERSECT
+    SELECT captures['F'][1].name, start_line FROM ast_match(
+        'test/data/python/macros/recursive_match.py',
+        'def __F__(__):
+    %__<**>__%
+    db.execute(__Y__)')
+);
+----
+6
+
+# <*> results should be a strict subset of <**> results
+query I
+SELECT count(*) FROM (
+    SELECT captures['F'][1].name, start_line FROM ast_match(
+        'test/data/python/macros/recursive_match.py',
+        'def __F__(__):
+    %__<*>__%
+    db.execute(__Y__)')
+    EXCEPT
+    SELECT captures['F'][1].name, start_line FROM ast_match(
+        'test/data/python/macros/recursive_match.py',
+        'def __F__(__):
+    %__<**>__%
+    db.execute(__Y__)')
+);
+----
+0
+
+# =============================================================================
+# <?> Optional Wildcard Tests (#58)
+# =============================================================================
+
+# <?> matches 0 or 1 siblings (optional)
+# simple (0 body) and multi (1 body) should match; process (2 body) should not
+query II
+SELECT captures['F'][1].name, length(captures['BODY'])
+FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__BODY<?>__%
+    return __Y__')
+ORDER BY captures['F'][1].name;
+----
+multi	1
+simple	0
+
+# <?> should reject when 2+ siblings exist
+query I
+SELECT count(*)
+FROM ast_match('test/data/python/macros/variadic_test.py',
+    'def __F__(__):
+    %__BODY<?>__%
+    return __Y__');
+----
+0
+
+# =============================================================================
+# <~> Negation Wildcard Tests (#59)
+# =============================================================================
+
+# <~> matches only when 0 siblings exist (nothing at that position)
+# Only simple (0 body before return) should match
+query I
+SELECT captures['F'][1].name
+FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__BODY<~>__%
+    return __Y__');
+----
+simple
+
+# <~> should reject when any siblings exist
+query I
+SELECT count(*)
+FROM ast_match('test/data/python/macros/variadic_test.py',
+    'def __F__(__):
+    %__BODY<~>__%
+    return __Y__');
+----
+0
+
+# =============================================================================
+# ast_not_has Tests (#59)
+# =============================================================================
+
+# Functions WITHOUT return statements
+query II
+SELECT name, start_line
+FROM ast_not_has(
+    'test/data/python/macros/recursive_match.py',
+    'function_definition',
+    'return_statement'
+)
+ORDER BY start_line;
+----
+direct_execute	18
+nested_execute	21
+no_execute	28
+outer_with_execute	32
+inner	33
+outer_no_execute	37
+inner	38
+
+# Functions WITHOUT execute calls
+query II
+SELECT name, start_line
+FROM ast_not_has(
+    'test/data/python/macros/recursive_match.py',
+    'function_definition',
+    'call',
+    'execute'
+)
+ORDER BY start_line;
+----
+shallow_return	2
+return_in_if	5
+deeply_nested_return	10
+no_execute	28
+
+# Wildcard summary: <*> 0+, <+> 1+, <?> 0-1, <~> 0 only
+# Compare all four on star_test.py (simple=0 body, multi=1 body)
+query I
+SELECT count(*) FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__X<*>__%
+    return __Y__');
+----
+2
+
+query I
+SELECT count(*) FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__X<+>__%
+    return __Y__');
+----
+1
+
+query I
+SELECT count(*) FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__X<?>__%
+    return __Y__');
+----
+2
+
+query I
+SELECT count(*) FROM ast_match('test/data/python/macros/star_test.py',
+    'def __F__(__):
+    %__X<~>__%
+    return __Y__');
+----
+1
+
+# =============================================================================
+# Edge Case Tests
+# =============================================================================
+
+# <**> in non-function context (if_statement containing return)
+query I
+SELECT count(*)
+FROM ast_match(
+    'test/data/python/macros/recursive_match.py',
+    'if __:
+    %__<**>__%
+    return __X__');
+----
+3
+
+# ast_has with unnamed ancestor types (no name filter)
+query I
+SELECT count(*)
+FROM ast_has(
+    'test/data/python/macros/recursive_match.py',
+    'if_statement',
+    'return_statement'
+);
+----
+3
+
+# ast_has with for_statement containing return
+query I
+SELECT count(*)
+FROM ast_has(
+    'test/data/python/macros/recursive_match.py',
+    'for_statement',
+    'return_statement'
+);
+----
+1
+
+# ast_not_has: functions are individual nodes, not scope-aware
+# outer_with_execute has inner() which has execute() — outer itself counts
+# as "having" execute because inner's subtree is within outer's descendant range
+query I
+SELECT count(*)
+FROM ast_not_has(
+    'test/data/python/macros/recursive_match.py',
+    'function_definition',
+    'call',
+    'execute'
+);
+----
+4

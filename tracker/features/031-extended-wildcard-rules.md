@@ -139,14 +139,22 @@ Use `_` or omit name entirely:
 
 ## Implementation
 
-### Phase 1: Basic HTML Wildcards
+### Phase 1: Basic HTML Wildcards — PARTIALLY COMPLETE
 
-**Scope:**
-- Parse `%__<...>__%` regions
-- Extract tag name as wildcard name (or `_` for anonymous)
-- Parse modifier attributes: `*`, `+`, `~`, `?`
+**Status:** Modifier parsing and matching implemented (PR #57/#58/#59). Constraint attribute application remains.
+
+**Completed:**
+- ✅ Parse `%__<...>__%` regions (regex-based)
+- ✅ Extract tag name as wildcard name (or `_` for anonymous)
+- ✅ Parse modifier attributes: `*`, `+`, `~`, `?`, `**` (via `parse_html_wildcard`)
+- ✅ Apply modifiers in pattern matching: `<*>` 0+, `<+>` 1+, `<?>` 0-1, `<~>` 0, `<**>` any-depth
+- ✅ Relational operators: `ast_has`, `ast_not_has`, `ast_inside`, `ast_precedes`, `ast_follows`
+
+**Remaining:**
 - Parse simple constraint attributes: `type`, `name`, `descendants`, etc.
 - Apply constraints in pattern matching CTEs
+
+**Scope:**
 
 **Implementation approach:**
 1. Regex extract `%__<(.+?)>__%` regions from pattern
@@ -182,9 +190,9 @@ Use `_` or omit name entirely:
 
 ### Phase 3: Advanced Features (Future)
 
-- `**` recursive depth matching
-- `<ancestor>` constraints (match must be inside X)
-- `<sibling>` constraints (match must be adjacent to X)
+- ~~`**` recursive depth matching~~ — DONE (#57)
+- ~~`<ancestor>` constraints (match must be inside X)~~ — DONE via `ast_inside` (#57)
+- ~~`<sibling>` constraints (match must be adjacent to X)~~ — DONE via `ast_precedes`/`ast_follows` (#57)
 - Performance optimizations with indexing
 
 ## Processing Pipeline

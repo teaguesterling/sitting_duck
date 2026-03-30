@@ -1,6 +1,6 @@
 # DuckDB AST Extension - Development Priorities
 
-**Last Updated:** 2026-03-28
+**Last Updated:** 2026-03-30
 
 ## Priority Levels
 
@@ -12,6 +12,8 @@
 ## Current Status
 
 ### Completed (since last update on 2026-03-04)
+- Recursive pattern matching (#57) — `<**>` any-depth wildcards, relational operators (`ast_has`, `ast_not_has`, `ast_inside`, `ast_precedes`, `ast_follows`)
+- Optional `<?>` and negation `<~>` wildcards (#58, #59) — complete wildcard cardinality system
 - `detect_language()` scalar function (#56) — expose language detection for downstream tools
 - `qualified_name` column with scoped definition paths (PR #55) — e.g., `MyClass.method`
 - `ast_definition_parent` macro (PR #53) — nearest definition ancestor resolution
@@ -28,7 +30,8 @@
 - Semantic type system with cross-language type codes
 - 50+ SQL macros (tree navigation, pattern matching, analysis)
 - SQL-based pattern matching with `ast_match()` / `ast_pattern()` / `ast_capture()`
-- Wildcard capture system (named, anonymous, variadic with LIST return)
+- Wildcard capture system (named, anonymous, variadic with LIST return, `<*>` `<+>` `<?>` `<~>` `<**>`)
+- Relational operators (`ast_has`, `ast_not_has`, `ast_inside`, `ast_precedes`, `ast_follows`)
 - Semantic predicates (40+ is_*() macros)
 - Source extraction (`ast_get_source()`, `ast_get_source_numbered()`, `ast_source_of()`)
 - Children/descendant counts for O(1) subtree operations
@@ -110,7 +113,7 @@
 3. **[FEATURE] AST Diff Analysis** (planned/005) - Code evolution
 4. **[FEATURE] Performance Caching** (planned/008) - Session-level AST cache
 5. **[FEATURE] Error Context Tracking** (planned/007) - Enhanced error messages
-6. **[FEATURE] Extended Wildcard Rules** (#031) - HTML/XML DSL for constraints
+6. **[FEATURE] Extended Wildcard Rules** (#031) - HTML/XML DSL for constraints (Phase 1 modifiers done: `*`, `+`, `?`, `~`, `**`; Phase 2 constraint attributes remain)
 7. **[FEATURE] Smart Pointer Refactor** (#018) - Memory safety improvement
 8. **[FEATURE] Grammar Adapter Refactor** (#025) - Consolidate language handling
 
