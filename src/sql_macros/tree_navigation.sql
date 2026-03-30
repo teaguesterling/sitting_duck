@@ -664,7 +664,6 @@ CREATE OR REPLACE MACRO ast_has(
     SELECT a.*
     FROM ast a
     WHERE a.type = ancestor_type
-      AND a.name IS NOT NULL AND a.name != ''
       AND EXISTS (
           SELECT 1
           FROM ast d
@@ -690,7 +689,6 @@ CREATE OR REPLACE MACRO ast_not_has(
     SELECT a.*
     FROM ast a
     WHERE a.type = ancestor_type
-      AND a.name IS NOT NULL AND a.name != ''
       AND NOT EXISTS (
           SELECT 1
           FROM ast d
@@ -710,6 +708,7 @@ CREATE OR REPLACE MACRO ast_inside(
     descendant_type,
     ancestor_type,
     ancestor_name := NULL,
+    descendant_name := NULL,
     language := NULL
 ) AS TABLE
     WITH ast AS (
@@ -718,6 +717,7 @@ CREATE OR REPLACE MACRO ast_inside(
     SELECT d.*
     FROM ast d
     WHERE d.type = descendant_type
+      AND (descendant_name IS NULL OR d.name = descendant_name)
       AND EXISTS (
           SELECT 1
           FROM ast a

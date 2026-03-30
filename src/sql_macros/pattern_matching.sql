@@ -318,7 +318,6 @@ CREATE OR REPLACE MACRO ast_match(
                 -- Pattern-level recursive detection: ** in any extended wildcard syntax
                 pattern_has_recursive(pattern_str) as pattern_has_recursive,
                 -- Per-wildcard recursive detection: <**> or HTML <NAME**>
-                -- Per-wildcard recursive detection: <**> or HTML <NAME**>
                 -- Named: match capture_name against pattern string
                 -- Anonymous: use pattern-level flag + check this wildcard is body-level
                 -- (wrapped by expression_statement, not a parameter/name wildcard)
