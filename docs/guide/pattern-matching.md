@@ -149,16 +149,66 @@ FROM ast_match('code',
 
 - `<*>` matches **0 or more** siblings at the same depth level
 - `<+>` matches **1 or more** siblings at the same depth level
+- `<**>` matches at **any depth** within the subtree (see below)
 - Variadics match horizontally (siblings), not vertically (descendants)
-- Variadic wildcards are not captured (would require LIST type)
+- Variadic captures return LIST-valued results
 
-### Future: Recursive Matching
+### Recursive Matching (`<**>`)
 
-A future `<**>` syntax may enable recursive/any-depth matching:
+The `<**>` wildcard enables matching descendants at **any depth**, unlike `<*>` which only matches siblings at the same level:
 
 ```sql
--- NOT YET IMPLEMENTED: Find returns at any depth
--- 'def __F__(__): %__<**>__% return __X__'
+-- Find functions containing db.execute() at ANY depth (inside if, try, loops, etc.)
+SELECT captures['F'][1].name, start_line
+FROM ast_match('src/**/*.py',
+    'def __F__(__):
+    %__<**>__%
+    db.execute(__Y__)');
+```
+
+Compare with `<*>` which only finds functions where `db.execute()` is a direct body statement:
+
+```sql
+-- <*> only matches at the same depth level
+SELECT * FROM ast_match('src/**/*.py',
+    'def __F__(__):
+    %__<*>__%
+    db.execute(__Y__)');
+```
+
+Named `<**>` captures collect all descendants in the scope region:
+
+```sql
+-- Capture the body content with a named recursive wildcard
+SELECT captures['F'][1].name, length(captures['DEEP'])
+FROM ast_match('src/**/*.py',
+    'def __F__(__):
+    %__DEEP<**>__%
+    return __X__');
+```
+
+### Relational Operators
+
+Standalone macros for structural queries without full pattern matching:
+
+```sql
+-- ast_has: find ancestor nodes containing a descendant type at any depth
+SELECT name, start_line
+FROM ast_has('src/**/*.py', 'function_definition', 'return_statement');
+
+-- ast_has with name filter: functions containing calls to 'execute'
+SELECT name, start_line
+FROM ast_has('src/**/*.py', 'function_definition', 'call', 'execute');
+
+-- ast_inside: find descendant nodes within an ancestor type
+SELECT peek, start_line
+FROM ast_inside('src/**/*.py', 'return_statement', 'function_definition', 'my_func');
+
+-- ast_precedes: nodes that come before a sibling of given type
+SELECT * FROM ast_precedes('src/**/*.py', 'comment', 'function_definition');
+
+-- ast_follows: nodes that come after a sibling of given type
+SELECT * FROM ast_follows('src/**/*.py', 'return_statement', 'if_statement');
 ```
 
 ## Parameters
@@ -292,9 +342,9 @@ This shows each pattern node with:
 ## Limitations
 
 1. **Structural matching**: Patterns match AST structure, not text
-2. **Single-level variadics**: `<*>` matches siblings, not descendants
-3. **No regex in patterns**: Wildcards match nodes, not text patterns
-4. **Language-specific parsing**: Pattern is parsed as valid code in the specified language
+2. **No regex in patterns**: Wildcards match nodes, not text patterns
+3. **Language-specific parsing**: Pattern is parsed as valid code in the specified language
+4. **Recursive capture quality**: `<**>` captures at deeply nested positions may pick up nodes at unintended depths — match correctness is reliable, but captured values may need filtering
 
 ## Next Steps
 
