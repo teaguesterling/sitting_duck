@@ -499,6 +499,28 @@ ORDER BY file_path;
 - For large codebases, materialize the AST first: `CREATE TABLE code AS SELECT * FROM read_ast(...)`
 - `ast_precedes` / `ast_follows` are simple sibling index comparisons
 
+### Nested Functions and Scope
+
+`ast_has`, `ast_not_has`, and `<**>` use AST subtree range checks, not function-scope-aware analysis. This means:
+
+- If function `outer` contains a nested function `inner`, and `inner` calls `execute()`, then `outer` is reported as "having" an `execute` call — because `inner`'s subtree is within `outer`'s descendant range.
+- To get scope-aware results (excluding nested function internals), use `ast_function_scope()` instead, or filter results with `depth` checks.
+
+```sql
+-- Scope-aware: functions that directly call execute (not via nested functions)
+SELECT f.name, f.start_line
+FROM read_ast('src/**/*.py') f
+WHERE is_function_definition(f.semantic_type)
+  AND EXISTS (
+      SELECT 1 FROM ast_function_scope('my_ast', f.node_id) s
+      WHERE s.type = 'call' AND s.name = 'execute'
+  );
+```
+
+### Anonymous Wildcard Cardinality
+
+Anonymous wildcards (`%__<?>__%`, `%__<~>__%`) do not enforce cardinality constraints — they behave like `<*>`. Use named wildcards (`%__X<?>__%`, `%__X<~>__%`) when you need the 0-1 or 0-only restriction. The captured list can be ignored if you don't need the values.
+
 ---
 
 ## Inspecting and Debugging Patterns

@@ -385,3 +385,54 @@ SELECT count(*) FROM ast_match('test/data/python/macros/star_test.py',
     return __Y__');
 ----
 1
+
+# =============================================================================
+# Edge Case Tests
+# =============================================================================
+
+# <**> in non-function context (if_statement containing return)
+query I
+SELECT count(*)
+FROM ast_match(
+    'test/data/python/macros/recursive_match.py',
+    'if __:
+    %__<**>__%
+    return __X__');
+----
+3
+
+# ast_has with unnamed ancestor types (no name filter)
+query I
+SELECT count(*)
+FROM ast_has(
+    'test/data/python/macros/recursive_match.py',
+    'if_statement',
+    'return_statement'
+);
+----
+3
+
+# ast_has with for_statement containing return
+query I
+SELECT count(*)
+FROM ast_has(
+    'test/data/python/macros/recursive_match.py',
+    'for_statement',
+    'return_statement'
+);
+----
+1
+
+# ast_not_has: functions are individual nodes, not scope-aware
+# outer_with_execute has inner() which has execute() — outer itself counts
+# as "having" execute because inner's subtree is within outer's descendant range
+query I
+SELECT count(*)
+FROM ast_not_has(
+    'test/data/python/macros/recursive_match.py',
+    'function_definition',
+    'call',
+    'execute'
+);
+----
+4

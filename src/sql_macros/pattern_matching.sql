@@ -192,7 +192,7 @@ CREATE OR REPLACE MACRO pattern_has_recursive(pattern_str) AS
     -- Legacy syntax: <**> inside %__...__%
     regexp_matches(pattern_str, '%__[A-Z]*<\*\*>__%')
     -- HTML syntax: ** as modifier inside %__<...>__%
-    OR regexp_matches(pattern_str, '%__<[A-Z_]*\*\*[^>]*>__%');
+    OR regexp_matches(pattern_str, '%__<[A-Z_]*\*\*[^*>]*>__%');
 
 -- Get list of variadic wildcard names
 CREATE OR REPLACE MACRO get_variadic_names(pattern_str) AS (
@@ -396,6 +396,23 @@ CREATE OR REPLACE MACRO ast_match(
             LIMIT 1
         ),
 
+        -- Precompute recursive wildcard depth threshold.
+        -- When <**> is present, pattern nodes at or below this depth use flexible
+        -- depth/sibling matching. The threshold is the rel_depth of the wrapper
+        -- (expression_statement) that contains the recursive wildcard.
+        recursive_threshold AS (
+            SELECT COALESCE(
+                MIN(p3.rel_depth),
+                999  -- No recursive wildcard: threshold never triggers
+            ) as depth
+            FROM pattern p3
+            WHERE p3.wraps_wildcard
+              AND EXISTS (
+                  SELECT 1 FROM pattern p4
+                  WHERE p4.is_recursive AND p4.rel_depth = p3.rel_depth + 1
+              )
+        ),
+
         -- Find candidate roots in target (nodes matching pattern root)
         candidates AS (
             SELECT
@@ -453,9 +470,7 @@ CREATE OR REPLACE MACRO ast_match(
                         -- of the recursive wildcard use >= matching (any depth deeper than expected)
                         AND CASE
                             WHEN p.pattern_has_recursive
-                                 AND p.rel_depth >= COALESCE(
-                                    (SELECT MIN(p3.rel_depth) FROM pattern p3 WHERE p3.wraps_wildcard
-                                     AND EXISTS (SELECT 1 FROM pattern p4 WHERE p4.is_recursive AND p4.rel_depth = p3.rel_depth + 1)), 999)
+                                 AND p.rel_depth >= (SELECT depth FROM recursive_threshold)
                             THEN (t.depth::INTEGER - c.candidate_depth::INTEGER) >= p.rel_depth::INTEGER
                             ELSE ABS((t.depth::INTEGER - c.candidate_depth::INTEGER) - p.rel_depth::INTEGER) <= depth_fuzz
                         END
@@ -463,9 +478,7 @@ CREATE OR REPLACE MACRO ast_match(
                         AND (p.rel_depth = 0
                              OR p.pattern_has_variadic  -- Skip sibling check if variadic present
                              OR (p.pattern_has_recursive
-                                 AND p.rel_depth >= COALESCE(
-                                    (SELECT MIN(p3.rel_depth) FROM pattern p3 WHERE p3.wraps_wildcard
-                                     AND EXISTS (SELECT 1 FROM pattern p4 WHERE p4.is_recursive AND p4.rel_depth = p3.rel_depth + 1)), 999))
+                                 AND p.rel_depth >= (SELECT depth FROM recursive_threshold))
                              OR t.sibling_index = p.sibling_index)
                         -- Match on type or semantic_type based on match_by parameter
                         -- For semantic_type mode: use exact type for operator TOKENS (*, +, etc.)
