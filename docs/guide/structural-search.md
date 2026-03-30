@@ -143,6 +143,36 @@ FROM ast_match('src/**/*.py',
     return __X__');
 ```
 
+### `<?>` — Optional (Zero or One)
+
+Use `<?>` when at most one node should exist at that position:
+
+```sql
+-- Functions with at most one statement before return
+-- Matches: `def f(): return x` and `def f(): setup(); return x`
+-- Rejects: `def f(): a(); b(); return x` (2 statements)
+SELECT captures['F'][1].name
+FROM ast_match('src/**/*.py',
+    'def __F__(__):
+    %__SETUP<?>__%
+    return __X__');
+```
+
+### `<~>` — Negation (Must Be Empty)
+
+Use `<~>` to require that NO siblings exist at that position:
+
+```sql
+-- Functions whose body is ONLY a return statement (nothing else)
+SELECT captures['F'][1].name
+FROM ast_match('src/**/*.py',
+    'def __F__(__):
+    %__<~>__%
+    return __X__');
+```
+
+This is the inverse of `<+>`: where `<+>` requires at least one sibling, `<~>` requires zero.
+
 ### Named Variadic Captures
 
 Named variadics capture all matched siblings as a list:
@@ -210,9 +240,11 @@ FROM ast_match('src/**/*.py',
 
 | Wildcard | Scope | Use When |
 |----------|-------|----------|
-| `<*>` | Same depth (siblings) | Pattern target is a direct child |
-| `<+>` | Same depth (1+ required) | Need at least one sibling before/after |
-| `<**>` | Any depth (descendants) | Target may be nested inside control flow |
+| `<*>` | 0+ siblings | Flexible matching, any number of siblings OK |
+| `<+>` | 1+ siblings | Need at least one sibling before/after |
+| `<?>` | 0-1 siblings | At most one optional element (e.g., docstring) |
+| `<~>` | 0 siblings | Require nothing at that position |
+| `<**>` | Any depth | Target may be nested inside control flow |
 
 ### Real-World Examples
 
@@ -268,6 +300,20 @@ With a name filter on the descendant:
 -- Functions that call 'execute' somewhere inside
 SELECT name, start_line
 FROM ast_has('src/**/*.py', 'function_definition', 'call', 'execute');
+```
+
+### `ast_not_has` — Ancestors NOT Containing a Descendant
+
+The inverse of `ast_has` — find nodes that do NOT contain a descendant type:
+
+```sql
+-- Functions that do NOT contain a return statement
+SELECT name, start_line
+FROM ast_not_has('src/**/*.py', 'function_definition', 'return_statement');
+
+-- Functions that never call 'execute'
+SELECT name, start_line
+FROM ast_not_has('src/**/*.py', 'function_definition', 'call', 'execute');
 ```
 
 ### `ast_inside` — Descendants Within an Ancestor
@@ -438,6 +484,7 @@ ORDER BY file_path;
 |------|------|---------|
 | Find structural code patterns | `ast_match` | `'def __F__(__): return __X__'` |
 | Check if X contains Y (any depth) | `ast_has` | Functions containing `try_statement` |
+| Check if X does NOT contain Y | `ast_not_has` | Functions without `return_statement` |
 | Find Y inside X (any depth) | `ast_inside` | Return statements inside a function |
 | Any-depth pattern matching | `<**>` in `ast_match` | Functions with dangerous calls nested in if/try |
 | Sibling-level flexible matching | `<*>`/`<+>` in `ast_match` | Functions with body before return |
@@ -509,6 +556,7 @@ FROM ast_pattern(
 
 ```sql
 ast_has(source, ancestor_type, descendant_type, descendant_name := NULL, language := NULL)
+ast_not_has(source, ancestor_type, descendant_type, descendant_name := NULL, language := NULL)
 ast_inside(source, descendant_type, ancestor_type, ancestor_name := NULL, language := NULL)
 ast_precedes(source, node_type, before_type, before_name := NULL, language := NULL)
 ast_follows(source, node_type, after_type, after_name := NULL, language := NULL)
@@ -522,6 +570,8 @@ ast_follows(source, node_type, after_type, after_name := NULL, language := NULL)
 | `__` | Anonymous match | Exact position |
 | `%__X<*>__%` | Named 0+ match | Siblings |
 | `%__X<+>__%` | Named 1+ match | Siblings |
+| `%__X<?>__%` | Named optional (0-1) | Siblings |
+| `%__X<~>__%` | Named negation (0 only) | Siblings |
 | `%__<*>__%` | Anonymous 0+ match | Siblings |
 | `%__<+>__%` | Anonymous 1+ match | Siblings |
 | `%__X<**>__%` | Named any-depth match | Descendants |

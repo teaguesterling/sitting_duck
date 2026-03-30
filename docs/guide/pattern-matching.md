@@ -38,8 +38,11 @@ Extended wildcards add rules for flexible matching:
 
 | Pattern | Description |
 |---------|-------------|
-| `%__X<*>__%` | Named variadic: matches 0 or more siblings at this level |
-| `%__X<+>__%` | Named variadic: matches 1 or more siblings at this level |
+| `%__X<*>__%` | Named variadic: matches 0 or more siblings |
+| `%__X<+>__%` | Named variadic: matches 1 or more siblings |
+| `%__X<?>__%` | Named optional: matches 0 or 1 sibling |
+| `%__X<~>__%` | Named negation: matches only if 0 siblings |
+| `%__X<**>__%` | Named recursive: matches at any depth |
 | `%__<*>__%` | Anonymous variadic: matches 0+ siblings (no capture) |
 | `%__<+>__%` | Anonymous variadic: matches 1+ siblings (no capture) |
 | `%__X<type=T>__%` | Type constraint: only match nodes of type T |
@@ -148,7 +151,9 @@ FROM ast_match('code',
 ### Variadic Semantics
 
 - `<*>` matches **0 or more** siblings at the same depth level
-- `<+>` matches **1 or more** siblings at the same depth level
+- `<+>` matches **1 or more** siblings (rejects if none)
+- `<?>` matches **0 or 1** sibling (optional — rejects if 2+)
+- `<~>` matches **0** siblings only (negation — rejects if any exist)
 - `<**>` matches at **any depth** within the subtree (see below)
 - Variadics match horizontally (siblings), not vertically (descendants)
 - Variadic captures return LIST-valued results
