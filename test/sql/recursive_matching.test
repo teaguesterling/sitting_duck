@@ -128,3 +128,42 @@ FROM ast_precedes(
 );
 ----
 2
+
+# =============================================================================
+# <**> Preprocessing Tests
+# =============================================================================
+
+# clean_pattern should strip <**> like other extended syntax
+query I
+SELECT clean_pattern('%__BODY<**>__%');
+----
+__BODY__
+
+# HTML syntax: <BODY**> should also clean
+query I
+SELECT clean_pattern('%__<BODY**>__%');
+----
+__BODY__
+
+# pattern_has_recursive detection
+query I
+SELECT pattern_has_recursive('%__BODY<**>__%');
+----
+true
+
+query I
+SELECT pattern_has_recursive('%__<BODY**>__%');
+----
+true
+
+# Single * should NOT be recursive
+query I
+SELECT pattern_has_recursive('%__BODY<*>__%');
+----
+false
+
+# Non-extended pattern should NOT be recursive
+query I
+SELECT pattern_has_recursive('__X__');
+----
+false

@@ -179,11 +179,20 @@ CREATE OR REPLACE MACRO clean_pattern(pattern_str) AS
 -- Check if pattern contains any variadic wildcards (either syntax)
 -- Legacy: %__X<*>__% or %__X<+>__%
 -- HTML: %__<X*>__% or %__<X+>__% or %__<*>__% or %__<+>__%
+-- NOTE: This intentionally matches <**> too — callers must check recursive separately
 CREATE OR REPLACE MACRO pattern_has_variadic(pattern_str) AS
     -- Legacy syntax: <*> or <+> inside %__...__%
     regexp_matches(pattern_str, '%__[A-Z]*<[^>]*[*+][^>]*>__%')
     -- HTML syntax: * or + as modifier inside %__<...>__%
     OR regexp_matches(pattern_str, '%__<[^>]*[*+][^>]*>__%');
+
+-- Check if pattern contains any recursive wildcards (<**> syntax)
+-- Legacy: %__X<**>__% or HTML: %__<X**>__%
+CREATE OR REPLACE MACRO pattern_has_recursive(pattern_str) AS
+    -- Legacy syntax: <**> inside %__...__%
+    regexp_matches(pattern_str, '%__[A-Z]*<\*\*>__%')
+    -- HTML syntax: ** as modifier inside %__<...>__%
+    OR regexp_matches(pattern_str, '%__<[A-Z_]*\*\*[^>]*>__%');
 
 -- Get list of variadic wildcard names
 CREATE OR REPLACE MACRO get_variadic_names(pattern_str) AS (
@@ -308,8 +317,16 @@ CREATE OR REPLACE MACRO ast_match(
                 -- Legacy: %__X<*>__%, HTML: %__<X*>__% or %__<*>__%
                 (regexp_matches(pattern_str, '%__[A-Z]*<[^>]*[*+][^>]*>__%')
                  OR regexp_matches(pattern_str, '%__<[^>]*[*+][^>]*>__%')) as pattern_has_variadic,
+                -- Per-wildcard recursive detection: <**> or HTML <NAME**>
+                unnest.capture_name IS NOT NULL AND (
+                    -- Legacy syntax
+                    pattern_str LIKE '%' || '%__' || unnest.capture_name || '<**>__%' || '%'
+                    -- HTML syntax
+                    OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '**%>__%' || '%'
+                ) as is_recursive,
                 -- Per-wildcard variadic detection: this specific wildcard has variadic syntax
                 -- Legacy: %__NAME<*>__%, HTML: %__<NAME*>__%
+                -- Excludes recursive wildcards (<**>) which use a separate pipeline
                 unnest.capture_name IS NOT NULL AND (
                     -- Legacy syntax
                     pattern_str LIKE '%' || '%__' || unnest.capture_name || '<*>__%' || '%'
@@ -317,6 +334,10 @@ CREATE OR REPLACE MACRO ast_match(
                     -- HTML syntax
                     OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '*%>__%' || '%'
                     OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '+%>__%' || '%'
+                ) AND NOT (
+                    -- Exclude recursive wildcards
+                    pattern_str LIKE '%' || '%__' || unnest.capture_name || '<**>__%' || '%'
+                    OR pattern_str LIKE '%' || '%__<' || unnest.capture_name || '**%>__%' || '%'
                 ) as is_variadic,
                 -- Variadic minimum count: 0 for *, 1 for +
                 CASE
@@ -389,6 +410,7 @@ CREATE OR REPLACE MACRO ast_match(
                 FROM pattern p
                 WHERE p.is_wildcard = false
                   AND NOT p.is_variadic  -- Skip variadic wildcards in verification
+                  AND NOT p.is_recursive  -- Skip recursive wildcards in verification
                   AND NOT p.wraps_wildcard  -- Skip wrapper nodes (e.g., expression_statement around __X__)
                   AND NOT EXISTS (
                       SELECT 1
@@ -453,6 +475,7 @@ CREATE OR REPLACE MACRO ast_match(
             WHERE p.is_wildcard = true
               AND p.capture_name IS NOT NULL
               AND NOT p.is_variadic
+              AND NOT p.is_recursive
         ),
 
         -- Deduplicate single captures - prefer nodes at expected sibling position
