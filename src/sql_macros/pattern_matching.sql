@@ -243,7 +243,11 @@ CREATE OR REPLACE MACRO ast_pattern(pattern_str, language) AS TABLE
             SELECT 1 FROM pattern_raw p2
             WHERE p2.parent_id = pattern_raw.node_id
               AND is_pattern_wildcard(p2.name)
-        ) as wraps_wildcard
+        ) as wraps_wildcard,
+        -- Note: is_recursive is always false here because the cleaned pattern
+        -- has no <**> syntax. Actual detection happens in ast_match's pattern CTE
+        -- using the original pattern_str. This field exists for struct completeness.
+        false as is_recursive
     FROM pattern_raw
     WHERE depth >= (SELECT min_depth FROM root_depth);
 
@@ -264,7 +268,8 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
         is_wildcard: is_wildcard,
         capture_name: capture_name,
         is_syntax: is_syntax,
-        wraps_wildcard: wraps_wildcard
+        wraps_wildcard: wraps_wildcard,
+        is_recursive: is_recursive
     })
     FROM ast_pattern(pattern_str, language)
 );
@@ -527,18 +532,14 @@ CREATE OR REPLACE MACRO ast_match(
                 -- Depth matching: flexible when at/below recursive wildcard wrapper depth
                 AND CASE
                     WHEN p.pattern_has_recursive
-                         AND p.rel_depth >= COALESCE(
-                            (SELECT MIN(p3.rel_depth) FROM pattern p3 WHERE p3.wraps_wildcard
-                             AND EXISTS (SELECT 1 FROM pattern p4 WHERE p4.is_recursive AND p4.rel_depth = p3.rel_depth + 1)), 999)
+                         AND p.rel_depth >= (SELECT depth FROM recursive_threshold)
                     THEN (t.depth::INTEGER - mc.candidate_depth::INTEGER) >= p.rel_depth::INTEGER
                     ELSE ABS((t.depth::INTEGER - mc.candidate_depth::INTEGER) - p.rel_depth::INTEGER) <= depth_fuzz
                 END
                 AND (p.rel_depth = 0
                      OR p.pattern_has_variadic
                      OR (p.pattern_has_recursive
-                         AND p.rel_depth >= COALESCE(
-                            (SELECT MIN(p3.rel_depth) FROM pattern p3 WHERE p3.wraps_wildcard
-                             AND EXISTS (SELECT 1 FROM pattern p4 WHERE p4.is_recursive AND p4.rel_depth = p3.rel_depth + 1)), 999))
+                         AND p.rel_depth >= (SELECT depth FROM recursive_threshold))
                      OR t.sibling_index = p.sibling_index)
             WHERE p.is_wildcard = true
               AND p.capture_name IS NOT NULL

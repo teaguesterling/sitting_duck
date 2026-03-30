@@ -59,6 +59,13 @@ This project must follow the conventions and practices described in duckdb/CONTR
 - **Example**: `ast_extract_class(ast, 'MyClass')` rebuilds valid AST containing only that class
 - **Use case**: When you need a valid sub-AST for further processing
 
+### 5. `ast_has/ast_inside/ast_precedes/ast_follows` → Relational predicates
+- **Purpose**: Filter nodes by structural relationships (containment, ordering)
+- **Output**: AST rows filtered by the predicate — same columns as `read_ast()`
+- **Examples**: `ast_has(source, 'function_definition', 'return_statement')`, `ast_inside(source, 'call', 'function_definition', 'main')`
+- **Use case**: When you need to answer "does X contain/precede/follow Y?" without full pattern matching
+- **Note**: These take a source path and call `read_ast()` internally, unlike categories 1-4 which take table names
+
 ## Current Parsing Functions
 The extension provides these main parsing functions:
 

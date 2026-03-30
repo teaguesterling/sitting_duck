@@ -579,7 +579,7 @@ FROM ast_pattern(
 ```sql
 ast_has(source, ancestor_type, descendant_type, descendant_name := NULL, language := NULL)
 ast_not_has(source, ancestor_type, descendant_type, descendant_name := NULL, language := NULL)
-ast_inside(source, descendant_type, ancestor_type, ancestor_name := NULL, language := NULL)
+ast_inside(source, descendant_type, ancestor_type, ancestor_name := NULL, descendant_name := NULL, language := NULL)
 ast_precedes(source, node_type, before_type, before_name := NULL, language := NULL)
 ast_follows(source, node_type, after_type, after_name := NULL, language := NULL)
 ```

@@ -45,6 +45,8 @@ Extended wildcards add rules for flexible matching:
 | `%__X<**>__%` | Named recursive: matches at any depth |
 | `%__<*>__%` | Anonymous variadic: matches 0+ siblings (no capture) |
 | `%__<+>__%` | Anonymous variadic: matches 1+ siblings (no capture) |
+
+> **Note:** Cardinality constraints (`<?>`, `<~>`, `<+>`) require **named** wildcards. Anonymous forms (`%__<?>__%`, `%__<~>__%`) behave like `<*>` (no enforcement).
 | `%__X<type=T>__%` | Type constraint: only match nodes of type T |
 
 ```sql
