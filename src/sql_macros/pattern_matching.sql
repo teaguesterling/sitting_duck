@@ -244,6 +244,14 @@ CREATE OR REPLACE MACRO ast_pattern(pattern_str, language) AS TABLE
             WHERE p2.parent_id = pattern_raw.node_id
               AND is_pattern_wildcard(p2.name)
         ) as wraps_wildcard,
+        -- Is this node's parent a wildcard? If so, we relax sibling matching
+        -- for this node because wildcard parents may have variable child structure
+        -- (e.g., async keyword, different parameter counts, optional modifiers)
+        EXISTS (
+            SELECT 1 FROM pattern_raw p3
+            WHERE p3.node_id = pattern_raw.parent_id
+              AND is_pattern_wildcard(p3.name)
+        ) as parent_is_wildcard,
         -- Note: is_recursive is always false here because the cleaned pattern
         -- has no <**> syntax. Actual detection happens in ast_match's pattern CTE
         -- using the original pattern_str. This field exists for struct completeness.
@@ -269,6 +277,7 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
         capture_name: capture_name,
         is_syntax: is_syntax,
         wraps_wildcard: wraps_wildcard,
+        parent_is_wildcard: parent_is_wildcard,
         is_recursive: is_recursive
     })
     FROM ast_pattern(pattern_str, language)
@@ -318,6 +327,7 @@ CREATE OR REPLACE MACRO ast_match(
                 unnest.capture_name,
                 unnest.is_syntax,
                 unnest.wraps_wildcard,
+                unnest.parent_is_wildcard,
                 -- Pattern-level variadic detection: *, +, ?, ~ in any extended wildcard syntax
                 pattern_has_variadic(pattern_str) as pattern_has_variadic,
                 -- Pattern-level recursive detection: ** in any extended wildcard syntax
@@ -480,8 +490,10 @@ CREATE OR REPLACE MACRO ast_match(
                             ELSE ABS((t.depth::INTEGER - c.candidate_depth::INTEGER) - p.rel_depth::INTEGER) <= depth_fuzz
                         END
                         -- Sibling matching: exact when no variadics, relaxed when variadics present
+                        -- or when this node's parent is a wildcard (allows optional modifiers like async)
                         AND (p.rel_depth = 0
                              OR p.pattern_has_variadic  -- Skip sibling check if variadic present
+                             OR p.parent_is_wildcard  -- Skip sibling check if parent is a wildcard
                              OR (p.pattern_has_recursive
                                  AND p.rel_depth >= (SELECT depth FROM recursive_threshold))
                              OR t.sibling_index = p.sibling_index)
@@ -538,6 +550,7 @@ CREATE OR REPLACE MACRO ast_match(
                 END
                 AND (p.rel_depth = 0
                      OR p.pattern_has_variadic
+                     OR p.parent_is_wildcard
                      OR (p.pattern_has_recursive
                          AND p.rel_depth >= (SELECT depth FROM recursive_threshold))
                      OR t.sibling_index = p.sibling_index)
@@ -545,6 +558,7 @@ CREATE OR REPLACE MACRO ast_match(
               AND p.capture_name IS NOT NULL
               AND NOT p.is_variadic
               AND NOT p.is_recursive
+              AND NOT p.parent_is_wildcard  -- Skip name-propagation children
         ),
 
         -- Deduplicate single captures - prefer nodes at expected sibling position
@@ -931,10 +945,14 @@ CREATE OR REPLACE MACRO ast_match(
             -- creating unintended duplicate capture names at depth 0.
             WHERE pattern_rel_depth > 0
               -- Only check captures that actually appear >1 time in the pattern
+              -- Exclude parent_is_wildcard nodes: tree-sitter propagates names from
+              -- parent to child (e.g., method_definition name → property_identifier),
+              -- creating duplicate capture names with different peeks.
               AND capture_name IN (
                   SELECT p.capture_name FROM pattern p
                   WHERE p.is_wildcard AND p.capture_name IS NOT NULL
                     AND NOT p.is_variadic AND p.rel_depth > 0
+                    AND NOT p.parent_is_wildcard
                   GROUP BY p.capture_name HAVING count(*) > 1
               )
         ),
