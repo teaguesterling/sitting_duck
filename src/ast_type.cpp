@@ -25,7 +25,7 @@ Value ASTNode::ToValue() const {
 	// Flat structure fields
 	struct_values.emplace_back("parent_id", parent_id < 0 ? Value(LogicalType::BIGINT) : Value::BIGINT(parent_id));
 	struct_values.emplace_back("depth", Value::UINTEGER(depth));
-	struct_values.emplace_back("sibling_index", Value::UINTEGER(sibling_index));
+	struct_values.emplace_back("sibling_index", Value::INTEGER(sibling_index));
 	struct_values.emplace_back("children_count", Value::UINTEGER(children_count));
 	struct_values.emplace_back("descendant_count", Value::UINTEGER(descendant_count));
 
@@ -121,7 +121,7 @@ ASTNode ASTNode::FromValue(const Value &value) {
 	auto &tree_pos_struct = StructValue::GetChildren(struct_value[4]);
 	node.node_index = tree_pos_struct[0].GetValue<int64_t>();
 	node.parent_index = tree_pos_struct[1].IsNull() ? -1 : tree_pos_struct[1].GetValue<int64_t>();
-	node.legacy_sibling_index = tree_pos_struct[2].GetValue<uint32_t>();
+	node.legacy_sibling_index = tree_pos_struct[2].GetValue<int32_t>();
 	node.node_depth = tree_pos_struct[3].GetValue<uint8_t>();
 
 	// Subtree info struct

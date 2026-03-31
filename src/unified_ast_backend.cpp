@@ -174,7 +174,7 @@ vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
 	    LogicalType::UINTEGER, // end_column
 	    LogicalType::BIGINT,   // parent_id (stays signed for -1)
 	    LogicalType::UINTEGER, // depth
-	    LogicalType::UINTEGER, // sibling_index
+	    LogicalType::INTEGER,  // sibling_index
 	    LogicalType::UINTEGER, // children_count
 	    LogicalType::UINTEGER, // descendant_count
 	    LogicalType::VARCHAR,  // peek (source_text)
@@ -209,7 +209,7 @@ LogicalType UnifiedASTBackend::GetASTStructSchema() {
 	node_children.push_back(make_pair("end_column", LogicalType::UINTEGER));
 	node_children.push_back(make_pair("parent_id", LogicalType::BIGINT));
 	node_children.push_back(make_pair("depth", LogicalType::UINTEGER));
-	node_children.push_back(make_pair("sibling_index", LogicalType::UINTEGER));
+	node_children.push_back(make_pair("sibling_index", LogicalType::INTEGER));
 	node_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
 	node_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
 	node_children.push_back(make_pair("peek", LogicalType::VARCHAR));
@@ -242,7 +242,7 @@ vector<LogicalType> UnifiedASTBackend::GetHierarchicalTableSchema() {
 	child_list_t<LogicalType> structure_children;
 	structure_children.push_back(make_pair("parent_id", LogicalType::BIGINT));
 	structure_children.push_back(make_pair("depth", LogicalType::UINTEGER));
-	structure_children.push_back(make_pair("sibling_index", LogicalType::UINTEGER));
+	structure_children.push_back(make_pair("sibling_index", LogicalType::INTEGER));
 	structure_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
 	structure_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
 
@@ -329,7 +329,7 @@ vector<LogicalType> UnifiedASTBackend::GetDynamicTableSchema(const ExtractionCon
 		}
 
 		if (config.structure >= StructureLevel::FULL) {
-			structure_children.push_back(make_pair("sibling_index", LogicalType::UINTEGER));
+			structure_children.push_back(make_pair("sibling_index", LogicalType::INTEGER));
 			structure_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
 			structure_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
 		}
@@ -464,7 +464,7 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
 		}
 
 		if (config.structure >= StructureLevel::FULL) {
-			schema.push_back(LogicalType::UINTEGER); // sibling_index
+			schema.push_back(LogicalType::INTEGER);  // sibling_index
 			schema.push_back(LogicalType::UINTEGER); // children_count
 			schema.push_back(LogicalType::UINTEGER); // descendant_count
 		}
@@ -557,7 +557,7 @@ LogicalType UnifiedASTBackend::GetHierarchicalStructSchema() {
 	child_list_t<LogicalType> tree_structure_children;
 	tree_structure_children.push_back(make_pair("parent_id", LogicalType::BIGINT));
 	tree_structure_children.push_back(make_pair("depth", LogicalType::UINTEGER));
-	tree_structure_children.push_back(make_pair("sibling_index", LogicalType::UINTEGER));
+	tree_structure_children.push_back(make_pair("sibling_index", LogicalType::INTEGER));
 	tree_structure_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
 	tree_structure_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
 
@@ -610,7 +610,7 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult &result, DataChunk &outpu
 	auto end_column_vec = FlatVector::GetData<uint32_t>(output.data[8]);
 	auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[9]);
 	auto depth_vec = FlatVector::GetData<uint32_t>(output.data[10]);
-	auto sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[11]);
+	auto sibling_index_vec = FlatVector::GetData<int32_t>(output.data[11]);
 	auto children_count_vec = FlatVector::GetData<uint32_t>(output.data[12]);
 	auto descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[13]);
 	auto peek_vec = FlatVector::GetData<string_t>(output.data[14]);
@@ -822,7 +822,7 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 	idx_t parent_id_col = 0, depth_col = 0, sibling_index_col = 0, children_count_col = 0, descendant_count_col = 0;
 	int64_t *parent_id_vec = nullptr;
 	uint32_t *depth_vec = nullptr;
-	uint32_t *sibling_index_vec = nullptr;
+	int32_t *sibling_index_vec = nullptr;
 	uint32_t *children_count_vec = nullptr;
 	uint32_t *descendant_count_vec = nullptr;
 	ValidityMask *parent_validity = nullptr;
@@ -840,7 +840,7 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 			sibling_index_col = col_idx++;
 			children_count_col = col_idx++;
 			descendant_count_col = col_idx++;
-			sibling_index_vec = FlatVector::GetData<uint32_t>(output.data[sibling_index_col]);
+			sibling_index_vec = FlatVector::GetData<int32_t>(output.data[sibling_index_col]);
 			children_count_vec = FlatVector::GetData<uint32_t>(output.data[children_count_col]);
 			descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[descendant_count_col]);
 		}
@@ -1034,7 +1034,7 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult &result) {
 		node_children.push_back(
 		    make_pair("parent_id", node.parent_index >= 0 ? Value::BIGINT(node.parent_index) : Value()));
 		node_children.push_back(make_pair("depth", Value::UINTEGER(node.node_depth)));
-		node_children.push_back(make_pair("sibling_index", Value::UINTEGER(node.legacy_sibling_index)));
+		node_children.push_back(make_pair("sibling_index", Value::INTEGER(node.legacy_sibling_index)));
 		node_children.push_back(make_pair("children_count", Value::UINTEGER(node.legacy_children_count)));
 		node_children.push_back(make_pair("descendant_count", Value::UINTEGER(node.legacy_descendant_count)));
 		node_children.push_back(make_pair("peek", Value(node.peek)));
@@ -1057,7 +1057,7 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult &result) {
 	node_schema.push_back(make_pair("end_column", LogicalType::UINTEGER));
 	node_schema.push_back(make_pair("parent_id", LogicalType::BIGINT));
 	node_schema.push_back(make_pair("depth", LogicalType::UINTEGER));
-	node_schema.push_back(make_pair("sibling_index", LogicalType::UINTEGER));
+	node_schema.push_back(make_pair("sibling_index", LogicalType::INTEGER));
 	node_schema.push_back(make_pair("children_count", LogicalType::UINTEGER));
 	node_schema.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
 	node_schema.push_back(make_pair("peek", LogicalType::VARCHAR));
@@ -1132,7 +1132,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult &result, Data
 			structure_values.push_back(make_pair("parent_id", Value::BIGINT(node.parent_index)));
 		}
 		structure_values.push_back(make_pair("depth", Value::UINTEGER(node.node_depth)));
-		structure_values.push_back(make_pair("sibling_index", Value::UINTEGER(node.legacy_sibling_index)));
+		structure_values.push_back(make_pair("sibling_index", Value::INTEGER(node.legacy_sibling_index)));
 		structure_values.push_back(make_pair("children_count", Value::UINTEGER(node.legacy_children_count)));
 		structure_values.push_back(make_pair("descendant_count", Value::UINTEGER(node.legacy_descendant_count)));
 		Value structure_struct = Value::STRUCT(structure_values);
@@ -1191,7 +1191,8 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 		// Structure fields
 		int64_t parent_id;
 		bool has_parent;
-		uint32_t depth, sibling_index, children_count, descendant_count;
+		uint32_t depth, children_count, descendant_count;
+		int32_t sibling_index;
 
 		// Context fields
 		string name;
@@ -1311,7 +1312,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 	auto structure_parent_id_vec = FlatVector::GetData<int64_t>(*structure_entries[0]);
 	auto &structure_parent_validity = FlatVector::Validity(*structure_entries[0]);
 	auto structure_depth_vec = FlatVector::GetData<uint32_t>(*structure_entries[1]);
-	auto structure_sibling_index_vec = FlatVector::GetData<uint32_t>(*structure_entries[2]);
+	auto structure_sibling_index_vec = FlatVector::GetData<int32_t>(*structure_entries[2]);
 	auto structure_children_count_vec = FlatVector::GetData<uint32_t>(*structure_entries[3]);
 	auto structure_descendant_count_vec = FlatVector::GetData<uint32_t>(*structure_entries[4]);
 
@@ -1448,7 +1449,7 @@ Value UnifiedASTBackend::CreateHierarchicalASTStruct(const ASTResult &result) {
 		structure_children.push_back(
 		    make_pair("parent_id", node.parent_index >= 0 ? Value::BIGINT(node.parent_index) : Value()));
 		structure_children.push_back(make_pair("depth", Value::UINTEGER(node.node_depth)));
-		structure_children.push_back(make_pair("sibling_index", Value::UINTEGER(node.legacy_sibling_index)));
+		structure_children.push_back(make_pair("sibling_index", Value::INTEGER(node.legacy_sibling_index)));
 		structure_children.push_back(make_pair("children_count", Value::UINTEGER(node.legacy_children_count)));
 		structure_children.push_back(make_pair("descendant_count", Value::UINTEGER(node.legacy_descendant_count)));
 		Value structure_value = Value::STRUCT(structure_children);
@@ -1487,7 +1488,7 @@ Value UnifiedASTBackend::CreateHierarchicalASTStruct(const ASTResult &result) {
 	child_list_t<LogicalType> tree_structure_children;
 	tree_structure_children.push_back(make_pair("parent_id", LogicalType::BIGINT));
 	tree_structure_children.push_back(make_pair("depth", LogicalType::UINTEGER));
-	tree_structure_children.push_back(make_pair("sibling_index", LogicalType::UINTEGER));
+	tree_structure_children.push_back(make_pair("sibling_index", LogicalType::INTEGER));
 	tree_structure_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
 	tree_structure_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
 

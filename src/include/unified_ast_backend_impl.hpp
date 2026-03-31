@@ -86,7 +86,7 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 		TSNode node;
 		int64_t parent_id;
 		uint32_t depth;
-		uint32_t sibling_index;
+		int32_t sibling_index;
 		bool processed;   // Track if node has been processed
 		idx_t node_index; // Index in nodes array for this node
 	};

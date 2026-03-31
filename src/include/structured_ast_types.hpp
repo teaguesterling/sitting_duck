@@ -70,7 +70,7 @@ struct SourceLocation {
 struct TreeStructure {
 	int64_t parent_id;         // Available if structure >= MINIMAL (O(1))
 	uint32_t depth;            // Available if structure >= MINIMAL (O(1))
-	uint32_t sibling_index;    // Available if structure >= MINIMAL (O(1))
+	int32_t sibling_index;     // Available if structure >= MINIMAL (O(1))
 	uint32_t children_count;   // Available if structure >= FULL (O(child_count))
 	uint32_t descendant_count; // Available if structure >= FULL (O(child_count))
 

@@ -92,7 +92,7 @@ struct SourceLocation {
 struct TreeStructure {
 	int64_t parent_id;         // Available if structure >= MINIMAL (O(1))
 	uint32_t depth;            // Available if structure >= MINIMAL (O(1))
-	uint32_t sibling_index;    // Available if structure >= MINIMAL (O(1))
+	int32_t sibling_index;     // Available if structure >= MINIMAL (O(1))
 	uint32_t children_count;   // Available if structure >= FULL (O(child_count))
 	uint32_t descendant_count; // Available if structure >= FULL (O(child_count))
 
@@ -174,14 +174,14 @@ struct ASTNode {
 	// Tree structure fields (flat)
 	int64_t parent_id = -1;        // Parent node ID
 	uint32_t depth = 0;            // Depth from root
-	uint32_t sibling_index = 0;    // Position among siblings
+	int32_t sibling_index = 0;     // Position among siblings
 	uint32_t children_count = 0;   // Number of direct children
 	uint32_t descendant_count = 0; // Total descendants (DFS count)
 
 	// Legacy tree fields (flat) - kept separate for future use
 	int64_t node_index = 0;            // Position in depth-first traversal
 	int64_t parent_index = -1;         // Parent's position (-1 for root)
-	uint32_t legacy_sibling_index = 0; // Position among siblings (legacy)
+	int32_t legacy_sibling_index = 0;  // Position among siblings (legacy)
 	uint8_t node_depth = 0;            // Depth from root (legacy)
 
 	// Legacy file position fields (flat)
