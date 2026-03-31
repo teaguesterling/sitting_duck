@@ -57,7 +57,7 @@
  */
 
 /// @brief Document - root JSON container
-DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end json_document
 

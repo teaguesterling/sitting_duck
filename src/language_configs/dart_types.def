@@ -56,7 +56,7 @@
  */
 
 /// @brief Program root - top-level compilation unit
-DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end dart_program
 
@@ -79,34 +79,34 @@ DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
  */
 
 /// @brief Class definition - `class Name { }`
-DEF_TYPE("class_definition", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+DEF_TYPE("class_definition", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Class body - contents of class
 DEF_TYPE("class_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 /// @brief Enum declaration - `enum Name { A, B, C }`
-DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Enum body - enum constants and members
 DEF_TYPE("enum_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 /// @brief Enum constant - individual enum value
-DEF_TYPE("enum_constant", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("enum_constant", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Mixin declaration - `mixin Name { }`
-DEF_TYPE("mixin_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+DEF_TYPE("mixin_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Extension declaration - `extension Name on Type { }`
-DEF_TYPE("extension_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+DEF_TYPE("extension_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Extension type declaration - Dart 3.0+
-DEF_TYPE("extension_type_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+DEF_TYPE("extension_type_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Extension body - extension methods
 DEF_TYPE("extension_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 /// @brief Type alias - `typedef Name = Type`
-DEF_TYPE("type_alias", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+DEF_TYPE("type_alias", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end dart_classes
 
@@ -131,35 +131,35 @@ DEF_TYPE("type_alias", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, F
  */
 
 /// @brief Function signature - function declaration without body
-DEF_TYPE("function_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+DEF_TYPE("function_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DECLARATION)
 
 /// @brief Function body - function implementation
 DEF_TYPE("function_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 /// @brief Function expression - anonymous function
-DEF_TYPE("function_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, 0)
+DEF_TYPE("function_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Function expression body
 DEF_TYPE("function_expression_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 /// @brief Lambda expression - `(x) => expr`
-DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, 0)
+DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Method signature - class method declaration
 /// Uses CUSTOM because identifier is inside wrapper nodes (function_signature, getter_signature, operator_signature)
-DEF_TYPE("method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+DEF_TYPE("method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DECLARATION)
 
 /// @brief Getter signature - `get name => value`
-DEF_TYPE("getter_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+DEF_TYPE("getter_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DECLARATION)
 
 /// @brief Setter signature - `set name(value) { }`
-DEF_TYPE("setter_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+DEF_TYPE("setter_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DECLARATION)
 
 /// @brief Operator signature - operator overload
-DEF_TYPE("operator_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, NONE, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_DECLARATION_ONLY)
+DEF_TYPE("operator_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, NONE, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DECLARATION)
 
 /// @brief Local function declaration - nested function
-DEF_TYPE("local_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("local_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end dart_functions
 
@@ -180,22 +180,22 @@ DEF_TYPE("local_function_declaration", DEFINITION_FUNCTION | SemanticRefinements
  */
 
 /// @brief Constructor signature - regular constructor
-DEF_TYPE("constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Constant constructor signature - `const` constructor
-DEF_TYPE("constant_constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("constant_constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Factory constructor signature - `factory` constructor
-DEF_TYPE("factory_constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("factory_constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Redirecting factory constructor
-DEF_TYPE("redirecting_factory_constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, 0)
+DEF_TYPE("redirecting_factory_constructor_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Constructor invocation - `new ClassName()` or `ClassName()`
 DEF_TYPE("constructor_invocation", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 
 /// @brief Constructor parameter
-DEF_TYPE("constructor_param", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("constructor_param", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Constructor tearoff - reference to constructor
 DEF_TYPE("constructor_tearoff", COMPUTATION_ACCESS, NONE, NONE, 0)
@@ -213,7 +213,7 @@ DEF_TYPE("constructor_tearoff", COMPUTATION_ACCESS, NONE, NONE, 0)
  */
 
 /// @brief Formal parameter - regular parameter
-DEF_TYPE("formal_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("formal_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Formal parameter list - `(params)`
 DEF_TYPE("formal_parameter_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
@@ -222,7 +222,7 @@ DEF_TYPE("formal_parameter_list", ORGANIZATION_LIST | SemanticRefinements::Organ
 DEF_TYPE("optional_formal_parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
 /// @brief Super formal parameter - `super.field`
-DEF_TYPE("super_formal_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("super_formal_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end dart_parameters
 
@@ -244,31 +244,31 @@ DEF_TYPE("super_formal_parameter", DEFINITION_VARIABLE | SemanticRefinements::Va
  */
 
 /// @brief Variable declaration - `var x = value`
-DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Local variable declaration
-DEF_TYPE("local_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("local_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Initialized variable definition
-DEF_TYPE("initialized_variable_definition", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("initialized_variable_definition", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Initialized identifier - variable with initializer
-DEF_TYPE("initialized_identifier", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("initialized_identifier", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Initialized identifier list
 DEF_TYPE("initialized_identifier_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
 /// @brief Static final declaration - `static final name = value`
-DEF_TYPE("static_final_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("static_final_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Static final declaration list
 DEF_TYPE("static_final_declaration_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
 /// @brief Declaration - general declaration
-DEF_TYPE("declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Pattern variable declaration - Dart 3.0+ patterns
-DEF_TYPE("pattern_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("pattern_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end dart_variables
 
@@ -303,7 +303,7 @@ DEF_TYPE("library_import", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE
 DEF_TYPE("library_export", EXTERNAL_EXPORT, NONE, NONE, 0)
 
 /// @brief Library name - `library name;`
-DEF_TYPE("library_name", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("library_name", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Part directive - `part 'file.dart'`
 DEF_TYPE("part_directive", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0)
@@ -429,7 +429,7 @@ DEF_TYPE("argument", ORGANIZATION_BLOCK, NONE, NONE, 0)
 DEF_TYPE("argument_part", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
 /// @brief Named argument - `name: value`
-DEF_TYPE("named_argument", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("named_argument", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Selector - `.member` or `[index]`
 DEF_TYPE("selector", COMPUTATION_ACCESS, NONE, NONE, 0)
@@ -473,7 +473,7 @@ DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BI
 DEF_TYPE("if_element", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
 
 /// @brief For statement - `for (var x in items) { }`
-DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief For element - for in collection
 DEF_TYPE("for_element", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
@@ -482,10 +482,10 @@ DEF_TYPE("for_element", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, N
 DEF_TYPE("for_loop_parts", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 /// @brief While statement - `while (cond) { }`
-DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Do statement - `do { } while (cond)`
-DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Switch statement
 DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
@@ -591,7 +591,7 @@ DEF_TYPE("yield_each_statement", FLOW_SYNC, NONE, NONE, 0)
  */
 
 /// @brief Block - `{ statements }`
-DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end dart_blocks
 
@@ -616,7 +616,7 @@ DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUEN
 DEF_TYPE("constant_pattern", LITERAL_STRUCTURED, NONE, NONE, 0)
 
 /// @brief Variable pattern
-DEF_TYPE("variable_pattern", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("variable_pattern", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief List pattern - `[a, b, c]`
 DEF_TYPE("list_pattern", LITERAL_STRUCTURED, NONE, NONE, 0)
@@ -664,7 +664,7 @@ DEF_TYPE("pattern_assignment", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
  */
 
 /// @brief Type identifier - type name
-DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /// @brief Type arguments - `<Type1, Type2>`
 DEF_TYPE("type_arguments", TYPE_GENERIC, NONE, NONE, 0)
@@ -709,7 +709,7 @@ DEF_TYPE("nullable_type", TYPE_REFERENCE, NONE, NONE, 0)
 DEF_TYPE("inferred_type", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
 
 /// @brief Typed identifier
-DEF_TYPE("typed_identifier", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("typed_identifier", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Parameter type list
 DEF_TYPE("parameter_type_list", ORGANIZATION_LIST, NONE, NONE, 0)
@@ -748,7 +748,7 @@ DEF_TYPE("mixins", TYPE_REFERENCE, NONE, NONE, 0)
 DEF_TYPE("mixin_application", TYPE_REFERENCE, NONE, NONE, 0)
 
 /// @brief Mixin application class
-DEF_TYPE("mixin_application_class", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, 0)
+DEF_TYPE("mixin_application_class", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Interfaces - `implements Interface1, Interface2`
 DEF_TYPE("interfaces", TYPE_REFERENCE, NONE, NONE, 0)
@@ -775,7 +775,7 @@ DEF_TYPE("initializers", ORGANIZATION_LIST, NONE, NONE, 0)
 DEF_TYPE("initializer_list_entry", ORGANIZATION_BLOCK, NONE, NONE, 0)
 
 /// @brief Field initializer - `this.field = value`
-DEF_TYPE("field_initializer", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("field_initializer", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Redirection - `: this()` or `: this.named()`
 DEF_TYPE("redirection", ORGANIZATION_BLOCK, NONE, NONE, 0)
@@ -878,10 +878,10 @@ DEF_TYPE("set_or_map_literal", LITERAL_STRUCTURED | SemanticRefinements::Structu
 DEF_TYPE("record_literal", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
 
 /// @brief Record field - named `(name: value)` or positional `(expr)`
-DEF_TYPE("record_field", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("record_field", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Pair - map entry `key: value`
-DEF_TYPE("pair", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, NONE, NONE, 0)
+DEF_TYPE("pair", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, NONE, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Spread element - `...list`
 DEF_TYPE("spread_element", ORGANIZATION_BLOCK, NONE, NONE, 0)
@@ -899,7 +899,7 @@ DEF_TYPE("spread_element", ORGANIZATION_BLOCK, NONE, NONE, 0)
  */
 
 /// @brief Identifier - simple name
-DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /// @brief Identifier list
 DEF_TYPE("identifier_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)

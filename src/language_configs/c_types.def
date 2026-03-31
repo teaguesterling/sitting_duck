@@ -63,7 +63,7 @@
  * @brief Translation unit: the root of a C source file
  * Represents an entire .c or .h file
  */
-DEF_TYPE("translation_unit", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("translation_unit", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end c_translation_unit
 
@@ -83,18 +83,18 @@ DEF_TYPE("translation_unit", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CON
 /**
  * @brief #include directive: `#include <header.h>` or `#include "header.h"`
  */
-DEF_TYPE("preproc_include", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("preproc_include", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, 0)
 
 /**
  * @brief Object-like macro: `#define NAME value`
  * Treated as immutable constant
  */
-DEF_TYPE("preproc_def", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("preproc_def", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /**
  * @brief Function-like macro: `#define NAME(args) body`
  */
-DEF_TYPE("preproc_function_def", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("preproc_function_def", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Macro invocation: `MACRO(args)`
@@ -105,22 +105,22 @@ DEF_TYPE("preproc_call", COMPUTATION_CALL | SemanticRefinements::Call::MACRO, FI
 /**
  * @brief Conditional compilation: `#if condition`
  */
-DEF_TYPE("preproc_if", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("preproc_if", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
 
 /**
  * @brief Conditional compilation: `#ifdef MACRO`
  */
-DEF_TYPE("preproc_ifdef", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("preproc_ifdef", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, FIND_IDENTIFIER, NONE, 0)
 
 /**
  * @brief Conditional else: `#else`
  */
-DEF_TYPE("preproc_else", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("preproc_else", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
 
 /**
  * @brief Conditional elif: `#elif condition`
  */
-DEF_TYPE("preproc_elif", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("preproc_elif", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
 
 /**
  * @brief Preprocessor parameters in function-like macro
@@ -166,58 +166,58 @@ DEF_TYPE("preproc_directive", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
  * @brief Function definition: `type name(params) { body }`
  * Has a body (IS_EMBODIED); uses FIND_IN_DECLARATOR for complex declarators
  */
-DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IN_DECLARATOR, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IN_DECLARATOR, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Variable/function declaration: `type name;` or `type name(params);`
  */
-DEF_TYPE("declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /**
  * @brief Struct definition: `struct name { fields };`
  */
-DEF_TYPE("struct_specifier", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("struct_specifier", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Union definition: `union name { fields };`
  * Tagged union type where members share memory
  */
-DEF_TYPE("union_specifier", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("union_specifier", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Enum definition: `enum name { values };`
  */
-DEF_TYPE("enum_specifier", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("enum_specifier", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Typedef: `typedef old_type new_name;`
  */
-DEF_TYPE("typedef_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("typedef_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Type definition (alternate form)
  */
-DEF_TYPE("type_definition", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("type_definition", DEFINITION_CLASS, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Field in struct/union: `type name;`
  */
-DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /**
  * @brief Enumerator: `NAME` or `NAME = value` in enum
  */
-DEF_TYPE("enumerator", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("enumerator", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /**
  * @brief Function parameter: `type name` in parameter list
  */
-DEF_TYPE("parameter_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("parameter_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /**
  * @brief Initializing declarator: `name = value` in declaration
  */
-DEF_TYPE("init_declarator", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("init_declarator", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end c_declarations
 
@@ -242,7 +242,7 @@ DEF_TYPE("primitive_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
 /**
  * @brief User-defined type reference: struct/union/enum/typedef name
  */
-DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
+DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /**
  * @brief Sized type specifier: `long int`, `short int`, etc.
@@ -359,17 +359,17 @@ DEF_TYPE("case_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::
 /**
  * @brief While loop: `while (cond) stmt`
  */
-DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief For loop: `for (init; cond; update) stmt`
  */
-DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Do-while loop: `do stmt while (cond);`
  */
-DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Goto statement: `goto label;`
@@ -493,12 +493,12 @@ DEF_TYPE("offsetof_expression", COMPUTATION_CALL, NONE, NONE, 0)
 /**
  * @brief Identifier: variable, function, or type name
  */
-DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /**
  * @brief Field identifier in struct access
  */
-DEF_TYPE("field_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("field_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /**
  * @brief Statement identifier (goto label)
@@ -578,7 +578,7 @@ DEF_TYPE("nullptr", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
  */
 
 /// @brief Comment: line or block style
-DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 /** @} */ // end c_comments
 
@@ -1137,7 +1137,7 @@ DEF_TYPE("#pragma", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
 /**
  * @brief GNU inline assembly: `__asm__(...)`
  */
-DEF_TYPE("__asm__", EXECUTION_STATEMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("__asm__", EXECUTION_STATEMENT, NODE_TEXT, NONE, 0)
 
 /**
  * @brief GNU asm expression

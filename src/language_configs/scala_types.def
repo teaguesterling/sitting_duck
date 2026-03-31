@@ -61,10 +61,10 @@
  */
 
 /// @brief Compilation unit - root node for Scala file
-DEF_TYPE("compilation_unit", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("compilation_unit", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Package clause - `package com.example`
-DEF_TYPE("package_clause", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("package_clause", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end scala_program
 
@@ -108,10 +108,10 @@ DEF_TYPE("import_declaration", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
  */
 
 /// @brief Function definition - `def name(params): Type = body`
-DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Function declaration - abstract method signature
-DEF_TYPE("function_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("function_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end scala_functions
 
@@ -134,16 +134,16 @@ DEF_TYPE("function_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_
  */
 
 /// @brief Class definition - `class Name(params) extends Parent`
-DEF_TYPE("class_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("class_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Object definition - singleton `object Name`
-DEF_TYPE("object_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("object_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Trait definition - `trait Name`
-DEF_TYPE("trait_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("trait_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Case class definition - `case class Name(params)`
-DEF_TYPE("case_class_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("case_class_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end scala_classes
 
@@ -164,16 +164,16 @@ DEF_TYPE("case_class_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_
  */
 
 /// @brief Val definition - immutable `val x = value`
-DEF_TYPE("val_definition", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("val_definition", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Var definition - mutable `var x = value`
-DEF_TYPE("var_definition", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("var_definition", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Val declaration - abstract val signature
-DEF_TYPE("val_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("val_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Var declaration - abstract var signature
-DEF_TYPE("var_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("var_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end scala_variables
 
@@ -241,10 +241,10 @@ DEF_TYPE("match_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
  */
 
 /// @brief For expression - for-comprehension
-DEF_TYPE("for_expression", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("for_expression", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief While expression - `while (cond) body`
-DEF_TYPE("while_expression", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("while_expression", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end scala_loops
 
@@ -309,10 +309,10 @@ DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
  */
 
 /// @brief Lambda expression - `(x) => expr`
-DEF_TYPE("lambda_expression", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
+DEF_TYPE("lambda_expression", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Anonymous function
-DEF_TYPE("anonymous_function", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
+DEF_TYPE("anonymous_function", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end scala_lambdas
 
@@ -335,7 +335,7 @@ DEF_TYPE("anonymous_function", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
  */
 
 /// @brief Identifier - name
-DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /// @brief Integer literal
 DEF_TYPE("integer_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
@@ -371,7 +371,7 @@ DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 /// @{
 
 /// @brief Comment
-DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 /** @} */ // end scala_comments
 

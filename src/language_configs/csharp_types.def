@@ -61,10 +61,10 @@
  */
 
 /// @brief Compilation unit - root node for C# file
-DEF_TYPE("compilation_unit", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("compilation_unit", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Namespace declaration - `namespace Name { }`
-DEF_TYPE("namespace_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("namespace_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end csharp_program
 
@@ -109,19 +109,19 @@ DEF_TYPE("using_directive", EXTERNAL_IMPORT | SemanticRefinements::Import::MODUL
  */
 
 /// @brief Method declaration - class method
-DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Constructor declaration - `ClassName(params) { }`
-DEF_TYPE("constructor_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("constructor_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Destructor/finalizer - `~ClassName() { }`
-DEF_TYPE("destructor_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("destructor_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Operator overload - `public static T operator+(T a, T b)`
-DEF_TYPE("operator_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("operator_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Lambda expression - `(x) => x * 2`
-DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end csharp_methods
 
@@ -144,19 +144,19 @@ DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Functio
  */
 
 /// @brief Class declaration - reference type
-DEF_TYPE("class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Struct declaration - value type
-DEF_TYPE("struct_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("struct_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Interface declaration - contract
-DEF_TYPE("interface_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("interface_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Enum declaration - enumeration
-DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Record declaration - immutable reference type (C# 9+)
-DEF_TYPE("record_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("record_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end csharp_classes
 
@@ -177,16 +177,16 @@ DEF_TYPE("record_declaration", DEFINITION_CLASS | SemanticRefinements::Class::RE
  */
 
 /// @brief Field declaration - class field
-DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("field_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Property declaration - get/set accessor
-DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Local variable declaration
-DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Method parameter
-DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end csharp_variables
 
@@ -248,16 +248,16 @@ DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional
  */
 
 /// @brief For statement - `for (int i = 0; i < n; i++)`
-DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Foreach statement - `foreach (var x in collection)`
-DEF_TYPE("foreach_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+DEF_TYPE("foreach_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief While statement - `while (cond) { }`
-DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Do statement - `do { } while (cond);`
-DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("do_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end csharp_loops
 
@@ -350,7 +350,7 @@ DEF_TYPE("await_expression", FLOW_SYNC, NONE, NONE, 0)
  */
 
 /// @brief Identifier - name
-DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /// @brief Integer literal
 DEF_TYPE("integer_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
@@ -386,7 +386,7 @@ DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 /// @{
 
 /// @brief Comment
-DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 /** @} */ // end csharp_comments
 

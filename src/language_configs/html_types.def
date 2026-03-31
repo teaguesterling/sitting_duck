@@ -61,10 +61,10 @@
  */
 
 /// @brief Document root - complete HTML document
-DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, 0)
+DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Fragment - partial HTML content
-DEF_TYPE("fragment", DEFINITION_MODULE, NONE, NONE, 0)
+DEF_TYPE("fragment", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief DOCTYPE declaration - `<!DOCTYPE html>`
 DEF_TYPE("doctype", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
@@ -125,7 +125,7 @@ DEF_TYPE("tag_name", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
  */
 
 /// @brief Attribute - `name="value"`
-DEF_TYPE("attribute", DEFINITION_VARIABLE, CUSTOM, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("attribute", DEFINITION_VARIABLE, CUSTOM, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Attribute name - the attribute identifier
 DEF_TYPE("attribute_name", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)

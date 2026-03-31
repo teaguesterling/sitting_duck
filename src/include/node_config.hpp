@@ -56,20 +56,43 @@ struct NodeConfig {
 };
 
 // Universal flags for orthogonal node properties
-// Design principle: Mark EXCEPTIONS, not the common case
+//
+// Layout (8 bits):
+//   Bit 0:   IS_SYNTAX_ONLY  (0x01) — pure syntax token (keyword, punctuation)
+//   Bit 1-2: NAME_ROLE       — 2-bit enum for name-binding role
+//            00 = NONE       (0x00) — not involved in name binding
+//            01 = REFERENCE  (0x02) — uses a name
+//            10 = DECLARATION(0x04) — introduces name without implementation
+//            11 = DEFINITION (0x06) — introduces name with implementation
+//   Bit 3:   IS_SCOPE        (0x08) — creates scope boundary
+//   Bit 4-7: reserved
+//
+// Useful bitmask checks:
+//   flags & 0x06          — involved in naming at all
+//   flags & 0x04          — binds a name (DECLARATION or DEFINITION)
+//   (flags & 0x06) == 0x06 — is a DEFINITION
+//   (flags & 0x06) == 0x02 — is a REFERENCE
+//   flags & 0x08          — is a scope boundary
 namespace ASTNodeFlags {
-constexpr uint8_t IS_SYNTAX_ONLY = 0x01;      // Pure syntax token (keyword, punctuation) - not a semantic construct
-constexpr uint8_t IS_DECLARATION_ONLY = 0x02; // Forward declaration without body (exception case)
-// 0x04 - 0x80: Reserved for future use
+// Bit 0: syntax token
+constexpr uint8_t IS_SYNTAX_ONLY = 0x01;
 
-// Backward compatibility: These are now no-ops (0x00)
-// Default assumptions:
-//   - Nodes ARE semantic constructs (not syntax-only)
-//   - Definitions HAVE bodies (not declaration-only)
-constexpr uint8_t IS_CONSTRUCT = 0x00; // DEPRECATED: no-op, semantic construct is now the default
-constexpr uint8_t IS_EMBODIED = 0x00;  // DEPRECATED: no-op, having a body is now the default
+// Bits 1-2: NAME_ROLE — mutually exclusive name-binding role
+constexpr uint8_t NAME_ROLE_MASK  = 0x06; // mask for bits 1-2
+constexpr uint8_t NAME_NONE       = 0x00; // 00 = not involved in name binding
+constexpr uint8_t NAME_REFERENCE  = 0x02; // 01 = uses a name
+constexpr uint8_t NAME_DECLARATION = 0x04; // 10 = introduces name (no body/impl)
+constexpr uint8_t NAME_DEFINITION = 0x06; // 11 = introduces name (with body/impl)
 
-// Keywords and punctuation are syntax-only tokens
+// Bit 3: scope boundary
+constexpr uint8_t IS_SCOPE = 0x08;
+
+// Convenience: single-bit check for "binds a name" (definition OR declaration)
+constexpr uint8_t BINDS_NAME = 0x04;
+
+// Backward compatibility aliases
+constexpr uint8_t IS_CONSTRUCT = 0x00;       // DEPRECATED: no-op
+constexpr uint8_t IS_EMBODIED = 0x00;        // DEPRECATED: no-op
 constexpr uint8_t IS_KEYWORD = IS_SYNTAX_ONLY;
 constexpr uint8_t IS_KEYWORD_IF_LEAF = IS_SYNTAX_ONLY;
 } // namespace ASTNodeFlags

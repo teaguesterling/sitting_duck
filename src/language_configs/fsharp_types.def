@@ -61,13 +61,13 @@
  */
 
 /// @brief File root - top-level compilation unit
-DEF_TYPE("file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Namespace declaration - `namespace Name.Space`
-DEF_TYPE("namespace_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("namespace_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Module declaration - `module ModuleName`
-DEF_TYPE("module_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("module_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end fsharp_program
 
@@ -109,10 +109,10 @@ DEF_TYPE("open_declaration", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
  */
 
 /// @brief Function declaration - `let functionName params = body`
-DEF_TYPE("function_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("function_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Method declaration - member in type definition
-DEF_TYPE("method_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("method_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end fsharp_functions
 
@@ -134,13 +134,13 @@ DEF_TYPE("method_declaration", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WI
  */
 
 /// @brief Type declaration - general type definition
-DEF_TYPE("type_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("type_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Record declaration - `type Person = { Name: string }`
-DEF_TYPE("record_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("record_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Union declaration - discriminated union `type Option = Some | None`
-DEF_TYPE("union_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("union_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end fsharp_types
 
@@ -161,7 +161,7 @@ DEF_TYPE("union_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METH
  */
 
 /// @brief Value declaration - `let x = value`
-DEF_TYPE("value_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("value_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end fsharp_variables
 
@@ -228,10 +228,10 @@ DEF_TYPE("match_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
  */
 
 /// @brief For expression - `for x in items do ...`
-DEF_TYPE("for_expression", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("for_expression", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief While expression - `while cond do ...`
-DEF_TYPE("while_expression", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("while_expression", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end fsharp_loops
 
@@ -298,10 +298,10 @@ DEF_TYPE("ce_expression", FLOW_SYNC, NONE, NONE, 0)
  */
 
 /// @brief Lambda expression - `fun x -> expr`
-DEF_TYPE("lambda_expression", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
+DEF_TYPE("lambda_expression", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Anonymous record expression - `{| Field = value |}`
-DEF_TYPE("anon_record_expression", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
+DEF_TYPE("anon_record_expression", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end fsharp_lambdas
 
@@ -324,7 +324,7 @@ DEF_TYPE("anon_record_expression", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
  */
 
 /// @brief Identifier - simple name
-DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /// @brief Long identifier - qualified name `Module.SubModule.Name`
 DEF_TYPE("long_identifier", NAME_QUALIFIED, NODE_TEXT, NONE, 0)
@@ -362,7 +362,7 @@ DEF_TYPE("bool", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
  */
 
 /// @brief Comment
-DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 /** @} */ // end fsharp_comments
 

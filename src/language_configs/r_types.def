@@ -63,7 +63,7 @@
  */
 
 /// @brief Function definition - `name <- function(params) body`
-DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_ASSIGNMENT_TARGET, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_ASSIGNMENT_TARGET, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Function keyword - `function` keyword
 DEF_TYPE("function", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -107,10 +107,10 @@ DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BI
  */
 
 /// @brief For statement - `for (x in seq) body`
-DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief While statement - `while (cond) body`
-DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Repeat statement - `repeat body` (infinite loop)
 DEF_TYPE("repeat_statement", FLOW_LOOP | SemanticRefinements::Loop::INFINITE, NONE, NONE, 0)
@@ -189,10 +189,10 @@ DEF_TYPE("in", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
  */
 
 /// @brief Identifier - name
-DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /// @brief Parameter - function parameter
-DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end r_identifiers
 

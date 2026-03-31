@@ -61,10 +61,10 @@
  */
 
 /// @brief Source file root - top-level compilation unit
-DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Module definition - `module Name ... end`
-DEF_TYPE("module_definition", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("module_definition", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end julia_program
 
@@ -111,13 +111,13 @@ DEF_TYPE("using_statement", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
  */
 
 /// @brief Function definition - `function name(params) body end`
-DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Short function definition - `f(x) = x + 1`
-DEF_TYPE("short_function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("short_function_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Macro definition - `macro name(args) body end`
-DEF_TYPE("macro_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("macro_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end julia_functions
 
@@ -139,13 +139,13 @@ DEF_TYPE("macro_definition", DEFINITION_FUNCTION, FIND_IDENTIFIER, FUNCTION_WITH
  */
 
 /// @brief Struct definition - `struct Name ... end`
-DEF_TYPE("struct_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("struct_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Abstract type definition - `abstract type Name end`
-DEF_TYPE("abstract_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("abstract_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Primitive type definition - `primitive type Name bits end`
-DEF_TYPE("primitive_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("primitive_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end julia_types
 
@@ -167,13 +167,13 @@ DEF_TYPE("primitive_definition", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_M
  */
 
 /// @brief Assignment - variable binding `x = value`
-DEF_TYPE("assignment", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("assignment", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Const statement - `const NAME = value`
-DEF_TYPE("const_statement", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("const_statement", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Global statement - `global x`
-DEF_TYPE("global_statement", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("global_statement", DEFINITION_VARIABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end julia_variables
 
@@ -241,10 +241,10 @@ DEF_TYPE("if_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
  */
 
 /// @brief For statement - `for x in collection body end`
-DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief While statement - `while cond body end`
-DEF_TYPE("while_statement", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end julia_loops
 
@@ -312,10 +312,10 @@ DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
  */
 
 /// @brief Function expression - anonymous function
-DEF_TYPE("function_expression", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
+DEF_TYPE("function_expression", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Do clause - `do x body end` (anonymous function in call)
-DEF_TYPE("do_clause", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
+DEF_TYPE("do_clause", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end julia_lambdas
 
@@ -341,7 +341,7 @@ DEF_TYPE("do_clause", DEFINITION_FUNCTION, NONE, ARROW_FUNCTION, 0)
  */
 
 /// @brief Identifier - name
-DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /// @brief Integer literal
 DEF_TYPE("integer_literal", LITERAL_NUMBER, NODE_TEXT, NONE, 0)
@@ -376,7 +376,7 @@ DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
  */
 
 /// @brief Comment
-DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 /** @} */ // end julia_comments
 

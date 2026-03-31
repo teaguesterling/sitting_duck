@@ -58,10 +58,10 @@
  */
 
 /// @brief Chunk - root node representing the entire Lua script
-DEF_TYPE("chunk", DEFINITION_MODULE, NONE, NONE, 0)
+DEF_TYPE("chunk", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Block - sequence of statements in a scope
-DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end lua_program
 
@@ -88,13 +88,13 @@ DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUEN
  */
 
 /// @brief Named function declaration - `function name(...) end`
-DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Anonymous function - `function(...) end` as expression
-DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Local function - `local function name(...) end`
-DEF_TYPE("local_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("local_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Parameter list - function parameters
 DEF_TYPE("parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
@@ -146,10 +146,10 @@ DEF_TYPE("method_index_expression", COMPUTATION_CALL | SemanticRefinements::Call
  */
 
 /// @brief Variable declaration (global)
-DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Local variable declaration - `local x = value`
-DEF_TYPE("local_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("local_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Assignment statement - `x = value` or `a, b = 1, 2`
 DEF_TYPE("assignment_statement", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, FIND_IDENTIFIER, NONE, 0)
@@ -183,7 +183,7 @@ DEF_TYPE("expression_list", ORGANIZATION_LIST | SemanticRefinements::Organizatio
 DEF_TYPE("table_constructor", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
 
 /// @brief Field in table - `key = value` or `[expr] = value`
-DEF_TYPE("field", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("field", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Field list in table constructor
 DEF_TYPE("field_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
@@ -201,7 +201,7 @@ DEF_TYPE("field_list", ORGANIZATION_LIST | SemanticRefinements::Organization::CO
  */
 
 /// @brief Identifier - variable or function name
-DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /// @brief Dot index - `table.key` access
 DEF_TYPE("dot_index_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
@@ -289,22 +289,22 @@ DEF_TYPE("else_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::
  */
 
 /// @brief For statement container
-DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Generic for clause - `for k, v in iterator do`
-DEF_TYPE("for_generic_clause", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+DEF_TYPE("for_generic_clause", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Numeric for clause - `for i = 1, 10, 1 do`
 DEF_TYPE("for_numeric_clause", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, 0)
 
 /// @brief While loop - `while ... do ... end`
-DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Repeat loop - `repeat ... until ...` (do-while equivalent)
 DEF_TYPE("repeat_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
 
 /// @brief Do block - `do ... end` creates a scope
-DEF_TYPE("do_statement", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+DEF_TYPE("do_statement", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end lua_loops
 

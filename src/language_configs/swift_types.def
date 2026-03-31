@@ -56,7 +56,7 @@
  */
 
 /// @brief Source file root - represents the entire Swift file
-DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end swift_program
 
@@ -100,16 +100,16 @@ DEF_TYPE("import_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MO
  */
 
 /// @brief Function declaration - `func name(params) -> Type { }`
-DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Initializer - `init(params) { }`
-DEF_TYPE("init_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, CUSTOM, CONSTRUCTOR_DEFINITION, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("init_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, CUSTOM, CONSTRUCTOR_DEFINITION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Deinitializer - `deinit { }` (destructor)
-DEF_TYPE("deinit_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, CUSTOM, NONE, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("deinit_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Subscript declaration - `subscript(index: Int) -> Element`
-DEF_TYPE("subscript_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("subscript_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end swift_functions
 
@@ -132,22 +132,22 @@ DEF_TYPE("subscript_declaration", DEFINITION_FUNCTION | SemanticRefinements::Fun
  */
 
 /// @brief Class declaration - reference type with inheritance
-DEF_TYPE("class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Struct declaration - value type, copied on assignment
-DEF_TYPE("struct_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("struct_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Actor declaration - concurrency-safe reference type
-DEF_TYPE("actor_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("actor_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Enum declaration - value type with cases
-DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Protocol declaration - interface/trait
-DEF_TYPE("protocol_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("protocol_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Extension - adds members to existing type
-DEF_TYPE("extension_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTRUCT | ASTNodeFlags::IS_EMBODIED)
+DEF_TYPE("extension_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end swift_classes
 
@@ -169,13 +169,13 @@ DEF_TYPE("extension_declaration", DEFINITION_CLASS | SemanticRefinements::Class:
  */
 
 /// @brief Property declaration - class/struct property
-DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, CUSTOM, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, CUSTOM, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Variable declaration - local or global `let`/`var`
-DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Function parameter
-DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end swift_variables
 
@@ -190,10 +190,10 @@ DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAM
  */
 
 /// @brief Type alias - `typealias Name = ExistingType`
-DEF_TYPE("typealias_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("typealias_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Associated type - protocol type placeholder
-DEF_TYPE("associatedtype_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("associatedtype_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end swift_typedefs
 
@@ -247,16 +247,16 @@ DEF_TYPE("default_case", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MU
  */
 
 /// @brief For-in loop - `for item in collection`
-DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief While loop - `while condition { }`
-DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Repeat-while loop - `repeat { } while condition`
-DEF_TYPE("repeat_while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("repeat_while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Do block - `do { }` for scoping or error handling
-DEF_TYPE("do_statement", FLOW_SYNC, NONE, NONE, 0)
+DEF_TYPE("do_statement", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Defer statement - executes when scope exits
 DEF_TYPE("defer_statement", FLOW_SYNC, NONE, NONE, 0)
@@ -424,13 +424,13 @@ DEF_TYPE("tuple_expression", LITERAL_STRUCTURED | SemanticRefinements::Structure
  */
 
 /// @brief Simple identifier - name
-DEF_TYPE("simple_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("simple_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /// @brief Identifier node
-DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /// @brief Type identifier - type name
-DEF_TYPE("type_identifier", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+DEF_TYPE("type_identifier", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /// @brief User-defined type
 DEF_TYPE("user_type", TYPE_COMPOSITE, NODE_TEXT, NONE, 0)
@@ -518,10 +518,10 @@ DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
  */
 
 /// @brief Lambda/closure literal
-DEF_TYPE("lambda_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, 0)
+DEF_TYPE("lambda_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Closure expression
-DEF_TYPE("closure_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, 0)
+DEF_TYPE("closure_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end swift_closures
 
@@ -569,10 +569,10 @@ DEF_TYPE("mutation_modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags
  */
 
 /// @brief Single-line comment - `// comment`
-DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 /// @brief Multi-line comment - `/* comment */`
-DEF_TYPE("multiline_comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("multiline_comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 /** @} */ // end swift_comments
 

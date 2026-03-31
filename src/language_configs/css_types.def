@@ -61,10 +61,10 @@
  */
 
 /// @brief Stylesheet - root node containing all CSS rules
-DEF_TYPE("stylesheet", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("stylesheet", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Rule set - selector(s) + declaration block `selector { declarations }`
-DEF_TYPE("rule_set", DEFINITION_CLASS, NONE, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("rule_set", DEFINITION_CLASS, NONE, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end css_document
 
@@ -87,25 +87,25 @@ DEF_TYPE("rule_set", DEFINITION_CLASS, NONE, FUNCTION_WITH_PARAMS, ASTNodeFlags:
  */
 
 /// @brief Generic at-rule - `@rule { }`
-DEF_TYPE("at_rule", DEFINITION_CLASS, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("at_rule", DEFINITION_CLASS, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Media statement - `@media screen and (min-width: 768px)`
-DEF_TYPE("media_statement", DEFINITION_CLASS, NODE_TEXT, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("media_statement", DEFINITION_CLASS, NODE_TEXT, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Import statement - `@import url("file.css")`
-DEF_TYPE("import_statement", EXTERNAL_IMPORT, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("import_statement", EXTERNAL_IMPORT, CUSTOM, FUNCTION_WITH_PARAMS, 0)
 
 /// @brief Namespace statement - `@namespace svg url(...)`
-DEF_TYPE("namespace_statement", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("namespace_statement", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Keyframes statement - `@keyframes animation-name`
-DEF_TYPE("keyframes_statement", DEFINITION_CLASS, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("keyframes_statement", DEFINITION_CLASS, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Supports statement - `@supports (display: grid)`
-DEF_TYPE("supports_statement", DEFINITION_CLASS, NODE_TEXT, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("supports_statement", DEFINITION_CLASS, NODE_TEXT, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Charset statement - `@charset "UTF-8"`
-DEF_TYPE("charset_statement", METADATA_DIRECTIVE, CUSTOM, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("charset_statement", METADATA_DIRECTIVE, CUSTOM, NONE, 0)
 
 /** @} */ // end css_at_rules
 
@@ -183,10 +183,10 @@ DEF_TYPE("adjacent_sibling_selector", OPERATOR_LOGICAL, NODE_TEXT, NONE, 0)
  */
 
 /// @brief Declaration block - `{ property: value; ... }`
-DEF_TYPE("block", ORGANIZATION_BLOCK, NONE, NONE, 0)
+DEF_TYPE("block", ORGANIZATION_BLOCK, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Declaration - `property: value`
-DEF_TYPE("declaration", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
+DEF_TYPE("declaration", DEFINITION_VARIABLE, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Property name - `color`, `margin`, `display`
 DEF_TYPE("property_name", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
@@ -229,7 +229,7 @@ DEF_TYPE("string_value", LITERAL_STRING, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
 DEF_TYPE("color_value", LITERAL_ATOMIC, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
 
 /// @brief Identifier - generic name token
-DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_REFERENCE)
 
 /// @brief Plain value - unquoted keyword value
 DEF_TYPE("plain_value", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
@@ -281,7 +281,7 @@ DEF_TYPE("arguments", ORGANIZATION_LIST, NONE, NONE, 0)
  */
 
 /// @brief Comment - `/* comment */`
-DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 /** @} */ // end css_comments
 

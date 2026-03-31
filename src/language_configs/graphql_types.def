@@ -61,7 +61,7 @@
  */
 
 /// @brief Source file - root GraphQL file
-DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, 0)
+DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Document - GraphQL document container
 DEF_TYPE("document", ORGANIZATION_CONTAINER, NONE, NONE, 0)
@@ -94,13 +94,13 @@ DEF_TYPE("type_system_extension", ORGANIZATION_BLOCK, NONE, NONE, 0)
  */
 
 /// @brief Schema definition - `schema { }`
-DEF_TYPE("schema_definition", DEFINITION_MODULE, NONE, NONE, 0)
+DEF_TYPE("schema_definition", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Schema extension - `extend schema { }`
-DEF_TYPE("schema_extension", DEFINITION_MODULE, NONE, NONE, 0)
+DEF_TYPE("schema_extension", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Root operation type - `query: Query`
-DEF_TYPE("root_operation_type_definition", DEFINITION_VARIABLE, NONE, NONE, 0)
+DEF_TYPE("root_operation_type_definition", DEFINITION_VARIABLE, NONE, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end gql_schema
 
@@ -126,22 +126,22 @@ DEF_TYPE("root_operation_type_definition", DEFINITION_VARIABLE, NONE, NONE, 0)
 DEF_TYPE("type_definition", ORGANIZATION_BLOCK, NONE, NONE, 0)
 
 /// @brief Object type - `type Name { }`
-DEF_TYPE("object_type_definition", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("object_type_definition", DEFINITION_CLASS, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Interface type - `interface Name { }`
-DEF_TYPE("interface_type_definition", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("interface_type_definition", DEFINITION_CLASS, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Union type - `union Name = A | B`
-DEF_TYPE("union_type_definition", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("union_type_definition", DEFINITION_CLASS, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Enum type - `enum Name { }`
-DEF_TYPE("enum_type_definition", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("enum_type_definition", DEFINITION_CLASS, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Input object type - `input Name { }`
-DEF_TYPE("input_object_type_definition", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("input_object_type_definition", DEFINITION_CLASS, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Scalar type - `scalar Name`
-DEF_TYPE("scalar_type_definition", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("scalar_type_definition", DEFINITION_CLASS, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end gql_types
 
@@ -162,22 +162,22 @@ DEF_TYPE("scalar_type_definition", DEFINITION_CLASS, CUSTOM, NONE, 0)
 DEF_TYPE("type_extension", ORGANIZATION_BLOCK, NONE, NONE, 0)
 
 /// @brief Object type extension
-DEF_TYPE("object_type_extension", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("object_type_extension", DEFINITION_CLASS, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Interface type extension
-DEF_TYPE("interface_type_extension", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("interface_type_extension", DEFINITION_CLASS, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Union type extension
-DEF_TYPE("union_type_extension", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("union_type_extension", DEFINITION_CLASS, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Enum type extension
-DEF_TYPE("enum_type_extension", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("enum_type_extension", DEFINITION_CLASS, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Input object type extension
-DEF_TYPE("input_object_type_extension", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("input_object_type_extension", DEFINITION_CLASS, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Scalar type extension
-DEF_TYPE("scalar_type_extension", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("scalar_type_extension", DEFINITION_CLASS, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end gql_extensions
 
@@ -197,7 +197,7 @@ DEF_TYPE("scalar_type_extension", DEFINITION_CLASS, CUSTOM, NONE, 0)
  */
 
 /// @brief Operation definition - `query Name { }`
-DEF_TYPE("operation_definition", DEFINITION_FUNCTION, CUSTOM, NONE, 0)
+DEF_TYPE("operation_definition", DEFINITION_FUNCTION, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Operation type - `query`, `mutation`, `subscription`
 DEF_TYPE("operation_type", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
@@ -220,7 +220,7 @@ DEF_TYPE("operation_type", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
  */
 
 /// @brief Fragment definition - `fragment Name on Type { }`
-DEF_TYPE("fragment_definition", DEFINITION_FUNCTION, CUSTOM, NONE, 0)
+DEF_TYPE("fragment_definition", DEFINITION_FUNCTION, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Fragment spread - `...FragmentName`
 DEF_TYPE("fragment_spread", COMPUTATION_CALL, CUSTOM, FUNCTION_CALL, 0)
@@ -254,7 +254,7 @@ DEF_TYPE("type_condition", TYPE_REFERENCE, CUSTOM, NONE, 0)
 DEF_TYPE("fields_definition", ORGANIZATION_LIST, NONE, NONE, 0)
 
 /// @brief Field definition - `fieldName: Type`
-DEF_TYPE("field_definition", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
+DEF_TYPE("field_definition", DEFINITION_VARIABLE, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Field selection - field in query
 DEF_TYPE("field", COMPUTATION_ACCESS, CUSTOM, NONE, 0)
@@ -287,7 +287,7 @@ DEF_TYPE("selection", ORGANIZATION_BLOCK, NONE, NONE, 0)
 DEF_TYPE("enum_values_definition", ORGANIZATION_LIST, NONE, NONE, 0)
 
 /// @brief Enum value definition - single value
-DEF_TYPE("enum_value_definition", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
+DEF_TYPE("enum_value_definition", DEFINITION_VARIABLE, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Enum value - value reference
 DEF_TYPE("enum_value", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
@@ -326,7 +326,7 @@ DEF_TYPE("implements_interfaces", ORGANIZATION_LIST, NONE, NONE, 0)
 DEF_TYPE("input_fields_definition", ORGANIZATION_LIST, NONE, NONE, 0)
 
 /// @brief Input value definition - input field
-DEF_TYPE("input_value_definition", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
+DEF_TYPE("input_value_definition", DEFINITION_VARIABLE, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end gql_input_fields
 
@@ -351,7 +351,7 @@ DEF_TYPE("arguments_definition", ORGANIZATION_LIST, NONE, NONE, 0)
 DEF_TYPE("arguments", ORGANIZATION_LIST, NONE, NONE, 0)
 
 /// @brief Argument - single argument
-DEF_TYPE("argument", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
+DEF_TYPE("argument", DEFINITION_VARIABLE, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end gql_arguments
 
@@ -373,7 +373,7 @@ DEF_TYPE("argument", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
 DEF_TYPE("variable_definitions", ORGANIZATION_LIST, NONE, NONE, 0)
 
 /// @brief Variable definition - `$name: Type`
-DEF_TYPE("variable_definition", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
+DEF_TYPE("variable_definition", DEFINITION_VARIABLE, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Variable reference - `$name`
 DEF_TYPE("variable", NAME_IDENTIFIER, CUSTOM, NONE, 0)
@@ -398,7 +398,7 @@ DEF_TYPE("default_value", LITERAL_ATOMIC, NONE, NONE, 0)
  */
 
 /// @brief Directive definition - `directive @name`
-DEF_TYPE("directive_definition", DEFINITION_FUNCTION, CUSTOM, NONE, 0)
+DEF_TYPE("directive_definition", DEFINITION_FUNCTION, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Directives list - applied directives
 DEF_TYPE("directives", ORGANIZATION_LIST, NONE, NONE, 0)
@@ -491,7 +491,7 @@ DEF_TYPE("list_value", LITERAL_STRUCTURED, NONE, NONE, 0)
 DEF_TYPE("object_value", LITERAL_STRUCTURED, NONE, NONE, 0)
 
 /// @brief Object field - `key: value` in object
-DEF_TYPE("object_field", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
+DEF_TYPE("object_field", DEFINITION_VARIABLE, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end gql_values
 

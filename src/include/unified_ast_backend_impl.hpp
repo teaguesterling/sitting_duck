@@ -345,21 +345,8 @@ void PopulateSemanticFieldsTemplated(ASTNode &node, const AdapterType *adapter, 
 			node.universal_flags |= ASTNodeFlags::IS_SYNTAX_ONLY;
 		}
 
-		// RUNTIME DETECTION: Set IS_DECLARATION_ONLY for nodes without substantive children.
-		// A node is "embodied" (has_body) if it has at least one named child that isn't
-		// purely punctuation. This covers:
-		//   - Function definitions: abstract methods vs concrete methods with body blocks
-		//   - Class definitions: empty vs populated class bodies
-		//   - Any construct: leaf tokens vs compound nodes
-		// Skip nodes already marked as syntax-only (they're tokens, not constructs).
-		if ((node.universal_flags & ASTNodeFlags::IS_SYNTAX_ONLY) == 0 &&
-		    (node.universal_flags & ASTNodeFlags::IS_DECLARATION_ONLY) == 0) {
-			uint32_t named_child_count = ts_node_named_child_count(ts_node);
-			if (named_child_count == 0) {
-				// No named children at all — this is a leaf construct (e.g., identifier, keyword)
-				node.universal_flags |= ASTNodeFlags::IS_DECLARATION_ONLY;
-			}
-		}
+		// NAME_ROLE (definition vs declaration vs reference) is set
+		// explicitly in each language's .def file via the flags column.
 
 		// NATIVE CONTEXT EXTRACTION: Use template specialization for zero-virtual-call performance
 		// Only extract native context if the config level allows it

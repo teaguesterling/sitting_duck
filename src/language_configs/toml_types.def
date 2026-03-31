@@ -61,7 +61,7 @@
  */
 
 /// @brief Document - root TOML container
-DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end toml_document
 
@@ -81,10 +81,10 @@ DEF_TYPE("document", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
  */
 
 /// @brief Table - `[section]`
-DEF_TYPE("table", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("table", DEFINITION_CLASS, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Array table element - `[[array]]`
-DEF_TYPE("table_array_element", DEFINITION_CLASS, CUSTOM, NONE, 0)
+DEF_TYPE("table_array_element", DEFINITION_CLASS, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end toml_tables
 
@@ -104,7 +104,7 @@ DEF_TYPE("table_array_element", DEFINITION_CLASS, CUSTOM, NONE, 0)
  */
 
 /// @brief Key-value pair - `key = value`
-DEF_TYPE("pair", DEFINITION_VARIABLE, CUSTOM, NONE, 0)
+DEF_TYPE("pair", DEFINITION_VARIABLE, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end toml_pairs
 

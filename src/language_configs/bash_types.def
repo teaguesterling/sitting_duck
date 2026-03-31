@@ -56,7 +56,7 @@
  */
 
 /// @brief Script root - represents the entire Bash script file
-DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end bash_program
 
@@ -81,7 +81,7 @@ DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
  */
 
 /// @brief Function definition - both POSIX `name()` and Bash `function name` styles
-DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end bash_functions
 
@@ -105,13 +105,13 @@ DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Funct
  */
 
 /// @brief Variable assignment - `name=value` or `name+=value`
-DEF_TYPE("variable_assignment", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("variable_assignment", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Declaration command - `declare`, `local`, `readonly`, `typeset`, `export`
-DEF_TYPE("declaration_command", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, CUSTOM, VARIABLE_WITH_TYPE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("declaration_command", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, CUSTOM, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Unset command - removes variable or function definition
-DEF_TYPE("unset_command", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("unset_command", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end bash_variables
 
@@ -184,13 +184,13 @@ DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BI
 DEF_TYPE("case_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 
 /// @brief While loop - `while cmd; do ...; done`
-DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief For loop - `for var in list; do ...; done`
-DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief C-style for loop - `for ((i=0; i<n; i++)); do ...; done`
-DEF_TYPE("c_style_for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, 0)
+DEF_TYPE("c_style_for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Break statement - exit from enclosing loop
 DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
@@ -406,7 +406,7 @@ DEF_TYPE("herestring_redirect", EXECUTION_STATEMENT, NONE, NONE, 0)
  */
 
 /// @brief Comment - starts with `#`, extends to end of line
-DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 /** @} */ // end bash_comments
 

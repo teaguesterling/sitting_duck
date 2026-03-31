@@ -253,31 +253,73 @@ static void IsConstructFunction(DataChunk &args, ExpressionState &state, Vector 
 	});
 }
 
-// Check if node is a declaration-only (no body/implementation)
+// ============================================================================
+// NAME_ROLE Flag Functions (bits 1-2 of flags byte)
+// ============================================================================
+
+// Check if node is a definition by flags (introduces name with implementation)
+static void IsDefinitionFlagFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	D_ASSERT(args.ColumnCount() == 1);
+	auto &flags_vector = args.data[0];
+	auto count = args.size();
+	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count,
+	                                      [&](uint8_t flags) { return (flags & ASTNodeFlags::NAME_ROLE_MASK) == ASTNodeFlags::NAME_DEFINITION; });
+}
+
+// Check if node is a declaration by flags (introduces name without implementation)
+static void IsDeclarationFlagFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	D_ASSERT(args.ColumnCount() == 1);
+	auto &flags_vector = args.data[0];
+	auto count = args.size();
+	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count,
+	                                      [&](uint8_t flags) { return (flags & ASTNodeFlags::NAME_ROLE_MASK) == ASTNodeFlags::NAME_DECLARATION; });
+}
+
+// Check if node is a reference by flags (uses a name)
+static void IsReferenceFlagFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	D_ASSERT(args.ColumnCount() == 1);
+	auto &flags_vector = args.data[0];
+	auto count = args.size();
+	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count,
+	                                      [&](uint8_t flags) { return (flags & ASTNodeFlags::NAME_ROLE_MASK) == ASTNodeFlags::NAME_REFERENCE; });
+}
+
+// Check if node binds a name (definition OR declaration — bit 2 set)
+static void BindsNameFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	D_ASSERT(args.ColumnCount() == 1);
+	auto &flags_vector = args.data[0];
+	auto count = args.size();
+	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count,
+	                                      [&](uint8_t flags) { return (flags & ASTNodeFlags::BINDS_NAME) != 0; });
+}
+
+// Check if node creates a scope boundary
+static void IsScopeFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	D_ASSERT(args.ColumnCount() == 1);
+	auto &flags_vector = args.data[0];
+	auto count = args.size();
+	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count,
+	                                      [&](uint8_t flags) { return (flags & ASTNodeFlags::IS_SCOPE) != 0; });
+}
+
+// Get the name role as an integer (0=none, 1=reference, 2=declaration, 3=definition)
+static void NameRoleFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	D_ASSERT(args.ColumnCount() == 1);
+	auto &flags_vector = args.data[0];
+	auto count = args.size();
+	UnaryExecutor::Execute<uint8_t, uint8_t>(flags_vector, result, count,
+	                                          [&](uint8_t flags) { return (uint8_t)((flags & ASTNodeFlags::NAME_ROLE_MASK) >> 1); });
+}
+
+// DEPRECATED: backward compatibility wrappers
 static void IsDeclarationOnlyFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-	D_ASSERT(args.ColumnCount() == 1);
-
-	auto &flags_vector = args.data[0];
-	auto count = args.size();
-
-	UnaryExecutor::Execute<uint8_t, bool>(
-	    flags_vector, result, count, [&](uint8_t flags) { return (flags & ASTNodeFlags::IS_DECLARATION_ONLY) != 0; });
+	IsDeclarationFlagFunction(args, state, result);
 }
 
-// Check if node has body/implementation (default true, false only for forward declarations)
 static void HasBodyFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-	D_ASSERT(args.ColumnCount() == 1);
-
-	auto &flags_vector = args.data[0];
-	auto count = args.size();
-
-	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count, [&](uint8_t flags) {
-		// Has body unless explicitly marked as declaration-only
-		return (flags & ASTNodeFlags::IS_DECLARATION_ONLY) == 0;
-	});
+	IsDefinitionFlagFunction(args, state, result);
 }
 
-// Alias for has_body - backward compatibility
 static void IsEmbodiedFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	HasBodyFunction(args, state, result);
 }
@@ -545,19 +587,34 @@ void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
 	                                 IsConstructFunction);
 	loader.RegisterFunction(is_construct_func);
 
-	// Register is_declaration_only(flags) -> BOOLEAN
-	// Returns true if node is a forward declaration (no body)
+	// NAME_ROLE flag functions (bits 1-2 of flags byte)
+	ScalarFunction is_name_definition_func("is_name_definition", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsDefinitionFlagFunction);
+	loader.RegisterFunction(is_name_definition_func);
+
+	ScalarFunction is_name_declaration_func("is_name_declaration", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsDeclarationFlagFunction);
+	loader.RegisterFunction(is_name_declaration_func);
+
+	ScalarFunction is_name_reference_func("is_name_reference", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsReferenceFlagFunction);
+	loader.RegisterFunction(is_name_reference_func);
+
+	ScalarFunction binds_name_func("binds_name", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, BindsNameFunction);
+	loader.RegisterFunction(binds_name_func);
+
+	ScalarFunction name_role_func("name_role", {LogicalType::UTINYINT}, LogicalType::UTINYINT, NameRoleFunction);
+	loader.RegisterFunction(name_role_func);
+
+	// IS_SCOPE flag function (bit 3)
+	ScalarFunction is_scope_func("is_scope", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsScopeFunction);
+	loader.RegisterFunction(is_scope_func);
+
+	// DEPRECATED: backward compatibility wrappers
 	ScalarFunction is_declaration_only_func("is_declaration_only", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
 	                                        IsDeclarationOnlyFunction);
 	loader.RegisterFunction(is_declaration_only_func);
 
-	// Register has_body(flags) -> BOOLEAN
-	// Returns true unless IS_DECLARATION_ONLY is set (default: has body)
 	ScalarFunction has_body_func("has_body", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, HasBodyFunction);
 	loader.RegisterFunction(has_body_func);
 
-	// Register is_embodied(flags) -> BOOLEAN
-	// Alias for has_body - backward compatibility
 	ScalarFunction is_embodied_func("is_embodied", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsEmbodiedFunction);
 	loader.RegisterFunction(is_embodied_func);
 

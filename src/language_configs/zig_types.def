@@ -56,7 +56,7 @@
  */
 
 /// @brief Source file root - top-level compilation unit
-DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUCT)
+DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end zig_program
 
@@ -79,7 +79,7 @@ DEF_TYPE("source_file", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_CONSTRUC
  */
 
 /// @brief Function declaration - `fn name(params) Type { }`
-DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Function signature - return type and parameters
 DEF_TYPE("function_signature", TYPE_COMPOSITE, NONE, NONE, 0)
@@ -88,7 +88,7 @@ DEF_TYPE("function_signature", TYPE_COMPOSITE, NONE, NONE, 0)
 DEF_TYPE("parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
 /// @brief Parameter - function parameter
-DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end zig_functions
 
@@ -110,19 +110,19 @@ DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAM
  */
 
 /// @brief Struct declaration - `const S = struct { }`
-DEF_TYPE("struct_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, NONE, 0)
+DEF_TYPE("struct_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Enum declaration - `const E = enum { }`
-DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, CUSTOM, NONE, 0)
+DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Union declaration - `const U = union { }`
-DEF_TYPE("union_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, NONE, 0)
+DEF_TYPE("union_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Opaque declaration - for C interop
-DEF_TYPE("opaque_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, CUSTOM, NONE, 0)
+DEF_TYPE("opaque_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Error set declaration - `const E = error { }`
-DEF_TYPE("error_set_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, CUSTOM, NONE, 0)
+DEF_TYPE("error_set_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end zig_types
 
@@ -143,13 +143,13 @@ DEF_TYPE("error_set_declaration", DEFINITION_CLASS | SemanticRefinements::Class:
  */
 
 /// @brief Variable declaration - `var` or `const`
-DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Comptime declaration - compile-time variable
-DEF_TYPE("comptime_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("comptime_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Test declaration - `test "name" { }`
-DEF_TYPE("test_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, NONE, 0)
+DEF_TYPE("test_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Using namespace declaration - `usingnamespace @import("...")`
 DEF_TYPE("using_namespace_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NONE, NONE, 0)
@@ -217,10 +217,10 @@ DEF_TYPE("range_expression", LITERAL_STRUCTURED, NONE, NONE, 0)
 DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
 
 /// @brief For statement - `for (items) |item| body`
-DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, 0)
+DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief While statement - `while (cond) body`
-DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Switch expression - `switch (value) { }`
 DEF_TYPE("switch_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
@@ -401,7 +401,7 @@ DEF_TYPE("builtin_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
  */
 
 /// @brief Identifier - name
-DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
+DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
 /// @brief Builtin identifier - `@identifier`
 DEF_TYPE("builtin_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
@@ -459,7 +459,7 @@ DEF_TYPE("boolean", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
  */
 
 /// @brief Block - `{ statements }`
-DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
+DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Block expression - block that returns value
 DEF_TYPE("block_expression", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
