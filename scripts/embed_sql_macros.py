@@ -48,6 +48,7 @@ def generate_header(sql_dir, output_file):
         'file_utilities.sql',
         'tree_navigation.sql',
         'pattern_matching.sql',
+        'relational_operators.sql',
     ]
 
     header_content = """// Auto-generated file - DO NOT EDIT
