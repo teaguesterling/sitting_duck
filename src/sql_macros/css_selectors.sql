@@ -226,133 +226,124 @@ CREATE OR REPLACE MACRO ast_select(
         ),
 
         -- =====================================================================
-        -- Apply selector to target AST
+        -- Apply selector: single scan with CASE dispatch (no UNION ALL)
         -- =====================================================================
 
-        -- Simple/compound selector result (type, #id, .class, :has, :not(:has), [attr])
-        simple_result AS (
-            SELECT a.*
-            FROM ast a
-            WHERE
-                -- Type filter
-                ((SELECT type_filter FROM simple_type) IS NULL
-                 OR a.type = (SELECT type_filter FROM simple_type))
-                -- #id name filter
-                AND ((SELECT name_filter FROM simple_id) IS NULL
-                     OR a.name = (SELECT name_filter FROM simple_id))
-                -- .class semantic filter (exclude syntax-only nodes like keywords/punctuation)
-                AND ((SELECT class_filter FROM simple_class) IS NULL
-                     OR (is_semantic_type(a.semantic_type, UPPER((SELECT class_filter FROM simple_class)))
-                         AND NOT is_syntax_only(a.flags)))
-                -- [attr=value] filters
-                AND NOT EXISTS (
-                    SELECT 1 FROM attr_conditions ac
-                    WHERE NOT CASE
-                        WHEN ac.attr_name = 'name' THEN a.name = ac.attr_value
-                        WHEN ac.attr_name = 'type' THEN a.type = ac.attr_value
-                        WHEN ac.attr_name = 'language' THEN a.language = ac.attr_value
-                        WHEN ac.attr_name = 'semantic' THEN is_semantic_type(a.semantic_type, UPPER(ac.attr_value))
-                        ELSE false
-                    END
-                )
-                -- :has() filters — every :has condition must be satisfied
-                AND NOT EXISTS (
-                    SELECT 1 FROM has_conditions h
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM ast d
-                        WHERE d.file_path = a.file_path
-                          AND d.node_id > a.node_id
-                          AND d.node_id <= a.node_id + a.descendant_count
-                          AND (h.has_type IS NULL OR d.type = h.has_type)
-                          AND (h.has_name IS NULL OR d.name = h.has_name)
-                          AND (h.has_class IS NULL
-                               OR is_semantic_type(d.semantic_type, UPPER(h.has_class)))
-                    )
-                )
-                -- :not(:has()) filters — none of these must be satisfied
-                AND NOT EXISTS (
-                    SELECT 1 FROM not_has_conditions nh
-                    WHERE EXISTS (
-                        SELECT 1 FROM ast d
-                        WHERE d.file_path = a.file_path
-                          AND d.node_id > a.node_id
-                          AND d.node_id <= a.node_id + a.descendant_count
-                          AND (nh.not_has_type IS NULL OR d.type = nh.not_has_type)
-                          AND (nh.not_has_name IS NULL OR d.name = nh.not_has_name)
-                    )
-                )
-        ),
-
-        -- Descendant selector: A B
-        descendant_result AS (
-            SELECT b.*
-            FROM ast b
-            WHERE EXISTS (
-                SELECT 1 FROM ast a
-                WHERE a.file_path = b.file_path
-                  AND b.node_id > a.node_id
-                  AND b.node_id <= a.node_id + a.descendant_count
-                  AND a.type = (SELECT left_type FROM combinator_parts)
-            )
-            AND b.type = (SELECT right_type FROM combinator_parts)
-        ),
-
-        -- Child selector: A > B
-        child_result AS (
-            SELECT b.*
-            FROM ast b
-            WHERE EXISTS (
-                SELECT 1 FROM ast a
-                WHERE a.node_id = b.parent_id
-                  AND a.type = (SELECT left_type FROM combinator_parts)
-            )
-            AND b.type = (SELECT right_type FROM combinator_parts)
-        ),
-
-        -- General sibling selector: A ~ B
-        sibling_result AS (
-            SELECT b.*
-            FROM ast b
-            WHERE EXISTS (
-                SELECT 1 FROM ast a
-                WHERE a.file_path = b.file_path
-                  AND a.parent_id = b.parent_id
-                  AND a.sibling_index < b.sibling_index
-                  AND a.type = (SELECT left_type FROM combinator_parts)
-            )
-            AND b.type = (SELECT right_type FROM combinator_parts)
-        ),
-
-        -- Adjacent sibling selector: A + B
-        adjacent_result AS (
-            SELECT b.*
-            FROM ast b
-            WHERE EXISTS (
-                SELECT 1 FROM ast a
-                WHERE a.file_path = b.file_path
-                  AND a.parent_id = b.parent_id
-                  AND a.sibling_index = b.sibling_index - 1
-                  AND a.type = (SELECT left_type FROM combinator_parts)
-            )
-            AND b.type = (SELECT right_type FROM combinator_parts)
+        -- Precompute selector properties as scalars
+        sel_props AS (
+            SELECT
+                (SELECT type FROM root_type) as sel_type,
+                (SELECT type_filter FROM simple_type) as type_filter,
+                (SELECT name_filter FROM simple_id) as name_filter,
+                (SELECT class_filter FROM simple_class) as class_filter,
+                (SELECT left_type FROM combinator_parts) as left_type,
+                (SELECT right_type FROM combinator_parts) as right_type
         )
 
-    -- Route to the correct result based on selector type
-    SELECT * FROM simple_result
-    WHERE (SELECT type FROM root_type) IN (
-        'tag_name', 'pseudo_class_selector', 'id_selector',
-        'class_selector', 'attribute_selector'
+    -- Single scan of ast with CASE-based dispatch
+    SELECT a.*
+    FROM ast a, sel_props sp
+    WHERE CASE sp.sel_type
+
+        -- Simple/compound selectors
+        WHEN 'tag_name' THEN
+            (sp.type_filter IS NULL OR a.type = sp.type_filter)
+            AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
+        WHEN 'id_selector' THEN
+            (sp.type_filter IS NULL OR a.type = sp.type_filter)
+            AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
+        WHEN 'class_selector' THEN
+            (sp.class_filter IS NULL
+             OR (is_semantic_type(a.semantic_type, UPPER(sp.class_filter))
+                 AND NOT is_syntax_only(a.flags)))
+        WHEN 'attribute_selector' THEN
+            (sp.type_filter IS NULL OR a.type = sp.type_filter)
+        WHEN 'pseudo_class_selector' THEN
+            (sp.type_filter IS NULL OR a.type = sp.type_filter)
+            AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
+            AND (sp.class_filter IS NULL
+                 OR (is_semantic_type(a.semantic_type, UPPER(sp.class_filter))
+                     AND NOT is_syntax_only(a.flags)))
+
+        -- Descendant combinator: A B
+        WHEN 'descendant_selector' THEN
+            a.type = sp.right_type
+            AND EXISTS (
+                SELECT 1 FROM ast anc
+                WHERE anc.file_path = a.file_path
+                  AND a.node_id > anc.node_id
+                  AND a.node_id <= anc.node_id + anc.descendant_count
+                  AND anc.type = sp.left_type
+            )
+
+        -- Child combinator: A > B
+        WHEN 'child_selector' THEN
+            a.type = sp.right_type
+            AND EXISTS (
+                SELECT 1 FROM ast par
+                WHERE par.node_id = a.parent_id
+                  AND par.type = sp.left_type
+            )
+
+        -- General sibling: A ~ B
+        WHEN 'sibling_selector' THEN
+            a.type = sp.right_type
+            AND EXISTS (
+                SELECT 1 FROM ast sib
+                WHERE sib.file_path = a.file_path
+                  AND sib.parent_id = a.parent_id
+                  AND sib.sibling_index < a.sibling_index
+                  AND sib.type = sp.left_type
+            )
+
+        -- Adjacent sibling: A + B
+        WHEN 'adjacent_sibling_selector' THEN
+            a.type = sp.right_type
+            AND EXISTS (
+                SELECT 1 FROM ast adj
+                WHERE adj.file_path = a.file_path
+                  AND adj.parent_id = a.parent_id
+                  AND adj.sibling_index = a.sibling_index - 1
+                  AND adj.type = sp.left_type
+            )
+
+        ELSE false
+    END
+    -- :has() filters (for simple/compound selectors)
+    AND NOT EXISTS (
+        SELECT 1 FROM has_conditions h
+        WHERE NOT EXISTS (
+            SELECT 1 FROM ast d
+            WHERE d.file_path = a.file_path
+              AND d.node_id > a.node_id
+              AND d.node_id <= a.node_id + a.descendant_count
+              AND (h.has_type IS NULL OR d.type = h.has_type)
+              AND (h.has_name IS NULL OR d.name = h.has_name)
+              AND (h.has_class IS NULL
+                   OR is_semantic_type(d.semantic_type, UPPER(h.has_class)))
+        )
     )
-    UNION ALL
-    SELECT * FROM descendant_result
-    WHERE (SELECT type FROM root_type) = 'descendant_selector'
-    UNION ALL
-    SELECT * FROM child_result
-    WHERE (SELECT type FROM root_type) = 'child_selector'
-    UNION ALL
-    SELECT * FROM sibling_result
-    WHERE (SELECT type FROM root_type) = 'sibling_selector'
-    UNION ALL
-    SELECT * FROM adjacent_result
-    WHERE (SELECT type FROM root_type) = 'adjacent_sibling_selector'
-    ORDER BY file_path, node_id;
+    -- :not(:has()) filters
+    AND NOT EXISTS (
+        SELECT 1 FROM not_has_conditions nh
+        WHERE EXISTS (
+            SELECT 1 FROM ast d
+            WHERE d.file_path = a.file_path
+              AND d.node_id > a.node_id
+              AND d.node_id <= a.node_id + a.descendant_count
+              AND (nh.not_has_type IS NULL OR d.type = nh.not_has_type)
+              AND (nh.not_has_name IS NULL OR d.name = nh.not_has_name)
+        )
+    )
+    -- [attr=value] filters
+    AND NOT EXISTS (
+        SELECT 1 FROM attr_conditions ac
+        WHERE NOT CASE
+            WHEN ac.attr_name = 'name' THEN a.name = ac.attr_value
+            WHEN ac.attr_name = 'type' THEN a.type = ac.attr_value
+            WHEN ac.attr_name = 'language' THEN a.language = ac.attr_value
+            WHEN ac.attr_name = 'semantic' THEN is_semantic_type(a.semantic_type, UPPER(ac.attr_value))
+            ELSE false
+        END
+    )
+    ORDER BY a.file_path, a.node_id;
