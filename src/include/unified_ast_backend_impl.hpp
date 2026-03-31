@@ -277,7 +277,7 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			int64_t current_id = ast_node.node_index;
 			for (int32_t i = child_count - 1; i >= 0; i--) {
 				TSNode child = ts_node_child(entry.node, i);
-				stack.push_back({child, current_id, entry.depth + 1, static_cast<uint32_t>(i), false, 0});
+				stack.push_back({child, current_id, entry.depth + 1, i, false, 0});
 			}
 		} else {
 			// Second visit - get the processed entry for descendant calculation
