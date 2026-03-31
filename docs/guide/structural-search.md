@@ -602,6 +602,7 @@ ast_follows(source, node_type, after_type, after_name := NULL, language := NULL)
 ### See Also
 
 - [Tutorial: Finding Code Patterns](tutorial-pattern-matching.md) — Step-by-step walkthrough with real examples
+- [CSS Selectors](css-selectors.md) — Query AST nodes with CSS selector syntax
 - [Pattern Matching Reference](pattern-matching.md) — Detailed API reference
 - [Cookbook](cookbook.md) — More code analysis recipes
 - [Cross-Language Analysis](cross-language.md) — Using semantic types
