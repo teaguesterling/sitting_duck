@@ -1,0 +1,212 @@
+# name: test/sql/ast_select_aliases.test
+# group: [sql]
+
+# Test ast_select semantic type aliases, bare type matching, and ast_type_map
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Semantic type aliases
+# =============================================================================
+
+# .func and .fn should return same count
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py', '.func');
+----
+10
+
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py', '.fn');
+----
+10
+
+# .if = all conditionals (if_statement + elif + else + conditional_expression)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py', '.if')
+WHERE type IN ('if_statement', 'elif_clause', 'else_clause', 'conditional_expression');
+----
+4
+
+# .loop = all loops
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py', '.loop');
+----
+1
+
+# .try = try blocks
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py', '.try');
+----
+1
+
+# .except = catch/except handlers (language alias)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py', '.except');
+----
+1
+
+# .catch should be same as .except
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py', '.catch');
+----
+1
+
+# .import = import statements
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/simple.py', '.import');
+----
+0
+
+# .call = function calls
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py', '.call')
+WHERE type = 'call';
+----
+7
+
+# .str = string literals
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py', '.str');
+----
+10
+
+# Case insensitive: .FUNC same as .func
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py', '.FUNC');
+----
+10
+
+# =============================================================================
+# Bare type matching (if matches if + if_*)
+# =============================================================================
+
+# Bare `if` matches if keyword AND if_statement AND if_clause
+query I
+SELECT COUNT(DISTINCT type) FROM ast_select('test/data/python/macros/recursive_match.py', 'if');
+----
+2
+
+# Bare `return` matches return keyword AND return_statement
+query I
+SELECT COUNT(DISTINCT type) FROM ast_select('test/data/python/macros/recursive_match.py', 'return');
+----
+2
+
+# Exact type name: only matches exactly
+query I
+SELECT COUNT(DISTINCT type) FROM ast_select('test/data/python/macros/recursive_match.py', 'if_statement');
+----
+1
+
+# Bare `for` matches for keyword + for_statement + for_in_clause
+query I
+SELECT COUNT(DISTINCT type) FROM ast_select('test/data/python/macros/recursive_match.py', 'for')
+WHERE type LIKE 'for%';
+----
+2
+
+# Combinator with bare types: class containing function
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', 'class function')
+WHERE type LIKE 'function%';
+----
+4
+
+# =============================================================================
+# Dotted vs bare distinction
+# =============================================================================
+
+# .if (broad: all conditionals) — in this file only if_statement exists
+query I
+SELECT COUNT(DISTINCT type) FROM ast_select('test/data/python/macros/recursive_match.py', '.if');
+----
+1
+
+# =============================================================================
+# ast_type_map()
+# =============================================================================
+
+# ast_type_map returns rows
+query I
+SELECT COUNT(*) > 0 FROM ast_type_map();
+----
+true
+
+# Filter by language
+query I
+SELECT COUNT(*) > 0 FROM ast_type_map('python');
+----
+true
+
+# Python has function_definition as a definition with scope
+query III
+SELECT semantic_type, name_role, is_scope
+FROM ast_type_map('python')
+WHERE node_type = 'function_definition';
+----
+DEFINITION_FUNCTION	definition	true
+
+# for_statement is a scope but not a definition
+query III
+SELECT semantic_type, name_role, is_scope
+FROM ast_type_map('python')
+WHERE node_type = 'for_statement';
+----
+FLOW_LOOP	NULL	true
+
+# identifier is a reference
+query II
+SELECT semantic_type, name_role
+FROM ast_type_map('python')
+WHERE node_type = 'identifier';
+----
+NAME_IDENTIFIER	reference
+
+# Cross-language: for_statement exists in many languages
+query I
+SELECT COUNT(DISTINCT language) > 10 FROM ast_type_map() WHERE node_type = 'for_statement';
+----
+true
+
+# =============================================================================
+# NAME_ROLE flags
+# =============================================================================
+
+# is_name_definition finds function/class/variable definitions
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/python/macros/recursive_match.py')
+WHERE is_name_definition(flags);
+----
+true
+
+# is_name_reference finds identifiers
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/python/macros/recursive_match.py')
+WHERE is_name_reference(flags);
+----
+true
+
+# is_scope finds scope boundaries
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/macros/recursive_match.py')
+WHERE is_scope(flags) AND type = 'function_definition';
+----
+10
+
+# binds_name = definition OR declaration
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/macros/recursive_match.py')
+WHERE binds_name(flags) AND type = 'function_definition';
+----
+10
+
+# name_role returns correct values
+query I
+SELECT DISTINCT name_role(flags) FROM read_ast('test/data/python/macros/recursive_match.py')
+WHERE type = 'identifier'
+LIMIT 1;
+----
+1

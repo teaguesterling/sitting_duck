@@ -185,3 +185,19 @@ outer_with_execute	32
 inner	33
 outer_no_execute	37
 inner	38
+
+# =============================================================================
+# Wildcard Child Relaxation (parent_is_wildcard)
+# =============================================================================
+
+# JS class method matching: __M__ should match regardless of async keyword
+query II
+SELECT captures['C'][1].name as cls, captures['M'][1].name as method
+FROM ast_match('test/data/javascript/simple.js',
+    'class __C__ {
+        __M__(__) { }
+    }', 'javascript')
+ORDER BY start_line
+LIMIT 1;
+----
+Calculator	constructor
