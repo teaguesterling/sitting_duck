@@ -2,24 +2,13 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
-#include "duckdb/parallel/task_executor.hpp"
-#include "duckdb/parallel/task_scheduler.hpp"
 #include "unified_ast_backend.hpp"
 #include "ast_file_utils.hpp"
-#include "ast_parsing_task.hpp"
 #include "read_ast_streaming_state.hpp"
 #include "language_adapter.hpp"
 #include <unordered_set>
 
 namespace duckdb {
-
-// Forward declarations for flat streaming functions
-static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadASTStreamingGlobalState &global_state,
-                                                   DataChunk &output);
-static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadASTStreamingGlobalState &global_state,
-                                                 DataChunk &output);
-static void ProcessBatchOfFiles(ClientContext &context, ReadASTStreamingGlobalState &global_state,
-                                const vector<string> &batch_files);
 // Bind function for flat streaming two-argument version (explicit language)
 static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &context, TableFunctionBindInput &input,
                                                                vector<LogicalType> &return_types,
@@ -249,7 +238,7 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
 	return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, extraction_config, batch_size);
 }
 
-// Initialize global state for streaming with parallel processing
+// Initialize global state: expand file patterns, pre-resolve languages
 static unique_ptr<GlobalTableFunctionState> ReadASTStreamingInit(ClientContext &context,
                                                                  TableFunctionInitInput &input) {
 	auto &bind_data = input.bind_data->Cast<ReadASTStreamingBindData>();
@@ -258,13 +247,10 @@ static unique_ptr<GlobalTableFunctionState> ReadASTStreamingInit(ClientContext &
 	// Store configuration
 	result->language = bind_data.language;
 	result->ignore_errors = bind_data.ignore_errors;
-	result->peek_size = bind_data.peek_size;
-	result->peek_mode = bind_data.peek_mode;
-	result->batch_size = bind_data.batch_size;
 	result->extraction_config = bind_data.extraction_config;
 
 	try {
-		// Use our reliable ASTFileUtils for pattern expansion and deduplication
+		// Expand file patterns and deduplicate
 		vector<string> supported_extensions;
 		if (bind_data.language != "auto") {
 			supported_extensions = ASTFileUtils::GetSupportedExtensions(bind_data.language);
@@ -277,354 +263,139 @@ static unique_ptr<GlobalTableFunctionState> ReadASTStreamingInit(ClientContext &
 			if (!bind_data.ignore_errors) {
 				throw IOException("read_ast needs at least one file to read");
 			}
-			result->files_exhausted = true;
+			// Leave all_file_paths empty; MaxThreads() returns 1, execute will produce 0 rows
 			return std::move(result);
 		}
 
-		// ADAPTIVE PARALLEL PROCESSING based on file count
-		const auto total_files = expanded_files.size();
-		const auto num_threads = NumericCast<idx_t>(TaskScheduler::GetScheduler(context).NumberOfThreads());
+		result->all_file_paths = std::move(expanded_files);
 
-		if (total_files >= 4) { // Use parallel processing for 4+ files
-			// Store file list for parallel processing (no batching!)
-			result->all_file_paths = std::move(expanded_files);
-			result->use_parallel_batching = true; // Reuse flag but no actual batching
-			result->files_exhausted = false;
+		// Pre-resolve languages for all files
+		result->resolved_languages.reserve(result->all_file_paths.size());
+		std::unordered_set<string> unique_languages;
 
-			// Pre-resolve languages for all files to avoid repeated work
-			result->resolved_languages.reserve(result->all_file_paths.size());
-			std::unordered_set<string> unique_languages;
-
-			for (const auto &file_path : result->all_file_paths) {
-				string file_language = bind_data.language;
-				if (bind_data.language == "auto" || bind_data.language.empty()) {
-					file_language = ASTFileUtils::DetectLanguageFromPath(file_path);
-					if (file_language == "auto") {
-						if (!bind_data.ignore_errors) {
-							throw BinderException("Could not detect language for file: " + file_path);
-						}
-						file_language = "unknown"; // Will be skipped during processing
+		for (const auto &file_path : result->all_file_paths) {
+			string file_language = bind_data.language;
+			if (bind_data.language == "auto" || bind_data.language.empty()) {
+				file_language = ASTFileUtils::DetectLanguageFromPath(file_path);
+				if (file_language == "auto") {
+					if (!bind_data.ignore_errors) {
+						throw BinderException("Could not detect language for file: " + file_path);
 					}
-				}
-				result->resolved_languages.push_back(file_language);
-				if (file_language != "unknown") {
-					unique_languages.insert(file_language);
+					file_language = "unknown"; // Will be skipped during processing
 				}
 			}
-
-			// MEMORY SAFETY FIX: Validate language support without caching adapters
-			// Fresh adapters will be created for each file to prevent state accumulation
-			auto &registry = LanguageAdapterRegistry::GetInstance();
-			for (const auto &language : unique_languages) {
-				auto adapter = registry.CreateAdapter(language);
-				if (!adapter && !bind_data.ignore_errors) {
-					throw InvalidInputException("Unsupported language: " + language);
-				}
-				// Don't store adapter - fresh ones will be created per file
+			result->resolved_languages.push_back(file_language);
+			if (file_language != "unknown") {
+				unique_languages.insert(file_language);
 			}
-		} else {
-			// Use traditional single-threaded streaming for small file sets
-			// Store paths directly to preserve URI components (e.g., @rev suffixes)
-			// that would be stripped by MultiFileReader path normalization
-			result->use_parallel_batching = false;
-			result->sequential_file_paths = std::move(expanded_files);
-			result->sequential_file_index = 0;
 		}
+
+		// Validate language support upfront
+		auto &registry = LanguageAdapterRegistry::GetInstance();
+		for (const auto &language : unique_languages) {
+			auto adapter = registry.CreateAdapter(language);
+			if (!adapter && !bind_data.ignore_errors) {
+				throw InvalidInputException("Unsupported language: " + language);
+			}
+		}
+
+		result->next_file_idx.store(0);
 
 	} catch (const Exception &e) {
 		if (!bind_data.ignore_errors) {
 			throw IOException("Failed to initialize file processing: " + string(e.what()));
 		}
-		result->files_exhausted = true;
+		// Leave all_file_paths empty so threads produce 0 rows
 	}
 
 	return std::move(result);
 }
 
+// Initialize per-thread local state
+static unique_ptr<LocalTableFunctionState> ReadASTInitLocal(ExecutionContext &context,
+                                                            TableFunctionInitInput &input,
+                                                            GlobalTableFunctionState *global_state) {
+	return make_uniq<ReadASTLocalState>();
+}
+
+// Flat streaming execute function — called from multiple threads by DuckDB's pipeline executor.
+// Each thread has its own ReadASTLocalState and claims files atomically from the global state.
 static void ReadASTFlatStreamingFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
 	auto &global_state = data_p.global_state->Cast<ReadASTStreamingGlobalState>();
+	auto &local_state = data_p.local_state->Cast<ReadASTLocalState>();
 
-	if (global_state.files_exhausted) {
-		output.SetCardinality(0);
-		return;
-	}
-
-	// Route to appropriate processing mode
-	if (global_state.use_parallel_batching) {
-		ReadASTFlatStreamingFunctionParallel(context, global_state, output);
-	} else {
-		ReadASTFlatStreamingFunctionSequential(context, global_state, output);
-	}
-}
-
-// Process a batch of files with shared parser context for memory efficiency
-static void ProcessBatchOfFiles(ClientContext &context, ReadASTStreamingGlobalState &global_state,
-                                const vector<string> &batch_files) {
-	if (batch_files.empty()) {
-		return;
-	}
-
-	// Clear any existing batch results
-	global_state.current_batch_results.clear();
-	global_state.current_batch_result_index = 0;
-	global_state.current_batch_row_index = 0;
-
-	auto &registry = LanguageAdapterRegistry::GetInstance();
-
-	// Process each file in the batch (auto-detect language per file if needed)
-	for (const auto &file_path : batch_files) {
-		try {
-			// Determine language for this specific file
-			string file_language = global_state.language;
-			if (file_language == "auto") {
-				file_language = ASTFileUtils::DetectLanguageFromPath(file_path);
-				if (file_language == "auto") {
-					if (!global_state.ignore_errors) {
-						throw BinderException("Could not detect language for file: " + file_path);
-					}
-					continue; // Skip this file
-				}
-			}
-
-			// Read file content using DuckDB conventions
-			auto &fs = FileSystem::GetFileSystem(context);
-			if (!fs.FileExists(file_path)) {
-				if (!global_state.ignore_errors) {
-					throw IOException("File does not exist: " + file_path);
-				}
-				continue; // Skip missing files
-			}
-
-			auto handle = fs.OpenFile(file_path, FileFlags::FILE_FLAGS_READ);
-			auto file_size = fs.GetFileSize(*handle);
-
-			string content;
-			content.resize(file_size);
-			handle->Read((void *)content.data(), file_size);
-
-			// Use ParseSingleFileToASTResult with ExtractionConfig
-			auto result_ptr = UnifiedASTBackend::ParseSingleFileToASTResult(
-			    context, file_path, file_language, global_state.ignore_errors, global_state.extraction_config);
-
-			if (result_ptr) {
-				global_state.current_batch_results.emplace_back(std::move(*result_ptr));
-			}
-			// If result_ptr is null, file was skipped due to errors (when ignore_errors=true)
-
-		} catch (const std::exception &e) {
-			if (!global_state.ignore_errors) {
-				// This should rarely happen since ParseSingleFileToASTResult handles errors
-				throw IOException("Failed to process " + file_path + ": " + e.what());
-			}
-			// Continue with next file on error when ignore_errors is true
-		}
-	}
-}
-
-// Sequential processing for small file sets (backward compatibility)
-static void ReadASTFlatStreamingFunctionSequential(ClientContext &context, ReadASTStreamingGlobalState &global_state,
-                                                   DataChunk &output) {
 	idx_t output_index = 0;
 
-	// Use flat projection for individual columns (dynamic schema based on ExtractionConfig)
-
 	while (output_index < STANDARD_VECTOR_SIZE) {
-		// Handle batch processing if enabled
-		if (global_state.batch_size > 1) {
-			// Check if we need to process a new batch
-			if (global_state.current_batch_results.empty() ||
-			    global_state.current_batch_result_index >= global_state.current_batch_results.size()) {
-				// Collect next batch of files from direct path list
-				vector<string> batch_files;
-				batch_files.reserve(global_state.batch_size);
-
-				for (int32_t i = 0; i < global_state.batch_size; i++) {
-					if (global_state.sequential_file_index >= global_state.sequential_file_paths.size()) {
-						global_state.files_exhausted = true;
-						break;
-					}
-					batch_files.push_back(
-					    global_state.sequential_file_paths[global_state.sequential_file_index++]);
-				}
-
-				if (batch_files.empty()) {
-					break; // No more files to process
-				}
-
-				// Process the batch
-				ProcessBatchOfFiles(context, global_state, batch_files);
+		// If we have a current file result with remaining nodes, project them
+		if (local_state.current_result && local_state.current_row_idx < local_state.current_result->nodes.size()) {
+			UnifiedASTBackend::ProjectToDynamicTable(*local_state.current_result, output,
+			                                         local_state.current_row_idx, output_index,
+			                                         global_state.extraction_config);
+			// ProjectToDynamicTable advances both current_row_idx and output_index
+			// If output chunk is full, it will stop and we return what we have
+			if (output_index >= STANDARD_VECTOR_SIZE) {
+				break;
 			}
-
-			// Output nodes from current batch results using flat projection
-			while (output_index < STANDARD_VECTOR_SIZE &&
-			       global_state.current_batch_result_index < global_state.current_batch_results.size()) {
-				auto &result = global_state.current_batch_results[global_state.current_batch_result_index];
-
-				if (global_state.current_batch_row_index < result.nodes.size()) {
-					// Use dynamic projection to populate individual columns based on extraction config
-					UnifiedASTBackend::ProjectToDynamicTable(result, output, global_state.current_batch_row_index,
-					                                         output_index, global_state.extraction_config);
-
-					global_state.current_batch_row_index++;
-				} else {
-					// Move to next result in batch
-					global_state.current_batch_result_index++;
-					global_state.current_batch_row_index = 0;
-				}
+			// If we finished this file's nodes, fall through to claim next file
+			if (local_state.current_row_idx >= local_state.current_result->nodes.size()) {
+				local_state.current_result.reset();
+				local_state.current_row_idx = 0;
 			}
-
-			// If we're in batch mode, continue to next iteration
 			continue;
 		}
 
-		// Original single-file processing logic (when batch_size == 1)
-		// Check if we need to parse a new file
-		if (!global_state.current_file_parsed || !global_state.current_file_result ||
-		    global_state.current_file_row_index >= global_state.current_file_result->nodes.size()) {
-			// Get next file from direct path list
-			if (global_state.sequential_file_index >= global_state.sequential_file_paths.size()) {
-				global_state.files_exhausted = true;
-				break;
-			}
-
-			auto &file_path = global_state.sequential_file_paths[global_state.sequential_file_index++];
-
-			// Parse this single file with ExtractionConfig
-			global_state.current_file_result = UnifiedASTBackend::ParseSingleFileToASTResult(
-			    context, file_path, global_state.language, global_state.ignore_errors, global_state.extraction_config);
-
-			if (!global_state.current_file_result) {
-				// File was skipped due to errors, continue to next file
-				continue;
-			}
-
-			global_state.current_file_row_index = 0;
-			global_state.current_file_parsed = true;
-		}
-
-		// Emit rows from current file using flat projection
-		if (!global_state.current_file_result) {
-			// This shouldn't happen, but add safety check
+		// Claim the next file atomically
+		idx_t file_idx = global_state.next_file_idx.fetch_add(1);
+		if (file_idx >= global_state.all_file_paths.size()) {
+			// No more files — this thread is done
 			break;
 		}
 
-		// Use flat projection to populate individual columns
-		UnifiedASTBackend::ProjectToDynamicTable(*global_state.current_file_result, output,
-		                                         global_state.current_file_row_index, output_index,
-		                                         global_state.extraction_config);
-	}
+		const auto &file_path = global_state.all_file_paths[file_idx];
+		const auto &file_language = global_state.resolved_languages[file_idx];
 
-	output.SetCardinality(output_index);
-}
-
-// PARALLEL PROCESSING without batching - let DuckDB handle task distribution
-// Helper function to convert ExtractionConfig to legacy parameters for ParsingFunction compatibility
-static pair<int32_t, string> ConvertExtractionConfigToLegacyParams(const ExtractionConfig &config) {
-	int32_t peek_size;
-	string peek_mode;
-
-	switch (config.peek) {
-	case PeekLevel::NONE:
-		peek_size = 0;
-		peek_mode = "none";
-		break;
-	case PeekLevel::SMART:
-		peek_size = -1; // Smart mode uses adaptive sizing
-		peek_mode = "smart";
-		break;
-	case PeekLevel::FULL:
-		peek_size = -2; // Full mode means read entire file
-		peek_mode = "full";
-		break;
-	case PeekLevel::CUSTOM:
-		peek_size = config.peek_size;
-		peek_mode = "custom";
-		break;
-	default:
-		peek_size = -1;
-		peek_mode = "smart";
-		break;
-	}
-
-	return make_pair(peek_size, peek_mode);
-}
-
-static void ReadASTFlatStreamingFunctionParallel(ClientContext &context, ReadASTStreamingGlobalState &global_state,
-                                                 DataChunk &output) {
-	// Check if we need to do the one-time parallel processing
-	if (!global_state.parallel_processing_complete) {
-		const auto num_threads = NumericCast<idx_t>(TaskScheduler::GetScheduler(context).NumberOfThreads());
-		const auto files_per_task =
-		    MaxValue<idx_t>((global_state.all_file_paths.size() + num_threads - 1) / num_threads, 1);
-		const auto num_tasks = (global_state.all_file_paths.size() + files_per_task - 1) / files_per_task;
-
-		// Convert ExtractionConfig to legacy parameters for ParsingFunction compatibility
-		auto legacy_params = ConvertExtractionConfigToLegacyParams(global_state.extraction_config);
-		auto peek_size = legacy_params.first;
-		auto peek_mode = legacy_params.second;
-
-		// Create parsing state for ALL files at once using converted parameters
-		ASTParsingState parsing_state(context, global_state.all_file_paths, global_state.resolved_languages,
-		                              global_state.ignore_errors, peek_size, peek_mode,
-		                              global_state.pre_created_adapters, num_tasks);
-
-		// Create tasks - let DuckDB's scheduler handle the distribution
-		TaskExecutor executor(context);
-		for (idx_t task_idx = 0; task_idx < num_tasks; task_idx++) {
-			const auto file_idx_start = task_idx * files_per_task;
-			const auto file_idx_end =
-			    MinValue<idx_t>(file_idx_start + files_per_task, global_state.all_file_paths.size());
-
-			auto task = make_uniq<ASTParsingTask>(executor, parsing_state, file_idx_start, file_idx_end, task_idx);
-			executor.ScheduleTask(std::move(task));
-		}
-
-		// Let DuckDB handle all the parallel work - no artificial batching!
-		executor.WorkOnTasks();
-
-		// Collect all results
-		parsing_state.CollectResults();
-
-		// Store all results for streaming
-		global_state.current_batch_results = std::move(parsing_state.results);
-		global_state.current_batch_result_index = 0;
-		global_state.current_batch_row_index = 0;
-		global_state.parallel_processing_complete = true;
-	}
-
-	// Now just stream the results using flat projection
-	idx_t output_index = 0;
-
-	// Use flat projection for individual columns (dynamic schema based on ExtractionConfig)
-
-	// Stream results from all completed parsing
-	while (output_index < STANDARD_VECTOR_SIZE &&
-	       global_state.current_batch_result_index < global_state.current_batch_results.size()) {
-		const auto &current_result = global_state.current_batch_results[global_state.current_batch_result_index];
-
-		// Check if we've exhausted this result
-		if (global_state.current_batch_row_index >= current_result.nodes.size()) {
-			global_state.current_batch_result_index++;
-			global_state.current_batch_row_index = 0;
+		// Skip files with unknown language
+		if (file_language == "unknown") {
 			continue;
 		}
 
-		// AGENT J FIX: Call ProjectToDynamicTable once per result, let it process multiple nodes
-		// This function will process nodes starting from current_batch_row_index and increment output_index
-		UnifiedASTBackend::ProjectToDynamicTable(current_result, output, global_state.current_batch_row_index,
-		                                         output_index, global_state.extraction_config);
+		try {
+			// Get or create a cached adapter for this language (avoids per-file adapter creation)
+			auto *adapter = local_state.GetOrCreateAdapter(file_language);
+			if (!adapter) {
+				if (!global_state.ignore_errors) {
+					throw IOException("Unsupported language: " + file_language);
+				}
+				continue;
+			}
 
-		// AGENT J FIX: Don't increment manually - ProjectToDynamicTable handles row advancement
-		// If ProjectToDynamicTable processed all remaining nodes, move to next result
-		if (global_state.current_batch_row_index >= current_result.nodes.size()) {
-			global_state.current_batch_result_index++;
-			global_state.current_batch_row_index = 0;
+			// Read file content
+			auto &fs = FileSystem::GetFileSystem(context);
+			auto file_handle = fs.OpenFile(file_path, FileFlags::FILE_FLAGS_READ);
+			auto file_size = fs.GetFileSize(*file_handle);
+			string content;
+			content.resize(file_size);
+			fs.Read(*file_handle, (void *)content.data(), file_size);
+
+			// Parse using cached adapter's parsing function
+			auto parsing_fn = adapter->GetParsingFunction();
+			auto &config = global_state.extraction_config;
+			string peek_mode_str = config.peek == PeekLevel::NONE ? "none" :
+			                       config.peek == PeekLevel::FULL ? "full" : "smart";
+			ASTResult result = parsing_fn(adapter, content, file_language, file_path,
+			                              config.peek_size, peek_mode_str);
+
+			local_state.current_result = make_uniq<ASTResult>(std::move(result));
+			local_state.current_row_idx = 0;
+
+		} catch (const std::exception &e) {
+			if (!global_state.ignore_errors) {
+				throw IOException("Failed to process " + file_path + ": " + e.what());
+			}
+			local_state.current_result.reset();
+			continue;
 		}
-	}
-
-	// Mark as exhausted when all results have been streamed
-	if (global_state.current_batch_result_index >= global_state.current_batch_results.size()) {
-		global_state.files_exhausted = true;
 	}
 
 	output.SetCardinality(output_index);
@@ -754,203 +525,85 @@ static unique_ptr<FunctionData> ReadASTHierarchicalBindOneArg(ClientContext &con
 	                                           batch_size);
 }
 
-// Hierarchical streaming functions - use NEW structured fields and hierarchical layout
-static void ReadASTHierarchicalFunctionSequential(ClientContext &context, ReadASTStreamingGlobalState &global_state,
-                                                  DataChunk &output) {
+// Hierarchical streaming execute function — called from multiple threads by DuckDB's pipeline executor.
+// Same pattern as flat: each thread claims files atomically and streams nodes.
+static void ReadASTHierarchicalFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
+	auto &global_state = data.global_state->Cast<ReadASTStreamingGlobalState>();
+	auto &local_state = data.local_state->Cast<ReadASTLocalState>();
+
 	idx_t output_index = 0;
 
 	while (output_index < STANDARD_VECTOR_SIZE) {
-		// Handle batch processing if enabled
-		if (global_state.batch_size > 1) {
-			// Process batches and use streaming projection
-			if (global_state.current_batch_results.empty() ||
-			    global_state.current_batch_result_index >= global_state.current_batch_results.size()) {
-				// Collect next batch of files from direct path list
-				vector<string> batch_files;
-				batch_files.reserve(global_state.batch_size);
-
-				for (int32_t i = 0; i < global_state.batch_size; i++) {
-					if (global_state.sequential_file_index >= global_state.sequential_file_paths.size()) {
-						break;
-					}
-					batch_files.push_back(
-					    global_state.sequential_file_paths[global_state.sequential_file_index++]);
-				}
-
-				if (batch_files.empty()) {
-					break;
-				}
-
-				ProcessBatchOfFiles(context, global_state, batch_files);
-				global_state.current_batch_result_index = 0;
-				global_state.current_batch_row_index = 0;
-			}
-
-			// Process current batch using hierarchical streaming projection
-			if (global_state.current_batch_result_index < global_state.current_batch_results.size()) {
-				const auto &result = global_state.current_batch_results[global_state.current_batch_result_index];
-
-				if (global_state.current_batch_row_index < result.nodes.size()) {
-					// Use streaming projection for this batch result
-					idx_t old_output_index = output_index;
-					UnifiedASTBackend::ProjectToHierarchicalTableStreaming(
-					    result.nodes, output, global_state.current_batch_row_index, output_index, result.source);
-
-					// Update tracking based on how many rows were processed
-					idx_t rows_processed = output_index - old_output_index;
-					global_state.current_batch_row_index += rows_processed;
-
-					if (global_state.current_batch_row_index >= result.nodes.size()) {
-						// Move to next result in batch
-						global_state.current_batch_result_index++;
-						global_state.current_batch_row_index = 0;
-					}
-				} else {
-					// Move to next result in batch
-					global_state.current_batch_result_index++;
-					global_state.current_batch_row_index = 0;
-				}
-			} else {
-				break;
-			}
-		} else {
-			// Single file processing using hierarchical streaming projection
-			// Check if we need to parse a new file
-			if (!global_state.current_file_parsed || !global_state.current_file_result ||
-			    global_state.current_file_row_index >= global_state.current_file_result->nodes.size()) {
-				// Get next file from direct path list
-				if (global_state.sequential_file_index >= global_state.sequential_file_paths.size()) {
-					global_state.files_exhausted = true;
-					break;
-				}
-
-				auto &file_path = global_state.sequential_file_paths[global_state.sequential_file_index++];
-
-				// Parse this single file with ExtractionConfig
-				global_state.current_file_result = UnifiedASTBackend::ParseSingleFileToASTResult(
-				    context, file_path, global_state.language, global_state.ignore_errors,
-				    global_state.extraction_config);
-
-				if (!global_state.current_file_result) {
-					// File was skipped due to errors, continue to next file
-					continue;
-				}
-
-				global_state.current_file_row_index = 0;
-				global_state.current_file_parsed = true;
-			}
-
-			// Emit rows from current file using hierarchical streaming projection
-			if (!global_state.current_file_result) {
-				break;
-			}
-
-			// Use streaming projection for current file
+		// If we have a current file result with remaining nodes, project them
+		if (local_state.current_result && local_state.current_row_idx < local_state.current_result->nodes.size()) {
 			idx_t old_output_index = output_index;
-			UnifiedASTBackend::ProjectToHierarchicalTableStreaming(global_state.current_file_result->nodes, output,
-			                                                       global_state.current_file_row_index, output_index,
-			                                                       global_state.current_file_result->source);
+			UnifiedASTBackend::ProjectToHierarchicalTableStreaming(
+			    local_state.current_result->nodes, output, local_state.current_row_idx,
+			    output_index, local_state.current_result->source);
 
-			// Update tracking based on how many rows were processed
 			idx_t rows_processed = output_index - old_output_index;
-			global_state.current_file_row_index += rows_processed;
-		}
-	}
+			local_state.current_row_idx += rows_processed;
 
-	output.SetCardinality(output_index);
-}
-
-static void ReadASTHierarchicalFunctionParallel(ClientContext &context, ReadASTStreamingGlobalState &global_state,
-                                                DataChunk &output) {
-	// Check if we need to do the one-time parallel processing
-	if (!global_state.parallel_processing_complete) {
-		const auto num_threads = NumericCast<idx_t>(TaskScheduler::GetScheduler(context).NumberOfThreads());
-		const auto files_per_task =
-		    MaxValue<idx_t>((global_state.all_file_paths.size() + num_threads - 1) / num_threads, 1);
-		const auto num_tasks = (global_state.all_file_paths.size() + files_per_task - 1) / files_per_task;
-
-		// Create parsing state for ALL files at once
-		ASTParsingState parsing_state(context, global_state.all_file_paths, global_state.resolved_languages,
-		                              global_state.ignore_errors, global_state.peek_size, global_state.peek_mode,
-		                              global_state.pre_created_adapters, num_tasks);
-
-		// Create tasks - let DuckDB's scheduler handle the distribution
-		TaskExecutor executor(context);
-		for (idx_t task_idx = 0; task_idx < num_tasks; task_idx++) {
-			const auto file_idx_start = task_idx * files_per_task;
-			const auto file_idx_end =
-			    MinValue<idx_t>(file_idx_start + files_per_task, global_state.all_file_paths.size());
-
-			auto task = make_uniq<ASTParsingTask>(executor, parsing_state, file_idx_start, file_idx_end, task_idx);
-			executor.ScheduleTask(std::move(task));
-		}
-
-		// Let DuckDB handle all the parallel work
-		executor.WorkOnTasks();
-
-		// Collect all results
-		parsing_state.CollectResults();
-
-		// Store all results for streaming
-		global_state.current_batch_results = std::move(parsing_state.results);
-		global_state.current_batch_result_index = 0;
-		global_state.current_batch_row_index = 0;
-		global_state.parallel_processing_complete = true;
-	}
-
-	// Stream the results using hierarchical streaming projection
-	idx_t output_index = 0;
-
-	// Stream results from all completed parsing using hierarchical streaming projection
-	while (output_index < STANDARD_VECTOR_SIZE &&
-	       global_state.current_batch_result_index < global_state.current_batch_results.size()) {
-		const auto &current_result = global_state.current_batch_results[global_state.current_batch_result_index];
-
-		if (global_state.current_batch_row_index >= current_result.nodes.size()) {
-			global_state.current_batch_result_index++;
-			global_state.current_batch_row_index = 0;
+			if (output_index >= STANDARD_VECTOR_SIZE) {
+				break;
+			}
+			// If we finished this file's nodes, fall through to claim next file
+			if (local_state.current_row_idx >= local_state.current_result->nodes.size()) {
+				local_state.current_result.reset();
+				local_state.current_row_idx = 0;
+			}
 			continue;
 		}
 
-		// Use streaming projection for this result
-		idx_t old_output_index = output_index;
+		// Claim the next file atomically
+		idx_t file_idx = global_state.next_file_idx.fetch_add(1);
+		if (file_idx >= global_state.all_file_paths.size()) {
+			break;
+		}
 
-		UnifiedASTBackend::ProjectToHierarchicalTableStreaming(
-		    current_result.nodes, output, global_state.current_batch_row_index, output_index, current_result.source);
+		const auto &file_path = global_state.all_file_paths[file_idx];
+		const auto &file_language = global_state.resolved_languages[file_idx];
 
-		// Update tracking based on how many rows were processed
-		idx_t rows_processed = output_index - old_output_index;
+		if (file_language == "unknown") {
+			continue;
+		}
 
-		global_state.current_batch_row_index += rows_processed;
+		try {
+			auto *adapter = local_state.GetOrCreateAdapter(file_language);
+			if (!adapter) {
+				if (!global_state.ignore_errors) {
+					throw IOException("Unsupported language: " + file_language);
+				}
+				continue;
+			}
 
-		if (global_state.current_batch_row_index >= current_result.nodes.size()) {
-			global_state.current_batch_result_index++;
-			global_state.current_batch_row_index = 0;
+			auto &fs = FileSystem::GetFileSystem(context);
+			auto file_handle = fs.OpenFile(file_path, FileFlags::FILE_FLAGS_READ);
+			auto file_size = fs.GetFileSize(*file_handle);
+			string content;
+			content.resize(file_size);
+			fs.Read(*file_handle, (void *)content.data(), file_size);
+
+			auto parsing_fn = adapter->GetParsingFunction();
+			auto &config = global_state.extraction_config;
+			string peek_mode_str = config.peek == PeekLevel::NONE ? "none" :
+			                       config.peek == PeekLevel::FULL ? "full" : "smart";
+			ASTResult result = parsing_fn(adapter, content, file_language, file_path,
+			                              config.peek_size, peek_mode_str);
+
+			local_state.current_result = make_uniq<ASTResult>(std::move(result));
+			local_state.current_row_idx = 0;
+
+		} catch (const std::exception &e) {
+			if (!global_state.ignore_errors) {
+				throw IOException("Failed to process " + file_path + ": " + e.what());
+			}
+			local_state.current_result.reset();
+			continue;
 		}
 	}
 
-	if (global_state.current_batch_result_index >= global_state.current_batch_results.size()) {
-		global_state.files_exhausted = true;
-	}
-
 	output.SetCardinality(output_index);
-}
-
-// Main hierarchical execute function - MATCH FLAT VERSION ROUTING LOGIC
-static void ReadASTHierarchicalFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
-	auto &global_state = data.global_state->Cast<ReadASTStreamingGlobalState>();
-
-	if (global_state.files_exhausted) {
-		output.SetCardinality(0);
-		return;
-	}
-
-	// Route to appropriate processing mode - SAME AS FLAT VERSION
-	if (global_state.use_parallel_batching) {
-		ReadASTHierarchicalFunctionParallel(context, global_state, output);
-	} else {
-		ReadASTHierarchicalFunctionSequential(context, global_state, output);
-	}
 }
 
 //==============================================================================
@@ -962,6 +615,8 @@ static TableFunction GetReadASTFlatFunctionTwoArg() {
 	TableFunction read_ast("read_ast", {LogicalType::ANY, LogicalType::VARCHAR}, ReadASTFlatStreamingFunction,
 	                       ReadASTFlatStreamingBindTwoArg, ReadASTStreamingInit);
 	read_ast.name = "read_ast";
+	read_ast.init_local = ReadASTInitLocal;
+	read_ast.order_preservation_type = OrderPreservationType::NO_ORDER;
 	read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast.named_parameters["source"] = LogicalType::VARCHAR;
@@ -980,6 +635,8 @@ static TableFunction GetReadASTFlatFunctionOneArg() {
 	TableFunction read_ast("read_ast", {LogicalType::ANY}, ReadASTFlatStreamingFunction, ReadASTFlatStreamingBindOneArg,
 	                       ReadASTStreamingInit);
 	read_ast.name = "read_ast";
+	read_ast.init_local = ReadASTInitLocal;
+	read_ast.order_preservation_type = OrderPreservationType::NO_ORDER;
 	read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast.named_parameters["source"] = LogicalType::VARCHAR;
@@ -999,6 +656,8 @@ static TableFunction GetReadASTStreamingFunctionTwoArg() {
 	                                 ReadASTFlatStreamingFunction, ReadASTFlatStreamingBindTwoArg,
 	                                 ReadASTStreamingInit);
 	read_ast_streaming.name = "read_ast_streaming";
+	read_ast_streaming.init_local = ReadASTInitLocal;
+	read_ast_streaming.order_preservation_type = OrderPreservationType::NO_ORDER;
 	read_ast_streaming.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_streaming.named_parameters["peek_size"] = LogicalType::INTEGER;
 	read_ast_streaming.named_parameters["peek_mode"] = LogicalType::VARCHAR;
@@ -1010,6 +669,8 @@ static TableFunction GetReadASTStreamingFunctionOneArg() {
 	TableFunction read_ast_streaming("read_ast_streaming", {LogicalType::ANY}, ReadASTFlatStreamingFunction,
 	                                 ReadASTFlatStreamingBindOneArg, ReadASTStreamingInit);
 	read_ast_streaming.name = "read_ast_streaming";
+	read_ast_streaming.init_local = ReadASTInitLocal;
+	read_ast_streaming.order_preservation_type = OrderPreservationType::NO_ORDER;
 	read_ast_streaming.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_streaming.named_parameters["peek_size"] = LogicalType::INTEGER;
 	read_ast_streaming.named_parameters["peek_mode"] = LogicalType::VARCHAR;
@@ -1249,6 +910,8 @@ static TableFunction GetReadASTFunctionTwoArg() {
 	                                        ReadASTHierarchicalFunction, ReadASTHierarchicalStreamingBindTwoArg,
 	                                        ReadASTStreamingInit);
 	read_ast_hierarchical_new.name = "read_ast_hierarchical_new";
+	read_ast_hierarchical_new.init_local = ReadASTInitLocal;
+	read_ast_hierarchical_new.order_preservation_type = OrderPreservationType::NO_ORDER;
 	read_ast_hierarchical_new.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_hierarchical_new.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast_hierarchical_new.named_parameters["source"] = LogicalType::VARCHAR;
@@ -1268,6 +931,8 @@ static TableFunction GetReadASTHierarchicalFunctionTwoArg() {
 	                                    ReadASTHierarchicalFunction, ReadASTHierarchicalStreamingBindTwoArg,
 	                                    ReadASTStreamingInit);
 	read_ast_hierarchical.name = "read_ast_hierarchical";
+	read_ast_hierarchical.init_local = ReadASTInitLocal;
+	read_ast_hierarchical.order_preservation_type = OrderPreservationType::NO_ORDER;
 	read_ast_hierarchical.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_hierarchical.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast_hierarchical.named_parameters["source"] = LogicalType::VARCHAR;
@@ -1286,6 +951,8 @@ static TableFunction GetReadASTFunctionOneArg() {
 	                                        ReadASTHierarchicalFunction, ReadASTHierarchicalStreamingBindOneArg,
 	                                        ReadASTStreamingInit);
 	read_ast_hierarchical_new.name = "read_ast_hierarchical_new";
+	read_ast_hierarchical_new.init_local = ReadASTInitLocal;
+	read_ast_hierarchical_new.order_preservation_type = OrderPreservationType::NO_ORDER;
 	read_ast_hierarchical_new.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_hierarchical_new.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast_hierarchical_new.named_parameters["source"] = LogicalType::VARCHAR;
@@ -1303,6 +970,8 @@ static TableFunction GetReadASTHierarchicalFunctionOneArg() {
 	TableFunction read_ast_hierarchical("read_ast_hierarchical", {LogicalType::ANY}, ReadASTHierarchicalFunction,
 	                                    ReadASTHierarchicalStreamingBindOneArg, ReadASTStreamingInit);
 	read_ast_hierarchical.name = "read_ast_hierarchical";
+	read_ast_hierarchical.init_local = ReadASTInitLocal;
+	read_ast_hierarchical.order_preservation_type = OrderPreservationType::NO_ORDER;
 	read_ast_hierarchical.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_hierarchical.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast_hierarchical.named_parameters["source"] = LogicalType::VARCHAR;
@@ -1321,6 +990,8 @@ static TableFunction GetReadASTFlatAliasFunctionOneArg() {
 	TableFunction read_ast_flat("read_ast_flat", {LogicalType::ANY}, ReadASTFlatStreamingFunction,
 	                            ReadASTFlatStreamingBindOneArg, ReadASTStreamingInit);
 	read_ast_flat.name = "read_ast_flat";
+	read_ast_flat.init_local = ReadASTInitLocal;
+	read_ast_flat.order_preservation_type = OrderPreservationType::NO_ORDER;
 	read_ast_flat.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_flat.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast_flat.named_parameters["source"] = LogicalType::VARCHAR;
@@ -1338,6 +1009,8 @@ static TableFunction GetReadASTFlatAliasFunctionTwoArg() {
 	TableFunction read_ast_flat("read_ast_flat", {LogicalType::ANY, LogicalType::VARCHAR}, ReadASTFlatStreamingFunction,
 	                            ReadASTFlatStreamingBindTwoArg, ReadASTStreamingInit);
 	read_ast_flat.name = "read_ast_flat";
+	read_ast_flat.init_local = ReadASTInitLocal;
+	read_ast_flat.order_preservation_type = OrderPreservationType::NO_ORDER;
 	read_ast_flat.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_flat.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast_flat.named_parameters["source"] = LogicalType::VARCHAR;

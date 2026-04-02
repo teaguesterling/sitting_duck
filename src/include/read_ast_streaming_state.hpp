@@ -4,53 +4,66 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "unified_ast_backend.hpp"
+#include "language_adapter.hpp"
+#include <atomic>
 #include <unordered_map>
 
 namespace duckdb {
 
-// Forward declaration
-class LanguageAdapter;
-
-//! Global state for streaming AST table function with parallel batch processing
+//! Global state for streaming AST table function with true parallel file parsing.
+//! DuckDB calls the execute function from multiple threads, each with its own
+//! ReadASTLocalState. Threads claim files atomically via next_file_idx.
 struct ReadASTStreamingGlobalState : public GlobalTableFunctionState {
-	// Direct file path list for sequential processing (preserves full URIs
-	// including @rev suffixes that MultiFileReader would strip)
-	vector<string> sequential_file_paths;
-	idx_t sequential_file_index = 0;
-
-	// Current file processing state (used by both modes)
-	unique_ptr<ASTResult> current_file_result;
-	idx_t current_file_row_index = 0;
-	bool current_file_parsed = false;
-	bool files_exhausted = false;
-
-	// PARALLEL PROCESSING (no batching - let DuckDB handle it!)
-	bool use_parallel_batching = false;        // Reuse flag name for compatibility
-	vector<string> all_file_paths;             // All files to process
-	vector<string> resolved_languages;         // Pre-resolved languages for all files
-	bool parallel_processing_complete = false; // True when all parsing is done
-
-	// Result management (all results from parallel processing)
-	vector<ASTResult> current_batch_results; // All results from parallel processing
-	idx_t current_batch_result_index = 0;    // Index within results
-	idx_t current_batch_row_index = 0;       // Row index within current result
+	// All expanded file paths to process
+	vector<string> all_file_paths;
+	// Pre-resolved language for each file (parallel index with all_file_paths)
+	vector<string> resolved_languages;
+	// Atomic index for lock-free file claiming by worker threads
+	atomic<idx_t> next_file_idx {0};
 
 	// Configuration
 	string language;
-	bool ignore_errors;
-	int32_t peek_size;
-	string peek_mode;
-	int32_t batch_size = 1;
-	ExtractionConfig extraction_config; // NEW: Full extraction configuration
-
-	// Batch processing state
-	vector<string> current_batch_files;
-	bool batch_exhausted = false;
-
-	// Pre-created language adapters (eliminates singleton contention)
-	unordered_map<string, unique_ptr<LanguageAdapter>> pre_created_adapters;
+	bool ignore_errors = false;
+	ExtractionConfig extraction_config;
 
 	ReadASTStreamingGlobalState() = default;
+
+	idx_t MaxThreads() const override {
+		// Parallel overhead isn't worth it for small file sets.
+		// Below 4 files, DuckDB's single-threaded path is faster.
+		auto n = all_file_paths.size();
+		if (n < 4) {
+			return 1;
+		}
+		return n;
+	}
+};
+
+//! Per-thread local state for parallel file parsing.
+//! Each thread parses one file at a time and streams its nodes before claiming the next.
+struct ReadASTLocalState : public LocalTableFunctionState {
+	// The parsed result for the file this thread is currently streaming
+	unique_ptr<ASTResult> current_result;
+	// Current row index within current_result->nodes
+	idx_t current_row_idx = 0;
+
+	// Per-thread adapter cache: reuse adapters for same-language files
+	// (creating fresh adapters per file is expensive — grammar loading, parser init)
+	unordered_map<string, unique_ptr<LanguageAdapter>> adapter_cache;
+
+	LanguageAdapter *GetOrCreateAdapter(const string &language) {
+		auto it = adapter_cache.find(language);
+		if (it != adapter_cache.end()) {
+			return it->second.get();
+		}
+		auto &registry = LanguageAdapterRegistry::GetInstance();
+		auto adapter = registry.CreateAdapter(language);
+		auto *ptr = adapter.get();
+		adapter_cache[language] = std::move(adapter);
+		return ptr;
+	}
+
+	ReadASTLocalState() = default;
 };
 
 //! Bind data for streaming AST table function

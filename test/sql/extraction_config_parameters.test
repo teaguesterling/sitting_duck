@@ -46,15 +46,16 @@ hello	1	0	def hello():
 # Test 3: read_ast with full enablement
 query IIII
 SELECT name, start_line, start_column, children_count
-FROM read_ast('test/data/python/simple.py', 'python', 
-    context := 'native', 
-    source := 'full', 
-    structure := 'full', 
+FROM read_ast('test/data/python/simple.py', 'python',
+    context := 'native',
+    source := 'full',
+    structure := 'full',
     peek := 'none')
+ORDER BY node_id
 LIMIT 2;
 ----
-(empty)	1	1	4
-hello	1	1	5
+(empty)	1	0	4
+hello	1	0	5
 
 # Test 4: Removed read_ast_hierarchical (deprecated)
 
