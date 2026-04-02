@@ -741,10 +741,12 @@ The common thread across all these examples: **grep operates on lines; structura
 | Extract specific captures from code | `ast_match` with `__X__` |
 | Flexible function body matching | `ast_match` with `<*>` / `<+>` |
 | Find patterns at any nesting depth | `ast_match` with `<**>` |
-| "Does X contain Y?" | `ast_has` / `ast_not_has` |
-| "What Y is inside X?" | `ast_inside` |
+| "Does X contain Y?" | `ast_select` with `:has()` or `ast_has` |
+| "X but not Y?" | `ast_select` with `:not(:has())` |
+| "What Y is inside X?" | `ast_select` with `A B` or `ast_inside` |
+| Cross-language queries | `ast_select` with `.func`, `.class`, `.call` |
 | "What comes before/after X?" | `ast_precedes` / `ast_follows` |
-| Combine multiple structural questions | SQL JOINs on relational operators |
+| Discover node types | `ast_type_map()` |
 
 ### Tips
 
@@ -758,6 +760,7 @@ The common thread across all these examples: **grep operates on lines; structura
 
 ## Next Steps
 
+- [CSS Selectors](css-selectors.md) — Query with `.func:has(.call#execute)` syntax
 - [Structural Search Reference](structural-search.md) — Complete wildcard reference and more recipes
 - [Pattern Matching API](pattern-matching.md) — Full `ast_match` parameter reference
 - [Cookbook](cookbook.md) — More practical analysis recipes
