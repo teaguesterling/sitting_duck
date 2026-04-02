@@ -232,15 +232,15 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
 
     // Additional DuckDB constructs from the full list
     DEF_TYPE("keyword_right", TRANSFORM_ITERATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD) DEF_TYPE(
-        "keyword_inner", TRANSFORM_ITERATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-        DEF_TYPE("keyword_full", TRANSFORM_ITERATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD) DEF_TYPE(
-            "keyword_cross", TRANSFORM_ITERATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-            DEF_TYPE("keyword_using", TRANSFORM_ITERATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD) DEF_TYPE(
-                "keyword_natural", TRANSFORM_ITERATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-                DEF_TYPE("keyword_exists", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD) DEF_TYPE(
-                    "keyword_any", OPERATOR_COMPARISON, NODE_TEXT,
-                    NONE, ASTNodeFlags::IS_KEYWORD) DEF_TYPE("keyword_some", OPERATOR_COMPARISON, NODE_TEXT, NONE,
-                                                             ASTNodeFlags::IS_KEYWORD)
+        "keyword_inner", TRANSFORM_ITERATION, NODE_TEXT, NONE,
+        ASTNodeFlags::IS_KEYWORD) DEF_TYPE("keyword_full", TRANSFORM_ITERATION, NODE_TEXT, NONE,
+                                           ASTNodeFlags::IS_KEYWORD) DEF_TYPE("keyword_cross", TRANSFORM_ITERATION,
+                                                                              NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+        DEF_TYPE("keyword_using", TRANSFORM_ITERATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD) DEF_TYPE(
+            "keyword_natural", TRANSFORM_ITERATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+            DEF_TYPE("keyword_exists", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+                DEF_TYPE("keyword_any", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+                    DEF_TYPE("keyword_some", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
                         DEF_TYPE("keyword_last", ORGANIZATION_LIST, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD) DEF_TYPE(
                             "keyword_asc", ORGANIZATION_LIST, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
                             DEF_TYPE("keyword_nulls", ORGANIZATION_LIST, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -287,8 +287,8 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
                                                     DEF_TYPE("%", OPERATOR_ARITHMETIC, NONE, NONE, 0)
                                                         DEF_TYPE("keyword_time", TYPE_PRIMITIVE, NODE_TEXT, NONE,
                                                                  ASTNodeFlags::IS_KEYWORD)
-                                                            DEF_TYPE("keyword_function", PARSER_SYNTAX, NODE_TEXT,
-                                                                     NONE, ASTNodeFlags::IS_KEYWORD)
+                                                            DEF_TYPE("keyword_function", PARSER_SYNTAX, NODE_TEXT, NONE,
+                                                                     ASTNodeFlags::IS_KEYWORD)
                                                                 DEF_TYPE("keyword_without", METADATA_ANNOTATION,
                                                                          NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
                                                                     DEF_TYPE("keyword_zone", METADATA_ANNOTATION,
@@ -557,8 +557,8 @@ string SQLAdapter::ExtractNodeName(TSNode node, const string &content) const {
 
 	// SQL-specific fallbacks for unconfigured node types
 	string node_type = string(node_type_str);
-	if (node_type.find("create") != string::npos ||
-	    node_type.find("table") != string::npos || node_type.find("view") != string::npos) {
+	if (node_type.find("create") != string::npos || node_type.find("table") != string::npos ||
+	    node_type.find("view") != string::npos) {
 		string result = FindChildByType(node, content, "identifier");
 		if (result.empty()) {
 			result = FindChildByType(node, content, "object_reference");

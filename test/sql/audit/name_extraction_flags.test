@@ -1,6 +1,6 @@
 # name: test/sql/audit/name_extraction_flags.test
 # description: Audit flags and keyword filtering
-# group: [sitting_duck_audit]
+# group: [audit]
 
 require sitting_duck
 

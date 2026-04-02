@@ -312,8 +312,7 @@ static unique_ptr<GlobalTableFunctionState> ReadASTStreamingInit(ClientContext &
 }
 
 // Initialize per-thread local state
-static unique_ptr<LocalTableFunctionState> ReadASTInitLocal(ExecutionContext &context,
-                                                            TableFunctionInitInput &input,
+static unique_ptr<LocalTableFunctionState> ReadASTInitLocal(ExecutionContext &context, TableFunctionInitInput &input,
                                                             GlobalTableFunctionState *global_state) {
 	return make_uniq<ReadASTLocalState>();
 }
@@ -329,9 +328,8 @@ static void ReadASTFlatStreamingFunction(ClientContext &context, TableFunctionIn
 	while (output_index < STANDARD_VECTOR_SIZE) {
 		// If we have a current file result with remaining nodes, project them
 		if (local_state.current_result && local_state.current_row_idx < local_state.current_result->nodes.size()) {
-			UnifiedASTBackend::ProjectToDynamicTable(*local_state.current_result, output,
-			                                         local_state.current_row_idx, output_index,
-			                                         global_state.extraction_config);
+			UnifiedASTBackend::ProjectToDynamicTable(*local_state.current_result, output, local_state.current_row_idx,
+			                                         output_index, global_state.extraction_config);
 			// ProjectToDynamicTable advances both current_row_idx and output_index
 			// If output chunk is full, it will stop and we return what we have
 			if (output_index >= STANDARD_VECTOR_SIZE) {
@@ -381,10 +379,10 @@ static void ReadASTFlatStreamingFunction(ClientContext &context, TableFunctionIn
 			// Parse using cached adapter's parsing function
 			auto parsing_fn = adapter->GetParsingFunction();
 			auto &config = global_state.extraction_config;
-			string peek_mode_str = config.peek == PeekLevel::NONE ? "none" :
-			                       config.peek == PeekLevel::FULL ? "full" : "smart";
-			ASTResult result = parsing_fn(adapter, content, file_language, file_path,
-			                              config.peek_size, peek_mode_str);
+			string peek_mode_str = config.peek == PeekLevel::NONE   ? "none"
+			                       : config.peek == PeekLevel::FULL ? "full"
+			                                                        : "smart";
+			ASTResult result = parsing_fn(adapter, content, file_language, file_path, config.peek_size, peek_mode_str);
 
 			local_state.current_result = make_uniq<ASTResult>(std::move(result));
 			local_state.current_row_idx = 0;
@@ -537,9 +535,9 @@ static void ReadASTHierarchicalFunction(ClientContext &context, TableFunctionInp
 		// If we have a current file result with remaining nodes, project them
 		if (local_state.current_result && local_state.current_row_idx < local_state.current_result->nodes.size()) {
 			idx_t old_output_index = output_index;
-			UnifiedASTBackend::ProjectToHierarchicalTableStreaming(
-			    local_state.current_result->nodes, output, local_state.current_row_idx,
-			    output_index, local_state.current_result->source);
+			UnifiedASTBackend::ProjectToHierarchicalTableStreaming(local_state.current_result->nodes, output,
+			                                                       local_state.current_row_idx, output_index,
+			                                                       local_state.current_result->source);
 
 			idx_t rows_processed = output_index - old_output_index;
 			local_state.current_row_idx += rows_processed;
@@ -586,10 +584,10 @@ static void ReadASTHierarchicalFunction(ClientContext &context, TableFunctionInp
 
 			auto parsing_fn = adapter->GetParsingFunction();
 			auto &config = global_state.extraction_config;
-			string peek_mode_str = config.peek == PeekLevel::NONE ? "none" :
-			                       config.peek == PeekLevel::FULL ? "full" : "smart";
-			ASTResult result = parsing_fn(adapter, content, file_language, file_path,
-			                              config.peek_size, peek_mode_str);
+			string peek_mode_str = config.peek == PeekLevel::NONE   ? "none"
+			                       : config.peek == PeekLevel::FULL ? "full"
+			                                                        : "smart";
+			ASTResult result = parsing_fn(adapter, content, file_language, file_path, config.peek_size, peek_mode_str);
 
 			local_state.current_result = make_uniq<ASTResult>(std::move(result));
 			local_state.current_row_idx = 0;

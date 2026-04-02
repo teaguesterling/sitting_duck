@@ -222,12 +222,9 @@ public:
 					TSNode mod = ts_node_child(child, j);
 					const char *mod_type = ts_node_type(mod);
 
-					if (strcmp(mod_type, "mutation_modifier") == 0 ||
-					    strcmp(mod_type, "member_modifier") == 0 ||
-					    strcmp(mod_type, "property_modifier") == 0 ||
-					    strcmp(mod_type, "access_level_modifier") == 0 ||
-					    strcmp(mod_type, "inheritance_modifier") == 0 ||
-					    strcmp(mod_type, "attribute") == 0) {
+					if (strcmp(mod_type, "mutation_modifier") == 0 || strcmp(mod_type, "member_modifier") == 0 ||
+					    strcmp(mod_type, "property_modifier") == 0 || strcmp(mod_type, "access_level_modifier") == 0 ||
+					    strcmp(mod_type, "inheritance_modifier") == 0 || strcmp(mod_type, "attribute") == 0) {
 						// Extract the text of the modifier (e.g., "mutating", "override", "static")
 						uint32_t start = ts_node_start_byte(mod);
 						uint32_t end = ts_node_end_byte(mod);
@@ -273,9 +270,8 @@ public:
 
 			if (strcmp(child_type, "closure_parameters") == 0) {
 				// Extract parameters from closure_parameters node (same structure as function params)
-				params =
-				    SwiftNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractSwiftParameters(
-				        child, content);
+				params = SwiftNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractSwiftParameters(
+				    child, content);
 				break;
 			}
 		}
@@ -502,10 +498,8 @@ public:
 				for (uint32_t j = 0; j < mod_count; j++) {
 					TSNode mod = ts_node_child(child, j);
 					const char *mod_type = ts_node_type(mod);
-					if (strcmp(mod_type, "access_level_modifier") == 0 ||
-					    strcmp(mod_type, "member_modifier") == 0 ||
-					    strcmp(mod_type, "property_modifier") == 0 ||
-					    strcmp(mod_type, "ownership_modifier") == 0 ||
+					if (strcmp(mod_type, "access_level_modifier") == 0 || strcmp(mod_type, "member_modifier") == 0 ||
+					    strcmp(mod_type, "property_modifier") == 0 || strcmp(mod_type, "ownership_modifier") == 0 ||
 					    strcmp(mod_type, "attribute") == 0) {
 						uint32_t start = ts_node_start_byte(mod);
 						uint32_t end = ts_node_end_byte(mod);
@@ -581,8 +575,7 @@ template <>
 struct SwiftNativeExtractor<NativeExtractionStrategy::CONSTRUCTOR_DEFINITION> {
 	static NativeContext Extract(TSNode node, const string &content) {
 		// Reuse FUNCTION_WITH_PARAMS for parameter and modifier extraction
-		auto context =
-		    SwiftNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
+		auto context = SwiftNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
 		context.signature_type = ""; // Constructors have no return type
 		return context;
 	}

@@ -340,8 +340,7 @@ void PopulateSemanticFieldsTemplated(ASTNode &node, const AdapterType *adapter, 
 		// Bug #009: Auto-set IS_SYNTAX_ONLY for delimiter/punctuation nodes
 		// These are always pure syntax tokens regardless of what flags say in the .def files.
 		// This matches the scope of IsPunctuation() in semantic_types.cpp.
-		if (base_semantic == SemanticTypes::PARSER_DELIMITER ||
-		    base_semantic == SemanticTypes::PARSER_PUNCTUATION) {
+		if (base_semantic == SemanticTypes::PARSER_DELIMITER || base_semantic == SemanticTypes::PARSER_PUNCTUATION) {
 			node.universal_flags |= ASTNodeFlags::IS_SYNTAX_ONLY;
 		}
 

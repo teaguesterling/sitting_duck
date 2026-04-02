@@ -78,11 +78,11 @@ namespace ASTNodeFlags {
 constexpr uint8_t IS_SYNTAX_ONLY = 0x01;
 
 // Bits 1-2: NAME_ROLE — mutually exclusive name-binding role
-constexpr uint8_t NAME_ROLE_MASK  = 0x06; // mask for bits 1-2
-constexpr uint8_t NAME_NONE       = 0x00; // 00 = not involved in name binding
-constexpr uint8_t NAME_REFERENCE  = 0x02; // 01 = uses a name
+constexpr uint8_t NAME_ROLE_MASK = 0x06;   // mask for bits 1-2
+constexpr uint8_t NAME_NONE = 0x00;        // 00 = not involved in name binding
+constexpr uint8_t NAME_REFERENCE = 0x02;   // 01 = uses a name
 constexpr uint8_t NAME_DECLARATION = 0x04; // 10 = introduces name (no body/impl)
-constexpr uint8_t NAME_DEFINITION = 0x06; // 11 = introduces name (with body/impl)
+constexpr uint8_t NAME_DEFINITION = 0x06;  // 11 = introduces name (with body/impl)
 
 // Bit 3: scope boundary
 constexpr uint8_t IS_SCOPE = 0x08;
@@ -91,8 +91,8 @@ constexpr uint8_t IS_SCOPE = 0x08;
 constexpr uint8_t BINDS_NAME = 0x04;
 
 // Backward compatibility aliases
-constexpr uint8_t IS_CONSTRUCT = 0x00;       // DEPRECATED: no-op
-constexpr uint8_t IS_EMBODIED = 0x00;        // DEPRECATED: no-op
+constexpr uint8_t IS_CONSTRUCT = 0x00; // DEPRECATED: no-op
+constexpr uint8_t IS_EMBODIED = 0x00;  // DEPRECATED: no-op
 constexpr uint8_t IS_KEYWORD = IS_SYNTAX_ONLY;
 constexpr uint8_t IS_KEYWORD_IF_LEAF = IS_SYNTAX_ONLY;
 } // namespace ASTNodeFlags

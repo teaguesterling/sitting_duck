@@ -47,26 +47,40 @@ struct TypeMapGlobalState : public GlobalTableFunctionState {
 static string GetKindName(uint8_t semantic_type) {
 	uint8_t kind_bits = semantic_type & 0xF0;
 	switch (kind_bits) {
-	case SemanticTypes::DEFINITION: return "definition";
-	case SemanticTypes::LITERAL: return "literal";
-	case SemanticTypes::NAME: return "name";
-	case SemanticTypes::TYPE: return "type";
-	case SemanticTypes::FLOW_CONTROL: return "flow";
-	case SemanticTypes::ERROR_HANDLING: return "error";
-	case SemanticTypes::EXTERNAL: return "external";
-	case SemanticTypes::EXECUTION: return "statement";
-	case SemanticTypes::ORGANIZATION: return "block";
-	case SemanticTypes::METADATA: return "comment";
-	case SemanticTypes::PATTERN: return "pattern";
+	case SemanticTypes::DEFINITION:
+		return "definition";
+	case SemanticTypes::LITERAL:
+		return "literal";
+	case SemanticTypes::NAME:
+		return "name";
+	case SemanticTypes::TYPE:
+		return "type";
+	case SemanticTypes::FLOW_CONTROL:
+		return "flow";
+	case SemanticTypes::ERROR_HANDLING:
+		return "error";
+	case SemanticTypes::EXTERNAL:
+		return "external";
+	case SemanticTypes::EXECUTION:
+		return "statement";
+	case SemanticTypes::ORGANIZATION:
+		return "block";
+	case SemanticTypes::METADATA:
+		return "comment";
+	case SemanticTypes::PATTERN:
+		return "pattern";
 	default:
 		// Check super-kind for computation/transform
 		uint8_t super_kind = semantic_type & 0xC0;
 		if (super_kind == SemanticTypes::COMPUTATION) {
-			if ((semantic_type & 0xF0) == SemanticTypes::OPERATOR) return "operator";
-			if ((semantic_type & 0xF0) == SemanticTypes::TRANSFORM) return "transform";
+			if ((semantic_type & 0xF0) == SemanticTypes::OPERATOR)
+				return "operator";
+			if ((semantic_type & 0xF0) == SemanticTypes::TRANSFORM)
+				return "transform";
 			return "access";
 		}
-		if (kind_bits == SemanticTypes::PARSER_SPECIFIC) return "syntax";
+		if (kind_bits == SemanticTypes::PARSER_SPECIFIC)
+			return "syntax";
 		return "unknown";
 	}
 }
@@ -74,27 +88,43 @@ static string GetKindName(uint8_t semantic_type) {
 static string GetNameRoleString(uint8_t flags) {
 	uint8_t role = (flags & ASTNodeFlags::NAME_ROLE_MASK) >> 1;
 	switch (role) {
-	case 0: return "";
-	case 1: return "reference";
-	case 2: return "declaration";
-	case 3: return "definition";
-	default: return "";
+	case 0:
+		return "";
+	case 1:
+		return "reference";
+	case 2:
+		return "declaration";
+	case 3:
+		return "definition";
+	default:
+		return "";
 	}
 }
 
 static string GetExtractionStrategyName(ExtractionStrategy strategy) {
 	switch (strategy) {
-	case ExtractionStrategy::NONE: return "none";
-	case ExtractionStrategy::NODE_TEXT: return "node_text";
-	case ExtractionStrategy::FIRST_CHILD: return "first_child";
-	case ExtractionStrategy::FIND_IDENTIFIER: return "find_identifier";
-	case ExtractionStrategy::FIND_PROPERTY: return "find_property";
-	case ExtractionStrategy::FIND_ASSIGNMENT_TARGET: return "find_assignment_target";
-	case ExtractionStrategy::FIND_QUALIFIED_IDENTIFIER: return "find_qualified_identifier";
-	case ExtractionStrategy::FIND_IN_DECLARATOR: return "find_in_declarator";
-	case ExtractionStrategy::FIND_CALL_TARGET: return "find_call_target";
-	case ExtractionStrategy::CUSTOM: return "custom";
-	default: return "unknown";
+	case ExtractionStrategy::NONE:
+		return "none";
+	case ExtractionStrategy::NODE_TEXT:
+		return "node_text";
+	case ExtractionStrategy::FIRST_CHILD:
+		return "first_child";
+	case ExtractionStrategy::FIND_IDENTIFIER:
+		return "find_identifier";
+	case ExtractionStrategy::FIND_PROPERTY:
+		return "find_property";
+	case ExtractionStrategy::FIND_ASSIGNMENT_TARGET:
+		return "find_assignment_target";
+	case ExtractionStrategy::FIND_QUALIFIED_IDENTIFIER:
+		return "find_qualified_identifier";
+	case ExtractionStrategy::FIND_IN_DECLARATOR:
+		return "find_in_declarator";
+	case ExtractionStrategy::FIND_CALL_TARGET:
+		return "find_call_target";
+	case ExtractionStrategy::CUSTOM:
+		return "custom";
+	default:
+		return "unknown";
 	}
 }
 
@@ -108,8 +138,8 @@ static unique_ptr<FunctionData> TypeMapBind(ClientContext &context, TableFunctio
 	}
 
 	// Output schema
-	names = {"language", "node_type", "semantic_type", "kind", "name_role", "is_scope",
-	         "is_syntax", "name_strategy", "flags"};
+	names = {"language", "node_type", "semantic_type", "kind", "name_role",
+	         "is_scope", "is_syntax", "name_strategy", "flags"};
 	return_types = {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR,
 	                LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::BOOLEAN,
 	                LogicalType::BOOLEAN, LogicalType::VARCHAR, LogicalType::UTINYINT};
@@ -131,7 +161,8 @@ static unique_ptr<GlobalTableFunctionState> TypeMapInit(ClientContext &context, 
 		}
 
 		auto adapter = registry.CreateAdapter(lang);
-		if (!adapter) continue;
+		if (!adapter)
+			continue;
 
 		const auto &configs = adapter->GetNodeConfigs();
 		for (const auto &entry : configs) {
@@ -153,10 +184,12 @@ static unique_ptr<GlobalTableFunctionState> TypeMapInit(ClientContext &context, 
 	// Sort by language, then kind, then node_type for consistent output
 	std::sort(state->rows.begin(), state->rows.end(),
 	          [](const TypeMapGlobalState::Row &a, const TypeMapGlobalState::Row &b) {
-		if (a.language != b.language) return a.language < b.language;
-		if (a.kind != b.kind) return a.kind < b.kind;
-		return a.node_type < b.node_type;
-	});
+		          if (a.language != b.language)
+			          return a.language < b.language;
+		          if (a.kind != b.kind)
+			          return a.kind < b.kind;
+		          return a.node_type < b.node_type;
+	          });
 
 	return std::move(state);
 }

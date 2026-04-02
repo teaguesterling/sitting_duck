@@ -132,7 +132,7 @@ string LanguageAdapter::ExtractNameFromDeclarator(TSNode node, const string &con
 	// - declarator (various): general declaration pattern
 
 	vector<string> declarator_patterns = {
-	    "function_declarator", "method_declarator", "declarator",
+	    "function_declarator",  "method_declarator", "declarator",
 	    "procedure_declarator", // Pascal-like languages
 	    "init_declarator",      // C++ initializing declarators
 	    "variable_declarator"   // Java field/variable declarations
@@ -324,22 +324,22 @@ string LanguageAdapter::FindIdentifierInWrappers(TSNode node, const string &cont
 	// The depth limit and identifier-type filter constrain what gets matched, but if
 	// false positives appear in other languages, consider qualifying it further.
 	static const vector<string> wrapper_types = {
-	    "variable_declarator",              // JS, C#, TypeScript
-	    "variable_list",                    // Lua (inside assignment_statement)
-	    "assignment_statement",             // Lua (inside variable_declaration)
-	    "init_declarator",                  // C++
-	    "initialized_variable_definition",  // Dart (inside local_variable_declaration)
-	    "expression",                       // HCL (object_elem key expressions)
-	    "variable_expr",                    // HCL (inside expression)
-	    "constructor_param",                // Dart (inside formal_parameter for this.x)
-	    "simple_formal_parameter",          // Dart (inside formal_parameter)
-	    "label",                            // Dart (record_field named labels)
-	    "constructor_signature",            // Dart (inside declaration)
-	    "constant_constructor_signature",   // Dart (inside declaration)
-	    "getter_signature",                 // Dart (inside declaration)
-	    "setter_signature",                 // Dart (inside declaration)
-	    "function_signature",               // Dart (inside declaration)
-	    "operator_signature",               // Dart (inside declaration)
+	    "variable_declarator",             // JS, C#, TypeScript
+	    "variable_list",                   // Lua (inside assignment_statement)
+	    "assignment_statement",            // Lua (inside variable_declaration)
+	    "init_declarator",                 // C++
+	    "initialized_variable_definition", // Dart (inside local_variable_declaration)
+	    "expression",                      // HCL (object_elem key expressions)
+	    "variable_expr",                   // HCL (inside expression)
+	    "constructor_param",               // Dart (inside formal_parameter for this.x)
+	    "simple_formal_parameter",         // Dart (inside formal_parameter)
+	    "label",                           // Dart (record_field named labels)
+	    "constructor_signature",           // Dart (inside declaration)
+	    "constant_constructor_signature",  // Dart (inside declaration)
+	    "getter_signature",                // Dart (inside declaration)
+	    "setter_signature",                // Dart (inside declaration)
+	    "function_signature",              // Dart (inside declaration)
+	    "operator_signature",              // Dart (inside declaration)
 	};
 
 	uint32_t child_count = ts_node_child_count(node);
@@ -402,13 +402,13 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		if (!ts_node_is_null(parent)) {
 			string parent_type = ts_node_type(parent);
 			// Check for assignment patterns across languages
-			if (parent_type == "binary_operator" ||               // R: name <- function
-			    parent_type == "variable_declarator" ||           // JS/TS: const name = function
-			    parent_type == "init_declarator" ||               // C++: auto name = lambda
-			    parent_type == "assignment" ||                    // Python: x = lambda
-			    parent_type == "named_expression" ||              // Python: (x := lambda)
+			if (parent_type == "binary_operator" ||                 // R: name <- function
+			    parent_type == "variable_declarator" ||             // JS/TS: const name = function
+			    parent_type == "init_declarator" ||                 // C++: auto name = lambda
+			    parent_type == "assignment" ||                      // Python: x = lambda
+			    parent_type == "named_expression" ||                // Python: (x := lambda)
 			    parent_type == "initialized_variable_definition" || // Dart: var name = () => ...
-			    parent_type.find("declarator") != string::npos) { // Other declarator patterns
+			    parent_type.find("declarator") != string::npos) {   // Other declarator patterns
 
 				// Find identifier among parent's children
 				// In most languages (JS, Python, C++) the identifier is the first child,
@@ -460,7 +460,6 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		    first_child_type == "field_expression" || first_child_type == "selector_expression" ||
 		    first_child_type == "field_access" || first_child_type == "scoped_identifier" ||
 		    first_child_type == "qualified_identifier") {
-
 			// Java method_invocation has a special structure: the method name is a sibling
 			// of field_access, not inside it. E.g., System.out.println():
 			//   method_invocation -> field_access("System.out"), ".", identifier("println"), argument_list

@@ -161,8 +161,7 @@ string CPPAdapter::ExtractCppCustomName(TSNode node, const string &content, cons
 			}
 			// Check for function_declarator inside wrapper types
 			// (reference_declarator for T& return, pointer_declarator for T* return)
-			if (strcmp(child_type, "reference_declarator") == 0 ||
-			    strcmp(child_type, "pointer_declarator") == 0) {
+			if (strcmp(child_type, "reference_declarator") == 0 || strcmp(child_type, "pointer_declarator") == 0) {
 				// Search for function_declarator inside the wrapper (may be nested)
 				constexpr int32_t MAX_DECLARATOR_WRAPPER_DEPTH = 3;
 				TSNode wrapper = child;

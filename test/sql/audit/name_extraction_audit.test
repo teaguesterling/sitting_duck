@@ -1,6 +1,6 @@
 # name: test/sql/audit/name_extraction_audit.test
 # description: Comprehensive audit of name extraction across all languages
-# group: [sitting_duck_audit]
+# group: [audit]
 
 require sitting_duck
 

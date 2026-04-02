@@ -118,29 +118,29 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		    } else if (pattern == "ACCESS") {
 			    return (base_type & 0xF0) == SemanticTypes::COMPUTATION;
 
-		    // --- Super-type level (bits 7-2, mid-level match) ---
+			    // --- Super-type level (bits 7-2, mid-level match) ---
 
-		    // DEFINITION super-types
+			    // DEFINITION super-types
 		    } else if (pattern == "FUNCTION" || pattern == "FUNC" || pattern == "FN" || pattern == "METHOD") {
 			    return base_type == SemanticTypes::DEFINITION_FUNCTION;
-		    } else if (pattern == "CLASS" || pattern == "CLS" || pattern == "STRUCT"
-			           || pattern == "TRAIT" || pattern == "INTERFACE") {
+		    } else if (pattern == "CLASS" || pattern == "CLS" || pattern == "STRUCT" || pattern == "TRAIT" ||
+		               pattern == "INTERFACE") {
 			    return base_type == SemanticTypes::DEFINITION_CLASS;
 		    } else if (pattern == "VARIABLE" || pattern == "VAR" || pattern == "LET" || pattern == "CONST") {
 			    return base_type == SemanticTypes::DEFINITION_VARIABLE;
 		    } else if (pattern == "MODULE" || pattern == "MOD" || pattern == "PACKAGE") {
 			    return base_type == SemanticTypes::DEFINITION_MODULE;
 
-		    // FLOW super-types
+			    // FLOW super-types
 		    } else if (pattern == "CONDITIONAL" || pattern == "COND" || pattern == "IF") {
 			    return base_type == SemanticTypes::FLOW_CONDITIONAL;
 		    } else if (pattern == "LOOP" || pattern == "FOR" || pattern == "WHILE") {
 			    return base_type == SemanticTypes::FLOW_LOOP;
-		    } else if (pattern == "JUMP" || pattern == "RETURN" || pattern == "BREAK"
-			           || pattern == "CONTINUE" || pattern == "YIELD") {
+		    } else if (pattern == "JUMP" || pattern == "RETURN" || pattern == "BREAK" || pattern == "CONTINUE" ||
+		               pattern == "YIELD") {
 			    return base_type == SemanticTypes::FLOW_JUMP;
 
-		    // ERROR super-types
+			    // ERROR super-types
 		    } else if (pattern == "TRY") {
 			    return base_type == SemanticTypes::ERROR_TRY;
 		    } else if (pattern == "CATCH" || pattern == "EXCEPT" || pattern == "RESCUE") {
@@ -150,19 +150,18 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		    } else if (pattern == "FINALLY" || pattern == "ENSURE" || pattern == "DEFER") {
 			    return base_type == SemanticTypes::ERROR_FINALLY;
 
-		    // LITERAL super-types
+			    // LITERAL super-types
 		    } else if (pattern == "NUM" || pattern == "NUMBER") {
 			    return base_type == SemanticTypes::LITERAL_NUMBER;
 		    } else if (pattern == "STR" || pattern == "STRING") {
 			    return base_type == SemanticTypes::LITERAL_STRING;
 		    } else if (pattern == "BOOL" || pattern == "BOOLEAN") {
 			    return base_type == SemanticTypes::LITERAL_ATOMIC;
-		    } else if (pattern == "COLL" || pattern == "LIST" || pattern == "DICT"
-			           || pattern == "ARRAY" || pattern == "MAP" || pattern == "SET"
-			           || pattern == "TUPLE") {
+		    } else if (pattern == "COLL" || pattern == "LIST" || pattern == "DICT" || pattern == "ARRAY" ||
+		               pattern == "MAP" || pattern == "SET" || pattern == "TUPLE") {
 			    return base_type == SemanticTypes::LITERAL_STRUCTURED;
 
-		    // NAME super-types
+			    // NAME super-types
 		    } else if (pattern == "IDENTIFIER" || pattern == "ID" || pattern == "IDENT") {
 			    return base_type == SemanticTypes::NAME_IDENTIFIER;
 		    } else if (pattern == "QUALIFIED" || pattern == "DOTTED") {
@@ -172,14 +171,13 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		    } else if (pattern == "LABEL") {
 			    return base_type == SemanticTypes::NAME_ATTRIBUTE;
 
-		    // COMPUTATION super-types
+			    // COMPUTATION super-types
 		    } else if (pattern == "CALL" || pattern == "INVOKE") {
 			    return base_type == SemanticTypes::COMPUTATION_CALL;
-		    } else if (pattern == "MEMBER" || pattern == "ATTR" || pattern == "FIELD"
-			           || pattern == "PROP") {
+		    } else if (pattern == "MEMBER" || pattern == "ATTR" || pattern == "FIELD" || pattern == "PROP") {
 			    return base_type == SemanticTypes::COMPUTATION_ACCESS;
 
-		    // OPERATOR super-types
+			    // OPERATOR super-types
 		    } else if (pattern == "ARITH" || pattern == "MATH") {
 			    return base_type == SemanticTypes::OPERATOR_ARITHMETIC;
 		    } else if (pattern == "CMP" || pattern == "COMPARISON") {
@@ -187,13 +185,13 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		    } else if (pattern == "LOGIC" || pattern == "LOGICAL") {
 			    return base_type == SemanticTypes::OPERATOR_LOGICAL;
 
-		    // EXTERNAL super-types
+			    // EXTERNAL super-types
 		    } else if (pattern == "IMPORT" || pattern == "REQUIRE" || pattern == "USE") {
 			    return base_type == SemanticTypes::EXTERNAL_IMPORT;
 		    } else if (pattern == "EXPORT" || pattern == "PUB") {
 			    return base_type == SemanticTypes::EXTERNAL_EXPORT;
 
-		    // TRANSFORM super-types
+			    // TRANSFORM super-types
 		    } else if (pattern == "COMP" || pattern == "COMPREHENSION") {
 			    return base_type == SemanticTypes::TRANSFORM_QUERY;
 		    }
@@ -365,8 +363,9 @@ static void IsDefinitionFlagFunction(DataChunk &args, ExpressionState &state, Ve
 	D_ASSERT(args.ColumnCount() == 1);
 	auto &flags_vector = args.data[0];
 	auto count = args.size();
-	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count,
-	                                      [&](uint8_t flags) { return (flags & ASTNodeFlags::NAME_ROLE_MASK) == ASTNodeFlags::NAME_DEFINITION; });
+	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count, [&](uint8_t flags) {
+		return (flags & ASTNodeFlags::NAME_ROLE_MASK) == ASTNodeFlags::NAME_DEFINITION;
+	});
 }
 
 // Check if node is a declaration by flags (introduces name without implementation)
@@ -374,8 +373,9 @@ static void IsDeclarationFlagFunction(DataChunk &args, ExpressionState &state, V
 	D_ASSERT(args.ColumnCount() == 1);
 	auto &flags_vector = args.data[0];
 	auto count = args.size();
-	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count,
-	                                      [&](uint8_t flags) { return (flags & ASTNodeFlags::NAME_ROLE_MASK) == ASTNodeFlags::NAME_DECLARATION; });
+	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count, [&](uint8_t flags) {
+		return (flags & ASTNodeFlags::NAME_ROLE_MASK) == ASTNodeFlags::NAME_DECLARATION;
+	});
 }
 
 // Check if node is a reference by flags (uses a name)
@@ -383,8 +383,9 @@ static void IsReferenceFlagFunction(DataChunk &args, ExpressionState &state, Vec
 	D_ASSERT(args.ColumnCount() == 1);
 	auto &flags_vector = args.data[0];
 	auto count = args.size();
-	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count,
-	                                      [&](uint8_t flags) { return (flags & ASTNodeFlags::NAME_ROLE_MASK) == ASTNodeFlags::NAME_REFERENCE; });
+	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count, [&](uint8_t flags) {
+		return (flags & ASTNodeFlags::NAME_ROLE_MASK) == ASTNodeFlags::NAME_REFERENCE;
+	});
 }
 
 // Check if node binds a name (definition OR declaration — bit 2 set)
@@ -410,8 +411,9 @@ static void NameRoleFunction(DataChunk &args, ExpressionState &state, Vector &re
 	D_ASSERT(args.ColumnCount() == 1);
 	auto &flags_vector = args.data[0];
 	auto count = args.size();
-	UnaryExecutor::Execute<uint8_t, uint8_t>(flags_vector, result, count,
-	                                          [&](uint8_t flags) { return (uint8_t)((flags & ASTNodeFlags::NAME_ROLE_MASK) >> 1); });
+	UnaryExecutor::Execute<uint8_t, uint8_t>(flags_vector, result, count, [&](uint8_t flags) {
+		return (uint8_t)((flags & ASTNodeFlags::NAME_ROLE_MASK) >> 1);
+	});
 }
 
 // DEPRECATED: backward compatibility wrappers
@@ -691,13 +693,16 @@ void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
 	loader.RegisterFunction(is_construct_func);
 
 	// NAME_ROLE flag functions (bits 1-2 of flags byte)
-	ScalarFunction is_name_definition_func("is_name_definition", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsDefinitionFlagFunction);
+	ScalarFunction is_name_definition_func("is_name_definition", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
+	                                       IsDefinitionFlagFunction);
 	loader.RegisterFunction(is_name_definition_func);
 
-	ScalarFunction is_name_declaration_func("is_name_declaration", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsDeclarationFlagFunction);
+	ScalarFunction is_name_declaration_func("is_name_declaration", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
+	                                        IsDeclarationFlagFunction);
 	loader.RegisterFunction(is_name_declaration_func);
 
-	ScalarFunction is_name_reference_func("is_name_reference", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsReferenceFlagFunction);
+	ScalarFunction is_name_reference_func("is_name_reference", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
+	                                      IsReferenceFlagFunction);
 	loader.RegisterFunction(is_name_reference_func);
 
 	ScalarFunction binds_name_func("binds_name", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, BindsNameFunction);

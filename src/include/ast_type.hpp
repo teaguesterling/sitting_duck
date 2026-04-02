@@ -179,10 +179,10 @@ struct ASTNode {
 	uint32_t descendant_count = 0; // Total descendants (DFS count)
 
 	// Legacy tree fields (flat) - kept separate for future use
-	int64_t node_index = 0;            // Position in depth-first traversal
-	int64_t parent_index = -1;         // Parent's position (-1 for root)
-	int32_t legacy_sibling_index = 0;  // Position among siblings (legacy)
-	uint8_t node_depth = 0;            // Depth from root (legacy)
+	int64_t node_index = 0;           // Position in depth-first traversal
+	int64_t parent_index = -1;        // Parent's position (-1 for root)
+	int32_t legacy_sibling_index = 0; // Position among siblings (legacy)
+	uint8_t node_depth = 0;           // Depth from root (legacy)
 
 	// Legacy file position fields (flat)
 	int64_t start_line = 0;
