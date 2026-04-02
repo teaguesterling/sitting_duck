@@ -20,6 +20,7 @@ void RegisterReadASTFunction(ExtensionLoader &loader); // Streaming-based implem
 void RegisterASTSQLMacros(ExtensionLoader &loader);
 // void RegisterDuckDBASTShortNamesFunction(ExtensionLoader &loader); // Removed
 void RegisterASTSupportedLanguagesFunction(ExtensionLoader &loader);
+void RegisterASTTypeMapFunction(ExtensionLoader &loader);
 // Temporarily disabled:
 // void RegisterASTObjectsFunction(ExtensionLoader &loader);
 // void RegisterASTHelperFunctions(ExtensionLoader &loader);
@@ -43,6 +44,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	// Register supported languages function
 	RegisterASTSupportedLanguagesFunction(loader);
+
+	// Register ast_type_map() for node type discovery
+	RegisterASTTypeMapFunction(loader);
 
 	// Register SQL macros for natural AST querying (depends on functions above)
 	RegisterASTSQLMacros(loader);

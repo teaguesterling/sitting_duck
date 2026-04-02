@@ -306,6 +306,7 @@ set(EXTENSION_SOURCES
     src/semantic_type_logical_type.cpp
     src/ast_file_utils.cpp
     src/ast_supported_languages_function.cpp
+    src/ast_type_map_function.cpp
     src/native_context_extraction.cpp
     # Parser source files - from PARSER_SOURCE_DIR (either generated_parsers/ or grammars/)
     ${PARSER_SOURCE_DIR}/tree-sitter-python/src/parser.c
