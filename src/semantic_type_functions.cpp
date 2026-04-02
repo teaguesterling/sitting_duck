@@ -76,26 +76,129 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		    uint8_t type = semantic_type;
 		    uint8_t base_type = semantic_type & 0xFC; // Mask refinement bits for base comparisons
 
-		    // Support common patterns
-		    if (pattern == "FUNCTION") {
-			    return base_type == SemanticTypes::DEFINITION_FUNCTION;
-		    } else if (pattern == "CLASS") {
-			    return base_type == SemanticTypes::DEFINITION_CLASS;
-		    } else if (pattern == "VARIABLE") {
-			    return base_type == SemanticTypes::DEFINITION_VARIABLE;
-		    } else if (pattern == "IDENTIFIER") {
-			    return base_type == SemanticTypes::NAME_IDENTIFIER;
-		    } else if (pattern == "CALL") {
-			    return base_type == SemanticTypes::COMPUTATION_CALL;
-		    } else if (pattern == "LITERAL") {
-			    return (base_type & 0xF0) == SemanticTypes::LITERAL;
-		    } else if (pattern == "DEFINITION") {
+		    // ================================================================
+		    // ALIAS TABLE: maps short selector names to semantic type checks
+		    // Three levels:
+		    //   Kind (broad):      .def, .flow, .literal, .external, ...
+		    //   Super-type (mid):  .func, .class, .cond, .loop, .call, ...
+		    //   Existing names:    FUNCTION, CLASS, DEFINITION, LITERAL, ...
+		    // ================================================================
+
+		    // --- Kind level (bits 7-4, broadest match) ---
+		    if (pattern == "DEFINITION" || pattern == "DEF") {
 			    return (base_type & 0xF0) == SemanticTypes::DEFINITION;
+		    } else if (pattern == "LITERAL" || pattern == "LIT" || pattern == "VALUE") {
+			    return (base_type & 0xF0) == SemanticTypes::LITERAL;
 		    } else if (pattern == "COMPUTATION") {
 			    return (base_type & 0xC0) == SemanticTypes::COMPUTATION;
+		    } else if (pattern == "FLOW" || pattern == "CONTROL") {
+			    return (base_type & 0xF0) == SemanticTypes::FLOW_CONTROL;
+		    } else if (pattern == "ERROR" || pattern == "ERR") {
+			    return (base_type & 0xF0) == SemanticTypes::ERROR_HANDLING;
+		    } else if (pattern == "NAME") {
+			    return (base_type & 0xF0) == SemanticTypes::NAME;
+		    } else if (pattern == "EXTERNAL" || pattern == "EXT") {
+			    return (base_type & 0xF0) == SemanticTypes::EXTERNAL;
+		    } else if (pattern == "OPERATOR" || pattern == "OP") {
+			    return (base_type & 0xF0) == SemanticTypes::OPERATOR;
+		    } else if (pattern == "TYPEDEF" || pattern == "TYPE") {
+			    return (base_type & 0xF0) == SemanticTypes::TYPE;
+		    } else if (pattern == "PATTERN" || pattern == "PAT") {
+			    return (base_type & 0xF0) == SemanticTypes::PATTERN;
+		    } else if (pattern == "BLOCK") {
+			    return (base_type & 0xF0) == SemanticTypes::ORGANIZATION;
+		    } else if (pattern == "STATEMENT" || pattern == "STMT") {
+			    return (base_type & 0xF0) == SemanticTypes::EXECUTION;
+		    } else if (pattern == "SYNTAX" || pattern == "SYN") {
+			    return (base_type & 0xF0) == SemanticTypes::PARSER_SPECIFIC;
+		    } else if (pattern == "TRANSFORM" || pattern == "XFORM") {
+			    return (base_type & 0xF0) == SemanticTypes::TRANSFORM;
+		    } else if (pattern == "COMMENT") {
+			    return (base_type & 0xF0) == SemanticTypes::METADATA;
+		    } else if (pattern == "ACCESS") {
+			    return (base_type & 0xF0) == SemanticTypes::COMPUTATION;
+
+		    // --- Super-type level (bits 7-2, mid-level match) ---
+
+		    // DEFINITION super-types
+		    } else if (pattern == "FUNCTION" || pattern == "FUNC" || pattern == "FN" || pattern == "METHOD") {
+			    return base_type == SemanticTypes::DEFINITION_FUNCTION;
+		    } else if (pattern == "CLASS" || pattern == "CLS" || pattern == "STRUCT"
+			           || pattern == "TRAIT" || pattern == "INTERFACE") {
+			    return base_type == SemanticTypes::DEFINITION_CLASS;
+		    } else if (pattern == "VARIABLE" || pattern == "VAR" || pattern == "LET" || pattern == "CONST") {
+			    return base_type == SemanticTypes::DEFINITION_VARIABLE;
+		    } else if (pattern == "MODULE" || pattern == "MOD" || pattern == "PACKAGE") {
+			    return base_type == SemanticTypes::DEFINITION_MODULE;
+
+		    // FLOW super-types
+		    } else if (pattern == "CONDITIONAL" || pattern == "COND" || pattern == "IF") {
+			    return base_type == SemanticTypes::FLOW_CONDITIONAL;
+		    } else if (pattern == "LOOP" || pattern == "FOR" || pattern == "WHILE") {
+			    return base_type == SemanticTypes::FLOW_LOOP;
+		    } else if (pattern == "JUMP" || pattern == "RETURN" || pattern == "BREAK"
+			           || pattern == "CONTINUE" || pattern == "YIELD") {
+			    return base_type == SemanticTypes::FLOW_JUMP;
+
+		    // ERROR super-types
+		    } else if (pattern == "TRY") {
+			    return base_type == SemanticTypes::ERROR_TRY;
+		    } else if (pattern == "CATCH" || pattern == "EXCEPT" || pattern == "RESCUE") {
+			    return base_type == SemanticTypes::ERROR_CATCH;
+		    } else if (pattern == "THROW" || pattern == "RAISE") {
+			    return base_type == SemanticTypes::ERROR_THROW;
+		    } else if (pattern == "FINALLY" || pattern == "ENSURE" || pattern == "DEFER") {
+			    return base_type == SemanticTypes::ERROR_FINALLY;
+
+		    // LITERAL super-types
+		    } else if (pattern == "NUM" || pattern == "NUMBER") {
+			    return base_type == SemanticTypes::LITERAL_NUMBER;
+		    } else if (pattern == "STR" || pattern == "STRING") {
+			    return base_type == SemanticTypes::LITERAL_STRING;
+		    } else if (pattern == "BOOL" || pattern == "BOOLEAN") {
+			    return base_type == SemanticTypes::LITERAL_ATOMIC;
+		    } else if (pattern == "COLL" || pattern == "LIST" || pattern == "DICT"
+			           || pattern == "ARRAY" || pattern == "MAP" || pattern == "SET"
+			           || pattern == "TUPLE") {
+			    return base_type == SemanticTypes::LITERAL_STRUCTURED;
+
+		    // NAME super-types
+		    } else if (pattern == "IDENTIFIER" || pattern == "ID" || pattern == "IDENT") {
+			    return base_type == SemanticTypes::NAME_IDENTIFIER;
+		    } else if (pattern == "QUALIFIED" || pattern == "DOTTED") {
+			    return base_type == SemanticTypes::NAME_QUALIFIED;
+		    } else if (pattern == "SELF" || pattern == "THIS") {
+			    return base_type == SemanticTypes::NAME_SCOPED;
+		    } else if (pattern == "LABEL") {
+			    return base_type == SemanticTypes::NAME_ATTRIBUTE;
+
+		    // COMPUTATION super-types
+		    } else if (pattern == "CALL" || pattern == "INVOKE") {
+			    return base_type == SemanticTypes::COMPUTATION_CALL;
+		    } else if (pattern == "MEMBER" || pattern == "ATTR" || pattern == "FIELD"
+			           || pattern == "PROP") {
+			    return base_type == SemanticTypes::COMPUTATION_ACCESS;
+
+		    // OPERATOR super-types
+		    } else if (pattern == "ARITH" || pattern == "MATH") {
+			    return base_type == SemanticTypes::OPERATOR_ARITHMETIC;
+		    } else if (pattern == "CMP" || pattern == "COMPARISON") {
+			    return base_type == SemanticTypes::OPERATOR_COMPARISON;
+		    } else if (pattern == "LOGIC" || pattern == "LOGICAL") {
+			    return base_type == SemanticTypes::OPERATOR_LOGICAL;
+
+		    // EXTERNAL super-types
+		    } else if (pattern == "IMPORT" || pattern == "REQUIRE" || pattern == "USE") {
+			    return base_type == SemanticTypes::EXTERNAL_IMPORT;
+		    } else if (pattern == "EXPORT" || pattern == "PUB") {
+			    return base_type == SemanticTypes::EXTERNAL_EXPORT;
+
+		    // TRANSFORM super-types
+		    } else if (pattern == "COMP" || pattern == "COMPREHENSION") {
+			    return base_type == SemanticTypes::TRANSFORM_QUERY;
 		    }
 
-		    // Default: exact string match with base semantic type name
+		    // Default: exact string match with full semantic type name
 		    return SemanticTypes::GetSemanticTypeName(base_type) == pattern;
 	    });
 }
