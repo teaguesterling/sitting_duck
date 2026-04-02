@@ -230,14 +230,19 @@ CREATE OR REPLACE MACRO ast_select(
         -- =====================================================================
 
         -- Precompute selector properties as scalars
+        -- type_filter_like: precomputed LIKE pattern for bare type matching.
+        -- Bare `if` matches `if` (keyword) AND `if_statement`, `if_clause`, etc.
         sel_props AS (
             SELECT
                 (SELECT type FROM root_type) as sel_type,
                 (SELECT type_filter FROM simple_type) as type_filter,
+                (SELECT type_filter || '_%' FROM simple_type) as type_filter_like,
                 (SELECT name_filter FROM simple_id) as name_filter,
                 (SELECT class_filter FROM simple_class) as class_filter,
                 (SELECT left_type FROM combinator_parts) as left_type,
-                (SELECT right_type FROM combinator_parts) as right_type
+                (SELECT left_type || '_%' FROM combinator_parts) as left_type_like,
+                (SELECT right_type FROM combinator_parts) as right_type,
+                (SELECT right_type || '_%' FROM combinator_parts) as right_type_like
         )
 
     -- Single scan of ast with CASE-based dispatch
@@ -246,20 +251,21 @@ CREATE OR REPLACE MACRO ast_select(
     WHERE CASE sp.sel_type
 
         -- Simple/compound selectors
+        -- Bare type matching: `if` matches both `if` and `if_statement`, `if_clause`, etc.
         WHEN 'tag_name' THEN
-            (sp.type_filter IS NULL OR a.type = sp.type_filter)
+            (sp.type_filter IS NULL OR a.type = sp.type_filter OR a.type LIKE sp.type_filter_like)
             AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
         WHEN 'id_selector' THEN
-            (sp.type_filter IS NULL OR a.type = sp.type_filter)
+            (sp.type_filter IS NULL OR a.type = sp.type_filter OR a.type LIKE sp.type_filter_like)
             AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
         WHEN 'class_selector' THEN
             (sp.class_filter IS NULL
              OR (is_semantic_type(a.semantic_type, UPPER(sp.class_filter))
                  AND NOT is_syntax_only(a.flags)))
         WHEN 'attribute_selector' THEN
-            (sp.type_filter IS NULL OR a.type = sp.type_filter)
+            (sp.type_filter IS NULL OR a.type = sp.type_filter OR a.type LIKE sp.type_filter_like)
         WHEN 'pseudo_class_selector' THEN
-            (sp.type_filter IS NULL OR a.type = sp.type_filter)
+            (sp.type_filter IS NULL OR a.type = sp.type_filter OR a.type LIKE sp.type_filter_like)
             AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
             AND (sp.class_filter IS NULL
                  OR (is_semantic_type(a.semantic_type, UPPER(sp.class_filter))
@@ -267,44 +273,44 @@ CREATE OR REPLACE MACRO ast_select(
 
         -- Descendant combinator: A B
         WHEN 'descendant_selector' THEN
-            a.type = sp.right_type
+            (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
             AND EXISTS (
                 SELECT 1 FROM ast anc
                 WHERE anc.file_path = a.file_path
                   AND a.node_id > anc.node_id
                   AND a.node_id <= anc.node_id + anc.descendant_count
-                  AND anc.type = sp.left_type
+                  AND (anc.type = sp.left_type OR anc.type LIKE sp.left_type_like)
             )
 
         -- Child combinator: A > B
         WHEN 'child_selector' THEN
-            a.type = sp.right_type
+            (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
             AND EXISTS (
                 SELECT 1 FROM ast par
                 WHERE par.node_id = a.parent_id
-                  AND par.type = sp.left_type
+                  AND (par.type = sp.left_type OR par.type LIKE sp.left_type_like)
             )
 
         -- General sibling: A ~ B
         WHEN 'sibling_selector' THEN
-            a.type = sp.right_type
+            (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
             AND EXISTS (
                 SELECT 1 FROM ast sib
                 WHERE sib.file_path = a.file_path
                   AND sib.parent_id = a.parent_id
                   AND sib.sibling_index < a.sibling_index
-                  AND sib.type = sp.left_type
+                  AND (sib.type = sp.left_type OR sib.type LIKE sp.left_type_like)
             )
 
         -- Adjacent sibling: A + B
         WHEN 'adjacent_sibling_selector' THEN
-            a.type = sp.right_type
+            (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
             AND EXISTS (
                 SELECT 1 FROM ast adj
                 WHERE adj.file_path = a.file_path
                   AND adj.parent_id = a.parent_id
                   AND adj.sibling_index = a.sibling_index - 1
-                  AND adj.type = sp.left_type
+                  AND (adj.type = sp.left_type OR adj.type LIKE sp.left_type_like)
             )
 
         ELSE false
