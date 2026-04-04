@@ -8,6 +8,7 @@
 #include "ast_sql_macros.hpp"
 // #include "short_names_function.hpp" // Removed
 #include "parse_ast_function.hpp"
+#include "parse_ast_list_function.hpp"
 #include "semantic_type_functions.hpp"
 #include "semantic_type_logical_type.hpp"
 
@@ -38,6 +39,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	// Register the parse_ast scalar function
 	ParseASTFunction::Register(loader);
+
+	// Register parse_ast_list scalar function
+	RegisterParseASTListFunction(loader);
 
 	// Register semantic type utility functions (must be before SQL macros that depend on them)
 	RegisterSemanticTypeFunctions(loader);

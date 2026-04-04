@@ -298,6 +298,7 @@ set(EXTENSION_SOURCES
     src/ast_sql_macros.cpp
     # src/short_names_function.cpp (removed - short names system removed)
     src/parse_ast_function.cpp
+    src/parse_ast_list_function.cpp
     src/unified_ast_backend.cpp
     src/ast_parsing_task.cpp
     src/ast_type.cpp
