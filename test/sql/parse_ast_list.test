@@ -1,0 +1,63 @@
+# name: test/sql/parse_ast_list.test
+# description: Test parse_ast_list scalar function returning LIST(STRUCT)
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: Basic function call returns a non-empty list
+query I
+SELECT length(parse_ast_list('x = 1', 'python')) > 0;
+----
+true
+
+# Test 2: Unnest produces rows with expected columns
+query II
+SELECT node.node_id, node.type FROM (
+    SELECT unnest(parse_ast_list('x = 1', 'python')) as node
+);
+----
+0	module
+1	expression_statement
+2	assignment
+3	identifier
+4	=
+5	integer
+
+# Test 3: Access struct fields via dot notation
+query II
+SELECT node.node_id, node.type FROM (
+    SELECT unnest(parse_ast_list('def f(): pass', 'python')) as node
+) WHERE node.type = 'function_definition';
+----
+1	function_definition
+
+# Test 4: Name field is populated (default config includes normalized context)
+query III
+SELECT node.node_id, node.type, node.name FROM (
+    SELECT unnest(parse_ast_list('def hello(): pass', 'python')) as node
+) WHERE node.name = 'hello';
+----
+2	identifier	hello
+
+# Test 5: NULL input returns NULL
+query I
+SELECT parse_ast_list(NULL, 'python') IS NULL;
+----
+true
+
+# Test 6: Works in expressions (e.g., length)
+query I
+SELECT length(parse_ast_list('x = 1', 'python'));
+----
+6
+
+# Test 7: Can be used in CTEs for pattern matching
+query I
+SELECT COUNT(*) FROM (
+    SELECT unnest(parse_ast_list('db.execute()', 'python')) as node
+) WHERE node.type NOT IN ('module', 'expression_statement');
+----
+4
