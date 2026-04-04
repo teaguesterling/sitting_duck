@@ -433,6 +433,7 @@ vector<string> UnifiedASTBackend::GetDynamicTableColumnNames(const ExtractionCon
 //==============================================================================
 
 vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const ExtractionConfig &config) {
+	ExtractionConfig schema_config = config.GetSchemaConfig();
 	vector<LogicalType> schema;
 
 	// Always include core columns
@@ -440,16 +441,16 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
 	schema.push_back(LogicalType::VARCHAR); // type
 
 	// Conditionally include context fields
-	if (config.context != ContextLevel::NONE) {
-		if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
+	if (schema_config.context != ContextLevel::NONE) {
+		if (schema_config.context >= ContextLevel::NODE_TYPES_ONLY) {
 			schema.push_back(SemanticTypeLogicalType()); // semantic_type (custom type with VARCHAR cast)
 			schema.push_back(LogicalType::UTINYINT);     // flags
 		}
-		if (config.context >= ContextLevel::NORMALIZED) {
+		if (schema_config.context >= ContextLevel::NORMALIZED) {
 			schema.push_back(LogicalType::VARCHAR); // name
 			schema.push_back(LogicalType::VARCHAR); // qualified_name
 		}
-		if (config.context >= ContextLevel::NATIVE) {
+		if (schema_config.context >= ContextLevel::NATIVE) {
 			schema.push_back(LogicalType::VARCHAR); // signature_type
 			// parameters: LIST of STRUCT with name and type fields
 			schema.push_back(LogicalType::LIST(
@@ -460,29 +461,29 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
 	}
 
 	// Conditionally include source fields
-	if (config.source != SourceLevel::NONE) {
+	if (schema_config.source != SourceLevel::NONE) {
 		schema.push_back(LogicalType::VARCHAR); // file_path
 		schema.push_back(LogicalType::VARCHAR); // language
 
-		if (config.source >= SourceLevel::LINES_ONLY) {
+		if (schema_config.source >= SourceLevel::LINES_ONLY) {
 			schema.push_back(LogicalType::UINTEGER); // start_line
 			schema.push_back(LogicalType::UINTEGER); // end_line
 		}
 
-		if (config.source >= SourceLevel::FULL) {
+		if (schema_config.source >= SourceLevel::FULL) {
 			schema.push_back(LogicalType::UINTEGER); // start_column
 			schema.push_back(LogicalType::UINTEGER); // end_column
 		}
 	}
 
 	// Conditionally include structure fields
-	if (config.structure != StructureLevel::NONE) {
-		if (config.structure >= StructureLevel::MINIMAL) {
+	if (schema_config.structure != StructureLevel::NONE) {
+		if (schema_config.structure >= StructureLevel::MINIMAL) {
 			schema.push_back(LogicalType::BIGINT);   // parent_id
 			schema.push_back(LogicalType::UINTEGER); // depth
 		}
 
-		if (config.structure >= StructureLevel::FULL) {
+		if (schema_config.structure >= StructureLevel::FULL) {
 			schema.push_back(LogicalType::INTEGER);  // sibling_index
 			schema.push_back(LogicalType::UINTEGER); // children_count
 			schema.push_back(LogicalType::UINTEGER); // descendant_count
@@ -490,7 +491,7 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
 	}
 
 	// Conditionally include peek
-	if (config.peek != PeekLevel::NONE) {
+	if (schema_config.peek != PeekLevel::NONE) {
 		schema.push_back(LogicalType::VARCHAR); // peek
 	}
 
@@ -498,6 +499,7 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
 }
 
 vector<string> UnifiedASTBackend::GetFlatDynamicTableColumnNames(const ExtractionConfig &config) {
+	ExtractionConfig schema_config = config.GetSchemaConfig();
 	vector<string> names;
 
 	// Always include core columns
@@ -505,16 +507,16 @@ vector<string> UnifiedASTBackend::GetFlatDynamicTableColumnNames(const Extractio
 	names.push_back("type");
 
 	// Conditionally include context fields
-	if (config.context != ContextLevel::NONE) {
-		if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
+	if (schema_config.context != ContextLevel::NONE) {
+		if (schema_config.context >= ContextLevel::NODE_TYPES_ONLY) {
 			names.push_back("semantic_type");
 			names.push_back("flags");
 		}
-		if (config.context >= ContextLevel::NORMALIZED) {
+		if (schema_config.context >= ContextLevel::NORMALIZED) {
 			names.push_back("name");
 			names.push_back("qualified_name");
 		}
-		if (config.context >= ContextLevel::NATIVE) {
+		if (schema_config.context >= ContextLevel::NATIVE) {
 			names.push_back("signature_type");
 			names.push_back("parameters");
 			names.push_back("modifiers");
@@ -523,29 +525,29 @@ vector<string> UnifiedASTBackend::GetFlatDynamicTableColumnNames(const Extractio
 	}
 
 	// Conditionally include source fields
-	if (config.source != SourceLevel::NONE) {
+	if (schema_config.source != SourceLevel::NONE) {
 		names.push_back("file_path");
 		names.push_back("language");
 
-		if (config.source >= SourceLevel::LINES_ONLY) {
+		if (schema_config.source >= SourceLevel::LINES_ONLY) {
 			names.push_back("start_line");
 			names.push_back("end_line");
 		}
 
-		if (config.source >= SourceLevel::FULL) {
+		if (schema_config.source >= SourceLevel::FULL) {
 			names.push_back("start_column");
 			names.push_back("end_column");
 		}
 	}
 
 	// Conditionally include structure fields
-	if (config.structure != StructureLevel::NONE) {
-		if (config.structure >= StructureLevel::MINIMAL) {
+	if (schema_config.structure != StructureLevel::NONE) {
+		if (schema_config.structure >= StructureLevel::MINIMAL) {
 			names.push_back("parent_id");
 			names.push_back("depth");
 		}
 
-		if (config.structure >= StructureLevel::FULL) {
+		if (schema_config.structure >= StructureLevel::FULL) {
 			names.push_back("sibling_index");
 			names.push_back("children_count");
 			names.push_back("descendant_count");
@@ -553,7 +555,7 @@ vector<string> UnifiedASTBackend::GetFlatDynamicTableColumnNames(const Extractio
 	}
 
 	// Conditionally include peek
-	if (config.peek != PeekLevel::NONE) {
+	if (schema_config.peek != PeekLevel::NONE) {
 		names.push_back("peek");
 	}
 
@@ -743,6 +745,10 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 		return; // No columns to project
 	}
 
+	// schema_config determines which columns exist in the output (for +schema mode).
+	// The original config determines whether actual data was computed or NULLs should be written.
+	ExtractionConfig schema_config = config.GetSchemaConfig();
+
 	const idx_t chunk_size = STANDARD_VECTOR_SIZE;
 	// CRITICAL FIX: Start writing at output_index position, not 0!
 	// This prevents multi-file scenarios from overwriting previous files' data.
@@ -760,7 +766,7 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 	auto *node_id_vec = FlatVector::GetData<int64_t>(output.data[node_id_col]);
 	auto *type_vec = FlatVector::GetData<string_t>(output.data[type_col]);
 
-	// Context columns based on config.context (AGENT J FIX: Track indices)
+	// Context columns based on schema_config.context (AGENT J FIX: Track indices)
 	idx_t semantic_type_col = 0, flags_col = 0, name_col = 0;
 	uint8_t *semantic_type_vec = nullptr;
 	uint8_t *flags_vec = nullptr;
@@ -771,14 +777,14 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 	string_t *qualified_name_vec = nullptr;
 	ValidityMask *qualified_name_validity = nullptr;
 
-	if (config.context != ContextLevel::NONE) {
-		if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
+	if (schema_config.context != ContextLevel::NONE) {
+		if (schema_config.context >= ContextLevel::NODE_TYPES_ONLY) {
 			semantic_type_col = col_idx++;
 			flags_col = col_idx++;
 			semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[semantic_type_col]);
 			flags_vec = FlatVector::GetData<uint8_t>(output.data[flags_col]);
 		}
-		if (config.context >= ContextLevel::NORMALIZED) {
+		if (schema_config.context >= ContextLevel::NORMALIZED) {
 			name_col = col_idx++;
 			name_vec = FlatVector::GetData<string_t>(output.data[name_col]);
 			qualified_name_col = col_idx++;
@@ -787,14 +793,14 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 		}
 	}
 
-	// Native context columns based on config.context
+	// Native context columns based on schema_config.context
 	idx_t signature_type_col = 0, parameters_col = 0, modifiers_col = 0, annotations_col = 0;
 	string_t *signature_type_vec = nullptr;
 	string_t *annotations_vec = nullptr;
 	ValidityMask *signature_type_validity = nullptr;
 	ValidityMask *annotations_validity = nullptr;
 
-	if (config.context >= ContextLevel::NATIVE) {
+	if (schema_config.context >= ContextLevel::NATIVE) {
 		signature_type_col = col_idx++;
 		parameters_col = col_idx++;
 		modifiers_col = col_idx++;
@@ -806,7 +812,7 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 		// Note: parameters and modifiers columns are LIST types, handled separately
 	}
 
-	// Source columns based on config.source (AGENT J FIX: Track indices)
+	// Source columns based on schema_config.source (AGENT J FIX: Track indices)
 	idx_t file_path_col = 0, language_col = 0, start_line_col = 0, end_line_col = 0, start_column_col = 0,
 	      end_column_col = 0;
 	string_t *file_path_vec = nullptr;
@@ -816,20 +822,20 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 	uint32_t *start_column_vec = nullptr;
 	uint32_t *end_column_vec = nullptr;
 
-	if (config.source != SourceLevel::NONE) {
+	if (schema_config.source != SourceLevel::NONE) {
 		file_path_col = col_idx++;
 		language_col = col_idx++;
 		file_path_vec = FlatVector::GetData<string_t>(output.data[file_path_col]);
 		language_vec = FlatVector::GetData<string_t>(output.data[language_col]);
 
-		if (config.source >= SourceLevel::LINES_ONLY) {
+		if (schema_config.source >= SourceLevel::LINES_ONLY) {
 			start_line_col = col_idx++;
 			end_line_col = col_idx++;
 			start_line_vec = FlatVector::GetData<uint32_t>(output.data[start_line_col]);
 			end_line_vec = FlatVector::GetData<uint32_t>(output.data[end_line_col]);
 		}
 
-		if (config.source >= SourceLevel::FULL) {
+		if (schema_config.source >= SourceLevel::FULL) {
 			start_column_col = col_idx++;
 			end_column_col = col_idx++;
 			start_column_vec = FlatVector::GetData<uint32_t>(output.data[start_column_col]);
@@ -837,7 +843,7 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 		}
 	}
 
-	// Structure columns based on config.structure (AGENT J FIX: Track indices)
+	// Structure columns based on schema_config.structure (AGENT J FIX: Track indices)
 	idx_t parent_id_col = 0, depth_col = 0, sibling_index_col = 0, children_count_col = 0, descendant_count_col = 0;
 	int64_t *parent_id_vec = nullptr;
 	uint32_t *depth_vec = nullptr;
@@ -846,8 +852,8 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 	uint32_t *descendant_count_vec = nullptr;
 	ValidityMask *parent_validity = nullptr;
 
-	if (config.structure != StructureLevel::NONE) {
-		if (config.structure >= StructureLevel::MINIMAL) {
+	if (schema_config.structure != StructureLevel::NONE) {
+		if (schema_config.structure >= StructureLevel::MINIMAL) {
 			parent_id_col = col_idx++;
 			depth_col = col_idx++;
 			parent_id_vec = FlatVector::GetData<int64_t>(output.data[parent_id_col]);
@@ -855,7 +861,7 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 			depth_vec = FlatVector::GetData<uint32_t>(output.data[depth_col]);
 		}
 
-		if (config.structure >= StructureLevel::FULL) {
+		if (schema_config.structure >= StructureLevel::FULL) {
 			sibling_index_col = col_idx++;
 			children_count_col = col_idx++;
 			descendant_count_col = col_idx++;
@@ -865,12 +871,12 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 		}
 	}
 
-	// Peek column based on config.peek (AGENT J FIX: Track index)
+	// Peek column based on schema_config.peek (AGENT J FIX: Track index)
 	idx_t peek_col = 0;
 	string_t *peek_vec = nullptr;
 	ValidityMask *peek_validity = nullptr;
 
-	if (config.peek != PeekLevel::NONE) {
+	if (schema_config.peek != PeekLevel::NONE) {
 		peek_col = col_idx++;
 		peek_vec = FlatVector::GetData<string_t>(output.data[peek_col]);
 		peek_validity = &FlatVector::Validity(output.data[peek_col]);
@@ -887,79 +893,108 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 		node_id_vec[count] = node.node_id;
 		type_vec[count] = StringVector::AddString(output.data[type_col], node.type_raw);
 
-		// Context columns
-		if (config.context != ContextLevel::NONE) {
-			if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
-				semantic_type_vec[count] = node.semantic_type;
-				flags_vec[count] = node.universal_flags;
-			}
-			if (config.context >= ContextLevel::NORMALIZED) {
-				// AGENT J FIX: Ensure string is properly copied to avoid dangling pointers
-				string name_copy = string(node.name_raw.c_str());
-				name_vec[count] = StringVector::AddString(output.data[name_col], name_copy);
-				// Qualified name (top-level, not inside native)
-				if (!node.name_qualified.empty()) {
-					qualified_name_vec[count] =
-					    StringVector::AddString(output.data[qualified_name_col], node.name_qualified);
+		// Context columns — schema_config controls column presence, config controls data
+		if (schema_config.context != ContextLevel::NONE) {
+			if (schema_config.context >= ContextLevel::NODE_TYPES_ONLY) {
+				if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
+					semantic_type_vec[count] = node.semantic_type;
+					flags_vec[count] = node.universal_flags;
 				} else {
+					// +schema: column exists but data wasn't computed — NULL
+					FlatVector::SetNull(output.data[semantic_type_col], count, true);
+					FlatVector::SetNull(output.data[flags_col], count, true);
+				}
+			}
+			if (schema_config.context >= ContextLevel::NORMALIZED) {
+				if (config.context >= ContextLevel::NORMALIZED) {
+					// AGENT J FIX: Ensure string is properly copied to avoid dangling pointers
+					string name_copy = string(node.name_raw.c_str());
+					name_vec[count] = StringVector::AddString(output.data[name_col], name_copy);
+					// Qualified name (top-level, not inside native)
+					if (!node.name_qualified.empty()) {
+						qualified_name_vec[count] =
+						    StringVector::AddString(output.data[qualified_name_col], node.name_qualified);
+					} else {
+						qualified_name_validity->SetInvalid(count);
+					}
+				} else {
+					// +schema: column exists but data wasn't computed — NULL
+					FlatVector::SetNull(output.data[name_col], count, true);
 					qualified_name_validity->SetInvalid(count);
 				}
 			}
-			if (config.context >= ContextLevel::NATIVE) {
-				// Check if native extraction was attempted and has meaningful data
-				if (node.native_extraction_attempted) {
-					// signature_type: set NULL if empty, otherwise set value
-					if (!node.native.signature_type.empty()) {
-						signature_type_vec[count] =
-						    StringVector::AddString(output.data[signature_type_col], node.native.signature_type);
-					} else {
-						signature_type_validity->SetInvalid(count);
-					}
-
-					// Create LIST of STRUCT for parameters
-					// Each parameter is a STRUCT with {name, type} fields
-					vector<Value> param_structs;
-					for (const auto &param : node.native.parameters) {
-						child_list_t<Value> struct_values;
-						struct_values.emplace_back("name", Value(param.name));
-						struct_values.emplace_back("type", Value(param.type));
-						param_structs.push_back(Value::STRUCT(std::move(struct_values)));
-					}
-					output.SetValue(parameters_col, count,
-					                Value::LIST(LogicalType::STRUCT(
-					                                {{"name", LogicalType::VARCHAR}, {"type", LogicalType::VARCHAR}}),
-					                            std::move(param_structs)));
-
-					// Same for modifiers
-					auto modifiers_list_data = FlatVector::GetData<list_entry_t>(output.data[modifiers_col]);
-					auto &modifiers_child = ListVector::GetEntry(output.data[modifiers_col]);
-					auto modifiers_child_data = FlatVector::GetData<string_t>(modifiers_child);
-
-					modifiers_list_data[count].offset = ListVector::GetListSize(output.data[modifiers_col]);
-					modifiers_list_data[count].length = node.native.modifiers.size();
-
-					for (size_t i = 0; i < node.native.modifiers.size(); i++) {
-						idx_t child_idx = modifiers_list_data[count].offset + i;
-						if (child_idx >= ListVector::GetListCapacity(output.data[modifiers_col])) {
-							ListVector::Reserve(output.data[modifiers_col], (child_idx + 1) * 2);
-							modifiers_child_data =
-							    FlatVector::GetData<string_t>(ListVector::GetEntry(output.data[modifiers_col]));
+			if (schema_config.context >= ContextLevel::NATIVE) {
+				if (config.context >= ContextLevel::NATIVE) {
+					// Check if native extraction was attempted and has meaningful data
+					if (node.native_extraction_attempted) {
+						// signature_type: set NULL if empty, otherwise set value
+						if (!node.native.signature_type.empty()) {
+							signature_type_vec[count] =
+							    StringVector::AddString(output.data[signature_type_col], node.native.signature_type);
+						} else {
+							signature_type_validity->SetInvalid(count);
 						}
-						modifiers_child_data[child_idx] =
-						    StringVector::AddString(modifiers_child, node.native.modifiers[i]);
-					}
-					ListVector::SetListSize(output.data[modifiers_col],
-					                        modifiers_list_data[count].offset + modifiers_list_data[count].length);
 
-					// annotations: set NULL if empty, otherwise set value
-					if (!node.native.annotations.empty()) {
-						annotations_vec[count] =
-						    StringVector::AddString(output.data[annotations_col], node.native.annotations);
+						// Create LIST of STRUCT for parameters
+						// Each parameter is a STRUCT with {name, type} fields
+						vector<Value> param_structs;
+						for (const auto &param : node.native.parameters) {
+							child_list_t<Value> struct_values;
+							struct_values.emplace_back("name", Value(param.name));
+							struct_values.emplace_back("type", Value(param.type));
+							param_structs.push_back(Value::STRUCT(std::move(struct_values)));
+						}
+						output.SetValue(parameters_col, count,
+						                Value::LIST(LogicalType::STRUCT(
+						                                {{"name", LogicalType::VARCHAR}, {"type", LogicalType::VARCHAR}}),
+						                            std::move(param_structs)));
+
+						// Same for modifiers
+						auto modifiers_list_data = FlatVector::GetData<list_entry_t>(output.data[modifiers_col]);
+						auto &modifiers_child = ListVector::GetEntry(output.data[modifiers_col]);
+						auto modifiers_child_data = FlatVector::GetData<string_t>(modifiers_child);
+
+						modifiers_list_data[count].offset = ListVector::GetListSize(output.data[modifiers_col]);
+						modifiers_list_data[count].length = node.native.modifiers.size();
+
+						for (size_t i = 0; i < node.native.modifiers.size(); i++) {
+							idx_t child_idx = modifiers_list_data[count].offset + i;
+							if (child_idx >= ListVector::GetListCapacity(output.data[modifiers_col])) {
+								ListVector::Reserve(output.data[modifiers_col], (child_idx + 1) * 2);
+								modifiers_child_data =
+								    FlatVector::GetData<string_t>(ListVector::GetEntry(output.data[modifiers_col]));
+							}
+							modifiers_child_data[child_idx] =
+							    StringVector::AddString(modifiers_child, node.native.modifiers[i]);
+						}
+						ListVector::SetListSize(output.data[modifiers_col],
+						                        modifiers_list_data[count].offset + modifiers_list_data[count].length);
+
+						// annotations: set NULL if empty, otherwise set value
+						if (!node.native.annotations.empty()) {
+							annotations_vec[count] =
+							    StringVector::AddString(output.data[annotations_col], node.native.annotations);
+						} else {
+							annotations_validity->SetInvalid(count);
+						}
 					} else {
+						// No native extraction attempted - set all native fields to NULL
+						signature_type_validity->SetInvalid(count);
 						annotations_validity->SetInvalid(count);
+
+						// For LIST types, create empty lists with proper indexing
+						auto list_data = FlatVector::GetData<list_entry_t>(output.data[parameters_col]);
+						auto modifiers_list_data = FlatVector::GetData<list_entry_t>(output.data[modifiers_col]);
+
+						// Set empty list entries for both parameters and modifiers
+						list_data[count].offset = ListVector::GetListSize(output.data[parameters_col]);
+						list_data[count].length = 0; // Empty list
+
+						modifiers_list_data[count].offset = ListVector::GetListSize(output.data[modifiers_col]);
+						modifiers_list_data[count].length = 0; // Empty list
 					}
 				} else {
-					// No native extraction attempted - set all native fields to NULL
+					// +schema: native columns exist but data wasn't computed — NULL
 					signature_type_validity->SetInvalid(count);
 					annotations_validity->SetInvalid(count);
 
@@ -967,57 +1002,92 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 					auto list_data = FlatVector::GetData<list_entry_t>(output.data[parameters_col]);
 					auto modifiers_list_data = FlatVector::GetData<list_entry_t>(output.data[modifiers_col]);
 
-					// Set empty list entries for both parameters and modifiers
 					list_data[count].offset = ListVector::GetListSize(output.data[parameters_col]);
-					list_data[count].length = 0; // Empty list
+					list_data[count].length = 0;
 
 					modifiers_list_data[count].offset = ListVector::GetListSize(output.data[modifiers_col]);
-					modifiers_list_data[count].length = 0; // Empty list
+					modifiers_list_data[count].length = 0;
 				}
 			}
 		}
 
-		// Source columns - set per row including file_path and language
-		if (config.source != SourceLevel::NONE) {
-			// Set file_path and language per row (multi-file scenarios need different values per row)
-			file_path_vec[count] = StringVector::AddString(output.data[file_path_col], result.source.file_path);
-			language_vec[count] = StringVector::AddString(output.data[language_col], result.source.language);
-
-			if (config.source >= SourceLevel::LINES_ONLY) {
-				start_line_vec[count] = node.start_line;
-				end_line_vec[count] = node.end_line;
-			}
-
-			if (config.source >= SourceLevel::FULL) {
-				start_column_vec[count] = node.start_column;
-				end_column_vec[count] = node.end_column;
-			}
-		}
-
-		// Structure columns
-		if (config.structure != StructureLevel::NONE) {
-			if (config.structure >= StructureLevel::MINIMAL) {
-				if (node.parent_index < 0) {
-					parent_validity->SetInvalid(count);
-				} else {
-					parent_id_vec[count] = node.parent_index;
-				}
-				depth_vec[count] = node.node_depth;
-			}
-
-			if (config.structure >= StructureLevel::FULL) {
-				sibling_index_vec[count] = node.legacy_sibling_index;
-				children_count_vec[count] = node.legacy_children_count;
-				descendant_count_vec[count] = node.legacy_descendant_count;
-			}
-		}
-
-		// Peek column - USE TRACKED INDEX (AGENT J FIX)
-		if (config.peek != PeekLevel::NONE) {
-			if (node.peek.empty()) {
-				peek_validity->SetInvalid(count);
+		// Source columns — schema_config controls column presence, config controls data
+		if (schema_config.source != SourceLevel::NONE) {
+			if (config.source != SourceLevel::NONE) {
+				// Set file_path and language per row (multi-file scenarios need different values per row)
+				file_path_vec[count] = StringVector::AddString(output.data[file_path_col], result.source.file_path);
+				language_vec[count] = StringVector::AddString(output.data[language_col], result.source.language);
 			} else {
-				peek_vec[count] = StringVector::AddString(output.data[peek_col], node.peek);
+				// +schema: column exists but data wasn't computed — NULL
+				FlatVector::SetNull(output.data[file_path_col], count, true);
+				FlatVector::SetNull(output.data[language_col], count, true);
+			}
+
+			if (schema_config.source >= SourceLevel::LINES_ONLY) {
+				if (config.source >= SourceLevel::LINES_ONLY) {
+					start_line_vec[count] = node.start_line;
+					end_line_vec[count] = node.end_line;
+				} else {
+					// +schema: column exists but data wasn't computed — NULL
+					FlatVector::SetNull(output.data[start_line_col], count, true);
+					FlatVector::SetNull(output.data[end_line_col], count, true);
+				}
+			}
+
+			if (schema_config.source >= SourceLevel::FULL) {
+				if (config.source >= SourceLevel::FULL) {
+					start_column_vec[count] = node.start_column;
+					end_column_vec[count] = node.end_column;
+				} else {
+					// +schema: column exists but data wasn't computed — NULL
+					FlatVector::SetNull(output.data[start_column_col], count, true);
+					FlatVector::SetNull(output.data[end_column_col], count, true);
+				}
+			}
+		}
+
+		// Structure columns — schema_config controls column presence, config controls data
+		if (schema_config.structure != StructureLevel::NONE) {
+			if (schema_config.structure >= StructureLevel::MINIMAL) {
+				if (config.structure >= StructureLevel::MINIMAL) {
+					if (node.parent_index < 0) {
+						parent_validity->SetInvalid(count);
+					} else {
+						parent_id_vec[count] = node.parent_index;
+					}
+					depth_vec[count] = node.node_depth;
+				} else {
+					// +schema: column exists but data wasn't computed — NULL
+					FlatVector::SetNull(output.data[parent_id_col], count, true);
+					FlatVector::SetNull(output.data[depth_col], count, true);
+				}
+			}
+
+			if (schema_config.structure >= StructureLevel::FULL) {
+				if (config.structure >= StructureLevel::FULL) {
+					sibling_index_vec[count] = node.legacy_sibling_index;
+					children_count_vec[count] = node.legacy_children_count;
+					descendant_count_vec[count] = node.legacy_descendant_count;
+				} else {
+					// +schema: column exists but data wasn't computed — NULL
+					FlatVector::SetNull(output.data[sibling_index_col], count, true);
+					FlatVector::SetNull(output.data[children_count_col], count, true);
+					FlatVector::SetNull(output.data[descendant_count_col], count, true);
+				}
+			}
+		}
+
+		// Peek column — schema_config controls column presence, config controls data
+		if (schema_config.peek != PeekLevel::NONE) {
+			if (config.peek != PeekLevel::NONE) {
+				if (node.peek.empty()) {
+					peek_validity->SetInvalid(count);
+				} else {
+					peek_vec[count] = StringVector::AddString(output.data[peek_col], node.peek);
+				}
+			} else {
+				// +schema: column exists but data wasn't computed — NULL
+				peek_validity->SetInvalid(count);
 			}
 		}
 
