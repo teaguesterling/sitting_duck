@@ -3017,6 +3017,106 @@ CREATE OR REPLACE MACRO ast_resolve(
     SELECT * FROM resolved
     ORDER BY file_path, ref_line;
 
+
+-- =============================================================================
+-- ast_callees: What does each function call?
+-- =============================================================================
+--
+-- For each function definition, finds all call expressions within its scope.
+-- Returns (caller_name, caller_line, callee_name, callee_line) pairs.
+--
+-- Usage:
+--   SELECT * FROM ast_callees('src/**/*.py');
+--   SELECT caller, callee FROM ast_callees('src/*.py') WHERE caller = 'main';
+
+CREATE OR REPLACE MACRO ast_callees(
+    source,
+    language := NULL
+) AS TABLE
+    WITH ast AS (
+        SELECT * FROM read_ast(source, language)
+    ),
+    funcs AS (
+        SELECT node_id, name, descendant_count, file_path, start_line, qualified_name
+        FROM ast
+        WHERE is_name_definition(flags) AND is_scope(flags)
+          AND is_semantic_type(semantic_type, 'FUNCTION')
+          AND name IS NOT NULL AND name != ''
+    ),
+    calls AS (
+        SELECT f.name as caller,
+               f.qualified_name as caller_qualified,
+               f.start_line as caller_line,
+               f.file_path,
+               c.name as callee,
+               c.start_line as callee_line,
+               c.peek as call_peek
+        FROM funcs f
+        JOIN ast c ON c.node_id > f.node_id
+          AND c.node_id <= f.node_id + f.descendant_count
+          AND c.file_path = f.file_path
+          AND is_semantic_type(c.semantic_type, 'CALL')
+          AND c.name IS NOT NULL AND c.name != ''
+    )
+    SELECT * FROM calls
+    ORDER BY file_path, caller_line, callee_line;
+
+
+-- =============================================================================
+-- ast_callers: Who calls a given function?
+-- =============================================================================
+--
+-- Finds all call sites for each function, with the enclosing function as caller.
+-- Uses scope_id to efficiently look up the containing function.
+--
+-- Usage:
+--   SELECT * FROM ast_callers('src/**/*.py');
+--   SELECT caller, callee FROM ast_callers('src/*.py') WHERE callee = 'execute';
+
+CREATE OR REPLACE MACRO ast_callers(
+    source,
+    language := NULL
+) AS TABLE
+    WITH ast AS (
+        SELECT * FROM read_ast(source, language)
+    ),
+    -- All call sites
+    calls AS (
+        SELECT node_id, name as callee, start_line as call_line,
+               scope_id, file_path
+        FROM ast
+        WHERE is_semantic_type(semantic_type, 'CALL')
+          AND name IS NOT NULL AND name != ''
+    ),
+    -- Resolve each call's enclosing function
+    -- Simple approach: find the deepest function ancestor that contains this call
+    with_caller AS (
+        SELECT
+            c.callee,
+            c.call_line,
+            c.file_path,
+            COALESCE(f.name, '<module>') as caller,
+            COALESCE(f.start_line, 0) as caller_line
+        FROM calls c
+        -- Find nearest enclosing function via range check
+        JOIN ast f ON f.file_path = c.file_path
+          AND is_semantic_type(f.semantic_type, 'FUNCTION')
+          AND c.node_id > f.node_id
+          AND c.node_id <= f.node_id + f.descendant_count
+          -- Nearest = deepest
+          AND NOT EXISTS (
+              SELECT 1 FROM ast f2
+              WHERE f2.file_path = c.file_path
+                AND is_semantic_type(f2.semantic_type, 'FUNCTION')
+                AND c.node_id > f2.node_id
+                AND c.node_id <= f2.node_id + f2.descendant_count
+                AND f2.depth > f.depth
+          )
+    )
+    SELECT caller, caller_line, callee, call_line, file_path
+    FROM with_caller
+    ORDER BY file_path, call_line;
+
 )SQLMACRO"},
 };
 
