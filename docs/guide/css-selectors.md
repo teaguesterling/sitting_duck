@@ -177,9 +177,9 @@ SELECT name FROM ast_select('src/*.py', 'import_statement + expression_statement
 
 ## Pseudo-Classes
 
-### `:has()` — Contains Descendant
+### Containment
 
-Match nodes that contain a descendant matching the inner selector:
+#### `:has()` — Contains Descendant
 
 ```sql
 -- Functions containing a return statement
@@ -189,9 +189,7 @@ SELECT name FROM ast_select('src/*.py', '.func:has(return_statement)');
 SELECT name FROM ast_select('src/*.py', '.func:has(.call#execute)');
 ```
 
-### `:not(:has())` — Does Not Contain
-
-Match nodes that do NOT contain a descendant:
+#### `:not(:has())` — Does Not Contain
 
 ```sql
 -- Functions without a return statement
@@ -201,9 +199,137 @@ SELECT name FROM ast_select('src/*.py', '.func:not(:has(return_statement))');
 SELECT name FROM ast_select('src/*.py', '.func:not(:has(.call#execute))');
 ```
 
+### Positional (Standard CSS)
+
+#### `:first-child` / `:last-child`
+
+```sql
+-- First function definition among its siblings
+SELECT name FROM ast_select('src/*.py', 'function_definition:first-child');
+
+-- Last method in a class
+SELECT name FROM ast_select('src/*.js', 'method_definition:last-child');
+```
+
+#### `:nth-child(n)`
+
+1-based position among siblings:
+
+```sql
+-- Second function definition
+SELECT name FROM ast_select('src/*.py', 'function_definition:nth-child(2)');
+```
+
+#### `:empty`
+
+Nodes with no children (leaf nodes):
+
+```sql
+-- Empty blocks (pass-only functions, empty classes)
+SELECT name FROM ast_select('src/*.py', 'block:empty');
+```
+
+#### `:root`
+
+The top-level node (module/program):
+
+```sql
+-- The module node
+SELECT type FROM ast_select('src/*.py', ':root');
+```
+
+### Structural
+
+#### `:named`
+
+Nodes with a non-empty `name` field. Filters out the many anonymous structural nodes:
+
+```sql
+-- Only named function definitions (excludes unnamed wrappers)
+SELECT name, start_line FROM ast_select('src/*.py', '.func:named');
+```
+
+#### `:syntax`
+
+Syntax-only tokens (keywords, punctuation). Useful for distinguishing keywords from their parent constructs:
+
+```sql
+-- Just the `if` keyword tokens (not if_statement)
+SELECT * FROM ast_select('src/*.py', 'if:syntax');
+
+-- if_statement constructs (not keywords) — use :not(:syntax) or exact type
+SELECT * FROM ast_select('src/*.py', 'if:not(:syntax)');
+```
+
+#### `:definition` / `:reference` / `:declaration`
+
+Query by NAME_ROLE flag:
+
+```sql
+-- All name-binding sites (functions, classes, variables, parameters)
+SELECT name, type FROM ast_select('src/*.py', ':definition');
+
+-- All name references (identifiers that use a name)
+SELECT name, type FROM ast_select('src/*.py', 'identifier:reference');
+
+-- Forward declarations only (C++ prototypes, TS signatures)
+SELECT name FROM ast_select('src/*.cpp', ':declaration');
+```
+
+### Scope
+
+#### `:scope` (bare) — Is a Scope Boundary
+
+```sql
+-- All scope-creating nodes (functions, classes, loops, module)
+SELECT type, name FROM ast_select('src/*.py', ':scope');
+```
+
+#### `:scope(type)` — Within Nearest Ancestor Scope
+
+The most powerful pseudo-class. Matches nodes within the nearest ancestor of the given type, **excluding subtrees of nested ancestors of the same type**.
+
+This solves the nested function problem:
+
+```sql
+-- Return statements within their DIRECT enclosing function
+-- (not returns in nested inner functions)
+SELECT peek, start_line
+FROM ast_select('src/*.py', 'return_statement:scope(function)');
+
+-- Calls within the nearest class (not from nested classes)
+SELECT name FROM ast_select('src/*.py', '.call:scope(class)');
+```
+
+Without `:scope()`, `ast_has` reports `outer_function` as containing `execute()` even when the call is inside a nested `inner_function`. With `:scope(function)`, only the direct enclosing function matches.
+
+### Ordering
+
+#### `:precedes(type)` — Before a Sibling
+
+```sql
+-- Comments that appear before function definitions
+SELECT peek FROM ast_select('src/*.py', 'comment:precedes(function_definition)');
+
+-- Import statements before class definitions
+SELECT name FROM ast_select('src/*.py', 'import:precedes(class)');
+```
+
+#### `:follows(type)` — After a Sibling
+
+```sql
+-- Functions defined after the last class
+SELECT name FROM ast_select('src/*.py', 'function_definition:follows(class)');
+
+-- Statements after imports (module-level constants, etc.)
+SELECT peek FROM ast_select('src/*.py', 'expression_statement:follows(import)');
+```
+
+These provide the reverse direction that CSS combinators (`~`, `+`) can't express. `A ~ B` returns B; `:precedes(B)` returns the A nodes.
+
 ## Compound Selectors
 
-Combine type, name, semantic, and pseudo-classes:
+All pseudo-classes compose freely:
 
 ```sql
 -- Functions that call execute() but have no error handling
@@ -211,8 +337,16 @@ SELECT name, start_line
 FROM ast_select('src/*.py',
     '.func:has(.call#execute):not(:has(try_statement))');
 
--- Functions named "main" that contain a try statement
-SELECT name FROM ast_select('src/*.py', 'function_definition#main:has(try_statement)');
+-- Named definitions that are scope boundaries
+SELECT name, type FROM ast_select('src/*.py', ':named:definition:scope');
+
+-- First function in each scope that has a return
+SELECT name FROM ast_select('src/*.py',
+    'function_definition:first-child:has(return_statement)');
+
+-- Return statements in scope of functions that follow a class
+SELECT peek FROM ast_select('src/*.py',
+    'return_statement:scope(function_definition):follows(class_definition)');
 ```
 
 ---
@@ -345,6 +479,27 @@ ast_type_map(language := NULL)
 | `language` | VARCHAR | Optional: filter to one language |
 
 Returns: `language`, `node_type`, `semantic_type`, `kind`, `name_role`, `is_scope`, `is_syntax`, `name_strategy`, `flags`.
+
+### Pseudo-Class Quick Reference
+
+| Pseudo-class | Meaning |
+|---|---|
+| `:has(sel)` | Contains descendant matching sel |
+| `:not(:has(sel))` | Does NOT contain descendant |
+| `:first-child` | First among siblings |
+| `:last-child` | Last among siblings |
+| `:nth-child(n)` | Nth sibling (1-based) |
+| `:empty` | No children |
+| `:root` | Top-level node (depth 0) |
+| `:named` | Has a non-empty name |
+| `:syntax` | Syntax-only token (keyword, punctuation) |
+| `:definition` | Introduces a name with implementation |
+| `:reference` | Uses a name |
+| `:declaration` | Introduces a name without implementation |
+| `:scope` | Is a scope boundary |
+| `:scope(type)` | Within nearest ancestor of type (scope-aware) |
+| `:precedes(type)` | Before a sibling of type |
+| `:follows(type)` | After a sibling of type |
 
 ---
 
