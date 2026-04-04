@@ -2503,12 +2503,22 @@ CREATE OR REPLACE MACRO ast_select(
         pseudo_classes AS (
             SELECT cn.name as pseudo_name,
                    -- For pseudo-classes with arguments, extract the argument value
-                   (SELECT t.name FROM sel t
-                    JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
-                    WHERE (t.type = 'tag_name' OR t.type = 'integer_value')
-                      AND t.node_id > args.node_id
-                      AND t.node_id <= args.node_id + args.descendant_count
-                    LIMIT 1) as pseudo_arg
+                   -- Handles tag_name, integer_value, AND quoted strings (for :matches)
+                   COALESCE(
+                       (SELECT t.name FROM sel t
+                        JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
+                        WHERE (t.type = 'tag_name' OR t.type = 'integer_value')
+                          AND t.node_id > args.node_id
+                          AND t.node_id <= args.node_id + args.descendant_count
+                        LIMIT 1),
+                       -- Quoted string argument: strip surrounding quotes
+                       (SELECT trim(t.name, '"''') FROM sel t
+                        JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
+                        WHERE t.type = 'string_value'
+                          AND t.node_id > args.node_id
+                          AND t.node_id <= args.node_id + args.descendant_count
+                        LIMIT 1)
+                   ) as pseudo_arg
             FROM sel pcs
             JOIN sel cn ON cn.parent_id = pcs.node_id AND cn.type = 'class_name'
             WHERE pcs.type = 'pseudo_class_selector'
@@ -2524,6 +2534,15 @@ CREATE OR REPLACE MACRO ast_select(
               )
         ),
 
+        -- NOTE: :matches("code") requires parse_ast() with a dynamic argument,
+        -- which DuckDB table macros can't do (table function args can't be subqueries).
+
+)SQLMACRO"
+        R"SQLMACRO(
+        -- The structural substring matching algorithm is proven (see prototype in
+        -- workspace/design) but needs a C++ implementation to call parse_ast internally.
+        -- For now, use ast_match() for pattern-by-example code search.
+
         -- =====================================================================
         -- Apply selector: single scan with CASE dispatch (no UNION ALL)
         -- =====================================================================
@@ -2537,9 +2556,6 @@ CREATE OR REPLACE MACRO ast_select(
                 (SELECT name_filter FROM simple_id) as name_filter,
                 (SELECT class_filter FROM simple_class) as class_filter,
                 (SELECT left_type FROM combinator_parts) as left_type,
-
-)SQLMACRO"
-        R"SQLMACRO(
                 (SELECT left_type || '_%' FROM combinator_parts) as left_type_like,
                 (SELECT right_type FROM combinator_parts) as right_type,
                 (SELECT right_type || '_%' FROM combinator_parts) as right_type_like
@@ -2732,6 +2748,8 @@ CREATE OR REPLACE MACRO ast_select(
             WHEN 'typed' THEN a.signature_type IS NOT NULL AND a.signature_type != ''
             WHEN 'void' THEN a.signature_type IS NULL OR a.signature_type = '' OR a.signature_type = 'void' OR a.signature_type = 'None'
             WHEN 'variadic' THEN a.parameters::VARCHAR LIKE '%*%' OR a.parameters::VARCHAR LIKE '%...%'
+
+            -- :matches("code") — deferred to C++ (requires dynamic parse_ast call)
 
             -- :scope — either bare (is a scope node) or with arg (within scope of type)
             WHEN 'scope' THEN

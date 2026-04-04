@@ -103,3 +103,7 @@ SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py'
     'function_definition[params=1]:has(return_statement)');
 ----
 true
+
+# NOTE: :matches("code") deferred to C++ implementation (DuckDB table macros
+# can't use dynamic parse_ast arguments). The structural substring matching
+# algorithm works (proven in prototype) but needs C++ to call parse_ast internally.
