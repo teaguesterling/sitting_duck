@@ -19,7 +19,21 @@ struct ExtractionConfig {
 	SourceLevel source = SourceLevel::LINES;
 	StructureLevel structure = StructureLevel::FULL;
 	PeekLevel peek = PeekLevel::SMART;
-	int32_t peek_size = 120; // Used when peek == CUSTOM
+	int32_t peek_size = 120;          // Used when peek == CUSTOM
+	bool include_full_schema = false; // When true, schema includes all columns regardless of level settings
+
+	// Get a schema-level config: if include_full_schema, return max levels for schema generation
+	ExtractionConfig GetSchemaConfig() const {
+		if (!include_full_schema) {
+			return *this;
+		}
+		ExtractionConfig schema_config = *this;
+		schema_config.context = ContextLevel::NATIVE;
+		schema_config.source = SourceLevel::FULL;
+		schema_config.structure = StructureLevel::FULL;
+		schema_config.peek = PeekLevel::SMART; // Just needs to be non-NONE
+		return schema_config;
+	}
 
 	// Validation methods
 	bool is_valid() const {
