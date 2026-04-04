@@ -178,6 +178,11 @@ struct ASTNode {
 	uint32_t children_count = 0;   // Number of direct children
 	uint32_t descendant_count = 0; // Total descendants (DFS count)
 
+	// Scope tracking fields
+	int64_t scope_id = -1;                    // Nearest enclosing scope's node_id (-1 for root)
+	vector<int64_t> scope_stack_data;         // Full scope chain (only for scope nodes)
+	bool has_scope_stack = false;             // Whether scope_stack_data is populated
+
 	// Legacy tree fields (flat) - kept separate for future use
 	int64_t node_index = 0;           // Position in depth-first traversal
 	int64_t parent_index = -1;        // Parent's position (-1 for root)
