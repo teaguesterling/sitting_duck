@@ -226,12 +226,40 @@ CREATE OR REPLACE MACRO ast_select(
         ),
 
         -- =====================================================================
+        -- Additional pseudo-class extraction
+        -- =====================================================================
+
+        -- Extract all pseudo-class names for boolean/positional checks
+        -- (excludes :has, :not which are handled separately above)
+        pseudo_classes AS (
+            SELECT cn.name as pseudo_name,
+                   -- For pseudo-classes with arguments, extract the argument value
+                   (SELECT t.name FROM sel t
+                    JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
+                    WHERE (t.type = 'tag_name' OR t.type = 'integer_value')
+                      AND t.node_id > args.node_id
+                      AND t.node_id <= args.node_id + args.descendant_count
+                    LIMIT 1) as pseudo_arg
+            FROM sel pcs
+            JOIN sel cn ON cn.parent_id = pcs.node_id AND cn.type = 'class_name'
+            WHERE pcs.type = 'pseudo_class_selector'
+              -- Exclude :has, :not (handled by dedicated CTEs above)
+              AND cn.name NOT IN ('has', 'not')
+              -- Exclude .class selectors (class_name under class_selector, not pseudo_class_selector)
+              -- Only top-level pseudo-classes (not inside :has/:not arguments)
+              AND NOT EXISTS (
+                  SELECT 1 FROM sel args
+                  WHERE args.type = 'arguments'
+                    AND pcs.node_id > args.node_id
+                    AND pcs.node_id <= args.node_id + args.descendant_count
+              )
+        ),
+
+        -- =====================================================================
         -- Apply selector: single scan with CASE dispatch (no UNION ALL)
         -- =====================================================================
 
         -- Precompute selector properties as scalars
-        -- type_filter_like: precomputed LIKE pattern for bare type matching.
-        -- Bare `if` matches `if` (keyword) AND `if_statement`, `if_clause`, etc.
         sel_props AS (
             SELECT
                 (SELECT type FROM root_type) as sel_type,
@@ -350,6 +378,85 @@ CREATE OR REPLACE MACRO ast_select(
             WHEN ac.attr_name = 'language' THEN a.language = ac.attr_value
             WHEN ac.attr_name = 'semantic' THEN is_semantic_type(a.semantic_type, UPPER(ac.attr_value))
             ELSE false
+        END
+    )
+    -- Additional pseudo-class filters
+    -- Each pseudo-class in the selector must be satisfied
+    AND NOT EXISTS (
+        SELECT 1 FROM pseudo_classes pc
+        WHERE NOT CASE pc.pseudo_name
+
+            -- Standard CSS positional pseudo-classes
+            WHEN 'first-child' THEN a.sibling_index = 0
+            WHEN 'last-child' THEN NOT EXISTS (
+                SELECT 1 FROM ast sib
+                WHERE sib.parent_id = a.parent_id
+                  AND sib.file_path = a.file_path
+                  AND sib.sibling_index > a.sibling_index
+            )
+            WHEN 'nth-child' THEN a.sibling_index = CAST(pc.pseudo_arg AS INTEGER) - 1
+            WHEN 'empty' THEN a.children_count = 0
+            WHEN 'root' THEN a.depth = 0
+
+            -- :named — has a non-empty name
+            WHEN 'named' THEN a.name IS NOT NULL AND a.name != ''
+
+            -- :syntax — is a syntax-only token (keyword, punctuation)
+            WHEN 'syntax' THEN is_syntax_only(a.flags)
+
+            -- :definition / :reference / :declaration — NAME_ROLE flags
+            WHEN 'definition' THEN is_name_definition(a.flags)
+            WHEN 'reference' THEN is_name_reference(a.flags)
+            WHEN 'declaration' THEN is_name_declaration(a.flags)
+
+            -- :scope — either bare (is a scope node) or with arg (within scope of type)
+            WHEN 'scope' THEN
+                CASE WHEN pc.pseudo_arg IS NULL
+                    -- Bare :scope — node is a scope boundary
+                    THEN is_scope(a.flags)
+                    -- :scope(type) — node is within the nearest ancestor of that type,
+                    -- excluding subtrees of nested nodes of the same type
+                    ELSE EXISTS (
+                        SELECT 1 FROM ast scope_anc
+                        WHERE scope_anc.file_path = a.file_path
+                          AND a.node_id > scope_anc.node_id
+                          AND a.node_id <= scope_anc.node_id + scope_anc.descendant_count
+                          AND (scope_anc.type = pc.pseudo_arg
+                               OR scope_anc.type LIKE pc.pseudo_arg || '_%')
+                          -- Exclude if there's a CLOSER ancestor of the same type between us
+                          AND NOT EXISTS (
+                              SELECT 1 FROM ast nested
+                              WHERE nested.file_path = a.file_path
+                                AND nested.node_id > scope_anc.node_id
+                                AND nested.node_id < a.node_id
+                                AND a.node_id <= nested.node_id + nested.descendant_count
+                                AND (nested.type = pc.pseudo_arg
+                                     OR nested.type LIKE pc.pseudo_arg || '_%')
+                          )
+                    )
+                END
+
+            -- :precedes(type) — this node comes before a sibling of the given type
+            WHEN 'precedes' THEN EXISTS (
+                SELECT 1 FROM ast after_sib
+                WHERE after_sib.file_path = a.file_path
+                  AND after_sib.parent_id = a.parent_id
+                  AND after_sib.sibling_index > a.sibling_index
+                  AND (after_sib.type = pc.pseudo_arg
+                       OR after_sib.type LIKE pc.pseudo_arg || '_%')
+            )
+
+            -- :follows(type) — this node comes after a sibling of the given type
+            WHEN 'follows' THEN EXISTS (
+                SELECT 1 FROM ast before_sib
+                WHERE before_sib.file_path = a.file_path
+                  AND before_sib.parent_id = a.parent_id
+                  AND before_sib.sibling_index < a.sibling_index
+                  AND (before_sib.type = pc.pseudo_arg
+                       OR before_sib.type LIKE pc.pseudo_arg || '_%')
+            )
+
+            ELSE true  -- Unknown pseudo-classes are ignored (not errors)
         END
     )
     ORDER BY a.file_path, a.node_id;
