@@ -75,12 +75,24 @@ void UnifiedASTBackend::PopulateSemanticFields(ASTNode &node, const LanguageAdap
 // Extraction Configuration Parsing
 //==============================================================================
 
+// Strip the "+schema" suffix from a config parameter string, setting the flag if found.
+// Returns the lowercased base value (without the suffix).
+static string StripSchemaSuffix(const string &input, bool &has_schema_suffix) {
+	string lower = StringUtil::Lower(input);
+	if (StringUtil::EndsWith(lower, "+schema")) {
+		has_schema_suffix = true;
+		return lower.substr(0, lower.size() - 7);
+	}
+	return lower;
+}
+
 ExtractionConfig ParseExtractionConfig(const string &context_str, const string &source_str, const string &structure_str,
                                        const string &peek_str, int32_t peek_size) {
 	ExtractionConfig config;
+	bool has_schema_suffix = false;
 
 	// Parse context level
-	string context_lower = StringUtil::Lower(context_str);
+	string context_lower = StripSchemaSuffix(context_str, has_schema_suffix);
 	if (context_lower == "none") {
 		config.context = ContextLevel::NONE;
 	} else if (context_lower == "node_types_only") {
@@ -91,12 +103,13 @@ ExtractionConfig ParseExtractionConfig(const string &context_str, const string &
 		config.context = ContextLevel::NATIVE;
 	} else {
 		throw InvalidInputException(
-		    "Invalid context parameter '%s'. Valid values are: 'none', 'node_types_only', 'normalized', 'native'",
+		    "Invalid context parameter '%s'. Valid values are: 'none', 'node_types_only', 'normalized', 'native' "
+		    "(append '+schema' to any value to include full schema columns)",
 		    context_str);
 	}
 
 	// Parse source level
-	string source_lower = StringUtil::Lower(source_str);
+	string source_lower = StripSchemaSuffix(source_str, has_schema_suffix);
 	if (source_lower == "none") {
 		config.source = SourceLevel::NONE;
 	} else if (source_lower == "path") {
@@ -109,12 +122,13 @@ ExtractionConfig ParseExtractionConfig(const string &context_str, const string &
 		config.source = SourceLevel::FULL;
 	} else {
 		throw InvalidInputException(
-		    "Invalid source parameter '%s'. Valid values are: 'none', 'path', 'lines_only', 'lines', 'full'",
+		    "Invalid source parameter '%s'. Valid values are: 'none', 'path', 'lines_only', 'lines', 'full' "
+		    "(append '+schema' to any value to include full schema columns)",
 		    source_str);
 	}
 
 	// Parse structure level
-	string structure_lower = StringUtil::Lower(structure_str);
+	string structure_lower = StripSchemaSuffix(structure_str, has_schema_suffix);
 	if (structure_lower == "none") {
 		config.structure = StructureLevel::NONE;
 	} else if (structure_lower == "minimal") {
@@ -122,12 +136,14 @@ ExtractionConfig ParseExtractionConfig(const string &context_str, const string &
 	} else if (structure_lower == "full") {
 		config.structure = StructureLevel::FULL;
 	} else {
-		throw InvalidInputException("Invalid structure parameter '%s'. Valid values are: 'none', 'minimal', 'full'",
-		                            structure_str);
+		throw InvalidInputException(
+		    "Invalid structure parameter '%s'. Valid values are: 'none', 'minimal', 'full' "
+		    "(append '+schema' to any value to include full schema columns)",
+		    structure_str);
 	}
 
 	// Parse peek level
-	string peek_lower = StringUtil::Lower(peek_str);
+	string peek_lower = StripSchemaSuffix(peek_str, has_schema_suffix);
 	if (peek_lower == "none") {
 		config.peek = PeekLevel::NONE;
 	} else if (peek_lower == "smart") {
@@ -138,9 +154,9 @@ ExtractionConfig ParseExtractionConfig(const string &context_str, const string &
 		// Custom peek mode (size will be set by peek_size parameter)
 		config.peek = PeekLevel::CUSTOM;
 	} else {
-		// Try to parse as integer for custom size
+		// Try to parse as integer for custom size (use peek_lower, which has the +schema suffix stripped)
 		try {
-			int32_t size = std::stoi(peek_str);
+			int32_t size = std::stoi(peek_lower);
 			if (size >= 0) {
 				config.peek = PeekLevel::CUSTOM;
 				config.peek_size = size;
@@ -149,7 +165,9 @@ ExtractionConfig ParseExtractionConfig(const string &context_str, const string &
 			}
 		} catch (...) {
 			throw InvalidInputException(
-			    "Invalid peek parameter '%s'. Valid values are: 'none', 'smart', 'full', or a numeric size", peek_str);
+			    "Invalid peek parameter '%s'. Valid values are: 'none', 'smart', 'full', a numeric size, "
+			    "or any of these with '+schema' appended",
+			    peek_str);
 		}
 	}
 
@@ -158,6 +176,7 @@ ExtractionConfig ParseExtractionConfig(const string &context_str, const string &
 		config.peek_size = peek_size;
 	}
 
+	config.include_full_schema = has_schema_suffix;
 	return config;
 }
 
