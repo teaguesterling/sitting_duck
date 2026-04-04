@@ -30,14 +30,15 @@ CREATE OR REPLACE MACRO ast_select(
     language := NULL
 ) AS TABLE
     WITH
-        -- Parse the source files
-        ast AS (
-            SELECT * FROM read_ast(source, language)
-        ),
-
-        -- Parse the CSS selector using tree-sitter-css
+        -- Parse the CSS selector FIRST (before source, so DuckDB can evaluate it early)
         sel AS (
             SELECT * FROM parse_ast(selector, 'css')
+        ),
+
+        -- Parse source files
+        -- TODO: optimize with +schema modes to avoid computing peek/native when unused
+        ast AS (
+            SELECT * FROM read_ast(source, language)
         ),
 
         -- Find the top-level selector node (skip stylesheet and ERROR wrappers)
@@ -209,11 +210,22 @@ CREATE OR REPLACE MACRO ast_select(
             WHERE not_pcs.type = 'pseudo_class_selector'
         ),
 
-        -- [attr=value] conditions
+        -- [attr op value] conditions — supports =, *=, ^=, $= operators
+        -- Handles both plain_value and integer_value (for [params=0])
         attr_conditions AS (
             SELECT
                 (SELECT a.name FROM sel a WHERE a.parent_id = s.node_id AND a.type = 'attribute_name' LIMIT 1) as attr_name,
-                (SELECT a.name FROM sel a WHERE a.parent_id = s.node_id AND a.type = 'plain_value' LIMIT 1) as attr_value
+                COALESCE(
+                    (SELECT a.name FROM sel a WHERE a.parent_id = s.node_id AND a.type = 'plain_value' LIMIT 1),
+                    (SELECT a.name FROM sel a WHERE a.parent_id = s.node_id AND a.type = 'integer_value' LIMIT 1)
+                ) as attr_value,
+                -- Detect operator: =, *=, ^=, $=
+                CASE
+                    WHEN EXISTS (SELECT 1 FROM sel a WHERE a.parent_id = s.node_id AND a.type = '*=') THEN '*='
+                    WHEN EXISTS (SELECT 1 FROM sel a WHERE a.parent_id = s.node_id AND a.type = '^=') THEN '^='
+                    WHEN EXISTS (SELECT 1 FROM sel a WHERE a.parent_id = s.node_id AND a.type = '$=') THEN '$='
+                    ELSE '='
+                END as attr_op
             FROM sel s
             WHERE s.type = 'attribute_selector'
               -- Only top-level attributes (not inside :has() arguments)
@@ -369,14 +381,53 @@ CREATE OR REPLACE MACRO ast_select(
               AND (nh.not_has_name IS NULL OR d.name = nh.not_has_name)
         )
     )
-    -- [attr=value] filters
+    -- [attr op value] filters — supports native extraction columns and CSS operators
     AND NOT EXISTS (
         SELECT 1 FROM attr_conditions ac
         WHERE NOT CASE
-            WHEN ac.attr_name = 'name' THEN a.name = ac.attr_value
+            -- Core columns
+            WHEN ac.attr_name = 'name' THEN
+                CASE ac.attr_op WHEN '*=' THEN a.name LIKE '%' || ac.attr_value || '%'
+                                WHEN '^=' THEN a.name LIKE ac.attr_value || '%'
+                                WHEN '$=' THEN a.name LIKE '%' || ac.attr_value
+                                ELSE a.name = ac.attr_value END
             WHEN ac.attr_name = 'type' THEN a.type = ac.attr_value
             WHEN ac.attr_name = 'language' THEN a.language = ac.attr_value
             WHEN ac.attr_name = 'semantic' THEN is_semantic_type(a.semantic_type, UPPER(ac.attr_value))
+
+            -- Native extraction: modifiers array
+            WHEN ac.attr_name = 'modifier' THEN
+                CASE ac.attr_op WHEN '*=' THEN list_contains(a.modifiers, ac.attr_value)
+                                ELSE list_contains(a.modifiers, ac.attr_value) END
+
+            -- Native extraction: annotations string
+            WHEN ac.attr_name = 'annotation' THEN
+                CASE ac.attr_op WHEN '*=' THEN a.annotations LIKE '%' || ac.attr_value || '%'
+                                WHEN '^=' THEN a.annotations LIKE ac.attr_value || '%'
+                                WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value
+                                ELSE a.annotations = ac.attr_value END
+
+            -- Native extraction: qualified_name
+            WHEN ac.attr_name = 'qualified' THEN
+                CASE ac.attr_op WHEN '*=' THEN a.qualified_name LIKE '%' || ac.attr_value || '%'
+                                WHEN '^=' THEN a.qualified_name LIKE ac.attr_value || '%'
+                                WHEN '$=' THEN a.qualified_name LIKE '%' || ac.attr_value
+                                ELSE a.qualified_name = ac.attr_value END
+
+            -- Native extraction: signature_type
+            WHEN ac.attr_name = 'signature' THEN
+                CASE ac.attr_op WHEN '*=' THEN a.signature_type LIKE '%' || ac.attr_value || '%'
+                                ELSE a.signature_type = ac.attr_value END
+
+            -- Native extraction: parameter count
+            WHEN ac.attr_name = 'params' THEN
+                len(a.parameters) = CAST(ac.attr_value AS INTEGER)
+
+            -- Peek (source text) content search
+            WHEN ac.attr_name = 'peek' THEN
+                CASE ac.attr_op WHEN '*=' THEN a.peek LIKE '%' || ac.attr_value || '%'
+                                ELSE a.peek = ac.attr_value END
+
             ELSE false
         END
     )
@@ -408,6 +459,19 @@ CREATE OR REPLACE MACRO ast_select(
             WHEN 'definition' THEN is_name_definition(a.flags)
             WHEN 'reference' THEN is_name_reference(a.flags)
             WHEN 'declaration' THEN is_name_declaration(a.flags)
+
+            -- Native extraction pseudo-classes (from modifiers/annotations)
+            WHEN 'async' THEN list_contains(a.modifiers, 'async')
+            WHEN 'static' THEN list_contains(a.modifiers, 'static')
+            WHEN 'abstract' THEN list_contains(a.modifiers, 'abstract')
+            WHEN 'const' THEN list_contains(a.modifiers, 'const') OR list_contains(a.modifiers, 'final')
+            WHEN 'public' THEN list_contains(a.modifiers, 'public')
+            WHEN 'private' THEN list_contains(a.modifiers, 'private')
+            WHEN 'protected' THEN list_contains(a.modifiers, 'protected')
+            WHEN 'decorated' THEN a.annotations IS NOT NULL AND a.annotations != ''
+            WHEN 'typed' THEN a.signature_type IS NOT NULL AND a.signature_type != ''
+            WHEN 'void' THEN a.signature_type IS NULL OR a.signature_type = '' OR a.signature_type = 'void' OR a.signature_type = 'None'
+            WHEN 'variadic' THEN a.parameters::VARCHAR LIKE '%*%' OR a.parameters::VARCHAR LIKE '%...%'
 
             -- :scope — either bare (is a scope node) or with arg (within scope of type)
             WHEN 'scope' THEN

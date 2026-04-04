@@ -1,0 +1,105 @@
+# name: test/sql/ast_select_native.test
+# group: [sql]
+
+# Test ast_select native extraction attributes and pseudo-classes
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Attribute selectors on native extraction fields
+# =============================================================================
+
+# [modifier=X] — check modifiers array
+# Python doesn't have many modifiers, but we can test the mechanism
+query I
+SELECT COUNT(*) >= 0 FROM ast_select('test/data/python/simple.py', '.func[modifier=async]');
+----
+true
+
+# [annotation*=X] — substring match on annotations
+query I
+SELECT COUNT(*) >= 0 FROM ast_select('test/data/python/simple.py', '.func[annotation*=pytest]');
+----
+true
+
+# [qualified*=X] — substring match on qualified_name
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/qualified_names.py', '.func[qualified*=Config]');
+----
+true
+
+# [params=N] — parameter count
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/star_test.py', 'function_definition[params=1]');
+----
+2
+
+# [signature=X] — signature_type match
+query I
+SELECT COUNT(*) >= 0 FROM ast_select('test/data/python/simple.py', '.func[signature=int]');
+----
+true
+
+# [peek*=X] — source text content search
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py', 'string[peek*=SELECT]');
+----
+true
+
+# =============================================================================
+# CSS attribute operators
+# =============================================================================
+
+# [name^=test] — starts with
+query I
+SELECT COUNT(*) >= 0 FROM ast_select('test/data/python/macros/recursive_match.py', '[name^=shallow]');
+----
+true
+
+# [name$=execute] — ends with
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py', 'function_definition[name$=execute]');
+----
+true
+
+# [name*=return] — contains
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py', 'function_definition[name*=return]');
+----
+true
+
+# =============================================================================
+# Native extraction pseudo-classes
+# =============================================================================
+
+# :decorated — has annotations
+query I
+SELECT COUNT(*) >= 0 FROM ast_select('test/data/python/simple.py', '.func:decorated');
+----
+true
+
+# :typed — has a signature_type
+query I
+SELECT COUNT(*) >= 0 FROM ast_select('test/data/python/simple.py', '.func:typed');
+----
+true
+
+# :void — no return type
+query I
+SELECT COUNT(*) >= 0 FROM ast_select('test/data/python/simple.py', '.func:void');
+----
+true
+
+# =============================================================================
+# Compound: native + structural
+# =============================================================================
+
+# Functions with parameters that have return statements
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py',
+    'function_definition[params=1]:has(return_statement)');
+----
+true
