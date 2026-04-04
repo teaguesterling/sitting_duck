@@ -1,0 +1,48 @@
+# name: test/sql/ast_select_optimized.test
+# description: Test ast_select with +schema optimization and parse_ast_list integration
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: Basic ast_select still works (regression check)
+query II
+SELECT type, name
+FROM ast_select('test/data/python/simple.py', 'function_definition')
+LIMIT 1;
+----
+function_definition	hello
+
+# Test 2: ast_select with :has still works
+query I
+SELECT name
+FROM ast_select('test/data/python/simple.py', '.function:has(call)')
+LIMIT 1;
+----
+hello
+
+# Test 3: ast_select with :matches still works
+query I
+SELECT name
+FROM ast_select('test/data/python/simple.py', '.function:matches("print")')
+LIMIT 1;
+----
+hello
+
+# Test 4: Combinators still work
+query I
+SELECT type
+FROM ast_select('test/data/python/simple.py', 'function_definition > identifier')
+LIMIT 1;
+----
+identifier
+
+# Test 5: Pseudo-classes referencing native fields work (via +schema NULLs)
+query I
+SELECT COUNT(*)
+FROM ast_select('test/data/python/simple.py', ':definition')
+WHERE name IS NOT NULL AND name != '';
+----
+5

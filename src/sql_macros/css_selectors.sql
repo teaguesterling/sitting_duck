@@ -35,10 +35,12 @@ CREATE OR REPLACE MACRO ast_select(
             SELECT * FROM parse_ast(selector, 'css')
         ),
 
-        -- Parse source files
-        -- TODO: optimize with +schema modes to avoid computing peek/native when unused
+        -- Parse source files with +schema: compute only normalized context and lines,
+        -- but keep all columns in schema so attribute/pseudo-class checks compile
         ast AS (
-            SELECT * FROM read_ast(source, language)
+            SELECT * FROM read_ast(source, language,
+                context := 'normalized+schema',
+                peek := 'none+schema')
         ),
 
         -- Find the top-level selector node (skip stylesheet and ERROR wrappers)
@@ -284,13 +286,16 @@ CREATE OR REPLACE MACRO ast_select(
         -- Use ___ (triple underscore) as wildcard for any name.
         matches_pattern AS (
             SELECT
-                row_number() OVER (ORDER BY node_id) - 1 as idx,
-                type as pat_type,
-                name as pat_name
-            FROM parse_ast(
-                regexp_extract(selector, ':matches\("([^"]+)"\)', 1),
-                COALESCE(language, 'python'))
-            WHERE type NOT IN ('module', 'expression_statement', 'program', 'source_file')
+                row_number() OVER (ORDER BY node.node_id) - 1 as idx,
+                node.type as pat_type,
+                node.name as pat_name
+            FROM (
+                SELECT unnest(parse_ast_list(
+                    regexp_extract(selector, ':matches\("([^"]+)"\)', 1),
+                    COALESCE(language, 'python')
+                )) as node
+            )
+            WHERE node.type NOT IN ('module', 'expression_statement', 'program', 'source_file')
         ),
         matches_len AS (
             SELECT COUNT(*) as len FROM matches_pattern
