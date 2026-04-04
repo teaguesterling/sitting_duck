@@ -327,6 +327,100 @@ SELECT peek FROM ast_select('src/*.py', 'expression_statement:follows(import)');
 
 These provide the reverse direction that CSS combinators (`~`, `+`) can't express. `A ~ B` returns B; `:precedes(B)` returns the A nodes.
 
+### Native Extraction
+
+These pseudo-classes and attribute selectors query the rich metadata that Sitting Duck extracts from each node — modifiers, annotations, parameters, signature types, and qualified names.
+
+#### Modifier Pseudo-Classes
+
+```sql
+-- Async functions
+SELECT name FROM ast_select('src/*.py', '.func:async');
+
+-- Static methods
+SELECT name FROM ast_select('src/*.java', '.func:static');
+
+-- Abstract classes
+SELECT name FROM ast_select('src/*.java', '.class:abstract');
+
+-- Const/final variables
+SELECT name FROM ast_select('src/*.js', '.var:const');
+
+-- Access modifiers
+SELECT name FROM ast_select('src/*.java', '.func:public');
+SELECT name FROM ast_select('src/*.java', '.func:private');
+```
+
+#### Annotation Pseudo-Classes
+
+```sql
+-- Decorated functions (have any annotation/decorator)
+SELECT name FROM ast_select('src/*.py', '.func:decorated');
+
+-- Functions with type annotations
+SELECT name FROM ast_select('src/*.py', '.func:typed');
+
+-- Functions without a return type (void/None)
+SELECT name FROM ast_select('src/*.py', '.func:void');
+
+-- Functions with variadic parameters (*args, **kwargs, ...rest)
+SELECT name FROM ast_select('src/*.py', '.func:variadic');
+```
+
+#### Attribute Selectors on Native Fields
+
+Use `[attr=value]` with CSS operators (`=`, `*=`, `^=`, `$=`) to query native extraction columns:
+
+```sql
+-- Functions with a specific modifier
+SELECT name FROM ast_select('src/*.js', '.func[modifier=async]');
+
+-- Decorated with a specific decorator
+SELECT name FROM ast_select('src/*.py', '.func[annotation*=pytest]');
+
+-- Functions in a specific namespace
+SELECT name FROM ast_select('src/*.py', '.func[qualified*=auth.]');
+
+-- Functions with exactly 2 parameters
+SELECT name FROM ast_select('src/*.py', '.func[params=2]');
+
+-- Functions returning a specific type
+SELECT name FROM ast_select('src/*.ts', '.func[signature=Promise]');
+
+-- Source text content search
+SELECT name, peek FROM ast_select('src/*.py', 'string[peek*=SELECT]');
+
+-- Name patterns with starts-with and ends-with
+SELECT name FROM ast_select('src/*.py', 'function_definition[name^=test_]');
+SELECT name FROM ast_select('src/*.py', 'function_definition[name$=_handler]');
+```
+
+### Pattern Matching
+
+#### `:matches("code")` — Structural Substring Match
+
+The most expressive pseudo-class. Parses the argument as real code and checks if that structure appears as a contiguous subtree within the matched node.
+
+```sql
+-- Functions containing a db.execute() call (structural, not text search)
+SELECT name FROM ast_select('src/*.py', '.func:matches("db.execute()")');
+
+-- Functions containing a specific return pattern
+SELECT name FROM ast_select('src/*.py', '.func:matches("return None")');
+
+-- Classes containing self.db assignment
+SELECT name FROM ast_select('src/*.py', '.class:matches("self.db = ___")');
+```
+
+`:matches()` uses DFS pre-order contiguity — a subtree is a contiguous slice of the node array, so structural matching becomes array substring matching. No tree traversal needed.
+
+Use `___` (triple underscore) as a wildcard for "any name":
+
+```sql
+-- Match any assignment to self.anything
+SELECT name FROM ast_select('src/*.py', '.func:matches("self.___ = ___")');
+```
+
 ## Compound Selectors
 
 All pseudo-classes compose freely:
@@ -484,22 +578,56 @@ Returns: `language`, `node_type`, `semantic_type`, `kind`, `name_role`, `is_scop
 
 | Pseudo-class | Meaning |
 |---|---|
+| **Containment** | |
 | `:has(sel)` | Contains descendant matching sel |
 | `:not(:has(sel))` | Does NOT contain descendant |
+| `:matches("code")` | Contains structural code pattern (substring match) |
+| **Positional** | |
 | `:first-child` | First among siblings |
 | `:last-child` | Last among siblings |
 | `:nth-child(n)` | Nth sibling (1-based) |
 | `:empty` | No children |
 | `:root` | Top-level node (depth 0) |
+| **Structural** | |
 | `:named` | Has a non-empty name |
 | `:syntax` | Syntax-only token (keyword, punctuation) |
 | `:definition` | Introduces a name with implementation |
 | `:reference` | Uses a name |
 | `:declaration` | Introduces a name without implementation |
+| **Scope** | |
 | `:scope` | Is a scope boundary |
 | `:scope(type)` | Within nearest ancestor of type (scope-aware) |
+| **Ordering** | |
 | `:precedes(type)` | Before a sibling of type |
 | `:follows(type)` | After a sibling of type |
+| **Modifiers** | |
+| `:async` | Has async modifier |
+| `:static` | Has static modifier |
+| `:abstract` | Has abstract modifier |
+| `:const` | Has const/final modifier |
+| `:public` / `:private` / `:protected` | Access modifiers |
+| **Annotations** | |
+| `:decorated` | Has decorators/annotations |
+| `:typed` | Has type annotation/signature |
+| `:void` | No return type |
+| `:variadic` | Has variadic parameters (*args, ...rest) |
+
+### Attribute Selector Quick Reference
+
+| Attribute | Meaning | Example |
+|---|---|---|
+| `[name=x]` | Exact name | `function_definition[name=main]` |
+| `[name^=test_]` | Name starts with | `[name^=test_]` |
+| `[name$=_handler]` | Name ends with | `[name$=_handler]` |
+| `[name*=auth]` | Name contains | `[name*=auth]` |
+| `[modifier=x]` | Has modifier | `[modifier=async]` |
+| `[annotation*=x]` | Annotation contains | `[annotation*=pytest]` |
+| `[qualified*=x]` | Qualified name contains | `[qualified*=auth.]` |
+| `[signature=x]` | Signature/return type | `[signature=int]` |
+| `[params=n]` | Parameter count | `[params=0]` |
+| `[peek*=x]` | Source text contains | `[peek*=SELECT]` |
+| `[language=x]` | Language filter | `[language=python]` |
+| `[semantic=x]` | Semantic type | `[semantic=FUNCTION]` |
 
 ---
 
