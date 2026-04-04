@@ -104,6 +104,27 @@ SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py'
 ----
 true
 
-# NOTE: :matches("code") deferred to C++ implementation (DuckDB table macros
-# can't use dynamic parse_ast arguments). The structural substring matching
-# algorithm works (proven in prototype) but needs C++ to call parse_ast internally.
+# =============================================================================
+# :matches("code") — structural substring matching
+# =============================================================================
+
+# Match attribute access pattern: db.execute (no parens = just the attribute)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py',
+    '.func:matches("db.execute")');
+----
+6
+
+# Exact match: return x
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py',
+    '.func:matches("return x")');
+----
+true
+
+# db.execute() with empty args should NOT match db.execute("SELECT 1")
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py',
+    '.func:matches("db.execute()")');
+----
+0

@@ -277,11 +277,24 @@ CREATE OR REPLACE MACRO ast_select(
               )
         ),
 
-        -- NOTE: :matches("code") requires parse_ast() with a dynamic argument,
-        -- which DuckDB table macros can't do (table function args can't be subqueries).
-        -- The structural substring matching algorithm is proven (see prototype in
-        -- workspace/design) but needs a C++ implementation to call parse_ast internally.
-        -- For now, use ast_match() for pattern-by-example code search.
+        -- :matches("code") — structural substring matching via DFS contiguity
+        -- Parse the pattern by extracting the quoted argument from the selector string.
+        -- Exact structural match: db.execute() matches only zero-arg calls,
+        -- db.execute("SELECT 1") matches only that exact call.
+        -- Use ___ (triple underscore) as wildcard for any name.
+        matches_pattern AS (
+            SELECT
+                row_number() OVER (ORDER BY node_id) - 1 as idx,
+                type as pat_type,
+                name as pat_name
+            FROM parse_ast(
+                regexp_extract(selector, ':matches\("([^"]+)"\)', 1),
+                COALESCE(language, 'python'))
+            WHERE type NOT IN ('module', 'expression_statement', 'program', 'source_file')
+        ),
+        matches_len AS (
+            SELECT COUNT(*) as len FROM matches_pattern
+        ),
 
         -- =====================================================================
         -- Apply selector: single scan with CASE dispatch (no UNION ALL)
@@ -489,7 +502,30 @@ CREATE OR REPLACE MACRO ast_select(
             WHEN 'void' THEN a.signature_type IS NULL OR a.signature_type = '' OR a.signature_type = 'void' OR a.signature_type = 'None'
             WHEN 'variadic' THEN a.parameters::VARCHAR LIKE '%*%' OR a.parameters::VARCHAR LIKE '%...%'
 
-            -- :matches("code") — deferred to C++ (requires dynamic parse_ast call)
+            -- :matches("code") — exact structural substring match
+            -- The parsed pattern must appear as a contiguous node slice in the
+            -- target's subtree. db.execute() matches zero-arg calls only.
+            -- Use ___ (triple underscore) as wildcard for any name.
+            WHEN 'matches' THEN (SELECT len FROM matches_len) > 0 AND EXISTS (
+                SELECT 1 FROM ast t
+                WHERE t.file_path = a.file_path
+                  AND t.node_id >= a.node_id
+                  AND t.node_id <= a.node_id + a.descendant_count
+                  -- Root type matches
+                  AND t.type = (SELECT pat_type FROM matches_pattern WHERE idx = 0)
+                  -- All pattern nodes match contiguously
+                  AND NOT EXISTS (
+                      SELECT 1 FROM matches_pattern mp
+                      JOIN ast t2 ON t2.node_id = t.node_id + mp.idx
+                                 AND t2.file_path = a.file_path
+                      WHERE t2.type != mp.pat_type
+                         OR (mp.pat_name IS NOT NULL AND mp.pat_name != ''
+                             AND mp.pat_name != '___' AND t2.name != mp.pat_name)
+                  )
+                  -- Verify we have enough nodes
+                  AND t.node_id + (SELECT len FROM matches_len) - 1
+                      <= a.node_id + a.descendant_count
+            )
 
             -- :scope — either bare (is a scope node) or with arg (within scope of type)
             WHEN 'scope' THEN
