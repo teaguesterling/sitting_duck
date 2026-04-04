@@ -240,16 +240,48 @@ SELECT name, type FROM ast_select('src/**/*.py', ':exported');
 SELECT name FROM ast_select('src/**/*.py', ':exported:not(:is-referenced)');
 ```
 
-### Future: Pseudo-Elements (Navigation)
+### Pseudo-Elements (`::` — Navigation)
 
-Pseudo-elements (`::`) will return *different* nodes rather than filtering:
-- `.func::callers` — the functions that call this one
-- `.func::callees` — the functions this one calls
-- `.def::references` — the nodes that reference this definition
-- `.node::parent` — the parent node
-- `.node::scope` — the enclosing scope node
+Pseudo-elements return *different* nodes rather than filtering. They navigate FROM matched nodes to related nodes.
 
-These require a post-match JOIN and are planned for a future release.
+#### Tree Navigation
+
+```sql
+-- Parent node
+SELECT * FROM ast_select('src/*.py', 'return_statement::parent');
+
+-- Enclosing scope
+SELECT * FROM ast_select('src/*.py', '.func#inner::scope');
+
+-- Nearest enclosing definition (function, class, variable)
+SELECT * FROM ast_select('src/*.py', 'return_statement::parent-definition');
+
+-- Adjacent siblings
+SELECT * FROM ast_select('src/*.py', '.func#validate::next-sibling');
+SELECT * FROM ast_select('src/*.py', '.func#validate::prev-sibling');
+```
+
+#### Call Graph Navigation
+
+```sql
+-- Functions that call this function
+SELECT name FROM ast_select('src/*.py', '.func#get_user::callers');
+
+-- What this function calls
+SELECT name FROM ast_select('src/*.py', '.func#main::callees');
+```
+
+### Pseudo-Element Quick Reference
+
+| Pseudo-element | Returns | Cardinality |
+|---|---|---|
+| `::parent` | Parent node | 1 |
+| `::scope` | Enclosing scope node | 1 |
+| `::parent-definition` | Nearest enclosing definition | 1 |
+| `::next-sibling` | Next sibling | 1 |
+| `::prev-sibling` | Previous sibling | 1 |
+| `::callers` | Functions that call this | N |
+| `::callees` | Functions this calls | N |
 
 ## Ordering
 

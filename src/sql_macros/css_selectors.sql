@@ -62,12 +62,19 @@ CREATE OR REPLACE MACRO ast_select(
                    s.descendant_count
             FROM sel s, sel_root_raw raw
             WHERE s.node_id = CASE
-                -- If root is pseudo_element_selector, unwrap to first meaningful child
+                -- If root is pseudo_element_selector, unwrap to inner selector
                 WHEN raw.type = 'pseudo_element_selector' THEN
-                    (SELECT c.node_id FROM sel c
-                     WHERE c.parent_id = raw.node_id
-                       AND c.type NOT IN ('::', 'tag_name', 'pseudo_element_selector')
-                     ORDER BY c.sibling_index LIMIT 1)
+                    COALESCE(
+                        -- First: look for a non-tag, non-syntax child (id_selector, class_selector, etc.)
+                        (SELECT c.node_id FROM sel c
+                         WHERE c.parent_id = raw.node_id
+                           AND c.type NOT IN ('::', 'tag_name', 'pseudo_element_selector')
+                         ORDER BY c.sibling_index LIMIT 1),
+                        -- Fallback: first tag_name child (bare type like return_statement)
+                        (SELECT c.node_id FROM sel c
+                         WHERE c.parent_id = raw.node_id AND c.type = 'tag_name'
+                         ORDER BY c.sibling_index LIMIT 1)
+                    )
                 ELSE raw.node_id
             END
             LIMIT 1
@@ -299,6 +306,7 @@ CREATE OR REPLACE MACRO ast_select(
                       AND EXISTS (SELECT 1 FROM sel pe
                                   WHERE pe.type = 'pseudo_element_selector'
                                     AND t.parent_id = pe.node_id)
+                    ORDER BY t.sibling_index DESC
                     LIMIT 1) as element_name
         ),
 
@@ -723,6 +731,25 @@ CREATE OR REPLACE MACRO ast_select(
           AND callee.node_id <= m.node_id + m.descendant_count
           AND is_semantic_type(callee.semantic_type, 'CALL')
           AND callee.name IS NOT NULL AND callee.name != ''
+    ),
+    -- ::parent-definition — nearest ancestor that is a named definition
+    pe_parent_def AS (
+        SELECT DISTINCT def.* FROM matched m
+        JOIN ast def ON def.file_path = m.file_path
+          AND m.node_id > def.node_id
+          AND m.node_id <= def.node_id + def.descendant_count
+          AND is_name_definition(def.flags)
+          AND def.name IS NOT NULL AND def.name != ''
+          -- Nearest = deepest
+          AND NOT EXISTS (
+              SELECT 1 FROM ast closer
+              WHERE closer.file_path = m.file_path
+                AND m.node_id > closer.node_id
+                AND m.node_id <= closer.node_id + closer.descendant_count
+                AND is_name_definition(closer.flags)
+                AND closer.name IS NOT NULL AND closer.name != ''
+                AND closer.depth > def.depth
+          )
     )
 
     -- Route to correct output based on pseudo-element (or return matched as-is)
@@ -731,6 +758,9 @@ CREATE OR REPLACE MACRO ast_select(
     UNION ALL
     SELECT * FROM pe_parent
     WHERE (SELECT element_name FROM pseudo_element) = 'parent'
+    UNION ALL
+    SELECT * FROM pe_parent_def
+    WHERE (SELECT element_name FROM pseudo_element) = 'parent-definition'
     UNION ALL
     SELECT * FROM pe_scope
     WHERE (SELECT element_name FROM pseudo_element) = 'scope'

@@ -1,0 +1,92 @@
+# name: test/sql/ast_select_pseudo_elements.test
+# group: [sql]
+
+# Test ast_select pseudo-elements (:: navigation)
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# ::parent — navigate to parent node
+# =============================================================================
+
+# Parent of a function definition should be a block or module
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py',
+    'function_definition#shallow_return::parent');
+----
+true
+
+# =============================================================================
+# ::scope — navigate to enclosing scope
+# =============================================================================
+
+# Scope of a nested inner function should be the outer function
+query II
+SELECT name, type FROM ast_select('test/data/python/macros/recursive_match.py',
+    'function_definition#inner::scope')
+WHERE type = 'function_definition'
+LIMIT 1;
+----
+outer_with_execute	function_definition
+
+# =============================================================================
+# ::next-sibling / ::prev-sibling
+# =============================================================================
+
+# Function after shallow_return (at module level)
+query II
+SELECT name, type FROM ast_select('test/data/python/macros/recursive_match.py',
+    'function_definition#shallow_return::next-sibling')
+WHERE type = 'function_definition';
+----
+return_in_if	function_definition
+
+# =============================================================================
+# ::callers — functions that call this function
+# =============================================================================
+
+# Who calls get_user in sample_app?
+query II
+SELECT name, type FROM ast_select('workspace/tutorial/sample_app.py',
+    '.func#get_user::callers')
+WHERE type = 'function_definition'
+ORDER BY start_line;
+----
+create_user	function_definition
+delete_user	function_definition
+
+# =============================================================================
+# ::callees — what does a function call
+# =============================================================================
+
+# What does get_user call?
+query I
+SELECT name FROM ast_select('workspace/tutorial/sample_app.py',
+    '.func#get_user:definition::callees')
+ORDER BY start_line;
+----
+fetch_all
+
+# =============================================================================
+# ::parent-definition — nearest enclosing definition
+# =============================================================================
+
+# What definition contains a return statement?
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py',
+    'return_statement::parent-definition');
+----
+true
+
+# Parent definition of return x in shallow_return should be shallow_return
+query II
+SELECT name, type FROM ast_select('test/data/python/scope_resolution/level2_parameter.py',
+    'return_statement::parent-definition')
+WHERE type = 'function_definition'
+ORDER BY start_line
+LIMIT 1;
+----
+greet	function_definition
