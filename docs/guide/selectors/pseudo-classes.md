@@ -128,6 +128,56 @@ SELECT name FROM ast_select('src/*.py', '.call:scope(class)');
 
 Without `:scope()`, `ast_has` reports `outer_function` as containing `execute()` even when the call is inside a nested `inner_function`. With `:scope(function)`, only the direct enclosing function matches.
 
+### Scope Columns
+
+Every node in `read_ast` output includes scope information:
+
+- **`scope_id`** (INT64): the `node_id` of the nearest enclosing scope boundary. `-1`/NULL for the root module.
+- **`scope_stack`** (LIST(INT64)): on scope-creating nodes only, the full chain of enclosing scopes from outermost to this node. NULL on non-scope nodes.
+
+```sql
+-- Scope chain for a class method:
+SELECT name, type, scope_id, scope_stack
+FROM read_ast('src/*.py')
+WHERE type IN ('module', 'class_definition', 'function_definition')
+ORDER BY node_id LIMIT 5;
+-- module:     scope_id=NULL, scope_stack=[0]
+-- Config:     scope_id=0,    scope_stack=[0, 32]
+-- __init__:   scope_id=32,   scope_stack=[0, 32, 42]
+```
+
+To get any node's full scope chain: look up its `scope_id` → read that node's `scope_stack`.
+
+### Scope Resolution Macros
+
+Three macros build on `scope_id` and `scope_stack` for name resolution:
+
+**`ast_exports(source)`** — module-level public definitions:
+```sql
+SELECT name, type FROM ast_exports('src/**/*.py');
+```
+
+**`ast_imports(source)`** — imported names with source module hints:
+```sql
+SELECT source_module, imported_name FROM ast_imports('src/*.py');
+```
+
+**`ast_resolve(source)`** — reference → definition binding via scope chain walk:
+```sql
+-- For each reference, find which definition it binds to
+SELECT ref_name, ref_line, def_line, def_type, scope_hops
+FROM ast_resolve('src/main.py');
+```
+
+Cross-file resolution: JOIN `ast_imports` with `ast_exports` to resolve imports:
+```sql
+SELECT im.imported_name, ex.file_path as resolved_file, ex.type
+FROM ast_imports('src/app.py') im
+JOIN ast_exports('src/**/*.py') ex
+  ON ex.name = im.imported_name
+  AND ex.file_path LIKE '%' || im.source_module || '%';
+```
+
 ## Ordering
 
 ### `:precedes(type)` — Before a Sibling

@@ -175,6 +175,32 @@ ast_type_map(language := NULL)
 
 Returns: `language`, `node_type`, `semantic_type`, `kind`, `name_role`, `is_scope`, `is_syntax`, `name_strategy`, `flags`.
 
+### Scope Resolution Macros
+
+```sql
+ast_exports(source, language := NULL)    -- Module-level public definitions
+ast_imports(source, language := NULL)    -- Imported names with source module
+ast_resolve(source, language := NULL)    -- Reference → definition binding
+```
+
+`ast_resolve` walks the scope chain (`scope_id` → `scope_stack`) to find which definition each reference binds to:
+
+```sql
+SELECT ref_name, ref_line, def_line, def_type
+FROM ast_resolve('src/main.py')
+WHERE ref_name = 'config';
+```
+
+Cross-file resolution via import/export JOIN:
+
+```sql
+SELECT im.imported_name, ex.file_path, ex.type
+FROM ast_imports('src/app.py') im
+JOIN ast_exports('src/**/*.py') ex
+  ON ex.name = im.imported_name
+  AND ex.file_path LIKE '%' || im.source_module || '%';
+```
+
 ---
 
 ## See Also
