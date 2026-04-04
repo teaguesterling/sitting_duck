@@ -41,20 +41,35 @@ CREATE OR REPLACE MACRO ast_select(
             SELECT * FROM read_ast(source, language)
         ),
 
-        -- Find the top-level selector node (skip stylesheet and ERROR wrappers)
+        -- Find the top-level selector node (skip stylesheet, ERROR, and pseudo_element wrappers)
         -- Note: bare words like "function_definition" parse as 'identifier' in CSS,
         -- not 'tag_name'. We treat 'identifier' at the root as equivalent to 'tag_name'.
-        sel_root AS (
-            SELECT node_id,
-                   CASE WHEN type = 'identifier' THEN 'tag_name' ELSE type END as type,
-                   name,
-                   descendant_count
+        -- pseudo_element_selector wraps the real selector — unwrap to its first child.
+        sel_root_raw AS (
+            SELECT node_id, type, name, descendant_count
             FROM sel
             WHERE type NOT IN ('stylesheet', 'ERROR')
               AND depth = (
                   SELECT MIN(depth) FROM sel
                   WHERE type NOT IN ('stylesheet', 'ERROR')
               )
+            LIMIT 1
+        ),
+        sel_root AS (
+            SELECT s.node_id,
+                   CASE WHEN s.type = 'identifier' THEN 'tag_name' ELSE s.type END as type,
+                   s.name,
+                   s.descendant_count
+            FROM sel s, sel_root_raw raw
+            WHERE s.node_id = CASE
+                -- If root is pseudo_element_selector, unwrap to first meaningful child
+                WHEN raw.type = 'pseudo_element_selector' THEN
+                    (SELECT c.node_id FROM sel c
+                     WHERE c.parent_id = raw.node_id
+                       AND c.type NOT IN ('::', 'tag_name', 'pseudo_element_selector')
+                     ORDER BY c.sibling_index LIMIT 1)
+                ELSE raw.node_id
+            END
             LIMIT 1
         ),
 
@@ -277,6 +292,16 @@ CREATE OR REPLACE MACRO ast_select(
               )
         ),
 
+        -- Detect pseudo-element (::callers, ::callees, etc.)
+        pseudo_element AS (
+            SELECT (SELECT t.name FROM sel t
+                    WHERE t.type = 'tag_name'
+                      AND EXISTS (SELECT 1 FROM sel pe
+                                  WHERE pe.type = 'pseudo_element_selector'
+                                    AND t.parent_id = pe.node_id)
+                    LIMIT 1) as element_name
+        ),
+
         -- :matches("code") — structural substring matching via DFS contiguity
         -- Parse the pattern by extracting the quoted argument from the selector string.
         -- Exact structural match: db.execute() matches only zero-arg calls,
@@ -312,9 +337,10 @@ CREATE OR REPLACE MACRO ast_select(
                 (SELECT left_type || '_%' FROM combinator_parts) as left_type_like,
                 (SELECT right_type FROM combinator_parts) as right_type,
                 (SELECT right_type || '_%' FROM combinator_parts) as right_type_like
-        )
+        ),
 
     -- Single scan of ast with CASE-based dispatch
+    matched_raw AS (
     SELECT a.*
     FROM ast a, sel_props sp
     WHERE CASE sp.sel_type
@@ -502,6 +528,64 @@ CREATE OR REPLACE MACRO ast_select(
             WHEN 'void' THEN a.signature_type IS NULL OR a.signature_type = '' OR a.signature_type = 'void' OR a.signature_type = 'None'
             WHEN 'variadic' THEN a.parameters::VARCHAR LIKE '%*%' OR a.parameters::VARCHAR LIKE '%...%'
 
+            -- :calls(name) — this node's scope contains a call to name
+            WHEN 'calls' THEN EXISTS (
+                SELECT 1 FROM ast callee
+                WHERE callee.file_path = a.file_path
+                  AND callee.node_id > a.node_id
+                  AND callee.node_id <= a.node_id + a.descendant_count
+                  AND is_semantic_type(callee.semantic_type, 'CALL')
+                  AND (pc.pseudo_arg IS NULL OR callee.name = pc.pseudo_arg)
+            )
+
+            -- :called-by(name) — this call site is inside a function named name
+            WHEN 'called-by' THEN EXISTS (
+                SELECT 1 FROM ast caller_fn
+                WHERE caller_fn.file_path = a.file_path
+                  AND a.node_id > caller_fn.node_id
+                  AND a.node_id <= caller_fn.node_id + caller_fn.descendant_count
+                  AND is_semantic_type(caller_fn.semantic_type, 'FUNCTION')
+                  AND (pc.pseudo_arg IS NULL OR caller_fn.name = pc.pseudo_arg)
+                  -- Nearest function (deepest)
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ast closer
+                      WHERE closer.file_path = a.file_path
+                        AND a.node_id > closer.node_id
+                        AND a.node_id <= closer.node_id + closer.descendant_count
+                        AND is_semantic_type(closer.semantic_type, 'FUNCTION')
+                        AND closer.depth > caller_fn.depth
+                  )
+            )
+
+            -- :is-called — this function definition is called somewhere in the file
+            WHEN 'is-called' THEN
+                is_name_definition(a.flags) AND a.name IS NOT NULL AND a.name != ''
+                AND EXISTS (
+                    SELECT 1 FROM ast ref
+                    WHERE ref.file_path = a.file_path
+                      AND is_semantic_type(ref.semantic_type, 'CALL')
+                      AND ref.name = a.name
+                      AND ref.node_id != a.node_id
+                )
+
+            -- :is-referenced — this definition is referenced somewhere
+            WHEN 'is-referenced' THEN
+                is_name_definition(a.flags) AND a.name IS NOT NULL AND a.name != ''
+                AND EXISTS (
+                    SELECT 1 FROM ast ref
+                    WHERE ref.file_path = a.file_path
+                      AND is_name_reference(ref.flags)
+                      AND ref.name = a.name
+                      AND ref.node_id != a.node_id
+                )
+
+            -- :exported — module-level public definition
+            WHEN 'exported' THEN
+                is_name_definition(a.flags)
+                AND (a.scope_id IS NULL OR a.scope_id <= 0)
+                AND a.name IS NOT NULL AND a.name != ''
+                AND a.name NOT LIKE '\_%'
+
             -- :matches("code") — exact structural substring match
             -- The parsed pattern must appear as a contiguous node slice in the
             -- target's subtree. db.execute() matches zero-arg calls only.
@@ -576,5 +660,90 @@ CREATE OR REPLACE MACRO ast_select(
 
             ELSE true  -- Unknown pseudo-classes are ignored (not errors)
         END
+    )),
+
+    -- =====================================================================
+    -- Pseudo-element dispatch: navigate FROM matched nodes to related nodes
+    -- =====================================================================
+
+    -- The matched nodes (before pseudo-element transformation)
+    matched AS (
+        SELECT * FROM matched_raw
+    ),
+
+    -- ::parent — the parent node
+    pe_parent AS (
+        SELECT p.* FROM matched m JOIN ast p
+          ON p.node_id = m.parent_id AND p.file_path = m.file_path
+    ),
+    -- ::scope — the enclosing scope node
+    pe_scope AS (
+        SELECT s.* FROM matched m JOIN ast s
+          ON s.node_id = m.scope_id AND s.file_path = m.file_path
+    ),
+    -- ::next-sibling — the next sibling
+    pe_next AS (
+        SELECT n.* FROM matched m JOIN ast n
+          ON n.parent_id = m.parent_id AND n.file_path = m.file_path
+          AND n.sibling_index = m.sibling_index + 1
+    ),
+    -- ::prev-sibling — the previous sibling
+    pe_prev AS (
+        SELECT p.* FROM matched m JOIN ast p
+          ON p.parent_id = m.parent_id AND p.file_path = m.file_path
+          AND p.sibling_index = m.sibling_index - 1
+    ),
+    -- ::callers — functions that call this function
+    pe_callers AS (
+        SELECT DISTINCT caller_fn.* FROM matched m
+        -- Find call nodes with the same name as this function
+        JOIN ast call_node ON call_node.file_path = m.file_path
+          AND is_semantic_type(call_node.semantic_type, 'CALL')
+          AND call_node.name = m.name
+          AND call_node.node_id != m.node_id
+        -- Find the enclosing function of each call
+        JOIN ast caller_fn ON caller_fn.file_path = call_node.file_path
+          AND is_semantic_type(caller_fn.semantic_type, 'FUNCTION')
+          AND call_node.node_id > caller_fn.node_id
+          AND call_node.node_id <= caller_fn.node_id + caller_fn.descendant_count
+          AND NOT EXISTS (
+              SELECT 1 FROM ast closer
+              WHERE closer.file_path = call_node.file_path
+                AND is_semantic_type(closer.semantic_type, 'FUNCTION')
+                AND call_node.node_id > closer.node_id
+                AND call_node.node_id <= closer.node_id + closer.descendant_count
+                AND closer.depth > caller_fn.depth
+          )
+    ),
+    -- ::callees — functions this function calls (call nodes within subtree)
+    pe_callees AS (
+        SELECT DISTINCT callee.* FROM matched m
+        JOIN ast callee ON callee.file_path = m.file_path
+          AND callee.node_id > m.node_id
+          AND callee.node_id <= m.node_id + m.descendant_count
+          AND is_semantic_type(callee.semantic_type, 'CALL')
+          AND callee.name IS NOT NULL AND callee.name != ''
     )
-    ORDER BY a.file_path, a.node_id;
+
+    -- Route to correct output based on pseudo-element (or return matched as-is)
+    SELECT * FROM matched
+    WHERE (SELECT element_name FROM pseudo_element) IS NULL
+    UNION ALL
+    SELECT * FROM pe_parent
+    WHERE (SELECT element_name FROM pseudo_element) = 'parent'
+    UNION ALL
+    SELECT * FROM pe_scope
+    WHERE (SELECT element_name FROM pseudo_element) = 'scope'
+    UNION ALL
+    SELECT * FROM pe_next
+    WHERE (SELECT element_name FROM pseudo_element) = 'next-sibling'
+    UNION ALL
+    SELECT * FROM pe_prev
+    WHERE (SELECT element_name FROM pseudo_element) IN ('prev-sibling', 'previous-sibling')
+    UNION ALL
+    SELECT * FROM pe_callers
+    WHERE (SELECT element_name FROM pseudo_element) = 'callers'
+    UNION ALL
+    SELECT * FROM pe_callees
+    WHERE (SELECT element_name FROM pseudo_element) = 'callees'
+    ORDER BY file_path, node_id;

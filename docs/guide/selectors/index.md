@@ -201,6 +201,35 @@ JOIN ast_exports('src/**/*.py') ex
   AND ex.file_path LIKE '%' || im.source_module || '%';
 ```
 
+### Call Graph Macros
+
+```sql
+ast_callees(source, language := NULL)   -- For each function, all calls within its scope
+ast_callers(source, language := NULL)   -- For each call, the enclosing function
+```
+
+`ast_callees` returns one row per (function, call) pair. `ast_callers` returns one row per (call, enclosing function) pair. Both use scope resolution to handle nested functions correctly.
+
+```sql
+-- Full call graph
+SELECT caller, callee, COUNT(*) as n
+FROM ast_callees('src/**/*.py')
+GROUP BY caller, callee ORDER BY n DESC;
+
+-- Who calls validate?
+SELECT caller, file_path FROM ast_callers('src/**/*.py') WHERE callee = 'validate';
+```
+
+Cross-file call graph with import resolution:
+
+```sql
+-- Combine call graph with imports to trace cross-module calls
+SELECT c.caller, c.callee, c.file_path as caller_file, ex.file_path as callee_file
+FROM ast_callees('src/**/*.py') c
+JOIN ast_exports('src/**/*.py') ex ON ex.name = c.callee
+WHERE c.file_path != ex.file_path;
+```
+
 ---
 
 ## See Also

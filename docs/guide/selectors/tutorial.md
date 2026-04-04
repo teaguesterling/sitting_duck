@@ -174,6 +174,46 @@ This single selector uses:
 - `:not(:has(.try))` — without error handling
 - `:has(.str[peek*=SELECT])` — containing SQL SELECT strings
 
+## Step 8: Call Graph Queries
+
+The call graph pseudo-classes bring everything together by answering questions about how functions relate to each other.
+
+Find functions that call `execute` using scope-aware resolution:
+
+```sql
+SELECT name
+FROM ast_select('workspace/tutorial/sample_app.py', '.func:calls(execute)');
+```
+
+Unlike `:has(.call#execute)`, `:calls()` uses scope resolution -- if `execute` is called inside a nested helper, it only attributes the call to the inner function, not the outer one.
+
+Find which functions are actually used:
+
+```sql
+-- Popular functions (called 2+ times)
+SELECT name
+FROM ast_select('workspace/tutorial/sample_app.py', '.func:callers(2)');
+
+-- Dead code: functions nobody calls
+SELECT name
+FROM ast_select('workspace/tutorial/sample_app.py', '.func:unreferenced');
+```
+
+Build a call graph for the whole file:
+
+```sql
+SELECT caller, callee
+FROM ast_callees('workspace/tutorial/sample_app.py');
+```
+
+Combine call graph with earlier selectors for precise questions: "Which functions call `execute` without error handling, and are themselves called by `main`?"
+
+```sql
+SELECT name
+FROM ast_select('workspace/tutorial/sample_app.py',
+    '.func:calls(execute):not(:has(.try)):called-by(main)');
+```
+
 ---
 
 ## See Also

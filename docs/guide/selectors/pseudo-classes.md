@@ -178,6 +178,79 @@ JOIN ast_exports('src/**/*.py') ex
   AND ex.file_path LIKE '%' || im.source_module || '%';
 ```
 
+## Call Graph
+
+### `:calls(name)` — Scope Contains a Call
+
+Matches nodes whose scope contains a call to `name`. Unlike `:has(.call#name)`, this uses scope resolution to avoid matching calls in nested functions.
+
+```sql
+-- Functions that call execute (direct scope only)
+SELECT name FROM ast_select('src/**/*.py', '.func:calls(execute)');
+
+-- Classes that call validate
+SELECT name FROM ast_select('src/**/*.py', '.class:calls(validate)');
+```
+
+### `:called-by(name)` — Call Inside Function
+
+Matches call nodes that are inside the function `name`:
+
+```sql
+-- All calls made by main()
+SELECT name, start_line FROM ast_select('src/**/*.py', '.call:called-by(main)');
+
+-- Database calls inside process_request
+SELECT name FROM ast_select('src/**/*.py', '.call:called-by(process_request)');
+```
+
+### `:is-called` — Function Is Called
+
+Matches function definitions that are called somewhere in the file:
+
+```sql
+-- Functions that are actually called
+SELECT name FROM ast_select('src/**/*.py', '.func:is-called');
+
+-- Unused functions (defined but never called)
+SELECT name FROM ast_select('src/**/*.py', '.func:not(:is-called)');
+```
+
+### `:is-referenced` — Definition Is Referenced
+
+Matches definitions that are referenced somewhere:
+
+```sql
+-- Variables that are actually used
+SELECT name FROM ast_select('src/**/*.py', '.var:is-referenced');
+
+-- Dead code: defined but never referenced
+SELECT name FROM ast_select('src/**/*.py', '.func:not(:is-referenced)');
+```
+
+### `:exported` — Module-Level Public Definition
+
+Matches definitions at module scope that are part of the public API:
+
+```sql
+-- Public API surface
+SELECT name, type FROM ast_select('src/**/*.py', ':exported');
+
+-- Exported but never referenced internally
+SELECT name FROM ast_select('src/**/*.py', ':exported:not(:is-referenced)');
+```
+
+### Future: Pseudo-Elements (Navigation)
+
+Pseudo-elements (`::`) will return *different* nodes rather than filtering:
+- `.func::callers` — the functions that call this one
+- `.func::callees` — the functions this one calls
+- `.def::references` — the nodes that reference this definition
+- `.node::parent` — the parent node
+- `.node::scope` — the enclosing scope node
+
+These require a post-match JOIN and are planned for a future release.
+
 ## Ordering
 
 ### `:precedes(type)` — Before a Sibling
@@ -288,6 +361,12 @@ SELECT name FROM ast_select('src/*.py', '.func:matches("self.___ = ___")');
 | **Scope** | |
 | `:scope` | Is a scope boundary |
 | `:scope(type)` | Within nearest ancestor of type (scope-aware) |
+| **Call Graph** | |
+| `:calls(name)` | Scope contains a call to name |
+| `:called-by(name)` | This call is inside function name |
+| `:is-called` | Function is called somewhere |
+| `:is-referenced` | Definition is referenced somewhere |
+| `:exported` | Module-level public definition |
 | **Ordering** | |
 | `:precedes(type)` | Before a sibling of type |
 | `:follows(type)` | After a sibling of type |
