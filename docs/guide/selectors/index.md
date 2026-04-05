@@ -93,6 +93,15 @@ SELECT name FROM ast_select('src/*.py',
 -- Return statements in scope of functions that follow a class
 SELECT peek FROM ast_select('src/*.py',
     'return_statement:scope(function_definition):follows(class_definition)');
+
+-- Dead code: exported but never referenced
+SELECT name FROM ast_select('src/*.py', ':exported:not(:is-referenced)');
+
+-- Navigate: who calls this function?
+SELECT name FROM ast_select('src/*.py', '.func#validate::callers');
+
+-- Navigate: what class contains this method?
+SELECT name FROM ast_select('src/*.py', '.func#validate::parent-definition');
 ```
 
 ## Comparison with Other Tools
