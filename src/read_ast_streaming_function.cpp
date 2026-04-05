@@ -76,6 +76,7 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
 	}
 
 	// Parse unified peek parameter (can be INTEGER or VARCHAR)
+	// Validation is deferred to ParseExtractionConfig which handles +schema suffix
 	int32_t peek_size = 120;
 	string peek_mode = "smart";
 	if (seen_parameters.find("peek") != seen_parameters.end()) {
@@ -85,15 +86,8 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
 			peek_size = peek_value.GetValue<int32_t>();
 			peek_mode = "custom";
 		} else {
-			// VARCHAR: named mode
-			string peek_str = peek_value.GetValue<string>();
-			string peek_lower = StringUtil::Lower(peek_str);
-			if (peek_lower == "none" || peek_lower == "smart" || peek_lower == "full") {
-				peek_mode = peek_lower;
-			} else {
-				throw BinderException("Invalid peek parameter: " + peek_str +
-				                      ". Must be integer or one of: none, smart, full");
-			}
+			// VARCHAR: pass through to ParseExtractionConfig for validation (supports +schema suffix)
+			peek_mode = peek_value.GetValue<string>();
 		}
 	}
 
@@ -186,6 +180,7 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
 	}
 
 	// Parse unified peek parameter (can be INTEGER or VARCHAR)
+	// Validation is deferred to ParseExtractionConfig which handles +schema suffix
 	int32_t peek_size = 120;
 	string peek_mode = "smart";
 	if (seen_parameters.find("peek") != seen_parameters.end()) {
@@ -195,15 +190,8 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
 			peek_size = peek_value.GetValue<int32_t>();
 			peek_mode = "custom";
 		} else {
-			// VARCHAR: named mode
-			string peek_str = peek_value.GetValue<string>();
-			string peek_lower = StringUtil::Lower(peek_str);
-			if (peek_lower == "none" || peek_lower == "smart" || peek_lower == "full") {
-				peek_mode = peek_lower;
-			} else {
-				throw BinderException("Invalid peek parameter: " + peek_str +
-				                      ". Must be integer or one of: none, smart, full");
-			}
+			// VARCHAR: pass through to ParseExtractionConfig for validation (supports +schema suffix)
+			peek_mode = peek_value.GetValue<string>();
 		}
 	}
 
@@ -739,6 +727,7 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientCon
 	}
 
 	// Parse unified peek parameter (can be INTEGER or VARCHAR)
+	// Validation is deferred to ParseExtractionConfig which handles +schema suffix
 	int32_t peek_size = 120;
 	string peek_mode = "smart";
 	if (seen_parameters.find("peek") != seen_parameters.end()) {
@@ -748,15 +737,8 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientCon
 			peek_size = peek_value.GetValue<int32_t>();
 			peek_mode = "custom";
 		} else {
-			// VARCHAR: named mode
-			string peek_str = peek_value.GetValue<string>();
-			string peek_lower = StringUtil::Lower(peek_str);
-			if (peek_lower == "none" || peek_lower == "smart" || peek_lower == "full") {
-				peek_mode = peek_lower;
-			} else {
-				throw BinderException("Invalid peek parameter: " + peek_str +
-				                      ". Must be integer or one of: none, smart, full");
-			}
+			// VARCHAR: pass through to ParseExtractionConfig for validation (supports +schema suffix)
+			peek_mode = peek_value.GetValue<string>();
 		}
 	}
 
@@ -850,6 +832,7 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientCon
 	}
 
 	// Parse unified peek parameter (can be INTEGER or VARCHAR)
+	// Validation is deferred to ParseExtractionConfig which handles +schema suffix
 	int32_t peek_size = 120;
 	string peek_mode = "smart";
 	if (seen_parameters.find("peek") != seen_parameters.end()) {
@@ -859,15 +842,8 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientCon
 			peek_size = peek_value.GetValue<int32_t>();
 			peek_mode = "custom";
 		} else {
-			// VARCHAR: named mode
-			string peek_str = peek_value.GetValue<string>();
-			string peek_lower = StringUtil::Lower(peek_str);
-			if (peek_lower == "none" || peek_lower == "smart" || peek_lower == "full") {
-				peek_mode = peek_lower;
-			} else {
-				throw BinderException("Invalid peek parameter: " + peek_str +
-				                      ". Must be integer or one of: none, smart, full");
-			}
+			// VARCHAR: pass through to ParseExtractionConfig for validation (supports +schema suffix)
+			peek_mode = peek_value.GetValue<string>();
 		}
 	}
 
