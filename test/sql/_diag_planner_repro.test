@@ -1,0 +1,49 @@
+# name: test/sql/_diag_planner_repro.test
+# group: [sql]
+#
+# Test multiple workaround forms for the planner bug.
+# Each variant is independent so we can see which ones survive.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# ============================================================================
+# Variant A: anti-join via LEFT JOIN + IS NULL (no NOT EXISTS at all)
+# ============================================================================
+
+statement ok
+CREATE OR REPLACE MACRO repro_anti_join(q) AS TABLE
+  WITH sel AS (
+    SELECT * FROM (SELECT unnest(parse_ast_list(q, 'css'), recursive := true))
+  )
+  SELECT s.node_id, s.type
+  FROM sel s
+  LEFT JOIN sel args
+    ON args.type = 'arguments'
+   AND s.node_id > args.node_id
+   AND s.node_id <= args.node_id + args.descendant_count
+  WHERE s.type = 'tag_name'
+    AND args.node_id IS NULL;
+
+query I
+SELECT count(*) >= 0 FROM repro_anti_join('div .foo {}');
+----
+true
+
+query II
+WITH inputs(q) AS (VALUES ('div {}'), ('span .foo {}'))
+SELECT i.q, count(*) AS n
+FROM inputs i, repro_anti_join(i.q) m
+GROUP BY i.q ORDER BY i.q;
+----
+div {}	1
+span .foo {}	1
+
+# Also test with multiple tag_names to make sure the count goes up
+query I
+SELECT count(*)
+FROM (SELECT 'div span {}' AS q) i, repro_anti_join(i.q) m;
+----
+2

@@ -30,9 +30,13 @@ CREATE OR REPLACE MACRO ast_select(
     language := NULL
 ) AS TABLE
     WITH
-        -- Parse the CSS selector FIRST (before source, so DuckDB can evaluate it early)
+        -- Parse the CSS selector FIRST (before source, so DuckDB can evaluate it early).
+        -- Uses parse_ast_list_table (table macro wrapping parse_ast_list scalar) instead
+        -- of parse_ast (table function) so that `selector` can be a column reference,
+        -- not just a literal — required for ast_select_rules to dispatch one ast_select
+        -- call per rule via lateral join.
         sel AS (
-            SELECT * FROM parse_ast(selector, 'css')
+            SELECT * FROM parse_ast_list_table(selector, 'css')
         ),
 
         -- Parse source files. Keep native context (needed for attribute filters like
@@ -106,20 +110,31 @@ CREATE OR REPLACE MACRO ast_select(
         -- For simple/compound selectors: extract type, #name, .class filters
         -- Type filter: find the tag_name in the selector tree (may be nested in compound selectors)
         -- Exclude tag_names inside :has()/:not() arguments — those are descendant filters, not the base type
+        --
+        -- WORKAROUND (DuckDB planner bug): the natural form here is
+        --   WHERE NOT EXISTS (SELECT 1 FROM sel args WHERE args.type = 'arguments'
+        --                     AND s.node_id > args.node_id
+        --                     AND s.node_id <= args.node_id + args.descendant_count)
+        -- but that triggers an INTERNAL Error: "Failed to bind column reference ''
+        -- [N.M]: inequal types (BIGINT != VARCHAR)" whenever ast_select is called
+        -- with a column-valued selector argument. The bug appears to be in DuckDB's
+        -- handling of SQL macro expansion when a CTE built from
+        -- unnest(parse_ast_list(macro_param, ...)) is referenced inside a
+        -- self-correlated NOT EXISTS subquery. Rewriting as an anti-join via
+        -- LEFT JOIN + IS NULL produces identical semantics but dodges the bug.
+        -- Same workaround applied to every other NOT EXISTS on `sel` in this macro.
         simple_type AS (
             SELECT COALESCE(
                 -- tag_name anywhere in selector (shallowest first), excluding inside arguments
                 (SELECT s.name FROM sel s
+                 LEFT JOIN sel args
+                   ON args.type = 'arguments'
+                  AND s.node_id > args.node_id
+                  AND s.node_id <= args.node_id + args.descendant_count
                  WHERE s.type = 'tag_name'
                    AND s.node_id >= (SELECT node_id FROM sel_root)
                    AND s.node_id <= (SELECT node_id + descendant_count FROM sel_root)
-                   -- Not inside an arguments block (those belong to :has/:not)
-                   AND NOT EXISTS (
-                       SELECT 1 FROM sel args
-                       WHERE args.type = 'arguments'
-                         AND s.node_id > args.node_id
-                         AND s.node_id <= args.node_id + args.descendant_count
-                   )
+                   AND args.node_id IS NULL  -- anti-join: not inside any arguments block
                  ORDER BY s.depth ASC
                  LIMIT 1),
                 -- Root IS a tag_name (bare type selector)

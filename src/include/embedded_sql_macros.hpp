@@ -2254,6 +2254,50 @@ CREATE OR REPLACE MACRO ast_follows(
       );
 
 )SQLMACRO"},
+    {"parse_ast_list_table.sql", R"SQLMACRO(
+-- =============================================================================
+-- parse_ast_list_table: Table-macro wrapper for parse_ast_list
+-- =============================================================================
+--
+-- parse_ast() is a table function that only accepts literal arguments — it
+-- cannot be used with column-valued inputs (e.g., per-row dispatch in lateral
+-- joins). parse_ast_list() (PR #66) is a scalar variant that DOES accept
+-- column-valued inputs but returns a single LIST(STRUCT) value, not a table.
+--
+-- This table macro bridges the two: it presents the same row-shaped interface
+-- as parse_ast() (so it can be used as a drop-in replacement in FROM clauses)
+-- while internally using parse_ast_list() so it accepts column-valued args.
+--
+-- Used by ast_select to enable column-valued selector dispatch, which in turn
+-- is required for ast_select_rules to call ast_select once per parsed CSS rule.
+
+CREATE OR REPLACE MACRO parse_ast_list_table(code, language) AS TABLE
+    SELECT
+        n.node_id,
+        n.type,
+        n.name,
+        n.qualified_name,
+        n.start_line,
+        n.end_line,
+        n.parent_id,
+        n.depth,
+        n.sibling_index,
+        n.children_count,
+        n.descendant_count,
+        n.scope_id,
+        n.scope_stack,
+        n.peek,
+        n.semantic_type,
+        n.flags,
+        n.signature_type,
+        n.parameters,
+        n.modifiers,
+        n.annotations,
+        n.file_path,
+        n.language
+    FROM (SELECT unnest(parse_ast_list(code, language)) AS n);
+
+)SQLMACRO"},
     {"css_selectors.sql", R"SQLMACRO(
 -- =============================================================================
 -- CSS Selector Query Language for AST (ast_select)
@@ -2287,9 +2331,13 @@ CREATE OR REPLACE MACRO ast_select(
     language := NULL
 ) AS TABLE
     WITH
-        -- Parse the CSS selector FIRST (before source, so DuckDB can evaluate it early)
+        -- Parse the CSS selector FIRST (before source, so DuckDB can evaluate it early).
+        -- Uses parse_ast_list_table (table macro wrapping parse_ast_list scalar) instead
+        -- of parse_ast (table function) so that `selector` can be a column reference,
+        -- not just a literal — required for ast_select_rules to dispatch one ast_select
+        -- call per rule via lateral join.
         sel AS (
-            SELECT * FROM parse_ast(selector, 'css')
+            SELECT * FROM parse_ast_list_table(selector, 'css')
         ),
 
         -- Parse source files. Keep native context (needed for attribute filters like
@@ -2363,20 +2411,31 @@ CREATE OR REPLACE MACRO ast_select(
         -- For simple/compound selectors: extract type, #name, .class filters
         -- Type filter: find the tag_name in the selector tree (may be nested in compound selectors)
         -- Exclude tag_names inside :has()/:not() arguments — those are descendant filters, not the base type
+        --
+        -- WORKAROUND (DuckDB planner bug): the natural form here is
+        --   WHERE NOT EXISTS (SELECT 1 FROM sel args WHERE args.type = 'arguments'
+        --                     AND s.node_id > args.node_id
+        --                     AND s.node_id <= args.node_id + args.descendant_count)
+        -- but that triggers an INTERNAL Error: "Failed to bind column reference ''
+        -- [N.M]: inequal types (BIGINT != VARCHAR)" whenever ast_select is called
+        -- with a column-valued selector argument. The bug appears to be in DuckDB's
+        -- handling of SQL macro expansion when a CTE built from
+        -- unnest(parse_ast_list(macro_param, ...)) is referenced inside a
+        -- self-correlated NOT EXISTS subquery. Rewriting as an anti-join via
+        -- LEFT JOIN + IS NULL produces identical semantics but dodges the bug.
+        -- Same workaround applied to every other NOT EXISTS on `sel` in this macro.
         simple_type AS (
             SELECT COALESCE(
                 -- tag_name anywhere in selector (shallowest first), excluding inside arguments
                 (SELECT s.name FROM sel s
+                 LEFT JOIN sel args
+                   ON args.type = 'arguments'
+                  AND s.node_id > args.node_id
+                  AND s.node_id <= args.node_id + args.descendant_count
                  WHERE s.type = 'tag_name'
                    AND s.node_id >= (SELECT node_id FROM sel_root)
                    AND s.node_id <= (SELECT node_id + descendant_count FROM sel_root)
-                   -- Not inside an arguments block (those belong to :has/:not)
-                   AND NOT EXISTS (
-                       SELECT 1 FROM sel args
-                       WHERE args.type = 'arguments'
-                         AND s.node_id > args.node_id
-                         AND s.node_id <= args.node_id + args.descendant_count
-                   )
+                   AND args.node_id IS NULL  -- anti-join: not inside any arguments block
                  ORDER BY s.depth ASC
                  LIMIT 1),
                 -- Root IS a tag_name (bare type selector)
@@ -2512,6 +2571,9 @@ CREATE OR REPLACE MACRO ast_select(
               -- Only top-level attributes (not inside :has() arguments)
               AND NOT EXISTS (
                   SELECT 1 FROM sel args
+
+)SQLMACRO"
+        R"SQLMACRO(
                   WHERE args.type = 'arguments'
                     AND s.node_id > args.node_id
                     AND s.node_id <= args.node_id + args.descendant_count
@@ -2535,9 +2597,6 @@ CREATE OR REPLACE MACRO ast_select(
                           AND t.node_id > args.node_id
                           AND t.node_id <= args.node_id + args.descendant_count
                         LIMIT 1),
-
-)SQLMACRO"
-        R"SQLMACRO(
                        (SELECT trim(t.name, '"''') FROM sel t
                         JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
                         WHERE t.type = 'string_value'
@@ -2798,6 +2857,9 @@ CREATE OR REPLACE MACRO ast_select(
             -- Core columns
             WHEN ac.attr_name = 'name' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.name LIKE '%' || ac.attr_value || '%'
+
+)SQLMACRO"
+        R"SQLMACRO(
                                 WHEN '^=' THEN a.name LIKE ac.attr_value || '%'
                                 WHEN '$=' THEN a.name LIKE '%' || ac.attr_value
                                 ELSE a.name = ac.attr_value END
@@ -2817,9 +2879,6 @@ CREATE OR REPLACE MACRO ast_select(
                                 WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value
                                 ELSE a.annotations = ac.attr_value END
 
-
-)SQLMACRO"
-        R"SQLMACRO(
             -- Native extraction: qualified_name
             WHEN ac.attr_name = 'qualified' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.qualified_name LIKE '%' || ac.attr_value || '%'
@@ -3074,6 +3133,9 @@ CREATE OR REPLACE MACRO ast_select(
     -- ::callers — functions that call this function
     pe_callers AS (
         SELECT DISTINCT caller_fn.* FROM matched m
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- Find call nodes with the same name as this function
         JOIN ast call_node ON call_node.file_path = m.file_path
           AND is_semantic_type(call_node.semantic_type, 'CALL')
@@ -3097,9 +3159,6 @@ CREATE OR REPLACE MACRO ast_select(
     pe_callees AS (
         SELECT DISTINCT callee.* FROM matched m
         JOIN ast callee ON callee.file_path = m.file_path
-
-)SQLMACRO"
-        R"SQLMACRO(
           AND callee.node_id > m.node_id
           AND callee.node_id <= m.node_id + m.descendant_count
           AND is_semantic_type(callee.semantic_type, 'CALL')
