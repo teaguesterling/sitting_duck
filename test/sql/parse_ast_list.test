@@ -38,9 +38,10 @@ SELECT node.node_id, node.type FROM (
 query III
 SELECT node.node_id, node.type, node.name FROM (
     SELECT unnest(parse_ast_list('def hello(): pass', 'python')) as node
-) WHERE node.name = 'hello';
+) WHERE node.name = 'hello' ORDER BY node.node_id;
 ----
-2	identifier	hello
+1	function_definition	hello
+3	identifier	hello
 
 # Test 5: NULL input returns NULL
 query I
@@ -60,4 +61,4 @@ SELECT COUNT(*) FROM (
     SELECT unnest(parse_ast_list('db.execute()', 'python')) as node
 ) WHERE node.type NOT IN ('module', 'expression_statement');
 ----
-4
+8

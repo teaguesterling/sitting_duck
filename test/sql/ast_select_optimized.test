@@ -45,4 +45,4 @@ SELECT COUNT(*)
 FROM ast_select('test/data/python/simple.py', ':definition')
 WHERE name IS NOT NULL AND name != '';
 ----
-5
+6

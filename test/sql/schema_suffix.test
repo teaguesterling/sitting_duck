@@ -68,4 +68,4 @@ FROM read_ast('test/data/python/simple.py', 'python',
 WHERE name = 'hello'
 LIMIT 1;
 ----
-hello	hello	DEFINITION_FUNCTION
+hello	F/hello	DEFINITION_FUNCTION
