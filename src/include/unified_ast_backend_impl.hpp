@@ -266,9 +266,11 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			}
 
 			// Build qualified_name for named definition nodes.
-			// All four definition types (F/C/V/M) push scopes so that nested definitions
-			// within them get properly scoped paths. For example, a variable assignment
-			// self.name inside __init__ produces C[User] F[__init__] V[name].
+			// Definition-kind nodes (F/C/V/M) introduce scopes that nested definitions
+			// inherit: a variable self.name inside __init__ produces
+			// C[User] F[__init__] V[name]. Import/export nodes (I/E) also get a
+			// qualified_name but do NOT push onto scope_stack — they're leaf bindings
+			// and shouldn't alter the scope path of subsequent siblings.
 			// The L[NAME] format with brackets allows unambiguous LIKE matching:
 			// 'F[%' finds all functions, '%[foo]%' finds name "foo", '%F[foo]%' finds foo as function.
 			if (config.context >= ContextLevel::NORMALIZED) {
@@ -283,7 +285,13 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 					}
 					qname += segment;
 					ast_node.name_qualified = qname;
-					scope_stack.push_back({entry.node_index, segment});
+					// Only definition-kind nodes act as scopes for nested definitions.
+					// I (import) and E (export) get a qualified_name but don't push.
+					const bool is_scope_provider =
+					    (type_code == 'F' || type_code == 'C' || type_code == 'V' || type_code == 'M');
+					if (is_scope_provider) {
+						scope_stack.push_back({entry.node_index, segment});
+					}
 				}
 			}
 
@@ -315,8 +323,7 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			result.nodes[entry.node_index].UpdateComputedLegacyFields();
 
 			// Pop scope node stack if this node is a scope boundary
-			if (!scope_node_stack.empty() &&
-			    scope_node_stack.back() == static_cast<int64_t>(entry.node_index)) {
+			if (!scope_node_stack.empty() && scope_node_stack.back() == static_cast<int64_t>(entry.node_index)) {
 				scope_node_stack.pop_back();
 			}
 

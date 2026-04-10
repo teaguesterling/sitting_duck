@@ -111,9 +111,8 @@ static Value ConvertASTResultToList(const ASTResult &result, const ExtractionCon
 				}
 				fields.push_back(make_pair(
 				    "parameters",
-				    Value::LIST(
-				        LogicalType::STRUCT({{"name", LogicalType::VARCHAR}, {"type", LogicalType::VARCHAR}}),
-				        std::move(param_structs))));
+				    Value::LIST(LogicalType::STRUCT({{"name", LogicalType::VARCHAR}, {"type", LogicalType::VARCHAR}}),
+				                std::move(param_structs))));
 
 				// modifiers: LIST(VARCHAR)
 				vector<Value> modifier_values;
@@ -122,13 +121,11 @@ static Value ConvertASTResultToList(const ASTResult &result, const ExtractionCon
 						modifier_values.push_back(Value(mod));
 					}
 				}
-				fields.push_back(
-				    make_pair("modifiers", Value::LIST(LogicalType::VARCHAR, std::move(modifier_values))));
+				fields.push_back(make_pair("modifiers", Value::LIST(LogicalType::VARCHAR, std::move(modifier_values))));
 
 				// annotations
-				fields.push_back(make_pair("annotations", node.native.annotations.empty()
-				                                              ? Value()
-				                                              : Value(node.native.annotations)));
+				fields.push_back(make_pair("annotations",
+				                           node.native.annotations.empty() ? Value() : Value(node.native.annotations)));
 			}
 		}
 
@@ -166,6 +163,26 @@ static Value ConvertASTResultToList(const ASTResult &result, const ExtractionCon
 				    make_pair("children_count", Value::UINTEGER(static_cast<uint32_t>(node.legacy_children_count))));
 				fields.push_back(make_pair("descendant_count",
 				                           Value::UINTEGER(static_cast<uint32_t>(node.legacy_descendant_count))));
+
+				// scope_id: NULL for nodes outside any scope (e.g., the root)
+				if (node.scope_id >= 0) {
+					fields.push_back(make_pair("scope_id", Value::BIGINT(node.scope_id)));
+				} else {
+					fields.push_back(make_pair("scope_id", Value(LogicalType::BIGINT)));
+				}
+
+				// scope_stack: LIST(BIGINT) populated for scope boundary nodes, NULL otherwise
+				if (node.has_scope_stack) {
+					vector<Value> stack_values;
+					stack_values.reserve(node.scope_stack_data.size());
+					for (auto &sid : node.scope_stack_data) {
+						stack_values.push_back(Value::BIGINT(sid));
+					}
+					fields.push_back(
+					    make_pair("scope_stack", Value::LIST(LogicalType::BIGINT, std::move(stack_values))));
+				} else {
+					fields.push_back(make_pair("scope_stack", Value(LogicalType::LIST(LogicalType::BIGINT))));
+				}
 			}
 		}
 
@@ -219,12 +236,12 @@ static void ParseASTListExecute(DataChunk &args, ExpressionState &state, Vector 
 		auto language = language_data[i].GetString();
 
 		try {
-			auto ast_result =
-			    UnifiedASTBackend::ParseToASTResult(code, language, "<inline>", bind_data.config);
+			auto ast_result = UnifiedASTBackend::ParseToASTResult(code, language, "<inline>", bind_data.config);
 			auto list_value = ConvertASTResultToList(ast_result, bind_data.config);
 			result.SetValue(i, list_value);
-		} catch (const Exception &e) {
-			// On parse error, set NULL rather than crashing the query
+		} catch (const InvalidInputException &) {
+			// User-input problems (unsupported language, etc.) — NULL this row rather than
+			// failing the entire query. Let InternalException and other bugs propagate.
 			FlatVector::SetNull(result, i, true);
 		}
 	}

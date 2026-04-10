@@ -666,7 +666,7 @@ CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language :
     WITH
 
 )SQLMACRO"
-        R"SQLMACRO(
+                            R"SQLMACRO(
         ast AS (
             SELECT * FROM read_ast(source, language)
         ),
@@ -1002,7 +1002,7 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
             FROM ast a
 
 )SQLMACRO"
-        R"SQLMACRO(
+                            R"SQLMACRO(
             WHERE is_function_definition(a.semantic_type)
               AND a.name IS NOT NULL AND a.name != ''
               -- Exclude special methods (constructors, dunder methods, etc.)
@@ -1380,7 +1380,7 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
 --   SELECT * FROM ast_match('src/**/*.py', 'my_func(__X__)');
 
 )SQLMACRO"
-        R"SQLMACRO(
+                             R"SQLMACRO(
 --   SELECT * FROM ast_match('src/main.py', 'my_func(__X__)', match_syntax := true);
 --   SELECT * FROM ast_match('src/**/*.py', '__F__(__X__)', match_by := 'semantic_type');
 --
@@ -1632,7 +1632,7 @@ CREATE OR REPLACE MACRO ast_match(
                 t.file_path = mc.file_path
 
 )SQLMACRO"
-        R"SQLMACRO(
+                             R"SQLMACRO(
                 AND t.node_id >= mc.candidate_root
                 AND t.node_id <= mc.candidate_root + mc.candidate_descendants
                 -- Depth matching: flexible when at/below recursive wildcard wrapper depth
@@ -1940,7 +1940,7 @@ CREATE OR REPLACE MACRO ast_match(
             FROM captures_single_listed
 
 )SQLMACRO"
-        R"SQLMACRO(
+                             R"SQLMACRO(
             UNION ALL
             SELECT candidate_file, candidate_root, capture_name, capture_list
             FROM captures_variadic_listed
@@ -2534,12 +2534,12 @@ CREATE OR REPLACE MACRO ast_select(
                         WHERE (t.type = 'tag_name' OR t.type = 'integer_value')
                           AND t.node_id > args.node_id
                           AND t.node_id <= args.node_id + args.descendant_count
+
+)SQLMACRO"
+                          R"SQLMACRO(
                         LIMIT 1),
                        -- Quoted string argument: strip surrounding quotes
                        (SELECT trim(t.name, '"''') FROM sel t
-
-)SQLMACRO"
-        R"SQLMACRO(
                         JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
                         WHERE t.type = 'string_value'
                           AND t.node_id > args.node_id
@@ -2557,9 +2557,6 @@ CREATE OR REPLACE MACRO ast_select(
                   SELECT 1 FROM sel args
                   WHERE args.type = 'arguments'
                     AND pcs.node_id > args.node_id
-
-)SQLMACRO"
-        R"SQLMACRO(
                     AND pcs.node_id <= args.node_id + args.descendant_count
               )
         ),
@@ -2824,13 +2821,13 @@ CREATE OR REPLACE MACRO ast_select(
                   AND (pc.pseudo_arg IS NULL OR caller_fn.name = pc.pseudo_arg)
                   -- Nearest function (deepest)
                   AND NOT EXISTS (
+
+)SQLMACRO"
+                          R"SQLMACRO(
                       SELECT 1 FROM ast closer
                       WHERE closer.file_path = a.file_path
                         AND a.node_id > closer.node_id
                         AND a.node_id <= closer.node_id + closer.descendant_count
-
-)SQLMACRO"
-        R"SQLMACRO(
                         AND is_semantic_type(closer.semantic_type, 'FUNCTION')
                         AND closer.depth > caller_fn.depth
                   )
@@ -2911,9 +2908,6 @@ CREATE OR REPLACE MACRO ast_select(
                                 AND nested.node_id > scope_anc.node_id
                                 AND nested.node_id < a.node_id
                                 AND a.node_id <= nested.node_id + nested.descendant_count
-
-)SQLMACRO"
-        R"SQLMACRO(
                                 AND (nested.type = pc.pseudo_arg
                                      OR nested.type LIKE pc.pseudo_arg || '_%')
                           )

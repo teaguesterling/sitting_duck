@@ -62,3 +62,25 @@ SELECT COUNT(*) FROM (
 ) WHERE node.type NOT IN ('module', 'expression_statement');
 ----
 8
+
+# Test 8: scope_id and scope_stack are populated (regression: PR#66 review)
+# parse_ast_list must emit the same scope data that parse_ast (table function) does.
+# Previously these fields were silently omitted and DuckDB filled them with NULL.
+query III
+SELECT node.type, node.scope_id, node.scope_stack FROM (
+    SELECT unnest(parse_ast_list('def foo():
+    pass', 'python')) as node
+) WHERE node.type IN ('module', 'function_definition')
+ORDER BY node.node_id;
+----
+module	NULL	[0]
+function_definition	0	[0, 1]
+
+# Test 9: scope_stack is populated for scope boundary nodes (not just NULL everywhere)
+query I
+SELECT COUNT(*) FROM (
+    SELECT unnest(parse_ast_list('def foo():
+    pass', 'python')) as node
+) WHERE node.scope_stack IS NOT NULL;
+----
+2

@@ -136,10 +136,9 @@ ExtractionConfig ParseExtractionConfig(const string &context_str, const string &
 	} else if (structure_lower == "full") {
 		config.structure = StructureLevel::FULL;
 	} else {
-		throw InvalidInputException(
-		    "Invalid structure parameter '%s'. Valid values are: 'none', 'minimal', 'full' "
-		    "(append '+schema' to any value to include full schema columns)",
-		    structure_str);
+		throw InvalidInputException("Invalid structure parameter '%s'. Valid values are: 'none', 'minimal', 'full' "
+		                            "(append '+schema' to any value to include full schema columns)",
+		                            structure_str);
 	}
 
 	// Parse peek level
@@ -182,23 +181,23 @@ ExtractionConfig ParseExtractionConfig(const string &context_str, const string &
 
 vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
 	return {
-	    LogicalType::BIGINT,   // node_id
-	    LogicalType::VARCHAR,  // type
-	    LogicalType::VARCHAR,  // name
-	    LogicalType::VARCHAR,  // file_path
-	    LogicalType::VARCHAR,  // language
-	    LogicalType::UINTEGER, // start_line
-	    LogicalType::UINTEGER, // start_column
-	    LogicalType::UINTEGER, // end_line
-	    LogicalType::UINTEGER, // end_column
-	    LogicalType::BIGINT,   // parent_id (stays signed for -1)
-	    LogicalType::UINTEGER, // depth
-	    LogicalType::INTEGER,  // sibling_index
-	    LogicalType::UINTEGER, // children_count
-	    LogicalType::UINTEGER, // descendant_count
-	    LogicalType::BIGINT,   // scope_id
+	    LogicalType::BIGINT,                    // node_id
+	    LogicalType::VARCHAR,                   // type
+	    LogicalType::VARCHAR,                   // name
+	    LogicalType::VARCHAR,                   // file_path
+	    LogicalType::VARCHAR,                   // language
+	    LogicalType::UINTEGER,                  // start_line
+	    LogicalType::UINTEGER,                  // start_column
+	    LogicalType::UINTEGER,                  // end_line
+	    LogicalType::UINTEGER,                  // end_column
+	    LogicalType::BIGINT,                    // parent_id (stays signed for -1)
+	    LogicalType::UINTEGER,                  // depth
+	    LogicalType::INTEGER,                   // sibling_index
+	    LogicalType::UINTEGER,                  // children_count
+	    LogicalType::UINTEGER,                  // descendant_count
+	    LogicalType::BIGINT,                    // scope_id
 	    LogicalType::LIST(LogicalType::BIGINT), // scope_stack
-	    LogicalType::VARCHAR,  // peek (source_text)
+	    LogicalType::VARCHAR,                   // peek (source_text)
 	    // Semantic type fields
 	    LogicalType::UTINYINT, // semantic_type
 	    LogicalType::UTINYINT, // flags (renamed from universal_flags, removed arity_bin)
@@ -208,7 +207,8 @@ vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
 
 vector<string> UnifiedASTBackend::GetFlatTableColumnNames() {
 	return {"node_id", "type", "name", "file_path", "language", "start_line", "start_column", "end_line", "end_column",
-	        "parent_id", "depth", "sibling_index", "children_count", "descendant_count", "scope_id", "scope_stack", "peek",
+	        "parent_id", "depth", "sibling_index", "children_count", "descendant_count", "scope_id", "scope_stack",
+	        "peek",
 	        // Semantic type fields
 	        "semantic_type", "flags", "qualified_name"};
 }
@@ -492,10 +492,10 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
 		}
 
 		if (schema_config.structure >= StructureLevel::FULL) {
-			schema.push_back(LogicalType::INTEGER);  // sibling_index
-			schema.push_back(LogicalType::UINTEGER); // children_count
-			schema.push_back(LogicalType::UINTEGER); // descendant_count
-			schema.push_back(LogicalType::BIGINT);   // scope_id
+			schema.push_back(LogicalType::INTEGER);                   // sibling_index
+			schema.push_back(LogicalType::UINTEGER);                  // children_count
+			schema.push_back(LogicalType::UINTEGER);                  // descendant_count
+			schema.push_back(LogicalType::BIGINT);                    // scope_id
 			schema.push_back(LogicalType::LIST(LogicalType::BIGINT)); // scope_stack
 		}
 	}
@@ -988,8 +988,8 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 							param_structs.push_back(Value::STRUCT(std::move(struct_values)));
 						}
 						output.SetValue(parameters_col, count,
-						                Value::LIST(LogicalType::STRUCT(
-						                                {{"name", LogicalType::VARCHAR}, {"type", LogicalType::VARCHAR}}),
+						                Value::LIST(LogicalType::STRUCT({{"name", LogicalType::VARCHAR},
+						                                                 {"type", LogicalType::VARCHAR}}),
 						                            std::move(param_structs)));
 
 						// Same for modifiers
@@ -1191,14 +1191,16 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult &result) {
 		node_children.push_back(make_pair("children_count", Value::UINTEGER(node.legacy_children_count)));
 		node_children.push_back(make_pair("descendant_count", Value::UINTEGER(node.legacy_descendant_count)));
 		// scope_id
-		node_children.push_back(make_pair("scope_id", node.scope_id >= 0 ? Value::BIGINT(node.scope_id) : Value(LogicalType::BIGINT)));
+		node_children.push_back(
+		    make_pair("scope_id", node.scope_id >= 0 ? Value::BIGINT(node.scope_id) : Value(LogicalType::BIGINT)));
 		// scope_stack
 		if (node.has_scope_stack) {
 			vector<Value> stack_values;
 			for (auto &sid : node.scope_stack_data) {
 				stack_values.push_back(Value::BIGINT(sid));
 			}
-			node_children.push_back(make_pair("scope_stack", Value::LIST(LogicalType::BIGINT, std::move(stack_values))));
+			node_children.push_back(
+			    make_pair("scope_stack", Value::LIST(LogicalType::BIGINT, std::move(stack_values))));
 		} else {
 			node_children.push_back(make_pair("scope_stack", Value(LogicalType::LIST(LogicalType::BIGINT))));
 		}
@@ -1302,13 +1304,15 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult &result, Data
 		structure_values.push_back(make_pair("sibling_index", Value::INTEGER(node.legacy_sibling_index)));
 		structure_values.push_back(make_pair("children_count", Value::UINTEGER(node.legacy_children_count)));
 		structure_values.push_back(make_pair("descendant_count", Value::UINTEGER(node.legacy_descendant_count)));
-		structure_values.push_back(make_pair("scope_id", node.scope_id >= 0 ? Value::BIGINT(node.scope_id) : Value(LogicalType::BIGINT)));
+		structure_values.push_back(
+		    make_pair("scope_id", node.scope_id >= 0 ? Value::BIGINT(node.scope_id) : Value(LogicalType::BIGINT)));
 		if (node.has_scope_stack) {
 			vector<Value> stack_values;
 			for (auto &sid : node.scope_stack_data) {
 				stack_values.push_back(Value::BIGINT(sid));
 			}
-			structure_values.push_back(make_pair("scope_stack", Value::LIST(LogicalType::BIGINT, std::move(stack_values))));
+			structure_values.push_back(
+			    make_pair("scope_stack", Value::LIST(LogicalType::BIGINT, std::move(stack_values))));
 		} else {
 			structure_values.push_back(make_pair("scope_stack", Value(LogicalType::LIST(LogicalType::BIGINT))));
 		}
@@ -1656,13 +1660,15 @@ Value UnifiedASTBackend::CreateHierarchicalASTStruct(const ASTResult &result) {
 		structure_children.push_back(make_pair("sibling_index", Value::INTEGER(node.legacy_sibling_index)));
 		structure_children.push_back(make_pair("children_count", Value::UINTEGER(node.legacy_children_count)));
 		structure_children.push_back(make_pair("descendant_count", Value::UINTEGER(node.legacy_descendant_count)));
-		structure_children.push_back(make_pair("scope_id", node.scope_id >= 0 ? Value::BIGINT(node.scope_id) : Value(LogicalType::BIGINT)));
+		structure_children.push_back(
+		    make_pair("scope_id", node.scope_id >= 0 ? Value::BIGINT(node.scope_id) : Value(LogicalType::BIGINT)));
 		if (node.has_scope_stack) {
 			vector<Value> stack_values;
 			for (auto &sid : node.scope_stack_data) {
 				stack_values.push_back(Value::BIGINT(sid));
 			}
-			structure_children.push_back(make_pair("scope_stack", Value::LIST(LogicalType::BIGINT, std::move(stack_values))));
+			structure_children.push_back(
+			    make_pair("scope_stack", Value::LIST(LogicalType::BIGINT, std::move(stack_values))));
 		} else {
 			structure_children.push_back(make_pair("scope_stack", Value(LogicalType::LIST(LogicalType::BIGINT))));
 		}
