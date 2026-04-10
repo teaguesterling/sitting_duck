@@ -168,3 +168,43 @@ FROM parse_ast('F = 1', 'python')
 WHERE is_definition(semantic_type) AND name = 'F';
 ----
 F	V[F]
+
+# =============================================================================
+# Test 13: Import statements get I[name] prefix
+# =============================================================================
+
+# Python aliased import produces I[np]
+query II
+SELECT name, qualified_name
+FROM parse_ast('import numpy as np', 'python')
+WHERE qualified_name LIKE 'I[%';
+----
+np	I[np]
+
+# =============================================================================
+# Test 14: Filter by import kind with 'I[' prefix pattern
+# =============================================================================
+
+query I
+SELECT COUNT(*)
+FROM parse_ast('
+import os
+import sys
+import numpy as np
+', 'python')
+WHERE qualified_name LIKE 'I[%';
+----
+3
+
+# =============================================================================
+# Test 15: JavaScript export specifiers get E[name] prefix
+# =============================================================================
+
+query II
+SELECT name, qualified_name
+FROM parse_ast('export { foo, bar }', 'javascript')
+WHERE qualified_name LIKE 'E[%'
+ORDER BY name;
+----
+bar	E[bar]
+foo	E[foo]
