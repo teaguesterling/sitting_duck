@@ -50,7 +50,7 @@ return_in_if	function_definition
 
 # Who calls get_user in sample_app?
 query II
-SELECT name, type FROM ast_select('workspace/tutorial/sample_app.py',
+SELECT name, type FROM ast_select('test/data/python/sample_app.py',
     '.func#get_user::callers')
 WHERE type = 'function_definition'
 ORDER BY start_line;
@@ -64,7 +64,7 @@ delete_user	function_definition
 
 # What does get_user call?
 query I
-SELECT name FROM ast_select('workspace/tutorial/sample_app.py',
+SELECT name FROM ast_select('test/data/python/sample_app.py',
     '.func#get_user:definition::callees')
 ORDER BY start_line;
 ----

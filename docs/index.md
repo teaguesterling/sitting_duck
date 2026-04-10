@@ -66,6 +66,9 @@ GROUP BY language;
 
 - **[Getting Started](getting-started/installation.md)** - Installation and basic setup
 - **[User Guide](guide/parsing-files.md)** - Detailed usage instructions
+- **[CSS Selectors](guide/selectors/index.md)** - Query ASTs with CSS selector syntax (`ast_select`)
+- **[Pattern Matching](guide/pattern-matching.md)** - Find code by example with `ast_match` and wildcards
+- **[Structural Search](guide/structural-search.md)** - Advanced pattern search across codebases
 - **[Cookbook](guide/cookbook.md)** - Practical recipes for common tasks
 - **[API Reference](api/core-functions.md)** - Complete function reference
 - **[Languages](languages/overview.md)** - Language-specific details
