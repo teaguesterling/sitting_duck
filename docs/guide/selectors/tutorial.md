@@ -190,13 +190,19 @@ Unlike `:has(.call#execute)`, `:calls()` uses scope resolution -- if `execute` i
 Find which functions are actually used:
 
 ```sql
--- Popular functions (called 2+ times)
-SELECT name
-FROM ast_select('test/data/python/sample_app.py', '.func:callers(2)');
+-- Popular functions (called 2+ times) — use the ast_callers macro for call counts
+SELECT callee as name, COUNT(*) as call_count
+FROM ast_callers('test/data/python/sample_app.py')
+GROUP BY callee
+HAVING COUNT(*) >= 2;
 
 -- Dead code: functions nobody calls
 SELECT name
-FROM ast_select('test/data/python/sample_app.py', '.func:unreferenced');
+FROM ast_select('test/data/python/sample_app.py', '.func:not(:is-called)');
+
+-- Definitions that are never referenced at all (neither called nor used)
+SELECT name
+FROM ast_select('test/data/python/sample_app.py', '.func:not(:is-referenced)');
 ```
 
 Build a call graph for the whole file:

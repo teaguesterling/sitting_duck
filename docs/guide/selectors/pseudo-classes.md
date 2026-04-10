@@ -259,6 +259,7 @@ SELECT * FROM ast_select('src/*.py', 'return_statement::parent-definition');
 -- Adjacent siblings
 SELECT * FROM ast_select('src/*.py', '.func#validate::next-sibling');
 SELECT * FROM ast_select('src/*.py', '.func#validate::prev-sibling');
+-- ::previous-sibling is accepted as an alias for ::prev-sibling
 ```
 
 #### Call Graph Navigation

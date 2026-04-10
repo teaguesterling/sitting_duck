@@ -224,11 +224,11 @@ FROM ast_select('src/**/*', '.func:named:scope');
 
 ## Call Graph Analysis
 
-### Find leaf functions (no callees)
+### Find leaf functions (no calls inside)
 
 ```sql
 SELECT name, file_path
-FROM ast_select('src/**/*.py', '.func:not(:callees)');
+FROM ast_select('src/**/*.py', '.func:not(:has(.call))');
 ```
 
 ### Find hub functions (many callers AND many callees)
@@ -253,7 +253,14 @@ ORDER BY in_degree + out_degree DESC;
 
 ```sql
 SELECT name, start_line, file_path
-FROM ast_select('src/**/*.py', '.func:unreferenced');
+FROM ast_select('src/**/*.py', '.func:not(:is-called)');
+```
+
+### Find definitions that are never referenced anywhere
+
+```sql
+SELECT name, type, start_line, file_path
+FROM ast_select('src/**/*.py', '.def:not(:is-referenced)');
 ```
 
 ### Cross-file call chain: what does main() call, and what do those call?
