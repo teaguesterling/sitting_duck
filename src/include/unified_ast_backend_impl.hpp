@@ -251,11 +251,13 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			// Build qualified_name for named definition nodes.
 			// All four definition types (F/C/V/M) push scopes so that nested definitions
 			// within them get properly scoped paths. For example, a variable assignment
-			// self.name inside __init__ produces C/User F/__init__ V/name.
+			// self.name inside __init__ produces C[User] F[__init__] V[name].
+			// The L[NAME] format with brackets allows unambiguous LIKE matching:
+			// 'F[%' finds all functions, '%[foo]%' finds name "foo", '%F[foo]%' finds foo as function.
 			if (config.context >= ContextLevel::NORMALIZED) {
-				char type_code = SemanticTypes::GetDefinitionTypeCode(ast_node.semantic_type);
+				char type_code = SemanticTypes::GetQualifiedNamePrefix(ast_node.semantic_type);
 				if (type_code != '\0' && !ast_node.name_raw.empty()) {
-					string segment = string(1, type_code) + "/" + ast_node.name_raw;
+					string segment = string(1, type_code) + "[" + ast_node.name_raw + "]";
 					// Build qualified_name from scope_stack + this segment
 					string qname;
 					for (auto &scope : scope_stack) {

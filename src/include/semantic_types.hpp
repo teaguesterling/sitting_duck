@@ -182,9 +182,10 @@ inline uint8_t KindCode(const string &name) {
 	return GetKindCode(name);
 }
 
-// Get single-letter type code for definition types: F, C, V, M
-// Returns '\0' for non-definition types
-inline char GetDefinitionTypeCode(uint8_t semantic_type) {
+// Get single-letter prefix for qualified_name segments.
+// Used to build qualified_name path like "C[User] F[__init__] V[name]".
+// Returns '\0' for node types that don't contribute to qualified_name scoping.
+inline char GetQualifiedNamePrefix(uint8_t semantic_type) {
 	uint8_t base = semantic_type & 0xFC; // Mask off language-specific bits
 	switch (base) {
 	case DEFINITION_FUNCTION:
