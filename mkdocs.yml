@@ -63,6 +63,19 @@ nav:
     - Semantic Types: guide/semantic-types.md
     - Context Extraction: guide/context-extraction.md
     - Cross-Language Analysis: guide/cross-language.md
+    - Cookbook: guide/cookbook.md
+    - Pattern Matching:
+      - Overview: guide/pattern-matching.md
+      - Tutorial: guide/tutorial-pattern-matching.md
+      - Structural Search: guide/structural-search.md
+    - CSS Selectors:
+      - Overview: guide/selectors/index.md
+      - Tutorial: guide/selectors/tutorial.md
+      - Node Type Selectors: guide/selectors/node-types.md
+      - Semantic Type Aliases: guide/selectors/kinds-types-and-classes.md
+      - Pseudo-Classes Reference: guide/selectors/pseudo-classes.md
+      - Attribute Selectors: guide/selectors/attributes.md
+      - Examples / Cookbook: guide/selectors/examples.md
   - API Reference:
     - Core Functions: api/core-functions.md
     - Semantic Type System: api/semantic-types.md

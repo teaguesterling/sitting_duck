@@ -100,6 +100,9 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 	// Scope stack for qualified_name: tracks (node_index, "T/name") segments
 	vector<pair<idx_t, string>> scope_stack;
 
+	// Scope tracking: stack of node_ids for IS_SCOPE nodes (for scope_id/scope_stack columns)
+	vector<int64_t> scope_node_stack;
+
 	while (!stack.empty()) {
 		// Check if the top entry is processed before copying
 		if (!stack.back().processed) {
@@ -248,6 +251,20 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 				ast_node.native_extraction_attempted = false;
 			}
 
+			// Scope tracking: set scope_id and build scope_stack for IS_SCOPE nodes
+			if (config.structure >= StructureLevel::FULL) {
+				// scope_id = top of scope node stack (or -1 if empty)
+				ast_node.scope_id = scope_node_stack.empty() ? -1 : scope_node_stack.back();
+
+				// If this node is a scope boundary, push it and record the full chain
+				if (ast_node.universal_flags & ASTNodeFlags::IS_SCOPE) {
+					scope_node_stack.push_back(static_cast<int64_t>(ast_node.node_id));
+					// Build scope_stack = copy of current scope_node_stack (includes this node)
+					ast_node.scope_stack_data = scope_node_stack;
+					ast_node.has_scope_stack = true;
+				}
+			}
+
 			// Build qualified_name for named definition nodes.
 			// All four definition types (F/C/V/M) push scopes so that nested definitions
 			// within them get properly scoped paths. For example, a variable assignment
@@ -296,6 +313,12 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 
 			// Update legacy fields after descendant count change
 			result.nodes[entry.node_index].UpdateComputedLegacyFields();
+
+			// Pop scope node stack if this node is a scope boundary
+			if (!scope_node_stack.empty() &&
+			    scope_node_stack.back() == static_cast<int64_t>(entry.node_index)) {
+				scope_node_stack.pop_back();
+			}
 
 			// Pop scope stack if this node pushed a scope.
 			// The scope stack should always match: if the top entry's node_index

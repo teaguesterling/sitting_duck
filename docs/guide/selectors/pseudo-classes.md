@@ -128,6 +128,161 @@ SELECT name FROM ast_select('src/*.py', '.call:scope(class)');
 
 Without `:scope()`, `ast_has` reports `outer_function` as containing `execute()` even when the call is inside a nested `inner_function`. With `:scope(function)`, only the direct enclosing function matches.
 
+### Scope Columns
+
+Every node in `read_ast` output includes scope information:
+
+- **`scope_id`** (INT64): the `node_id` of the nearest enclosing scope boundary. `-1`/NULL for the root module.
+- **`scope_stack`** (LIST(INT64)): on scope-creating nodes only, the full chain of enclosing scopes from outermost to this node. NULL on non-scope nodes.
+
+```sql
+-- Scope chain for a class method:
+SELECT name, type, scope_id, scope_stack
+FROM read_ast('src/*.py')
+WHERE type IN ('module', 'class_definition', 'function_definition')
+ORDER BY node_id LIMIT 5;
+-- module:     scope_id=NULL, scope_stack=[0]
+-- Config:     scope_id=0,    scope_stack=[0, 32]
+-- __init__:   scope_id=32,   scope_stack=[0, 32, 42]
+```
+
+To get any node's full scope chain: look up its `scope_id` → read that node's `scope_stack`.
+
+### Scope Resolution Macros
+
+Three macros build on `scope_id` and `scope_stack` for name resolution:
+
+**`ast_exports(source)`** — module-level public definitions:
+```sql
+SELECT name, type FROM ast_exports('src/**/*.py');
+```
+
+**`ast_imports(source)`** — imported names with source module hints:
+```sql
+SELECT source_module, imported_name FROM ast_imports('src/*.py');
+```
+
+**`ast_resolve(source)`** — reference → definition binding via scope chain walk:
+```sql
+-- For each reference, find which definition it binds to
+SELECT ref_name, ref_line, def_line, def_type, scope_hops
+FROM ast_resolve('src/main.py');
+```
+
+Cross-file resolution: JOIN `ast_imports` with `ast_exports` to resolve imports:
+```sql
+SELECT im.imported_name, ex.file_path as resolved_file, ex.type
+FROM ast_imports('src/app.py') im
+JOIN ast_exports('src/**/*.py') ex
+  ON ex.name = im.imported_name
+  AND ex.file_path LIKE '%' || im.source_module || '%';
+```
+
+## Call Graph
+
+### `:calls(name)` — Scope Contains a Call
+
+Matches nodes whose scope contains a call to `name`. Unlike `:has(.call#name)`, this uses scope resolution to avoid matching calls in nested functions.
+
+```sql
+-- Functions that call execute (direct scope only)
+SELECT name FROM ast_select('src/**/*.py', '.func:calls(execute)');
+
+-- Classes that call validate
+SELECT name FROM ast_select('src/**/*.py', '.class:calls(validate)');
+```
+
+### `:called-by(name)` — Call Inside Function
+
+Matches call nodes that are inside the function `name`:
+
+```sql
+-- All calls made by main()
+SELECT name, start_line FROM ast_select('src/**/*.py', '.call:called-by(main)');
+
+-- Database calls inside process_request
+SELECT name FROM ast_select('src/**/*.py', '.call:called-by(process_request)');
+```
+
+### `:is-called` — Function Is Called
+
+Matches function definitions that are called somewhere in the file:
+
+```sql
+-- Functions that are actually called
+SELECT name FROM ast_select('src/**/*.py', '.func:is-called');
+
+-- Unused functions (defined but never called)
+SELECT name FROM ast_select('src/**/*.py', '.func:not(:is-called)');
+```
+
+### `:is-referenced` — Definition Is Referenced
+
+Matches definitions that are referenced somewhere:
+
+```sql
+-- Variables that are actually used
+SELECT name FROM ast_select('src/**/*.py', '.var:is-referenced');
+
+-- Dead code: defined but never referenced
+SELECT name FROM ast_select('src/**/*.py', '.func:not(:is-referenced)');
+```
+
+### `:exported` — Module-Level Public Definition
+
+Matches definitions at module scope that are part of the public API:
+
+```sql
+-- Public API surface
+SELECT name, type FROM ast_select('src/**/*.py', ':exported');
+
+-- Exported but never referenced internally
+SELECT name FROM ast_select('src/**/*.py', ':exported:not(:is-referenced)');
+```
+
+### Pseudo-Elements (`::` — Navigation)
+
+Pseudo-elements return *different* nodes rather than filtering. They navigate FROM matched nodes to related nodes.
+
+#### Tree Navigation
+
+```sql
+-- Parent node
+SELECT * FROM ast_select('src/*.py', 'return_statement::parent');
+
+-- Enclosing scope
+SELECT * FROM ast_select('src/*.py', '.func#inner::scope');
+
+-- Nearest enclosing definition (function, class, variable)
+SELECT * FROM ast_select('src/*.py', 'return_statement::parent-definition');
+
+-- Adjacent siblings
+SELECT * FROM ast_select('src/*.py', '.func#validate::next-sibling');
+SELECT * FROM ast_select('src/*.py', '.func#validate::prev-sibling');
+```
+
+#### Call Graph Navigation
+
+```sql
+-- Functions that call this function
+SELECT name FROM ast_select('src/*.py', '.func#get_user::callers');
+
+-- What this function calls
+SELECT name FROM ast_select('src/*.py', '.func#main::callees');
+```
+
+### Pseudo-Element Quick Reference
+
+| Pseudo-element | Returns | Cardinality |
+|---|---|---|
+| `::parent` | Parent node | 1 |
+| `::scope` | Enclosing scope node | 1 |
+| `::parent-definition` | Nearest enclosing definition | 1 |
+| `::next-sibling` | Next sibling | 1 |
+| `::prev-sibling` | Previous sibling | 1 |
+| `::callers` | Functions that call this | N |
+| `::callees` | Functions this calls | N |
+
 ## Ordering
 
 ### `:precedes(type)` — Before a Sibling
@@ -238,6 +393,12 @@ SELECT name FROM ast_select('src/*.py', '.func:matches("self.___ = ___")');
 | **Scope** | |
 | `:scope` | Is a scope boundary |
 | `:scope(type)` | Within nearest ancestor of type (scope-aware) |
+| **Call Graph** | |
+| `:calls(name)` | Scope contains a call to name |
+| `:called-by(name)` | This call is inside function name |
+| `:is-called` | Function is called somewhere |
+| `:is-referenced` | Definition is referenced somewhere |
+| `:exported` | Module-level public definition |
 | **Ordering** | |
 | `:precedes(type)` | Before a sibling of type |
 | `:follows(type)` | After a sibling of type |

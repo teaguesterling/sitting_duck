@@ -2,7 +2,7 @@
 
 This tutorial walks through `ast_select` progressively, using a sample Python application with classes and functions. Each step adds one concept.
 
-The example file is `workspace/tutorial/sample_app.py` — a small app with `Config`, `DatabaseConnection`, and `UserService` classes, plus standalone functions like `process_file`, `validate_email`, `retry`, and `main`.
+The example file is `test/data/python/sample_app.py` — a small app with `Config`, `DatabaseConnection`, and `UserService` classes, plus standalone functions like `process_file`, `validate_email`, `retry`, and `main`.
 
 ## Step 1: Simple Type Selector
 
@@ -10,7 +10,7 @@ Start by finding all function definitions:
 
 ```sql
 SELECT name, start_line
-FROM ast_select('workspace/tutorial/sample_app.py', 'function_definition');
+FROM ast_select('test/data/python/sample_app.py', 'function_definition');
 ```
 
 This returns every function and method: `__init__`, `load`, `get`, `connect`, `execute`, `fetch_all`, `close`, `get_user`, `create_user`, `delete_user`, `search_users`, `bulk_import`, `export_users`, `process_file`, `transform`, `validate_email`, `retry`, `main`.
@@ -23,7 +23,7 @@ Find a specific function by name:
 
 ```sql
 SELECT name, start_line
-FROM ast_select('workspace/tutorial/sample_app.py', 'function_definition#main');
+FROM ast_select('test/data/python/sample_app.py', 'function_definition#main');
 ```
 
 Returns just the `main` function at line 144. The `#name` filter is an exact match on the node's `name` field.
@@ -32,7 +32,7 @@ Find all calls to `execute`:
 
 ```sql
 SELECT name, start_line
-FROM ast_select('workspace/tutorial/sample_app.py', '.call#execute');
+FROM ast_select('test/data/python/sample_app.py', '.call#execute');
 ```
 
 ## Step 3: Use `.semantic` for Cross-Language Queries
@@ -41,7 +41,7 @@ Instead of the tree-sitter-specific `function_definition`, use `.func`:
 
 ```sql
 SELECT name, start_line
-FROM ast_select('workspace/tutorial/sample_app.py', '.func');
+FROM ast_select('test/data/python/sample_app.py', '.func');
 ```
 
 Same results, but `.func` works across all 27 languages. If you later scan Java or TypeScript files, the same selector works without changes.
@@ -50,7 +50,7 @@ Find all class definitions:
 
 ```sql
 SELECT name, start_line
-FROM ast_select('workspace/tutorial/sample_app.py', '.class');
+FROM ast_select('test/data/python/sample_app.py', '.class');
 ```
 
 Returns `Config`, `DatabaseConnection`, `UserService`.
@@ -61,7 +61,7 @@ Find functions that contain a call to `execute`:
 
 ```sql
 SELECT name, start_line
-FROM ast_select('workspace/tutorial/sample_app.py',
+FROM ast_select('test/data/python/sample_app.py',
     '.func:has(.call#execute)');
 ```
 
@@ -71,7 +71,7 @@ Now find functions that call `execute` but have no error handling:
 
 ```sql
 SELECT name, start_line
-FROM ast_select('workspace/tutorial/sample_app.py',
+FROM ast_select('test/data/python/sample_app.py',
     '.func:has(.call#execute):not(:has(.try))');
 ```
 
@@ -83,7 +83,7 @@ Find functions whose names start with `get_`:
 
 ```sql
 SELECT name, start_line
-FROM ast_select('workspace/tutorial/sample_app.py',
+FROM ast_select('test/data/python/sample_app.py',
     '.func[name^=get_]');
 ```
 
@@ -93,7 +93,7 @@ Find string literals containing SQL:
 
 ```sql
 SELECT peek, start_line
-FROM ast_select('workspace/tutorial/sample_app.py',
+FROM ast_select('test/data/python/sample_app.py',
     '.str[peek*=SELECT]');
 ```
 
@@ -103,7 +103,7 @@ Combine type and attribute selectors to find the dangerous pattern — string li
 
 ```sql
 SELECT name, peek, start_line
-FROM ast_select('workspace/tutorial/sample_app.py',
+FROM ast_select('test/data/python/sample_app.py',
     '.func:has(.str[peek*=SELECT]):has(.str[peek*=%])');
 ```
 
@@ -115,7 +115,7 @@ Find return statements scoped to their direct enclosing function (not returns fr
 
 ```sql
 SELECT peek, start_line
-FROM ast_select('workspace/tutorial/sample_app.py',
+FROM ast_select('test/data/python/sample_app.py',
     'return_statement:scope(function)');
 ```
 
@@ -123,7 +123,7 @@ Find calls scoped to the `UserService` class (not calls in other classes):
 
 ```sql
 SELECT name, start_line
-FROM ast_select('workspace/tutorial/sample_app.py',
+FROM ast_select('test/data/python/sample_app.py',
     '.call:scope(.class#UserService)');
 ```
 
@@ -135,7 +135,7 @@ Find functions that contain a `self.db` assignment:
 
 ```sql
 SELECT name
-FROM ast_select('workspace/tutorial/sample_app.py',
+FROM ast_select('test/data/python/sample_app.py',
     '.func:matches("self.db")');
 ```
 
@@ -143,7 +143,7 @@ Find functions that return `None` explicitly:
 
 ```sql
 SELECT name
-FROM ast_select('workspace/tutorial/sample_app.py',
+FROM ast_select('test/data/python/sample_app.py',
     '.func:matches("return None")');
 ```
 
@@ -151,7 +151,7 @@ Use `___` as a wildcard — find any method that does `self.___ = ___` (attribut
 
 ```sql
 SELECT name
-FROM ast_select('workspace/tutorial/sample_app.py',
+FROM ast_select('test/data/python/sample_app.py',
     '.func:matches("self.___ = ___")');
 ```
 
@@ -163,7 +163,7 @@ Combine everything to answer a complex question: "Which methods in UserService c
 
 ```sql
 SELECT name, start_line, peek
-FROM ast_select('workspace/tutorial/sample_app.py',
+FROM ast_select('test/data/python/sample_app.py',
     '.class#UserService .func:has(.call#execute):not(:has(.try)):has(.str[peek*=SELECT])');
 ```
 
@@ -173,6 +173,46 @@ This single selector uses:
 - `:has(.call#execute)` — that call execute
 - `:not(:has(.try))` — without error handling
 - `:has(.str[peek*=SELECT])` — containing SQL SELECT strings
+
+## Step 8: Call Graph Queries
+
+The call graph pseudo-classes bring everything together by answering questions about how functions relate to each other.
+
+Find functions that call `execute` using scope-aware resolution:
+
+```sql
+SELECT name
+FROM ast_select('test/data/python/sample_app.py', '.func:calls(execute)');
+```
+
+Unlike `:has(.call#execute)`, `:calls()` uses scope resolution -- if `execute` is called inside a nested helper, it only attributes the call to the inner function, not the outer one.
+
+Find which functions are actually used:
+
+```sql
+-- Popular functions (called 2+ times)
+SELECT name
+FROM ast_select('test/data/python/sample_app.py', '.func:callers(2)');
+
+-- Dead code: functions nobody calls
+SELECT name
+FROM ast_select('test/data/python/sample_app.py', '.func:unreferenced');
+```
+
+Build a call graph for the whole file:
+
+```sql
+SELECT caller, callee
+FROM ast_callees('test/data/python/sample_app.py');
+```
+
+Combine call graph with earlier selectors for precise questions: "Which functions call `execute` without error handling, and are themselves called by `main`?"
+
+```sql
+SELECT name
+FROM ast_select('test/data/python/sample_app.py',
+    '.func:calls(execute):not(:has(.try)):called-by(main)');
+```
 
 ---
 

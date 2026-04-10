@@ -50,6 +50,7 @@ def generate_header(sql_dir, output_file):
         'pattern_matching.sql',
         'relational_operators.sql',
         'css_selectors.sql',
+        'scope_resolution.sql',
     ]
 
     header_content = """// Auto-generated file - DO NOT EDIT

@@ -93,6 +93,15 @@ SELECT name FROM ast_select('src/*.py',
 -- Return statements in scope of functions that follow a class
 SELECT peek FROM ast_select('src/*.py',
     'return_statement:scope(function_definition):follows(class_definition)');
+
+-- Dead code: exported but never referenced
+SELECT name FROM ast_select('src/*.py', ':exported:not(:is-referenced)');
+
+-- Navigate: who calls this function?
+SELECT name FROM ast_select('src/*.py', '.func#validate::callers');
+
+-- Navigate: what class contains this method?
+SELECT name FROM ast_select('src/*.py', '.func#validate::parent-definition');
 ```
 
 ## Comparison with Other Tools
@@ -174,6 +183,61 @@ ast_type_map(language := NULL)
 | `language` | VARCHAR | Optional: filter to one language |
 
 Returns: `language`, `node_type`, `semantic_type`, `kind`, `name_role`, `is_scope`, `is_syntax`, `name_strategy`, `flags`.
+
+### Scope Resolution Macros
+
+```sql
+ast_exports(source, language := NULL)    -- Module-level public definitions
+ast_imports(source, language := NULL)    -- Imported names with source module
+ast_resolve(source, language := NULL)    -- Reference → definition binding
+```
+
+`ast_resolve` walks the scope chain (`scope_id` → `scope_stack`) to find which definition each reference binds to:
+
+```sql
+SELECT ref_name, ref_line, def_line, def_type
+FROM ast_resolve('src/main.py')
+WHERE ref_name = 'config';
+```
+
+Cross-file resolution via import/export JOIN:
+
+```sql
+SELECT im.imported_name, ex.file_path, ex.type
+FROM ast_imports('src/app.py') im
+JOIN ast_exports('src/**/*.py') ex
+  ON ex.name = im.imported_name
+  AND ex.file_path LIKE '%' || im.source_module || '%';
+```
+
+### Call Graph Macros
+
+```sql
+ast_callees(source, language := NULL)   -- For each function, all calls within its scope
+ast_callers(source, language := NULL)   -- For each call, the enclosing function
+```
+
+`ast_callees` returns one row per (function, call) pair. `ast_callers` returns one row per (call, enclosing function) pair. Both use scope resolution to handle nested functions correctly.
+
+```sql
+-- Full call graph
+SELECT caller, callee, COUNT(*) as n
+FROM ast_callees('src/**/*.py')
+GROUP BY caller, callee ORDER BY n DESC;
+
+-- Who calls validate?
+SELECT caller, file_path FROM ast_callers('src/**/*.py') WHERE callee = 'validate';
+```
+
+Cross-file call graph with import resolution:
+
+```sql
+-- Combine call graph with imports to trace cross-module calls
+SELECT c.caller, c.callee, c.file_path as caller_file, ex.file_path as callee_file
+FROM ast_callees('src/**/*.py') c
+JOIN ast_exports('src/**/*.py') ex ON ex.name = c.callee
+WHERE c.file_path != ex.file_path;
+```
 
 ---
 

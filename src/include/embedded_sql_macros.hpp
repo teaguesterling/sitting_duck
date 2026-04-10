@@ -2300,20 +2300,42 @@ CREATE OR REPLACE MACRO ast_select(
             SELECT * FROM read_ast(source, language, peek := 'none+schema')
         ),
 
-        -- Find the top-level selector node (skip stylesheet and ERROR wrappers)
+        -- Find the top-level selector node (skip stylesheet, ERROR, and pseudo_element wrappers)
         -- Note: bare words like "function_definition" parse as 'identifier' in CSS,
         -- not 'tag_name'. We treat 'identifier' at the root as equivalent to 'tag_name'.
-        sel_root AS (
-            SELECT node_id,
-                   CASE WHEN type = 'identifier' THEN 'tag_name' ELSE type END as type,
-                   name,
-                   descendant_count
+        -- pseudo_element_selector wraps the real selector — unwrap to its first child.
+        sel_root_raw AS (
+            SELECT node_id, type, name, descendant_count
             FROM sel
             WHERE type NOT IN ('stylesheet', 'ERROR')
               AND depth = (
                   SELECT MIN(depth) FROM sel
                   WHERE type NOT IN ('stylesheet', 'ERROR')
               )
+            LIMIT 1
+        ),
+        sel_root AS (
+            SELECT s.node_id,
+                   CASE WHEN s.type = 'identifier' THEN 'tag_name' ELSE s.type END as type,
+                   s.name,
+                   s.descendant_count
+            FROM sel s, sel_root_raw raw
+            WHERE s.node_id = CASE
+                -- If root is pseudo_element_selector, unwrap to inner selector
+                WHEN raw.type = 'pseudo_element_selector' THEN
+                    COALESCE(
+                        -- First: look for a non-tag, non-syntax child (id_selector, class_selector, etc.)
+                        (SELECT c.node_id FROM sel c
+                         WHERE c.parent_id = raw.node_id
+                           AND c.type NOT IN ('::', 'tag_name', 'pseudo_element_selector')
+                         ORDER BY c.sibling_index LIMIT 1),
+                        -- Fallback: first tag_name child (bare type like return_statement)
+                        (SELECT c.node_id FROM sel c
+                         WHERE c.parent_id = raw.node_id AND c.type = 'tag_name'
+                         ORDER BY c.sibling_index LIMIT 1)
+                    )
+                ELSE raw.node_id
+            END
             LIMIT 1
         ),
 
@@ -2515,6 +2537,9 @@ CREATE OR REPLACE MACRO ast_select(
                         LIMIT 1),
                        -- Quoted string argument: strip surrounding quotes
                        (SELECT trim(t.name, '"''') FROM sel t
+
+)SQLMACRO"
+        R"SQLMACRO(
                         JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
                         WHERE t.type = 'string_value'
                           AND t.node_id > args.node_id
@@ -2537,6 +2562,17 @@ CREATE OR REPLACE MACRO ast_select(
         R"SQLMACRO(
                     AND pcs.node_id <= args.node_id + args.descendant_count
               )
+        ),
+
+        -- Detect pseudo-element (::callers, ::callees, etc.)
+        pseudo_element AS (
+            SELECT (SELECT t.name FROM sel t
+                    WHERE t.type = 'tag_name'
+                      AND EXISTS (SELECT 1 FROM sel pe
+                                  WHERE pe.type = 'pseudo_element_selector'
+                                    AND t.parent_id = pe.node_id)
+                    ORDER BY t.sibling_index DESC
+                    LIMIT 1) as element_name
         ),
 
         -- :matches("code") — structural substring matching via DFS contiguity
@@ -2577,9 +2613,10 @@ CREATE OR REPLACE MACRO ast_select(
                 (SELECT left_type || '_%' FROM combinator_parts) as left_type_like,
                 (SELECT right_type FROM combinator_parts) as right_type,
                 (SELECT right_type || '_%' FROM combinator_parts) as right_type_like
-        )
+        ),
 
     -- Single scan of ast with CASE-based dispatch
+    matched_raw AS (
     SELECT a.*
     FROM ast a, sel_props sp
     WHERE CASE sp.sel_type
@@ -2767,6 +2804,67 @@ CREATE OR REPLACE MACRO ast_select(
             WHEN 'void' THEN a.signature_type IS NULL OR a.signature_type = '' OR a.signature_type = 'void' OR a.signature_type = 'None'
             WHEN 'variadic' THEN a.parameters::VARCHAR LIKE '%*%' OR a.parameters::VARCHAR LIKE '%...%'
 
+            -- :calls(name) — this node's scope contains a call to name
+            WHEN 'calls' THEN EXISTS (
+                SELECT 1 FROM ast callee
+                WHERE callee.file_path = a.file_path
+                  AND callee.node_id > a.node_id
+                  AND callee.node_id <= a.node_id + a.descendant_count
+                  AND is_semantic_type(callee.semantic_type, 'CALL')
+                  AND (pc.pseudo_arg IS NULL OR callee.name = pc.pseudo_arg)
+            )
+
+            -- :called-by(name) — this call site is inside a function named name
+            WHEN 'called-by' THEN EXISTS (
+                SELECT 1 FROM ast caller_fn
+                WHERE caller_fn.file_path = a.file_path
+                  AND a.node_id > caller_fn.node_id
+                  AND a.node_id <= caller_fn.node_id + caller_fn.descendant_count
+                  AND is_semantic_type(caller_fn.semantic_type, 'FUNCTION')
+                  AND (pc.pseudo_arg IS NULL OR caller_fn.name = pc.pseudo_arg)
+                  -- Nearest function (deepest)
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ast closer
+                      WHERE closer.file_path = a.file_path
+                        AND a.node_id > closer.node_id
+                        AND a.node_id <= closer.node_id + closer.descendant_count
+
+)SQLMACRO"
+        R"SQLMACRO(
+                        AND is_semantic_type(closer.semantic_type, 'FUNCTION')
+                        AND closer.depth > caller_fn.depth
+                  )
+            )
+
+            -- :is-called — this function definition is called somewhere in the file
+            WHEN 'is-called' THEN
+                is_name_definition(a.flags) AND a.name IS NOT NULL AND a.name != ''
+                AND EXISTS (
+                    SELECT 1 FROM ast ref
+                    WHERE ref.file_path = a.file_path
+                      AND is_semantic_type(ref.semantic_type, 'CALL')
+                      AND ref.name = a.name
+                      AND ref.node_id != a.node_id
+                )
+
+            -- :is-referenced — this definition is referenced somewhere
+            WHEN 'is-referenced' THEN
+                is_name_definition(a.flags) AND a.name IS NOT NULL AND a.name != ''
+                AND EXISTS (
+                    SELECT 1 FROM ast ref
+                    WHERE ref.file_path = a.file_path
+                      AND is_name_reference(ref.flags)
+                      AND ref.name = a.name
+                      AND ref.node_id != a.node_id
+                )
+
+            -- :exported — module-level public definition
+            WHEN 'exported' THEN
+                is_name_definition(a.flags)
+                AND (a.scope_id IS NULL OR a.scope_id <= 0)
+                AND a.name IS NOT NULL AND a.name != ''
+                AND a.name NOT LIKE '\_%'
+
             -- :matches("code") — exact structural substring match
             -- The parsed pattern must appear as a contiguous node slice in the
             -- target's subtree. db.execute() matches zero-arg calls only.
@@ -2844,8 +2942,391 @@ CREATE OR REPLACE MACRO ast_select(
 
             ELSE true  -- Unknown pseudo-classes are ignored (not errors)
         END
+    )),
+
+    -- =====================================================================
+    -- Pseudo-element dispatch: navigate FROM matched nodes to related nodes
+    -- =====================================================================
+
+    -- The matched nodes (before pseudo-element transformation)
+    matched AS (
+        SELECT * FROM matched_raw
+    ),
+
+    -- ::parent — the parent node
+    pe_parent AS (
+        SELECT p.* FROM matched m JOIN ast p
+          ON p.node_id = m.parent_id AND p.file_path = m.file_path
+    ),
+    -- ::scope — the enclosing scope node
+    pe_scope AS (
+        SELECT s.* FROM matched m JOIN ast s
+          ON s.node_id = m.scope_id AND s.file_path = m.file_path
+    ),
+    -- ::next-sibling — the next sibling
+    pe_next AS (
+        SELECT n.* FROM matched m JOIN ast n
+          ON n.parent_id = m.parent_id AND n.file_path = m.file_path
+          AND n.sibling_index = m.sibling_index + 1
+    ),
+    -- ::prev-sibling — the previous sibling
+    pe_prev AS (
+        SELECT p.* FROM matched m JOIN ast p
+          ON p.parent_id = m.parent_id AND p.file_path = m.file_path
+          AND p.sibling_index = m.sibling_index - 1
+    ),
+    -- ::callers — functions that call this function
+    pe_callers AS (
+        SELECT DISTINCT caller_fn.* FROM matched m
+        -- Find call nodes with the same name as this function
+        JOIN ast call_node ON call_node.file_path = m.file_path
+          AND is_semantic_type(call_node.semantic_type, 'CALL')
+          AND call_node.name = m.name
+          AND call_node.node_id != m.node_id
+        -- Find the enclosing function of each call
+        JOIN ast caller_fn ON caller_fn.file_path = call_node.file_path
+          AND is_semantic_type(caller_fn.semantic_type, 'FUNCTION')
+          AND call_node.node_id > caller_fn.node_id
+          AND call_node.node_id <= caller_fn.node_id + caller_fn.descendant_count
+          AND NOT EXISTS (
+              SELECT 1 FROM ast closer
+              WHERE closer.file_path = call_node.file_path
+                AND is_semantic_type(closer.semantic_type, 'FUNCTION')
+                AND call_node.node_id > closer.node_id
+                AND call_node.node_id <= closer.node_id + closer.descendant_count
+                AND closer.depth > caller_fn.depth
+          )
+    ),
+    -- ::callees — functions this function calls (call nodes within subtree)
+    pe_callees AS (
+        SELECT DISTINCT callee.* FROM matched m
+        JOIN ast callee ON callee.file_path = m.file_path
+          AND callee.node_id > m.node_id
+          AND callee.node_id <= m.node_id + m.descendant_count
+          AND is_semantic_type(callee.semantic_type, 'CALL')
+          AND callee.name IS NOT NULL AND callee.name != ''
+    ),
+    -- ::parent-definition — nearest ancestor that is a named definition
+    pe_parent_def AS (
+        SELECT DISTINCT def.* FROM matched m
+        JOIN ast def ON def.file_path = m.file_path
+          AND m.node_id > def.node_id
+          AND m.node_id <= def.node_id + def.descendant_count
+          AND is_name_definition(def.flags)
+          AND def.name IS NOT NULL AND def.name != ''
+          -- Nearest = deepest
+          AND NOT EXISTS (
+              SELECT 1 FROM ast closer
+              WHERE closer.file_path = m.file_path
+                AND m.node_id > closer.node_id
+                AND m.node_id <= closer.node_id + closer.descendant_count
+                AND is_name_definition(closer.flags)
+                AND closer.name IS NOT NULL AND closer.name != ''
+                AND closer.depth > def.depth
+          )
     )
-    ORDER BY a.file_path, a.node_id;
+
+    -- Route to correct output based on pseudo-element (or return matched as-is)
+    SELECT * FROM matched
+    WHERE (SELECT element_name FROM pseudo_element) IS NULL
+    UNION ALL
+    SELECT * FROM pe_parent
+    WHERE (SELECT element_name FROM pseudo_element) = 'parent'
+    UNION ALL
+    SELECT * FROM pe_parent_def
+    WHERE (SELECT element_name FROM pseudo_element) = 'parent-definition'
+    UNION ALL
+    SELECT * FROM pe_scope
+    WHERE (SELECT element_name FROM pseudo_element) = 'scope'
+    UNION ALL
+    SELECT * FROM pe_next
+    WHERE (SELECT element_name FROM pseudo_element) = 'next-sibling'
+    UNION ALL
+    SELECT * FROM pe_prev
+    WHERE (SELECT element_name FROM pseudo_element) IN ('prev-sibling', 'previous-sibling')
+    UNION ALL
+    SELECT * FROM pe_callers
+    WHERE (SELECT element_name FROM pseudo_element) = 'callers'
+    UNION ALL
+    SELECT * FROM pe_callees
+    WHERE (SELECT element_name FROM pseudo_element) = 'callees'
+    ORDER BY file_path, node_id;
+)SQLMACRO"},
+    {"scope_resolution.sql", R"SQLMACRO(
+-- =============================================================================
+-- Scope Resolution Macros
+-- =============================================================================
+--
+-- Macros for scope-aware querying: exports, imports, and name resolution.
+-- These use the scope_id and scope_stack columns from read_ast().
+--
+-- scope_id: nearest enclosing scope's node_id (on every node)
+-- scope_stack: LIST(INT64) of enclosing scopes, outermost first (on scope nodes only)
+-- =============================================================================
+
+-- =============================================================================
+-- ast_exports: Module-level definitions visible outside the file
+-- =============================================================================
+--
+-- Returns definitions at module scope (depth <= 2) that are not private.
+-- For Python: excludes _ prefixed names.
+-- For other languages: includes all top-level definitions (use :exported
+-- pseudo-class or [modifier=public] for language-specific filtering).
+--
+-- Usage:
+--   SELECT * FROM ast_exports('src/**/*.py');
+--   SELECT name, type FROM ast_exports('src/*.go') WHERE name = upper(left(name, 1)) || right(name, -1);
+
+CREATE OR REPLACE MACRO ast_exports(
+    source,
+    language := NULL
+) AS TABLE
+    SELECT *
+    FROM read_ast(source, language)
+    WHERE is_name_definition(flags)
+      AND scope_id <= 0  -- module-level scope (scope_id = -1 or 0 = root module)
+      AND name IS NOT NULL
+      AND name != ''
+      AND name NOT LIKE '\_%'  -- exclude Python-style private
+    ORDER BY file_path, start_line;
+
+
+-- =============================================================================
+-- ast_imports: Import statements with source module and imported names
+-- =============================================================================
+--
+-- Extracts (file_path, source_module, imported_name) from import statements.
+-- Uses semantic type EXTERNAL_IMPORT to work across languages.
+--
+-- Usage:
+--   SELECT * FROM ast_imports('src/**/*.py');
+--   SELECT source_module, imported_name FROM ast_imports('src/*.js');
+
+CREATE OR REPLACE MACRO ast_imports(
+    source,
+    language := NULL
+) AS TABLE
+    WITH
+        ast AS (
+            SELECT * FROM read_ast(source, language)
+        ),
+        -- Find import statements via semantic type
+        import_nodes AS (
+            SELECT node_id, name as source_module, type as import_type,
+                   descendant_count, file_path, start_line, language
+            FROM ast
+            WHERE is_semantic_type(semantic_type, 'IMPORT')
+              AND NOT is_syntax_only(flags)
+              AND descendant_count > 0  -- exclude keyword tokens
+        ),
+        -- Extract imported names: named identifier children of import nodes
+        -- that are not the module name itself
+        imported_names AS (
+            SELECT
+                i.file_path,
+                i.source_module,
+                i.import_type,
+                a.name as imported_name,
+                i.start_line
+            FROM import_nodes i
+            JOIN ast a ON a.node_id > i.node_id
+              AND a.node_id <= i.node_id + i.descendant_count
+              AND a.type IN ('dotted_name', 'identifier', 'import_specifier',
+                            'import_default_specifier', 'scoped_identifier')
+              AND a.name IS NOT NULL AND a.name != ''
+              AND a.name != i.source_module  -- exclude the module name itself
+              AND a.depth = (
+                  -- Get the shallowest named children (avoid deep duplicates)
+                  SELECT MIN(a2.depth) FROM ast a2
+                  WHERE a2.node_id > i.node_id
+                    AND a2.node_id <= i.node_id + i.descendant_count
+                    AND a2.type IN ('dotted_name', 'identifier', 'import_specifier',
+                                   'import_default_specifier', 'scoped_identifier')
+                    AND a2.name IS NOT NULL AND a2.name != ''
+                    AND a2.name != i.source_module
+              )
+        )
+    SELECT file_path, source_module, imported_name, import_type, start_line
+    FROM imported_names
+    ORDER BY file_path, start_line, imported_name;
+
+
+-- =============================================================================
+-- ast_resolve: Resolve references to their definitions via scope chain
+-- =============================================================================
+--
+-- For each reference node, walks the scope chain to find the nearest
+-- enclosing definition with the same name. Returns (ref_node_id, def_node_id)
+-- pairs.
+--
+-- Usage:
+--   SELECT * FROM ast_resolve('src/main.py');
+--   SELECT r.ref_name, r.def_line, r.scope_hops FROM ast_resolve('src/*.py') r;
+
+CREATE OR REPLACE MACRO ast_resolve(
+    source,
+    language := NULL
+) AS TABLE
+    WITH
+        ast AS (
+            SELECT * FROM read_ast(source, language)
+        ),
+        -- All references with their scope chain
+        refs AS (
+            SELECT
+                a.node_id as ref_node_id,
+                a.name as ref_name,
+                a.type as ref_type,
+                a.start_line as ref_line,
+                a.file_path,
+                a.scope_id,
+                -- Get scope chain from the enclosing scope node
+                s.scope_stack
+            FROM ast a
+            JOIN ast s ON s.node_id = a.scope_id AND s.file_path = a.file_path
+            WHERE is_name_reference(a.flags)
+              AND a.name IS NOT NULL AND a.name != ''
+              AND s.scope_stack IS NOT NULL
+        ),
+        -- Unnest scope chain with position (for distance ranking)
+        search_scopes AS (
+            SELECT
+                r.ref_node_id, r.ref_name, r.ref_type, r.ref_line, r.file_path,
+                unnest(r.scope_stack) as search_scope_id,
+                generate_series(1, len(r.scope_stack)) as scope_distance
+            FROM refs r
+        ),
+        -- Find definitions in each scope
+        candidates AS (
+            SELECT
+                ss.ref_node_id,
+                ss.ref_name,
+                ss.ref_type,
+                ss.ref_line,
+                ss.file_path,
+                ss.scope_distance,
+                d.node_id as def_node_id,
+                d.type as def_type,
+                d.start_line as def_line,
+                d.qualified_name as def_qualified_name
+            FROM search_scopes ss
+            JOIN ast d ON d.scope_id = ss.search_scope_id
+              AND d.file_path = ss.file_path
+              AND d.name = ss.ref_name
+              AND is_name_definition(d.flags)
+        ),
+        -- Pick the closest definition (highest scope_distance = innermost scope)
+        resolved AS (
+            SELECT DISTINCT ON (ref_node_id)
+                ref_node_id, ref_name, ref_type, ref_line, file_path,
+                def_node_id, def_type, def_line, def_qualified_name,
+                scope_distance as scope_hops
+            FROM candidates
+            ORDER BY ref_node_id, scope_distance DESC
+        )
+    SELECT * FROM resolved
+    ORDER BY file_path, ref_line;
+
+
+-- =============================================================================
+-- ast_callees: What does each function call?
+-- =============================================================================
+--
+-- For each function definition, finds all call expressions within its scope.
+-- Returns (caller_name, caller_line, callee_name, callee_line) pairs.
+--
+-- Usage:
+--   SELECT * FROM ast_callees('src/**/*.py');
+--   SELECT caller, callee FROM ast_callees('src/*.py') WHERE caller = 'main';
+
+CREATE OR REPLACE MACRO ast_callees(
+    source,
+    language := NULL
+) AS TABLE
+    WITH ast AS (
+        SELECT * FROM read_ast(source, language)
+    ),
+    funcs AS (
+        SELECT node_id, name, descendant_count, file_path, start_line, qualified_name
+        FROM ast
+        WHERE is_name_definition(flags) AND is_scope(flags)
+          AND is_semantic_type(semantic_type, 'FUNCTION')
+          AND name IS NOT NULL AND name != ''
+    ),
+    calls AS (
+        SELECT f.name as caller,
+               f.qualified_name as caller_qualified,
+               f.start_line as caller_line,
+               f.file_path,
+               c.name as callee,
+               c.start_line as callee_line,
+               c.peek as call_peek
+        FROM funcs f
+        JOIN ast c ON c.node_id > f.node_id
+          AND c.node_id <= f.node_id + f.descendant_count
+          AND c.file_path = f.file_path
+          AND is_semantic_type(c.semantic_type, 'CALL')
+          AND c.name IS NOT NULL AND c.name != ''
+    )
+    SELECT * FROM calls
+    ORDER BY file_path, caller_line, callee_line;
+
+
+-- =============================================================================
+-- ast_callers: Who calls a given function?
+-- =============================================================================
+--
+-- Finds all call sites for each function, with the enclosing function as caller.
+-- Uses scope_id to efficiently look up the containing function.
+--
+-- Usage:
+--   SELECT * FROM ast_callers('src/**/*.py');
+--   SELECT caller, callee FROM ast_callers('src/*.py') WHERE callee = 'execute';
+
+CREATE OR REPLACE MACRO ast_callers(
+    source,
+    language := NULL
+) AS TABLE
+    WITH ast AS (
+        SELECT * FROM read_ast(source, language)
+    ),
+    -- All call sites
+    calls AS (
+        SELECT node_id, name as callee, start_line as call_line,
+               scope_id, file_path
+        FROM ast
+        WHERE is_semantic_type(semantic_type, 'CALL')
+          AND name IS NOT NULL AND name != ''
+    ),
+    -- Resolve each call's enclosing function
+    -- Simple approach: find the deepest function ancestor that contains this call
+    with_caller AS (
+        SELECT
+            c.callee,
+            c.call_line,
+            c.file_path,
+            COALESCE(f.name, '<module>') as caller,
+            COALESCE(f.start_line, 0) as caller_line
+        FROM calls c
+        -- Find nearest enclosing function via range check
+        JOIN ast f ON f.file_path = c.file_path
+          AND is_semantic_type(f.semantic_type, 'FUNCTION')
+          AND c.node_id > f.node_id
+          AND c.node_id <= f.node_id + f.descendant_count
+          -- Nearest = deepest
+          AND NOT EXISTS (
+              SELECT 1 FROM ast f2
+              WHERE f2.file_path = c.file_path
+                AND is_semantic_type(f2.semantic_type, 'FUNCTION')
+                AND c.node_id > f2.node_id
+                AND c.node_id <= f2.node_id + f2.descendant_count
+                AND f2.depth > f.depth
+          )
+    )
+    SELECT caller, caller_line, callee, call_line, file_path
+    FROM with_caller
+    ORDER BY file_path, call_line;
+
 )SQLMACRO"},
 };
 

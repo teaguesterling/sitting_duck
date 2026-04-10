@@ -222,6 +222,71 @@ SELECT name, type, start_line, file_path
 FROM ast_select('src/**/*', '.func:named:scope');
 ```
 
+## Call Graph Analysis
+
+### Find leaf functions (no callees)
+
+```sql
+SELECT name, file_path
+FROM ast_select('src/**/*.py', '.func:not(:callees)');
+```
+
+### Find hub functions (many callers AND many callees)
+
+```sql
+WITH callees AS (
+    SELECT caller, COUNT(DISTINCT callee) as out_degree
+    FROM ast_callees('src/**/*.py') GROUP BY caller
+),
+callers AS (
+    SELECT callee, COUNT(DISTINCT caller) as in_degree
+    FROM ast_callees('src/**/*.py') GROUP BY callee
+)
+SELECT callees.caller as name, in_degree, out_degree
+FROM callees
+JOIN callers ON callers.callee = callees.caller
+WHERE in_degree >= 3 AND out_degree >= 3
+ORDER BY in_degree + out_degree DESC;
+```
+
+### Find unused functions (defined but never called)
+
+```sql
+SELECT name, start_line, file_path
+FROM ast_select('src/**/*.py', '.func:unreferenced');
+```
+
+### Cross-file call chain: what does main() call, and what do those call?
+
+```sql
+-- Level 1: direct callees of main
+SELECT callee as level_1
+FROM ast_callees('src/**/*.py')
+WHERE caller = 'main';
+
+-- Level 2: what do those functions call?
+SELECT c1.callee as level_1, c2.callee as level_2
+FROM ast_callees('src/**/*.py') c1
+JOIN ast_callees('src/**/*.py') c2 ON c2.caller = c1.callee
+WHERE c1.caller = 'main';
+```
+
+### Find functions that call a dangerous function
+
+```sql
+-- Functions calling eval
+SELECT name, file_path
+FROM ast_select('src/**/*.py', '.func:calls(eval)');
+
+-- Functions calling exec
+SELECT name, file_path
+FROM ast_select('src/**/*.py', '.func:calls(exec)');
+
+-- Functions calling both eval and exec
+SELECT name, file_path
+FROM ast_select('src/**/*.py', '.func:calls(eval):calls(exec)');
+```
+
 ---
 
 ## See Also
