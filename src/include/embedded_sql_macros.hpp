@@ -2292,10 +2292,12 @@ CREATE OR REPLACE MACRO ast_select(
             SELECT * FROM parse_ast(selector, 'css')
         ),
 
-        -- Parse source files
-        -- TODO: optimize with +schema modes to avoid computing peek/native when unused
+        -- Parse source files. Keep native context (needed for attribute filters like
+        -- [params=N] and pseudo-classes like :decorated, :typed, :async, etc.) but
+        -- skip peek computation since no selector feature references it. The +schema
+        -- suffix keeps the peek column in the schema as NULL.
         ast AS (
-            SELECT * FROM read_ast(source, language)
+            SELECT * FROM read_ast(source, language, peek := 'none+schema')
         ),
 
         -- Find the top-level selector node (skip stylesheet, ERROR, and pseudo_element wrappers)
@@ -2533,12 +2535,12 @@ CREATE OR REPLACE MACRO ast_select(
                           AND t.node_id > args.node_id
                           AND t.node_id <= args.node_id + args.descendant_count
                         LIMIT 1),
-                       (SELECT trim(t.name, '"''') FROM sel t
-                        JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
-                        WHERE t.type = 'string_value'
 
 )SQLMACRO"
         R"SQLMACRO(
+                       (SELECT trim(t.name, '"''') FROM sel t
+                        JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
+                        WHERE t.type = 'string_value'
                           AND t.node_id > args.node_id
                           AND t.node_id <= args.node_id + args.descendant_count
                         LIMIT 1)
@@ -2641,13 +2643,16 @@ CREATE OR REPLACE MACRO ast_select(
         -- Use ___ (triple underscore) as wildcard for any name.
         matches_pattern AS (
             SELECT
-                row_number() OVER (ORDER BY node_id) - 1 as idx,
-                type as pat_type,
-                name as pat_name
-            FROM parse_ast(
-                regexp_extract(selector, ':matches\("([^"]+)"\)', 1),
-                COALESCE(language, 'python'))
-            WHERE type NOT IN ('module', 'expression_statement', 'program', 'source_file')
+                row_number() OVER (ORDER BY node.node_id) - 1 as idx,
+                node.type as pat_type,
+                node.name as pat_name
+            FROM (
+                SELECT unnest(parse_ast_list(
+                    regexp_extract(selector, ':matches\("([^"]+)"\)', 1),
+                    COALESCE(language, 'python')
+                )) as node
+            )
+            WHERE node.type NOT IN ('module', 'expression_statement', 'program', 'source_file')
         ),
         matches_len AS (
             SELECT COUNT(*) as len FROM matches_pattern
@@ -2813,6 +2818,9 @@ CREATE OR REPLACE MACRO ast_select(
             -- Peek (source text) content search
             WHEN ac.attr_name = 'peek' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.peek LIKE '%' || ac.attr_value || '%'
+
+)SQLMACRO"
+        R"SQLMACRO(
                                 ELSE a.peek = ac.attr_value END
 
             ELSE false
@@ -2822,9 +2830,6 @@ CREATE OR REPLACE MACRO ast_select(
     -- Each pseudo-class in the selector must be satisfied.
     -- For non-negated pcs: satisfied iff CASE is true.
     -- For negated pcs (inside :not()): satisfied iff CASE is false.
-
-)SQLMACRO"
-        R"SQLMACRO(
     -- A pc is unsatisfied when (negated = CASE), so NOT EXISTS of that identifies nodes
     -- where every pc is satisfied.
     AND (SELECT ok FROM pseudo_class_validation)
@@ -3106,6 +3111,9 @@ CREATE OR REPLACE MACRO ast_select(
     WHERE (SELECT element_name FROM pseudo_element) IN ('prev-sibling', 'previous-sibling')
     UNION ALL
     SELECT * FROM pe_callers
+
+)SQLMACRO"
+        R"SQLMACRO(
     WHERE (SELECT element_name FROM pseudo_element) = 'callers'
     UNION ALL
     SELECT * FROM pe_callees

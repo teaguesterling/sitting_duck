@@ -1,0 +1,71 @@
+# name: test/sql/schema_suffix.test
+# description: Test +schema suffix for extraction config parameters
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Test 1: +schema suffix on context — all columns present, native fields are NULL
+query IIIII
+SELECT node_id, type, name, signature_type, peek
+FROM read_ast('test/data/python/simple.py', 'python',
+    context := 'normalized+schema',
+    peek := 'none+schema')
+WHERE type = 'function_definition'
+LIMIT 1;
+----
+1	function_definition	hello	NULL	NULL
+
+# Test 2: Without +schema, native columns don't exist — this confirms the suffix is needed
+statement error
+SELECT signature_type
+FROM read_ast('test/data/python/simple.py', 'python',
+    context := 'normalized',
+    peek := 'none')
+LIMIT 1;
+----
+Binder Error
+
+# Test 3: +schema on structure — all structure columns present
+query III
+SELECT parent_id, depth, descendant_count
+FROM read_ast('test/data/python/simple.py', 'python',
+    structure := 'minimal+schema')
+WHERE type = 'function_definition'
+LIMIT 1;
+----
+0	1	NULL
+
+# Test 4: +schema on source — all source columns present
+query II
+SELECT start_line, start_column
+FROM read_ast('test/data/python/simple.py', 'python',
+    source := 'lines+schema')
+WHERE type = 'function_definition'
+LIMIT 1;
+----
+1	NULL
+
+# Test 5: +schema works with parse_ast too
+query III
+SELECT name, signature_type, peek
+FROM parse_ast('def hello(): pass', 'python',
+    context := 'normalized+schema',
+    peek := 'none+schema')
+WHERE name = 'hello'
+LIMIT 1;
+----
+hello	NULL	NULL
+
+# Test 6: Data at requested level is still computed correctly
+query III
+SELECT name, qualified_name, semantic_type::VARCHAR
+FROM read_ast('test/data/python/simple.py', 'python',
+    context := 'normalized+schema',
+    peek := 'none+schema')
+WHERE name = 'hello'
+LIMIT 1;
+----
+hello	F[hello]	DEFINITION_FUNCTION

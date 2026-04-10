@@ -158,7 +158,7 @@ SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python',
     peek_size := 120,
     peek_mode := 'auto') LIMIT 1;
 ----
-Invalid peek parameter 'auto'. Valid values are: 'none', 'smart', 'full', or a numeric size
+Invalid peek parameter 'auto'
 
 statement ok
 SELECT COUNT(*) FROM read_ast('test/data/python/simple.py', 'python', 

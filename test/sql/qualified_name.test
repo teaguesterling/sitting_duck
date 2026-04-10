@@ -11,35 +11,35 @@ LOAD sitting_duck;
 # Test 1: Basic qualified_name format for top-level definitions
 # =============================================================================
 
-# Top-level variable gets V/name
+# Top-level variable gets V[name]
 query II
 SELECT name, qualified_name
 FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE name = 'MY_CONST' AND is_definition(semantic_type);
 ----
-MY_CONST	V/MY_CONST
+MY_CONST	V[MY_CONST]
 
-# Top-level function gets F/name
+# Top-level function gets F[name]
 query II
 SELECT name, qualified_name
 FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE name = 'top_level_function' AND is_definition(semantic_type);
 ----
-top_level_function	F/top_level_function
+top_level_function	F[top_level_function]
 
 # =============================================================================
 # Test 2: Class-scoped definitions
 # =============================================================================
 
-# Classes get C/name
+# Classes get C[name]
 query II
 SELECT name, qualified_name
 FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE name IN ('User', 'Account') AND is_definition(semantic_type)
 ORDER BY start_line;
 ----
-User	C/User
-Account	C/Account
+User	C[User]
+Account	C[Account]
 
 # =============================================================================
 # Test 3: Disambiguation of same-named methods (__init__)
@@ -52,9 +52,9 @@ FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE name = '__init__' AND is_definition(semantic_type)
 ORDER BY start_line;
 ----
-C/User F/__init__
-C/Account F/__init__
-C/Account C/Settings F/__init__
+C[User] F[__init__]
+C[Account] F[__init__]
+C[Account] C[Settings] F[__init__]
 
 # =============================================================================
 # Test 4: Nested class scoping
@@ -66,7 +66,7 @@ SELECT name, qualified_name
 FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE name = 'Settings' AND is_definition(semantic_type);
 ----
-Settings	C/Account C/Settings
+Settings	C[Account] C[Settings]
 
 # =============================================================================
 # Test 5: Nested function scoping
@@ -77,7 +77,7 @@ SELECT name, qualified_name
 FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE name = 'nested_helper' AND is_definition(semantic_type);
 ----
-nested_helper	F/top_level_function F/nested_helper
+nested_helper	F[top_level_function] F[nested_helper]
 
 # =============================================================================
 # Test 6: Method in class
@@ -88,7 +88,7 @@ SELECT name, qualified_name
 FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE name = 'validate' AND is_definition(semantic_type);
 ----
-validate	C/User F/validate
+validate	C[User] F[validate]
 
 # =============================================================================
 # Test 7: Non-definition nodes get NULL qualified_name
@@ -115,23 +115,23 @@ class Foo:
 WHERE qualified_name IS NOT NULL
 ORDER BY start_line;
 ----
-Foo	C/Foo
-bar	C/Foo F/bar
+Foo	C[Foo]
+bar	C[Foo] F[bar]
 
 # =============================================================================
 # Test 9: Partial matching with LIKE
 # =============================================================================
 
-# All definitions scoped under User class
+# All definitions nested inside User class (not User itself)
 query I
 SELECT qualified_name
 FROM read_ast('test/data/python/qualified_names.py', 'python')
-WHERE qualified_name LIKE 'C/User %'
+WHERE qualified_name LIKE 'C[User] %'
 ORDER BY start_line;
 ----
-C/User F/__init__
-C/User F/__init__ V/name
-C/User F/validate
+C[User] F[__init__]
+C[User] F[__init__] V[name]
+C[User] F[validate]
 
 # =============================================================================
 # Test 10: All definitions have qualified_name (no definition left NULL)
@@ -143,3 +143,68 @@ FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE is_definition(semantic_type) AND name != '' AND qualified_name IS NULL;
 ----
 0
+
+# =============================================================================
+# Test 11: Filter by kind — anchored prefix match finds all functions
+# =============================================================================
+
+# Match any qualified_name containing F[ — includes functions themselves
+# AND nested definitions inside functions (e.g., V[x] inside F[foo])
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/python/qualified_names.py', 'python')
+WHERE qualified_name LIKE '%F[%';
+----
+10
+
+# =============================================================================
+# Test 12: A variable literally named "F" does not match the function filter
+# =============================================================================
+
+# V[F] doesn't contain 'F[' — format avoids the single-letter-name collision
+query II
+SELECT name, qualified_name
+FROM parse_ast('F = 1', 'python')
+WHERE is_definition(semantic_type) AND name = 'F';
+----
+F	V[F]
+
+# =============================================================================
+# Test 13: Import statements get I[name] prefix
+# =============================================================================
+
+# Python aliased import produces I[np]
+query II
+SELECT name, qualified_name
+FROM parse_ast('import numpy as np', 'python')
+WHERE qualified_name LIKE 'I[%';
+----
+np	I[np]
+
+# =============================================================================
+# Test 14: Filter by import kind with 'I[' prefix pattern
+# =============================================================================
+
+query I
+SELECT COUNT(*)
+FROM parse_ast('
+import os
+import sys
+import numpy as np
+', 'python')
+WHERE qualified_name LIKE 'I[%';
+----
+3
+
+# =============================================================================
+# Test 15: JavaScript export specifiers get E[name] prefix
+# =============================================================================
+
+query II
+SELECT name, qualified_name
+FROM parse_ast('export { foo, bar }', 'javascript')
+WHERE qualified_name LIKE 'E[%'
+ORDER BY name;
+----
+bar	E[bar]
+foo	E[foo]
