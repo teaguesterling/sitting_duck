@@ -666,7 +666,7 @@ CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language :
     WITH
 
 )SQLMACRO"
-                            R"SQLMACRO(
+        R"SQLMACRO(
         ast AS (
             SELECT * FROM read_ast(source, language)
         ),
@@ -1002,7 +1002,7 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
             FROM ast a
 
 )SQLMACRO"
-                            R"SQLMACRO(
+        R"SQLMACRO(
             WHERE is_function_definition(a.semantic_type)
               AND a.name IS NOT NULL AND a.name != ''
               -- Exclude special methods (constructors, dunder methods, etc.)
@@ -1380,7 +1380,7 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
 --   SELECT * FROM ast_match('src/**/*.py', 'my_func(__X__)');
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
 --   SELECT * FROM ast_match('src/main.py', 'my_func(__X__)', match_syntax := true);
 --   SELECT * FROM ast_match('src/**/*.py', '__F__(__X__)', match_by := 'semantic_type');
 --
@@ -1632,7 +1632,7 @@ CREATE OR REPLACE MACRO ast_match(
                 t.file_path = mc.file_path
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
                 AND t.node_id >= mc.candidate_root
                 AND t.node_id <= mc.candidate_root + mc.candidate_descendants
                 -- Depth matching: flexible when at/below recursive wildcard wrapper depth
@@ -1940,7 +1940,7 @@ CREATE OR REPLACE MACRO ast_match(
             FROM captures_single_listed
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
             UNION ALL
             SELECT candidate_file, candidate_root, capture_name, capture_list
             FROM captures_variadic_listed
@@ -2523,35 +2523,34 @@ CREATE OR REPLACE MACRO ast_select(
         -- =====================================================================
 
         -- Extract all pseudo-class names for boolean/positional checks
-        -- (excludes :has, :not which are handled separately above)
+        -- (excludes :has, :not(:has) which are handled separately above)
+        -- Includes pseudo-classes wrapped by :not() with negated=true.
         pseudo_classes AS (
+            -- Top-level pseudo-classes (not negated)
             SELECT cn.name as pseudo_name,
-                   -- For pseudo-classes with arguments, extract the argument value
-                   -- Handles tag_name, integer_value, AND quoted strings (for :matches)
                    COALESCE(
                        (SELECT t.name FROM sel t
                         JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
                         WHERE (t.type = 'tag_name' OR t.type = 'integer_value')
                           AND t.node_id > args.node_id
                           AND t.node_id <= args.node_id + args.descendant_count
+                        LIMIT 1),
 
 )SQLMACRO"
-                          R"SQLMACRO(
-                        LIMIT 1),
-                       -- Quoted string argument: strip surrounding quotes
+        R"SQLMACRO(
                        (SELECT trim(t.name, '"''') FROM sel t
                         JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
                         WHERE t.type = 'string_value'
                           AND t.node_id > args.node_id
                           AND t.node_id <= args.node_id + args.descendant_count
                         LIMIT 1)
-                   ) as pseudo_arg
+                   ) as pseudo_arg,
+                   false as negated
             FROM sel pcs
             JOIN sel cn ON cn.parent_id = pcs.node_id AND cn.type = 'class_name'
             WHERE pcs.type = 'pseudo_class_selector'
               -- Exclude :has, :not (handled by dedicated CTEs above)
               AND cn.name NOT IN ('has', 'not')
-              -- Exclude .class selectors (class_name under class_selector, not pseudo_class_selector)
               -- Only top-level pseudo-classes (not inside :has/:not arguments)
               AND NOT EXISTS (
                   SELECT 1 FROM sel args
@@ -2559,6 +2558,71 @@ CREATE OR REPLACE MACRO ast_select(
                     AND pcs.node_id > args.node_id
                     AND pcs.node_id <= args.node_id + args.descendant_count
               )
+
+            UNION ALL
+
+            -- Pseudo-classes inside a top-level :not() (negated)
+            -- :not(:has(...)) is still handled by not_has_conditions, so exclude :has here.
+            SELECT cn.name as pseudo_name,
+                   COALESCE(
+                       (SELECT t.name FROM sel t
+                        JOIN sel inner_args ON inner_args.parent_id = pcs.node_id
+                          AND inner_args.type = 'arguments'
+                        WHERE (t.type = 'tag_name' OR t.type = 'integer_value')
+                          AND t.node_id > inner_args.node_id
+                          AND t.node_id <= inner_args.node_id + inner_args.descendant_count
+                        LIMIT 1),
+                       (SELECT trim(t.name, '"''') FROM sel t
+                        JOIN sel inner_args ON inner_args.parent_id = pcs.node_id
+                          AND inner_args.type = 'arguments'
+                        WHERE t.type = 'string_value'
+                          AND t.node_id > inner_args.node_id
+                          AND t.node_id <= inner_args.node_id + inner_args.descendant_count
+                        LIMIT 1)
+                   ) as pseudo_arg,
+                   true as negated
+            FROM sel pcs
+            JOIN sel cn ON cn.parent_id = pcs.node_id AND cn.type = 'class_name'
+            -- The inner pseudo-class must be a direct child of :not()'s arguments
+            JOIN sel not_args ON not_args.node_id = pcs.parent_id AND not_args.type = 'arguments'
+            JOIN sel not_pcs ON not_pcs.node_id = not_args.parent_id
+              AND not_pcs.type = 'pseudo_class_selector'
+            JOIN sel not_cn ON not_cn.parent_id = not_pcs.node_id
+              AND not_cn.type = 'class_name' AND not_cn.name = 'not'
+            WHERE pcs.type = 'pseudo_class_selector'
+              -- :not(:has(...)) is handled by not_has_conditions
+              AND cn.name != 'has'
+              -- The enclosing :not() must be top-level, not nested inside another argument
+              AND NOT EXISTS (
+                  SELECT 1 FROM sel outer_args
+                  WHERE outer_args.type = 'arguments'
+                    AND not_pcs.node_id > outer_args.node_id
+                    AND not_pcs.node_id <= outer_args.node_id + outer_args.descendant_count
+              )
+        ),
+
+        -- Validate that every pseudo-class name we saw is one we know about.
+        -- Unknown names raise an error rather than silently matching/mismatching.
+        known_pseudo_class_names(name) AS (
+            VALUES ('first-child'), ('last-child'), ('nth-child'), ('empty'), ('root'),
+                   ('named'), ('syntax'),
+                   ('definition'), ('reference'), ('declaration'),
+                   ('async'), ('static'), ('abstract'), ('const'),
+                   ('public'), ('private'), ('protected'),
+                   ('decorated'), ('typed'), ('void'), ('variadic'),
+                   ('calls'), ('called-by'), ('is-called'), ('is-referenced'), ('exported'),
+                   ('matches'), ('scope'), ('precedes'), ('follows')
+        ),
+        pseudo_class_validation AS (
+            SELECT CASE WHEN EXISTS (
+                SELECT 1 FROM pseudo_classes pc
+                WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
+            ) THEN error(
+                'ast_select: unknown pseudo-class ":' ||
+                (SELECT pc.pseudo_name FROM pseudo_classes pc
+                 WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
+                 LIMIT 1) || '"'
+            ) ELSE true END as ok
         ),
 
         -- Detect pseudo-element (::callers, ::callees, etc.)
@@ -2754,16 +2818,24 @@ CREATE OR REPLACE MACRO ast_select(
             -- Peek (source text) content search
             WHEN ac.attr_name = 'peek' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.peek LIKE '%' || ac.attr_value || '%'
+
+)SQLMACRO"
+        R"SQLMACRO(
                                 ELSE a.peek = ac.attr_value END
 
             ELSE false
         END
     )
     -- Additional pseudo-class filters
-    -- Each pseudo-class in the selector must be satisfied
+    -- Each pseudo-class in the selector must be satisfied.
+    -- For non-negated pcs: satisfied iff CASE is true.
+    -- For negated pcs (inside :not()): satisfied iff CASE is false.
+    -- A pc is unsatisfied when (negated = CASE), so NOT EXISTS of that identifies nodes
+    -- where every pc is satisfied.
+    AND (SELECT ok FROM pseudo_class_validation)
     AND NOT EXISTS (
         SELECT 1 FROM pseudo_classes pc
-        WHERE NOT CASE pc.pseudo_name
+        WHERE pc.negated = CASE pc.pseudo_name
 
             -- Standard CSS positional pseudo-classes
             WHEN 'first-child' THEN a.sibling_index = 0
@@ -2821,9 +2893,6 @@ CREATE OR REPLACE MACRO ast_select(
                   AND (pc.pseudo_arg IS NULL OR caller_fn.name = pc.pseudo_arg)
                   -- Nearest function (deepest)
                   AND NOT EXISTS (
-
-)SQLMACRO"
-                          R"SQLMACRO(
                       SELECT 1 FROM ast closer
                       WHERE closer.file_path = a.file_path
                         AND a.node_id > closer.node_id
@@ -2934,7 +3003,9 @@ CREATE OR REPLACE MACRO ast_select(
                        OR before_sib.type LIKE pc.pseudo_arg || '_%')
             )
 
-            ELSE true  -- Unknown pseudo-classes are ignored (not errors)
+            -- Unreachable: pseudo_class_validation fires first for unknown names.
+            -- ELSE false means "unsatisfied" (fail closed) if validation ever misses one.
+            ELSE false
         END
     )),
 
@@ -3040,6 +3111,9 @@ CREATE OR REPLACE MACRO ast_select(
     WHERE (SELECT element_name FROM pseudo_element) IN ('prev-sibling', 'previous-sibling')
     UNION ALL
     SELECT * FROM pe_callers
+
+)SQLMACRO"
+        R"SQLMACRO(
     WHERE (SELECT element_name FROM pseudo_element) = 'callers'
     UNION ALL
     SELECT * FROM pe_callees

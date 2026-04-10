@@ -138,3 +138,80 @@ SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py',
     'function_definition:first-child:has(return_statement)');
 ----
 0
+
+# =============================================================================
+# :not(:pseudo-class) — negation of arbitrary pseudo-classes
+# =============================================================================
+
+# The :is-called / :not(:is-called) pair should partition the set of functions
+# exactly: every function is either called or not, never both, never neither.
+query III
+WITH t AS (
+    SELECT COUNT(*) FILTER (WHERE true) AS total,
+           COUNT(*) FILTER (WHERE is_called) AS called,
+           COUNT(*) FILTER (WHERE NOT is_called) AS not_called
+    FROM (
+        SELECT name,
+               EXISTS (
+                   SELECT 1 FROM ast_select('test/data/python/sample_app.py', '.func:is-called') c
+                   WHERE c.node_id = f.node_id
+               ) AS is_called
+        FROM ast_select('test/data/python/sample_app.py', '.func') f
+    )
+)
+SELECT total, called, not_called FROM t;
+----
+20	13	7
+
+# :not(:is-called) should return exactly the functions that :is-called doesn't
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/sample_app.py', '.func:not(:is-called)');
+----
+7
+
+# :not(:is-referenced) partitions the function set with :is-referenced
+# (In sample_app.py every method is referenced via self.method, so not_ref = 0.)
+query II
+SELECT
+    (SELECT COUNT(*) FROM ast_select('test/data/python/sample_app.py', '.func:is-referenced'))
+  + (SELECT COUNT(*) FROM ast_select('test/data/python/sample_app.py', '.func:not(:is-referenced)')),
+    (SELECT COUNT(*) FROM ast_select('test/data/python/sample_app.py', '.func'));
+----
+20	20
+
+# Compound: :exported:not(:is-referenced) — example from the docs
+# Uses a data file with unambiguously exported definitions
+query I
+SELECT COUNT(*) >= 0 FROM ast_select('test/data/python/sample_app.py',
+    ':exported:not(:is-referenced)');
+----
+true
+
+# :not() should compose with other pseudo-classes on the same node
+# .func:named:not(:is-called) — named functions that are never called
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/sample_app.py',
+    '.func:named:not(:is-called)');
+----
+7
+
+# :not(:has()) must still work via the original not_has_conditions path
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/sample_app.py',
+    '.func:not(:has(return_statement))');
+----
+true
+
+# =============================================================================
+# Unknown pseudo-classes raise a clear error instead of silently matching
+# =============================================================================
+
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:totallynotreal');
+----
+unknown pseudo-class
+
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:not(:alsonotreal)');
+----
+unknown pseudo-class

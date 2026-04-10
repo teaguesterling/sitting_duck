@@ -63,16 +63,46 @@ A `.semantic` selector matches at the super-type level by default. Kind-level al
 | `.coll` | `.list`, `.dict`, `.array`, `.map`, `.set`, `.tuple` | Collection literals |
 | `.lit` | `.literal`, `.value` | All literals (kind level) |
 
-## Other
+## Names and Labels
+
+| Alias | Alternatives | Matches |
+|-------|-------------|---------|
+| `.label` | | Label / attribute name nodes |
+
+## External
 
 | Alias | Alternatives | Matches |
 |-------|-------------|---------|
 | `.import` | `.require`, `.use` | Import statements |
 | `.export` | `.pub` | Export declarations |
-| `.op` | `.operator` | All operators |
+| `.external` | `.ext` | All external references (kind level) |
+
+## Operators
+
+| Alias | Alternatives | Matches |
+|-------|-------------|---------|
+| `.op` | `.operator` | All operators (kind level) |
 | `.arith` | `.math` | Arithmetic operators |
 | `.cmp` | `.comparison` | Comparison operators |
 | `.logic` | `.logical` | Logical operators |
+
+## Transforms and Comprehensions
+
+| Alias | Alternatives | Matches |
+|-------|-------------|---------|
+| `.comp` | `.comprehension` | Comprehensions / query-style transforms |
+| `.transform` | `.xform` | All transforms (kind level) |
+
+## Other Kind-Level Aliases
+
+These match entire kinds when you want the broadest possible filter:
+
+| Alias | Alternatives | Matches |
+|-------|-------------|---------|
+| `.typedef` | `.type` | All type definitions |
+| `.pattern` | `.pat` | Pattern-matching constructs |
+| `.statement` | `.stmt` | Statement-like constructs |
+| `.syntax` | `.syn` | Syntax tokens (keywords, punctuation) |
 
 ## Discovering Mappings
 
