@@ -351,18 +351,32 @@ CREATE OR REPLACE MACRO ast_select(
                    ('public'), ('private'), ('protected'),
                    ('decorated'), ('typed'), ('void'), ('variadic'),
                    ('calls'), ('called-by'), ('is-called'), ('is-referenced'), ('exported'),
-                   ('matches'), ('scope'), ('precedes'), ('follows')
+                   ('match'), ('contains'),
+                   ('scope'), ('precedes'), ('follows')
         ),
         pseudo_class_validation AS (
-            SELECT CASE WHEN EXISTS (
-                SELECT 1 FROM pseudo_classes pc
-                WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
-            ) THEN error(
-                'ast_select: unknown pseudo-class ":' ||
-                (SELECT pc.pseudo_name FROM pseudo_classes pc
-                 WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
-                 LIMIT 1) || '"'
-            ) ELSE true END as ok
+            SELECT CASE
+                -- Unknown pseudo-class name
+                WHEN EXISTS (
+                    SELECT 1 FROM pseudo_classes pc
+                    WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
+                ) THEN error(
+                    'ast_select: unknown pseudo-class ":' ||
+                    (SELECT pc.pseudo_name FROM pseudo_classes pc
+                     WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
+                     LIMIT 1) || '"'
+                )
+                -- Multiple :match/:contains in one selector — only one pattern per
+                -- selector is supported. The pattern is extracted from the selector
+                -- string via regex; multiple patterns would silently share the first.
+                WHEN (SELECT COUNT(*) FROM pseudo_classes
+                      WHERE pseudo_name IN ('match', 'contains')) > 1
+                THEN error(
+                    'ast_select: only one :match or :contains pattern per selector. '
+                    'To combine multiple patterns, chain ast_select calls via CTE.'
+                )
+                ELSE true
+            END as ok
         ),
 
         -- Detect pseudo-element (::callers, ::callees, etc.)
@@ -376,26 +390,30 @@ CREATE OR REPLACE MACRO ast_select(
                     LIMIT 1) as element_name
         ),
 
-        -- :matches("code") — structural substring matching via DFS contiguity
-        -- Parse the pattern by extracting the quoted argument from the selector string.
+        -- :match("code") / :contains("code") — structural code pattern.
+        -- The quoted argument is parsed as real code and checked against the target:
+        --   :match("code")    — the current node IS the pattern root (exact)
+        --   :contains("code") — some descendant IS the pattern root (any depth)
+        -- Both share the same parsed pattern. Only the first :match/:contains
+        -- occurrence in a selector is extracted (one pattern per selector).
         -- Exact structural match: db.execute() matches only zero-arg calls,
         -- db.execute("SELECT 1") matches only that exact call.
         -- Use ___ (triple underscore) as wildcard for any name.
-        matches_pattern AS (
+        ast_pattern AS (
             SELECT
                 row_number() OVER (ORDER BY node.node_id) - 1 as idx,
                 node.type as pat_type,
                 node.name as pat_name
             FROM (
                 SELECT unnest(parse_ast_list(
-                    regexp_extract(selector, ':matches\("([^"]+)"\)', 1),
+                    regexp_extract(selector, ':(?:match|contains)\("([^"]+)"\)', 1),
                     COALESCE(language, 'python')
                 )) as node
             )
             WHERE node.type NOT IN ('module', 'expression_statement', 'program', 'source_file')
         ),
-        matches_len AS (
-            SELECT COUNT(*) as len FROM matches_pattern
+        ast_pattern_len AS (
+            SELECT COUNT(*) as len FROM ast_pattern
         ),
 
         -- =====================================================================
@@ -668,28 +686,41 @@ CREATE OR REPLACE MACRO ast_select(
                 AND a.name IS NOT NULL AND a.name != ''
                 AND a.name NOT LIKE '\_%'
 
-            -- :matches("code") — exact structural substring match
-            -- The parsed pattern must appear as a contiguous node slice in the
-            -- target's subtree. db.execute() matches zero-arg calls only.
-            -- Use ___ (triple underscore) as wildcard for any name.
-            WHEN 'matches' THEN (SELECT len FROM matches_len) > 0 AND EXISTS (
+            -- :match("code") — the CURRENT node is the root of the parsed pattern.
+            -- Strict: target type must equal pattern root type. Use ___ wildcard
+            -- for any name. Unlike :contains, this never iterates descendants —
+            -- it's a direct check on node `a`.
+            WHEN 'match' THEN (SELECT len FROM ast_pattern_len) > 0
+                AND a.type = (SELECT pat_type FROM ast_pattern WHERE idx = 0)
+                AND (SELECT len FROM ast_pattern_len) - 1 <= a.descendant_count
+                AND NOT EXISTS (
+                    SELECT 1 FROM ast_pattern mp
+                    JOIN ast t2 ON t2.node_id = a.node_id + mp.idx
+                               AND t2.file_path = a.file_path
+                    WHERE t2.type != mp.pat_type
+                       OR (mp.pat_name IS NOT NULL AND mp.pat_name != ''
+                           AND mp.pat_name != '___' AND t2.name != mp.pat_name)
+                )
+
+            -- :contains("code") — some descendant of the current node is the
+            -- root of the parsed pattern. Equivalent to :has(:match(...)).
+            -- Iterates descendants in the DFS node array and runs the same
+            -- contiguity check as :match at each candidate root.
+            WHEN 'contains' THEN (SELECT len FROM ast_pattern_len) > 0 AND EXISTS (
                 SELECT 1 FROM ast t
                 WHERE t.file_path = a.file_path
                   AND t.node_id >= a.node_id
                   AND t.node_id <= a.node_id + a.descendant_count
-                  -- Root type matches
-                  AND t.type = (SELECT pat_type FROM matches_pattern WHERE idx = 0)
-                  -- All pattern nodes match contiguously
+                  AND t.type = (SELECT pat_type FROM ast_pattern WHERE idx = 0)
                   AND NOT EXISTS (
-                      SELECT 1 FROM matches_pattern mp
+                      SELECT 1 FROM ast_pattern mp
                       JOIN ast t2 ON t2.node_id = t.node_id + mp.idx
                                  AND t2.file_path = a.file_path
                       WHERE t2.type != mp.pat_type
                          OR (mp.pat_name IS NOT NULL AND mp.pat_name != ''
                              AND mp.pat_name != '___' AND t2.name != mp.pat_name)
                   )
-                  -- Verify we have enough nodes
-                  AND t.node_id + (SELECT len FROM matches_len) - 1
+                  AND t.node_id + (SELECT len FROM ast_pattern_len) - 1
                       <= a.node_id + a.descendant_count
             )
 

@@ -127,16 +127,19 @@ FROM ast_select('test/data/python/sample_app.py',
     '.call:scope(.class#UserService)');
 ```
 
-## Step 7: Use `:matches()` for Structural Patterns
+## Step 7: Use `:match()` and `:contains()` for Structural Patterns
 
-`:matches()` parses its argument as real code and checks for structural subtree matches.
+Both `:match("code")` and `:contains("code")` parse their argument as real code and compare it structurally to the AST. The difference is scope:
 
-Find functions that contain a `self.db` assignment:
+- `:match("code")` — the **current node** is the pattern (strict type match)
+- `:contains("code")` — **some descendant** is the pattern (subtree scan)
+
+Find functions that contain a `self.db` reference anywhere in their body:
 
 ```sql
 SELECT name
 FROM ast_select('test/data/python/sample_app.py',
-    '.func:matches("self.db")');
+    '.func:contains("self.db")');
 ```
 
 Find functions that return `None` explicitly:
@@ -144,7 +147,7 @@ Find functions that return `None` explicitly:
 ```sql
 SELECT name
 FROM ast_select('test/data/python/sample_app.py',
-    '.func:matches("return None")');
+    '.func:contains("return None")');
 ```
 
 Use `___` as a wildcard — find any method that does `self.___ = ___` (attribute assignment):
@@ -152,10 +155,20 @@ Use `___` as a wildcard — find any method that does `self.___ = ___` (attribut
 ```sql
 SELECT name
 FROM ast_select('test/data/python/sample_app.py',
-    '.func:matches("self.___ = ___")');
+    '.func:contains("self.___ = ___")');
 ```
 
 Returns the `__init__` methods that set instance attributes.
+
+When you want to check the *current* node directly — for example, to find calls that exactly match `db.execute()` — use `:match` instead:
+
+```sql
+SELECT name, start_line
+FROM ast_select('test/data/python/sample_app.py',
+    'call:match("db.execute()")');
+```
+
+`.func:match("db.execute()")` would return nothing — a function definition is not a call node, so the types don't line up. That's the whole point: `:match` is strict, `:contains` is lenient.
 
 ## Putting It All Together
 

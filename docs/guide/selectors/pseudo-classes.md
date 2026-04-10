@@ -347,28 +347,64 @@ SELECT name FROM ast_select('src/*.py', '.func:variadic');
 
 ## Pattern Matching
 
-### `:matches("code")` — Structural Substring Match
+Two pseudo-classes parse their argument as real code and compare it structurally to the AST. They differ in *what* they compare against:
 
-The most expressive pseudo-class. Parses the argument as real code and checks if that structure appears as a contiguous subtree within the matched node.
+- **`:match("code")`** — the **current node** is the root of the parsed pattern. Strict: the target's type must equal the pattern root's type.
+- **`:contains("code")`** — **some descendant** of the current node is the root of the parsed pattern. Equivalent to `:has(:match("code"))`.
+
+### `:match("code")` — Current-Node Structural Match
+
+Use `:match` when you know the type of node you're looking for and want to check it directly:
 
 ```sql
--- Functions containing a db.execute() call (structural, not text search)
-SELECT name FROM ast_select('src/*.py', '.func:matches("db.execute()")');
+-- Find call expressions that are exactly db.execute() with no arguments
+SELECT name FROM ast_select('src/*.py', 'call:match("db.execute()")');
 
--- Functions containing a specific return pattern
-SELECT name FROM ast_select('src/*.py', '.func:matches("return None")');
-
--- Classes containing self.db assignment
-SELECT name FROM ast_select('src/*.py', '.class:matches("self.db = ___")');
+-- Find return statements that return None
+SELECT peek FROM ast_select('src/*.py', 'return_statement:match("return None")');
 ```
 
-`:matches()` uses DFS pre-order contiguity — a subtree is a contiguous slice of the node array, so structural matching becomes array substring matching. No tree traversal needed.
+`.func:match("db.execute()")` returns **zero rows** — a function_definition is not a call node, so the types don't match. Use `:contains` for "function contains X".
 
-Use `___` (triple underscore) as a wildcard for "any name":
+### `:contains("code")` — Subtree Structural Match
+
+Use `:contains` when you want to find a pattern *anywhere inside* a larger node:
 
 ```sql
--- Match any assignment to self.anything
-SELECT name FROM ast_select('src/*.py', '.func:matches("self.___ = ___")');
+-- Functions that contain a db.execute() call somewhere in their body
+SELECT name FROM ast_select('src/*.py', '.func:contains("db.execute()")');
+
+-- Functions containing a specific return pattern
+SELECT name FROM ast_select('src/*.py', '.func:contains("return None")');
+
+-- Classes that contain a self.db assignment anywhere inside
+SELECT name FROM ast_select('src/*.py', '.class:contains("self.db = ___")');
+```
+
+### Wildcards and Semantics
+
+Both pseudo-classes share the same pattern parser. Use `___` (triple underscore) as a wildcard for "any name":
+
+```sql
+-- Match any assignment to self.<something>
+SELECT name FROM ast_select('src/*.py', '.func:contains("self.___ = ___")');
+```
+
+Both use DFS pre-order contiguity — a subtree is a contiguous slice of the node array, so structural matching becomes array substring matching. No recursive tree traversal. `:match` is a direct lookup on the current node; `:contains` scans descendants.
+
+### One Pattern per Selector
+
+Only one `:match` or `:contains` is supported per selector. To combine multiple patterns, chain `ast_select` calls via a CTE:
+
+```sql
+WITH execute_callers AS (
+    SELECT * FROM ast_select('src/*.py', '.func:contains("db.execute()")')
+)
+SELECT f.name FROM execute_callers f
+WHERE EXISTS (
+    SELECT 1 FROM ast_select('src/*.py', '.func:contains("return ___")') r
+    WHERE r.file_path = f.file_path AND r.node_id = f.node_id
+);
 ```
 
 ## Quick Reference
@@ -378,7 +414,8 @@ SELECT name FROM ast_select('src/*.py', '.func:matches("self.___ = ___")');
 | **Containment** | |
 | `:has(sel)` | Contains descendant matching sel |
 | `:not(:has(sel))` | Does NOT contain descendant |
-| `:matches("code")` | Contains structural code pattern (substring match) |
+| `:match("code")` | Current node IS the parsed pattern root (direct match) |
+| `:contains("code")` | Some descendant IS the parsed pattern root (subtree match) |
 | **Positional** | |
 | `:first-child` | First among siblings |
 | `:last-child` | Last among siblings |

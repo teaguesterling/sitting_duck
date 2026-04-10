@@ -23,10 +23,10 @@ LIMIT 1;
 ----
 hello
 
-# Test 3: ast_select with :matches still works
+# Test 3: ast_select with :contains still works
 query I
 SELECT name
-FROM ast_select('test/data/python/simple.py', '.function:matches("print")')
+FROM ast_select('test/data/python/simple.py', '.function:contains("print")')
 LIMIT 1;
 ----
 hello
