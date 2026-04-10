@@ -2292,12 +2292,12 @@ CREATE OR REPLACE MACRO ast_select(
             SELECT * FROM parse_ast(selector, 'css')
         ),
 
-        -- Parse source files with +schema: compute only normalized context and lines,
-        -- but keep all columns in schema so attribute/pseudo-class checks compile
+        -- Parse source files. Keep native context (needed for attribute filters like
+        -- [params=N] and pseudo-classes like :decorated, :typed, :async, etc.) but
+        -- skip peek computation since no selector feature references it. The +schema
+        -- suffix keeps the peek column in the schema as NULL.
         ast AS (
-            SELECT * FROM read_ast(source, language,
-                context := 'normalized+schema',
-                peek := 'none+schema')
+            SELECT * FROM read_ast(source, language, peek := 'none+schema')
         ),
 
         -- Find the top-level selector node (skip stylesheet and ERROR wrappers)
@@ -2532,13 +2532,13 @@ CREATE OR REPLACE MACRO ast_select(
                   SELECT 1 FROM sel args
                   WHERE args.type = 'arguments'
                     AND pcs.node_id > args.node_id
+
+)SQLMACRO"
+        R"SQLMACRO(
                     AND pcs.node_id <= args.node_id + args.descendant_count
               )
         ),
 
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- :matches("code") — structural substring matching via DFS contiguity
         -- Parse the pattern by extracting the quoted argument from the selector string.
         -- Exact structural match: db.execute() matches only zero-arg calls,
@@ -2813,10 +2813,10 @@ CREATE OR REPLACE MACRO ast_select(
                                 AND nested.node_id > scope_anc.node_id
                                 AND nested.node_id < a.node_id
                                 AND a.node_id <= nested.node_id + nested.descendant_count
-                                AND (nested.type = pc.pseudo_arg
 
 )SQLMACRO"
         R"SQLMACRO(
+                                AND (nested.type = pc.pseudo_arg
                                      OR nested.type LIKE pc.pseudo_arg || '_%')
                           )
                     )

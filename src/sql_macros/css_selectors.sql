@@ -35,12 +35,12 @@ CREATE OR REPLACE MACRO ast_select(
             SELECT * FROM parse_ast(selector, 'css')
         ),
 
-        -- Parse source files with +schema: compute only normalized context and lines,
-        -- but keep all columns in schema so attribute/pseudo-class checks compile
+        -- Parse source files. Keep native context (needed for attribute filters like
+        -- [params=N] and pseudo-classes like :decorated, :typed, :async, etc.) but
+        -- skip peek computation since no selector feature references it. The +schema
+        -- suffix keeps the peek column in the schema as NULL.
         ast AS (
-            SELECT * FROM read_ast(source, language,
-                context := 'normalized+schema',
-                peek := 'none+schema')
+            SELECT * FROM read_ast(source, language, peek := 'none+schema')
         ),
 
         -- Find the top-level selector node (skip stylesheet and ERROR wrappers)
