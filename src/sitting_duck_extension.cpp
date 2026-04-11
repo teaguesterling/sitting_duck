@@ -27,6 +27,22 @@ void RegisterASTTypeMapFunction(ExtensionLoader &loader);
 // void RegisterASTHelperFunctions(ExtensionLoader &loader);
 
 static void LoadInternal(ExtensionLoader &loader) {
+	// Force-load core_functions before we register our SQL macros. In
+	// DuckDB v1.5+ the bitwise operators (`&`, `|`, `<<`, etc.) live in
+	// core_functions, and pattern_matching.sql uses `&` when comparing
+	// masked-off semantic type bits. If core_functions isn't loaded yet
+	// the macro registration fails at parse time with
+	//   Catalog Error: Scalar Function with name "&" is not in the catalog,
+	//     but it exists in the core_functions extension.
+	//
+	// NOTE: this call alone is not yet sufficient to make `LOAD sitting_duck`
+	// work on a vanilla CLI without `LOAD core_functions` first — deferred
+	// investigation. Kept in place as the starting point for the follow-up.
+	// TryAutoLoadAvailableExtension is noexcept and doesn't respect the user's
+	// autoload_known_extensions setting (unlike TryAutoLoadExtension), so it's
+	// the right API shape even if more plumbing is still needed.
+	ExtensionHelper::TryAutoLoadAvailableExtension(loader.GetDatabaseInstance(), "core_functions");
+
 	// Register SEMANTIC_TYPE logical type and its cast functions (must be first)
 	RegisterSemanticTypeLogicalType(loader);
 
