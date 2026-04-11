@@ -6,6 +6,7 @@
 #include "duckdb/common/string_util.hpp"
 #include "utf8proc_wrapper.hpp"
 #include <algorithm>
+#include <unordered_map>
 
 namespace duckdb {
 
@@ -97,8 +98,19 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 	vector<StackEntry> stack;
 	stack.push_back({root, -1, 0, 0, false, 0});
 
-	// Scope stack for qualified_name: tracks (node_index, "T/name") segments
+	// Scope stack for qualified_name: tracks (node_index, "T[name]" or "T[name][N]") segments
 	vector<pair<idx_t, string>> scope_stack;
+
+	// Parallel stack of per-scope collision counters, keyed on the bare segment
+	// "T[name]". Each frame counts occurrences of each (prefix, name) pair for
+	// definitions added at that scope. The first occurrence produces segment
+	// "T[name]"; the Nth (N>=2) produces "T[name][N]". Frame lifetime matches
+	// scope_stack: a new empty frame is pushed alongside scope_stack whenever a
+	// scope-providing definition is emitted, and popped together. A root frame is
+	// always present for module-level definitions, so scope_name_counts.size()
+	// is always scope_stack.size() + 1.
+	vector<unordered_map<string, int>> scope_name_counts;
+	scope_name_counts.push_back({}); // root frame
 
 	// Scope tracking: stack of node_ids for IS_SCOPE nodes (for scope_id/scope_stack columns)
 	vector<int64_t> scope_node_stack;
@@ -273,10 +285,26 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			// and shouldn't alter the scope path of subsequent siblings.
 			// The L[NAME] format with brackets allows unambiguous LIKE matching:
 			// 'F[%' finds all functions, '%[foo]%' finds name "foo", '%F[foo]%' finds foo as function.
+			//
+			// Collision handling: within a single scope, if the same (prefix, name)
+			// pair would produce the same segment as a previously-emitted definition,
+			// the Nth occurrence (N >= 2) gets a "[N]" suffix: V[x], V[x][2], V[x][3].
+			// The first occurrence stays clean. The counter is keyed on the BARE
+			// segment "T[name]", so V[x] and F[x] never collide with each other —
+			// semantic role already disambiguates them.
 			if (config.context >= ContextLevel::NORMALIZED) {
 				char type_code = SemanticTypes::GetQualifiedNamePrefix(ast_node.semantic_type);
 				if (type_code != '\0' && !ast_node.name_raw.empty()) {
-					string segment = string(1, type_code) + "[" + ast_node.name_raw + "]";
+					string base = string(1, type_code) + "[" + ast_node.name_raw + "]";
+					// Collision counter lookup happens in the CURRENT scope's frame,
+					// i.e. the scope this definition is being added TO (the parent
+					// scope, not any scope this definition might open).
+					auto &counts = scope_name_counts.back();
+					int &count = counts[base];
+					++count;
+					string segment = (count == 1)
+					    ? base
+					    : base + "[" + std::to_string(count) + "]";
 					// Build qualified_name from scope_stack + this segment
 					string qname;
 					for (auto &scope : scope_stack) {
@@ -291,6 +319,8 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 					    (type_code == 'F' || type_code == 'C' || type_code == 'V' || type_code == 'M');
 					if (is_scope_provider) {
 						scope_stack.push_back({entry.node_index, segment});
+						// Fresh counter frame for nested definitions inside this scope
+						scope_name_counts.push_back({});
 					}
 				}
 			}
@@ -333,6 +363,11 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			D_ASSERT(scope_stack.empty() || scope_stack.back().first <= entry.node_index);
 			if (!scope_stack.empty() && scope_stack.back().first == entry.node_index) {
 				scope_stack.pop_back();
+				// scope_name_counts was pushed in lockstep; pop its frame too.
+				// Invariant: scope_name_counts.size() == scope_stack.size() + 1
+				// (the extra +1 is the always-present root frame, which is never popped).
+				D_ASSERT(scope_name_counts.size() > 1);
+				scope_name_counts.pop_back();
 			}
 
 			stack.pop_back();

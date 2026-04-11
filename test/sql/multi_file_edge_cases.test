@@ -164,7 +164,7 @@ WHERE parent_id IS NOT NULL;
 # ====================================
 # All patterns should be processed
 query I
-SELECT COUNT(DISTINCT file_path) = 18 as processes_all_files
+SELECT COUNT(DISTINCT file_path) = 19 as processes_all_files
 FROM read_ast([
     'test/data/python/*.py',
     'test/data/javascript/*.js',

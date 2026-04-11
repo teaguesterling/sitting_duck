@@ -208,3 +208,114 @@ ORDER BY name;
 ----
 bar	E[bar]
 foo	E[foo]
+
+# =============================================================================
+# Test 16: Collision suffix — two definitions with the same (prefix, name)
+# in the same scope produce "base" and "base[2]". First stays clean.
+# =============================================================================
+
+# Two module-level `counter = ...` rebinding statements.
+query I
+SELECT qualified_name
+FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
+WHERE name = 'counter' AND is_definition(semantic_type)
+ORDER BY start_line;
+----
+V[counter]
+V[counter][2]
+
+# =============================================================================
+# Test 17: Collision counter increments monotonically (third occurrence → [3])
+# =============================================================================
+
+query I
+SELECT qualified_name
+FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
+WHERE name = 'total' AND is_definition(semantic_type)
+ORDER BY start_line;
+----
+V[total]
+V[total][2]
+V[total][3]
+
+# =============================================================================
+# Test 18: Counter resets at scope boundaries — the second function's
+# "result" is its scope's first occurrence, so it stays unsuffixed.
+# =============================================================================
+
+# The 'transform_items' function has two 'result' locals → collision
+# The 'accumulator' function has one 'result' local → no suffix
+query II
+SELECT start_line, qualified_name
+FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
+WHERE name = 'result' AND is_definition(semantic_type)
+ORDER BY start_line;
+----
+22	F[transform_items] V[result]
+23	F[transform_items] V[result][2]
+31	F[accumulator] V[result]
+
+# =============================================================================
+# Test 19: Nested method scope — Container.__init__ has two `self.* = value`
+# assignments, which record the RHS identifier as V[value] twice in that
+# method's scope. The second gets a [2] suffix.
+# =============================================================================
+
+query I
+SELECT qualified_name
+FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
+WHERE name = 'value' AND is_definition(semantic_type)
+ORDER BY start_line;
+----
+C[Container] F[__init__] V[value]
+C[Container] F[__init__] V[value][2]
+
+# =============================================================================
+# Test 20: Method redefinition — same class scope, same function name.
+# =============================================================================
+
+query I
+SELECT qualified_name
+FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
+WHERE name = 'reset' AND is_definition(semantic_type)
+ORDER BY start_line;
+----
+C[Container] F[reset]
+C[Container] F[reset][2]
+
+# =============================================================================
+# Test 21: V[x] and F[x] in the same scope do NOT collide with each other —
+# the counter is keyed on the full (prefix, name) tuple, not just the name.
+# =============================================================================
+
+query II
+SELECT name, qualified_name
+FROM parse_ast('
+x = 1
+def x():
+    pass
+', 'python')
+WHERE name = 'x' AND is_definition(semantic_type)
+ORDER BY start_line;
+----
+x	V[x]
+x	F[x]
+
+# =============================================================================
+# Test 22: LIKE '%[name]%' still finds both unsuffixed and suffixed forms
+# because the [name] substring is preserved in both.
+# =============================================================================
+
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
+WHERE qualified_name LIKE '%[counter]%';
+----
+2
+
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
+WHERE qualified_name LIKE '%[total]%';
+----
+3
