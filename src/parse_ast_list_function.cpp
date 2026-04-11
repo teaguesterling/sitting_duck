@@ -91,7 +91,7 @@ static Value ConvertASTResultToList(const ASTResult &result, const ExtractionCon
 			if (config.context >= ContextLevel::NORMALIZED) {
 				fields.push_back(make_pair("name", Value(node.name_raw)));
 				fields.push_back(
-				    make_pair("qualified_name", node.name_qualified.empty() ? Value() : Value(node.name_qualified)));
+				    make_pair("qualified_name", UnifiedASTBackend::QualifiedNameValue(node.name_qualified_segments)));
 			}
 			if (config.context >= ContextLevel::NATIVE) {
 				// signature_type

@@ -61,7 +61,7 @@ hello	NULL	NULL
 
 # Test 6: Data at requested level is still computed correctly
 query III
-SELECT name, qualified_name, semantic_type::VARCHAR
+SELECT name, ast_qualified_name_as_string(qualified_name), semantic_type::VARCHAR
 FROM read_ast('test/data/python/simple.py', 'python',
     context := 'normalized+schema',
     peek := 'none+schema')

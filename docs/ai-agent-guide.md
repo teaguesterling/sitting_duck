@@ -385,7 +385,7 @@ read_ast(['script.py'], peek_mode := 'lines')
 - `parameters`: Function parameters (STRUCT array with name and type)
 - `modifiers`: Access modifiers and keywords (VARCHAR array)
 - `annotations`: Decorator/annotation text
-- `qualified_name`: Scope-based definition path, unique within a file (e.g., `C[User] F[__init__]`, with `[N]` suffix on collisions)
+- `qualified_name`: LIST of STRUCT segments `{semantic_type, name, index}`, unique within a file. Query structurally (`list_filter`, `list_transform`, `qualified_name[-1].name`) or call `ast_qualified_name_as_string()` for the bracket display form like `C[User] F[__init__]`.
 - `file_path`: Source file path
 - `language`: Detected or specified language
 - `start_line`, `end_line`: Position info (line numbers)

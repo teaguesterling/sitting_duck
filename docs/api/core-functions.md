@@ -51,7 +51,7 @@ read_ast(file_patterns LIST(VARCHAR), language VARCHAR) -> TABLE
 | `parameters` | STRUCT[] | Function parameters (name and type) |
 | `modifiers` | VARCHAR[] | Access modifiers and keywords |
 | `annotations` | VARCHAR | Decorator/annotation text |
-| `qualified_name` | VARCHAR | Scope-based definition path, unique within a file (e.g., `C[User] F[__init__]`) |
+| `qualified_name` | LIST&lt;STRUCT&gt; | Scope path as segment list of `{semantic_type, name, index}`. Use `ast_qualified_name_as_string()` to render as `C[User] F[__init__]` for display. See [Output Schema](output-schema.md#qualified_name) for full details. |
 | `scope_id` | BIGINT | node_id of the nearest enclosing scope (NULL at root) |
 | `scope_stack` | BIGINT[] | On scope-creating nodes: chain of enclosing scope node_ids |
 | `file_path` | VARCHAR | Source file path |

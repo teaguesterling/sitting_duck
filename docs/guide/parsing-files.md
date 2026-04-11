@@ -97,7 +97,7 @@ The `read_ast()` function returns 20 columns by default (22 with `source := 'ful
 | `parameters` | STRUCT[] | Function parameters (name and type) |
 | `modifiers` | VARCHAR[] | Access modifiers and keywords |
 | `annotations` | VARCHAR | Decorator/annotation text |
-| `qualified_name` | VARCHAR | Scope-based definition path, unique within a file (e.g., `C[User] F[__init__]`) |
+| `qualified_name` | LIST&lt;STRUCT&gt; | Scope path as segment list `[{semantic_type, name, index}, ...]`, unique within a file. Use `ast_qualified_name_as_string()` for the legacy bracket display form. |
 | `file_path` | VARCHAR | Source file path |
 | `language` | VARCHAR | Detected language |
 | `start_line` | UINTEGER | Starting line (1-based) |

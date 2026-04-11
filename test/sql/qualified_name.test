@@ -13,7 +13,7 @@ LOAD sitting_duck;
 
 # Top-level variable gets V[name]
 query II
-SELECT name, qualified_name
+SELECT name, ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE name = 'MY_CONST' AND is_definition(semantic_type);
 ----
@@ -21,7 +21,7 @@ MY_CONST	V[MY_CONST]
 
 # Top-level function gets F[name]
 query II
-SELECT name, qualified_name
+SELECT name, ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE name = 'top_level_function' AND is_definition(semantic_type);
 ----
@@ -33,7 +33,7 @@ top_level_function	F[top_level_function]
 
 # Classes get C[name]
 query II
-SELECT name, qualified_name
+SELECT name, ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE name IN ('User', 'Account') AND is_definition(semantic_type)
 ORDER BY start_line;
@@ -47,7 +47,7 @@ Account	C[Account]
 
 # This is the KEY use case: three __init__ methods, all disambiguated
 query I
-SELECT qualified_name
+SELECT ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE name = '__init__' AND is_definition(semantic_type)
 ORDER BY start_line;
@@ -62,7 +62,7 @@ C[Account] C[Settings] F[__init__]
 
 # Settings is nested inside Account
 query II
-SELECT name, qualified_name
+SELECT name, ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE name = 'Settings' AND is_definition(semantic_type);
 ----
@@ -73,7 +73,7 @@ Settings	C[Account] C[Settings]
 # =============================================================================
 
 query II
-SELECT name, qualified_name
+SELECT name, ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE name = 'nested_helper' AND is_definition(semantic_type);
 ----
@@ -84,7 +84,7 @@ nested_helper	F[top_level_function] F[nested_helper]
 # =============================================================================
 
 query II
-SELECT name, qualified_name
+SELECT name, ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE name = 'validate' AND is_definition(semantic_type);
 ----
@@ -106,7 +106,7 @@ WHERE qualified_name IS NOT NULL AND NOT is_definition(semantic_type);
 # =============================================================================
 
 query II
-SELECT name, qualified_name
+SELECT name, ast_qualified_name_as_string(qualified_name)
 FROM parse_ast('
 class Foo:
     def bar(self):
@@ -124,9 +124,9 @@ bar	C[Foo] F[bar]
 
 # All definitions nested inside User class (not User itself)
 query I
-SELECT qualified_name
+SELECT ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_names.py', 'python')
-WHERE qualified_name LIKE 'C[User] %'
+WHERE ast_qualified_name_as_string(qualified_name) LIKE 'C[User] %'
 ORDER BY start_line;
 ----
 C[User] F[__init__]
@@ -153,7 +153,7 @@ WHERE is_definition(semantic_type) AND name != '' AND qualified_name IS NULL;
 query I
 SELECT COUNT(*)
 FROM read_ast('test/data/python/qualified_names.py', 'python')
-WHERE qualified_name LIKE '%F[%';
+WHERE ast_qualified_name_as_string(qualified_name) LIKE '%F[%';
 ----
 10
 
@@ -163,7 +163,7 @@ WHERE qualified_name LIKE '%F[%';
 
 # V[F] doesn't contain 'F[' — format avoids the single-letter-name collision
 query II
-SELECT name, qualified_name
+SELECT name, ast_qualified_name_as_string(qualified_name)
 FROM parse_ast('F = 1', 'python')
 WHERE is_definition(semantic_type) AND name = 'F';
 ----
@@ -175,9 +175,9 @@ F	V[F]
 
 # Python aliased import produces I[np]
 query II
-SELECT name, qualified_name
+SELECT name, ast_qualified_name_as_string(qualified_name)
 FROM parse_ast('import numpy as np', 'python')
-WHERE qualified_name LIKE 'I[%';
+WHERE ast_qualified_name_as_string(qualified_name) LIKE 'I[%';
 ----
 np	I[np]
 
@@ -192,7 +192,7 @@ import os
 import sys
 import numpy as np
 ', 'python')
-WHERE qualified_name LIKE 'I[%';
+WHERE ast_qualified_name_as_string(qualified_name) LIKE 'I[%';
 ----
 3
 
@@ -201,9 +201,9 @@ WHERE qualified_name LIKE 'I[%';
 # =============================================================================
 
 query II
-SELECT name, qualified_name
+SELECT name, ast_qualified_name_as_string(qualified_name)
 FROM parse_ast('export { foo, bar }', 'javascript')
-WHERE qualified_name LIKE 'E[%'
+WHERE ast_qualified_name_as_string(qualified_name) LIKE 'E[%'
 ORDER BY name;
 ----
 bar	E[bar]
@@ -216,7 +216,7 @@ foo	E[foo]
 
 # Two module-level `counter = ...` rebinding statements.
 query I
-SELECT qualified_name
+SELECT ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
 WHERE name = 'counter' AND is_definition(semantic_type)
 ORDER BY start_line;
@@ -229,7 +229,7 @@ V[counter][2]
 # =============================================================================
 
 query I
-SELECT qualified_name
+SELECT ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
 WHERE name = 'total' AND is_definition(semantic_type)
 ORDER BY start_line;
@@ -246,7 +246,7 @@ V[total][3]
 # The 'transform_items' function has two 'result' locals → collision
 # The 'accumulator' function has one 'result' local → no suffix
 query II
-SELECT start_line, qualified_name
+SELECT start_line, ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
 WHERE name = 'result' AND is_definition(semantic_type)
 ORDER BY start_line;
@@ -262,7 +262,7 @@ ORDER BY start_line;
 # =============================================================================
 
 query I
-SELECT qualified_name
+SELECT ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
 WHERE name = 'value' AND is_definition(semantic_type)
 ORDER BY start_line;
@@ -275,7 +275,7 @@ C[Container] F[__init__] V[value][2]
 # =============================================================================
 
 query I
-SELECT qualified_name
+SELECT ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
 WHERE name = 'reset' AND is_definition(semantic_type)
 ORDER BY start_line;
@@ -289,7 +289,7 @@ C[Container] F[reset][2]
 # =============================================================================
 
 query II
-SELECT name, qualified_name
+SELECT name, ast_qualified_name_as_string(qualified_name)
 FROM parse_ast('
 x = 1
 def x():
@@ -309,13 +309,67 @@ x	F[x]
 query I
 SELECT COUNT(*)
 FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
-WHERE qualified_name LIKE '%[counter]%';
+WHERE ast_qualified_name_as_string(qualified_name) LIKE '%[counter]%';
 ----
 2
 
 query I
 SELECT COUNT(*)
 FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
-WHERE qualified_name LIKE '%[total]%';
+WHERE ast_qualified_name_as_string(qualified_name) LIKE '%[total]%';
 ----
 3
+
+# =============================================================================
+# Test 23: Struct-list form — filter by semantic_type inside the list
+# =============================================================================
+
+# Find all definitions whose path contains a class scope (any class ancestor).
+query I
+SELECT COUNT(*) > 0
+FROM read_ast('test/data/python/qualified_names.py', 'python')
+WHERE len(list_filter(qualified_name,
+                      s -> is_class_definition(s.semantic_type))) > 0;
+----
+true
+
+# =============================================================================
+# Test 24: Struct-list form — get the innermost enclosing class name
+# =============================================================================
+
+query II
+SELECT name,
+       (list_reverse(list_filter(qualified_name,
+                                 s -> is_class_definition(s.semantic_type))))[1].name
+FROM read_ast('test/data/python/qualified_names.py', 'python')
+WHERE name = 'validate';
+----
+validate	User
+
+# =============================================================================
+# Test 25: Struct-list form — depth-based filter (top-level definitions only)
+# =============================================================================
+
+# Top-level functions have a single-segment qualified_name.
+query I
+SELECT name
+FROM read_ast('test/data/python/qualified_names.py', 'python')
+WHERE len(qualified_name) = 1
+  AND is_function_definition(semantic_type)
+ORDER BY start_line;
+----
+top_level_function
+
+# =============================================================================
+# Test 26: Struct-list form — explicit index is always >= 1 on definitions
+# =============================================================================
+
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
+WHERE is_definition(semantic_type)
+  AND name != ''
+  AND len(qualified_name) > 0
+  AND qualified_name[-1].index < 1;
+----
+0

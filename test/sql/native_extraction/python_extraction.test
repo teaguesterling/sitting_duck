@@ -96,7 +96,7 @@ Pet	class	[{'name': Dog, 'type': extends}, {'name': Cat, 'type': extends}]	[has_
 
 # Test: Simple function calls have name (qualified_name is NULL for calls)
 query ITT
-SELECT name, qualified_name, peek FROM read_ast('test/data/python/simple.py', context := 'native', peek := 40)
+SELECT name, ast_qualified_name_as_string(qualified_name), peek FROM read_ast('test/data/python/simple.py', context := 'native', peek := 40)
 WHERE type = 'call' AND name IS NOT NULL AND length(name) > 0
 ORDER BY start_line;
 ----

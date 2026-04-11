@@ -187,7 +187,7 @@ owner	String
 
 # Test: Method calls have correct name and parameters (qualified_name is NULL for calls)
 query ITT
-SELECT name, qualified_name, parameters FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+SELECT name, ast_qualified_name_as_string(qualified_name), parameters FROM read_ast('test/data/languages/java/Test.java', context := 'native')
 WHERE type = 'method_invocation' AND name IS NOT NULL AND length(name) > 0
 ORDER BY start_line;
 ----

@@ -98,17 +98,18 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 	vector<StackEntry> stack;
 	stack.push_back({root, -1, 0, 0, false, 0});
 
-	// Scope stack for qualified_name: tracks (node_index, "T[name]" or "T[name][N]") segments
-	vector<pair<idx_t, string>> scope_stack;
+	// Scope stack for qualified_name: tracks (node_index, segment) pairs. Each
+	// segment is a QualifiedNameSegment carrying the semantic type, raw name,
+	// and occurrence index of the scope-providing definition.
+	vector<pair<idx_t, QualifiedNameSegment>> scope_stack;
 
-	// Parallel stack of per-scope collision counters, keyed on the bare segment
-	// "T[name]". Each frame counts occurrences of each (prefix, name) pair for
-	// definitions added at that scope. The first occurrence produces segment
-	// "T[name]"; the Nth (N>=2) produces "T[name][N]". Frame lifetime matches
-	// scope_stack: a new empty frame is pushed alongside scope_stack whenever a
-	// scope-providing definition is emitted, and popped together. A root frame is
-	// always present for module-level definitions, so scope_name_counts.size()
-	// is always scope_stack.size() + 1.
+	// Parallel stack of per-scope collision counters, keyed on (semantic_type, name).
+	// Each frame counts occurrences of each (semantic_type, name) pair for definitions
+	// added at that scope. The Nth occurrence (N>=1) gets index=N in its segment.
+	// Frame lifetime matches scope_stack: a new empty frame is pushed alongside
+	// scope_stack whenever a scope-providing definition is emitted, and popped
+	// together. A root frame is always present for module-level definitions, so
+	// scope_name_counts.size() is always scope_stack.size() + 1.
 	vector<unordered_map<string, int>> scope_name_counts;
 	scope_name_counts.push_back({}); // root frame
 
@@ -279,38 +280,35 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 
 			// Build qualified_name for named definition nodes.
 			// Definition-kind nodes (F/C/V/M) introduce scopes that nested definitions
-			// inherit: a variable self.name inside __init__ produces
-			// C[User] F[__init__] V[name]. Import/export nodes (I/E) also get a
-			// qualified_name but do NOT push onto scope_stack — they're leaf bindings
-			// and shouldn't alter the scope path of subsequent siblings.
-			// The L[NAME] format with brackets allows unambiguous LIKE matching:
-			// 'F[%' finds all functions, '%[foo]%' finds name "foo", '%F[foo]%' finds foo as function.
+			// inherit: a variable `self.name` inside __init__ produces the path
+			// [{class, User}, {function, __init__}, {variable, name}]. Import/export
+			// nodes (I/E) also get a qualified_name path but do NOT push onto
+			// scope_stack — they're leaf bindings and shouldn't alter the scope path
+			// of subsequent siblings.
 			//
-			// Collision handling: within a single scope, if the same (prefix, name)
-			// pair would produce the same segment as a previously-emitted definition,
-			// the Nth occurrence (N >= 2) gets a "[N]" suffix: V[x], V[x][2], V[x][3].
-			// The first occurrence stays clean. The counter is keyed on the BARE
-			// segment "T[name]", so V[x] and F[x] never collide with each other —
-			// semantic role already disambiguates them.
+			// Collision handling: within a single scope, each (semantic_type, name)
+			// pair gets a monotonically increasing occurrence index. The first
+			// occurrence of `V[x]` has index=1; the second has index=2; etc. This
+			// makes qualified_name unique within a file. Counters are keyed on
+			// (semantic_type, name) so V[x] and F[x] in the same scope each track
+			// independently — semantic role already disambiguates them.
 			if (config.context >= ContextLevel::NORMALIZED) {
 				char type_code = SemanticTypes::GetQualifiedNamePrefix(ast_node.semantic_type);
 				if (type_code != '\0' && !ast_node.name_raw.empty()) {
-					string base = string(1, type_code) + "[" + ast_node.name_raw + "]";
-					// Collision counter lookup happens in the CURRENT scope's frame,
-					// i.e. the scope this definition is being added TO (the parent
-					// scope, not any scope this definition might open).
+					// Counter key — stable on (semantic_type, name). We mix in the
+					// semantic_type byte so V[x] and F[x] don't collide as a single key.
+					string counter_key = std::to_string(ast_node.semantic_type) + "\x00" + ast_node.name_raw;
 					auto &counts = scope_name_counts.back();
-					int &count = counts[base];
+					int &count = counts[counter_key];
 					++count;
-					string segment = (count == 1) ? base : base + "[" + std::to_string(count) + "]";
-					// Build qualified_name from scope_stack + this segment
-					string qname;
+					QualifiedNameSegment segment {ast_node.semantic_type, ast_node.name_raw, count};
+					// Build qualified_name from scope_stack + this new segment.
+					ast_node.name_qualified_segments.clear();
+					ast_node.name_qualified_segments.reserve(scope_stack.size() + 1);
 					for (auto &scope : scope_stack) {
-						qname += scope.second;
-						qname += ' ';
+						ast_node.name_qualified_segments.push_back(scope.second);
 					}
-					qname += segment;
-					ast_node.name_qualified = qname;
+					ast_node.name_qualified_segments.push_back(segment);
 					// Only definition-kind nodes act as scopes for nested definitions.
 					// I (import) and E (export) get a qualified_name but don't push.
 					const bool is_scope_provider =

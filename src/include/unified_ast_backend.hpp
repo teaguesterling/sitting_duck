@@ -131,6 +131,13 @@ public:
 	static vector<string> GetFlatTableColumnNames();
 	static LogicalType GetASTStructSchema();
 
+	// Shared helpers for the qualified_name column. The column type is
+	// LIST<STRUCT<semantic_type SEMANTIC_TYPE, name VARCHAR, index INTEGER>>,
+	// and QualifiedNameValue builds one column value from an ASTNode's segment
+	// vector (NULL list when the node has no qualified_name).
+	static LogicalType QualifiedNameColumnType();
+	static Value QualifiedNameValue(const vector<QualifiedNameSegment> &segments);
+
 	// NEW: Hierarchical schema functions for structured field access
 	static vector<LogicalType> GetHierarchicalTableSchema();
 	static vector<string> GetHierarchicalTableColumnNames();

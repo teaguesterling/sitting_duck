@@ -105,10 +105,11 @@ ASTNode ASTNode::FromValue(const Value &value) {
 	node.type_normalized = type_struct[1].GetValue<string>();
 	node.type_kind = type_struct[2].GetValue<string>();
 
-	// Name struct
+	// Name struct. This FromValue path uses an older nested layout and does
+	// not carry full qualified_name segments; leave the vector empty.
 	auto &name_struct = StructValue::GetChildren(struct_value[2]);
 	node.name_raw = name_struct[0].IsNull() ? "" : name_struct[0].GetValue<string>();
-	node.name_qualified = name_struct[1].IsNull() ? "" : name_struct[1].GetValue<string>();
+	node.name_qualified_segments.clear();
 
 	// File position struct
 	auto &file_pos_struct = StructValue::GetChildren(struct_value[3]);

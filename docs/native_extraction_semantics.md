@@ -11,7 +11,7 @@ This document describes the semantic meaning of each native extraction field acr
 | `parameters` | VARCHAR[] | Parameter names for functions, argument values for calls |
 | `modifiers` | VARCHAR[] | Access modifiers, keywords, inheritance info |
 | `annotations` | VARCHAR | Decorator/annotation text |
-| `qualified_name` | VARCHAR | Scope-based definition path, unique within a file (e.g., `C[User] F[__init__]`, with `[N]` suffix on collisions). Top-level column, not part of native struct. |
+| `qualified_name` | LIST&lt;STRUCT&gt; | Scope path as segment list `[{semantic_type, name, index}, ...]`, unique within a file. Top-level column, not part of native struct. |
 
 ---
 
@@ -229,23 +229,24 @@ Lua functions show `parameters = []` even when they have parameters:
 
 The `qualified_name` field is populated for all named definition nodes across all languages. It provides a scope-based path that disambiguates nodes with the same `name`.
 
-**Format:** Space-separated `T[name]` segments. Type codes: `F` (function), `C` (class), `V` (variable), `M` (module), `I` (import), `E` (export).
+**Format:** `LIST(STRUCT(semantic_type SEMANTIC_TYPE, name VARCHAR, index INTEGER))`. One element per scope level, outermost → innermost.
 
-| Example Code | qualified_name |
-|--------------|----------------|
-| Top-level `def process():` | `F[process]` |
-| `class User: def __init__():` | `C[User] F[__init__]` |
-| Nested `class Account: class Settings: def __init__():` | `C[Account] C[Settings] F[__init__]` |
-| `def outer(): def inner():` | `F[outer] F[inner]` |
-| Two `x = ...` in same scope (collision) | `V[x]`, `V[x][2]` |
+| Example Code | qualified_name (as struct list) | `ast_qualified_name_as_string()` |
+|--------------|----------------------------------|-----------------------------------|
+| Top-level `def process():` | `[{function, process, 1}]` | `F[process]` |
+| `class User: def __init__():` | `[{class, User, 1}, {function, __init__, 1}]` | `C[User] F[__init__]` |
+| Nested class → class → init | `[{class, Account, 1}, {class, Settings, 1}, {function, __init__, 1}]` | `C[Account] C[Settings] F[__init__]` |
+| `def outer(): def inner():` | `[{function, outer, 1}, {function, inner, 1}]` | `F[outer] F[inner]` |
+| Two `x = ...` in same scope | `[{variable, x, 1}]`, `[{variable, x, 2}]` | `V[x]`, `V[x][2]` |
 
 **Key properties:**
 - NULL for non-definition nodes (calls, identifiers, operators, etc.)
 - Available at `context := 'normalized'` and above (not just `native`)
-- Unique within a file (collision suffix `[N]` applied when needed)
+- **Unique within a file** — explicit `index` field disambiguates same-name collisions within a scope
 - Excludes `file_path` — use `USING (file_path, qualified_name)` for cross-file joins
-- Language-agnostic format (same type codes across all 27 languages)
-- Self-delimiting brackets enable clean LIKE matching: `LIKE '%F[%'` for all functions, `LIKE '%[foo]%'` for name "foo"
+- Language-agnostic format (same semantic type values across all 27 languages)
+- Queryable structurally via DuckDB list/struct functions: `len()`, `list_filter()`, `list_transform()`, `qualified_name[-1].name`, etc.
+- `ast_qualified_name_as_string()` renders the list as a bracket string for display, logging, or LIKE-style matching
 
 ---
 

@@ -157,3 +157,43 @@ CREATE OR REPLACE MACRO is_type_reference(st) AS
 -- Check if semantic_type is a generic/template type
 CREATE OR REPLACE MACRO is_type_generic(st) AS
     is_semantic_type(st, 'TYPE_GENERIC');
+
+-- =============================================================================
+-- qualified_name Helpers
+-- =============================================================================
+--
+-- qualified_name is a LIST(STRUCT(semantic_type, name, index)) column: one
+-- segment per scope level, outermost → innermost. These macros render or
+-- query the list without making users write list_transform/list_filter
+-- boilerplate for the common cases.
+
+-- Render a qualified_name as the legacy bracket form "C[Foo] F[bar] V[x][2]".
+-- Useful for display, logging, and test assertions. The index "[N]" suffix
+-- is omitted for N=1 so the common case stays clean, matching the pre-v1.7
+-- bracket format string.
+--
+-- Example:
+--   SELECT name, ast_qualified_name_as_string(qualified_name)
+--   FROM read_ast('src/main.py')
+--   WHERE is_definition(semantic_type);
+CREATE OR REPLACE MACRO ast_qualified_name_as_string(qn) AS (
+    CASE
+        WHEN qn IS NULL OR len(qn) = 0 THEN NULL
+        ELSE list_aggregate(
+            list_transform(qn, s ->
+                CASE
+                    WHEN is_function_definition(s.semantic_type) THEN 'F'
+                    WHEN is_class_definition(s.semantic_type) THEN 'C'
+                    WHEN is_variable_definition(s.semantic_type) THEN 'V'
+                    WHEN is_module_definition(s.semantic_type) THEN 'M'
+                    WHEN is_semantic_type(s.semantic_type, 'IMPORT') THEN 'I'
+                    WHEN is_semantic_type(s.semantic_type, 'EXPORT') THEN 'E'
+                    ELSE '?'
+                END
+                || '[' || s.name || ']'
+                || CASE WHEN s.index > 1 THEN '[' || s.index::VARCHAR || ']' ELSE '' END
+            ),
+            'string_agg', ' '
+        )
+    END
+);

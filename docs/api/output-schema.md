@@ -17,7 +17,7 @@ Complete reference for `read_ast()` output columns.
 | `parameters` | STRUCT[] | Function parameters with names and types |
 | `modifiers` | VARCHAR[] | Access modifiers and keywords |
 | `annotations` | VARCHAR | Decorator/annotation text |
-| `qualified_name` | VARCHAR | Scope-based definition path, unique within a file (e.g., `C[User] F[__init__]`) |
+| `qualified_name` | LIST&lt;STRUCT&gt; | Scope-based path as segment list (semantic_type + name + index), unique within a file |
 | `file_path` | VARCHAR | Source file path |
 | `language` | VARCHAR | Programming language |
 | `start_line` | UINTEGER | Starting line (1-based) |
@@ -260,63 +260,83 @@ WHERE is_function_definition(semantic_type)
 
 ### `qualified_name`
 
-**Type:** `VARCHAR` (nullable)
+**Type:** `LIST(STRUCT(semantic_type SEMANTIC_TYPE, name VARCHAR, index INTEGER))` (nullable)
 
-Scope-based definition path that uniquely identifies a node within its file. Built during AST traversal by tracking nested definition scopes. Format: space-separated `T[name]` segments, where `T` is a single-letter type code.
+Scope-based definition path that uniquely identifies a node within its file. Each element of the list is one segment of the path from outermost scope to innermost. Built during AST traversal by tracking nested definition scopes.
 
-**Type codes:** `F` (function), `C` (class), `V` (variable), `M` (module), `I` (import), `E` (export)
+**Segment fields:**
+
+| Field | Type | Meaning |
+|---|---|---|
+| `semantic_type` | `SEMANTIC_TYPE` | The semantic role of this scope level (e.g. `DEFINITION_FUNCTION`, `DEFINITION_CLASS`, `DEFINITION_VARIABLE`, `DEFINITION_MODULE`, `EXTERNAL_IMPORT`, `EXTERNAL_EXPORT`). Cast to `VARCHAR` for the long-form name. |
+| `name` | `VARCHAR` | The identifier name at that scope level. |
+| `index` | `INTEGER` | 1-based occurrence index for disambiguating same-name collisions within a scope. The first `x = ...` in a scope gets `index = 1`; the second gets `index = 2`; and so on. Always explicit. |
 
 ```sql
--- Disambiguate same-named methods across classes
-SELECT name, qualified_name, file_path
-FROM read_ast('src/**/*.py')
-WHERE name = '__init__' AND is_definition(semantic_type);
--- Results:
--- __init__  C[User] F[__init__]       src/models.py
--- __init__  C[Account] F[__init__]    src/models.py
+-- Inspect the raw segment list
+SELECT name, qualified_name
+FROM read_ast('src/models.py')
+WHERE name = 'validate';
+-- validate  [{semantic_type: DEFINITION_CLASS,    name: User,     index: 1},
+--            {semantic_type: DEFINITION_FUNCTION, name: validate, index: 1}]
 
--- Use as a composite join key
-SELECT a.qualified_name, a.start_line, b.start_line
+-- Filter by semantic role at any depth (e.g. all definitions inside a class)
+SELECT name
+FROM read_ast('src/**/*.py')
+WHERE len(list_filter(qualified_name,
+                      s -> is_class_definition(s.semantic_type))) > 0;
+
+-- Innermost enclosing class name
+SELECT name,
+       (list_reverse(list_filter(qualified_name,
+                                 s -> is_class_definition(s.semantic_type))))[1].name AS in_class
+FROM read_ast('src/**/*.py')
+WHERE is_function_definition(semantic_type);
+
+-- Top-level definitions only (depth = 1)
+SELECT name
+FROM read_ast('src/**/*.py')
+WHERE len(qualified_name) = 1 AND is_function_definition(semantic_type);
+
+-- Innermost segment
+SELECT name, qualified_name[-1].name, qualified_name[-1].index
+FROM read_ast('src/**/*.py')
+WHERE is_definition(semantic_type);
+
+-- Composite join key across parses
+SELECT a.name, a.start_line, b.start_line
 FROM read_ast('v1/**/*.py') a
 JOIN read_ast('v2/**/*.py') b USING (file_path, qualified_name);
-
--- Find all definitions under a class (bracket boundary makes the prefix
--- self-delimiting — "C[MyClass] " won't match a class named "MyClassB")
-SELECT qualified_name
-FROM read_ast('src/**/*.py')
-WHERE qualified_name LIKE 'C[MyClass] %';
-
--- Find nodes by name regardless of role (the [name] substring is preserved
--- in both unsuffixed and collision-suffixed forms)
-SELECT qualified_name
-FROM read_ast('src/**/*.py')
-WHERE qualified_name LIKE '%[process]%';
 ```
 
-**Collision disambiguation.** Within a single file, the first occurrence of each `(type_code, name)` pair in a given scope emits a bare segment like `V[x]`. Subsequent occurrences in the same scope get a `[N]` suffix where N starts at 2:
+**Collision disambiguation.** Within a single file, each `(semantic_type, name)` pair in a given scope gets a monotonically increasing `index`. The first occurrence has `index = 1`, the second has `index = 2`, and so on. This makes `qualified_name` unique within a file for every named definition.
 
 ```python
-counter = 0    # V[counter]
-counter = 1    # V[counter][2]
-counter = 2    # V[counter][3]
+counter = 0    # [{variable, counter, 1}]
+counter = 1    # [{variable, counter, 2}]
+counter = 2    # [{variable, counter, 3}]
 ```
 
-Counters reset at scope boundaries — each function/class/module gets a fresh counter, so `F[foo] V[x]` and `F[bar] V[x]` are both unsuffixed.
+Counters reset at scope boundaries — each function/class gets a fresh counter, so `[{function, foo}, {variable, x}]` and `[{function, bar}, {variable, x}]` both use `index = 1` for their `x`.
 
-**LIKE-matching properties:**
+**String form.** For display, logging, or test assertions, `ast_qualified_name_as_string(qualified_name)` renders the list into the legacy bracket form:
 
-| Query | Pattern | Notes |
-|---|---|---|
-| All functions | `LIKE '%F[%'` | `F[` is self-delimiting |
-| Name "foo" (any role) | `LIKE '%[foo]%'` | `[foo]` is preserved in both unsuffixed and suffixed forms |
-| "foo" as function | `LIKE '%F[foo]%'` | combines both |
-| All suffixed collisions | `LIKE '%][%'` | second `[` only appears in `[N]` suffix |
+```sql
+SELECT name, ast_qualified_name_as_string(qualified_name)
+FROM read_ast('src/models.py')
+WHERE name = 'validate';
+-- validate  C[User] F[validate]
+```
 
-- NULL for non-definition nodes
+The bracket form uses single-letter prefixes (`F`/`C`/`V`/`M`/`I`/`E`) and omits the `[N]` suffix for `index = 1`, so `V[x]` means "the first `x`" and `V[x][2]` means "the second `x` in that scope".
+
+**Key properties:**
+
+- NULL for non-definition nodes (the `qualified_name` column holds a NULL list, not an empty one)
 - Only populated for named definition nodes (functions, classes, variables, modules, imports, exports)
 - Available at `context := 'normalized'` and above
-- Unique within a file (once collision suffixes are applied)
-- Excludes `file_path` — use `USING (file_path, qualified_name)` for cross-file joins
+- **Unique within a file** — every named definition node gets a distinct segment list
+- Joinable: `USING (file_path, qualified_name)` works as a cross-parse composite key
 
 ---
 

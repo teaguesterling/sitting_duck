@@ -127,6 +127,20 @@ struct ParameterInfo {
 	}
 };
 
+// One segment of a qualified_name path. A qualified_name is a list of these
+// segments from outermost scope to innermost, uniquely identifying a definition
+// within its file. The first occurrence of each (semantic_type, name) pair in
+// a given scope has index=1; subsequent occurrences get 2, 3, etc.
+struct QualifiedNameSegment {
+	uint8_t semantic_type = 0; // Stored as SEMANTIC_TYPE logical type in columns
+	string name;
+	int32_t index = 1; // 1-based; explicit even for first occurrences
+
+	QualifiedNameSegment() = default;
+	QualifiedNameSegment(uint8_t st, string n, int32_t i) : semantic_type(st), name(std::move(n)), index(i) {
+	}
+};
+
 struct NativeContext {
 	string signature_type;            // Return type (functions) | Variable type | Class type
 	vector<ParameterInfo> parameters; // Function/method parameters (empty for non-parameterized)
@@ -211,10 +225,12 @@ struct ASTNode {
 	uint32_t source_end_column = 0;   // Ending column
 
 	// Context fields (flattened from ContextInfo, except native)
-	string name_raw;                          // Raw node name/identifier
-	string name_qualified;                    // Fully qualified name
-	bool native_extraction_attempted = false; // Track native extraction attempts
-	NativeContext native;                     // ONLY remaining nested struct - language-specific data
+	string name_raw;                                      // Raw node name/identifier
+	vector<QualifiedNameSegment> name_qualified_segments; // Scope-path segments (outermost → innermost).
+	                                                      // Empty means no qualified_name (non-definition or
+	                                                      // context level below NORMALIZED).
+	bool native_extraction_attempted = false;             // Track native extraction attempts
+	NativeContext native;                                 // ONLY remaining nested struct - language-specific data
 
 	// Type fields (flattened from ASTTypeInfo)
 	string type_raw;        // Raw parser type name
