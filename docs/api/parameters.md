@@ -204,6 +204,31 @@ SELECT * FROM read_ast('file.py', peek := 'smart');
 
 ---
 
+### `+schema` Extraction Suffix
+
+**Available on:** `context`, `source`, `structure`, `peek`
+**Introduced:** v1.7.0
+
+Any of the extraction-level parameters can take a `+schema` suffix that **keeps all columns in the output schema as NULLs** without computing them. This gives SQL macros and downstream queries a stable schema even when they only need a subset of columns — the expensive data is skipped but the columns are still present.
+
+```sql
+-- Skip peek computation (the expensive part) but keep the peek column
+-- in the schema so macros that reference it don't break.
+SELECT name, peek FROM read_ast('file.py', peek := 'none+schema');
+-- peek column is always NULL, but it exists.
+
+-- Keep all context columns in the schema, compute only up to normalized level.
+-- native-level fields (parameters, modifiers, annotations, signature_type)
+-- will be NULL even though they appear in the output.
+SELECT * FROM read_ast('file.py', context := 'normalized+schema');
+```
+
+**Why use it:** the primary use case is SQL macros that need to declare a stable output schema regardless of which columns they actually populate. `ast_select` uses `peek := 'none+schema'` internally to skip peek computation while keeping the column available for selectors that reference it.
+
+**What it affects:** only the data is suppressed — the column remains in the output schema, typed normally, with NULL values. Any query that references a suppressed column sees NULL without erroring.
+
+---
+
 ### `peek_size`
 
 **Type:** `INTEGER`

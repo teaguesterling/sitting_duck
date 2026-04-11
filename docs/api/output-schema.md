@@ -17,7 +17,7 @@ Complete reference for `read_ast()` output columns.
 | `parameters` | STRUCT[] | Function parameters with names and types |
 | `modifiers` | VARCHAR[] | Access modifiers and keywords |
 | `annotations` | VARCHAR | Decorator/annotation text |
-| `qualified_name` | VARCHAR | Scope-based definition path (e.g., `C/User F/__init__`) |
+| `qualified_name` | VARCHAR | Scope-based definition path, unique within a file (e.g., `C[User] F[__init__]`) |
 | `file_path` | VARCHAR | Source file path |
 | `language` | VARCHAR | Programming language |
 | `start_line` | UINTEGER | Starting line (1-based) |
@@ -262,9 +262,9 @@ WHERE is_function_definition(semantic_type)
 
 **Type:** `VARCHAR` (nullable)
 
-Scope-based definition path that disambiguates nodes with the same `name`. Built during AST traversal by tracking nested definition scopes. Format: space-separated `type_code/name` segments.
+Scope-based definition path that uniquely identifies a node within its file. Built during AST traversal by tracking nested definition scopes. Format: space-separated `T[name]` segments, where `T` is a single-letter type code.
 
-**Type codes:** `F` (function), `C` (class), `V` (variable), `M` (module)
+**Type codes:** `F` (function), `C` (class), `V` (variable), `M` (module), `I` (import), `E` (export)
 
 ```sql
 -- Disambiguate same-named methods across classes
@@ -272,23 +272,50 @@ SELECT name, qualified_name, file_path
 FROM read_ast('src/**/*.py')
 WHERE name = '__init__' AND is_definition(semantic_type);
 -- Results:
--- __init__  C/User F/__init__       src/models.py
--- __init__  C/Account F/__init__    src/models.py
+-- __init__  C[User] F[__init__]       src/models.py
+-- __init__  C[Account] F[__init__]    src/models.py
 
 -- Use as a composite join key
 SELECT a.qualified_name, a.start_line, b.start_line
 FROM read_ast('v1/**/*.py') a
 JOIN read_ast('v2/**/*.py') b USING (file_path, qualified_name);
 
--- Find all definitions under a class
+-- Find all definitions under a class (bracket boundary makes the prefix
+-- self-delimiting — "C[MyClass] " won't match a class named "MyClassB")
 SELECT qualified_name
 FROM read_ast('src/**/*.py')
-WHERE qualified_name LIKE 'C/MyClass %';
+WHERE qualified_name LIKE 'C[MyClass] %';
+
+-- Find nodes by name regardless of role (the [name] substring is preserved
+-- in both unsuffixed and collision-suffixed forms)
+SELECT qualified_name
+FROM read_ast('src/**/*.py')
+WHERE qualified_name LIKE '%[process]%';
 ```
 
+**Collision disambiguation.** Within a single file, the first occurrence of each `(type_code, name)` pair in a given scope emits a bare segment like `V[x]`. Subsequent occurrences in the same scope get a `[N]` suffix where N starts at 2:
+
+```python
+counter = 0    # V[counter]
+counter = 1    # V[counter][2]
+counter = 2    # V[counter][3]
+```
+
+Counters reset at scope boundaries — each function/class/module gets a fresh counter, so `F[foo] V[x]` and `F[bar] V[x]` are both unsuffixed.
+
+**LIKE-matching properties:**
+
+| Query | Pattern | Notes |
+|---|---|---|
+| All functions | `LIKE '%F[%'` | `F[` is self-delimiting |
+| Name "foo" (any role) | `LIKE '%[foo]%'` | `[foo]` is preserved in both unsuffixed and suffixed forms |
+| "foo" as function | `LIKE '%F[foo]%'` | combines both |
+| All suffixed collisions | `LIKE '%][%'` | second `[` only appears in `[N]` suffix |
+
 - NULL for non-definition nodes
-- Only populated for named definition nodes (functions, classes, variables, modules)
+- Only populated for named definition nodes (functions, classes, variables, modules, imports, exports)
 - Available at `context := 'normalized'` and above
+- Unique within a file (once collision suffixes are applied)
 - Excludes `file_path` — use `USING (file_path, qualified_name)` for cross-file joins
 
 ---

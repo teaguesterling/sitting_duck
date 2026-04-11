@@ -11,7 +11,7 @@ This document describes the semantic meaning of each native extraction field acr
 | `parameters` | VARCHAR[] | Parameter names for functions, argument values for calls |
 | `modifiers` | VARCHAR[] | Access modifiers, keywords, inheritance info |
 | `annotations` | VARCHAR | Decorator/annotation text |
-| `qualified_name` | VARCHAR | Scope-based definition path (e.g., `C/User F/__init__`). Top-level column, not part of native struct. |
+| `qualified_name` | VARCHAR | Scope-based definition path, unique within a file (e.g., `C[User] F[__init__]`, with `[N]` suffix on collisions). Top-level column, not part of native struct. |
 
 ---
 
@@ -229,20 +229,23 @@ Lua functions show `parameters = []` even when they have parameters:
 
 The `qualified_name` field is populated for all named definition nodes across all languages. It provides a scope-based path that disambiguates nodes with the same `name`.
 
-**Format:** Space-separated `type_code/name` segments. Type codes: `F` (function), `C` (class), `V` (variable), `M` (module).
+**Format:** Space-separated `T[name]` segments. Type codes: `F` (function), `C` (class), `V` (variable), `M` (module), `I` (import), `E` (export).
 
 | Example Code | qualified_name |
 |--------------|----------------|
-| Top-level `def process():` | `F/process` |
-| `class User: def __init__():` | `C/User F/__init__` |
-| Nested `class Account: class Settings: def __init__():` | `C/Account C/Settings F/__init__` |
-| `def outer(): def inner():` | `F/outer F/inner` |
+| Top-level `def process():` | `F[process]` |
+| `class User: def __init__():` | `C[User] F[__init__]` |
+| Nested `class Account: class Settings: def __init__():` | `C[Account] C[Settings] F[__init__]` |
+| `def outer(): def inner():` | `F[outer] F[inner]` |
+| Two `x = ...` in same scope (collision) | `V[x]`, `V[x][2]` |
 
 **Key properties:**
 - NULL for non-definition nodes (calls, identifiers, operators, etc.)
 - Available at `context := 'normalized'` and above (not just `native`)
+- Unique within a file (collision suffix `[N]` applied when needed)
 - Excludes `file_path` — use `USING (file_path, qualified_name)` for cross-file joins
 - Language-agnostic format (same type codes across all 27 languages)
+- Self-delimiting brackets enable clean LIKE matching: `LIKE '%F[%'` for all functions, `LIKE '%[foo]%'` for name "foo"
 
 ---
 
