@@ -1,5 +1,6 @@
 # name: test/sql/_diag_planner_repro.test
 # group: [sql]
+
 #
 # Test multiple workaround forms for the planner bug.
 # Each variant is independent so we can see which ones survive.

@@ -1,5 +1,6 @@
 # name: test/sql/_wip_ast_select_rules.test
 # group: [sql]
+
 #
 # Intended-behavior tests for ast_select_rules / ast_select_list.
 #

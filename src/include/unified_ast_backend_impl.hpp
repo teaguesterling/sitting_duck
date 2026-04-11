@@ -302,9 +302,7 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 					auto &counts = scope_name_counts.back();
 					int &count = counts[base];
 					++count;
-					string segment = (count == 1)
-					    ? base
-					    : base + "[" + std::to_string(count) + "]";
+					string segment = (count == 1) ? base : base + "[" + std::to_string(count) + "]";
 					// Build qualified_name from scope_stack + this segment
 					string qname;
 					for (auto &scope : scope_stack) {
