@@ -174,6 +174,38 @@ ast_select(source, selector, language := NULL)
 
 Returns the same columns as `read_ast()`.
 
+### Multi-Rule Dispatch (v1.7.0+, currently WIP)
+
+For queries that contain **multiple CSS rules** — each with its own selector and declaration block — sitting_duck provides two macros that dispatch `ast_select` once per rule and tag the matches with per-rule metadata.
+
+```sql
+ast_select_rules(source, query, language := NULL)    -- flat: row per (rule, match)
+ast_select_list(source, query, language := NULL)     -- nested: row per rule, matches as LIST
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `source` | VARCHAR | File path, glob pattern, or array of paths |
+| `query` | VARCHAR | Multi-rule CSS query — each rule must include a declaration block (e.g., `'.fn { show: signature; }'`). Bare selectors should use `ast_select` instead. |
+| `language` | VARCHAR | Optional language override (auto-detected) |
+
+**Intended query shape:**
+
+```sql
+-- Flat form: one row per (rule, match) pair
+SELECT rule_index, selector, declarations['show'], name
+FROM ast_select_rules('src/**/*.py',
+    '.func { show: signature; }
+     #main { show: body; }
+     .class#Config { show: outline; }');
+```
+
+Declarations are stored as `MAP(VARCHAR, VARCHAR)` where the value is the raw text span between `:` and `;` (trimmed). Consumers cast as needed, e.g., `declarations['depth']::INT`, `string_split(declarations['trace'], ',')`.
+
+**Status**: The macros register successfully but any call currently crashes at bind time due to a DuckDB v1.5.1 planner regression ([duckdb/duckdb#21890](https://github.com/duckdb/duckdb/issues/21890)) in the optimizer's dependent-join flattening. The sitting_duck side is complete and will "just work" once the upstream fix lands. See `tracker/bugs/007-duckdb-correlated-macro-bind-error.md` for the minimal repro, workarounds, and resolution plan.
+
+---
+
 ```sql
 ast_type_map(language := NULL)
 ```

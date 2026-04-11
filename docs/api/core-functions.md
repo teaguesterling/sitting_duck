@@ -51,7 +51,9 @@ read_ast(file_patterns LIST(VARCHAR), language VARCHAR) -> TABLE
 | `parameters` | STRUCT[] | Function parameters (name and type) |
 | `modifiers` | VARCHAR[] | Access modifiers and keywords |
 | `annotations` | VARCHAR | Decorator/annotation text |
-| `qualified_name` | VARCHAR | Scope-based definition path (e.g., `C/User F/__init__`) |
+| `qualified_name` | VARCHAR | Scope-based definition path, unique within a file (e.g., `C[User] F[__init__]`) |
+| `scope_id` | BIGINT | node_id of the nearest enclosing scope (NULL at root) |
+| `scope_stack` | BIGINT[] | On scope-creating nodes: chain of enclosing scope node_ids |
 | `file_path` | VARCHAR | Source file path |
 | `language` | VARCHAR | Detected language |
 | `start_line` | UINTEGER | Starting line (1-based) |
@@ -131,6 +133,89 @@ class MyClass:
 ', 'python')
 WHERE type = 'function_definition';
 ```
+
+---
+
+## `parse_ast_list()`
+
+Parse source code from a string and return the AST as a `LIST<STRUCT>` — the scalar equivalent of `parse_ast()`. Useful inside CTEs, lateral joins, and scalar expressions where a table function isn't allowed.
+
+### Signature
+
+```sql
+parse_ast_list(source_code VARCHAR, language VARCHAR) -> LIST<STRUCT(...)>
+```
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `source_code` | VARCHAR | Yes | Source code to parse |
+| `language` | VARCHAR | Yes | Programming language |
+
+Returns `NULL` on invalid input language; other parse errors are raised as `InvalidInputException`.
+
+### Output
+
+A `LIST(STRUCT(...))` whose element struct type matches the default flat schema of `read_ast()` (type, name, semantic_type, qualified_name, start_line, end_line, ...).
+
+### Examples
+
+```sql
+-- Count nodes in a snippet
+SELECT length(parse_ast_list('def hello(): pass', 'python'));
+-- → 6
+
+-- Use inside a CTE / scalar context where parse_ast() table function isn't allowed
+WITH ast_nodes AS (
+    SELECT unnest(parse_ast_list('x = 1; y = 2', 'python')) AS node
+)
+SELECT node.type, node.name FROM ast_nodes WHERE node.name IS NOT NULL;
+
+-- Per-row parsing of a column (lateral-friendly)
+SELECT file.path, length(parse_ast_list(file.content, 'python')) AS node_count
+FROM my_files file;
+```
+
+Introduced in v1.7.0 specifically to unblock CTE/lateral-join use cases that can't call table functions. Internally used by `ast_select`'s pattern-matching pseudo-classes (`:match`, `:contains`).
+
+---
+
+## `parse_ast_list_table()`
+
+Table-macro wrapper around `parse_ast_list()`. Presents the same row-shaped interface as `parse_ast()` (so it can be used as a drop-in replacement in `FROM` clauses) while internally calling `parse_ast_list()` so it accepts column-valued arguments.
+
+### Signature
+
+```sql
+parse_ast_list_table(source_code, language) -> TABLE
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `source_code` | VARCHAR | Source code to parse. May be a column reference or expression (unlike `parse_ast()`, which requires a literal). |
+| `language` | VARCHAR | Programming language |
+
+### Output
+
+Same row shape as `parse_ast()`: `node_id`, `parent_id`, `type`, `name`, `start_line`, `end_line`, `depth`, `sibling_index`, `descendant_count`, `semantic_type`, `flags`, `peek`, and the other flat schema columns.
+
+### Example
+
+```sql
+-- Drop-in replacement for parse_ast() in FROM clauses
+SELECT node_id, type, name
+FROM parse_ast_list_table('.fn#main {}', 'css')
+WHERE type = 'class_selector';
+```
+
+### Why this exists
+
+`parse_ast()` is a table function and, like all DuckDB table functions, its arguments must be literals at bind time. `parse_ast_list_table()` is the macro-level escape hatch: it wraps the scalar `parse_ast_list()` inside a table-shaped relation, which allows downstream SQL macros to substitute column-valued arguments at macro-expansion time and still produce a row-shaped result.
+
+`ast_select()`'s internal `sel` CTE uses `parse_ast_list_table` rather than `parse_ast` for exactly this reason — it's the plumbing that (together with the upstream DuckDB planner fix tracked in `tracker/bugs/007`) enables per-row selector dispatch for features like `ast_select_rules()`.
 
 ---
 
