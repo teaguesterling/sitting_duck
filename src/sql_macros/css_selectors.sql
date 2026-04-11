@@ -67,6 +67,10 @@ CREATE OR REPLACE MACRO ast_select(
             SELECT node_id, parent_id, name, depth, descendant_count, sibling_index
             FROM sel WHERE type = 'pseudo_class_selector'
         ),
+        sel_pseudo_elements AS (
+            SELECT node_id, parent_id, name, depth, descendant_count, sibling_index
+            FROM sel WHERE type = 'pseudo_element_selector'
+        ),
         sel_arg_blocks AS (
             SELECT node_id, parent_id, descendant_count
             FROM sel WHERE type = 'arguments'
@@ -545,15 +549,18 @@ CREATE OR REPLACE MACRO ast_select(
             END as ok
         ),
 
-        -- Detect pseudo-element (::callers, ::callees, etc.)
+        -- Detect pseudo-element (::callers, ::callees, etc.).
+        -- Finds the LAST tag_name child of any pseudo_element_selector.
+        -- Refactored to use typed CTEs + window function — avoids the correlated
+        -- EXISTS that would trip the planner bug on column-valued selectors.
+        sel_pe_tag_names_ranked AS (
+            SELECT t.name,
+                   row_number() OVER (ORDER BY t.sibling_index DESC) AS rn
+            FROM sel_tag_names t
+            JOIN sel_pseudo_elements pe ON pe.node_id = t.parent_id
+        ),
         pseudo_element AS (
-            SELECT (SELECT t.name FROM sel t
-                    WHERE t.type = 'tag_name'
-                      AND EXISTS (SELECT 1 FROM sel pe
-                                  WHERE pe.type = 'pseudo_element_selector'
-                                    AND t.parent_id = pe.node_id)
-                    ORDER BY t.sibling_index DESC
-                    LIMIT 1) as element_name
+            SELECT (SELECT name FROM sel_pe_tag_names_ranked WHERE rn = 1) AS element_name
         ),
 
         -- :match("code") / :contains("code") — structural code pattern.

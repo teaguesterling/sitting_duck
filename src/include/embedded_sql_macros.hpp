@@ -2368,6 +2368,10 @@ CREATE OR REPLACE MACRO ast_select(
             SELECT node_id, parent_id, name, depth, descendant_count, sibling_index
             FROM sel WHERE type = 'pseudo_class_selector'
         ),
+        sel_pseudo_elements AS (
+            SELECT node_id, parent_id, name, depth, descendant_count, sibling_index
+            FROM sel WHERE type = 'pseudo_element_selector'
+        ),
         sel_arg_blocks AS (
             SELECT node_id, parent_id, descendant_count
             FROM sel WHERE type = 'arguments'
@@ -2585,12 +2589,12 @@ CREATE OR REPLACE MACRO ast_select(
         ),
 
         -- First id_name in each pcs's args block
-        sel_pcs_first_id_name AS (
-            SELECT pcs_id, name FROM (
-                SELECT pa.pcs_id, i.name,
 
 )SQLMACRO"
         R"SQLMACRO(
+        sel_pcs_first_id_name AS (
+            SELECT pcs_id, name FROM (
+                SELECT pa.pcs_id, i.name,
                        row_number() OVER (PARTITION BY pa.pcs_id ORDER BY i.node_id) AS rn
                 FROM sel_pcs_to_args pa
                 JOIN sel_id_names i
@@ -2849,15 +2853,18 @@ CREATE OR REPLACE MACRO ast_select(
             END as ok
         ),
 
-        -- Detect pseudo-element (::callers, ::callees, etc.)
+        -- Detect pseudo-element (::callers, ::callees, etc.).
+        -- Finds the LAST tag_name child of any pseudo_element_selector.
+        -- Refactored to use typed CTEs + window function — avoids the correlated
+        -- EXISTS that would trip the planner bug on column-valued selectors.
+        sel_pe_tag_names_ranked AS (
+            SELECT t.name,
+                   row_number() OVER (ORDER BY t.sibling_index DESC) AS rn
+            FROM sel_tag_names t
+            JOIN sel_pseudo_elements pe ON pe.node_id = t.parent_id
+        ),
         pseudo_element AS (
-            SELECT (SELECT t.name FROM sel t
-                    WHERE t.type = 'tag_name'
-                      AND EXISTS (SELECT 1 FROM sel pe
-                                  WHERE pe.type = 'pseudo_element_selector'
-                                    AND t.parent_id = pe.node_id)
-                    ORDER BY t.sibling_index DESC
-                    LIMIT 1) as element_name
+            SELECT (SELECT name FROM sel_pe_tag_names_ranked WHERE rn = 1) AS element_name
         ),
 
         -- :match("code") / :contains("code") — structural code pattern.
@@ -2867,6 +2874,9 @@ CREATE OR REPLACE MACRO ast_select(
         -- Both share the same parsed pattern. Only the first :match/:contains
         -- occurrence in a selector is extracted (one pattern per selector).
         -- Exact structural match: db.execute() matches only zero-arg calls,
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- db.execute("SELECT 1") matches only that exact call.
         -- Use ___ (triple underscore) as wildcard for any name.
         ast_pattern AS (
@@ -2874,9 +2884,6 @@ CREATE OR REPLACE MACRO ast_select(
                 row_number() OVER (ORDER BY node.node_id) - 1 as idx,
                 node.type as pat_type,
                 node.name as pat_name
-
-)SQLMACRO"
-        R"SQLMACRO(
             FROM (
                 SELECT unnest(parse_ast_list(
                     regexp_extract(selector, ':(?:match|contains)\("([^"]+)"\)', 1),
@@ -3157,15 +3164,15 @@ CREATE OR REPLACE MACRO ast_select(
                 is_name_definition(a.flags)
                 AND (a.scope_id IS NULL OR a.scope_id <= 0)
                 AND a.name IS NOT NULL AND a.name != ''
+
+)SQLMACRO"
+        R"SQLMACRO(
                 AND a.name NOT LIKE '\_%'
 
             -- :match("code") — the CURRENT node is the root of the parsed pattern.
             -- Strict: target type must equal pattern root type. Use ___ wildcard
             -- for any name. Unlike :contains, this never iterates descendants —
             -- it's a direct check on node `a`.
-
-)SQLMACRO"
-        R"SQLMACRO(
             WHEN 'match' THEN (SELECT len FROM ast_pattern_len) > 0
                 AND a.type = (SELECT pat_type FROM ast_pattern WHERE idx = 0)
                 AND (SELECT len FROM ast_pattern_len) - 1 <= a.descendant_count
