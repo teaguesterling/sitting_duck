@@ -2340,6 +2340,47 @@ CREATE OR REPLACE MACRO ast_select(
             SELECT * FROM parse_ast_list_table(selector, 'css')
         ),
 
+        -- =====================================================================
+        -- Typed views over `sel`, one per node type the macro cares about.
+        -- These exist so downstream CTEs can join different node types as
+        -- separate relations rather than self-correlating two aliases of `sel`
+        -- (which trips a DuckDB planner bug when ast_select is called with a
+        -- column-valued selector — see commit 86587bc for details).
+        -- Each typed CTE references `sel` exactly once.
+        -- =====================================================================
+        sel_tag_names AS (
+            SELECT node_id, parent_id, name, depth, descendant_count, sibling_index
+            FROM sel WHERE type = 'tag_name'
+        ),
+        sel_class_names AS (
+            SELECT node_id, parent_id, name, depth, descendant_count, sibling_index
+            FROM sel WHERE type = 'class_name'
+        ),
+        sel_id_names AS (
+            SELECT node_id, parent_id, name, depth, descendant_count, sibling_index
+            FROM sel WHERE type = 'id_name'
+        ),
+        sel_class_selectors AS (
+            SELECT node_id, parent_id, name, depth, descendant_count, sibling_index
+            FROM sel WHERE type = 'class_selector'
+        ),
+        sel_pseudo_classes AS (
+            SELECT node_id, parent_id, name, depth, descendant_count, sibling_index
+            FROM sel WHERE type = 'pseudo_class_selector'
+        ),
+        sel_arg_blocks AS (
+            SELECT node_id, parent_id, descendant_count
+            FROM sel WHERE type = 'arguments'
+        ),
+        sel_attribute_selectors AS (
+            SELECT node_id, parent_id, descendant_count, sibling_index
+            FROM sel WHERE type = 'attribute_selector'
+        ),
+        sel_attribute_names AS (
+            SELECT node_id, parent_id, name
+            FROM sel WHERE type = 'attribute_name'
+        ),
+
         -- Parse source files. Keep native context (needed for attribute filters like
         -- [params=N] and pseudo-classes like :decorated, :typed, :async, etc.) but
         -- skip peek computation since no selector feature references it. The +schema
@@ -2362,28 +2403,45 @@ CREATE OR REPLACE MACRO ast_select(
               )
             LIMIT 1
         ),
+        -- For pseudo_element_selector roots, we need to "unwrap" to the inner
+        -- selector child. Precompute the chosen child node for any pseudo-element
+        -- root via a window function so sel_root can do a simple JOIN instead of
+        -- correlated LIMIT 1 scalar subqueries.
+        sel_pseudo_element_unwrap AS (
+            SELECT c.parent_id AS pe_node_id,
+                   c.node_id,
+                   row_number() OVER (
+                       PARTITION BY c.parent_id
+                       ORDER BY
+                           -- Prefer non-tag, non-syntax children (id_selector, class_selector, etc.)
+                           CASE WHEN c.type NOT IN ('::', 'tag_name', 'pseudo_element_selector') THEN 0
+                                WHEN c.type = 'tag_name' THEN 1
+                                ELSE 2 END,
+                           c.sibling_index
+                   ) AS rn
+            FROM sel c
+            WHERE c.parent_id IN (
+                SELECT node_id FROM sel_root_raw WHERE type = 'pseudo_element_selector'
+            )
+              AND c.type NOT IN ('::', 'pseudo_element_selector')
+        ),
+        -- Resolve the chosen_id for each raw root: either the unwrapped child of
+        -- a pseudo-element selector, or the raw node itself. Done as a LEFT JOIN
+        -- in its own CTE so sel_root below doesn't need a correlated subquery.
+        sel_root_resolved AS (
+            SELECT raw.node_id AS raw_id,
+                   COALESCE(u.node_id, raw.node_id) AS chosen_id
+            FROM sel_root_raw raw
+            LEFT JOIN sel_pseudo_element_unwrap u
+              ON u.pe_node_id = raw.node_id AND u.rn = 1
+        ),
         sel_root AS (
             SELECT s.node_id,
                    CASE WHEN s.type = 'identifier' THEN 'tag_name' ELSE s.type END as type,
                    s.name,
                    s.descendant_count
-            FROM sel s, sel_root_raw raw
-            WHERE s.node_id = CASE
-                -- If root is pseudo_element_selector, unwrap to inner selector
-                WHEN raw.type = 'pseudo_element_selector' THEN
-                    COALESCE(
-                        -- First: look for a non-tag, non-syntax child (id_selector, class_selector, etc.)
-                        (SELECT c.node_id FROM sel c
-                         WHERE c.parent_id = raw.node_id
-                           AND c.type NOT IN ('::', 'tag_name', 'pseudo_element_selector')
-                         ORDER BY c.sibling_index LIMIT 1),
-                        -- Fallback: first tag_name child (bare type like return_statement)
-                        (SELECT c.node_id FROM sel c
-                         WHERE c.parent_id = raw.node_id AND c.type = 'tag_name'
-                         ORDER BY c.sibling_index LIMIT 1)
-                    )
-                ELSE raw.node_id
-            END
+            FROM sel s
+            JOIN sel_root_resolved r ON s.node_id = r.chosen_id
             LIMIT 1
         ),
 
@@ -2396,48 +2454,48 @@ CREATE OR REPLACE MACRO ast_select(
             SELECT type FROM sel_root
         ),
 
-        -- For combinators (descendant, child, sibling): extract left and right types
-        -- Left = first tag_name child, Right = last tag_name child
+        -- For combinators (descendant, child, sibling): extract left and right types.
+        -- Left = first tag_name child of sel_root, Right = last tag_name child.
+        -- Refactored to use sel_tag_names + a single window pass instead of two
+        -- correlated LIMIT 1 scalar subqueries on sel.
         combinator_parts AS (
             SELECT
-                (SELECT s.name FROM sel s
-                 WHERE s.parent_id = (SELECT node_id FROM sel_root) AND s.type = 'tag_name'
-                 ORDER BY s.sibling_index ASC LIMIT 1) as left_type,
-                (SELECT s.name FROM sel s
-                 WHERE s.parent_id = (SELECT node_id FROM sel_root) AND s.type = 'tag_name'
-                 ORDER BY s.sibling_index DESC LIMIT 1) as right_type
+                MAX(name) FILTER (WHERE first_rn = 1) AS left_type,
+                MAX(name) FILTER (WHERE last_rn = 1) AS right_type
+            FROM (
+                SELECT t.name,
+                       row_number() OVER (ORDER BY t.sibling_index ASC) AS first_rn,
+                       row_number() OVER (ORDER BY t.sibling_index DESC) AS last_rn
+                FROM sel_tag_names t
+                WHERE t.parent_id = (SELECT node_id FROM sel_root)
+            )
         ),
 
-        -- For simple/compound selectors: extract type, #name, .class filters
-        -- Type filter: find the tag_name in the selector tree (may be nested in compound selectors)
-        -- Exclude tag_names inside :has()/:not() arguments — those are descendant filters, not the base type
+        -- For simple/compound selectors: extract type, #name, .class filters.
+        -- Type filter: find the tag_name in the selector tree (may be nested in compound selectors).
+        -- Exclude tag_names inside :has()/:not() arguments — those are descendant filters, not the base type.
         --
-        -- WORKAROUND (DuckDB planner bug): the natural form here is
-        --   WHERE NOT EXISTS (SELECT 1 FROM sel args WHERE args.type = 'arguments'
-        --                     AND s.node_id > args.node_id
-        --                     AND s.node_id <= args.node_id + args.descendant_count)
-        -- but that triggers an INTERNAL Error: "Failed to bind column reference ''
-        -- [N.M]: inequal types (BIGINT != VARCHAR)" whenever ast_select is called
-        -- with a column-valued selector argument. The bug appears to be in DuckDB's
-        -- handling of SQL macro expansion when a CTE built from
-        -- unnest(parse_ast_list(macro_param, ...)) is referenced inside a
-        -- self-correlated NOT EXISTS subquery. Rewriting as an anti-join via
-        -- LEFT JOIN + IS NULL produces identical semantics but dodges the bug.
-        -- Same workaround applied to every other NOT EXISTS on `sel` in this macro.
+        -- Implementation notes:
+        --   * Uses sel_tag_names and sel_arg_blocks (typed views over sel) so we
+        --     don't self-correlate `sel` — that pattern hits a DuckDB planner bug
+        --     when ast_select is called with a column-valued selector.
+        --   * `simple_type_candidates` ranks valid tag_names by depth (shallowest
+        --     first) so we can pick the rank-1 row with an UNCORRELATED scalar
+        --     subquery (`WHERE rn = 1`) instead of a correlated `LIMIT 1`.
+        simple_type_candidates AS (
+            SELECT t.name, t.depth,
+                   row_number() OVER (ORDER BY t.depth ASC, t.node_id ASC) AS rn
+            FROM sel_tag_names t
+            LEFT JOIN sel_arg_blocks a
+              ON t.node_id > a.node_id
+             AND t.node_id <= a.node_id + a.descendant_count
+            WHERE t.node_id >= (SELECT node_id FROM sel_root)
+              AND t.node_id <= (SELECT node_id + descendant_count FROM sel_root)
+              AND a.node_id IS NULL  -- not contained in any arguments block
+        ),
         simple_type AS (
             SELECT COALESCE(
-                -- tag_name anywhere in selector (shallowest first), excluding inside arguments
-                (SELECT s.name FROM sel s
-                 LEFT JOIN sel args
-                   ON args.type = 'arguments'
-                  AND s.node_id > args.node_id
-                  AND s.node_id <= args.node_id + args.descendant_count
-                 WHERE s.type = 'tag_name'
-                   AND s.node_id >= (SELECT node_id FROM sel_root)
-                   AND s.node_id <= (SELECT node_id + descendant_count FROM sel_root)
-                   AND args.node_id IS NULL  -- anti-join: not inside any arguments block
-                 ORDER BY s.depth ASC
-                 LIMIT 1),
+                (SELECT name FROM simple_type_candidates WHERE rn = 1),
                 -- Root IS a tag_name (bare type selector)
                 CASE WHEN (SELECT type FROM root_type) = 'tag_name'
                      THEN (SELECT name FROM sel_root) END
@@ -2445,33 +2503,35 @@ CREATE OR REPLACE MACRO ast_select(
         ),
 
         -- #id name filter
+        -- Top-level #id (not inside :has()/:not() arguments).
+        -- Same shape as simple_type: rank candidates by node order, pick rn=1 via
+        -- an uncorrelated subquery so we don't self-correlate `sel`.
+        simple_id_candidates AS (
+            SELECT i.name,
+                   row_number() OVER (ORDER BY i.node_id ASC) AS rn
+            FROM sel_id_names i
+            LEFT JOIN sel_arg_blocks a
+              ON i.node_id > a.node_id
+             AND i.node_id <= a.node_id + a.descendant_count
+            WHERE i.node_id > (SELECT node_id FROM sel_root)
+              AND i.node_id <= (SELECT node_id + descendant_count FROM sel_root)
+              AND a.node_id IS NULL  -- not inside any arguments block
+        ),
         simple_id AS (
-            SELECT s.name as name_filter
-            FROM sel s
-            WHERE s.type = 'id_name'
-              AND s.node_id > (SELECT node_id FROM sel_root)
-              AND s.node_id <= (SELECT node_id + descendant_count FROM sel_root)
-              -- Only top-level #id (not inside :has() arguments)
-              AND NOT EXISTS (
-                  SELECT 1 FROM sel args
-                  WHERE args.type = 'arguments'
-                    AND s.node_id > args.node_id
-                    AND s.node_id <= args.node_id + args.descendant_count
-              )
-            LIMIT 1
+            SELECT (SELECT name FROM simple_id_candidates WHERE rn = 1) as name_filter
         ),
 
-        -- .class semantic filter
+        -- .class semantic filter: a class_name whose parent is a class_selector
+        -- (not a pseudo_class_selector — :has, :not, etc. also have class_name children).
+        -- Joins typed views instead of self-correlating sel.
+        simple_class_candidates AS (
+            SELECT cn.name,
+                   row_number() OVER (ORDER BY cn.node_id ASC) AS rn
+            FROM sel_class_names cn
+            INNER JOIN sel_class_selectors cs ON cs.node_id = cn.parent_id
+        ),
         simple_class AS (
-            SELECT s.name as class_filter
-            FROM sel s
-            WHERE s.type = 'class_name'
-              -- Must be child of a class_selector, not a pseudo-class name
-              AND EXISTS (
-                  SELECT 1 FROM sel p
-                  WHERE p.node_id = s.parent_id AND p.type = 'class_selector'
-              )
-            LIMIT 1
+            SELECT (SELECT name FROM simple_class_candidates WHERE rn = 1) as class_filter
         ),
 
         -- :has() conditions — find pseudo_class_selector nodes with class_name='has'
@@ -2520,6 +2580,9 @@ CREATE OR REPLACE MACRO ast_select(
               )
         ),
 
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- :not(:has()) conditions — :not() wrapping a :has()
         not_has_conditions AS (
             SELECT
@@ -2571,9 +2634,6 @@ CREATE OR REPLACE MACRO ast_select(
               -- Only top-level attributes (not inside :has() arguments)
               AND NOT EXISTS (
                   SELECT 1 FROM sel args
-
-)SQLMACRO"
-        R"SQLMACRO(
                   WHERE args.type = 'arguments'
                     AND s.node_id > args.node_id
                     AND s.node_id <= args.node_id + args.descendant_count
@@ -2786,6 +2846,9 @@ CREATE OR REPLACE MACRO ast_select(
             AND EXISTS (
                 SELECT 1 FROM ast anc
                 WHERE anc.file_path = a.file_path
+
+)SQLMACRO"
+        R"SQLMACRO(
                   AND a.node_id > anc.node_id
                   AND a.node_id <= anc.node_id + anc.descendant_count
                   AND (anc.type = sp.left_type OR anc.type LIKE sp.left_type_like)
@@ -2857,9 +2920,6 @@ CREATE OR REPLACE MACRO ast_select(
             -- Core columns
             WHEN ac.attr_name = 'name' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.name LIKE '%' || ac.attr_value || '%'
-
-)SQLMACRO"
-        R"SQLMACRO(
                                 WHEN '^=' THEN a.name LIKE ac.attr_value || '%'
                                 WHEN '$=' THEN a.name LIKE '%' || ac.attr_value
                                 ELSE a.name = ac.attr_value END
@@ -3064,6 +3124,9 @@ CREATE OR REPLACE MACRO ast_select(
                           AND NOT EXISTS (
                               SELECT 1 FROM ast nested
                               WHERE nested.file_path = a.file_path
+
+)SQLMACRO"
+        R"SQLMACRO(
                                 AND nested.node_id > scope_anc.node_id
                                 AND nested.node_id < a.node_id
                                 AND a.node_id <= nested.node_id + nested.descendant_count
@@ -3133,9 +3196,6 @@ CREATE OR REPLACE MACRO ast_select(
     -- ::callers — functions that call this function
     pe_callers AS (
         SELECT DISTINCT caller_fn.* FROM matched m
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- Find call nodes with the same name as this function
         JOIN ast call_node ON call_node.file_path = m.file_path
           AND is_semantic_type(call_node.semantic_type, 'CALL')
