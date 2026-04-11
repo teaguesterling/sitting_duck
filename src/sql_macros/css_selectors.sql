@@ -730,12 +730,18 @@ CREATE OR REPLACE MACRO ast_select(
                                 WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value
                                 ELSE a.annotations = ac.attr_value END
 
-            -- Native extraction: qualified_name
+            -- Native extraction: qualified_name. The column is a LIST<STRUCT>,
+            -- so we render it to the legacy bracket string via
+            -- ast_qualified_name_as_string() before applying text comparisons.
+            -- Equality (=) also runs against the string form so selectors like
+            -- [qualified=F[main]] stay human-writable.
             WHEN ac.attr_name = 'qualified' THEN
-                CASE ac.attr_op WHEN '*=' THEN a.qualified_name LIKE '%' || ac.attr_value || '%'
-                                WHEN '^=' THEN a.qualified_name LIKE ac.attr_value || '%'
-                                WHEN '$=' THEN a.qualified_name LIKE '%' || ac.attr_value
-                                ELSE a.qualified_name = ac.attr_value END
+                CASE ac.attr_op
+                    WHEN '*=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value || '%'
+                    WHEN '^=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE ac.attr_value || '%'
+                    WHEN '$=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value
+                    ELSE ast_qualified_name_as_string(a.qualified_name) = ac.attr_value
+                END
 
             -- Native extraction: signature_type
             WHEN ac.attr_name = 'signature' THEN

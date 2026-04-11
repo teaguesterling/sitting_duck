@@ -342,7 +342,7 @@ SELECT name,
        (list_reverse(list_filter(qualified_name,
                                  s -> is_class_definition(s.semantic_type))))[1].name
 FROM read_ast('test/data/python/qualified_names.py', 'python')
-WHERE name = 'validate';
+WHERE name = 'validate' AND is_function_definition(semantic_type);
 ----
 validate	User
 
