@@ -2380,6 +2380,27 @@ CREATE OR REPLACE MACRO ast_select(
             SELECT node_id, parent_id, name
             FROM sel WHERE type = 'attribute_name'
         ),
+        sel_integer_values AS (
+            SELECT node_id, parent_id, name
+            FROM sel WHERE type = 'integer_value'
+        ),
+        sel_string_values AS (
+            SELECT node_id, parent_id, name
+            FROM sel WHERE type = 'string_value'
+        ),
+        sel_plain_values AS (
+            SELECT node_id, parent_id, name
+            FROM sel WHERE type = 'plain_value'
+        ),
+        sel_attr_op_starswith AS (  -- *=
+            SELECT node_id, parent_id FROM sel WHERE type = '*='
+        ),
+        sel_attr_op_caret AS (       -- ^=
+            SELECT node_id, parent_id FROM sel WHERE type = '^='
+        ),
+        sel_attr_op_dollar AS (      -- $=
+            SELECT node_id, parent_id FROM sel WHERE type = '$='
+        ),
 
         -- Parse source files. Keep native context (needed for attribute filters like
         -- [params=N] and pseudo-classes like :decorated, :typed, :async, etc.) but
@@ -2534,110 +2555,217 @@ CREATE OR REPLACE MACRO ast_select(
             SELECT (SELECT name FROM simple_class_candidates WHERE rn = 1) as class_filter
         ),
 
-        -- :has() conditions — find pseudo_class_selector nodes with class_name='has'
-        -- that are NOT inside a :not() wrapper
-        has_conditions AS (
-            SELECT
-                pcs.node_id as has_id,
-                -- Type inside :has() arguments
-                (SELECT t.name FROM sel t
-                 JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
-                 WHERE t.type = 'tag_name'
-                   AND t.node_id > args.node_id
-                   AND t.node_id <= args.node_id + args.descendant_count
-                 LIMIT 1) as has_type,
-                -- #name inside :has() arguments
-                (SELECT t.name FROM sel t
-                 JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
-                 WHERE t.type = 'id_name'
-                   AND t.node_id > args.node_id
-                   AND t.node_id <= args.node_id + args.descendant_count
-                 LIMIT 1) as has_name,
-                -- .class inside :has() arguments
-                (SELECT t.name FROM sel t
-                 JOIN sel cs ON cs.type = 'class_selector'
-                   AND t.parent_id = cs.node_id AND t.type = 'class_name'
-                 JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
-                 WHERE cs.node_id > args.node_id
-                   AND cs.node_id <= args.node_id + args.descendant_count
-                 LIMIT 1) as has_class
-            FROM sel pcs
-            WHERE pcs.type = 'pseudo_class_selector'
-              AND EXISTS (
-                  SELECT 1 FROM sel cn
-                  WHERE cn.parent_id = pcs.node_id AND cn.type = 'class_name' AND cn.name = 'has'
-              )
-              -- NOT inside a :not() arguments block
-              AND NOT EXISTS (
-                  SELECT 1 FROM sel not_args
-                  JOIN sel not_pcs ON not_args.parent_id = not_pcs.node_id
-                    AND not_pcs.type = 'pseudo_class_selector'
-                  JOIN sel not_cn ON not_cn.parent_id = not_pcs.node_id
-                    AND not_cn.type = 'class_name' AND not_cn.name = 'not'
-                  WHERE not_args.type = 'arguments'
-                    AND pcs.node_id > not_args.node_id
-                    AND pcs.node_id <= not_args.node_id + not_args.descendant_count
-              )
+        -- =====================================================================
+        -- Helper CTEs for pseudo-class / attribute extraction.
+        -- These precompute "first child of type X inside the args of pcs Y"
+        -- relationships so the downstream CTEs can use flat LEFT JOINs instead
+        -- of correlated LIMIT 1 scalar subqueries (which trip the planner bug
+        -- when ast_select is called with a column-valued selector).
+        -- =====================================================================
+
+        -- For each pseudo_class_selector pcs, the (single) arguments block under it.
+        sel_pcs_to_args AS (
+            SELECT pcs.node_id AS pcs_id,
+                   a.node_id AS args_id,
+                   a.descendant_count AS args_descendants
+            FROM sel_pseudo_classes pcs
+            JOIN sel_arg_blocks a ON a.parent_id = pcs.node_id
         ),
 
+        -- First tag_name in each pcs's args block
+        sel_pcs_first_tag_name AS (
+            SELECT pcs_id, name FROM (
+                SELECT pa.pcs_id, t.name,
+                       row_number() OVER (PARTITION BY pa.pcs_id ORDER BY t.node_id) AS rn
+                FROM sel_pcs_to_args pa
+                JOIN sel_tag_names t
+                  ON t.node_id > pa.args_id
+                 AND t.node_id <= pa.args_id + pa.args_descendants
+            ) WHERE rn = 1
+        ),
+
+        -- First id_name in each pcs's args block
+        sel_pcs_first_id_name AS (
+            SELECT pcs_id, name FROM (
+                SELECT pa.pcs_id, i.name,
 
 )SQLMACRO"
         R"SQLMACRO(
-        -- :not(:has()) conditions — :not() wrapping a :has()
-        not_has_conditions AS (
-            SELECT
-                not_pcs.node_id as not_id,
-                -- Find the :has() inside the :not()'s arguments
-                (SELECT t.name FROM sel t
-                 JOIN sel args ON args.parent_id = has_pcs.node_id AND args.type = 'arguments'
-                 WHERE t.type = 'tag_name'
-                   AND t.node_id > args.node_id
-                   AND t.node_id <= args.node_id + args.descendant_count
-                 LIMIT 1) as not_has_type,
-                (SELECT t.name FROM sel t
-                 JOIN sel args ON args.parent_id = has_pcs.node_id AND args.type = 'arguments'
-                 WHERE t.type = 'id_name'
-                   AND t.node_id > args.node_id
-                   AND t.node_id <= args.node_id + args.descendant_count
-                 LIMIT 1) as not_has_name
-            FROM sel not_pcs
-            JOIN sel not_cn ON not_cn.parent_id = not_pcs.node_id
-              AND not_cn.type = 'class_name' AND not_cn.name = 'not'
-            JOIN sel not_args ON not_args.parent_id = not_pcs.node_id
-              AND not_args.type = 'arguments'
-            JOIN sel has_pcs ON has_pcs.type = 'pseudo_class_selector'
-              AND has_pcs.node_id > not_args.node_id
-              AND has_pcs.node_id <= not_args.node_id + not_args.descendant_count
-            JOIN sel has_cn ON has_cn.parent_id = has_pcs.node_id
-              AND has_cn.type = 'class_name' AND has_cn.name = 'has'
-            WHERE not_pcs.type = 'pseudo_class_selector'
+                       row_number() OVER (PARTITION BY pa.pcs_id ORDER BY i.node_id) AS rn
+                FROM sel_pcs_to_args pa
+                JOIN sel_id_names i
+                  ON i.node_id > pa.args_id
+                 AND i.node_id <= pa.args_id + pa.args_descendants
+            ) WHERE rn = 1
         ),
 
-        -- [attr op value] conditions — supports =, *=, ^=, $= operators
-        -- Handles both plain_value and integer_value (for [params=0])
+        -- First .class (class_name whose parent is a class_selector) in each pcs's args
+        sel_pcs_first_class_name AS (
+            SELECT pcs_id, name FROM (
+                SELECT pa.pcs_id, cn.name,
+                       row_number() OVER (PARTITION BY pa.pcs_id ORDER BY cs.node_id) AS rn
+                FROM sel_pcs_to_args pa
+                JOIN sel_class_selectors cs
+                  ON cs.node_id > pa.args_id
+                 AND cs.node_id <= pa.args_id + pa.args_descendants
+                JOIN sel_class_names cn ON cn.parent_id = cs.node_id
+            ) WHERE rn = 1
+        ),
+
+        -- First (tag_name OR integer_value) in each pcs's args — for pseudo_classes pseudo_arg
+        sel_pcs_first_tag_or_int AS (
+            SELECT pcs_id, name FROM (
+                SELECT pa.pcs_id, n.name,
+                       row_number() OVER (PARTITION BY pa.pcs_id ORDER BY n.node_id) AS rn
+                FROM sel_pcs_to_args pa
+                JOIN (
+                    SELECT node_id, name FROM sel_tag_names
+                    UNION ALL
+                    SELECT node_id, name FROM sel_integer_values
+                ) n
+                  ON n.node_id > pa.args_id
+                 AND n.node_id <= pa.args_id + pa.args_descendants
+            ) WHERE rn = 1
+        ),
+
+        -- First string_value (trimmed) in each pcs's args — for pseudo_classes pseudo_arg
+        sel_pcs_first_string AS (
+            SELECT pcs_id, trim(name, '"''') AS name FROM (
+                SELECT pa.pcs_id, sv.name,
+                       row_number() OVER (PARTITION BY pa.pcs_id ORDER BY sv.node_id) AS rn
+                FROM sel_pcs_to_args pa
+                JOIN sel_string_values sv
+                  ON sv.node_id > pa.args_id
+                 AND sv.node_id <= pa.args_id + pa.args_descendants
+            ) WHERE rn = 1
+        ),
+
+        -- :not() argument blocks (the args block of any pseudo_class_selector named 'not')
+        sel_not_arg_blocks AS (
+            SELECT a.node_id, a.descendant_count
+            FROM sel_arg_blocks a
+            JOIN sel_pseudo_classes np ON np.node_id = a.parent_id
+            JOIN sel_class_names ncn ON ncn.parent_id = np.node_id AND ncn.name = 'not'
+        ),
+
+        -- pcs nodes NOT inside any :not() arg block (anti-join helper)
+        sel_pcs_outside_not_args AS (
+            SELECT pcs.node_id AS pcs_id
+            FROM sel_pseudo_classes pcs
+            LEFT JOIN sel_not_arg_blocks na
+              ON pcs.node_id > na.node_id
+             AND pcs.node_id <= na.node_id + na.descendant_count
+            GROUP BY pcs.node_id
+            HAVING max(na.node_id) IS NULL
+        ),
+
+        -- pcs nodes NOT inside ANY arg block (anti-join helper for top-level only)
+        sel_pcs_outside_any_args AS (
+            SELECT pcs.node_id AS pcs_id
+            FROM sel_pseudo_classes pcs
+            LEFT JOIN sel_arg_blocks a
+              ON pcs.node_id > a.node_id
+             AND pcs.node_id <= a.node_id + a.descendant_count
+            GROUP BY pcs.node_id
+            HAVING max(a.node_id) IS NULL
+        ),
+
+        -- attribute_selectors NOT inside any arg block (anti-join helper)
+        sel_attr_outside_args AS (
+            SELECT s.node_id AS attr_id
+            FROM sel_attribute_selectors s
+            LEFT JOIN sel_arg_blocks a
+              ON s.node_id > a.node_id
+             AND s.node_id <= a.node_id + a.descendant_count
+            GROUP BY s.node_id
+            HAVING max(a.node_id) IS NULL
+        ),
+
+        -- For each attribute_selector, look up its child attr_name / value / op
+        sel_attr_first_name AS (
+            SELECT parent_id AS attr_id, name FROM (
+                SELECT an.parent_id, an.name,
+                       row_number() OVER (PARTITION BY an.parent_id ORDER BY an.node_id) AS rn
+                FROM sel_attribute_names an
+            ) WHERE rn = 1
+        ),
+        sel_attr_first_plain AS (
+            SELECT parent_id AS attr_id, name FROM (
+                SELECT pv.parent_id, pv.name,
+                       row_number() OVER (PARTITION BY pv.parent_id ORDER BY pv.node_id) AS rn
+                FROM sel_plain_values pv
+            ) WHERE rn = 1
+        ),
+        sel_attr_first_int AS (
+            SELECT parent_id AS attr_id, name FROM (
+                SELECT iv.parent_id, iv.name,
+                       row_number() OVER (PARTITION BY iv.parent_id ORDER BY iv.node_id) AS rn
+                FROM sel_integer_values iv
+            ) WHERE rn = 1
+        ),
+
+        -- :has() — pseudo_class_selectors named 'has' that are NOT inside :not() args.
+        has_conditions AS (
+            SELECT pcs.node_id AS has_id,
+                   ftn.name AS has_type,
+                   fin.name AS has_name,
+                   fcn.name AS has_class
+            FROM sel_pseudo_classes pcs
+            JOIN sel_class_names cn ON cn.parent_id = pcs.node_id AND cn.name = 'has'
+            JOIN sel_pcs_outside_not_args nn ON nn.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_first_tag_name  ftn ON ftn.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_first_id_name   fin ON fin.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_first_class_name fcn ON fcn.pcs_id = pcs.node_id
+        ),
+
+        -- :not(:has()) conditions — for each :not()'s args block, find a :has() inside it.
+        sel_not_to_has AS (
+            -- (not_pcs_id, has_pcs_id) pairs: a :has() inside the args of a :not()
+            SELECT not_pcs.node_id AS not_pcs_id,
+                   has_pcs.node_id AS has_pcs_id
+            FROM sel_pseudo_classes not_pcs
+            JOIN sel_class_names not_cn ON not_cn.parent_id = not_pcs.node_id AND not_cn.name = 'not'
+            JOIN sel_arg_blocks not_args ON not_args.parent_id = not_pcs.node_id
+            JOIN sel_pseudo_classes has_pcs
+              ON has_pcs.node_id > not_args.node_id
+             AND has_pcs.node_id <= not_args.node_id + not_args.descendant_count
+            JOIN sel_class_names has_cn ON has_cn.parent_id = has_pcs.node_id AND has_cn.name = 'has'
+        ),
+        not_has_conditions AS (
+            SELECT nh.not_pcs_id AS not_id,
+                   ftn.name AS not_has_type,
+                   fin.name AS not_has_name
+            FROM sel_not_to_has nh
+            LEFT JOIN sel_pcs_first_tag_name ftn ON ftn.pcs_id = nh.has_pcs_id
+            LEFT JOIN sel_pcs_first_id_name  fin ON fin.pcs_id = nh.has_pcs_id
+        ),
+
+        -- [attr op value] conditions — supports =, *=, ^=, $= operators.
+        -- Uses precomputed sel_attr_* helpers for value/op detection so there are
+        -- no correlated subqueries.
         attr_conditions AS (
-            SELECT
-                (SELECT a.name FROM sel a WHERE a.parent_id = s.node_id AND a.type = 'attribute_name' LIMIT 1) as attr_name,
-                COALESCE(
-                    (SELECT a.name FROM sel a WHERE a.parent_id = s.node_id AND a.type = 'plain_value' LIMIT 1),
-                    (SELECT a.name FROM sel a WHERE a.parent_id = s.node_id AND a.type = 'integer_value' LIMIT 1)
-                ) as attr_value,
-                -- Detect operator: =, *=, ^=, $=
-                CASE
-                    WHEN EXISTS (SELECT 1 FROM sel a WHERE a.parent_id = s.node_id AND a.type = '*=') THEN '*='
-                    WHEN EXISTS (SELECT 1 FROM sel a WHERE a.parent_id = s.node_id AND a.type = '^=') THEN '^='
-                    WHEN EXISTS (SELECT 1 FROM sel a WHERE a.parent_id = s.node_id AND a.type = '$=') THEN '$='
-                    ELSE '='
-                END as attr_op
-            FROM sel s
-            WHERE s.type = 'attribute_selector'
-              -- Only top-level attributes (not inside :has() arguments)
-              AND NOT EXISTS (
-                  SELECT 1 FROM sel args
-                  WHERE args.type = 'arguments'
-                    AND s.node_id > args.node_id
-                    AND s.node_id <= args.node_id + args.descendant_count
-              )
+            SELECT fname.name AS attr_name,
+                   COALESCE(fplain.name, fint.name) AS attr_value,
+                   CASE
+                       WHEN starswith.attr_id IS NOT NULL THEN '*='
+                       WHEN caret.attr_id    IS NOT NULL THEN '^='
+                       WHEN dollar.attr_id   IS NOT NULL THEN '$='
+                       ELSE '='
+                   END AS attr_op
+            FROM sel_attribute_selectors s
+            JOIN sel_attr_outside_args outside ON outside.attr_id = s.node_id
+            LEFT JOIN sel_attr_first_name  fname  ON fname.attr_id  = s.node_id
+            LEFT JOIN sel_attr_first_plain fplain ON fplain.attr_id = s.node_id
+            LEFT JOIN sel_attr_first_int   fint   ON fint.attr_id   = s.node_id
+            LEFT JOIN (
+                SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_starswith
+            ) starswith ON starswith.attr_id = s.node_id
+            LEFT JOIN (
+                SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_caret
+            ) caret ON caret.attr_id = s.node_id
+            LEFT JOIN (
+                SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_dollar
+            ) dollar ON dollar.attr_id = s.node_id
         ),
 
         -- =====================================================================
@@ -2645,79 +2773,42 @@ CREATE OR REPLACE MACRO ast_select(
         -- =====================================================================
 
         -- Extract all pseudo-class names for boolean/positional checks
-        -- (excludes :has, :not(:has) which are handled separately above)
+        -- (excludes :has, :not(:has) which are handled separately above).
         -- Includes pseudo-classes wrapped by :not() with negated=true.
+        --
+        -- Refactored to use precomputed helper CTEs (sel_pcs_first_tag_or_int,
+        -- sel_pcs_first_string, sel_pcs_outside_*) instead of correlated LIMIT 1
+        -- scalar subqueries on sel.
         pseudo_classes AS (
             -- Top-level pseudo-classes (not negated)
             SELECT cn.name as pseudo_name,
-                   COALESCE(
-                       (SELECT t.name FROM sel t
-                        JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
-                        WHERE (t.type = 'tag_name' OR t.type = 'integer_value')
-                          AND t.node_id > args.node_id
-                          AND t.node_id <= args.node_id + args.descendant_count
-                        LIMIT 1),
-                       (SELECT trim(t.name, '"''') FROM sel t
-                        JOIN sel args ON args.parent_id = pcs.node_id AND args.type = 'arguments'
-                        WHERE t.type = 'string_value'
-                          AND t.node_id > args.node_id
-                          AND t.node_id <= args.node_id + args.descendant_count
-                        LIMIT 1)
-                   ) as pseudo_arg,
+                   COALESCE(ftoi.name, fstr.name) AS pseudo_arg,
                    false as negated
-            FROM sel pcs
-            JOIN sel cn ON cn.parent_id = pcs.node_id AND cn.type = 'class_name'
-            WHERE pcs.type = 'pseudo_class_selector'
-              -- Exclude :has, :not (handled by dedicated CTEs above)
-              AND cn.name NOT IN ('has', 'not')
-              -- Only top-level pseudo-classes (not inside :has/:not arguments)
-              AND NOT EXISTS (
-                  SELECT 1 FROM sel args
-                  WHERE args.type = 'arguments'
-                    AND pcs.node_id > args.node_id
-                    AND pcs.node_id <= args.node_id + args.descendant_count
-              )
+            FROM sel_pseudo_classes pcs
+            JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
+            JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_first_tag_or_int ftoi ON ftoi.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_first_string     fstr ON fstr.pcs_id = pcs.node_id
+            WHERE cn.name NOT IN ('has', 'not')
 
             UNION ALL
 
             -- Pseudo-classes inside a top-level :not() (negated)
             -- :not(:has(...)) is still handled by not_has_conditions, so exclude :has here.
             SELECT cn.name as pseudo_name,
-                   COALESCE(
-                       (SELECT t.name FROM sel t
-                        JOIN sel inner_args ON inner_args.parent_id = pcs.node_id
-                          AND inner_args.type = 'arguments'
-                        WHERE (t.type = 'tag_name' OR t.type = 'integer_value')
-                          AND t.node_id > inner_args.node_id
-                          AND t.node_id <= inner_args.node_id + inner_args.descendant_count
-                        LIMIT 1),
-                       (SELECT trim(t.name, '"''') FROM sel t
-                        JOIN sel inner_args ON inner_args.parent_id = pcs.node_id
-                          AND inner_args.type = 'arguments'
-                        WHERE t.type = 'string_value'
-                          AND t.node_id > inner_args.node_id
-                          AND t.node_id <= inner_args.node_id + inner_args.descendant_count
-                        LIMIT 1)
-                   ) as pseudo_arg,
+                   COALESCE(ftoi.name, fstr.name) AS pseudo_arg,
                    true as negated
-            FROM sel pcs
-            JOIN sel cn ON cn.parent_id = pcs.node_id AND cn.type = 'class_name'
+            FROM sel_pseudo_classes pcs
+            JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
             -- The inner pseudo-class must be a direct child of :not()'s arguments
-            JOIN sel not_args ON not_args.node_id = pcs.parent_id AND not_args.type = 'arguments'
-            JOIN sel not_pcs ON not_pcs.node_id = not_args.parent_id
-              AND not_pcs.type = 'pseudo_class_selector'
-            JOIN sel not_cn ON not_cn.parent_id = not_pcs.node_id
-              AND not_cn.type = 'class_name' AND not_cn.name = 'not'
-            WHERE pcs.type = 'pseudo_class_selector'
-              -- :not(:has(...)) is handled by not_has_conditions
-              AND cn.name != 'has'
-              -- The enclosing :not() must be top-level, not nested inside another argument
-              AND NOT EXISTS (
-                  SELECT 1 FROM sel outer_args
-                  WHERE outer_args.type = 'arguments'
-                    AND not_pcs.node_id > outer_args.node_id
-                    AND not_pcs.node_id <= outer_args.node_id + outer_args.descendant_count
-              )
+            JOIN sel_arg_blocks not_args ON not_args.node_id = pcs.parent_id
+            JOIN sel_pseudo_classes not_pcs ON not_pcs.node_id = not_args.parent_id
+            JOIN sel_class_names not_cn ON not_cn.parent_id = not_pcs.node_id AND not_cn.name = 'not'
+            -- The enclosing :not() must be top-level
+            JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = not_pcs.node_id
+            LEFT JOIN sel_pcs_first_tag_or_int ftoi ON ftoi.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_first_string     fstr ON fstr.pcs_id = pcs.node_id
+            WHERE cn.name != 'has'
         ),
 
         -- Validate that every pseudo-class name we saw is one we know about.
@@ -2783,6 +2874,9 @@ CREATE OR REPLACE MACRO ast_select(
                 row_number() OVER (ORDER BY node.node_id) - 1 as idx,
                 node.type as pat_type,
                 node.name as pat_name
+
+)SQLMACRO"
+        R"SQLMACRO(
             FROM (
                 SELECT unnest(parse_ast_list(
                     regexp_extract(selector, ':(?:match|contains)\("([^"]+)"\)', 1),
@@ -2846,9 +2940,6 @@ CREATE OR REPLACE MACRO ast_select(
             AND EXISTS (
                 SELECT 1 FROM ast anc
                 WHERE anc.file_path = a.file_path
-
-)SQLMACRO"
-        R"SQLMACRO(
                   AND a.node_id > anc.node_id
                   AND a.node_id <= anc.node_id + anc.descendant_count
                   AND (anc.type = sp.left_type OR anc.type LIKE sp.left_type_like)
@@ -3072,6 +3163,9 @@ CREATE OR REPLACE MACRO ast_select(
             -- Strict: target type must equal pattern root type. Use ___ wildcard
             -- for any name. Unlike :contains, this never iterates descendants —
             -- it's a direct check on node `a`.
+
+)SQLMACRO"
+        R"SQLMACRO(
             WHEN 'match' THEN (SELECT len FROM ast_pattern_len) > 0
                 AND a.type = (SELECT pat_type FROM ast_pattern WHERE idx = 0)
                 AND (SELECT len FROM ast_pattern_len) - 1 <= a.descendant_count
@@ -3124,9 +3218,6 @@ CREATE OR REPLACE MACRO ast_select(
                           AND NOT EXISTS (
                               SELECT 1 FROM ast nested
                               WHERE nested.file_path = a.file_path
-
-)SQLMACRO"
-        R"SQLMACRO(
                                 AND nested.node_id > scope_anc.node_id
                                 AND nested.node_id < a.node_id
                                 AND a.node_id <= nested.node_id + nested.descendant_count
