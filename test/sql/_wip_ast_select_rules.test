@@ -1,0 +1,116 @@
+# name: test/sql/_wip_ast_select_rules.test
+# group: [sql]
+#
+# Intended-behavior tests for ast_select_rules / ast_select_list.
+#
+# STATUS: WIP — the macro body dispatches ast_select via a lateral join with
+# a column-valued selector, which currently triggers a DuckDB planner bug
+# (duckdb/duckdb#21890). Calling either macro crashes at bind time with:
+#
+#   INTERNAL Error: Failed to bind column reference "" [N.M]:
+#   inequal types (BIGINT != VARCHAR)
+#
+# The macros themselves register successfully (macro bodies aren't bound at
+# store time). This file asserts the registration, and leaves TODO blocks
+# below for the intended behavior queries so they can be uncommented when
+# the upstream DuckDB fix lands.
+#
+# HOW TO RE-ENABLE THIS FILE AFTER THE UPSTREAM FIX:
+#   1. Rename from _wip_ast_select_rules.test to ast_select_rules.test
+#   2. Uncomment the TODO blocks below
+#   3. Run: build/release/test/unittest test/sql/ast_select_rules.test
+#   4. Update any expected row counts / values as needed
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# ============================================================================
+# Registration sanity checks (these pass today — macro bodies are stored,
+# not bound at register time)
+# ============================================================================
+
+query I
+SELECT count(*) FROM duckdb_functions()
+WHERE function_name IN ('ast_select_rules', 'ast_select_list');
+----
+2
+
+# ============================================================================
+# TODO(upstream-fix): single rule, simple selector with declaration block.
+# Uncomment after duckdb/duckdb#21890 lands.
+#
+# query IIII
+# SELECT rule_index, selector, declarations['show'], count(*) AS n
+# FROM ast_select_rules('test/data/python/simple.py', '.func { show: signature; }')
+# GROUP BY rule_index, selector, declarations['show']
+# ORDER BY rule_index;
+# ----
+# 0	.func	signature	4
+# ============================================================================
+
+# ============================================================================
+# TODO(upstream-fix): multi-rule query, per-rule declarations.
+# Uncomment after duckdb/duckdb#21890 lands.
+#
+# query III
+# SELECT rule_index, selector, declarations['show']
+# FROM ast_select_list('test/data/python/simple.py',
+#     '.func { show: signature; } #main { show: body; }')
+# ORDER BY rule_index;
+# ----
+# 0	.func	signature
+# 1	#main	body
+# ============================================================================
+
+# ============================================================================
+# TODO(upstream-fix): nested form, matches packed into LIST<STRUCT>.
+# Uncomment after duckdb/duckdb#21890 lands.
+#
+# query II
+# SELECT rule_index, length(matches) AS n_matches
+# FROM ast_select_list('test/data/python/simple.py',
+#     '.func { show: signature; } #main { show: body; }')
+# ORDER BY rule_index;
+# ----
+# 0	4
+# 1	0
+# ============================================================================
+
+# ============================================================================
+# TODO(upstream-fix): empty declaration block yields empty MAP, not NULL.
+# Uncomment after duckdb/duckdb#21890 lands.
+#
+# query II
+# SELECT declarations IS NOT NULL, cardinality(declarations)
+# FROM ast_select_rules('test/data/python/simple.py', '.func {}')
+# LIMIT 1;
+# ----
+# true	0
+# ============================================================================
+
+# ============================================================================
+# TODO(upstream-fix): multi-value declaration preserves raw span.
+# Uncomment after duckdb/duckdb#21890 lands.
+#
+# query I
+# SELECT any_value(declarations['trace'])
+# FROM ast_select_rules('test/data/python/simple.py',
+#     '.func { trace: callers, dependents; }');
+# ----
+# callers, dependents
+# ============================================================================
+
+# ============================================================================
+# TODO(upstream-fix): rule with zero matches still emits one row per rule.
+# Uncomment after duckdb/duckdb#21890 lands.
+#
+# query II
+# SELECT rule_index, length(matches)
+# FROM ast_select_list('test/data/python/simple.py',
+#     '#nonexistent_name_that_matches_nothing {}')
+# ORDER BY rule_index;
+# ----
+# 0	0
+# ============================================================================
