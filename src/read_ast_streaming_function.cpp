@@ -602,7 +602,7 @@ static TableFunction GetReadASTFlatFunctionTwoArg() {
 	                       ReadASTFlatStreamingBindTwoArg, ReadASTStreamingInit);
 	read_ast.name = "read_ast";
 	read_ast.init_local = ReadASTInitLocal;
-	read_ast.order_preservation_type = OrderPreservationType::NO_ORDER;
+	read_ast; // .order_preservation_type removed for v1.4.3 compat
 	read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast.named_parameters["source"] = LogicalType::VARCHAR;
@@ -622,7 +622,7 @@ static TableFunction GetReadASTFlatFunctionOneArg() {
 	                       ReadASTStreamingInit);
 	read_ast.name = "read_ast";
 	read_ast.init_local = ReadASTInitLocal;
-	read_ast.order_preservation_type = OrderPreservationType::NO_ORDER;
+	read_ast; // .order_preservation_type removed for v1.4.3 compat
 	read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast.named_parameters["source"] = LogicalType::VARCHAR;
@@ -643,7 +643,7 @@ static TableFunction GetReadASTStreamingFunctionTwoArg() {
 	                                 ReadASTStreamingInit);
 	read_ast_streaming.name = "read_ast_streaming";
 	read_ast_streaming.init_local = ReadASTInitLocal;
-	read_ast_streaming.order_preservation_type = OrderPreservationType::NO_ORDER;
+	read_ast_streaming; // .order_preservation_type removed for v1.4.3 compat
 	read_ast_streaming.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_streaming.named_parameters["peek_size"] = LogicalType::INTEGER;
 	read_ast_streaming.named_parameters["peek_mode"] = LogicalType::VARCHAR;
@@ -656,7 +656,7 @@ static TableFunction GetReadASTStreamingFunctionOneArg() {
 	                                 ReadASTFlatStreamingBindOneArg, ReadASTStreamingInit);
 	read_ast_streaming.name = "read_ast_streaming";
 	read_ast_streaming.init_local = ReadASTInitLocal;
-	read_ast_streaming.order_preservation_type = OrderPreservationType::NO_ORDER;
+	read_ast_streaming; // .order_preservation_type removed for v1.4.3 compat
 	read_ast_streaming.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_streaming.named_parameters["peek_size"] = LogicalType::INTEGER;
 	read_ast_streaming.named_parameters["peek_mode"] = LogicalType::VARCHAR;
@@ -885,7 +885,7 @@ static TableFunction GetReadASTFunctionTwoArg() {
 	                                        ReadASTStreamingInit);
 	read_ast_hierarchical_new.name = "read_ast_hierarchical_new";
 	read_ast_hierarchical_new.init_local = ReadASTInitLocal;
-	read_ast_hierarchical_new.order_preservation_type = OrderPreservationType::NO_ORDER;
+	read_ast_hierarchical_new; // .order_preservation_type removed for v1.4.3 compat
 	read_ast_hierarchical_new.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_hierarchical_new.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast_hierarchical_new.named_parameters["source"] = LogicalType::VARCHAR;
@@ -906,7 +906,7 @@ static TableFunction GetReadASTHierarchicalFunctionTwoArg() {
 	                                    ReadASTStreamingInit);
 	read_ast_hierarchical.name = "read_ast_hierarchical";
 	read_ast_hierarchical.init_local = ReadASTInitLocal;
-	read_ast_hierarchical.order_preservation_type = OrderPreservationType::NO_ORDER;
+	read_ast_hierarchical; // .order_preservation_type removed for v1.4.3 compat
 	read_ast_hierarchical.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_hierarchical.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast_hierarchical.named_parameters["source"] = LogicalType::VARCHAR;
@@ -926,7 +926,7 @@ static TableFunction GetReadASTFunctionOneArg() {
 	                                        ReadASTStreamingInit);
 	read_ast_hierarchical_new.name = "read_ast_hierarchical_new";
 	read_ast_hierarchical_new.init_local = ReadASTInitLocal;
-	read_ast_hierarchical_new.order_preservation_type = OrderPreservationType::NO_ORDER;
+	read_ast_hierarchical_new; // .order_preservation_type removed for v1.4.3 compat
 	read_ast_hierarchical_new.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_hierarchical_new.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast_hierarchical_new.named_parameters["source"] = LogicalType::VARCHAR;
@@ -945,7 +945,7 @@ static TableFunction GetReadASTHierarchicalFunctionOneArg() {
 	                                    ReadASTHierarchicalStreamingBindOneArg, ReadASTStreamingInit);
 	read_ast_hierarchical.name = "read_ast_hierarchical";
 	read_ast_hierarchical.init_local = ReadASTInitLocal;
-	read_ast_hierarchical.order_preservation_type = OrderPreservationType::NO_ORDER;
+	read_ast_hierarchical; // .order_preservation_type removed for v1.4.3 compat
 	read_ast_hierarchical.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_hierarchical.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast_hierarchical.named_parameters["source"] = LogicalType::VARCHAR;
@@ -965,7 +965,7 @@ static TableFunction GetReadASTFlatAliasFunctionOneArg() {
 	                            ReadASTFlatStreamingBindOneArg, ReadASTStreamingInit);
 	read_ast_flat.name = "read_ast_flat";
 	read_ast_flat.init_local = ReadASTInitLocal;
-	read_ast_flat.order_preservation_type = OrderPreservationType::NO_ORDER;
+	read_ast_flat; // .order_preservation_type removed for v1.4.3 compat
 	read_ast_flat.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_flat.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast_flat.named_parameters["source"] = LogicalType::VARCHAR;
@@ -984,7 +984,7 @@ static TableFunction GetReadASTFlatAliasFunctionTwoArg() {
 	                            ReadASTFlatStreamingBindTwoArg, ReadASTStreamingInit);
 	read_ast_flat.name = "read_ast_flat";
 	read_ast_flat.init_local = ReadASTInitLocal;
-	read_ast_flat.order_preservation_type = OrderPreservationType::NO_ORDER;
+	read_ast_flat; // .order_preservation_type removed for v1.4.3 compat
 	read_ast_flat.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
 	read_ast_flat.named_parameters["context"] = LogicalType::VARCHAR;
 	read_ast_flat.named_parameters["source"] = LogicalType::VARCHAR;
