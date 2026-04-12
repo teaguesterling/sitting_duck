@@ -41,7 +41,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// TryAutoLoadAvailableExtension is noexcept and doesn't respect the user's
 	// autoload_known_extensions setting (unlike TryAutoLoadExtension), so it's
 	// the right API shape even if more plumbing is still needed.
-	ExtensionHelper::TryAutoLoadAvailableExtension(loader.GetDatabaseInstance(), "core_functions");
+	// TryAutoLoadAvailableExtension is v1.5+ API — disabled for v1.4.3 build.
+	// ExtensionHelper::TryAutoLoadAvailableExtension(loader.GetDatabaseInstance(), "core_functions");
 
 	// Register SEMANTIC_TYPE logical type and its cast functions (must be first)
 	RegisterSemanticTypeLogicalType(loader);
