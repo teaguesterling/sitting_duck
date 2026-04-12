@@ -3,10 +3,16 @@ cmake_minimum_required(VERSION 3.5)
 # Set extension name here
 set(TARGET_NAME sitting_duck)
 
-# Tree-sitter is our main dependency for AST parsing
-# Build tree-sitter from submodule (lib subdirectory contains CMakeLists.txt)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build tree-sitter as static library" FORCE)
-add_subdirectory(third_party/tree-sitter/lib)
+# Tree-sitter is our main dependency for AST parsing.
+# For native builds, build as a static library and link normally.
+# For WASM, tree-sitter sources are compiled directly into the extension
+# because WASM side modules (-sSIDE_MODULE=1) can't resolve symbols from
+# separately-linked static libraries — the WASM linker leaves them as
+# unresolved dynamic imports that the host module doesn't provide.
+if(NOT WASM_LOADABLE_EXTENSIONS)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build tree-sitter as static library" FORCE)
+    add_subdirectory(third_party/tree-sitter/lib)
+endif()
 
 #############################
 # Pre-generated Parser Support
@@ -206,11 +212,13 @@ elseif(NOT USING_PREGENERATED_PARSERS)
     endif()
 endif()
 
-# Add tree-sitter to the DuckDB export set
-install(TARGETS tree-sitter
-        EXPORT "${DUCKDB_EXPORT_SET}"
-        LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
-        ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")
+# Add tree-sitter to the DuckDB export set (native builds only)
+if(NOT WASM_LOADABLE_EXTENSIONS)
+    install(TARGETS tree-sitter
+            EXPORT "${DUCKDB_EXPORT_SET}"
+            LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
+            ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")
+endif()
 
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
@@ -357,12 +365,13 @@ set(EXTENSION_SOURCES
     ${PARSER_SOURCE_DIR}/tree-sitter-dart/src/parser.c
     ${PARSER_SOURCE_DIR}/tree-sitter-dart/src/scanner.c
     )
-    # Removed unused files:
-    # src/ast_parser.cpp (replaced by unified_ast_backend.cpp)
-    # src/language_handler.cpp (replaced by language_adapter.cpp) 
-    # Temporarily disabled while fixing issues:
-    # src/read_ast_objects_function.cpp
-    # src/ast_helper_functions.cpp
+
+# For WASM builds, include tree-sitter source directly in the extension sources
+# so the symbols are compiled into the side module rather than left as unresolved imports.
+if(WASM_LOADABLE_EXTENSIONS)
+    list(APPEND EXTENSION_SOURCES third_party/tree-sitter/lib/src/lib.c)
+    message(STATUS "WASM build: tree-sitter sources included directly in extension")
+endif()
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
@@ -374,9 +383,11 @@ if(TARGET generate-parsers)
     message(STATUS "Extension targets will depend on generated parsers")
 endif()
 
-# Link tree-sitter library
-target_link_libraries(${EXTENSION_NAME} tree-sitter)
-target_link_libraries(${LOADABLE_EXTENSION_NAME} tree-sitter)
+# Link tree-sitter library (native builds only — WASM embeds sources directly)
+if(NOT WASM_LOADABLE_EXTENSIONS)
+    target_link_libraries(${EXTENSION_NAME} tree-sitter)
+    target_link_libraries(${LOADABLE_EXTENSION_NAME} tree-sitter)
+endif()
 
 install(
   TARGETS ${EXTENSION_NAME}
