@@ -22,12 +22,22 @@
 --   SELECT * FROM ast_select('src/**/*.py', '.function:has(return_statement)');
 --   SELECT * FROM ast_select('src/*.js', 'class_body > method_definition');
 --   SELECT * FROM ast_select('src/*.py', '.function:has(.call#execute):not(:has(try_statement))');
+--
+-- For repeated queries against the same source, parse once and use ast_select_from:
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_select_from('my_ast', '.class:named');
+--   SELECT * FROM ast_select_from('my_ast', '.func:has(return_statement)');
 -- =============================================================================
 
-CREATE OR REPLACE MACRO ast_select(
+-- =============================================================================
+-- ast_select_from: the selector engine, operates on a pre-parsed AST table.
+-- The `source` parameter is a table name (string) resolved via query_table().
+-- This separates parsing (expensive) from querying (cheap), enabling callers
+-- to parse once and query many times with different selectors.
+-- =============================================================================
+CREATE OR REPLACE MACRO ast_select_from(
     source,
-    selector,
-    language := NULL
+    selector
 ) AS TABLE
     WITH
         -- Parse the CSS selector FIRST (before source, so DuckDB can evaluate it early).
@@ -110,7 +120,7 @@ CREATE OR REPLACE MACRO ast_select(
         -- skip peek computation since no selector feature references it. The +schema
         -- suffix keeps the peek column in the schema as NULL.
         ast AS (
-            SELECT * FROM read_ast(source, language, peek := 'none+schema')
+            SELECT * FROM query_table(source)
         ),
 
         -- Find the top-level selector node (skip stylesheet, ERROR, and pseudo_element wrappers)
@@ -1063,3 +1073,22 @@ CREATE OR REPLACE MACRO ast_select(
     SELECT * FROM pe_callees
     WHERE (SELECT element_name FROM pseudo_element) = 'callees'
     ORDER BY file_path, node_id;
+
+
+-- =============================================================================
+-- ast_select: convenience wrapper that parses source files and then runs
+-- the selector engine. For one-off queries this is the simplest API.
+-- For repeated queries, use ast_select_from with a pre-parsed table.
+-- =============================================================================
+CREATE OR REPLACE MACRO ast_select(
+    source,
+    selector,
+    language := NULL
+) AS TABLE
+    -- Parse into a temp name, then delegate to ast_select_from.
+    -- We use read_ast directly and wrap with ast_select_from via a CTE trick:
+    -- DuckDB table macros can accept subqueries as table arguments.
+    WITH __ast_src AS (
+        SELECT * FROM read_ast(source, language, peek := 'none+schema')
+    )
+    SELECT * FROM ast_select_from('__ast_src', selector);
