@@ -3896,40 +3896,30 @@ CREATE OR REPLACE MACRO ast_callees(
     source,
     language := NULL
 ) AS TABLE
-    -- Pre-filter both sides of the range join into small CTEs before joining,
-    -- so the join cost is bounded per file rather than quadratic in the whole AST.
+    -- Every node now carries scope.function — the node_id of its nearest
+    -- enclosing function — precomputed at parse time. So "find calls inside
+    -- function F" collapses from an O(calls x funcs) range join into a
+    -- simple hash join on scope.function. The range-join version this
+    -- replaces took up to 20 seconds on DuckDB's own source tree; this
+    -- runs in under a second.
     WITH ast AS (
         SELECT * FROM read_ast(source, language)
-    ),
-    funcs AS (
-        SELECT node_id, name, descendant_count, file_path, start_line, qualified_name
-        FROM ast
-        WHERE is_name_definition(flags) AND is_scope(flags)
-          AND is_semantic_type(semantic_type, 'FUNCTION')
-          AND name IS NOT NULL AND name != ''
-    ),
-    call_nodes AS (
-        SELECT node_id, name, start_line, file_path, peek
-        FROM ast
-        WHERE is_semantic_type(semantic_type, 'CALL')
-          AND name IS NOT NULL AND name != ''
-    ),
-    calls AS (
-        SELECT f.name as caller,
-               f.qualified_name as caller_qualified,
-               f.start_line as caller_line,
-               f.file_path,
-               c.name as callee,
-               c.start_line as callee_line,
-               c.peek as call_peek
-        FROM funcs f
-        JOIN call_nodes c
-          ON c.file_path = f.file_path
-          AND c.node_id > f.node_id
-          AND c.node_id <= f.node_id + f.descendant_count
     )
-    SELECT * FROM calls
-    ORDER BY file_path, caller_line, callee_line;
+    SELECT f.name         AS caller,
+           f.qualified_name AS caller_qualified,
+           f.start_line   AS caller_line,
+           c.file_path,
+           c.name         AS callee,
+           c.start_line   AS callee_line,
+           c.peek         AS call_peek
+    FROM ast c
+    JOIN ast f
+      ON f.node_id = c.scope.function
+     AND f.file_path = c.file_path
+    WHERE is_semantic_type(c.semantic_type, 'CALL')
+      AND c.name IS NOT NULL AND c.name != ''
+      AND f.name IS NOT NULL AND f.name != ''
+    ORDER BY c.file_path, f.start_line, c.start_line;
 
 
 -- =============================================================================
@@ -3937,7 +3927,11 @@ CREATE OR REPLACE MACRO ast_callees(
 -- =============================================================================
 --
 -- Finds all call sites for each function, with the enclosing function as caller.
--- Uses scope_id to efficiently look up the containing function.
+-- Uses scope.function (precomputed at parse time) as a direct hash lookup —
+-- no range join, no ROW_NUMBER window, no nearest-ancestor dance.
+--
+-- Module-level calls (no enclosing function) get caller = '<module>',
+-- caller_line = 0.
 --
 -- Usage:
 --   SELECT * FROM ast_callers('src/**/*.py');
@@ -3947,59 +3941,22 @@ CREATE OR REPLACE MACRO ast_callers(
     source,
     language := NULL
 ) AS TABLE
-    -- Two optimizations over the naive approach:
-    --   1. Pre-filter functions and calls into their own small CTEs, so the
-    --      range join happens over bounded inputs per file.
-    --   2. Replace the correlated NOT EXISTS (which was O(calls x funcs x funcs))
-    --      with a ROW_NUMBER() window over depth. Deepest enclosing function is
-    --      the first row per call after partitioning, which we pick with rn = 1.
-    --
-    -- On large codebases (e.g. DuckDB's own src/) this is the difference between
-    -- OOM and sub-second execution.
     WITH ast AS (
         SELECT * FROM read_ast(source, language)
-    ),
-    funcs AS (
-        SELECT node_id, name, start_line, file_path, depth, descendant_count
-        FROM ast
-        WHERE is_semantic_type(semantic_type, 'FUNCTION')
-          AND name IS NOT NULL AND name != ''
-    ),
-    calls AS (
-        SELECT node_id, name as callee, start_line as call_line, file_path
-        FROM ast
-        WHERE is_semantic_type(semantic_type, 'CALL')
-          AND name IS NOT NULL AND name != ''
-    ),
-    -- For each call, join with every containing function; rank by depth DESC so
-    -- rn = 1 is the deepest (nearest) enclosing function.
-    ranked AS (
-        SELECT
-            c.callee,
-            c.call_line,
-            c.file_path,
-            c.node_id AS call_node_id,
-            f.name AS caller,
-            f.start_line AS caller_line,
-            ROW_NUMBER() OVER (
-                PARTITION BY c.node_id, c.file_path
-                ORDER BY f.depth DESC
-            ) AS rn
-        FROM calls c
-        LEFT JOIN funcs f
-          ON f.file_path = c.file_path
-          AND c.node_id > f.node_id
-          AND c.node_id <= f.node_id + f.descendant_count
     )
     SELECT
-        COALESCE(caller, '<module>') AS caller,
-        COALESCE(caller_line, 0) AS caller_line,
-        callee,
-        call_line,
-        file_path
-    FROM ranked
-    WHERE rn = 1
-    ORDER BY file_path, call_line;
+        COALESCE(f.name, '<module>')       AS caller,
+        COALESCE(f.start_line, 0::UINTEGER) AS caller_line,
+        c.name       AS callee,
+        c.start_line AS call_line,
+        c.file_path
+    FROM ast c
+    LEFT JOIN ast f
+      ON f.node_id = c.scope.function
+     AND f.file_path = c.file_path
+    WHERE is_semantic_type(c.semantic_type, 'CALL')
+      AND c.name IS NOT NULL AND c.name != ''
+    ORDER BY c.file_path, c.start_line;
 
 )SQLMACRO"},
 };
