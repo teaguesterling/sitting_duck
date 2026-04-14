@@ -12,47 +12,41 @@ selector bugs were identified. The new test file
 and passes against current (buggy) implementation so the regressions are
 locked in. The underlying bugs are listed below.
 
-## Bug 1: `type:has(.class)` returns 0 results
+## Bug 1: `type:has(.class)` returns 0 results — **FIXED 2026-04-13**
 
 When the base selector is a type (tag_name) and `:has()` uses a semantic-class
-argument, the filter produces no matches.
+argument, the filter produced no matches.
 
-### Examples
-```sql
--- Returns 0 rows (incorrect):
-SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
-    'function_definition:has(.call)');
+### Root cause
 
--- Returns 3 rows (correct):
-SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
-    '.function:has(.call)');  -- main, make_animal, process_animals
-```
+`simple_class_candidates` in `css_selectors.sql` extracted class_names from
+anywhere in the selector AST, including inside `:has(...)` / `:not(...)` args
+— unlike `simple_type_candidates` and `simple_id_candidates`, which anti-join
+against `sel_arg_blocks`. So for `function_definition:has(.call)` the CSS
+parser wraps the whole expression as `pseudo_class_selector(...)`, the root
+hits the `pseudo_class_selector` CASE branch which enforces `class_filter`,
+and `class_filter` leaked from `.call` inside `:has()`. No `function_definition`
+node is semantically `.call`, so the base filter matched zero rows.
 
-### Workaround
-Use `.class:has(.class)` form OR switch inner `:has()` to a type selector:
-`function_definition:has(call)` works.
+### Fix
 
-### Likely cause
-The `has_conditions` CTE extracts `has_class` correctly, but when the base
-selector is a type, something prevents the `has_class` check from firing
-against the right `semantic_type` values in the candidate set. Suspect:
-the CASE dispatch for `tag_name` base + `:has()` doesn't call `is_semantic_type`
-on descendants. Needs investigation in `src/sql_macros/css_selectors.sql`
-around lines 418-429 and 692-703.
+Added the same `LEFT JOIN sel_arg_blocks ... WHERE a.node_id IS NULL`
+anti-join to `simple_class_candidates`, mirroring the pattern already used
+by the type and id candidate CTEs.
 
-## Bug 2: `:not(:has(.class))` also broken
+## Bug 2: `:not(:has(.class))` also broken — **FIXED 2026-04-13**
 
-Same root cause as Bug 1.
+Related but separate cause from Bug 1. `not_has_conditions` only extracted
+`not_has_type` and `not_has_name` — it had no `not_has_class` column. So
+`.call` inside `:not(:has(.call))` was silently dropped, the inner EXISTS
+matched any descendant (`NULL OR ...` → true), and the outer `NOT EXISTS`
+failed for every candidate with any children.
 
-```sql
--- Returns 0 rows (incorrect — should return 7 functions without calls):
-SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
-    '.function:not(:has(.call))');
+### Fix
 
--- Returns 7 rows (correct) using type-based :has:
-SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
-    'function_definition:not(:has(call))');
-```
+Added `not_has_class` (via `sel_pcs_first_class_name`) to `not_has_conditions`
+and wired the corresponding `is_semantic_type(d.semantic_type, UPPER(...))`
+check into the `:not(:has())` filter, mirroring the regular `:has()` filter.
 
 ## Bug 3: Combinators combined with pseudo-classes on the right side
 

@@ -121,18 +121,42 @@ All four share the same error class (`Failed to bind column reference` +
 Incremental fixes have been merged but the underlying bug class still has
 uncovered trigger shapes.
 
+## Upstream timeline
+
+- **2026-04-13 06:51 UTC** — PR #21913 (fix for #21890) merged to `main`.
+- **2026-04-13 10:42 UTC** — PR #22031 **reverted** #21913 on `main`. The fix
+  broke `test/sql/error/test_try_expression.test_slow` and
+  `test/sql/cte/test_correlated_recursive_cte.test_slow`; CI on #21913 only
+  ran fast tests so the regression slipped through.
+- **2026-04-13 10:46 UTC** — DuckDB v1.5.2 tagged/published, four minutes
+  after the revert. **v1.5.2 does NOT contain the fix.**
+- **2026-04-13 (same day)** — PR #22033 opened against `v1.5-variegata`
+  (the 1.5 release branch) with a tightened version that preserves the
+  original fix, tracks grouped/correlated column refs without allowing
+  aggregates inside `TRY(...)`, and restores immediate-left-child
+  correlated-binding remapping. Currently **open, not yet merged.**
+
+v1.5.2 does include "TopNWindowElimination Column Binding Fix" and other
+binder touch-ups, but those are different code paths and don't address
+our trigger shape.
+
 ## Resolution plan
 
-1. **Watch duckdb/duckdb#21890 / #21913** for the fix to land.
-2. **When DuckDB v1.5.2 (or whichever version) ships the fix:**
+1. **Watch duckdb/duckdb#22033** (not #21913) for merge into `v1.5-variegata`.
+2. **When the next 1.5.x patch release ships the fix:**
    - Pull the updated `duckdb` submodule.
    - Rebuild sitting_duck.
    - Rename `test/sql/_wip_ast_select_rules.test` → `test/sql/ast_select_rules.test`.
    - Uncomment the TODO blocks in that test file and update expected values.
    - Verify the CSS selector regression suite still passes.
    - Close this tracker entry and move to `tracker/bugs/resolved/`.
-3. **If the fix doesn't cover our specific macro shape**, add our repro to the
-   upstream discussion (the comment on #21890 is already posted) and either:
+3. **No rush to revert our workarounds** even when the fix lands — the CTE
+   refactors (typed views, `row_number() + WHERE rn = 1`, flat anti-joins)
+   are architecturally cleaner than the correlated forms they replaced, so
+   they stand on their own merits.
+4. **If #22033 doesn't cover our specific macro shape when it lands**, add
+   our repro to the upstream discussion (the comment on #21890 is already
+   posted) and either:
    - File a separate issue, or
    - Work around it by fully restructuring `ast_select`'s outer SELECT body
      to eliminate correlated NOT EXISTS patterns over `has_conditions` etc.

@@ -257,12 +257,18 @@ CREATE OR REPLACE MACRO ast_select_from(
 
         -- .class semantic filter: a class_name whose parent is a class_selector
         -- (not a pseudo_class_selector — :has, :not, etc. also have class_name children).
-        -- Joins typed views instead of self-correlating sel.
+        -- Anti-joins sel_arg_blocks so .class inside :has(.foo) / :not(.foo)
+        -- doesn't leak into the top-level class_filter. Joins typed views
+        -- instead of self-correlating sel.
         simple_class_candidates AS (
             SELECT cn.name,
                    row_number() OVER (ORDER BY cn.node_id ASC) AS rn
             FROM sel_class_names cn
             INNER JOIN sel_class_selectors cs ON cs.node_id = cn.parent_id
+            LEFT JOIN sel_arg_blocks a
+              ON cs.node_id > a.node_id
+             AND cs.node_id <= a.node_id + a.descendant_count
+            WHERE a.node_id IS NULL  -- not inside any arguments block
         ),
         simple_class AS (
             SELECT (SELECT name FROM simple_class_candidates WHERE rn = 1) as class_filter
@@ -444,10 +450,12 @@ CREATE OR REPLACE MACRO ast_select_from(
         not_has_conditions AS (
             SELECT nh.not_pcs_id AS not_id,
                    ftn.name AS not_has_type,
-                   fin.name AS not_has_name
+                   fin.name AS not_has_name,
+                   fcn.name AS not_has_class
             FROM sel_not_to_has nh
-            LEFT JOIN sel_pcs_first_tag_name ftn ON ftn.pcs_id = nh.has_pcs_id
-            LEFT JOIN sel_pcs_first_id_name  fin ON fin.pcs_id = nh.has_pcs_id
+            LEFT JOIN sel_pcs_first_tag_name   ftn ON ftn.pcs_id = nh.has_pcs_id
+            LEFT JOIN sel_pcs_first_id_name    fin ON fin.pcs_id = nh.has_pcs_id
+            LEFT JOIN sel_pcs_first_class_name fcn ON fcn.pcs_id = nh.has_pcs_id
         ),
 
         -- [attr op value] conditions — supports =, *=, ^=, $= operators.
@@ -712,6 +720,8 @@ CREATE OR REPLACE MACRO ast_select_from(
               AND d.node_id <= a.node_id + a.descendant_count
               AND (nh.not_has_type IS NULL OR d.type = nh.not_has_type)
               AND (nh.not_has_name IS NULL OR d.name = nh.not_has_name)
+              AND (nh.not_has_class IS NULL
+                   OR is_semantic_type(d.semantic_type, UPPER(nh.not_has_class)))
         )
     )
     -- [attr op value] filters — supports native extraction columns and CSS operators

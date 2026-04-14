@@ -865,12 +865,12 @@ Cat
 Dog
 
 # =============================================================================
-# 16. :has() WITH SEMANTIC CLASS (.class) inside
+# 16. :has() AND :not(:has()) WITH SEMANTIC CLASS (.class) inside
 # =============================================================================
-# KNOWN ISSUE: :has(.class) works when base selector is .class,
-# but NOT when base selector is a type (e.g., function_definition).
+# Semantic class arguments inside :has() / :not() work regardless of whether
+# the base selector is a .class or a type selector.
 
-# .class:has(.class) WORKS correctly
+# .class:has(.class)
 query I
 SELECT name FROM ast_select('test/data/python/css_selectors_test.py', '.class:has(.function)')
 ORDER BY name;
@@ -879,7 +879,7 @@ Animal
 Cat
 Dog
 
-# .function:has(.call) WORKS when base is .class
+# .function:has(.call) — semantic base + semantic :has
 query I
 SELECT name FROM ast_select('test/data/python/css_selectors_test.py', '.function:has(.call)')
 ORDER BY name, start_line;
@@ -896,27 +896,37 @@ ORDER BY name;
 factorial
 main
 
-# type:has(.class) returns EMPTY — known bug: semantic class inside :has()
-# doesn't work when the base selector is a type selector
-# function_definition:has(.call) should match the same as .function:has(.call) but doesn't
+# type:has(.class) — type base + semantic :has. Must return the same set as
+# .function:has(.call) above.
 query I
 SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition:has(.call)')
-ORDER BY name;
+ORDER BY name, start_line;
 ----
+main
+make_animal
+process_animals
 
-# class_definition:has(.function) should match all 3 classes but doesn't
+# class_definition:has(.function) matches all 3 classes.
 query I
 SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'class_definition:has(.function)')
 ORDER BY name;
 ----
+Animal
+Cat
+Dog
 
-# :not(:has(.class)) is also affected by the same issue
-# .function:not(:has(.call)) should return functions WITHOUT calls
-# but returns 0 results
+# :not(:has(.class)) — functions without a descendant call
 query I
 SELECT name FROM ast_select('test/data/python/css_selectors_test.py', '.function:not(:has(.call))')
-ORDER BY name;
+ORDER BY name, start_line;
 ----
+__init__
+fetch
+move
+purr
+speak
+speak
+speak
 
 # Compare with type-based :has(call) which works correctly
 query I
