@@ -3017,8 +3017,14 @@ CREATE OR REPLACE MACRO ast_select_from(
             (sp.class_filter IS NULL
              OR (is_semantic_type(a.semantic_type, UPPER(sp.class_filter))
                  AND NOT is_syntax_only(a.flags)))
+            AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
+            AND (sp.type_filter IS NULL OR a.type = sp.type_filter OR a.type LIKE sp.type_filter_like)
         WHEN 'attribute_selector' THEN
             (sp.type_filter IS NULL OR a.type = sp.type_filter OR a.type LIKE sp.type_filter_like)
+            AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
+            AND (sp.class_filter IS NULL
+                 OR (is_semantic_type(a.semantic_type, UPPER(sp.class_filter))
+                     AND NOT is_syntax_only(a.flags)))
         WHEN 'pseudo_class_selector' THEN
             (sp.type_filter IS NULL OR a.type = sp.type_filter OR a.type LIKE sp.type_filter_like)
             AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
@@ -3186,15 +3192,15 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- :definition / :reference / :declaration — NAME_ROLE flags
             WHEN 'definition' THEN is_name_definition(a.flags)
             WHEN 'reference' THEN is_name_reference(a.flags)
+
+)SQLMACRO"
+        R"SQLMACRO(
             WHEN 'declaration' THEN is_name_declaration(a.flags)
 
             -- Native extraction pseudo-classes (from modifiers/annotations)
             WHEN 'async' THEN list_contains(a.modifiers, 'async')
             WHEN 'static' THEN list_contains(a.modifiers, 'static')
             WHEN 'abstract' THEN list_contains(a.modifiers, 'abstract')
-
-)SQLMACRO"
-        R"SQLMACRO(
             WHEN 'const' THEN list_contains(a.modifiers, 'const') OR list_contains(a.modifiers, 'final')
             WHEN 'public' THEN list_contains(a.modifiers, 'public')
             WHEN 'private' THEN list_contains(a.modifiers, 'private')
@@ -3473,6 +3479,9 @@ CREATE OR REPLACE MACRO ast_select(
     language := NULL
 ) AS TABLE
     -- Parse into a temp name, then delegate to ast_select_from.
+
+)SQLMACRO"
+        R"SQLMACRO(
     -- We use read_ast directly and wrap with ast_select_from via a CTE trick:
     -- DuckDB table macros can accept subqueries as table arguments.
     WITH __ast_src AS (
@@ -3858,6 +3867,8 @@ CREATE OR REPLACE MACRO ast_callees(
     source,
     language := NULL
 ) AS TABLE
+    -- Pre-filter both sides of the range join into small CTEs before joining,
+    -- so the join cost is bounded per file rather than quadratic in the whole AST.
     WITH ast AS (
         SELECT * FROM read_ast(source, language)
     ),
@@ -3866,6 +3877,12 @@ CREATE OR REPLACE MACRO ast_callees(
         FROM ast
         WHERE is_name_definition(flags) AND is_scope(flags)
           AND is_semantic_type(semantic_type, 'FUNCTION')
+          AND name IS NOT NULL AND name != ''
+    ),
+    call_nodes AS (
+        SELECT node_id, name, start_line, file_path, peek
+        FROM ast
+        WHERE is_semantic_type(semantic_type, 'CALL')
           AND name IS NOT NULL AND name != ''
     ),
     calls AS (
@@ -3877,11 +3894,10 @@ CREATE OR REPLACE MACRO ast_callees(
                c.start_line as callee_line,
                c.peek as call_peek
         FROM funcs f
-        JOIN ast c ON c.node_id > f.node_id
+        JOIN call_nodes c
+          ON c.file_path = f.file_path
+          AND c.node_id > f.node_id
           AND c.node_id <= f.node_id + f.descendant_count
-          AND c.file_path = f.file_path
-          AND is_semantic_type(c.semantic_type, 'CALL')
-          AND c.name IS NOT NULL AND c.name != ''
     )
     SELECT * FROM calls
     ORDER BY file_path, caller_line, callee_line;
@@ -3902,44 +3918,58 @@ CREATE OR REPLACE MACRO ast_callers(
     source,
     language := NULL
 ) AS TABLE
+    -- Two optimizations over the naive approach:
+    --   1. Pre-filter functions and calls into their own small CTEs, so the
+    --      range join happens over bounded inputs per file.
+    --   2. Replace the correlated NOT EXISTS (which was O(calls x funcs x funcs))
+    --      with a ROW_NUMBER() window over depth. Deepest enclosing function is
+    --      the first row per call after partitioning, which we pick with rn = 1.
+    --
+    -- On large codebases (e.g. DuckDB's own src/) this is the difference between
+    -- OOM and sub-second execution.
     WITH ast AS (
         SELECT * FROM read_ast(source, language)
     ),
-    -- All call sites
+    funcs AS (
+        SELECT node_id, name, start_line, file_path, depth, descendant_count
+        FROM ast
+        WHERE is_semantic_type(semantic_type, 'FUNCTION')
+          AND name IS NOT NULL AND name != ''
+    ),
     calls AS (
-        SELECT node_id, name as callee, start_line as call_line,
-               scope_id, file_path
+        SELECT node_id, name as callee, start_line as call_line, file_path
         FROM ast
         WHERE is_semantic_type(semantic_type, 'CALL')
           AND name IS NOT NULL AND name != ''
     ),
-    -- Resolve each call's enclosing function
-    -- Simple approach: find the deepest function ancestor that contains this call
-    with_caller AS (
+    -- For each call, join with every containing function; rank by depth DESC so
+    -- rn = 1 is the deepest (nearest) enclosing function.
+    ranked AS (
         SELECT
             c.callee,
             c.call_line,
             c.file_path,
-            COALESCE(f.name, '<module>') as caller,
-            COALESCE(f.start_line, 0) as caller_line
+            c.node_id AS call_node_id,
+            f.name AS caller,
+            f.start_line AS caller_line,
+            ROW_NUMBER() OVER (
+                PARTITION BY c.node_id, c.file_path
+                ORDER BY f.depth DESC
+            ) AS rn
         FROM calls c
-        -- Find nearest enclosing function via range check
-        JOIN ast f ON f.file_path = c.file_path
-          AND is_semantic_type(f.semantic_type, 'FUNCTION')
+        LEFT JOIN funcs f
+          ON f.file_path = c.file_path
           AND c.node_id > f.node_id
           AND c.node_id <= f.node_id + f.descendant_count
-          -- Nearest = deepest
-          AND NOT EXISTS (
-              SELECT 1 FROM ast f2
-              WHERE f2.file_path = c.file_path
-                AND is_semantic_type(f2.semantic_type, 'FUNCTION')
-                AND c.node_id > f2.node_id
-                AND c.node_id <= f2.node_id + f2.descendant_count
-                AND f2.depth > f.depth
-          )
     )
-    SELECT caller, caller_line, callee, call_line, file_path
-    FROM with_caller
+    SELECT
+        COALESCE(caller, '<module>') AS caller,
+        COALESCE(caller_line, 0) AS caller_line,
+        callee,
+        call_line,
+        file_path
+    FROM ranked
+    WHERE rn = 1
     ORDER BY file_path, call_line;
 
 )SQLMACRO"},
