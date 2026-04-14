@@ -164,25 +164,8 @@ static Value ConvertASTResultToList(const ASTResult &result, const ExtractionCon
 				fields.push_back(make_pair("descendant_count",
 				                           Value::UINTEGER(static_cast<uint32_t>(node.legacy_descendant_count))));
 
-				// scope_id: NULL for nodes outside any scope (e.g., the root)
-				if (node.scope_id >= 0) {
-					fields.push_back(make_pair("scope_id", Value::BIGINT(node.scope_id)));
-				} else {
-					fields.push_back(make_pair("scope_id", Value(LogicalType::BIGINT)));
-				}
-
-				// scope_stack: LIST(BIGINT) populated for scope boundary nodes, NULL otherwise
-				if (node.has_scope_stack) {
-					vector<Value> stack_values;
-					stack_values.reserve(node.scope_stack_data.size());
-					for (auto &sid : node.scope_stack_data) {
-						stack_values.push_back(Value::BIGINT(sid));
-					}
-					fields.push_back(
-					    make_pair("scope_stack", Value::LIST(LogicalType::BIGINT, std::move(stack_values))));
-				} else {
-					fields.push_back(make_pair("scope_stack", Value(LogicalType::LIST(LogicalType::BIGINT))));
-				}
+				// scope STRUCT<current, function, class, module, stack>
+				fields.push_back(make_pair("scope", UnifiedASTBackend::ScopeValue(node.scope)));
 			}
 		}
 

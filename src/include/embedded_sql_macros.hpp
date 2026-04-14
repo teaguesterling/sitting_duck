@@ -2324,8 +2324,7 @@ CREATE OR REPLACE MACRO parse_ast_list_table(code, language) AS TABLE
         n.sibling_index,
         n.children_count,
         n.descendant_count,
-        n.scope_id,
-        n.scope_stack,
+        n.scope,
         n.peek,
         n.semantic_type,
         n.flags,
@@ -3289,7 +3288,7 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- :exported — module-level public definition
             WHEN 'exported' THEN
                 is_name_definition(a.flags)
-                AND (a.scope_id IS NULL OR a.scope_id <= 0)
+                AND (a.scope.current IS NULL OR a.scope.current <= 0)
                 AND a.name IS NOT NULL AND a.name != ''
                 AND a.name NOT LIKE '\_%'
 
@@ -3401,7 +3400,7 @@ CREATE OR REPLACE MACRO ast_select_from(
     -- ::scope — the enclosing scope node
     pe_scope AS (
         SELECT s.* FROM matched m JOIN ast s
-          ON s.node_id = m.scope_id AND s.file_path = m.file_path
+          ON s.node_id = m.scope.current AND s.file_path = m.file_path
     ),
     -- ::next-sibling — the next sibling
     pe_next AS (
@@ -3480,10 +3479,10 @@ CREATE OR REPLACE MACRO ast_select_from(
     WHERE (SELECT element_name FROM pseudo_element) = 'scope'
     UNION ALL
     SELECT * FROM pe_next
-    WHERE (SELECT element_name FROM pseudo_element) = 'next-sibling'
 
 )SQLMACRO"
         R"SQLMACRO(
+    WHERE (SELECT element_name FROM pseudo_element) = 'next-sibling'
     UNION ALL
     SELECT * FROM pe_prev
     WHERE (SELECT element_name FROM pseudo_element) IN ('prev-sibling', 'previous-sibling')
@@ -3707,10 +3706,14 @@ CREATE OR REPLACE MACRO ast_select_list(source, query, language := NULL) AS TABL
 -- =============================================================================
 --
 -- Macros for scope-aware querying: exports, imports, and name resolution.
--- These use the scope_id and scope_stack columns from read_ast().
+-- These use the scope STRUCT column from read_ast().
 --
--- scope_id: nearest enclosing scope's node_id (on every node)
--- scope_stack: LIST(INT64) of enclosing scopes, outermost first (on scope nodes only)
+-- scope.current:  nearest enclosing scope's node_id (on every node)
+-- scope.function: nearest enclosing function (on every node)
+-- scope.class:    nearest enclosing class (on every node)
+-- scope.module:   nearest enclosing module/namespace (on every node)
+-- scope.stack:    LIST<STRUCT<id, kind SEMANTIC_TYPE>> of enclosing scopes,
+--                 outermost first (on scope nodes only).
 -- =============================================================================
 
 -- =============================================================================
@@ -3733,7 +3736,7 @@ CREATE OR REPLACE MACRO ast_exports(
     SELECT *
     FROM read_ast(source, language)
     WHERE is_name_definition(flags)
-      AND scope_id <= 0  -- module-level scope (scope_id = -1 or 0 = root module)
+      AND (scope.current IS NULL OR scope.current <= 0)  -- module-level scope
       AND name IS NOT NULL
       AND name != ''
       AND name NOT LIKE '\_%'  -- exclude Python-style private
@@ -3820,7 +3823,7 @@ CREATE OR REPLACE MACRO ast_resolve(
         ast AS (
             SELECT * FROM read_ast(source, language)
         ),
-        -- All references with their scope chain
+        -- All references with their scope chain (typed stack: LIST<STRUCT<id, kind>>)
         refs AS (
             SELECT
                 a.node_id as ref_node_id,
@@ -3828,20 +3831,21 @@ CREATE OR REPLACE MACRO ast_resolve(
                 a.type as ref_type,
                 a.start_line as ref_line,
                 a.file_path,
-                a.scope_id,
-                -- Get scope chain from the enclosing scope node
-                s.scope_stack
+                a.scope.current AS scope_current,
+                -- Get the enclosing-scope node's stack chain.
+                s.scope.stack AS scope_stack
             FROM ast a
-            JOIN ast s ON s.node_id = a.scope_id AND s.file_path = a.file_path
+            JOIN ast s ON s.node_id = a.scope.current AND s.file_path = a.file_path
             WHERE is_name_reference(a.flags)
               AND a.name IS NOT NULL AND a.name != ''
-              AND s.scope_stack IS NOT NULL
+              AND s.scope.stack IS NOT NULL
         ),
-        -- Unnest scope chain with position (for distance ranking)
+        -- Unnest scope chain with position (for distance ranking).
+        -- scope.stack entries are STRUCT<id, kind>, so project .id for the join key.
         search_scopes AS (
             SELECT
                 r.ref_node_id, r.ref_name, r.ref_type, r.ref_line, r.file_path,
-                unnest(r.scope_stack) as search_scope_id,
+                unnest(r.scope_stack).id as search_scope_id,
                 generate_series(1, len(r.scope_stack)) as scope_distance
             FROM refs r
         ),
@@ -3859,7 +3863,7 @@ CREATE OR REPLACE MACRO ast_resolve(
                 d.start_line as def_line,
                 d.qualified_name as def_qualified_name
             FROM search_scopes ss
-            JOIN ast d ON d.scope_id = ss.search_scope_id
+            JOIN ast d ON d.scope.current = ss.search_scope_id
               AND d.file_path = ss.file_path
               AND d.name = ss.ref_name
               AND is_name_definition(d.flags)

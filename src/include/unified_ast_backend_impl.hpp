@@ -2,6 +2,7 @@
 
 #include "unified_ast_backend.hpp"
 #include "native_context_extraction.hpp"
+#include "semantic_types.hpp"
 // Note: Individual extractor headers are included in native_context_extraction.hpp
 #include "duckdb/common/string_util.hpp"
 #include "utf8proc_wrapper.hpp"
@@ -113,8 +114,11 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 	vector<unordered_map<string, int>> scope_name_counts;
 	scope_name_counts.push_back({}); // root frame
 
-	// Scope tracking: stack of node_ids for IS_SCOPE nodes (for scope_id/scope_stack columns)
-	vector<int64_t> scope_node_stack;
+	// Scope tracking: stack of (node_id, semantic_type) pairs for IS_SCOPE
+	// ancestors. Storing the kind alongside the id lets us populate per-kind
+	// shortcuts (function / class / module / namespace) on every node without
+	// having to re-scan the AST, and also lets us emit a typed scope.stack.
+	vector<ASTNode::ScopeEntry> scope_node_stack;
 
 	while (!stack.empty()) {
 		// Check if the top entry is processed before copying
@@ -264,17 +268,50 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 				ast_node.native_extraction_attempted = false;
 			}
 
-			// Scope tracking: set scope_id and build scope_stack for IS_SCOPE nodes
+			// Scope tracking: populate the scope struct for every node.
+			//   scope.current = nearest enclosing scope (top of stack)
+			//   scope.function/class/module_scope = nearest enclosing scope of
+			//     that semantic kind (scan stack once per node, cost bounded
+			//     by tree depth which is typically 10-20).
+			//   scope.stack_data = full chain with kinds (only on IS_SCOPE
+			//     nodes; non-scope nodes leave it empty, matching the old
+			//     scope_stack sparsity).
 			if (config.structure >= StructureLevel::FULL) {
-				// scope_id = top of scope node stack (or -1 if empty)
-				ast_node.scope_id = scope_node_stack.empty() ? -1 : scope_node_stack.back();
+				if (scope_node_stack.empty()) {
+					ast_node.scope.current = -1;
+				} else {
+					ast_node.scope.current = scope_node_stack.back().id;
+				}
+				// Scan for nearest-of-kind: walk stack from innermost to
+				// outermost, taking the first match for each field.
+				for (auto it = scope_node_stack.rbegin(); it != scope_node_stack.rend(); ++it) {
+					uint8_t base = it->kind & 0xFC; // mask refinement bits
+					if (ast_node.scope.function_scope == -1 &&
+					    base == SemanticTypes::DEFINITION_FUNCTION) {
+						ast_node.scope.function_scope = it->id;
+					}
+					if (ast_node.scope.class_scope == -1 &&
+					    base == SemanticTypes::DEFINITION_CLASS) {
+						ast_node.scope.class_scope = it->id;
+					}
+					if (ast_node.scope.module_scope == -1 &&
+					    base == SemanticTypes::DEFINITION_MODULE) {
+						ast_node.scope.module_scope = it->id;
+					}
+					// Short-circuit once all named slots are filled.
+					if (ast_node.scope.function_scope != -1 &&
+					    ast_node.scope.class_scope != -1 &&
+					    ast_node.scope.module_scope != -1) {
+						break;
+					}
+				}
 
-				// If this node is a scope boundary, push it and record the full chain
+				// If this node is a scope boundary, push it (with its kind)
+				// and emit the typed stack snapshot for downstream queries.
 				if (ast_node.universal_flags & ASTNodeFlags::IS_SCOPE) {
-					scope_node_stack.push_back(static_cast<int64_t>(ast_node.node_id));
-					// Build scope_stack = copy of current scope_node_stack (includes this node)
-					ast_node.scope_stack_data = scope_node_stack;
-					ast_node.has_scope_stack = true;
+					scope_node_stack.push_back({static_cast<int64_t>(ast_node.node_id), ast_node.semantic_type});
+					ast_node.scope.stack_data = scope_node_stack;
+					ast_node.scope.has_stack = true;
 				}
 			}
 
@@ -349,7 +386,7 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			result.nodes[entry.node_index].UpdateComputedLegacyFields();
 
 			// Pop scope node stack if this node is a scope boundary
-			if (!scope_node_stack.empty() && scope_node_stack.back() == static_cast<int64_t>(entry.node_index)) {
+			if (!scope_node_stack.empty() && scope_node_stack.back().id == static_cast<int64_t>(entry.node_index)) {
 				scope_node_stack.pop_back();
 			}
 

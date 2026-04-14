@@ -51,12 +51,79 @@ Value UnifiedASTBackend::QualifiedNameValue(const vector<QualifiedNameSegment> &
 	return Value::LIST(struct_type, std::move(seg_values));
 }
 
+// LogicalType for the scope column.
+//   scope: STRUCT<
+//     current BIGINT,
+//     function BIGINT,
+//     class BIGINT,
+//     module BIGINT,
+//     stack LIST<STRUCT<id BIGINT, kind SEMANTIC_TYPE>>
+//   >
+// The named slots (current/function/class/module) are populated on every
+// node; stack is sparse (only on IS_SCOPE nodes, matching old scope_stack).
+LogicalType UnifiedASTBackend::ScopeColumnType() {
+	child_list_t<LogicalType> entry_fields;
+	entry_fields.push_back({"id", LogicalType::BIGINT});
+	entry_fields.push_back({"kind", SemanticTypeLogicalType()});
+	auto entry_type = LogicalType::STRUCT(std::move(entry_fields));
+
+	child_list_t<LogicalType> scope_fields;
+	scope_fields.push_back({"current", LogicalType::BIGINT});
+	scope_fields.push_back({"function", LogicalType::BIGINT});
+	scope_fields.push_back({"class", LogicalType::BIGINT});
+	scope_fields.push_back({"module", LogicalType::BIGINT});
+	scope_fields.push_back({"stack", LogicalType::LIST(entry_type)});
+	return LogicalType::STRUCT(std::move(scope_fields));
+}
+
+// Build a single scope STRUCT Value from an ASTNode's ScopeInfo.
+// -1 in a slot means "no enclosing scope of that kind" and is surfaced as NULL.
+// Stack is NULL (list) when the node isn't itself a scope.
+Value UnifiedASTBackend::ScopeValue(const ASTNode::ScopeInfo &scope) {
+	auto col_type = ScopeColumnType();
+	auto &fields = StructType::GetChildTypes(col_type);
+	auto stack_list_type = fields[4].second; // LIST<STRUCT<id, kind>>
+	auto entry_type = ListType::GetChildType(stack_list_type);
+
+	auto make_bigint_or_null = [](int64_t v) {
+		return v < 0 ? Value(LogicalType::BIGINT) : Value::BIGINT(v);
+	};
+
+	child_list_t<Value> children;
+	children.push_back({"current", make_bigint_or_null(scope.current)});
+	children.push_back({"function", make_bigint_or_null(scope.function_scope)});
+	children.push_back({"class", make_bigint_or_null(scope.class_scope)});
+	children.push_back({"module", make_bigint_or_null(scope.module_scope)});
+
+	if (scope.has_stack && !scope.stack_data.empty()) {
+		vector<Value> stack_values;
+		stack_values.reserve(scope.stack_data.size());
+		for (const auto &entry : scope.stack_data) {
+			child_list_t<Value> entry_children;
+			entry_children.push_back({"id", Value::BIGINT(entry.id)});
+			entry_children.push_back(
+			    {"kind", Value::UTINYINT(entry.kind).DefaultCastAs(SemanticTypeLogicalType())});
+			stack_values.push_back(Value::STRUCT(std::move(entry_children)));
+		}
+		children.push_back({"stack", Value::LIST(entry_type, std::move(stack_values))});
+	} else {
+		children.push_back({"stack", Value(stack_list_type)}); // NULL list
+	}
+	return Value::STRUCT(std::move(children));
+}
+
 // File-local aliases so existing call sites keep their short names.
 static LogicalType QualifiedNameColumnType() {
 	return UnifiedASTBackend::QualifiedNameColumnType();
 }
 static Value QualifiedNameValue(const vector<QualifiedNameSegment> &segments) {
 	return UnifiedASTBackend::QualifiedNameValue(segments);
+}
+static LogicalType ScopeColumnType() {
+	return UnifiedASTBackend::ScopeColumnType();
+}
+static Value ScopeValue(const ASTNode::ScopeInfo &scope) {
+	return UnifiedASTBackend::ScopeValue(scope);
 }
 
 ASTResult UnifiedASTBackend::ParseToASTResult(const string &content, const string &language, const string &file_path,
@@ -235,8 +302,7 @@ vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
 	    LogicalType::INTEGER,                   // sibling_index
 	    LogicalType::UINTEGER,                  // children_count
 	    LogicalType::UINTEGER,                  // descendant_count
-	    LogicalType::BIGINT,                    // scope_id
-	    LogicalType::LIST(LogicalType::BIGINT), // scope_stack
+	    ScopeColumnType(),                      // scope STRUCT<current, function, class, module, stack>
 	    LogicalType::VARCHAR,                   // peek (source_text)
 	    // Semantic type fields
 	    LogicalType::UTINYINT,    // semantic_type
@@ -247,7 +313,7 @@ vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
 
 vector<string> UnifiedASTBackend::GetFlatTableColumnNames() {
 	return {"node_id", "type", "name", "file_path", "language", "start_line", "start_column", "end_line", "end_column",
-	        "parent_id", "depth", "sibling_index", "children_count", "descendant_count", "scope_id", "scope_stack",
+	        "parent_id", "depth", "sibling_index", "children_count", "descendant_count", "scope",
 	        "peek",
 	        // Semantic type fields
 	        "semantic_type", "flags", "qualified_name"};
@@ -273,8 +339,7 @@ LogicalType UnifiedASTBackend::GetASTStructSchema() {
 	node_children.push_back(make_pair("sibling_index", LogicalType::INTEGER));
 	node_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
 	node_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
-	node_children.push_back(make_pair("scope_id", LogicalType::BIGINT));
-	node_children.push_back(make_pair("scope_stack", LogicalType::LIST(LogicalType::BIGINT)));
+	node_children.push_back(make_pair("scope", ScopeColumnType()));
 	node_children.push_back(make_pair("peek", LogicalType::VARCHAR));
 	// Semantic type fields
 	node_children.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
@@ -308,8 +373,7 @@ vector<LogicalType> UnifiedASTBackend::GetHierarchicalTableSchema() {
 	structure_children.push_back(make_pair("sibling_index", LogicalType::INTEGER));
 	structure_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
 	structure_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
-	structure_children.push_back(make_pair("scope_id", LogicalType::BIGINT));
-	structure_children.push_back(make_pair("scope_stack", LogicalType::LIST(LogicalType::BIGINT)));
+	structure_children.push_back(make_pair("scope", ScopeColumnType()));
 
 	// Context Information STRUCT (including native context)
 	child_list_t<LogicalType> context_children;
@@ -348,7 +412,7 @@ vector<string> UnifiedASTBackend::GetHierarchicalTableColumnNames() {
 	    "node_id",   // BIGINT
 	    "type",      // VARCHAR (moved to base level)
 	    "source",    // STRUCT(file_path, language, start_line, start_column, end_line, end_column)
-	    "structure", // STRUCT(parent_id, depth, sibling_index, children_count, descendant_count, scope_id, scope_stack)
+	    "structure", // STRUCT(parent_id, depth, sibling_index, children_count, descendant_count, scope)
 	    "context",   // STRUCT(name, qualified_name, semantic_type, flags, native)
 	    "peek"       // VARCHAR
 	};
@@ -397,8 +461,7 @@ vector<LogicalType> UnifiedASTBackend::GetDynamicTableSchema(const ExtractionCon
 			structure_children.push_back(make_pair("sibling_index", LogicalType::INTEGER));
 			structure_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
 			structure_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
-			structure_children.push_back(make_pair("scope_id", LogicalType::BIGINT));
-			structure_children.push_back(make_pair("scope_stack", LogicalType::LIST(LogicalType::BIGINT)));
+			structure_children.push_back(make_pair("scope", ScopeColumnType()));
 		}
 
 		schema.push_back(LogicalType::STRUCT(structure_children));
@@ -532,11 +595,10 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
 		}
 
 		if (schema_config.structure >= StructureLevel::FULL) {
-			schema.push_back(LogicalType::INTEGER);                   // sibling_index
-			schema.push_back(LogicalType::UINTEGER);                  // children_count
-			schema.push_back(LogicalType::UINTEGER);                  // descendant_count
-			schema.push_back(LogicalType::BIGINT);                    // scope_id
-			schema.push_back(LogicalType::LIST(LogicalType::BIGINT)); // scope_stack
+			schema.push_back(LogicalType::INTEGER);  // sibling_index
+			schema.push_back(LogicalType::UINTEGER); // children_count
+			schema.push_back(LogicalType::UINTEGER); // descendant_count
+			schema.push_back(ScopeColumnType());     // scope
 		}
 	}
 
@@ -601,8 +663,7 @@ vector<string> UnifiedASTBackend::GetFlatDynamicTableColumnNames(const Extractio
 			names.push_back("sibling_index");
 			names.push_back("children_count");
 			names.push_back("descendant_count");
-			names.push_back("scope_id");
-			names.push_back("scope_stack");
+			names.push_back("scope");
 		}
 	}
 
@@ -633,8 +694,7 @@ LogicalType UnifiedASTBackend::GetHierarchicalStructSchema() {
 	tree_structure_children.push_back(make_pair("sibling_index", LogicalType::INTEGER));
 	tree_structure_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
 	tree_structure_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
-	tree_structure_children.push_back(make_pair("scope_id", LogicalType::BIGINT));
-	tree_structure_children.push_back(make_pair("scope_stack", LogicalType::LIST(LogicalType::BIGINT)));
+	tree_structure_children.push_back(make_pair("scope", ScopeColumnType()));
 
 	// Context Information group (semantic information only)
 	child_list_t<LogicalType> context_info_children;
@@ -668,10 +728,16 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult &result, DataChunk &outpu
                                        idx_t &output_index) {
 	// DuckDB automatically handles vector reset via VectorCache system - no manual reset needed
 
-	// Verify output chunk has correct number of columns (20 with scope_id, scope_stack)
-	if (output.ColumnCount() != 20) {
-		throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 20");
+	// Verify output chunk has correct number of columns (19 with combined scope)
+	if (output.ColumnCount() != 19) {
+		throw InternalException("Output chunk has " + to_string(output.ColumnCount()) + " columns, expected 19");
 	}
+
+	// Column index map after consolidating scope_id + scope_stack → scope (col 14):
+	//   0:node_id 1:type 2:name 3:file_path 4:language
+	//   5:start_line 6:start_column 7:end_line 8:end_column
+	//   9:parent_id 10:depth 11:sibling_index 12:children_count 13:descendant_count
+	//   14:scope (STRUCT) 15:peek 16:semantic_type 17:flags 18:qualified_name
 
 	// Get output vectors
 	auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
@@ -688,19 +754,17 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult &result, DataChunk &outpu
 	auto sibling_index_vec = FlatVector::GetData<int32_t>(output.data[11]);
 	auto children_count_vec = FlatVector::GetData<uint32_t>(output.data[12]);
 	auto descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[13]);
-	// scope_id (col 14) and scope_stack (col 15) use SetValue for LIST type
-	auto scope_id_vec = FlatVector::GetData<int64_t>(output.data[14]);
-	auto peek_vec = FlatVector::GetData<string_t>(output.data[16]);
+	// scope (col 14) is STRUCT<current, function, class, module, stack>; written via SetValue.
+	auto peek_vec = FlatVector::GetData<string_t>(output.data[15]);
 	// Semantic type fields
-	auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[17]);
-	auto flags_vec = FlatVector::GetData<uint8_t>(output.data[18]);
+	auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[16]);
+	auto flags_vec = FlatVector::GetData<uint8_t>(output.data[17]);
 	// qualified_name is LIST<STRUCT>; written via SetValue, not a direct data pointer.
 
 	// Get validity masks for nullable fields
 	auto &name_validity = FlatVector::Validity(output.data[2]);
 	auto &parent_validity = FlatVector::Validity(output.data[9]);
-	auto &scope_id_validity = FlatVector::Validity(output.data[14]);
-	auto &peek_validity = FlatVector::Validity(output.data[16]);
+	auto &peek_validity = FlatVector::Validity(output.data[15]);
 
 	idx_t count = 0;
 	idx_t max_count = STANDARD_VECTOR_SIZE;
@@ -742,28 +806,13 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult &result, DataChunk &outpu
 		children_count_vec[count] = node.legacy_children_count;
 		descendant_count_vec[count] = node.legacy_descendant_count;
 
-		// scope_id
-		if (node.scope_id >= 0) {
-			scope_id_vec[count] = node.scope_id;
-		} else {
-			scope_id_validity.SetInvalid(count);
-		}
-
-		// scope_stack (LIST(BIGINT), NULL for non-scope nodes)
-		if (node.has_scope_stack) {
-			vector<Value> stack_values;
-			for (auto &sid : node.scope_stack_data) {
-				stack_values.push_back(Value::BIGINT(sid));
-			}
-			output.SetValue(15, count, Value::LIST(LogicalType::BIGINT, std::move(stack_values)));
-		} else {
-			output.SetValue(15, count, Value(LogicalType::LIST(LogicalType::BIGINT)));
-		}
+		// scope (STRUCT<current, function, class, module, stack>)
+		output.SetValue(14, count, ScopeValue(node.scope));
 
 		if (node.peek.empty()) {
 			peek_validity.SetInvalid(count);
 		} else {
-			peek_vec[count] = StringVector::AddString(output.data[16], node.peek);
+			peek_vec[count] = StringVector::AddString(output.data[15], node.peek);
 		}
 
 		// Semantic type fields
@@ -771,7 +820,7 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult &result, DataChunk &outpu
 		flags_vec[count] = node.universal_flags;
 
 		// Qualified name (LIST<STRUCT<semantic_type, name, index>>)
-		output.SetValue(19, count, QualifiedNameValue(node.name_qualified_segments));
+		output.SetValue(18, count, QualifiedNameValue(node.name_qualified_segments));
 
 		count++;
 		current_row++; // Track which row we're on
@@ -915,15 +964,14 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 
 	// Structure columns based on schema_config.structure (AGENT J FIX: Track indices)
 	idx_t parent_id_col = 0, depth_col = 0, sibling_index_col = 0, children_count_col = 0, descendant_count_col = 0;
-	idx_t scope_id_col = 0, scope_stack_col = 0;
+	idx_t scope_col = 0;
 	int64_t *parent_id_vec = nullptr;
 	uint32_t *depth_vec = nullptr;
 	int32_t *sibling_index_vec = nullptr;
 	uint32_t *children_count_vec = nullptr;
 	uint32_t *descendant_count_vec = nullptr;
-	int64_t *scope_id_vec = nullptr;
 	ValidityMask *parent_validity = nullptr;
-	ValidityMask *scope_id_validity = nullptr;
+	bool has_scope_col = false;
 
 	if (schema_config.structure != StructureLevel::NONE) {
 		if (schema_config.structure >= StructureLevel::MINIMAL) {
@@ -938,13 +986,11 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 			sibling_index_col = col_idx++;
 			children_count_col = col_idx++;
 			descendant_count_col = col_idx++;
-			scope_id_col = col_idx++;
-			scope_stack_col = col_idx++;
+			scope_col = col_idx++;
 			sibling_index_vec = FlatVector::GetData<int32_t>(output.data[sibling_index_col]);
 			children_count_vec = FlatVector::GetData<uint32_t>(output.data[children_count_col]);
 			descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[descendant_count_col]);
-			scope_id_vec = FlatVector::GetData<int64_t>(output.data[scope_id_col]);
-			scope_id_validity = &FlatVector::Validity(output.data[scope_id_col]);
+			has_scope_col = true;
 		}
 	}
 
@@ -1141,31 +1187,14 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 					children_count_vec[count] = node.legacy_children_count;
 					descendant_count_vec[count] = node.legacy_descendant_count;
 
-					// scope_id
-					if (node.scope_id >= 0) {
-						scope_id_vec[count] = node.scope_id;
-					} else {
-						scope_id_validity->SetInvalid(count);
-					}
-
-					// scope_stack (LIST(BIGINT), NULL for non-scope nodes)
-					if (node.has_scope_stack) {
-						vector<Value> stack_values;
-						for (auto &sid : node.scope_stack_data) {
-							stack_values.push_back(Value::BIGINT(sid));
-						}
-						output.SetValue(scope_stack_col, count,
-						                Value::LIST(LogicalType::BIGINT, std::move(stack_values)));
-					} else {
-						output.SetValue(scope_stack_col, count, Value(LogicalType::LIST(LogicalType::BIGINT)));
-					}
+					// scope STRUCT<current, function, class, module, stack>
+					output.SetValue(scope_col, count, ScopeValue(node.scope));
 				} else {
 					// +schema: column exists but data wasn't computed — NULL
 					FlatVector::SetNull(output.data[sibling_index_col], count, true);
 					FlatVector::SetNull(output.data[children_count_col], count, true);
 					FlatVector::SetNull(output.data[descendant_count_col], count, true);
-					scope_id_validity->SetInvalid(count);
-					output.SetValue(scope_stack_col, count, Value(LogicalType::LIST(LogicalType::BIGINT)));
+					FlatVector::SetNull(output.data[scope_col], count, true);
 				}
 			}
 		}
@@ -1218,20 +1247,8 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult &result) {
 		node_children.push_back(make_pair("sibling_index", Value::INTEGER(node.legacy_sibling_index)));
 		node_children.push_back(make_pair("children_count", Value::UINTEGER(node.legacy_children_count)));
 		node_children.push_back(make_pair("descendant_count", Value::UINTEGER(node.legacy_descendant_count)));
-		// scope_id
-		node_children.push_back(
-		    make_pair("scope_id", node.scope_id >= 0 ? Value::BIGINT(node.scope_id) : Value(LogicalType::BIGINT)));
-		// scope_stack
-		if (node.has_scope_stack) {
-			vector<Value> stack_values;
-			for (auto &sid : node.scope_stack_data) {
-				stack_values.push_back(Value::BIGINT(sid));
-			}
-			node_children.push_back(
-			    make_pair("scope_stack", Value::LIST(LogicalType::BIGINT, std::move(stack_values))));
-		} else {
-			node_children.push_back(make_pair("scope_stack", Value(LogicalType::LIST(LogicalType::BIGINT))));
-		}
+		// scope STRUCT<current, function, class, module, stack>
+		node_children.push_back(make_pair("scope", ScopeValue(node.scope)));
 		node_children.push_back(make_pair("peek", Value(node.peek)));
 		// Semantic type fields
 		node_children.push_back(make_pair("semantic_type", Value::UTINYINT(node.semantic_type)));
@@ -1255,8 +1272,7 @@ Value UnifiedASTBackend::CreateASTStruct(const ASTResult &result) {
 	node_schema.push_back(make_pair("sibling_index", LogicalType::INTEGER));
 	node_schema.push_back(make_pair("children_count", LogicalType::UINTEGER));
 	node_schema.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
-	node_schema.push_back(make_pair("scope_id", LogicalType::BIGINT));
-	node_schema.push_back(make_pair("scope_stack", LogicalType::LIST(LogicalType::BIGINT)));
+	node_schema.push_back(make_pair("scope", ScopeColumnType()));
 	node_schema.push_back(make_pair("peek", LogicalType::VARCHAR));
 	node_schema.push_back(make_pair("semantic_type", LogicalType::UTINYINT));
 	node_schema.push_back(make_pair("flags", LogicalType::UTINYINT));
@@ -1332,18 +1348,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult &result, Data
 		structure_values.push_back(make_pair("sibling_index", Value::INTEGER(node.legacy_sibling_index)));
 		structure_values.push_back(make_pair("children_count", Value::UINTEGER(node.legacy_children_count)));
 		structure_values.push_back(make_pair("descendant_count", Value::UINTEGER(node.legacy_descendant_count)));
-		structure_values.push_back(
-		    make_pair("scope_id", node.scope_id >= 0 ? Value::BIGINT(node.scope_id) : Value(LogicalType::BIGINT)));
-		if (node.has_scope_stack) {
-			vector<Value> stack_values;
-			for (auto &sid : node.scope_stack_data) {
-				stack_values.push_back(Value::BIGINT(sid));
-			}
-			structure_values.push_back(
-			    make_pair("scope_stack", Value::LIST(LogicalType::BIGINT, std::move(stack_values))));
-		} else {
-			structure_values.push_back(make_pair("scope_stack", Value(LogicalType::LIST(LogicalType::BIGINT))));
-		}
+		structure_values.push_back(make_pair("scope", ScopeValue(node.scope)));
 		Value structure_struct = Value::STRUCT(structure_values);
 		FlatVector::GetData<Value>(structure_vector)[row_idx] = structure_struct;
 
@@ -1401,9 +1406,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 		bool has_parent;
 		uint32_t depth, children_count, descendant_count;
 		int32_t sibling_index;
-		int64_t scope_id;
-		vector<int64_t> scope_stack_data;
-		bool has_scope_stack;
+		ASTNode::ScopeInfo scope;
 
 		// Context fields
 		string name;
@@ -1465,9 +1468,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 		row_data.sibling_index = node.legacy_sibling_index;
 		row_data.children_count = node.legacy_children_count;
 		row_data.descendant_count = node.legacy_descendant_count;
-		row_data.scope_id = node.scope_id;
-		row_data.scope_stack_data = node.scope_stack_data;
-		row_data.has_scope_stack = node.has_scope_stack;
+		row_data.scope = node.scope;
 
 		// Context fields - ensure proper string copies
 		row_data.has_name = !node.name_raw.empty();
@@ -1527,9 +1528,9 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 	auto structure_sibling_index_vec = FlatVector::GetData<int32_t>(*structure_entries[2]);
 	auto structure_children_count_vec = FlatVector::GetData<uint32_t>(*structure_entries[3]);
 	auto structure_descendant_count_vec = FlatVector::GetData<uint32_t>(*structure_entries[4]);
-	auto structure_scope_id_vec = FlatVector::GetData<int64_t>(*structure_entries[5]);
-	auto &structure_scope_id_validity = FlatVector::Validity(*structure_entries[5]);
-	// structure_entries[6] is scope_stack (LIST(BIGINT)), handled via SetValue
+	// structure_entries[5] is scope STRUCT<current, function, class, module, stack>;
+	// written via SetValue on the containing struct.
+	auto &structure_scope_vec = *structure_entries[5];
 
 	// Context STRUCT child vectors
 	auto context_name_vec = FlatVector::GetData<string_t>(*context_entries[0]);
@@ -1582,23 +1583,8 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 		structure_children_count_vec[row_idx] = row_data.children_count;
 		structure_descendant_count_vec[row_idx] = row_data.descendant_count;
 
-		// scope_id
-		if (row_data.scope_id >= 0) {
-			structure_scope_id_vec[row_idx] = row_data.scope_id;
-		} else {
-			structure_scope_id_validity.SetInvalid(row_idx);
-		}
-
-		// scope_stack (LIST(BIGINT)) — use output.SetValue on structure child vector
-		if (row_data.has_scope_stack) {
-			vector<Value> stack_values;
-			for (auto &sid : row_data.scope_stack_data) {
-				stack_values.push_back(Value::BIGINT(sid));
-			}
-			structure_entries[6]->SetValue(row_idx, Value::LIST(LogicalType::BIGINT, std::move(stack_values)));
-		} else {
-			structure_entries[6]->SetValue(row_idx, Value(LogicalType::LIST(LogicalType::BIGINT)));
-		}
+		// scope STRUCT<current, function, class, module, stack>
+		structure_scope_vec.SetValue(row_idx, ScopeValue(row_data.scope));
 
 		// Context fields - populate child vectors directly (safe approach)
 		if (row_data.has_name) {
@@ -1678,18 +1664,7 @@ Value UnifiedASTBackend::CreateHierarchicalASTStruct(const ASTResult &result) {
 		structure_children.push_back(make_pair("sibling_index", Value::INTEGER(node.legacy_sibling_index)));
 		structure_children.push_back(make_pair("children_count", Value::UINTEGER(node.legacy_children_count)));
 		structure_children.push_back(make_pair("descendant_count", Value::UINTEGER(node.legacy_descendant_count)));
-		structure_children.push_back(
-		    make_pair("scope_id", node.scope_id >= 0 ? Value::BIGINT(node.scope_id) : Value(LogicalType::BIGINT)));
-		if (node.has_scope_stack) {
-			vector<Value> stack_values;
-			for (auto &sid : node.scope_stack_data) {
-				stack_values.push_back(Value::BIGINT(sid));
-			}
-			structure_children.push_back(
-			    make_pair("scope_stack", Value::LIST(LogicalType::BIGINT, std::move(stack_values))));
-		} else {
-			structure_children.push_back(make_pair("scope_stack", Value(LogicalType::LIST(LogicalType::BIGINT))));
-		}
+		structure_children.push_back(make_pair("scope", ScopeValue(node.scope)));
 		Value structure_value = Value::STRUCT(structure_children);
 
 		// Context Information struct (semantic information only)
@@ -1728,8 +1703,7 @@ Value UnifiedASTBackend::CreateHierarchicalASTStruct(const ASTResult &result) {
 	tree_structure_children.push_back(make_pair("sibling_index", LogicalType::INTEGER));
 	tree_structure_children.push_back(make_pair("children_count", LogicalType::UINTEGER));
 	tree_structure_children.push_back(make_pair("descendant_count", LogicalType::UINTEGER));
-	tree_structure_children.push_back(make_pair("scope_id", LogicalType::BIGINT));
-	tree_structure_children.push_back(make_pair("scope_stack", LogicalType::LIST(LogicalType::BIGINT)));
+	tree_structure_children.push_back(make_pair("scope", ScopeColumnType()));
 
 	child_list_t<LogicalType> context_info_children;
 	context_info_children.push_back(make_pair("type", LogicalType::VARCHAR));

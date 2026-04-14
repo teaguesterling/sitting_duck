@@ -138,6 +138,15 @@ public:
 	static LogicalType QualifiedNameColumnType();
 	static Value QualifiedNameValue(const vector<QualifiedNameSegment> &segments);
 
+	// Shared helpers for the scope column. The column type is
+	//   STRUCT<
+	//     current BIGINT, function BIGINT, class BIGINT, module BIGINT,
+	//     stack LIST<STRUCT<id BIGINT, kind SEMANTIC_TYPE>>
+	//   >
+	// ScopeValue builds one column value from an ASTNode's scope field.
+	static LogicalType ScopeColumnType();
+	static Value ScopeValue(const ASTNode::ScopeInfo &scope);
+
 	// NEW: Hierarchical schema functions for structured field access
 	static vector<LogicalType> GetHierarchicalTableSchema();
 	static vector<string> GetHierarchicalTableColumnNames();

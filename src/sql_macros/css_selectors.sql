@@ -939,7 +939,7 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- :exported — module-level public definition
             WHEN 'exported' THEN
                 is_name_definition(a.flags)
-                AND (a.scope_id IS NULL OR a.scope_id <= 0)
+                AND (a.scope.current IS NULL OR a.scope.current <= 0)
                 AND a.name IS NOT NULL AND a.name != ''
                 AND a.name NOT LIKE '\_%'
 
@@ -1051,7 +1051,7 @@ CREATE OR REPLACE MACRO ast_select_from(
     -- ::scope — the enclosing scope node
     pe_scope AS (
         SELECT s.* FROM matched m JOIN ast s
-          ON s.node_id = m.scope_id AND s.file_path = m.file_path
+          ON s.node_id = m.scope.current AND s.file_path = m.file_path
     ),
     -- ::next-sibling — the next sibling
     pe_next AS (

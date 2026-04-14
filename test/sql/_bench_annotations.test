@@ -112,14 +112,14 @@ PRAGMA profiling_output='/tmp/bench_derived_create.json';
 
 statement ok
 CREATE TABLE funcs AS
-SELECT node_id, name, file_path, depth, descendant_count, scope_id
+SELECT node_id, name, file_path, depth, descendant_count, scope.current AS scope_id
 FROM ast
 WHERE is_semantic_type(semantic_type, 'FUNCTION')
   AND name IS NOT NULL AND name != '';
 
 statement ok
 CREATE TABLE calls AS
-SELECT node_id, name, file_path, parent_id, scope_id
+SELECT node_id, name, file_path, parent_id, scope.current AS scope_id
 FROM ast
 WHERE is_semantic_type(semantic_type, 'CALL')
   AND name IS NOT NULL AND name != '';

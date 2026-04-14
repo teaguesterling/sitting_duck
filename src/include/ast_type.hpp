@@ -192,10 +192,35 @@ struct ASTNode {
 	uint32_t children_count = 0;   // Number of direct children
 	uint32_t descendant_count = 0; // Total descendants (DFS count)
 
-	// Scope tracking fields
-	int64_t scope_id = -1;            // Nearest enclosing scope's node_id (-1 for root)
-	vector<int64_t> scope_stack_data; // Full scope chain (only for scope nodes)
-	bool has_scope_stack = false;     // Whether scope_stack_data is populated
+	// Scope tracking: unified struct replacing the old scope_id + scope_stack.
+	// - current/function_scope/class_scope/module_scope hold the node_id of the
+	//   nearest enclosing scope of that kind (-1 if none). Populated for every
+	//   node, so "which function/class/module am I in?" is an O(1) struct-field
+	//   read instead of a range join against the full AST.
+	// - stack_data is the full chain of (node_id, semantic_type) pairs; like
+	//   the old scope_stack it's sparse (only populated for IS_SCOPE nodes).
+	//
+	// module_scope covers DEFINITION_MODULE, which tags module/namespace
+	// definitions uniformly (Python module, C++/C# namespace, Rust mod, etc.).
+	// A dedicated DEFINITION_NAMESPACE + separate namespace_scope slot is a
+	// future refinement; the shape here is additive.
+	//
+	// C++ field names use `_scope` suffix to avoid colliding with C++ reserved
+	// words (class); the DuckDB STRUCT field names drop the suffix:
+	//   scope: STRUCT<current, function, class, module, stack>
+	struct ScopeEntry {
+		int64_t id;
+		uint8_t kind; // semantic_type of the scope-defining node
+	};
+	struct ScopeInfo {
+		int64_t current = -1;
+		int64_t function_scope = -1;
+		int64_t class_scope = -1;
+		int64_t module_scope = -1;
+		vector<ScopeEntry> stack_data; // sparse: populated only on IS_SCOPE nodes
+		bool has_stack = false;
+	};
+	ScopeInfo scope;
 
 	// Legacy tree fields (flat) - kept separate for future use
 	int64_t node_index = 0;           // Position in depth-first traversal
