@@ -76,12 +76,16 @@ SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js',
     'class_body > method_definition:has(return_statement)');
 ```
 
-### Known limitation
+### Known limitation — **RESOLVED 2026-04-14**
 
 Nested pseudo-class wraps like `A > B:has(X):not(Y)` (parsed as
 `pseudo_class_selector(pseudo_class_selector(child_selector, :has), :not)`)
-are not yet handled — only a single layer of wrapping is unwrapped.
-Recursive unwrap can be added if/when that pattern turns up in practice.
+now unwrap correctly. The old version only looked at direct children of
+sel_root_raw; the new version searches the whole sel_root subtree for a
+combinator outside any arg blocks, picking the shallowest. The anti-join
+against `sel_arg_blocks` avoids re-rooting into combinators that live
+inside `:has(...)` or `:not(...)` arguments (which are descendant filters,
+not the base selector).
 
 ## Bug 4: `ast_select_from` defined in SQL but missing from embedded macros — **FIXED 2026-04-13**
 

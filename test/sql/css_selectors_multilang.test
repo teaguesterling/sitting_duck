@@ -934,6 +934,44 @@ speak
 speak
 speak
 
+# Nested pseudo-class wraps: combinator + multiple chained :has / :not.
+# CSS parses "A B:has(X):not(Y)" as pcs(pcs(descendant_selector(A,B), :has(X)), :not(Y)),
+# so the combinator is two pcs layers deep. The engine must recursively unwrap
+# to find it.
+#
+# Nested class methods with return AND without if (excludes `fetch` which has if):
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
+    'class_definition function_definition:has(return_statement):not(:has(if_statement))')
+ORDER BY name, start_line;
+----
+move
+speak
+speak
+speak
+
+# Child combinator equivalent (via block intermediary) — same result
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
+    'block > function_definition:has(return_statement):not(:has(if_statement))')
+ORDER BY name, start_line;
+----
+move
+speak
+speak
+speak
+
+# Triple-nested: combinator + 3 pseudo-class filters
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
+    'class_definition function_definition:has(return_statement):not(:has(if_statement)):named')
+ORDER BY name, start_line;
+----
+move
+speak
+speak
+speak
+
 # =============================================================================
 # 16. :has() AND :not(:has()) WITH SEMANTIC CLASS (.class) inside
 # =============================================================================

@@ -2503,33 +2503,48 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- When the CSS parser wraps a combinator selector inside a
         -- pseudo_class_selector (e.g., "A > B:has(X)" parses as
         -- pseudo_class_selector(child_selector(A,B), :has(X))), unwrap to the
-        -- combinator child so the combinator CASE branches fire. The :has /
-        -- :not / pseudo-class filters still apply because they iterate over
-        -- all sel nodes, not just sel_root.
-        -- Only unwraps when a combinator child is present — a plain
-        -- type:has()/class:has() pcs (no combinator) stays as-is so the
-        -- pseudo_class_selector CASE branch handles it.
+        -- combinator so the combinator CASE branches fire. The :has / :not /
+        -- pseudo-class filters still apply because they iterate over all sel
+        -- nodes, not just sel_root.
+        --
+        -- Handles nested pcs wraps too: "A > B:has(X):not(Y):first-child"
+        -- parses as pcs(pcs(pcs(child_selector, :has), :not), :first-child),
+        -- so the combinator is deep inside. We find ANY combinator that is a
+        -- descendant of sel_root_raw AND is outside any arguments block
+        -- (i.e., not inside a :has(...) / :not(...) arg, which is where we
+        -- DON'T want to re-root). The shallowest such combinator is the one
+        -- the user wrote as the base of the selector.
+        --
+        -- When sel_root_raw isn't a pseudo_class_selector, or when the pcs
+        -- has no combinator in its base chain (e.g., plain type:has(...)),
+        -- this CTE is empty and sel_root stays as-is.
         sel_pseudo_class_unwrap AS (
-            SELECT c.parent_id AS pcs_node_id,
-                   c.node_id
+            SELECT c.node_id
             FROM sel c
-            WHERE c.parent_id IN (
-                SELECT node_id FROM sel_root_raw WHERE type = 'pseudo_class_selector'
-            )
-              AND c.type IN ('child_selector', 'descendant_selector',
+            LEFT JOIN sel_arg_blocks a
+              ON c.node_id > a.node_id
+             AND c.node_id <= a.node_id + a.descendant_count
+            WHERE c.type IN ('child_selector', 'descendant_selector',
                              'sibling_selector', 'adjacent_sibling_selector')
-            QUALIFY row_number() OVER (PARTITION BY c.parent_id ORDER BY c.sibling_index) = 1
+              AND a.node_id IS NULL
+              AND c.node_id > (SELECT node_id FROM sel_root_raw
+                               WHERE type = 'pseudo_class_selector')
+              AND c.node_id <= (SELECT node_id + descendant_count FROM sel_root_raw
+                                WHERE type = 'pseudo_class_selector')
+            QUALIFY row_number() OVER (ORDER BY c.depth ASC, c.node_id ASC) = 1
         ),
-        -- Resolve the chosen_id for each raw root: the combinator child of a
-        -- pseudo_class_selector takes precedence, then the unwrapped child of a
-        -- pseudo_element_selector, then the raw node itself. LEFT JOINs in one
-        -- CTE so sel_root below doesn't need a correlated subquery.
+        -- Resolve the chosen_id for each raw root: a combinator descendant of
+        -- a pseudo_class_selector takes precedence (handles nested pcs wraps
+        -- like "A > B:has(X):not(Y)"), then the unwrapped child of a
+        -- pseudo_element_selector, then the raw node itself.
+        -- sel_pseudo_class_unwrap is a zero-or-one-row CTE, so CROSS JOIN with
+        -- it would be fine; we use LEFT JOIN (... ON true) instead so it's
+        -- absent-safe.
         sel_root_resolved AS (
             SELECT raw.node_id AS raw_id,
                    COALESCE(pcu.node_id, u.node_id, raw.node_id) AS chosen_id
             FROM sel_root_raw raw
-            LEFT JOIN sel_pseudo_class_unwrap pcu
-              ON pcu.pcs_node_id = raw.node_id
+            LEFT JOIN sel_pseudo_class_unwrap pcu ON true
             LEFT JOIN sel_pseudo_element_unwrap u
               ON u.pe_node_id = raw.node_id AND u.rn = 1
         ),
@@ -2600,6 +2615,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             ) as type_filter
         ),
 
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- #id name filter
         -- Top-level #id (not inside :has()/:not() arguments).
         -- Same shape as simple_type: rank candidates by node order, pick rn=1 via
@@ -2619,9 +2637,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             SELECT (SELECT name FROM simple_id_candidates WHERE rn = 1) as name_filter
         ),
 
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- .class semantic filter: a class_name whose parent is a class_selector
         -- (not a pseudo_class_selector — :has, :not, etc. also have class_name children).
         -- Anti-joins sel_arg_blocks so .class inside :has(.foo) / :not(.foo)
@@ -2891,6 +2906,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             JOIN sel_class_names not_cn ON not_cn.parent_id = not_pcs.node_id AND not_cn.name = 'not'
             -- The enclosing :not() must be top-level
             JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = not_pcs.node_id
+
+)SQLMACRO"
+        R"SQLMACRO(
             LEFT JOIN sel_pcs_first_tag_or_int ftoi ON ftoi.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_string     fstr ON fstr.pcs_id = pcs.node_id
             WHERE cn.name != 'has'
@@ -2907,9 +2925,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                    ('decorated'), ('typed'), ('void'), ('variadic'),
                    ('calls'), ('called-by'), ('is-called'), ('is-referenced'), ('exported'),
                    ('match'), ('contains'),
-
-)SQLMACRO"
-        R"SQLMACRO(
                    ('scope'), ('precedes'), ('follows')
         ),
         pseudo_class_validation AS (
@@ -3181,6 +3196,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         SELECT 1 FROM pseudo_classes pc
         WHERE pc.negated = CASE pc.pseudo_name
 
+
+)SQLMACRO"
+        R"SQLMACRO(
             -- Standard CSS positional pseudo-classes
             WHEN 'first-child' THEN a.sibling_index = 0
             WHEN 'last-child' THEN NOT EXISTS (
@@ -3201,9 +3219,6 @@ CREATE OR REPLACE MACRO ast_select_from(
 
             -- :definition / :reference / :declaration — NAME_ROLE flags
             WHEN 'definition' THEN is_name_definition(a.flags)
-
-)SQLMACRO"
-        R"SQLMACRO(
             WHEN 'reference' THEN is_name_reference(a.flags)
             WHEN 'declaration' THEN is_name_declaration(a.flags)
 
@@ -3466,6 +3481,9 @@ CREATE OR REPLACE MACRO ast_select_from(
     UNION ALL
     SELECT * FROM pe_next
     WHERE (SELECT element_name FROM pseudo_element) = 'next-sibling'
+
+)SQLMACRO"
+        R"SQLMACRO(
     UNION ALL
     SELECT * FROM pe_prev
     WHERE (SELECT element_name FROM pseudo_element) IN ('prev-sibling', 'previous-sibling')
@@ -3489,9 +3507,6 @@ CREATE OR REPLACE MACRO ast_select(
     language := NULL
 ) AS TABLE
     -- Parse into a temp name, then delegate to ast_select_from.
-
-)SQLMACRO"
-        R"SQLMACRO(
     -- We use read_ast directly and wrap with ast_select_from via a CTE trick:
     -- DuckDB table macros can accept subqueries as table arguments.
     WITH __ast_src AS (

@@ -162,33 +162,48 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- When the CSS parser wraps a combinator selector inside a
         -- pseudo_class_selector (e.g., "A > B:has(X)" parses as
         -- pseudo_class_selector(child_selector(A,B), :has(X))), unwrap to the
-        -- combinator child so the combinator CASE branches fire. The :has /
-        -- :not / pseudo-class filters still apply because they iterate over
-        -- all sel nodes, not just sel_root.
-        -- Only unwraps when a combinator child is present — a plain
-        -- type:has()/class:has() pcs (no combinator) stays as-is so the
-        -- pseudo_class_selector CASE branch handles it.
+        -- combinator so the combinator CASE branches fire. The :has / :not /
+        -- pseudo-class filters still apply because they iterate over all sel
+        -- nodes, not just sel_root.
+        --
+        -- Handles nested pcs wraps too: "A > B:has(X):not(Y):first-child"
+        -- parses as pcs(pcs(pcs(child_selector, :has), :not), :first-child),
+        -- so the combinator is deep inside. We find ANY combinator that is a
+        -- descendant of sel_root_raw AND is outside any arguments block
+        -- (i.e., not inside a :has(...) / :not(...) arg, which is where we
+        -- DON'T want to re-root). The shallowest such combinator is the one
+        -- the user wrote as the base of the selector.
+        --
+        -- When sel_root_raw isn't a pseudo_class_selector, or when the pcs
+        -- has no combinator in its base chain (e.g., plain type:has(...)),
+        -- this CTE is empty and sel_root stays as-is.
         sel_pseudo_class_unwrap AS (
-            SELECT c.parent_id AS pcs_node_id,
-                   c.node_id
+            SELECT c.node_id
             FROM sel c
-            WHERE c.parent_id IN (
-                SELECT node_id FROM sel_root_raw WHERE type = 'pseudo_class_selector'
-            )
-              AND c.type IN ('child_selector', 'descendant_selector',
+            LEFT JOIN sel_arg_blocks a
+              ON c.node_id > a.node_id
+             AND c.node_id <= a.node_id + a.descendant_count
+            WHERE c.type IN ('child_selector', 'descendant_selector',
                              'sibling_selector', 'adjacent_sibling_selector')
-            QUALIFY row_number() OVER (PARTITION BY c.parent_id ORDER BY c.sibling_index) = 1
+              AND a.node_id IS NULL
+              AND c.node_id > (SELECT node_id FROM sel_root_raw
+                               WHERE type = 'pseudo_class_selector')
+              AND c.node_id <= (SELECT node_id + descendant_count FROM sel_root_raw
+                                WHERE type = 'pseudo_class_selector')
+            QUALIFY row_number() OVER (ORDER BY c.depth ASC, c.node_id ASC) = 1
         ),
-        -- Resolve the chosen_id for each raw root: the combinator child of a
-        -- pseudo_class_selector takes precedence, then the unwrapped child of a
-        -- pseudo_element_selector, then the raw node itself. LEFT JOINs in one
-        -- CTE so sel_root below doesn't need a correlated subquery.
+        -- Resolve the chosen_id for each raw root: a combinator descendant of
+        -- a pseudo_class_selector takes precedence (handles nested pcs wraps
+        -- like "A > B:has(X):not(Y)"), then the unwrapped child of a
+        -- pseudo_element_selector, then the raw node itself.
+        -- sel_pseudo_class_unwrap is a zero-or-one-row CTE, so CROSS JOIN with
+        -- it would be fine; we use LEFT JOIN (... ON true) instead so it's
+        -- absent-safe.
         sel_root_resolved AS (
             SELECT raw.node_id AS raw_id,
                    COALESCE(pcu.node_id, u.node_id, raw.node_id) AS chosen_id
             FROM sel_root_raw raw
-            LEFT JOIN sel_pseudo_class_unwrap pcu
-              ON pcu.pcs_node_id = raw.node_id
+            LEFT JOIN sel_pseudo_class_unwrap pcu ON true
             LEFT JOIN sel_pseudo_element_unwrap u
               ON u.pe_node_id = raw.node_id AND u.rn = 1
         ),
