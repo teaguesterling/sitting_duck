@@ -850,19 +850,50 @@ constructor
 constructor
 constructor
 
-# Python: classes after another class that have speak method
-# KNOWN ISSUE: combinator + pseudo-class on right side doesn't work correctly.
-# CSS parser wraps as pseudo_class_selector(sibling_selector(...), :has(...))
-# so the combinator is ignored and all classes matching :has are returned.
-# Expected (correct): Cat, Dog
-# Actual (buggy): Animal, Cat, Dog
+# Python: classes after another class that have a speak method.
+# CSS parser wraps as pseudo_class_selector(sibling_selector(...), :has(...));
+# sel_pseudo_class_unwrap re-roots to the sibling_selector so the combinator
+# CASE branch fires with the :has filter still applied.
 query I
 SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'class_definition ~ class_definition:has(function_definition#speak)')
 ORDER BY name;
 ----
-Animal
 Cat
 Dog
+
+# JavaScript: class_body > method_definition:has(return_statement)
+# Child combinator + :has on right side. Unwrap re-roots to child_selector.
+query I
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js',
+    'class_body > method_definition:has(return_statement)')
+ORDER BY name, start_line;
+----
+area
+area
+area
+describe
+perimeter
+
+# Python: classes that immediately follow another class AND have __init__
+# Adjacent sibling + :has
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
+    'class_definition + class_definition:has(function_definition#__init__)')
+ORDER BY name;
+----
+
+# Python: descendant combinator + :has
+# Functions containing a call to an if_statement descendant
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
+    'class_definition function_definition:has(return_statement)')
+ORDER BY name, start_line;
+----
+fetch
+move
+speak
+speak
+speak
 
 # =============================================================================
 # 16. :has() AND :not(:has()) WITH SEMANTIC CLASS (.class) inside

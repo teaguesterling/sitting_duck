@@ -48,31 +48,40 @@ Added `not_has_class` (via `sel_pcs_first_class_name`) to `not_has_conditions`
 and wired the corresponding `is_semantic_type(d.semantic_type, UPPER(...))`
 check into the `:not(:has())` filter, mirroring the regular `:has()` filter.
 
-## Bug 3: Combinators combined with pseudo-classes on the right side
+## Bug 3: Combinators combined with pseudo-classes on the right side — **FIXED 2026-04-13**
 
 When a combinator is followed by a selector that has a pseudo-class, the CSS
 parser wraps the whole thing as `pseudo_class_selector(combinator_selector, ...)`.
-The selector engine then treats the root as `pseudo_class_selector` and applies
-only the pseudo-class filters, ignoring the combinator structure entirely.
+The selector engine treated the root as `pseudo_class_selector` and applied
+only the pseudo-class filters, ignoring the combinator structure entirely —
+silently returning a superset of correct results.
 
-### Example
+### Fix
+
+Added `sel_pseudo_class_unwrap` CTE analogous to `sel_pseudo_element_unwrap`:
+when `sel_root_raw` is a `pseudo_class_selector` with a direct combinator
+child (`child_selector`, `descendant_selector`, `sibling_selector`,
+`adjacent_sibling_selector`), re-root to that combinator child. The existing
+`:has` / `:not` / pseudo-class filters still apply because they iterate over
+all sel nodes, not just sel_root.
+
+Results after fix (example):
 ```sql
--- Should return Cat, Dog (classes that have speak method AND follow another class)
--- Actually returns Animal, Cat, Dog (ignores the sibling combinator)
+-- Correctly returns Cat, Dog (classes that follow another class AND have speak)
 SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
     'class_definition ~ class_definition:has(function_definition#speak)');
+
+-- Correctly returns all class methods with return statements
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js',
+    'class_body > method_definition:has(return_statement)');
 ```
 
-### Likely cause
-`sel_root_raw` picks the outermost pseudo_class_selector and dispatch code
-hits the pseudo_class_selector CASE branch (lines 640-645) which only
-checks `type_filter`, `name_filter`, `class_filter`. The `child_selector` or
-`sibling_selector` child is never used for the combinator matching.
+### Known limitation
 
-### Impact
-Combinator + pseudo-class is a common pattern that users would expect to work.
-The bug silently returns a superset of correct results, which is worse than
-a clean failure.
+Nested pseudo-class wraps like `A > B:has(X):not(Y)` (parsed as
+`pseudo_class_selector(pseudo_class_selector(child_selector, :has), :not)`)
+are not yet handled — only a single layer of wrapping is unwrapped.
+Recursive unwrap can be added if/when that pattern turns up in practice.
 
 ## Bug 4: `ast_select_from` defined in SQL but missing from embedded macros
 

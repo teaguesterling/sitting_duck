@@ -2490,13 +2490,32 @@ CREATE OR REPLACE MACRO ast_select(
             )
               AND c.type NOT IN ('::', 'pseudo_element_selector')
         ),
-        -- Resolve the chosen_id for each raw root: either the unwrapped child of
-        -- a pseudo-element selector, or the raw node itself. Done as a LEFT JOIN
-        -- in its own CTE so sel_root below doesn't need a correlated subquery.
+        -- When the CSS parser wraps a combinator selector inside a
+        -- pseudo_class_selector (e.g., "A > B:has(X)" parses as
+        -- pseudo_class_selector(child_selector(A,B), :has(X))), unwrap to the
+        -- combinator child so the combinator CASE branches fire. The :has /
+        -- :not / pseudo-class filters still apply because they iterate over
+        -- all sel nodes, not just sel_root.
+        sel_pseudo_class_unwrap AS (
+            SELECT c.parent_id AS pcs_node_id,
+                   c.node_id
+            FROM sel c
+            WHERE c.parent_id IN (
+                SELECT node_id FROM sel_root_raw WHERE type = 'pseudo_class_selector'
+            )
+              AND c.type IN ('child_selector', 'descendant_selector',
+                             'sibling_selector', 'adjacent_sibling_selector')
+            QUALIFY row_number() OVER (PARTITION BY c.parent_id ORDER BY c.sibling_index) = 1
+        ),
+        -- Resolve the chosen_id for each raw root: the combinator child of a
+        -- pseudo_class_selector takes precedence, then the unwrapped child of a
+        -- pseudo_element_selector, then the raw node itself.
         sel_root_resolved AS (
             SELECT raw.node_id AS raw_id,
-                   COALESCE(u.node_id, raw.node_id) AS chosen_id
+                   COALESCE(pcu.node_id, u.node_id, raw.node_id) AS chosen_id
             FROM sel_root_raw raw
+            LEFT JOIN sel_pseudo_class_unwrap pcu
+              ON pcu.pcs_node_id = raw.node_id
             LEFT JOIN sel_pseudo_element_unwrap u
               ON u.pe_node_id = raw.node_id AND u.rn = 1
         ),
