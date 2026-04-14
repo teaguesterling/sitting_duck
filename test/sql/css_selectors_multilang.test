@@ -971,13 +971,182 @@ process_animals
 # =============================================================================
 
 # =============================================================================
-# 17. ast_select_from: NOT AVAILABLE IN CURRENT BUILD
+# 17. ast_select_from (PRE-PARSED TABLE QUERIES)
 # =============================================================================
-# NOTE: `ast_select_from` is defined in src/sql_macros/css_selectors.sql
-# (commit e0902f7) but is NOT present in the committed embedded_sql_macros.hpp.
-# The embed script scripts/embed_sql_macros.py must be re-run for it to appear.
-# Additionally, the ast_select wrapper uses query_table on a CTE name which
-# introduces its own issues. Tests for ast_select_from are deferred.
+# ast_select_from operates on a pre-parsed AST table so callers can parse
+# once and run many selector queries without re-reading the source files.
+# Every selector type should produce identical results to ast_select.
+
+statement ok
+CREATE TABLE py_ast AS SELECT * FROM read_ast('test/data/python/css_selectors_test.py');
+
+# Type selector
+query I
+SELECT name FROM ast_select_from('py_ast', 'function_definition')
+ORDER BY name, start_line;
+----
+__init__
+fetch
+main
+make_animal
+move
+process_animals
+purr
+speak
+speak
+speak
+
+# Class (semantic) selector
+query I
+SELECT name FROM ast_select_from('py_ast', '.class')
+ORDER BY name;
+----
+Animal
+Cat
+Dog
+
+# ID selector
+query I
+SELECT name FROM ast_select_from('py_ast', 'function_definition#main');
+----
+main
+
+# Descendant combinator
+query I
+SELECT name FROM ast_select_from('py_ast', 'class_definition function_definition')
+ORDER BY name, start_line;
+----
+__init__
+fetch
+move
+purr
+speak
+speak
+speak
+
+# Adjacent sibling combinator
+query I
+SELECT name FROM ast_select_from('py_ast', 'class_definition + class_definition')
+ORDER BY name;
+----
+Cat
+Dog
+
+# General sibling combinator
+query I
+SELECT name FROM ast_select_from('py_ast', 'class_definition ~ function_definition')
+WHERE depth = 1
+ORDER BY name;
+----
+main
+make_animal
+process_animals
+
+# :has()
+query I
+SELECT name FROM ast_select_from('py_ast', 'function_definition:has(return_statement)')
+ORDER BY name, start_line;
+----
+fetch
+make_animal
+move
+speak
+speak
+speak
+
+# :not(:has())
+query I
+SELECT name FROM ast_select_from('py_ast', 'function_definition:not(:has(return_statement))')
+ORDER BY name;
+----
+__init__
+main
+process_animals
+purr
+
+# :has(.class) — exercises the Bug 1/2 fix path
+query I
+SELECT name FROM ast_select_from('py_ast', 'function_definition:has(.call)')
+ORDER BY name, start_line;
+----
+main
+make_animal
+process_animals
+
+# Combinator + pseudo-class on right side — exercises the Bug 3 fix path
+query I
+SELECT name FROM ast_select_from('py_ast',
+    'class_definition ~ class_definition:has(function_definition#speak)')
+ORDER BY name;
+----
+Cat
+Dog
+
+# Compound selector
+query I
+SELECT name FROM ast_select_from('py_ast', 'class_definition:has(function_definition#speak):not(:has(function_definition#fetch))')
+ORDER BY name;
+----
+Animal
+Cat
+
+# :named
+query I
+SELECT name FROM ast_select_from('py_ast', 'function_definition:named')
+ORDER BY name, start_line;
+----
+__init__
+fetch
+main
+make_animal
+move
+process_animals
+purr
+speak
+speak
+speak
+
+statement ok
+DROP TABLE py_ast;
+
+# ast_select_from with a different language (pattern language auto-detected from the table)
+statement ok
+CREATE TABLE js_ast AS SELECT * FROM read_ast('test/data/javascript/css_selectors_test.js');
+
+query I
+SELECT name FROM ast_select_from('js_ast', '.function')
+ORDER BY name, start_line;
+----
+add
+area
+area
+area
+constructor
+constructor
+constructor
+describe
+fetchShape
+greet
+perimeter
+processShapes
+
+query I
+SELECT name FROM ast_select_from('js_ast', 'class_declaration:has(method_definition#constructor)')
+ORDER BY name;
+----
+Circle
+Shape
+Square
+
+query I
+SELECT name FROM ast_select_from('js_ast', 'function_declaration + function_declaration')
+ORDER BY name;
+----
+add
+processShapes
+
+statement ok
+DROP TABLE js_ast;
 
 # =============================================================================
 # 18. ROSETTA CODE EXAMPLES — cross-language selector consistency

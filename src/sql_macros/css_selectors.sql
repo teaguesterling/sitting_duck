@@ -621,7 +621,11 @@ CREATE OR REPLACE MACRO ast_select_from(
             FROM (
                 SELECT unnest(parse_ast_list(
                     regexp_extract(selector, ':(?:match|contains)\("([^"]+)"\)', 1),
-                    COALESCE(language, 'python')
+                    -- Pull language from the AST table itself so the :match pattern
+                    -- parses in the same grammar as the target. Falls back to
+                    -- 'python' for the degenerate empty-table case.
+                    COALESCE((SELECT language FROM ast
+                              WHERE language IS NOT NULL LIMIT 1), 'python')
                 )) as node
             )
             WHERE node.type NOT IN ('module', 'expression_statement', 'program', 'source_file')

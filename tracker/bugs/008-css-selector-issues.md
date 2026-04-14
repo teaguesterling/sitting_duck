@@ -83,18 +83,50 @@ Nested pseudo-class wraps like `A > B:has(X):not(Y)` (parsed as
 are not yet handled — only a single layer of wrapping is unwrapped.
 Recursive unwrap can be added if/when that pattern turns up in practice.
 
-## Bug 4: `ast_select_from` defined in SQL but missing from embedded macros
+## Bug 4: `ast_select_from` defined in SQL but missing from embedded macros — **FIXED 2026-04-13**
 
-`ast_select_from` macro is defined in `src/sql_macros/css_selectors.sql`
+`ast_select_from` was defined in `src/sql_macros/css_selectors.sql`
 (commit e0902f7) but was never embedded into `src/include/embedded_sql_macros.hpp`.
-Running `python3 scripts/embed_sql_macros.py` regenerates the embed file but
-reveals a separate issue: the `ast_select` convenience wrapper uses
-`query_table('__ast_src')` on a CTE name, which DuckDB cannot resolve.
+Re-running `python3 scripts/embed_sql_macros.py` to pick it up revealed a
+bug left over from the refactor:
 
-### Fix options
-1. Make `ast_select` a wrapper that doesn't rely on CTE-named query_table,
-   or register `ast_select_from` as a standalone macro without the wrapper.
-2. Update the embed script to include `ast_select_from` and fix the wrapper.
+### Root cause
+
+Line 624 of `css_selectors.sql` (inside `ast_select_from`) referenced a bare
+`language` identifier in `COALESCE(language, 'python')`. In the pre-refactor
+form this was inside `ast_select`, where `language` was a macro parameter.
+After commit e0902f7 split the body into `ast_select_from` (which has no
+`language` parameter), the reference was left behind. DuckDB's binder
+tried to resolve `language` as a column reference and failed with
+"Referenced column 'language' was not found".
+
+Because this reference sits inside an always-bound CTE (`ast_pattern`),
+the binder fails for EVERY call to `ast_select_from` / `ast_select`,
+not just ones that use `:match()` / `:contains()`.
+
+### Fix
+
+Pull the language from the AST table itself:
+```sql
+COALESCE((SELECT language FROM ast WHERE language IS NOT NULL LIMIT 1), 'python')
+```
+
+This works because the `ast` CTE is always in scope (it's the parsed AST
+table), and every node has a `language` column. For mixed-language globs
+this arbitrarily picks one — acceptable since :match patterns already
+assume a single grammar.
+
+### Secondary concern (CTE + query_table in ast_select wrapper)
+
+I had worried that the `ast_select` wrapper using `query_table('__ast_src')`
+on a CTE name would fail. Testing confirms it DOES work — DuckDB resolves
+CTEs through `query_table` correctly. No separate fix needed.
+
+### Test coverage
+
+`test/sql/css_selectors_multilang.test` section 17 restores the
+`ast_select_from` tests across type/id/class selectors, all four combinators,
+:has / :not / :has(.class), compound selectors, and multi-language usage.
 
 ## Test Coverage Added
 

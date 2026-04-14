@@ -2363,12 +2363,22 @@ CREATE OR REPLACE MACRO parse_ast_list_table(code, language) AS TABLE
 --   SELECT * FROM ast_select('src/**/*.py', '.function:has(return_statement)');
 --   SELECT * FROM ast_select('src/*.js', 'class_body > method_definition');
 --   SELECT * FROM ast_select('src/*.py', '.function:has(.call#execute):not(:has(try_statement))');
+--
+-- For repeated queries against the same source, parse once and use ast_select_from:
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_select_from('my_ast', '.class:named');
+--   SELECT * FROM ast_select_from('my_ast', '.func:has(return_statement)');
 -- =============================================================================
 
-CREATE OR REPLACE MACRO ast_select(
+-- =============================================================================
+-- ast_select_from: the selector engine, operates on a pre-parsed AST table.
+-- The `source` parameter is a table name (string) resolved via query_table().
+-- This separates parsing (expensive) from querying (cheap), enabling callers
+-- to parse once and query many times with different selectors.
+-- =============================================================================
+CREATE OR REPLACE MACRO ast_select_from(
     source,
-    selector,
-    language := NULL
+    selector
 ) AS TABLE
     WITH
         -- Parse the CSS selector FIRST (before source, so DuckDB can evaluate it early).
@@ -2451,7 +2461,7 @@ CREATE OR REPLACE MACRO ast_select(
         -- skip peek computation since no selector feature references it. The +schema
         -- suffix keeps the peek column in the schema as NULL.
         ast AS (
-            SELECT * FROM read_ast(source, language, peek := 'none+schema')
+            SELECT * FROM query_table(source)
         ),
 
         -- Find the top-level selector node (skip stylesheet, ERROR, and pseudo_element wrappers)
@@ -2496,6 +2506,9 @@ CREATE OR REPLACE MACRO ast_select(
         -- combinator child so the combinator CASE branches fire. The :has /
         -- :not / pseudo-class filters still apply because they iterate over
         -- all sel nodes, not just sel_root.
+        -- Only unwraps when a combinator child is present — a plain
+        -- type:has()/class:has() pcs (no combinator) stays as-is so the
+        -- pseudo_class_selector CASE branch handles it.
         sel_pseudo_class_unwrap AS (
             SELECT c.parent_id AS pcs_node_id,
                    c.node_id
@@ -2509,7 +2522,8 @@ CREATE OR REPLACE MACRO ast_select(
         ),
         -- Resolve the chosen_id for each raw root: the combinator child of a
         -- pseudo_class_selector takes precedence, then the unwrapped child of a
-        -- pseudo_element_selector, then the raw node itself.
+        -- pseudo_element_selector, then the raw node itself. LEFT JOINs in one
+        -- CTE so sel_root below doesn't need a correlated subquery.
         sel_root_resolved AS (
             SELECT raw.node_id AS raw_id,
                    COALESCE(pcu.node_id, u.node_id, raw.node_id) AS chosen_id
@@ -2605,6 +2619,9 @@ CREATE OR REPLACE MACRO ast_select(
             SELECT (SELECT name FROM simple_id_candidates WHERE rn = 1) as name_filter
         ),
 
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- .class semantic filter: a class_name whose parent is a class_selector
         -- (not a pseudo_class_selector — :has, :not, etc. also have class_name children).
         -- Anti-joins sel_arg_blocks so .class inside :has(.foo) / :not(.foo)
@@ -2654,9 +2671,6 @@ CREATE OR REPLACE MACRO ast_select(
         ),
 
         -- First id_name in each pcs's args block
-
-)SQLMACRO"
-        R"SQLMACRO(
         sel_pcs_first_id_name AS (
             SELECT pcs_id, name FROM (
                 SELECT pa.pcs_id, i.name,
@@ -2893,6 +2907,9 @@ CREATE OR REPLACE MACRO ast_select(
                    ('decorated'), ('typed'), ('void'), ('variadic'),
                    ('calls'), ('called-by'), ('is-called'), ('is-referenced'), ('exported'),
                    ('match'), ('contains'),
+
+)SQLMACRO"
+        R"SQLMACRO(
                    ('scope'), ('precedes'), ('follows')
         ),
         pseudo_class_validation AS (
@@ -2941,9 +2958,6 @@ CREATE OR REPLACE MACRO ast_select(
         -- Both share the same parsed pattern. Only the first :match/:contains
         -- occurrence in a selector is extracted (one pattern per selector).
         -- Exact structural match: db.execute() matches only zero-arg calls,
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- db.execute("SELECT 1") matches only that exact call.
         -- Use ___ (triple underscore) as wildcard for any name.
         ast_pattern AS (
@@ -2954,7 +2968,11 @@ CREATE OR REPLACE MACRO ast_select(
             FROM (
                 SELECT unnest(parse_ast_list(
                     regexp_extract(selector, ':(?:match|contains)\("([^"]+)"\)', 1),
-                    COALESCE(language, 'python')
+                    -- Pull language from the AST table itself so the :match pattern
+                    -- parses in the same grammar as the target. Falls back to
+                    -- 'python' for the degenerate empty-table case.
+                    COALESCE((SELECT language FROM ast
+                              WHERE language IS NOT NULL LIMIT 1), 'python')
                 )) as node
             )
             WHERE node.type NOT IN ('module', 'expression_statement', 'program', 'source_file')
@@ -3174,6 +3192,9 @@ CREATE OR REPLACE MACRO ast_select(
             WHEN 'async' THEN list_contains(a.modifiers, 'async')
             WHEN 'static' THEN list_contains(a.modifiers, 'static')
             WHEN 'abstract' THEN list_contains(a.modifiers, 'abstract')
+
+)SQLMACRO"
+        R"SQLMACRO(
             WHEN 'const' THEN list_contains(a.modifiers, 'const') OR list_contains(a.modifiers, 'final')
             WHEN 'public' THEN list_contains(a.modifiers, 'public')
             WHEN 'private' THEN list_contains(a.modifiers, 'private')
@@ -3229,9 +3250,6 @@ CREATE OR REPLACE MACRO ast_select(
                 AND EXISTS (
                     SELECT 1 FROM ast ref
                     WHERE ref.file_path = a.file_path
-
-)SQLMACRO"
-        R"SQLMACRO(
                       AND is_name_reference(ref.flags)
                       AND ref.name = a.name
                       AND ref.node_id != a.node_id
@@ -3442,6 +3460,25 @@ CREATE OR REPLACE MACRO ast_select(
     SELECT * FROM pe_callees
     WHERE (SELECT element_name FROM pseudo_element) = 'callees'
     ORDER BY file_path, node_id;
+
+
+-- =============================================================================
+-- ast_select: convenience wrapper that parses source files and then runs
+-- the selector engine. For one-off queries this is the simplest API.
+-- For repeated queries, use ast_select_from with a pre-parsed table.
+-- =============================================================================
+CREATE OR REPLACE MACRO ast_select(
+    source,
+    selector,
+    language := NULL
+) AS TABLE
+    -- Parse into a temp name, then delegate to ast_select_from.
+    -- We use read_ast directly and wrap with ast_select_from via a CTE trick:
+    -- DuckDB table macros can accept subqueries as table arguments.
+    WITH __ast_src AS (
+        SELECT * FROM read_ast(source, language, peek := 'none+schema')
+    )
+    SELECT * FROM ast_select_from('__ast_src', selector);
 )SQLMACRO"},
     {"ast_select_rules.sql", R"SQLMACRO(
 -- =============================================================================
