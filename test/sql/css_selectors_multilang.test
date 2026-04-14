@@ -234,6 +234,45 @@ speak
 speak
 speak
 
+# Compound filters apply uniformly regardless of root selector type:
+# .func#main should match only the single function named main (not calls/identifiers).
+query II
+SELECT type, name FROM ast_select('test/data/python/css_selectors_test.py', '.func#main')
+ORDER BY start_line;
+----
+function_definition	main
+
+# type#name compound with non-matching class — must match NOTHING,
+# previously matched every node named "main" because class_filter leaked.
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition.class#main');
+----
+0
+
+# function_definition#ExecuteRecursivePipelines works on any file — the strict
+# type form always matches exactly the definition, not call sites.
+# Three shapes that should all return the same row:
+query I
+SELECT type FROM ast_select('test/data/python/css_selectors_test.py', '.func#main')
+ORDER BY start_line;
+----
+function_definition
+
+query I
+SELECT type FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition#main')
+ORDER BY start_line;
+----
+function_definition
+
+# Bare #main has no type/class filter, so also matches the identifier
+# node that IS the function name.
+query I
+SELECT type FROM ast_select('test/data/python/css_selectors_test.py', '#main')
+ORDER BY type;
+----
+function_definition
+identifier
+
 # =============================================================================
 # 3. ID SELECTORS (#name) across languages
 # =============================================================================

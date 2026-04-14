@@ -128,6 +128,51 @@ CTEs through `query_table` correctly. No separate fix needed.
 `ast_select_from` tests across type/id/class selectors, all four combinators,
 :has / :not / :has(.class), compound selectors, and multi-language usage.
 
+## Bug 5: Compound filter leaks across root selector types — **FIXED 2026-04-14**
+
+The simple-selector CASE dispatch applied a different subset of filters
+depending on which selector node type the CSS parser chose as the root:
+
+| Root type                  | type_filter | name_filter | class_filter |
+|----------------------------|-------------|-------------|--------------|
+| `tag_name` (before fix)    | ✓           | ✓           | ✗            |
+| `id_selector` (before fix) | ✓           | ✓           | ✗            |
+| `class_selector` (before)  | ✗           | ✗           | ✓            |
+| `attribute_selector` (bef) | ✓           | ✗           | ✗            |
+
+Consequence: `.func#ExecuteRecursivePipelines` (parses root =
+`id_selector`) ignored the `.func` class filter and matched every node
+named "ExecuteRecursivePipelines" — including call_expression,
+identifiers (two per definition), and the function_definition itself.
+
+Fix: apply all three filters uniformly from every root type. After the
+fix, `.func#main` returns only the single `function_definition` named
+`main`, and `function_definition.class#main` correctly returns zero
+(because the node isn't semantically a class).
+
+## Bug 6: Combinator EXISTS subqueries decorrelated into always-on joins — **FIXED 2026-04-14**
+
+Even for selectors without any combinator, DuckDB's optimizer decorrelated
+the EXISTS subqueries inside the combinator CASE branches into hash joins
+over the full AST. On large codebases (e.g., DuckDB's own source tree, ~2M
+AST nodes) this produced a 28.8M-row HASH_JOIN and pushed simple queries
+to 20+ seconds.
+
+EXPLAIN ANALYZE showed the 28M join came from the descendant_selector
+branch — `file_path = file_path AND node_id < node_id AND (node_id +
+descendant_count) >= node_id` — fired regardless of `sp.sel_type`.
+
+Fix: replace the single CASE dispatch with a UNION ALL of per-sel_type
+sub-queries, each gated by `sp.sel_type = 'X'` at the FROM-WHERE level.
+When the selector is, say, `.func#name`, the combinator branches have a
+provably-false equality and produce zero rows without ever firing their
+decorrelated joins.
+
+Benchmark on duckdb/src/**/*.cpp (~1400 files, ~2M AST nodes):
+- `function_definition#ExecuteRecursivePipelines`: 22.5s → 1.3s (17×)
+- `...::callers`: 19.3s → 1.2s (16×)
+- `...::callees`: 19.9s → 1.3s (15×)
+
 ## Test Coverage Added
 
 The new test file `test/sql/css_selectors_multilang.test` covers:

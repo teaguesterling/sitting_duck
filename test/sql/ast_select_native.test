@@ -25,9 +25,11 @@ SELECT COUNT(*) >= 0 FROM ast_select('test/data/python/simple.py', '.func[annota
 ----
 true
 
-# [qualified*=X] — substring match on qualified_name
+# [qualified*=X] — substring match on qualified_name.
+# .func requires the match to be a function (semantic CLASS check on base), and
+# Account has __init__ / methods whose qualified_name includes "Account".
 query I
-SELECT COUNT(*) > 0 FROM ast_select('test/data/python/qualified_names.py', '.func[qualified*=Config]');
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/qualified_names.py', '.func[qualified*=Account]');
 ----
 true
 

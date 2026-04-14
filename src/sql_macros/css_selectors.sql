@@ -652,79 +652,95 @@ CREATE OR REPLACE MACRO ast_select_from(
                 (SELECT right_type || '_%' FROM combinator_parts) as right_type_like
         ),
 
-    -- Single scan of ast with CASE-based dispatch
-    matched_raw AS (
-    SELECT a.*
-    FROM ast a, sel_props sp
-    WHERE CASE sp.sel_type
+    -- Dispatch by sel_type using UNION ALL instead of a single CASE.
+    -- DuckDB's optimizer decorrelates EXISTS subqueries into always-on hash
+    -- joins, so combinator branches embedded inside CASE would execute even
+    -- for non-combinator selectors — a 20s+ penalty on large codebases.
+    -- UNION ALL with `sp.sel_type = 'X'` equality lets the optimizer prune
+    -- unused branches to zero-row inputs, skipping the decorrelated joins.
+    --
+    -- All three simple filters (type_filter / name_filter / class_filter)
+    -- apply consistently to every compound selector root so that e.g.
+    -- `.func#name`, `type[attr=val]` match on ALL components, not just the
+    -- one that happens to parent the others.
+    matched_base AS (
+        -- Simple/compound selectors (non-combinator roots).
+        -- Bare type matching: `if` matches `if` and `if_statement`, `if_clause`, etc.
+        SELECT a.*
+        FROM ast a, sel_props sp
+        WHERE sp.sel_type IN ('tag_name', 'id_selector', 'class_selector',
+                              'attribute_selector', 'pseudo_class_selector')
+          AND (sp.type_filter IS NULL OR a.type = sp.type_filter OR a.type LIKE sp.type_filter_like)
+          AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
+          AND (sp.class_filter IS NULL
+               OR (is_semantic_type(a.semantic_type, UPPER(sp.class_filter))
+                   AND NOT is_syntax_only(a.flags)))
 
-        -- Simple/compound selectors
-        -- Bare type matching: `if` matches both `if` and `if_statement`, `if_clause`, etc.
-        WHEN 'tag_name' THEN
-            (sp.type_filter IS NULL OR a.type = sp.type_filter OR a.type LIKE sp.type_filter_like)
-            AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
-        WHEN 'id_selector' THEN
-            (sp.type_filter IS NULL OR a.type = sp.type_filter OR a.type LIKE sp.type_filter_like)
-            AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
-        WHEN 'class_selector' THEN
-            (sp.class_filter IS NULL
-             OR (is_semantic_type(a.semantic_type, UPPER(sp.class_filter))
-                 AND NOT is_syntax_only(a.flags)))
-        WHEN 'attribute_selector' THEN
-            (sp.type_filter IS NULL OR a.type = sp.type_filter OR a.type LIKE sp.type_filter_like)
-        WHEN 'pseudo_class_selector' THEN
-            (sp.type_filter IS NULL OR a.type = sp.type_filter OR a.type LIKE sp.type_filter_like)
-            AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
-            AND (sp.class_filter IS NULL
-                 OR (is_semantic_type(a.semantic_type, UPPER(sp.class_filter))
-                     AND NOT is_syntax_only(a.flags)))
+        UNION ALL
 
         -- Descendant combinator: A B
-        WHEN 'descendant_selector' THEN
-            (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
-            AND EXISTS (
-                SELECT 1 FROM ast anc
-                WHERE anc.file_path = a.file_path
-                  AND a.node_id > anc.node_id
-                  AND a.node_id <= anc.node_id + anc.descendant_count
-                  AND (anc.type = sp.left_type OR anc.type LIKE sp.left_type_like)
-            )
+        SELECT a.*
+        FROM ast a, sel_props sp
+        WHERE sp.sel_type = 'descendant_selector'
+          AND (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND EXISTS (
+              SELECT 1 FROM ast anc
+              WHERE anc.file_path = a.file_path
+                AND a.node_id > anc.node_id
+                AND a.node_id <= anc.node_id + anc.descendant_count
+                AND (anc.type = sp.left_type OR anc.type LIKE sp.left_type_like)
+          )
+
+        UNION ALL
 
         -- Child combinator: A > B
-        WHEN 'child_selector' THEN
-            (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
-            AND EXISTS (
-                SELECT 1 FROM ast par
-                WHERE par.node_id = a.parent_id
-                  AND (par.type = sp.left_type OR par.type LIKE sp.left_type_like)
-            )
+        SELECT a.*
+        FROM ast a, sel_props sp
+        WHERE sp.sel_type = 'child_selector'
+          AND (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND EXISTS (
+              SELECT 1 FROM ast par
+              WHERE par.node_id = a.parent_id
+                AND (par.type = sp.left_type OR par.type LIKE sp.left_type_like)
+          )
+
+        UNION ALL
 
         -- General sibling: A ~ B
-        WHEN 'sibling_selector' THEN
-            (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
-            AND EXISTS (
-                SELECT 1 FROM ast sib
-                WHERE sib.file_path = a.file_path
-                  AND sib.parent_id = a.parent_id
-                  AND sib.sibling_index < a.sibling_index
-                  AND (sib.type = sp.left_type OR sib.type LIKE sp.left_type_like)
-            )
+        SELECT a.*
+        FROM ast a, sel_props sp
+        WHERE sp.sel_type = 'sibling_selector'
+          AND (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND EXISTS (
+              SELECT 1 FROM ast sib
+              WHERE sib.file_path = a.file_path
+                AND sib.parent_id = a.parent_id
+                AND sib.sibling_index < a.sibling_index
+                AND (sib.type = sp.left_type OR sib.type LIKE sp.left_type_like)
+          )
+
+        UNION ALL
 
         -- Adjacent sibling: A + B
-        WHEN 'adjacent_sibling_selector' THEN
-            (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
-            AND EXISTS (
-                SELECT 1 FROM ast adj
-                WHERE adj.file_path = a.file_path
-                  AND adj.parent_id = a.parent_id
-                  AND adj.sibling_index = a.sibling_index - 1
-                  AND (adj.type = sp.left_type OR adj.type LIKE sp.left_type_like)
-            )
+        SELECT a.*
+        FROM ast a, sel_props sp
+        WHERE sp.sel_type = 'adjacent_sibling_selector'
+          AND (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND EXISTS (
+              SELECT 1 FROM ast adj
+              WHERE adj.file_path = a.file_path
+                AND adj.parent_id = a.parent_id
+                AND adj.sibling_index = a.sibling_index - 1
+                AND (adj.type = sp.left_type OR adj.type LIKE sp.left_type_like)
+          )
+    ),
 
-        ELSE false
-    END
+    -- Apply :has / :not / attribute / pseudo-class filters to the base matches.
+    matched_raw AS (
+    SELECT a.*
+    FROM matched_base a
     -- :has() filters (for simple/compound selectors)
-    AND NOT EXISTS (
+    WHERE NOT EXISTS (
         SELECT 1 FROM has_conditions h
         WHERE NOT EXISTS (
             SELECT 1 FROM ast d
