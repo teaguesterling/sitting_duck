@@ -1,0 +1,238 @@
+# name: test/sql/_bench_annotations.test
+# group: [sql]
+#
+# Benchmark: what cache-time annotations would give the biggest speedup?
+#
+# Hypotheses under test (manual: we build the annotations inline here,
+# we do NOT modify the codebase — this is purely a measurement exercise):
+#
+#   1. Ordered clustering        — CTAS ... ORDER BY file_path, node_id
+#   2. Semantic role columns     — precomputed booleans (is_function, is_call)
+#   3. Derived funcs/calls tables — small, hand-filtered, reusable
+#   4. enclosing_function_id     — nearest function ancestor per node
+#   5. Pre-built call_edges      — (caller, callee_name) precomputed
+#
+# Baseline: ast_select_from() on a plain cached table.
+# Each hypothesis implements the ::callers equivalent manually, so we compare
+# like-for-like: "find functions that call ExecuteRecursivePipelines."
+#
+# Not run in make test; kept underscore-prefixed. Invoke directly:
+#   build/release/test/unittest "test/sql/_bench_annotations.test"
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# ==========================================================================
+# Baseline: plain cached table
+# ==========================================================================
+
+statement ok
+CREATE TABLE ast AS SELECT * FROM read_ast(['duckdb/src/**/*.cpp', 'duckdb/src/**/*.hpp'],
+    peek := 'none+schema', ignore_errors := true);
+
+query I
+SELECT COUNT(*) > 1000000 FROM ast;
+----
+true
+
+statement ok
+PRAGMA enable_profiling='json';
+
+# --- Baseline: ast_select_from with ::callers ---
+statement ok
+PRAGMA profiling_output='/tmp/bench_baseline.json';
+
+statement ok
+SELECT COUNT(*) FROM ast_select_from('ast',
+    'function_definition#ExecuteRecursivePipelines::callers');
+
+# ==========================================================================
+# Experiment 1: Ordered clustering
+# ==========================================================================
+
+statement ok
+PRAGMA profiling_output='/tmp/bench_sort.json';
+
+statement ok
+CREATE TABLE ast_sorted AS SELECT * FROM ast ORDER BY file_path, node_id;
+
+statement ok
+PRAGMA profiling_output='/tmp/bench_sorted_callers.json';
+
+statement ok
+SELECT COUNT(*) FROM ast_select_from('ast_sorted',
+    'function_definition#ExecuteRecursivePipelines::callers');
+
+# ==========================================================================
+# Experiment 2: Semantic role columns (precomputed booleans)
+# ==========================================================================
+
+statement ok
+PRAGMA profiling_output='/tmp/bench_roles_create.json';
+
+statement ok
+CREATE TABLE ast_roles AS
+SELECT *,
+       is_semantic_type(semantic_type, 'FUNCTION') AS is_function,
+       is_semantic_type(semantic_type, 'CALL') AS is_call,
+       is_semantic_type(semantic_type, 'CLASS') AS is_class
+FROM ast;
+
+# Manual ::callers using the role columns (no is_semantic_type per row)
+statement ok
+PRAGMA profiling_output='/tmp/bench_roles_callers.json';
+
+statement ok
+WITH target AS (
+    SELECT node_id, name, file_path FROM ast_roles
+    WHERE is_function AND name = 'ExecuteRecursivePipelines'
+)
+SELECT DISTINCT caller.node_id, caller.name
+FROM target t
+JOIN ast_roles call_node
+  ON call_node.file_path = t.file_path
+ AND call_node.is_call
+ AND call_node.name = t.name
+ AND call_node.node_id != t.node_id
+JOIN ast_roles caller
+  ON caller.file_path = call_node.file_path
+ AND caller.is_function
+ AND call_node.node_id > caller.node_id
+ AND call_node.node_id <= caller.node_id + caller.descendant_count
+QUALIFY ROW_NUMBER() OVER (PARTITION BY call_node.node_id ORDER BY caller.depth DESC) = 1;
+
+# ==========================================================================
+# Experiment 3: Derived funcs/calls tables
+# ==========================================================================
+
+statement ok
+PRAGMA profiling_output='/tmp/bench_derived_create.json';
+
+statement ok
+CREATE TABLE funcs AS
+SELECT node_id, name, file_path, depth, descendant_count, scope_id
+FROM ast
+WHERE is_semantic_type(semantic_type, 'FUNCTION')
+  AND name IS NOT NULL AND name != '';
+
+statement ok
+CREATE TABLE calls AS
+SELECT node_id, name, file_path, parent_id, scope_id
+FROM ast
+WHERE is_semantic_type(semantic_type, 'CALL')
+  AND name IS NOT NULL AND name != '';
+
+query I
+SELECT (SELECT COUNT(*) FROM funcs) > 0 AND (SELECT COUNT(*) FROM calls) > 0;
+----
+true
+
+statement ok
+PRAGMA profiling_output='/tmp/bench_derived_callers.json';
+
+statement ok
+WITH target AS (
+    SELECT node_id, name, file_path FROM funcs
+    WHERE name = 'ExecuteRecursivePipelines'
+)
+SELECT DISTINCT caller.node_id, caller.name
+FROM target t
+JOIN calls c
+  ON c.file_path = t.file_path
+ AND c.name = t.name
+ AND c.node_id != t.node_id
+JOIN funcs caller
+  ON caller.file_path = c.file_path
+ AND c.node_id > caller.node_id
+ AND c.node_id <= caller.node_id + caller.descendant_count
+QUALIFY ROW_NUMBER() OVER (PARTITION BY c.node_id ORDER BY caller.depth DESC) = 1;
+
+# ==========================================================================
+# Experiment 4: Precomputed enclosing_function_id
+# ==========================================================================
+# For every call node, precompute the nearest function ancestor's node_id.
+# This is the single O(N*M) operation we move from per-query to per-cache-build.
+
+statement ok
+PRAGMA profiling_output='/tmp/bench_enclosing_create.json';
+
+statement ok
+CREATE TABLE calls_with_enclosing AS
+SELECT c.node_id AS call_id, c.name AS callee, c.file_path,
+       f.node_id AS enclosing_fn_id, f.name AS caller_name
+FROM calls c
+JOIN funcs f
+  ON f.file_path = c.file_path
+ AND c.node_id > f.node_id
+ AND c.node_id <= f.node_id + f.descendant_count
+QUALIFY ROW_NUMBER() OVER (PARTITION BY c.node_id ORDER BY f.depth DESC) = 1;
+
+query I
+SELECT COUNT(*) > 0 FROM calls_with_enclosing;
+----
+true
+
+statement ok
+PRAGMA profiling_output='/tmp/bench_enclosing_callers.json';
+
+# Now ::callers is a trivial hash join — no range join, no NOT EXISTS
+statement ok
+SELECT DISTINCT caller_name
+FROM calls_with_enclosing
+WHERE callee = 'ExecuteRecursivePipelines';
+
+# ==========================================================================
+# Experiment 5: Pre-built call_edges table (same as Exp 4, treated as edges)
+# ==========================================================================
+# This is what you'd ship if you wanted every selector's ::callers / ::callees
+# to be a two-row hash lookup.
+
+statement ok
+PRAGMA profiling_output='/tmp/bench_edges_create.json';
+
+statement ok
+CREATE TABLE call_edges AS
+SELECT cwe.enclosing_fn_id AS caller_id,
+       cwe.caller_name AS caller_name,
+       cwe.callee AS callee_name,
+       cwe.call_id,
+       cwe.file_path
+FROM calls_with_enclosing cwe;
+
+# An index on callee_name turns ::callers into a single-key lookup.
+statement ok
+CREATE INDEX call_edges_callee ON call_edges(callee_name);
+
+statement ok
+PRAGMA profiling_output='/tmp/bench_edges_callers.json';
+
+statement ok
+SELECT DISTINCT caller_name
+FROM call_edges
+WHERE callee_name = 'ExecuteRecursivePipelines';
+
+# Bonus: ::callees of ExecuteRecursivePipelines using the same edge table
+statement ok
+PRAGMA profiling_output='/tmp/bench_edges_callees.json';
+
+statement ok
+SELECT DISTINCT callee_name
+FROM call_edges
+WHERE caller_name = 'ExecuteRecursivePipelines';
+
+# Bonus: full callgraph fan-out — answer "what does the whole codebase call?"
+# (A question you can barely ask with the current engine.)
+statement ok
+PRAGMA profiling_output='/tmp/bench_edges_all_callers.json';
+
+statement ok
+SELECT callee_name, COUNT(DISTINCT caller_name) AS caller_count
+FROM call_edges
+GROUP BY callee_name
+ORDER BY caller_count DESC
+LIMIT 20;
+
+statement ok
+PRAGMA disable_profiling;
