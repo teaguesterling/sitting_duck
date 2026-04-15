@@ -99,8 +99,8 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 			    return base_type == SemanticTypes::DEFINITION_CLASS;
 		    } else if (pattern == "IDENTIFIER" || pattern == "ID" || pattern == "IDENT") {
 			    return base_type == SemanticTypes::NAME_IDENTIFIER;
-		    } else if (pattern == "MODULE" || pattern == "MOD" || pattern == "PACKAGE" ||
-		               pattern == "NAMESPACE" || pattern == "NS") {
+		    } else if (pattern == "MODULE" || pattern == "MOD" || pattern == "PACKAGE" || pattern == "NAMESPACE" ||
+		               pattern == "NS") {
 			    // NAMESPACE/NS map to DEFINITION_MODULE because the current
 			    // taxonomy's 4 DEFINITION super-type slots are full
 			    // (FUNCTION/VARIABLE/CLASS/MODULE) and DEFINITION_MODULE is
@@ -113,7 +113,7 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		    } else if (pattern == "VARIABLE" || pattern == "VAR" || pattern == "LET" || pattern == "CONST") {
 			    return base_type == SemanticTypes::DEFINITION_VARIABLE;
 
-		    // --- Tier 2: common control-flow super-types ---
+			    // --- Tier 2: common control-flow super-types ---
 		    } else if (pattern == "CONDITIONAL" || pattern == "COND" || pattern == "IF") {
 			    return base_type == SemanticTypes::FLOW_CONDITIONAL;
 		    } else if (pattern == "LOOP" || pattern == "FOR" || pattern == "WHILE") {
@@ -122,7 +122,7 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		               pattern == "YIELD") {
 			    return base_type == SemanticTypes::FLOW_JUMP;
 
-		    // --- Tier 3: common kind-level patterns ---
+			    // --- Tier 3: common kind-level patterns ---
 		    } else if (pattern == "DEFINITION" || pattern == "DEF") {
 			    return (base_type & 0xF0) == SemanticTypes::DEFINITION;
 		    } else if (pattern == "LITERAL" || pattern == "LIT" || pattern == "VALUE") {
@@ -134,7 +134,7 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		    } else if (pattern == "EXTERNAL" || pattern == "EXT") {
 			    return (base_type & 0xF0) == SemanticTypes::EXTERNAL;
 
-		    // --- Tier 4: less-common super-types ---
+			    // --- Tier 4: less-common super-types ---
 		    } else if (pattern == "MEMBER" || pattern == "ATTR" || pattern == "FIELD" || pattern == "PROP") {
 			    return base_type == SemanticTypes::COMPUTATION_ACCESS;
 		    } else if (pattern == "IMPORT" || pattern == "REQUIRE" || pattern == "USE") {
@@ -142,7 +142,7 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		    } else if (pattern == "EXPORT" || pattern == "PUB") {
 			    return base_type == SemanticTypes::EXTERNAL_EXPORT;
 
-		    // --- Tier 5: error-handling super-types ---
+			    // --- Tier 5: error-handling super-types ---
 		    } else if (pattern == "TRY") {
 			    return base_type == SemanticTypes::ERROR_TRY;
 		    } else if (pattern == "CATCH" || pattern == "EXCEPT" || pattern == "RESCUE") {
@@ -152,7 +152,7 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		    } else if (pattern == "FINALLY" || pattern == "ENSURE" || pattern == "DEFER") {
 			    return base_type == SemanticTypes::ERROR_FINALLY;
 
-		    // --- Tier 6: literal super-types ---
+			    // --- Tier 6: literal super-types ---
 		    } else if (pattern == "STR" || pattern == "STRING") {
 			    return base_type == SemanticTypes::LITERAL_STRING;
 		    } else if (pattern == "NUM" || pattern == "NUMBER") {
@@ -163,7 +163,7 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		               pattern == "MAP" || pattern == "SET" || pattern == "TUPLE") {
 			    return base_type == SemanticTypes::LITERAL_STRUCTURED;
 
-		    // --- Tier 7: name / operator / transform super-types ---
+			    // --- Tier 7: name / operator / transform super-types ---
 		    } else if (pattern == "QUALIFIED" || pattern == "DOTTED") {
 			    return base_type == SemanticTypes::NAME_QUALIFIED;
 		    } else if (pattern == "SELF" || pattern == "THIS") {
@@ -179,7 +179,7 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		    } else if (pattern == "COMP" || pattern == "COMPREHENSION") {
 			    return base_type == SemanticTypes::TRANSFORM_QUERY;
 
-		    // --- Tier 8: rare kind-level patterns ---
+			    // --- Tier 8: rare kind-level patterns ---
 		    } else if (pattern == "COMPUTATION") {
 			    return (base_type & 0xC0) == SemanticTypes::COMPUTATION;
 		    } else if (pattern == "ERROR" || pattern == "ERR") {

@@ -101,8 +101,7 @@ Value UnifiedASTBackend::ScopeValue(const ASTNode::ScopeInfo &scope) {
 		for (const auto &entry : scope.stack_data) {
 			child_list_t<Value> entry_children;
 			entry_children.push_back({"id", Value::BIGINT(entry.id)});
-			entry_children.push_back(
-			    {"kind", Value::UTINYINT(entry.kind).DefaultCastAs(SemanticTypeLogicalType())});
+			entry_children.push_back({"kind", Value::UTINYINT(entry.kind).DefaultCastAs(SemanticTypeLogicalType())});
 			stack_values.push_back(Value::STRUCT(std::move(entry_children)));
 		}
 		children.push_back({"stack", Value::LIST(entry_type, std::move(stack_values))});
@@ -288,22 +287,22 @@ ExtractionConfig ParseExtractionConfig(const string &context_str, const string &
 
 vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
 	return {
-	    LogicalType::BIGINT,                    // node_id
-	    LogicalType::VARCHAR,                   // type
-	    LogicalType::VARCHAR,                   // name
-	    LogicalType::VARCHAR,                   // file_path
-	    LogicalType::VARCHAR,                   // language
-	    LogicalType::UINTEGER,                  // start_line
-	    LogicalType::UINTEGER,                  // start_column
-	    LogicalType::UINTEGER,                  // end_line
-	    LogicalType::UINTEGER,                  // end_column
-	    LogicalType::BIGINT,                    // parent_id (stays signed for -1)
-	    LogicalType::UINTEGER,                  // depth
-	    LogicalType::INTEGER,                   // sibling_index
-	    LogicalType::UINTEGER,                  // children_count
-	    LogicalType::UINTEGER,                  // descendant_count
-	    ScopeColumnType(),                      // scope STRUCT<current, function, class, module, stack>
-	    LogicalType::VARCHAR,                   // peek (source_text)
+	    LogicalType::BIGINT,   // node_id
+	    LogicalType::VARCHAR,  // type
+	    LogicalType::VARCHAR,  // name
+	    LogicalType::VARCHAR,  // file_path
+	    LogicalType::VARCHAR,  // language
+	    LogicalType::UINTEGER, // start_line
+	    LogicalType::UINTEGER, // start_column
+	    LogicalType::UINTEGER, // end_line
+	    LogicalType::UINTEGER, // end_column
+	    LogicalType::BIGINT,   // parent_id (stays signed for -1)
+	    LogicalType::UINTEGER, // depth
+	    LogicalType::INTEGER,  // sibling_index
+	    LogicalType::UINTEGER, // children_count
+	    LogicalType::UINTEGER, // descendant_count
+	    ScopeColumnType(),     // scope STRUCT<current, function, class, module, stack>
+	    LogicalType::VARCHAR,  // peek (source_text)
 	    // Semantic type fields
 	    LogicalType::UTINYINT,    // semantic_type
 	    LogicalType::UTINYINT,    // flags (renamed from universal_flags, removed arity_bin)
@@ -313,8 +312,7 @@ vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
 
 vector<string> UnifiedASTBackend::GetFlatTableColumnNames() {
 	return {"node_id", "type", "name", "file_path", "language", "start_line", "start_column", "end_line", "end_column",
-	        "parent_id", "depth", "sibling_index", "children_count", "descendant_count", "scope",
-	        "peek",
+	        "parent_id", "depth", "sibling_index", "children_count", "descendant_count", "scope", "peek",
 	        // Semantic type fields
 	        "semantic_type", "flags", "qualified_name"};
 }

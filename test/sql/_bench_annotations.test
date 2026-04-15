@@ -1,5 +1,6 @@
 # name: test/sql/_bench_annotations.test
 # group: [sql]
+
 #
 # Benchmark: what cache-time annotations would give the biggest speedup?
 #

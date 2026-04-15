@@ -113,7 +113,8 @@ constexpr uint8_t TRANSFORM_AGGREGATION = TRANSFORM | 0x0C; // 1110 1100 - group
 constexpr uint8_t DEFINITION_FUNCTION = DEFINITION | 0x00; // 1111 0000 - function definitions
 constexpr uint8_t DEFINITION_VARIABLE = DEFINITION | 0x04; // 1111 0100 - variable/constant definitions
 constexpr uint8_t DEFINITION_CLASS = DEFINITION | 0x08;    // 1111 1000 - class/struct definitions
-constexpr uint8_t DEFINITION_MODULE = DEFINITION | 0x0C;   // 1111 1100 - named module/namespace definitions (Python module, C++/C# namespace, Rust mod, Java package decl)
+constexpr uint8_t DEFINITION_MODULE = DEFINITION | 0x0C;   // 1111 1100 - named module/namespace definitions (Python
+                                                           // module, C++/C# namespace, Rust mod, Java package decl)
 
 // ===== EXECUTION super types (1000 ttxx) =====
 constexpr uint8_t EXECUTION_STATEMENT = EXECUTION | 0x00;      // 1000 0000 - expression statements
@@ -134,10 +135,12 @@ constexpr uint8_t ERROR_THROW = ERROR_HANDLING | 0x08;   // 1010 1000 - throw, r
 constexpr uint8_t ERROR_FINALLY = ERROR_HANDLING | 0x0C; // 1010 1100 - finally, ensure blocks
 
 // ===== ORGANIZATION super types (1011 ttxx) =====
-constexpr uint8_t ORGANIZATION_BLOCK = ORGANIZATION | 0x00;     // 1011 0000 - code blocks, scopes
-constexpr uint8_t ORGANIZATION_LIST = ORGANIZATION | 0x04;      // 1011 0100 - argument lists, parameter lists
-constexpr uint8_t ORGANIZATION_SECTION = ORGANIZATION | 0x08;   // 1011 1000 - sections, regions
-constexpr uint8_t ORGANIZATION_CONTAINER = ORGANIZATION | 0x0C; // 1011 1100 - structural containers (source_file/program/compilation_unit roots) — distinct from DEFINITION_MODULE, which tags named module/namespace definitions within the file
+constexpr uint8_t ORGANIZATION_BLOCK = ORGANIZATION | 0x00;   // 1011 0000 - code blocks, scopes
+constexpr uint8_t ORGANIZATION_LIST = ORGANIZATION | 0x04;    // 1011 0100 - argument lists, parameter lists
+constexpr uint8_t ORGANIZATION_SECTION = ORGANIZATION | 0x08; // 1011 1000 - sections, regions
+constexpr uint8_t ORGANIZATION_CONTAINER =
+    ORGANIZATION | 0x0C; // 1011 1100 - structural containers (source_file/program/compilation_unit roots) — distinct
+                         // from DEFINITION_MODULE, which tags named module/namespace definitions within the file
 
 // Utility functions to extract components
 constexpr uint8_t GetSuperKind(uint8_t semantic_type) {

@@ -286,21 +286,17 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 				// outermost, taking the first match for each field.
 				for (auto it = scope_node_stack.rbegin(); it != scope_node_stack.rend(); ++it) {
 					uint8_t base = it->kind & 0xFC; // mask refinement bits
-					if (ast_node.scope.function_scope == -1 &&
-					    base == SemanticTypes::DEFINITION_FUNCTION) {
+					if (ast_node.scope.function_scope == -1 && base == SemanticTypes::DEFINITION_FUNCTION) {
 						ast_node.scope.function_scope = it->id;
 					}
-					if (ast_node.scope.class_scope == -1 &&
-					    base == SemanticTypes::DEFINITION_CLASS) {
+					if (ast_node.scope.class_scope == -1 && base == SemanticTypes::DEFINITION_CLASS) {
 						ast_node.scope.class_scope = it->id;
 					}
-					if (ast_node.scope.module_scope == -1 &&
-					    base == SemanticTypes::DEFINITION_MODULE) {
+					if (ast_node.scope.module_scope == -1 && base == SemanticTypes::DEFINITION_MODULE) {
 						ast_node.scope.module_scope = it->id;
 					}
 					// Short-circuit once all named slots are filled.
-					if (ast_node.scope.function_scope != -1 &&
-					    ast_node.scope.class_scope != -1 &&
+					if (ast_node.scope.function_scope != -1 && ast_node.scope.class_scope != -1 &&
 					    ast_node.scope.module_scope != -1) {
 						break;
 					}
