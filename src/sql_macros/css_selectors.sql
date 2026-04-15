@@ -1071,29 +1071,33 @@ CREATE OR REPLACE MACRO ast_select_from(
           ON p.parent_id = m.parent_id AND p.file_path = m.file_path
           AND p.sibling_index = m.sibling_index - 1
     ),
-    -- ::callers — functions that call this function
+    -- ::callers — functions that call this function.
+    -- Every call node carries scope.function (the node_id of its nearest
+    -- enclosing function), precomputed at parse time. So "find the function
+    -- that contains each call site" collapses from a range join + correlated
+    -- NOT EXISTS into a plain hash join. Same semantics (immediate caller),
+    -- ~1000x faster on large codebases.
     pe_callers AS (
         SELECT DISTINCT caller_fn.* FROM matched m
-        -- Find call nodes with the same name as this function
         JOIN ast call_node ON call_node.file_path = m.file_path
           AND call_node.semantic_type = 'COMPUTATION_CALL'
           AND call_node.name = m.name
           AND call_node.node_id != m.node_id
-        -- Find the enclosing function of each call
-        JOIN ast caller_fn ON caller_fn.file_path = call_node.file_path
-          AND caller_fn.semantic_type = 'DEFINITION_FUNCTION'
-          AND call_node.node_id > caller_fn.node_id
-          AND call_node.node_id <= caller_fn.node_id + caller_fn.descendant_count
-          AND NOT EXISTS (
-              SELECT 1 FROM ast closer
-              WHERE closer.file_path = call_node.file_path
-                AND closer.semantic_type = 'DEFINITION_FUNCTION'
-                AND call_node.node_id > closer.node_id
-                AND call_node.node_id <= closer.node_id + closer.descendant_count
-                AND closer.depth > caller_fn.depth
-          )
+        JOIN ast caller_fn
+          ON caller_fn.node_id = call_node.scope.function
+         AND caller_fn.file_path = call_node.file_path
     ),
-    -- ::callees — functions this function calls (call nodes within subtree)
+    -- ::callees — calls inside this function (transitive — includes calls
+    -- inside nested functions and lambdas).
+    --
+    -- Kept as a subtree range scan rather than rewriting to
+    -- `callee.scope.function = m.node_id` because that would change the
+    -- semantics: scope.function points to the IMMEDIATE enclosing function,
+    -- so a call inside a lambda/nested function would have scope.function
+    -- pointing to the inner function, not to m. With the range scan we
+    -- pick up everything textually inside m's body. The range scan is
+    -- already cheap for the common pseudo-element case where matched is
+    -- a single named function (descendant_count is small).
     pe_callees AS (
         SELECT DISTINCT callee.* FROM matched m
         JOIN ast callee ON callee.file_path = m.file_path
