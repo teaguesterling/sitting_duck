@@ -115,9 +115,9 @@ HAVING COUNT(*) > 0
 ORDER BY language;
 ----
 cpp	534	2
-go	104	2
-javascript	392	3
-python	2880	15
+go	462	3
+javascript	779	4
+python	3183	16
 
 # Test 13: Consistent ordering (DuckDB convention)
 # ===============================================
