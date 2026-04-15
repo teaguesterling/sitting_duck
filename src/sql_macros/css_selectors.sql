@@ -628,6 +628,15 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- Exact structural match: db.execute() matches only zero-arg calls,
         -- db.execute("SELECT 1") matches only that exact call.
         -- Use ___ (triple underscore) as wildcard for any name.
+        --
+        -- Language assumption: the pattern is parsed once, in the language of
+        -- the first non-NULL row in the ast table. For single-language sources
+        -- (the common case) this is exactly what you want. For mixed-language
+        -- sources the pattern only matches against nodes from the chosen
+        -- language's grammar — patterns won't cross-match across languages.
+        -- Per-language pattern parsing is a future enhancement; for now, run
+        -- separate ast_select calls per language if you need :match across a
+        -- mixed corpus.
         ast_pattern AS (
             SELECT
                 row_number() OVER (ORDER BY node.node_id) - 1 as idx,
@@ -636,9 +645,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             FROM (
                 SELECT unnest(parse_ast_list(
                     regexp_extract(selector, ':(?:match|contains)\("([^"]+)"\)', 1),
-                    -- Pull language from the AST table itself so the :match pattern
-                    -- parses in the same grammar as the target. Falls back to
-                    -- 'python' for the degenerate empty-table case.
                     COALESCE((SELECT language FROM ast
                               WHERE language IS NOT NULL LIMIT 1), 'python')
                 )) as node
