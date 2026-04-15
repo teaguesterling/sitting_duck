@@ -64,7 +64,7 @@ CREATE OR REPLACE MACRO ast_imports(
             SELECT node_id, name as source_module, type as import_type,
                    descendant_count, file_path, start_line, language
             FROM ast
-            WHERE is_semantic_type(semantic_type, 'IMPORT')
+            WHERE semantic_type = 'EXTERNAL_IMPORT'
               AND NOT is_syntax_only(flags)
               AND descendant_count > 0  -- exclude keyword tokens
         ),
@@ -213,7 +213,7 @@ CREATE OR REPLACE MACRO ast_callees(
     JOIN ast f
       ON f.node_id = c.scope.function
      AND f.file_path = c.file_path
-    WHERE is_semantic_type(c.semantic_type, 'CALL')
+    WHERE c.semantic_type = 'COMPUTATION_CALL'
       AND c.name IS NOT NULL AND c.name != ''
       AND f.name IS NOT NULL AND f.name != ''
     ORDER BY c.file_path, f.start_line, c.start_line;
@@ -251,6 +251,6 @@ CREATE OR REPLACE MACRO ast_callers(
     LEFT JOIN ast f
       ON f.node_id = c.scope.function
      AND f.file_path = c.file_path
-    WHERE is_semantic_type(c.semantic_type, 'CALL')
+    WHERE c.semantic_type = 'COMPUTATION_CALL'
       AND c.name IS NOT NULL AND c.name != ''
     ORDER BY c.file_path, c.start_line;

@@ -3240,7 +3240,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 WHERE callee.file_path = a.file_path
                   AND callee.node_id > a.node_id
                   AND callee.node_id <= a.node_id + a.descendant_count
-                  AND is_semantic_type(callee.semantic_type, 'CALL')
+                  AND callee.semantic_type = 'COMPUTATION_CALL'
                   AND (pc.pseudo_arg IS NULL OR callee.name = pc.pseudo_arg)
             )
 
@@ -3250,7 +3250,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 WHERE caller_fn.file_path = a.file_path
                   AND a.node_id > caller_fn.node_id
                   AND a.node_id <= caller_fn.node_id + caller_fn.descendant_count
-                  AND is_semantic_type(caller_fn.semantic_type, 'FUNCTION')
+                  AND caller_fn.semantic_type = 'DEFINITION_FUNCTION'
                   AND (pc.pseudo_arg IS NULL OR caller_fn.name = pc.pseudo_arg)
                   -- Nearest function (deepest)
                   AND NOT EXISTS (
@@ -3258,7 +3258,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                       WHERE closer.file_path = a.file_path
                         AND a.node_id > closer.node_id
                         AND a.node_id <= closer.node_id + closer.descendant_count
-                        AND is_semantic_type(closer.semantic_type, 'FUNCTION')
+                        AND closer.semantic_type = 'DEFINITION_FUNCTION'
                         AND closer.depth > caller_fn.depth
                   )
             )
@@ -3269,7 +3269,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 AND EXISTS (
                     SELECT 1 FROM ast ref
                     WHERE ref.file_path = a.file_path
-                      AND is_semantic_type(ref.semantic_type, 'CALL')
+                      AND ref.semantic_type = 'COMPUTATION_CALL'
                       AND ref.name = a.name
                       AND ref.node_id != a.node_id
                 )
@@ -3419,18 +3419,18 @@ CREATE OR REPLACE MACRO ast_select_from(
         SELECT DISTINCT caller_fn.* FROM matched m
         -- Find call nodes with the same name as this function
         JOIN ast call_node ON call_node.file_path = m.file_path
-          AND is_semantic_type(call_node.semantic_type, 'CALL')
+          AND call_node.semantic_type = 'COMPUTATION_CALL'
           AND call_node.name = m.name
           AND call_node.node_id != m.node_id
         -- Find the enclosing function of each call
         JOIN ast caller_fn ON caller_fn.file_path = call_node.file_path
-          AND is_semantic_type(caller_fn.semantic_type, 'FUNCTION')
+          AND caller_fn.semantic_type = 'DEFINITION_FUNCTION'
           AND call_node.node_id > caller_fn.node_id
           AND call_node.node_id <= caller_fn.node_id + caller_fn.descendant_count
           AND NOT EXISTS (
               SELECT 1 FROM ast closer
               WHERE closer.file_path = call_node.file_path
-                AND is_semantic_type(closer.semantic_type, 'FUNCTION')
+                AND closer.semantic_type = 'DEFINITION_FUNCTION'
                 AND call_node.node_id > closer.node_id
                 AND call_node.node_id <= closer.node_id + closer.descendant_count
                 AND closer.depth > caller_fn.depth
@@ -3442,7 +3442,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         JOIN ast callee ON callee.file_path = m.file_path
           AND callee.node_id > m.node_id
           AND callee.node_id <= m.node_id + m.descendant_count
-          AND is_semantic_type(callee.semantic_type, 'CALL')
+          AND callee.semantic_type = 'COMPUTATION_CALL'
           AND callee.name IS NOT NULL AND callee.name != ''
     ),
     -- ::parent-definition — nearest ancestor that is a named definition
@@ -3479,11 +3479,11 @@ CREATE OR REPLACE MACRO ast_select_from(
     WHERE (SELECT element_name FROM pseudo_element) = 'scope'
     UNION ALL
     SELECT * FROM pe_next
+    WHERE (SELECT element_name FROM pseudo_element) = 'next-sibling'
+    UNION ALL
 
 )SQLMACRO"
         R"SQLMACRO(
-    WHERE (SELECT element_name FROM pseudo_element) = 'next-sibling'
-    UNION ALL
     SELECT * FROM pe_prev
     WHERE (SELECT element_name FROM pseudo_element) IN ('prev-sibling', 'previous-sibling')
     UNION ALL
@@ -3767,7 +3767,7 @@ CREATE OR REPLACE MACRO ast_imports(
             SELECT node_id, name as source_module, type as import_type,
                    descendant_count, file_path, start_line, language
             FROM ast
-            WHERE is_semantic_type(semantic_type, 'IMPORT')
+            WHERE semantic_type = 'EXTERNAL_IMPORT'
               AND NOT is_syntax_only(flags)
               AND descendant_count > 0  -- exclude keyword tokens
         ),
@@ -3916,7 +3916,7 @@ CREATE OR REPLACE MACRO ast_callees(
     JOIN ast f
       ON f.node_id = c.scope.function
      AND f.file_path = c.file_path
-    WHERE is_semantic_type(c.semantic_type, 'CALL')
+    WHERE c.semantic_type = 'COMPUTATION_CALL'
       AND c.name IS NOT NULL AND c.name != ''
       AND f.name IS NOT NULL AND f.name != ''
     ORDER BY c.file_path, f.start_line, c.start_line;
@@ -3954,7 +3954,7 @@ CREATE OR REPLACE MACRO ast_callers(
     LEFT JOIN ast f
       ON f.node_id = c.scope.function
      AND f.file_path = c.file_path
-    WHERE is_semantic_type(c.semantic_type, 'CALL')
+    WHERE c.semantic_type = 'COMPUTATION_CALL'
       AND c.name IS NOT NULL AND c.name != ''
     ORDER BY c.file_path, c.start_line;
 
