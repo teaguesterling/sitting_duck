@@ -38,7 +38,7 @@ read_ast(file_patterns LIST(VARCHAR), language VARCHAR) -> TABLE
 | `peek_mode` | VARCHAR | `'smart'` | Peek extraction mode |
 | `batch_size` | INTEGER | - | Batch size for streaming |
 
-### Output Schema (20 columns default, 22 with `source := 'full'`)
+### Output Schema (19 columns default, 21 with `source := 'full'`)
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -52,8 +52,7 @@ read_ast(file_patterns LIST(VARCHAR), language VARCHAR) -> TABLE
 | `modifiers` | VARCHAR[] | Access modifiers and keywords |
 | `annotations` | VARCHAR | Decorator/annotation text |
 | `qualified_name` | LIST&lt;STRUCT&gt; | Scope path as segment list of `{semantic_type, name, index}`. Use `ast_qualified_name_as_string()` to render as `C[User] F[__init__]` for display. See [Output Schema](output-schema.md#qualified_name) for full details. |
-| `scope_id` | BIGINT | node_id of the nearest enclosing scope (NULL at root) |
-| `scope_stack` | BIGINT[] | On scope-creating nodes: chain of enclosing scope node_ids |
+| `scope` | STRUCT | Scope info bundle: `{current, function, class, module, stack}`. `current` is the nearest enclosing scope's node_id; `function`/`class`/`module` are precomputed shortcuts to the nearest ancestor of that kind (so `a.scope.function` gives "what function is this inside?" as a single field read, no range join needed). `stack` is a typed `LIST<STRUCT<id, kind SEMANTIC_TYPE>>` populated only on scope boundary nodes. See [Scope structure](#scope-structure) below. |
 | `file_path` | VARCHAR | Source file path |
 | `language` | VARCHAR | Detected language |
 | `start_line` | UINTEGER | Starting line (1-based) |
@@ -66,6 +65,41 @@ read_ast(file_patterns LIST(VARCHAR), language VARCHAR) -> TABLE
 | `children_count` | UINTEGER | Direct children count |
 | `descendant_count` | UINTEGER | Total descendants |
 | `peek` | VARCHAR | Source code snippet |
+
+### Scope structure
+
+The `scope` column is a STRUCT with five fields, letting common scope
+questions resolve to a single field read instead of a range join:
+
+```
+scope: STRUCT<
+    current   BIGINT,   -- every node: nearest enclosing scope's node_id
+    function  BIGINT,   -- every node: nearest function ancestor's node_id
+    class     BIGINT,   -- every node: nearest class/struct/trait ancestor
+    module    BIGINT,   -- every node: nearest module/namespace ancestor
+    stack     LIST<STRUCT<id BIGINT, kind SEMANTIC_TYPE>>
+                        -- scope nodes only: full ancestor chain with kinds
+>
+```
+
+Common access patterns:
+
+```sql
+-- "what function is this inside?"
+SELECT name FROM nodes WHERE scope.function = <target_function_node_id>;
+
+-- "all module-level definitions"
+SELECT * FROM nodes WHERE scope.current IS NULL OR scope.current <= 0;
+
+-- "all calls inside any try block (kind-filtered scope walk)"
+SELECT * FROM nodes c
+WHERE c.semantic_type = 'COMPUTATION_CALL'
+  AND list_filter(c.scope.stack, s -> s.kind = 'ERROR_TRY') != [];
+```
+
+Replaces the pre-v1.7.4 `scope_id` and `scope_stack` columns:
+- `scope_id` → `scope.current`
+- `scope_stack` → `scope.stack` (now typed; project `.id` for the scalar node_id)
 
 See [Output Schema](output-schema.md) for detailed column documentation and parameter effects.
 

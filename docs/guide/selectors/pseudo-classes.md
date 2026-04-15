@@ -130,27 +130,52 @@ Without `:scope()`, `ast_has` reports `outer_function` as containing `execute()`
 
 ### Scope Columns
 
-Every node in `read_ast` output includes scope information:
+Every node in `read_ast` output carries a `scope` STRUCT:
 
-- **`scope_id`** (INT64): the `node_id` of the nearest enclosing scope boundary. `-1`/NULL for the root module.
-- **`scope_stack`** (LIST(INT64)): on scope-creating nodes only, the full chain of enclosing scopes from outermost to this node. NULL on non-scope nodes.
+```
+scope: STRUCT<
+    current   BIGINT,   -- nearest enclosing scope's node_id (-1/NULL at root)
+    function  BIGINT,   -- nearest function ancestor's node_id
+    class     BIGINT,   -- nearest class/struct/trait ancestor
+    module    BIGINT,   -- nearest module/namespace ancestor
+    stack     LIST<STRUCT<id BIGINT, kind SEMANTIC_TYPE>>
+                        -- scope nodes only: full ancestor chain with kinds
+>
+```
+
+`scope.current` replaces the pre-v1.7.4 `scope_id` column. The
+`function`/`class`/`module` shortcuts are the big win: they let you ask
+"what function is this in?" as a single struct-field read instead of a
+range join against the AST. `scope.stack` replaces the old
+`scope_stack` (now typed — each entry carries its semantic kind).
 
 ```sql
 -- Scope chain for a class method:
-SELECT name, type, scope_id, scope_stack
+SELECT name, type, scope.current, list_transform(scope.stack, s -> s.id)
 FROM read_ast('src/*.py')
 WHERE type IN ('module', 'class_definition', 'function_definition')
 ORDER BY node_id LIMIT 5;
--- module:     scope_id=NULL, scope_stack=[0]
--- Config:     scope_id=0,    scope_stack=[0, 32]
--- __init__:   scope_id=32,   scope_stack=[0, 32, 42]
+-- module:     scope.current=NULL, stack=[0]
+-- Config:     scope.current=0,    stack=[0, 32]
+-- __init__:   scope.current=32,   stack=[0, 32, 42]
+
+-- "who calls ExecuteRecursivePipelines?" — O(1) per candidate
+SELECT DISTINCT caller.name
+FROM read_ast('src/**/*.cpp') call_site
+JOIN read_ast('src/**/*.cpp') caller
+  ON caller.node_id = call_site.scope.function
+ AND caller.file_path = call_site.file_path
+WHERE call_site.semantic_type = 'COMPUTATION_CALL'
+  AND call_site.name = 'ExecuteRecursivePipelines';
 ```
 
-To get any node's full scope chain: look up its `scope_id` → read that node's `scope_stack`.
+To get any node's full scope chain when it isn't a scope node itself:
+look up its `scope.current` → read that node's `scope.stack`.
 
 ### Scope Resolution Macros
 
-Three macros build on `scope_id` and `scope_stack` for name resolution:
+Three macros build on `scope.current`, `scope.function`, and `scope.stack`
+for name resolution:
 
 **`ast_exports(source)`** — module-level public definitions:
 ```sql

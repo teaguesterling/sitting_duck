@@ -224,7 +224,7 @@ ast_imports(source, language := NULL)    -- Imported names with source module
 ast_resolve(source, language := NULL)    -- Reference → definition binding
 ```
 
-`ast_resolve` walks the scope chain (`scope_id` → `scope_stack`) to find which definition each reference binds to:
+`ast_resolve` walks the scope chain (`scope.current` → `scope.stack`) to find which definition each reference binds to:
 
 ```sql
 SELECT ref_name, ref_line, def_line, def_type
