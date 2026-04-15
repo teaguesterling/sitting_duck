@@ -79,6 +79,24 @@ SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py', '.
 ----
 10
 
+# .namespace and .ns alias DEFINITION_MODULE — same set as .module / .mod /
+# .package because the current taxonomy doesn't yet distinguish module
+# from namespace. C++ namespace_definition / Rust mod_item / Java
+# package_declaration all surface here.
+query I
+SELECT
+    (SELECT COUNT(*) FROM ast_select('test/data/python/simple.py', '.namespace'))
+  = (SELECT COUNT(*) FROM ast_select('test/data/python/simple.py', '.module'));
+----
+true
+
+query I
+SELECT
+    (SELECT COUNT(*) FROM ast_select('test/data/python/simple.py', '.ns'))
+  = (SELECT COUNT(*) FROM ast_select('test/data/python/simple.py', '.mod'));
+----
+true
+
 # =============================================================================
 # Bare type matching (if matches if + if_*)
 # =============================================================================

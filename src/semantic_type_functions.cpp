@@ -99,7 +99,16 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 			    return base_type == SemanticTypes::DEFINITION_CLASS;
 		    } else if (pattern == "IDENTIFIER" || pattern == "ID" || pattern == "IDENT") {
 			    return base_type == SemanticTypes::NAME_IDENTIFIER;
-		    } else if (pattern == "MODULE" || pattern == "MOD" || pattern == "PACKAGE") {
+		    } else if (pattern == "MODULE" || pattern == "MOD" || pattern == "PACKAGE" ||
+		               pattern == "NAMESPACE" || pattern == "NS") {
+			    // NAMESPACE/NS map to DEFINITION_MODULE because the current
+			    // taxonomy's 4 DEFINITION super-type slots are full
+			    // (FUNCTION/VARIABLE/CLASS/MODULE) and DEFINITION_MODULE is
+			    // the conceptual home for any named module/namespace
+			    // definition (Python module, C++/C# namespace, Rust mod,
+			    // Java package decl). A future refinement could split
+			    // namespace from module by repurposing the language-specific
+			    // refinement bits — see tracker entry on namespace taxonomy.
 			    return base_type == SemanticTypes::DEFINITION_MODULE;
 		    } else if (pattern == "VARIABLE" || pattern == "VAR" || pattern == "LET" || pattern == "CONST") {
 			    return base_type == SemanticTypes::DEFINITION_VARIABLE;
