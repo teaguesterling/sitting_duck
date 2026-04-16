@@ -43,7 +43,7 @@ PRAGMA enable_profiling='json';
 
 # --- Baseline: ast_select_from with ::callers ---
 statement ok
-PRAGMA profiling_output='/tmp/bench_baseline.json';
+PRAGMA profiling_output='build/bench_baseline.json';
 
 statement ok
 SELECT COUNT(*) FROM ast_select_from('ast',
@@ -54,13 +54,13 @@ SELECT COUNT(*) FROM ast_select_from('ast',
 # ==========================================================================
 
 statement ok
-PRAGMA profiling_output='/tmp/bench_sort.json';
+PRAGMA profiling_output='build/bench_sort.json';
 
 statement ok
 CREATE TABLE ast_sorted AS SELECT * FROM ast ORDER BY file_path, node_id;
 
 statement ok
-PRAGMA profiling_output='/tmp/bench_sorted_callers.json';
+PRAGMA profiling_output='build/bench_sorted_callers.json';
 
 statement ok
 SELECT COUNT(*) FROM ast_select_from('ast_sorted',
@@ -71,7 +71,7 @@ SELECT COUNT(*) FROM ast_select_from('ast_sorted',
 # ==========================================================================
 
 statement ok
-PRAGMA profiling_output='/tmp/bench_roles_create.json';
+PRAGMA profiling_output='build/bench_roles_create.json';
 
 statement ok
 CREATE TABLE ast_roles AS
@@ -83,7 +83,7 @@ FROM ast;
 
 # Manual ::callers using the role columns (no is_semantic_type per row)
 statement ok
-PRAGMA profiling_output='/tmp/bench_roles_callers.json';
+PRAGMA profiling_output='build/bench_roles_callers.json';
 
 statement ok
 WITH target AS (
@@ -109,7 +109,7 @@ QUALIFY ROW_NUMBER() OVER (PARTITION BY call_node.node_id ORDER BY caller.depth 
 # ==========================================================================
 
 statement ok
-PRAGMA profiling_output='/tmp/bench_derived_create.json';
+PRAGMA profiling_output='build/bench_derived_create.json';
 
 statement ok
 CREATE TABLE funcs AS
@@ -131,7 +131,7 @@ SELECT (SELECT COUNT(*) FROM funcs) > 0 AND (SELECT COUNT(*) FROM calls) > 0;
 true
 
 statement ok
-PRAGMA profiling_output='/tmp/bench_derived_callers.json';
+PRAGMA profiling_output='build/bench_derived_callers.json';
 
 statement ok
 WITH target AS (
@@ -157,7 +157,7 @@ QUALIFY ROW_NUMBER() OVER (PARTITION BY c.node_id ORDER BY caller.depth DESC) = 
 # This is the single O(N*M) operation we move from per-query to per-cache-build.
 
 statement ok
-PRAGMA profiling_output='/tmp/bench_enclosing_create.json';
+PRAGMA profiling_output='build/bench_enclosing_create.json';
 
 statement ok
 CREATE TABLE calls_with_enclosing AS
@@ -176,7 +176,7 @@ SELECT COUNT(*) > 0 FROM calls_with_enclosing;
 true
 
 statement ok
-PRAGMA profiling_output='/tmp/bench_enclosing_callers.json';
+PRAGMA profiling_output='build/bench_enclosing_callers.json';
 
 # Now ::callers is a trivial hash join — no range join, no NOT EXISTS
 statement ok
@@ -191,7 +191,7 @@ WHERE callee = 'ExecuteRecursivePipelines';
 # to be a two-row hash lookup.
 
 statement ok
-PRAGMA profiling_output='/tmp/bench_edges_create.json';
+PRAGMA profiling_output='build/bench_edges_create.json';
 
 statement ok
 CREATE TABLE call_edges AS
@@ -207,7 +207,7 @@ statement ok
 CREATE INDEX call_edges_callee ON call_edges(callee_name);
 
 statement ok
-PRAGMA profiling_output='/tmp/bench_edges_callers.json';
+PRAGMA profiling_output='build/bench_edges_callers.json';
 
 statement ok
 SELECT DISTINCT caller_name
@@ -216,7 +216,7 @@ WHERE callee_name = 'ExecuteRecursivePipelines';
 
 # Bonus: ::callees of ExecuteRecursivePipelines using the same edge table
 statement ok
-PRAGMA profiling_output='/tmp/bench_edges_callees.json';
+PRAGMA profiling_output='build/bench_edges_callees.json';
 
 statement ok
 SELECT DISTINCT callee_name
@@ -226,7 +226,7 @@ WHERE caller_name = 'ExecuteRecursivePipelines';
 # Bonus: full callgraph fan-out — answer "what does the whole codebase call?"
 # (A question you can barely ask with the current engine.)
 statement ok
-PRAGMA profiling_output='/tmp/bench_edges_all_callers.json';
+PRAGMA profiling_output='build/bench_edges_all_callers.json';
 
 statement ok
 SELECT callee_name, COUNT(DISTINCT caller_name) AS caller_count
