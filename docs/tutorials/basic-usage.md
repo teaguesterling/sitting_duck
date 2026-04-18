@@ -40,15 +40,15 @@ SELECT * FROM read_ast('file.py', ignore_errors := true);
 
 ```sql
 -- Find specific node types
-SELECT * FROM read_ast('example.py')
+SELECT * FROM read_ast('test/data/python/sample_app.py')
 WHERE type = 'function_definition';
 
 -- Multiple types
-SELECT * FROM read_ast('example.py')
+SELECT * FROM read_ast('test/data/python/sample_app.py')
 WHERE type IN ('function_definition', 'class_definition');
 
 -- Pattern matching
-SELECT * FROM read_ast('example.py')
+SELECT * FROM read_ast('test/data/python/sample_app.py')
 WHERE type LIKE '%definition%';
 ```
 
@@ -59,10 +59,10 @@ Semantic types provide language-agnostic filtering:
 ```sql
 -- Find all function definitions (any language)
 SELECT * FROM read_ast('**/*.*', ignore_errors := true)
-WHERE semantic_type = 240;  -- DEFINITION_FUNCTION
+WHERE semantic_type = 'DEFINITION_FUNCTION';
 
 -- Use helper functions
-SELECT * FROM read_ast('example.py')
+SELECT * FROM read_ast('test/data/python/sample_app.py')
 WHERE is_definition(semantic_type);
 ```
 
@@ -70,11 +70,11 @@ WHERE is_definition(semantic_type);
 
 ```sql
 -- Nodes in a specific line range
-SELECT * FROM read_ast('example.py')
+SELECT * FROM read_ast('test/data/python/sample_app.py')
 WHERE start_line BETWEEN 10 AND 50;
 
 -- Top-level nodes only
-SELECT * FROM read_ast('example.py')
+SELECT * FROM read_ast('test/data/python/sample_app.py')
 WHERE depth = 1;
 ```
 
@@ -85,11 +85,11 @@ WHERE depth = 1;
 ```sql
 -- Functions with names
 SELECT name, type, start_line
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE name IS NOT NULL AND type = 'function_definition';
 
 -- Find a specific function
-SELECT * FROM read_ast('example.py')
+SELECT * FROM read_ast('test/data/python/sample_app.py')
 WHERE name = 'my_function';
 ```
 
@@ -104,7 +104,7 @@ WHERE type = 'function_definition'
 
 -- Find private methods (Python convention)
 SELECT name, start_line
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE type = 'function_definition'
   AND name LIKE '\_%';
 ```
@@ -116,7 +116,7 @@ WHERE type = 'function_definition'
 ```sql
 -- Find deeply nested code
 SELECT type, name, depth, start_line
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE depth > 5
 ORDER BY depth DESC;
 ```
@@ -129,7 +129,7 @@ SELECT
     name,
     descendant_count as complexity,
     end_line - start_line + 1 as line_count
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE type = 'function_definition'
 ORDER BY complexity DESC;
 ```
@@ -140,11 +140,11 @@ ORDER BY complexity DESC;
 -- Find children of a specific node
 WITH target AS (
     SELECT node_id
-    FROM read_ast('example.py')
+    FROM read_ast('test/data/python/sample_app.py')
     WHERE type = 'class_definition' AND name = 'MyClass'
 )
 SELECT type, name, start_line
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE parent_id = (SELECT node_id FROM target);
 ```
 
@@ -157,7 +157,7 @@ The `peek` column contains a snippet of the source code:
 ```sql
 -- See function signatures
 SELECT name, peek
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE type = 'function_definition';
 ```
 
@@ -166,12 +166,12 @@ WHERE type = 'function_definition';
 ```sql
 -- Larger peek for more context
 SELECT name, peek
-FROM read_ast('example.py', peek := 200)
+FROM read_ast('test/data/python/sample_app.py', peek := 200)
 WHERE type = 'function_definition';
 
 -- Different peek modes
 SELECT name, peek
-FROM read_ast('example.py', peek := 'smart')
+FROM read_ast('test/data/python/sample_app.py', peek := 'smart')
 WHERE type = 'class_definition';
 ```
 
@@ -202,7 +202,7 @@ WHERE type = 'ERROR';
 ```sql
 -- Node type distribution
 SELECT type, COUNT(*) as count
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 GROUP BY type
 ORDER BY count DESC;
 ```
@@ -215,7 +215,7 @@ SELECT
     repeat('│ ', depth - 1) || '├─ ' || type as tree,
     COALESCE(name, '') as name,
     start_line as line
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 ORDER BY node_id;
 ```
 

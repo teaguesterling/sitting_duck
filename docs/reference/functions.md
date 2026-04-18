@@ -38,7 +38,7 @@ read_ast(file_patterns LIST(VARCHAR), language VARCHAR) -> TABLE
 | `peek_mode` | VARCHAR | `'smart'` | Peek extraction mode |
 | `batch_size` | INTEGER | - | Batch size for streaming |
 
-### Output Schema (19 columns default, 21 with `source := 'full'`)
+### Output Schema
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -249,7 +249,7 @@ WHERE type = 'class_selector';
 
 `parse_ast()` is a table function and, like all DuckDB table functions, its arguments must be literals at bind time. `parse_ast_list_table()` is the macro-level escape hatch: it wraps the scalar `parse_ast_list()` inside a table-shaped relation, which allows downstream SQL macros to substitute column-valued arguments at macro-expansion time and still produce a row-shaped result.
 
-`ast_select()`'s internal `sel` CTE uses `parse_ast_list_table` rather than `parse_ast` for exactly this reason — it's the plumbing that (together with the upstream DuckDB planner fix tracked in `tracker/bugs/007`) enables per-row selector dispatch for features like `ast_select_rules()`.
+`ast_select()`'s internal `sel` CTE uses `parse_ast_list_table` rather than `parse_ast` for exactly this reason — it's the plumbing that enables per-row selector dispatch for features like `ast_select_rules()`.
 
 ---
 

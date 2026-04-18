@@ -84,7 +84,7 @@ SELECT * FROM read_ast('**/test_*.py');
 
 ## Output Columns
 
-The `read_ast()` function returns 19 columns by default (21 with `source := 'full'`):
+The `read_ast()` function returns a table with one row per AST node. Column set depends on extraction parameters:
 
 | Column | Type | Description |
 |--------|------|-------------|

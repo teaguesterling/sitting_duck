@@ -224,7 +224,7 @@ SELECT * FROM read_ast(['file1.py', 'file2.py'], batch_size := 2);
 
 ## Table Schema
 
-The `read_ast()` function returns 19 columns by default (21 with `source := 'full'`):
+The `read_ast()` function returns a table with one row per AST node. Column set depends on extraction parameters:
 
 | Column | Type | Description |
 |--------|------|-------------|

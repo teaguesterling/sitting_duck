@@ -56,7 +56,7 @@ FROM read_ast([
     '**/*.java',
     '**/*.go'
 ], ignore_errors := true)
-WHERE semantic_type = 240  -- DEFINITION_FUNCTION
+WHERE semantic_type = 'DEFINITION_FUNCTION'
 GROUP BY language
 ORDER BY function_count DESC;
 ```
@@ -205,7 +205,7 @@ SELECT
     descendant_count as complexity,
     language
 FROM read_ast(['**/*.py', '**/*.js'], ignore_errors := true)
-WHERE semantic_type = 240  -- DEFINITION_FUNCTION
+WHERE semantic_type = 'DEFINITION_FUNCTION'
   AND name IS NOT NULL
 ORDER BY complexity DESC
 LIMIT 20;

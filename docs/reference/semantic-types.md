@@ -311,7 +311,7 @@ SELECT * FROM read_ast('file.ts') WHERE is_type_generic(semantic_type);
 
 ```sql
 SELECT * FROM read_ast('file.py')
-WHERE semantic_type = 240;  -- Functions only
+WHERE semantic_type = 'DEFINITION_FUNCTION';  -- Functions only
 ```
 
 ### By Super Kind
@@ -447,11 +447,11 @@ WHERE is_definition(semantic_type)
 -- JavaScript: function, arrow functions
 -- Java: method_declaration
 -- Go: function_declaration
--- All have semantic_type = 240
+-- All have semantic_type = 'DEFINITION_FUNCTION'
 
 SELECT language, name, type
 FROM read_ast(['**/*.py', '**/*.js', '**/*.java'], ignore_errors := true)
-WHERE semantic_type = 240
+WHERE semantic_type = 'DEFINITION_FUNCTION'
 ORDER BY language, name;
 ```
 
@@ -462,11 +462,11 @@ ORDER BY language, name;
 -- Java: class_declaration
 -- TypeScript: class_declaration
 -- C++: class_specifier
--- All have semantic_type = 248
+-- All have semantic_type = 'DEFINITION_CLASS'
 
 SELECT language, name
 FROM read_ast(['**/*.py', '**/*.java', '**/*.cpp'], ignore_errors := true)
-WHERE semantic_type = 248;
+WHERE semantic_type = 'DEFINITION_CLASS';
 ```
 
 ## Next Steps

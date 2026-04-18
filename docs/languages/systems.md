@@ -225,8 +225,8 @@ WHERE peek LIKE '%comptime%';
 -- Compare systems language usage
 SELECT
     language,
-    COUNT(CASE WHEN semantic_type = 240 THEN 1 END) as functions,
-    COUNT(CASE WHEN semantic_type = 248 THEN 1 END) as types,
+    COUNT(CASE WHEN semantic_type = 'DEFINITION_FUNCTION' THEN 1 END) as functions,
+    COUNT(CASE WHEN semantic_type = 'DEFINITION_CLASS' THEN 1 END) as types,
     COUNT(*) as total_nodes
 FROM read_ast(['**/*.c', '**/*.cpp', '**/*.go', '**/*.rs', '**/*.zig'], ignore_errors := true)
 GROUP BY language

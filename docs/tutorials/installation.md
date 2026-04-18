@@ -1,24 +1,37 @@
 # Installation
 
-This guide covers how to install Sitting Duck for use with DuckDB.
+## From the DuckDB Community Registry
 
-## Prerequisites
+The simplest way to install:
 
-- **DuckDB**: Version 1.0.0 or later
-- **Git**: For cloning the repository
-- **CMake**: Version 3.20 or later (for building from source)
-- **C++ Compiler**: GCC 9+, Clang 10+, or MSVC 2019+
+```sql
+INSTALL sitting_duck FROM community;
+LOAD sitting_duck;
+
+-- Verify it works
+SELECT * FROM ast_supported_languages() LIMIT 5;
+```
+
+This works on Linux (x64, ARM64), macOS (Intel, Apple Silicon), Windows, and DuckDB-Wasm.
 
 ## Building from Source
 
-Sitting Duck must currently be built from source. We plan to publish to the DuckDB extension repository in the future.
+For development or if you need the latest unreleased features.
 
-### Clone the Repository
+### Prerequisites
+
+- **DuckDB**: v1.5.1 or later (the extension is compiled against a specific DuckDB API version)
+- **Git**: for cloning the repository
+- **CMake**: 3.20 or later
+- **C++ compiler**: GCC 9+, Clang 10+, or MSVC 2019+
+- **Node.js**: required for tree-sitter grammar generation
+
+### Build
 
 ```bash
-# Clone with submodules (required for Tree-Sitter grammars)
 git clone --recursive https://github.com/teaguesterling/sitting_duck.git
 cd sitting_duck
+make
 ```
 
 If you already cloned without `--recursive`:
@@ -27,114 +40,45 @@ If you already cloned without `--recursive`:
 git submodule update --init --recursive
 ```
 
-### Build the Extension
+### Verify
 
 ```bash
-# Build with make (recommended)
-make
-
-# Or use CMake directly
-mkdir -p build/release
-cd build/release
-cmake ../..
-make -j$(nproc)
-```
-
-### Verify Installation
-
-```bash
-# Test the extension loads correctly
 ./build/release/duckdb -c "
-LOAD './build/release/extension/sitting_duck/sitting_duck.duckdb_extension';
+LOAD 'build/release/extension/sitting_duck/sitting_duck.duckdb_extension';
 SELECT COUNT(*) FROM read_ast('README.md');
 "
 ```
 
-## Loading the Extension
-
-### From Build Directory
+### Load from build directory
 
 ```sql
--- Load from build directory
-LOAD './build/release/extension/sitting_duck/sitting_duck.duckdb_extension';
-
--- Verify it loaded
-SELECT * FROM ast_supported_languages() LIMIT 5;
-```
-
-### Installing to DuckDB Extensions Directory
-
-```bash
-# Copy to DuckDB extensions directory
-cp build/release/extension/sitting_duck/sitting_duck.duckdb_extension ~/.duckdb/extensions/
-
-# Now you can load without the full path
-duckdb -c "LOAD sitting_duck; SELECT COUNT(*) FROM read_ast('README.md');"
-```
-
-## Build Options
-
-### Debug Build
-
-```bash
-make debug
-# Or
-cmake -DCMAKE_BUILD_TYPE=Debug ../..
-make
-```
-
-### Release with Debug Info
-
-```bash
-cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ../..
-make
+LOAD 'build/release/extension/sitting_duck/sitting_duck.duckdb_extension';
 ```
 
 ## Troubleshooting
 
-### Submodule Issues
-
-If grammar submodules show errors:
-
+**Submodule issues:**
 ```bash
-# Reset and reinitialize submodules
 git submodule deinit -f .
 git submodule update --init --recursive
 ```
 
-### Build Errors
-
-**Missing Tree-sitter headers:**
+**Missing tree-sitter headers:**
 ```bash
-# Headers are auto-installed during CMake configuration
 rm -rf build && make
 ```
 
-**Grammar generation failures:**
+**Grammar generation failures** (Node.js needed):
 ```bash
-# Ensure Node.js is available for tree-sitter-cli
 npm install -g tree-sitter-cli
 make clean && make
 ```
 
-### Runtime Errors
-
-**Extension not found:**
+**Extension not found at runtime:**
 ```sql
--- Use the full path to the extension
 LOAD '/full/path/to/sitting_duck.duckdb_extension';
-```
-
-**Language not recognized:**
-```sql
--- Check available languages
-SELECT * FROM ast_supported_languages();
-
--- Force a specific language
-SELECT * FROM read_ast('file.txt', 'python');
 ```
 
 ## Next Steps
 
-- [Quick Start Guide](quickstart.md) - Your first Sitting Duck queries
-- [Basic Usage](basic-usage.md) - Common usage patterns
+- [Your First Query](quickstart.md) — start querying code

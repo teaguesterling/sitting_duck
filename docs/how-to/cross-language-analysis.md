@@ -21,7 +21,7 @@ FROM read_ast([
     '**/*.go',
     '**/*.rs'
 ], ignore_errors := true)
-WHERE semantic_type = 240  -- DEFINITION_FUNCTION
+WHERE semantic_type = 'DEFINITION_FUNCTION'
 GROUP BY language
 ORDER BY function_count DESC;
 ```
@@ -40,7 +40,7 @@ FROM read_ast([
     '**/*.cpp',
     '**/*.cs'
 ], ignore_errors := true)
-WHERE semantic_type = 248  -- DEFINITION_CLASS
+WHERE semantic_type = 'DEFINITION_CLASS'
   AND name IS NOT NULL
 ORDER BY language, file_path;
 ```
@@ -60,7 +60,7 @@ FROM read_ast([
     '**/*.js',
     '**/*.java'
 ], ignore_errors := true)
-WHERE semantic_type = 240  -- Functions
+WHERE semantic_type = 'DEFINITION_FUNCTION'
 GROUP BY language
 ORDER BY avg_complexity DESC;
 ```
@@ -154,8 +154,8 @@ ORDER BY nodes DESC;
 ```sql
 SELECT
     language,
-    COUNT(CASE WHEN semantic_type = 240 THEN 1 END) as functions,
-    COUNT(CASE WHEN semantic_type = 248 THEN 1 END) as classes,
+    COUNT(CASE WHEN semantic_type = 'DEFINITION_FUNCTION' THEN 1 END) as functions,
+    COUNT(CASE WHEN semantic_type = 'DEFINITION_CLASS' THEN 1 END) as classes,
     COUNT(CASE WHEN semantic_type = 244 THEN 1 END) as variables
 FROM read_ast('**/*.*', ignore_errors := true)
 GROUP BY language
@@ -178,7 +178,7 @@ FROM read_ast([
     '**/*.js',
     '**/*.java'
 ], ignore_errors := true)
-WHERE semantic_type = 240
+WHERE semantic_type = 'DEFINITION_FUNCTION'
   AND name LIKE '%validate%'
 ORDER BY name, language;
 ```
@@ -195,7 +195,7 @@ FROM read_ast([
     '**/*.java',
     '**/*.cpp'
 ], ignore_errors := true)
-WHERE semantic_type = 248
+WHERE semantic_type = 'DEFINITION_CLASS'
   AND name LIKE '%Service%'
 ORDER BY complexity DESC;
 ```
@@ -216,7 +216,7 @@ FROM read_ast([
     '**/*.js',
     '**/*.java'
 ], ignore_errors := true)
-WHERE semantic_type = 240
+WHERE semantic_type = 'DEFINITION_FUNCTION'
   AND descendant_count > 100
 ORDER BY complexity DESC
 LIMIT 20;

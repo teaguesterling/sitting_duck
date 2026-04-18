@@ -88,7 +88,7 @@ For function definitions, native context extracts:
 ```sql
 -- Python function with parameters and return type
 SELECT name, native, semantic_type
-FROM read_ast('example.py', context := 'native')
+FROM read_ast('test/data/python/sample_app.py', context := 'native')
 WHERE type = 'function_definition';
 ```
 
@@ -176,7 +176,7 @@ SELECT
     file_path,
     start_line
 FROM read_ast('src/**/*.py', context := 'native')
-WHERE semantic_type = 240  -- DEFINITION_FUNCTION
+WHERE semantic_type = 'DEFINITION_FUNCTION'
 ORDER BY file_path, start_line;
 ```
 
@@ -206,7 +206,7 @@ SELECT COUNT(*) FROM read_ast('**/*.py', context := 'native', ignore_errors := t
 ```sql
 -- Full context, full source text
 SELECT type, name, native, peek
-FROM read_ast('example.py', context := 'native', source := 'full');
+FROM read_ast('test/data/python/sample_app.py', context := 'native', source := 'full');
 ```
 
 ### With Structure Control
@@ -214,7 +214,7 @@ FROM read_ast('example.py', context := 'native', source := 'full');
 ```sql
 -- Minimal structure, full context
 SELECT type, name, semantic_type
-FROM read_ast('example.py', context := 'native', structure := 'minimal');
+FROM read_ast('test/data/python/sample_app.py', context := 'native', structure := 'minimal');
 ```
 
 ### Optimized for Large Codebases

@@ -860,7 +860,7 @@ GROUP BY language;
 
 ```sql
 SELECT DISTINCT type, semantic_type_to_string(semantic_type) as semantic
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 ORDER BY semantic, type;
 ```
 
@@ -868,7 +868,7 @@ ORDER BY semantic, type;
 
 ```sql
 SELECT type, name, peek
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE is_function_definition(semantic_type)
    OR is_class_definition(semantic_type);
 ```

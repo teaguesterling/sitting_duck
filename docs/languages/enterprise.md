@@ -264,8 +264,8 @@ This means:
 -- Compare enterprise language patterns
 SELECT
     language,
-    COUNT(CASE WHEN semantic_type = 240 THEN 1 END) as methods,
-    COUNT(CASE WHEN semantic_type = 248 THEN 1 END) as classes,
+    COUNT(CASE WHEN semantic_type = 'DEFINITION_FUNCTION' THEN 1 END) as methods,
+    COUNT(CASE WHEN semantic_type = 'DEFINITION_CLASS' THEN 1 END) as classes,
     COUNT(*) as total_nodes
 FROM read_ast(['**/*.java', '**/*.cs', '**/*.kt', '**/*.swift', '**/*.dart'], ignore_errors := true)
 GROUP BY language
@@ -277,7 +277,7 @@ SELECT
     name,
     descendant_count as complexity
 FROM read_ast(['**/*.java', '**/*.cs', '**/*.kt', '**/*.dart'], ignore_errors := true)
-WHERE semantic_type = 248
+WHERE semantic_type = 'DEFINITION_CLASS'
   AND name LIKE '%Service%'
 ORDER BY complexity DESC;
 ```

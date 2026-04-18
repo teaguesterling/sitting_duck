@@ -65,7 +65,7 @@ HTML and CSS are structural languages without functions or classes:
 -- Find all functions
 SELECT name, type, start_line
 FROM read_ast('app.js')
-WHERE semantic_type = 240;
+WHERE semantic_type = 'DEFINITION_FUNCTION';
 
 -- Find React components (functions returning JSX)
 SELECT name, peek
@@ -208,7 +208,7 @@ SELECT
     name,
     type
 FROM read_ast(['**/*.js', '**/*.ts'], ignore_errors := true)
-WHERE semantic_type = 240
+WHERE semantic_type = 'DEFINITION_FUNCTION'
 ORDER BY file_path;
 
 -- Compare front-end file sizes

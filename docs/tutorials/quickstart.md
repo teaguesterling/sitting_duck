@@ -18,11 +18,11 @@ SELECT COUNT(*) as node_count FROM read_ast('README.md');
 
 ```sql
 -- See all AST nodes in a Python file
-SELECT * FROM read_ast('example.py') LIMIT 20;
+SELECT * FROM read_ast('test/data/python/sample_app.py') LIMIT 20;
 
 -- Find function definitions
 SELECT name, start_line, end_line
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE type = 'function_definition';
 ```
 
@@ -34,7 +34,7 @@ SELECT
     repeat('  ', depth) || type as tree_view,
     name,
     start_line
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 ORDER BY node_id
 LIMIT 30;
 ```
@@ -66,7 +66,7 @@ SELECT
     language,
     COUNT(*) as function_count
 FROM read_ast(['**/*.py', '**/*.js', '**/*.java'], ignore_errors := true)
-WHERE semantic_type = 240  -- DEFINITION_FUNCTION
+WHERE semantic_type = 'DEFINITION_FUNCTION'
 GROUP BY language
 ORDER BY function_count DESC;
 ```

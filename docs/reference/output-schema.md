@@ -4,7 +4,7 @@ Complete reference for `read_ast()` output columns.
 
 ## Quick Reference
 
-**Default output (19 columns):**
+**Default output:**
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -30,7 +30,7 @@ Complete reference for `read_ast()` output columns.
 | `descendant_count` | UINTEGER | Total descendant count |
 | `peek` | VARCHAR | Source code snippet |
 
-**Additional columns with `source := 'full'` (21 columns total):**
+**Additional columns with `source := 'full'`:**
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -40,7 +40,7 @@ Complete reference for `read_ast()` output columns.
 ```sql
 -- Get column positions with source := 'full'
 SELECT name, start_line, start_column, end_line, end_column
-FROM read_ast('example.py', source := 'full')
+FROM read_ast('test/data/python/sample_app.py', source := 'full')
 WHERE is_function_definition(semantic_type);
 ```
 
@@ -56,7 +56,7 @@ Unique identifier for each AST node within a file.
 
 ```sql
 SELECT node_id, type, name
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 ORDER BY node_id;
 ```
 
@@ -75,7 +75,7 @@ Language-specific AST node type from Tree-sitter.
 ```sql
 -- Common types vary by language
 SELECT DISTINCT type
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 ORDER BY type;
 ```
 
@@ -95,12 +95,12 @@ Universal semantic category. This is a custom DuckDB type that:
 
 ```sql
 -- Direct string comparison (natural syntax)
-SELECT * FROM read_ast('example.py')
+SELECT * FROM read_ast('test/data/python/sample_app.py')
 WHERE semantic_type = 'DEFINITION_FUNCTION';
 
 -- Group by semantic type
 SELECT semantic_type, COUNT(*)
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 GROUP BY semantic_type
 ORDER BY COUNT(*) DESC;
 ```
@@ -149,7 +149,7 @@ Extracted identifier or name for the node.
 
 ```sql
 SELECT name, type, start_line
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE name IS NOT NULL;
 ```
 
@@ -199,7 +199,7 @@ SELECT
     name,
     parameters,
     array_length(parameters) as param_count
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE is_function_definition(semantic_type);
 
 -- Find functions with specific parameter names
@@ -381,7 +381,7 @@ Line numbers (1-based).
 
 ```sql
 SELECT name, start_line, end_line, end_line - start_line + 1 as line_count
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE type = 'function_definition';
 ```
 
@@ -396,7 +396,7 @@ Column positions (1-based). **Only available with `source := 'full'`.**
 ```sql
 -- Must use source := 'full' to get column positions
 SELECT name, start_line, start_column, end_line, end_column
-FROM read_ast('example.py', source := 'full')
+FROM read_ast('test/data/python/sample_app.py', source := 'full')
 WHERE type = 'identifier';
 ```
 
@@ -413,7 +413,7 @@ Node ID of the parent node.
 ```sql
 -- Find children of a specific node
 SELECT type, name
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE parent_id = 5;
 ```
 
@@ -431,7 +431,7 @@ Tree depth (0 for root).
 ```sql
 -- Find deeply nested code
 SELECT type, name, depth
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE depth > 5
 ORDER BY depth DESC;
 ```
@@ -446,7 +446,7 @@ Position among siblings (0-based).
 
 ```sql
 SELECT type, sibling_index
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE parent_id = 0
 ORDER BY sibling_index;
 ```
@@ -461,7 +461,7 @@ Number of direct child nodes.
 
 ```sql
 SELECT type, name, children_count
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE children_count > 10;
 ```
 
@@ -476,7 +476,7 @@ Total number of descendant nodes. Useful as a complexity metric.
 ```sql
 -- Find complex functions
 SELECT name, descendant_count as complexity
-FROM read_ast('example.py')
+FROM read_ast('test/data/python/sample_app.py')
 WHERE type = 'function_definition'
 ORDER BY complexity DESC;
 ```
@@ -539,7 +539,7 @@ Source code snippet for the node.
 
 ```sql
 SELECT type, name, peek
-FROM read_ast('example.py', peek := 100)
+FROM read_ast('test/data/python/sample_app.py', peek := 100)
 WHERE type = 'function_definition';
 ```
 
@@ -591,11 +591,11 @@ WHERE type = 'function_definition';
 
 ```sql
 -- Default: line positions only
-SELECT start_line, end_line FROM read_ast('example.py');
+SELECT start_line, end_line FROM read_ast('test/data/python/sample_app.py');
 
 -- With source := 'full': includes column positions
 SELECT start_line, start_column, end_line, end_column
-FROM read_ast('example.py', source := 'full');
+FROM read_ast('test/data/python/sample_app.py', source := 'full');
 ```
 
 ---

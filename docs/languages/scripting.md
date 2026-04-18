@@ -76,8 +76,8 @@ WHERE type = 'function_definition'
 
 -- Find class methods
 SELECT c.name as class_name, f.name as method_name
-FROM read_ast('example.py') c
-JOIN read_ast('example.py') f ON f.parent_id = c.node_id
+FROM read_ast('test/data/python/sample_app.py') c
+JOIN read_ast('test/data/python/sample_app.py') f ON f.parent_id = c.node_id
 WHERE c.type = 'class_definition'
   AND f.type = 'function_definition';
 ```
@@ -254,7 +254,7 @@ WHERE type = 'command';
 -- Compare scripting language patterns
 SELECT
     language,
-    COUNT(CASE WHEN semantic_type = 240 THEN 1 END) as functions,
+    COUNT(CASE WHEN semantic_type = 'DEFINITION_FUNCTION' THEN 1 END) as functions,
     COUNT(CASE WHEN semantic_type = 244 THEN 1 END) as variables,
     COUNT(*) as total_nodes
 FROM read_ast(['**/*.py', '**/*.rb', '**/*.php', '**/*.lua'], ignore_errors := true)
