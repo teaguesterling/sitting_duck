@@ -224,7 +224,7 @@ SELECT * FROM read_ast(['file1.py', 'file2.py'], batch_size := 2);
 
 ## Table Schema
 
-The `read_ast()` function returns 20 columns by default (22 with `source := 'full'`):
+The `read_ast()` function returns 19 columns by default (21 with `source := 'full'`):
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -237,7 +237,8 @@ The `read_ast()` function returns 20 columns by default (22 with `source := 'ful
 | `parameters` | STRUCT[] | Function parameters with names and types |
 | `modifiers` | VARCHAR[] | Access modifiers and keywords |
 | `annotations` | VARCHAR | Decorator/annotation text |
-| `qualified_name` | VARCHAR | Scope-based definition path (e.g., `C/User F/__init__`) |
+| `qualified_name` | LIST&lt;STRUCT&gt; | Scope-based definition path as segment list (`{semantic_type, name, index}`), unique within a file |
+| `scope` | STRUCT | Scope info: `{current, function, class, module, stack}`. `scope.function` answers "what function is this inside?" as a single field read. |
 | `file_path` | VARCHAR | Source file path |
 | `language` | VARCHAR | Detected programming language |
 | `start_line` | UINTEGER | Starting line number (1-based) |

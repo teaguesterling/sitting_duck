@@ -4,7 +4,7 @@ Complete reference for `read_ast()` output columns.
 
 ## Quick Reference
 
-**Default output (20 columns):**
+**Default output (19 columns):**
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -18,6 +18,7 @@ Complete reference for `read_ast()` output columns.
 | `modifiers` | VARCHAR[] | Access modifiers and keywords |
 | `annotations` | VARCHAR | Decorator/annotation text |
 | `qualified_name` | LIST&lt;STRUCT&gt; | Scope-based path as segment list (semantic_type + name + index), unique within a file |
+| `scope` | STRUCT | Scope info: `{current, function, class, module, stack}`. See [scope](#scope) below. |
 | `file_path` | VARCHAR | Source file path |
 | `language` | VARCHAR | Programming language |
 | `start_line` | UINTEGER | Starting line (1-based) |
@@ -29,7 +30,7 @@ Complete reference for `read_ast()` output columns.
 | `descendant_count` | UINTEGER | Total descendant count |
 | `peek` | VARCHAR | Source code snippet |
 
-**Additional columns with `source := 'full'` (22 columns total):**
+**Additional columns with `source := 'full'` (21 columns total):**
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -478,6 +479,52 @@ SELECT name, descendant_count as complexity
 FROM read_ast('example.py')
 WHERE type = 'function_definition'
 ORDER BY complexity DESC;
+```
+
+---
+
+## Scope Column
+
+### `scope`
+
+**Type:** `STRUCT<current BIGINT, function BIGINT, class BIGINT, module BIGINT, stack LIST<STRUCT<id BIGINT, kind SEMANTIC_TYPE>>>`
+
+Unified scope information for each node. Replaces the pre-v1.7.4 `scope_id` and `scope_stack` columns.
+
+**Named shortcuts** (populated on every node):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `scope.current` | BIGINT | Nearest enclosing scope's node_id. NULL at root. |
+| `scope.function` | BIGINT | Nearest enclosing function ancestor's node_id. NULL if not inside a function. |
+| `scope.class` | BIGINT | Nearest enclosing class/struct/trait ancestor's node_id. NULL if not inside a class. |
+| `scope.module` | BIGINT | Nearest enclosing module/namespace ancestor's node_id. NULL if not inside a named module. |
+
+**Scope stack** (populated on scope-boundary nodes only):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `scope.stack` | LIST&lt;STRUCT&gt; | Full chain of enclosing scopes from outermost to this node. Each entry has `id` (node_id) and `kind` (SEMANTIC_TYPE). NULL on non-scope nodes. |
+
+```sql
+-- "What function is this call inside?" — single field read, no join needed
+SELECT name, scope.function AS enclosing_fn
+FROM read_ast('src/**/*.py')
+WHERE semantic_type = 'COMPUTATION_CALL';
+
+-- "All class methods (inside a class but not inside a nested function)"
+SELECT name, scope.class, scope.function
+FROM read_ast('src/**/*.py')
+WHERE semantic_type = 'DEFINITION_FUNCTION'
+  AND scope.class IS NOT NULL;
+
+-- "Find calls inside a try block (kind-filtered stack walk)"
+SELECT name FROM read_ast('src/**/*.py') c
+JOIN read_ast('src/**/*.py') s
+  ON s.node_id = c.scope.current AND s.file_path = c.file_path
+WHERE c.semantic_type = 'COMPUTATION_CALL'
+  AND s.scope.stack IS NOT NULL
+  AND len(list_filter(s.scope.stack, e -> e.kind = 'ERROR_TRY')) > 0;
 ```
 
 ---

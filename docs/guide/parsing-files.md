@@ -84,7 +84,7 @@ SELECT * FROM read_ast('**/test_*.py');
 
 ## Output Columns
 
-The `read_ast()` function returns 20 columns by default (22 with `source := 'full'`):
+The `read_ast()` function returns 19 columns by default (21 with `source := 'full'`):
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -98,6 +98,7 @@ The `read_ast()` function returns 20 columns by default (22 with `source := 'ful
 | `modifiers` | VARCHAR[] | Access modifiers and keywords |
 | `annotations` | VARCHAR | Decorator/annotation text |
 | `qualified_name` | LIST&lt;STRUCT&gt; | Scope path as segment list `[{semantic_type, name, index}, ...]`, unique within a file. Use `ast_qualified_name_as_string()` for the legacy bracket display form. |
+| `scope` | STRUCT | Scope info: `{current, function, class, module, stack}`. `scope.function` gives "what function is this inside?" as a single field read. See [Output Schema](../api/output-schema.md#scope). |
 | `file_path` | VARCHAR | Source file path |
 | `language` | VARCHAR | Detected language |
 | `start_line` | UINTEGER | Starting line (1-based) |
