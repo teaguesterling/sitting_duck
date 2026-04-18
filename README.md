@@ -640,7 +640,7 @@ This project uses Tree-sitter grammars as git submodules. To add a new language:
 3. Add language adapter in `src/language_adapters/`
 4. Add type definitions in `src/language_configs/`
 
-See `docs/ADDING_NEW_LANGUAGES.md` for details.
+See `docs/development/adding-languages.md` for details.
 
 ## License
 
@@ -659,7 +659,7 @@ MIT License - see LICENSE file for details.
 - **[Pattern Matching](docs/guide/pattern-matching.md)** - Find code patterns with wildcards
 - **[Language Guide](docs/languages/overview.md)** - Supported languages with nuances and quality ratings
 - **[Native Extraction Semantics](docs/native_extraction_semantics.md)** - Field semantics across languages
-- **[Adding Languages](docs/ADDING_NEW_LANGUAGES.md)** - How to add new language support
+- **[Adding Languages](docs/development/adding-languages.md)** - How to add new language support
 
 ---
 

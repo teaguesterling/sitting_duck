@@ -53,84 +53,81 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Getting Started:
-    - Installation: getting-started/installation.md
-    - Quick Start: getting-started/quickstart.md
-    - Basic Usage: getting-started/basic-usage.md
-  - User Guide:
-    - Parsing Files: guide/parsing-files.md
-    - Multi-File Processing: guide/multi-file.md
-    - Semantic Types: guide/semantic-types.md
-    - Context Extraction: guide/context-extraction.md
-    - Cross-Language Analysis: guide/cross-language.md
-    - Cookbook: guide/cookbook.md
-    - Pattern Matching:
-      - Overview: guide/pattern-matching.md
-      - Tutorial: guide/tutorial-pattern-matching.md
-      - Structural Search: guide/structural-search.md
-    - CSS Selectors:
-      - Overview: guide/selectors/index.md
-      - Tutorial: guide/selectors/tutorial.md
-      - Node Type Selectors: guide/selectors/node-types.md
-      - Semantic Type Aliases: guide/selectors/kinds-types-and-classes.md
-      - Pseudo-Classes Reference: guide/selectors/pseudo-classes.md
-      - Attribute Selectors: guide/selectors/attributes.md
-      - Examples / Cookbook: guide/selectors/examples.md
-  - API Reference:
-    - Core Functions: api/core-functions.md
-    - Semantic Type System: api/semantic-types.md
-    - Parameters: api/parameters.md
-    - Output Schema: api/output-schema.md
-  - Languages:
-    - Overview: languages/overview.md
-    - Web Languages: languages/web.md
-    - Systems Languages: languages/systems.md
-    - Scripting Languages: languages/scripting.md
-    - Enterprise Languages: languages/enterprise.md
-    - Infrastructure Languages: languages/infrastructure.md
-  - Node Type Reference:
-    - Overview: reference/languages/index.md
-    - Web:
+  - Tutorials:
+    - Installation: tutorials/installation.md
+    - Your First Query: tutorials/quickstart.md
+    - Basic Usage: tutorials/basic-usage.md
+    - CSS Selectors: tutorials/css-selectors.md
+    - Pattern Matching: tutorials/pattern-matching.md
+    - AI Agent Integration: tutorials/ai-agents.md
+  - How-to Guides:
+    - Multi-File Processing: how-to/multi-file-processing.md
+    - Cross-Language Analysis: how-to/cross-language-analysis.md
+    - Context Extraction: how-to/extract-context.md
+    - Structural Search: how-to/structural-search.md
+    - Selector Examples: how-to/selector-examples.md
+    - Cookbook: how-to/cookbook.md
+  - Reference:
+    - Functions: reference/functions.md
+    - Output Schema: reference/output-schema.md
+    - Parameters: reference/parameters.md
+    - Semantic Types: reference/semantic-types.md
+    - CSS Selector Syntax: reference/css-selectors.md
+    - Pseudo-Classes: reference/css-pseudo-classes.md
+    - Attribute Selectors: reference/css-attributes.md
+    - Semantic Aliases: reference/semantic-aliases.md
+    - Node Type Selectors: reference/node-type-selectors.md
+    - Pattern Matching: reference/pattern-matching.md
+    - Analysis Macros: reference/analysis-macros.md
+    - Utility Functions: reference/utility-functions.md
+    - Node Types by Language:
+      - Overview: reference/languages/index.md
       - JavaScript: reference/languages/javascript.md
       - TypeScript: reference/languages/typescript.md
-      - HTML: reference/languages/html.md
-      - CSS: reference/languages/css.md
-    - Systems:
+      - Python: reference/languages/python.md
       - C: reference/languages/c.md
       - C++: reference/languages/cpp.md
       - Go: reference/languages/go.md
       - Rust: reference/languages/rust.md
-      - Zig: reference/languages/zig.md
-    - Scripting:
-      - Python: reference/languages/python.md
+      - Java: reference/languages/java.md
       - Ruby: reference/languages/ruby.md
+      - HTML: reference/languages/html.md
+      - CSS: reference/languages/css.md
+      - Zig: reference/languages/zig.md
       - PHP: reference/languages/php.md
       - Lua: reference/languages/lua.md
       - R: reference/languages/r.md
       - Bash: reference/languages/bash.md
-    - Enterprise & Mobile:
-      - Java: reference/languages/java.md
       - C#: reference/languages/csharp.md
       - Kotlin: reference/languages/kotlin.md
       - Swift: reference/languages/swift.md
       - Dart: reference/languages/dart.md
       - Scala: reference/languages/scala.md
-    - Infrastructure:
       - HCL: reference/languages/hcl.md
       - JSON: reference/languages/json.md
       - TOML: reference/languages/toml.md
       - GraphQL: reference/languages/graphql.md
       - YAML: reference/languages/yaml.md
-    - Documentation:
       - Markdown: reference/languages/markdown.md
-    - Other:
       - F#: reference/languages/fsharp.md
       - Haskell: reference/languages/haskell.md
       - Julia: reference/languages/julia.md
+  - Explanation:
+    - Architecture: explanation/architecture.md
+    - How Parsing Works: explanation/how-parsing-works.md
+    - Native Extraction: explanation/native-extraction.md
+    - Native Extraction Semantics: explanation/native-extraction-semantics.md
+  - Languages:
+    - Overview: languages/overview.md
+    - Web: languages/web.md
+    - Systems: languages/systems.md
+    - Scripting: languages/scripting.md
+    - Enterprise: languages/enterprise.md
+    - Infrastructure: languages/infrastructure.md
   - Development:
-    - Adding Languages: development/adding-languages.md
-    - Architecture: development/architecture.md
     - Contributing: development/contributing.md
+    - Adding Languages: development/adding-languages.md
+    - Updating: development/updating.md
   - AI Agent Guide: ai-agent-guide.md
 
 extra:

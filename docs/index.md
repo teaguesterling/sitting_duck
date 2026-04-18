@@ -122,14 +122,11 @@ SELECT * FROM ast_select_from('ast', '.class:named');
 
 ## Documentation
 
-- **[Getting Started](getting-started/installation.md)** — installation and first query
-- **[CSS Selectors](guide/selectors/index.md)** — the full selector language (`.func:has(X):not(:has(Y))`)
-- **[Pattern Matching](guide/pattern-matching.md)** — find code by example with `ast_match`
-- **[Output Schema](api/output-schema.md)** — all 19 columns including `scope`, `semantic_type`, `qualified_name`
-- **[Semantic Types](api/semantic-types.md)** — the cross-language type system
-- **[Cookbook](guide/cookbook.md)** — practical recipes
-- **[API Reference](api/core-functions.md)** — `read_ast`, `parse_ast`, `ast_select`, and more
-- **[AI Agent Guide](ai-agent-guide.md)** — using Sitting Duck with Claude Code, Cursor, and other AI tools
+- **[Tutorials](tutorials/quickstart.md)** — installation, first query, CSS selectors, pattern matching
+- **[How-to Guides](how-to/cookbook.md)** — practical recipes for common tasks
+- **[Reference](reference/functions.md)** — functions, output schema, selector syntax, semantic types
+- **[Explanation](explanation/architecture.md)** — how parsing, scope, and the selector engine work
+- **[AI Agent Guide](tutorials/ai-agents.md)** — using Sitting Duck with Claude Code, Cursor, and other AI tools
 
 ## Why "Sitting Duck"?
 
