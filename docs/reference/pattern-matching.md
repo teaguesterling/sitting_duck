@@ -355,6 +355,6 @@ This shows each pattern node with:
 
 ## Next Steps
 
-- [Cross-Language Analysis](cross-language.md) - Using semantic types
-- [Cookbook](cookbook.md) - Practical code analysis recipes
+- [Cross-Language Analysis](../how-to/cross-language-analysis.md) - Using semantic types
+- [Cookbook](../how-to/cookbook.md) - Practical code analysis recipes
 - [Semantic Types](semantic-types.md) - Understanding type classifications

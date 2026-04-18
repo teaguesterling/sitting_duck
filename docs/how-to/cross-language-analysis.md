@@ -285,6 +285,6 @@ SELECT language, COUNT(*) FROM codebase_ast GROUP BY language;
 
 ## Next Steps
 
-- [Semantic Types](semantic-types.md) - Complete type reference
-- [API Reference](../api/core-functions.md) - Function documentation
+- [Semantic Types](../reference/semantic-types.md) - Complete type reference
+- [API Reference](../reference/functions.md) - Function documentation
 - [Languages Overview](../languages/overview.md) - Language-specific details

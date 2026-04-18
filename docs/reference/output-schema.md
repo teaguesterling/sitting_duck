@@ -638,7 +638,7 @@ WHERE ast.type = 'function_definition';
 
 ## Next Steps
 
-- [Core Functions](core-functions.md) - Function reference
+- [Core Functions](functions.md) - Function reference
 - [Parameters](parameters.md) - Parameter reference
 - [Semantic Types](semantic-types.md) - Type system
-- [Native Extraction Semantics](../native_extraction_semantics.md) - Cross-language field behavior
+- [Native Extraction Semantics](../explanation/native-extraction-semantics.md) - Cross-language field behavior

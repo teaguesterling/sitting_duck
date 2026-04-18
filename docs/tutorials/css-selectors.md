@@ -237,7 +237,7 @@ FROM ast_select('test/data/python/sample_app.py',
 
 ## See Also
 
-- [CSS Selectors Overview](index.md) — Full API reference and combinators
-- [Examples / Cookbook](examples.md) — More practical recipes
-- [Node Type Selectors](node-types.md) — Understanding the three tiers
-- [Pseudo-Classes Reference](pseudo-classes.md) — Complete pseudo-class list
+- [CSS Selectors Overview](../reference/css-selectors.md) — Full API reference and combinators
+- [Examples / Cookbook](../how-to/selector-examples.md) — More practical recipes
+- [Node Type Selectors](../reference/node-type-selectors.md) — Understanding the three tiers
+- [Pseudo-Classes Reference](../reference/css-pseudo-classes.md) — Complete pseudo-class list

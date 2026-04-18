@@ -30,7 +30,7 @@ SELECT name FROM ast_select('src/**/*.py',
 SELECT name FROM ast_select('src/**/*.py', '.func#validate::callers');
 ```
 
-~80 semantic aliases (`.func`, `.class`, `.call`, `.loop`, `.if`, `.namespace`, ...) work identically across all 27 languages. [Full selector reference →](guide/selectors/index.md)
+~80 semantic aliases (`.func`, `.class`, `.call`, `.loop`, `.if`, `.namespace`, ...) work identically across all 27 languages. [Full selector reference →](reference/css-selectors.md)
 
 ### Pattern matching by example
 
@@ -48,7 +48,7 @@ SELECT captures['X'].peek AS dangerous_input, file_path
 FROM ast_match('src/**/*.py', 'subprocess.call(__X__)', 'python');
 ```
 
-[Pattern matching guide →](guide/pattern-matching.md)
+[Pattern matching guide →](reference/pattern-matching.md)
 
 ### Scope-aware analysis
 

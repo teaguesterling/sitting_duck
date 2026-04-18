@@ -241,6 +241,6 @@ COPY (
 
 ## Next Steps
 
-- [Semantic Types](semantic-types.md) - Cross-language type system
-- [Context Extraction](context-extraction.md) - Detailed semantic analysis
-- [Cross-Language Analysis](cross-language.md) - Comparing across languages
+- [Semantic Types](../reference/semantic-types.md) - Cross-language type system
+- [Context Extraction](extract-context.md) - Detailed semantic analysis
+- [Cross-Language Analysis](cross-language-analysis.md) - Comparing across languages

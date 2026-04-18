@@ -471,6 +471,6 @@ WHERE semantic_type = 248;
 
 ## Next Steps
 
-- [Core Functions](core-functions.md) - Function reference
+- [Core Functions](functions.md) - Function reference
 - [Parameters](parameters.md) - Parameter reference
-- [Cross-Language Analysis](../guide/cross-language.md) - Practical examples
+- [Cross-Language Analysis](../how-to/cross-language-analysis.md) - Practical examples

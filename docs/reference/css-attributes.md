@@ -137,6 +137,6 @@ SELECT peek FROM ast_select('src/*.py', 'comment[peek*=TODO]');
 
 ## See Also
 
-- [CSS Selectors Overview](index.md) — Combinators, compound selectors, API reference
-- [Pseudo-Classes Reference](pseudo-classes.md) — Structural and modifier pseudo-classes
-- [Node Type Selectors](node-types.md) — Three tiers of type specificity
+- [CSS Selectors Overview](css-selectors.md) — Combinators, compound selectors, API reference
+- [Pseudo-Classes Reference](css-pseudo-classes.md) — Structural and modifier pseudo-classes
+- [Node Type Selectors](node-type-selectors.md) — Three tiers of type specificity

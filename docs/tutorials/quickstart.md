@@ -125,5 +125,5 @@ ORDER BY file_path, start_line;
 ## Next Steps
 
 - [Basic Usage](basic-usage.md) - Detailed usage patterns
-- [Parsing Files](../guide/parsing-files.md) - File and glob processing
-- [Semantic Types](../guide/semantic-types.md) - Cross-language analysis
+- [Parsing Files](../explanation/how-parsing-works.md) - File and glob processing
+- [Semantic Types](../reference/semantic-types.md) - Cross-language analysis

@@ -313,5 +313,5 @@ FROM read_ast(
 ## Next Steps
 
 - [Output Schema](output-schema.md) - Column reference
-- [Core Functions](core-functions.md) - Function reference
+- [Core Functions](functions.md) - Function reference
 - [Semantic Types](semantic-types.md) - Type system

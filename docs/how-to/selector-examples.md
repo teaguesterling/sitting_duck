@@ -298,8 +298,8 @@ FROM ast_select('src/**/*.py', '.func:calls(eval):calls(exec)');
 
 ## See Also
 
-- [CSS Selectors Overview](index.md) — Full API reference and combinators
-- [Tutorial](tutorial.md) — Step-by-step introduction
-- [Pseudo-Classes Reference](pseudo-classes.md) — Complete pseudo-class documentation
-- [Attribute Selectors](attributes.md) — All attribute operators and fields
-- [Cookbook](../cookbook.md) — General analysis recipes beyond CSS selectors
+- [CSS Selectors Overview](../reference/css-selectors.md) — Full API reference and combinators
+- [Tutorial](../tutorials/css-selectors.md) — Step-by-step introduction
+- [Pseudo-Classes Reference](../reference/css-pseudo-classes.md) — Complete pseudo-class documentation
+- [Attribute Selectors](../reference/css-attributes.md) — All attribute operators and fields
+- [Cookbook](cookbook.md) — General analysis recipes beyond CSS selectors

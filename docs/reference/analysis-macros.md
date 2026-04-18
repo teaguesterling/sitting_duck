@@ -498,5 +498,5 @@ ORDER BY max_depth DESC;
 ## See Also
 
 - [Utility Functions](utility-functions.md) - Semantic predicates and file utilities
-- [Cookbook](../guide/cookbook.md) - More SQL recipes
-- [Core Functions](core-functions.md) - `read_ast` and `parse_ast`
+- [Cookbook](../how-to/cookbook.md) - More SQL recipes
+- [Core Functions](functions.md) - `read_ast` and `parse_ast`

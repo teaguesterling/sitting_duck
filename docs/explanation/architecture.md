@@ -157,7 +157,7 @@ DEF_TYPE(class_definition, DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS
 3. Create type definitions
 4. Register in adapter registry
 
-See [Adding Languages](adding-languages.md) for details.
+See [Adding Languages](../development/adding-languages.md) for details.
 
 ### Custom Extractors
 

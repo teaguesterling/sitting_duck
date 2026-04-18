@@ -146,7 +146,7 @@ WHERE is_definition(semantic_type)
   AND descendant_count > 50;
 ```
 
-> **💡 Pro Tip**: Use convenience functions for readability during development, then switch to raw semantic type codes for performance in production queries. See the complete semantic type reference in [Semantic Types](api/semantic-types.md).
+> **💡 Pro Tip**: Use convenience functions for readability during development, then switch to raw semantic type codes for performance in production queries. See the complete semantic type reference in [Semantic Types](../reference/semantic-types.md).
 
 ## DuckDB-Consistent Pattern Arrays (NEW!)
 

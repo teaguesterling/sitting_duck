@@ -238,6 +238,6 @@ WHERE is_definition(semantic_type);
 
 ## Next Steps
 
-- [Cross-Language Analysis](cross-language.md) - Comparing across languages
-- [Semantic Types](semantic-types.md) - Type system details
-- [API Reference](../api/parameters.md) - All parameters
+- [Cross-Language Analysis](cross-language-analysis.md) - Comparing across languages
+- [Semantic Types](../reference/semantic-types.md) - Type system details
+- [API Reference](../reference/parameters.md) - All parameters

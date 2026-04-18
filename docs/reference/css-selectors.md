@@ -13,9 +13,9 @@ FROM ast_select('src/**/*.py',
 
 `ast_select` parses your CSS selector using Sitting Duck's own tree-sitter CSS grammar, then translates the parsed selector AST into SQL conditions against your source code's AST. No string parsing — the CSS grammar does the heavy lifting.
 
-Type selectors come in three tiers of specificity — `.semantic` (cross-language), bare keywords (language-specific prefix match), and exact types (tree-sitter specific). See [Node Type Selectors](node-types.md) for details.
+Type selectors come in three tiers of specificity — `.semantic` (cross-language), bare keywords (language-specific prefix match), and exact types (tree-sitter specific). See [Node Type Selectors](node-type-selectors.md) for details.
 
-Semantic types provide ~80 aliases like `.func`, `.if`, `.loop` that work identically across all 27 languages. See [Semantic Type Aliases](kinds-types-and-classes.md) for the full table.
+Semantic types provide ~80 aliases like `.func`, `.if`, `.loop` that work identically across all 27 languages. See [Semantic Type Aliases](semantic-aliases.md) for the full table.
 
 ## `#name` — Name Filter
 
@@ -300,10 +300,10 @@ WHERE c.file_path != ex.file_path;
 
 ## See Also
 
-- [Node Type Selectors](node-types.md) — Three tiers of type specificity
-- [Semantic Type Aliases](kinds-types-and-classes.md) — Full alias table for `.semantic` selectors
-- [Pseudo-Classes Reference](pseudo-classes.md) — All pseudo-classes by category
-- [Attribute Selectors](attributes.md) — Query by name, modifier, annotation, and more
-- [Tutorial](tutorial.md) — Step-by-step walkthrough building up selectors
-- [Examples / Cookbook](examples.md) — Practical recipes by use case
-- [Structural Search](../structural-search.md) — Pattern matching with `ast_match` and wildcards
+- [Node Type Selectors](node-type-selectors.md) — Three tiers of type specificity
+- [Semantic Type Aliases](semantic-aliases.md) — Full alias table for `.semantic` selectors
+- [Pseudo-Classes Reference](css-pseudo-classes.md) — All pseudo-classes by category
+- [Attribute Selectors](css-attributes.md) — Query by name, modifier, annotation, and more
+- [Tutorial](../tutorials/css-selectors.md) — Step-by-step walkthrough building up selectors
+- [Examples / Cookbook](../how-to/selector-examples.md) — Practical recipes by use case
+- [Structural Search](../how-to/structural-search.md) — Pattern matching with `ast_match` and wildcards

@@ -221,6 +221,6 @@ ORDER BY node_id;
 
 ## Next Steps
 
-- [Parsing Files](../guide/parsing-files.md) - Advanced file processing
-- [Multi-File Processing](../guide/multi-file.md) - Glob patterns and arrays
-- [Semantic Types](../guide/semantic-types.md) - Cross-language analysis
+- [Parsing Files](../explanation/how-parsing-works.md) - Advanced file processing
+- [Multi-File Processing](../how-to/multi-file-processing.md) - Glob patterns and arrays
+- [Semantic Types](../reference/semantic-types.md) - Cross-language analysis

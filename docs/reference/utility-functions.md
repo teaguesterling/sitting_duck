@@ -452,7 +452,7 @@ SELECT string_contains_any('hello', ['foo', NULL, 'hello']);  -- true (NULL skip
 
 ## See Also
 
-- [Structural Analysis Macros](structural-analysis.md) - Tree navigation and code analysis macros
-- [Core Functions](core-functions.md) - Main parsing functions (`read_ast`, `parse_ast`)
+- [Structural Analysis Macros](analysis-macros.md) - Tree navigation and code analysis macros
+- [Core Functions](functions.md) - Main parsing functions (`read_ast`, `parse_ast`)
 - [Semantic Types](semantic-types.md) - Complete semantic type reference
 - [Output Schema](output-schema.md) - AST column definitions

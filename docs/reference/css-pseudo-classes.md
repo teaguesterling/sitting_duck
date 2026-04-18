@@ -481,7 +481,7 @@ WHERE EXISTS (
 
 ## See Also
 
-- [CSS Selectors Overview](index.md) — Combinators, compound selectors, API reference
-- [Node Type Selectors](node-types.md) — Three tiers of type specificity
-- [Attribute Selectors](attributes.md) — Query by name, modifier, annotation, and more
-- [Semantic Type Aliases](kinds-types-and-classes.md) — Full alias table for `.semantic` selectors
+- [CSS Selectors Overview](css-selectors.md) — Combinators, compound selectors, API reference
+- [Node Type Selectors](node-type-selectors.md) — Three tiers of type specificity
+- [Attribute Selectors](css-attributes.md) — Query by name, modifier, annotation, and more
+- [Semantic Type Aliases](semantic-aliases.md) — Full alias table for `.semantic` selectors

@@ -25,7 +25,7 @@ Match by semantic category. Works identically across all 27 languages:
 
 `.if` includes elif, else, switch, case — the entire conditional family. Both `.func` and `.FUNC` work (case-insensitive).
 
-See [Semantic Type Aliases](kinds-types-and-classes.md) for the full alias table (~80 aliases).
+See [Semantic Type Aliases](semantic-aliases.md) for the full alias table (~80 aliases).
 
 ### Bare keywords — Language-specific, medium
 
@@ -97,6 +97,6 @@ WHERE name_role = 'reference';
 
 ## See Also
 
-- [Semantic Type Aliases](kinds-types-and-classes.md) — Full alias table for `.semantic` selectors
-- [CSS Selectors Overview](index.md) — Combinators, compound selectors, API reference
-- [Pseudo-Classes Reference](pseudo-classes.md) — Filter by structure, position, scope, and more
+- [Semantic Type Aliases](semantic-aliases.md) — Full alias table for `.semantic` selectors
+- [CSS Selectors Overview](css-selectors.md) — Combinators, compound selectors, API reference
+- [Pseudo-Classes Reference](css-pseudo-classes.md) — Filter by structure, position, scope, and more

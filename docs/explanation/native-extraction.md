@@ -253,6 +253,6 @@ GROUP BY language;
 
 ## Related Documentation
 
-- [native_extraction_semantics.md](native_extraction_semantics.md) - Detailed field semantics
-- [api/semantic-types.md](api/semantic-types.md) - Complete semantic type reference
+- [native_extraction_semantics.md](native-extraction-semantics.md) - Detailed field semantics
+- [api/semantic-types.md](../reference/semantic-types.md) - Complete semantic type reference
 - Language `.def` files contain inline Doxygen documentation

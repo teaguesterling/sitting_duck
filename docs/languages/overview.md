@@ -101,4 +101,4 @@ Each category doc includes:
 | Enterprise & Mobile | [enterprise.md](enterprise.md) | Java, C#, Kotlin, Swift, Dart |
 | Infrastructure | [infrastructure.md](infrastructure.md) | HCL, JSON, TOML, GraphQL |
 
-See also: [Native Extraction Semantics](../native_extraction_semantics.md) for detailed field semantics across languages.
+See also: [Native Extraction Semantics](../explanation/native-extraction-semantics.md) for detailed field semantics across languages.

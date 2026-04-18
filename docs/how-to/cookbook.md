@@ -639,7 +639,7 @@ ORDER BY risk_category, occurrences DESC;
 
 ## Structural Analysis
 
-> **Tip**: Many of these patterns are now available as built-in macros. See [Structural Analysis Macros](../api/structural-analysis.md) for `ast_function_metrics`, `ast_nesting_analysis`, `ast_security_audit`, `ast_dead_code`, and more.
+> **Tip**: Many of these patterns are now available as built-in macros. See [Structural Analysis Macros](../reference/analysis-macros.md) for `ast_function_metrics`, `ast_nesting_analysis`, `ast_security_audit`, `ast_dead_code`, and more.
 
 ### Using Built-in Macros (Recommended)
 
@@ -886,7 +886,7 @@ LIMIT 10;
 
 ## See Also
 
-- [Structural Analysis Macros](../api/structural-analysis.md) - Full macro reference
-- [Cross-Language Analysis](cross-language.md) - More cross-language patterns
-- [Semantic Types](../api/semantic-types.md) - Full type reference
-- [API Reference](../api/core-functions.md) - Function documentation
+- [Structural Analysis Macros](../reference/analysis-macros.md) - Full macro reference
+- [Cross-Language Analysis](cross-language-analysis.md) - More cross-language patterns
+- [Semantic Types](../reference/semantic-types.md) - Full type reference
+- [API Reference](../reference/functions.md) - Function documentation

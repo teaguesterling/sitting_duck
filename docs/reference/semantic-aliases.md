@@ -126,6 +126,6 @@ ORDER BY kind, semantic_type;
 
 ## See Also
 
-- [Node Type Selectors](node-types.md) — Three tiers of type specificity
-- [CSS Selectors Overview](index.md) — Combinators, compound selectors, API reference
-- [Pseudo-Classes Reference](pseudo-classes.md) — Filter by structure, position, scope, and more
+- [Node Type Selectors](node-type-selectors.md) — Three tiers of type specificity
+- [CSS Selectors Overview](css-selectors.md) — Combinators, compound selectors, API reference
+- [Pseudo-Classes Reference](css-pseudo-classes.md) — Filter by structure, position, scope, and more
