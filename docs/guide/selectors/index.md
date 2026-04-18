@@ -174,6 +174,31 @@ ast_select(source, selector, language := NULL)
 
 Returns the same columns as `read_ast()`.
 
+### `ast_select_from` — Parse Once, Query Many (v1.7.4+)
+
+For repeated queries against the same source, parse once into a table and then run selectors against the cached AST:
+
+```sql
+-- Parse once (expensive)
+CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+
+-- Query many times (cheap — no re-parsing)
+SELECT * FROM ast_select_from('my_ast', '.func:has(return_statement)');
+SELECT * FROM ast_select_from('my_ast', '.class:named');
+SELECT * FROM ast_select_from('my_ast', 'class_definition function_definition');
+```
+
+```sql
+ast_select_from(source, selector)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `source` | VARCHAR | Name of a pre-parsed AST table (string) |
+| `selector` | VARCHAR | CSS selector string |
+
+Same output, same selector syntax. The only difference is the `source` parameter is a table name rather than a file path. On large codebases, this amortizes the parse cost across queries — each subsequent `ast_select_from` call runs in ~1s instead of re-parsing from disk.
+
 ### Multi-Rule Dispatch (v1.7.0+, currently WIP)
 
 For queries that contain **multiple CSS rules** — each with its own selector and declaration block — sitting_duck provides two macros that dispatch `ast_select` once per rule and tag the matches with per-rule metadata.

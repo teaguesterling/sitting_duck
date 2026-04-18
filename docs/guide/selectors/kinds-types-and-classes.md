@@ -21,7 +21,7 @@ A `.semantic` selector matches at the super-type level by default. Kind-level al
 | `.func` | `.fn`, `.function`, `.method` | Function/method definitions |
 | `.class` | `.cls`, `.struct`, `.trait`, `.interface` | Class definitions |
 | `.var` | `.variable`, `.let`, `.const` | Variable definitions |
-| `.mod` | `.module`, `.package` | Module definitions |
+| `.mod` | `.module`, `.package`, `.namespace`, `.ns` | Module/namespace definitions |
 | `.def` | `.definition` | All definitions (kind level) |
 
 ## Control Flow
