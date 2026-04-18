@@ -56,11 +56,11 @@ nav:
   - Tutorials:
     - Installation: tutorials/installation.md
     - Your First Query: tutorials/quickstart.md
-    - Basic Usage: tutorials/basic-usage.md
     - CSS Selectors: tutorials/css-selectors.md
     - Pattern Matching: tutorials/pattern-matching.md
     - AI Agent Integration: tutorials/ai-agents.md
   - How-to Guides:
+    - Common Queries: how-to/common-queries.md
     - Multi-File Processing: how-to/multi-file-processing.md
     - Cross-Language Analysis: how-to/cross-language-analysis.md
     - Context Extraction: how-to/extract-context.md
@@ -117,18 +117,17 @@ nav:
     - How Parsing Works: explanation/how-parsing-works.md
     - Native Extraction: explanation/native-extraction.md
     - Native Extraction Semantics: explanation/native-extraction-semantics.md
-  - Languages:
-    - Overview: languages/overview.md
-    - Web: languages/web.md
-    - Systems: languages/systems.md
-    - Scripting: languages/scripting.md
-    - Enterprise: languages/enterprise.md
-    - Infrastructure: languages/infrastructure.md
+    - Languages:
+      - Overview: languages/overview.md
+      - Web: languages/web.md
+      - Systems: languages/systems.md
+      - Scripting: languages/scripting.md
+      - Enterprise: languages/enterprise.md
+      - Infrastructure: languages/infrastructure.md
   - Development:
     - Contributing: development/contributing.md
     - Adding Languages: development/adding-languages.md
     - Updating: development/updating.md
-  - AI Agent Guide: ai-agent-guide.md
 
 extra:
   social:

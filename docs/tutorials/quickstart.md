@@ -1,129 +1,149 @@
-# Quick Start
+# Your First Query
 
-Get up and running with Sitting Duck in 5 minutes.
+This tutorial walks you through querying source code with Sitting Duck.
+You will parse a Python file, find functions and classes with CSS selectors,
+and explore scope relationships -- all in SQL.
 
-## Your First Query
+The examples use `test/data/python/sample_app.py`, a small app with classes,
+functions, and a few deliberate code smells.
 
-After [installing](installation.md) Sitting Duck, try these queries:
+## Parse a file
+
+Start by loading the extension and reading the AST:
 
 ```sql
--- Load the extension
 LOAD sitting_duck;
 
--- Parse this README and count nodes
-SELECT COUNT(*) as node_count FROM read_ast('README.md');
-```
-
-## Parse a Source File
-
-```sql
--- See all AST nodes in a Python file
-SELECT * FROM read_ast('test/data/python/sample_app.py') LIMIT 20;
-
--- Find function definitions
-SELECT name, start_line, end_line
+SELECT type, name, start_line, depth
 FROM read_ast('test/data/python/sample_app.py')
-WHERE type = 'function_definition';
-```
-
-## Visualize Tree Structure
-
-```sql
--- Show indented tree structure
-SELECT
-    repeat('  ', depth) || type as tree_view,
-    name,
-    start_line
-FROM read_ast('test/data/python/sample_app.py')
-ORDER BY node_id
-LIMIT 30;
-```
-
-## Analyze Multiple Files
-
-```sql
--- Parse all Python files in a directory
-SELECT file_path, COUNT(*) as nodes
-FROM read_ast('src/**/*.py')
-GROUP BY file_path
-ORDER BY nodes DESC;
-
--- Parse files from multiple patterns
-SELECT file_path, language, COUNT(*) as nodes
-FROM read_ast([
-    'src/**/*.py',
-    'lib/**/*.js',
-    'main.cpp'
-], ignore_errors := true)
-GROUP BY file_path, language;
-```
-
-## Cross-Language Analysis
-
-```sql
--- Compare function counts across languages
-SELECT
-    language,
-    COUNT(*) as function_count
-FROM read_ast(['**/*.py', '**/*.js', '**/*.java'], ignore_errors := true)
-WHERE semantic_type = 'DEFINITION_FUNCTION'
-GROUP BY language
-ORDER BY function_count DESC;
-```
-
-## Find Complex Functions
-
-```sql
--- Functions with high complexity (many AST nodes)
-SELECT
-    name,
-    file_path,
-    descendant_count as complexity,
-    start_line
-FROM read_ast('**/*.py', ignore_errors := true)
-WHERE type = 'function_definition'
-  AND descendant_count > 50
-ORDER BY complexity DESC
+WHERE name IS NOT NULL
 LIMIT 10;
 ```
 
-## Common Patterns
+`read_ast` parses a file into a flat table -- one row per AST node.
+Every row carries the node's `type`, `name`, `start_line`, `depth`,
+`semantic_type`, and more. You *could* filter with raw `WHERE type = ...`
+clauses, but there is a better way.
 
-### Find All Classes
+## Find functions with ast_select
+
+`ast_select` lets you query the AST with CSS-style selectors instead
+of hand-written WHERE clauses. The `.func` shorthand matches any function
+definition, regardless of language-specific node types:
 
 ```sql
-SELECT name, file_path, start_line
-FROM read_ast('**/*.py')
-WHERE type = 'class_definition'
-ORDER BY file_path, start_line;
+SELECT name, start_line, end_line
+FROM ast_select('test/data/python/sample_app.py', '.func');
 ```
 
-### Count Imports
+Similarly, `.class` matches class definitions:
+
+```sql
+SELECT name, start_line
+FROM ast_select('test/data/python/sample_app.py', '.class');
+```
+
+These semantic aliases (`.func`, `.class`, `.call`, `.var`, `.literal`)
+work across all 27 supported languages. No need to memorize that Python
+uses `function_definition` while JavaScript uses `function_declaration`.
+
+## Filter by name
+
+Append `#name` to match a specific identifier. Find the `main` function:
+
+```sql
+SELECT name, start_line, end_line, descendant_count
+FROM ast_select('test/data/python/sample_app.py', '.func#main');
+```
+
+## Structural queries with :has
+
+Selectors can express structural relationships. Find every function that
+contains a `return_statement`:
+
+```sql
+SELECT name, start_line
+FROM ast_select('test/data/python/sample_app.py', '.func:has(return_statement)');
+```
+
+Or find classes that contain a call to `execute`:
+
+```sql
+SELECT name, start_line
+FROM ast_select('test/data/python/sample_app.py', '.class:has(.call#execute)');
+```
+
+## Parse once, query many with ast_select_from
+
+Each `ast_select` call re-parses the source file. When you are exploring
+interactively, parse once into a table and query it repeatedly:
+
+```sql
+CREATE TABLE app_ast AS
+  SELECT * FROM read_ast('test/data/python/sample_app.py');
+
+-- All functions
+SELECT name, start_line FROM ast_select_from('app_ast', '.func');
+
+-- All call sites
+SELECT name, start_line FROM ast_select_from('app_ast', '.call');
+
+-- Functions that never return a value
+SELECT name FROM ast_select_from('app_ast', '.func:not(:has(return_statement))');
+```
+
+This is the recommended workflow for interactive analysis. Parsing is
+expensive; selector matching is cheap.
+
+## Scope: "what function is this inside?"
+
+Every node carries a `scope` struct. The `scope.function` field gives
+the `node_id` of the enclosing function -- you can join on it to answer
+"which function contains this call?":
 
 ```sql
 SELECT
-    file_path,
-    COUNT(*) as import_count
-FROM read_ast('**/*.py')
-WHERE type IN ('import_statement', 'import_from_statement')
-GROUP BY file_path
-ORDER BY import_count DESC;
+    call.name AS call_name,
+    caller.name AS in_function,
+    call.start_line
+FROM ast_select_from('app_ast', '.call') AS call
+JOIN app_ast AS caller
+  ON caller.node_id = call.scope.function
+  AND caller.file_path = call.file_path
+ORDER BY call.start_line;
 ```
 
-### Find Comments
+Or use the `::parent-definition` pseudo-element to get the nearest
+enclosing definition directly:
 
 ```sql
-SELECT
-    file_path,
-    start_line,
-    peek as comment_text
-FROM read_ast('**/*.py')
-WHERE type = 'comment'
-ORDER BY file_path, start_line;
+SELECT name, start_line
+FROM ast_select_from('app_ast', '.call#execute::parent-definition');
 ```
 
-## Next Steps
+## Use semantic_type strings, not numbers
 
-- [Basic Usage](basic-usage.md) - Detailed usage patterns
-- [Parsing Files](../explanation/how-parsing-works.md) - File and glob processing
-- [Semantic Types](../reference/semantic-types.md) - Cross-language analysis
+The `semantic_type` column uses human-readable strings like
+`'DEFINITION_FUNCTION'` and `'COMPUTATION_CALL'`. You never need raw
+numeric codes:
+
+```sql
+SELECT name, semantic_type, start_line
+FROM read_ast('test/data/python/sample_app.py')
+WHERE semantic_type = 'DEFINITION_FUNCTION';
+```
+
+But prefer `.func` in `ast_select` -- it is shorter and cross-language.
+
+## Clean up
+
+```sql
+DROP TABLE IF EXISTS app_ast;
+```
+
+## Next steps
+
+- [CSS Selectors Tutorial](css-selectors.md) -- combinators, pseudo-classes,
+  attribute filters, and pseudo-elements in depth.
+- [CSS Selectors Reference](../reference/css-selectors.md) -- complete syntax
+  and examples for every selector feature.
