@@ -706,7 +706,7 @@ CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language :
     WITH
 
 )SQLMACRO"
-                            R"SQLMACRO(
+        R"SQLMACRO(
         ast AS (
             SELECT * FROM read_ast(source, language)
         ),
@@ -1042,7 +1042,7 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
             FROM ast a
 
 )SQLMACRO"
-                            R"SQLMACRO(
+        R"SQLMACRO(
             WHERE is_function_definition(a.semantic_type)
               AND a.name IS NOT NULL AND a.name != ''
               -- Exclude special methods (constructors, dunder methods, etc.)
@@ -1420,7 +1420,7 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
 --   SELECT * FROM ast_match('src/**/*.py', 'my_func(__X__)');
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
 --   SELECT * FROM ast_match('src/main.py', 'my_func(__X__)', match_syntax := true);
 --   SELECT * FROM ast_match('src/**/*.py', '__F__(__X__)', match_by := 'semantic_type');
 --
@@ -1672,7 +1672,7 @@ CREATE OR REPLACE MACRO ast_match(
                 t.file_path = mc.file_path
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
                 AND t.node_id >= mc.candidate_root
                 AND t.node_id <= mc.candidate_root + mc.candidate_descendants
                 -- Depth matching: flexible when at/below recursive wildcard wrapper depth
@@ -1980,7 +1980,7 @@ CREATE OR REPLACE MACRO ast_match(
             FROM captures_single_listed
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
             UNION ALL
             SELECT candidate_file, candidate_root, capture_name, capture_list
             FROM captures_variadic_listed
@@ -2616,7 +2616,7 @@ CREATE OR REPLACE MACRO ast_select_from(
 
 
 )SQLMACRO"
-                          R"SQLMACRO(
+        R"SQLMACRO(
         -- #id name filter
         -- Top-level #id (not inside :has()/:not() arguments).
         -- Same shape as simple_type: rank candidates by node order, pick rn=1 via
@@ -2907,10 +2907,18 @@ CREATE OR REPLACE MACRO ast_select_from(
             JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = not_pcs.node_id
 
 )SQLMACRO"
-                          R"SQLMACRO(
+        R"SQLMACRO(
             LEFT JOIN sel_pcs_first_tag_or_int ftoi ON ftoi.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_string     fstr ON fstr.pcs_id = pcs.node_id
             WHERE cn.name != 'has'
+        ),
+
+        -- Detect whether func_apply extension is loaded (provides function_exists)
+        has_func_apply AS (
+            SELECT EXISTS (
+                SELECT 1 FROM duckdb_functions()
+                WHERE function_name = 'function_exists'
+            ) AS available
         ),
 
         -- Validate that every pseudo-class name we saw is one we know about.
@@ -2928,19 +2936,39 @@ CREATE OR REPLACE MACRO ast_select_from(
         ),
         pseudo_class_validation AS (
             SELECT CASE
-                -- Unknown pseudo-class name
                 WHEN EXISTS (
                     SELECT 1 FROM pseudo_classes pc
                     WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
+                      AND (
+                          NOT (SELECT available FROM has_func_apply)
+                          OR NOT function_exists(format('ast_selector_predicate_{}', pc.pseudo_name))
+                      )
                 ) THEN error(
-                    'ast_select: unknown pseudo-class ":' ||
-                    (SELECT pc.pseudo_name FROM pseudo_classes pc
-                     WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
-                     LIMIT 1) || '"'
+                    CASE WHEN NOT (SELECT available FROM has_func_apply)
+                    THEN format(
+                        'ast_select: unknown pseudo-class ":{}". '
+                        'Custom predicates require the func_apply extension: '
+                        'INSTALL func_apply FROM community; LOAD func_apply; '
+                        'Then define: CREATE MACRO ast_selector_predicate_{}(node, arg) AS (...)',
+                        (SELECT pc.pseudo_name FROM pseudo_classes pc
+                         WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names) LIMIT 1),
+                        (SELECT pc.pseudo_name FROM pseudo_classes pc
+                         WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names) LIMIT 1)
+                    )
+                    ELSE format(
+                        'ast_select: unknown pseudo-class ":{}". '
+                        'No macro named ast_selector_predicate_{} is registered.',
+                        (SELECT pc.pseudo_name FROM pseudo_classes pc
+                         WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
+                           AND NOT function_exists(format('ast_selector_predicate_{}', pc.pseudo_name))
+                         LIMIT 1),
+                        (SELECT pc.pseudo_name FROM pseudo_classes pc
+                         WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
+                           AND NOT function_exists(format('ast_selector_predicate_{}', pc.pseudo_name))
+                         LIMIT 1)
+                    )
+                    END
                 )
-                -- Multiple :match/:contains in one selector — only one pattern per
-                -- selector is supported. The pattern is extracted from the selector
-                -- string via regex; multiple patterns would silently share the first.
                 WHEN (SELECT COUNT(*) FROM pseudo_classes
                       WHERE pseudo_name IN ('match', 'contains')) > 1
                 THEN error(
@@ -3162,6 +3190,9 @@ CREATE OR REPLACE MACRO ast_select_from(
 
             -- Native extraction: qualified_name. The column is a LIST<STRUCT>,
             -- so we render it to the legacy bracket string via
+
+)SQLMACRO"
+        R"SQLMACRO(
             -- ast_qualified_name_as_string() before applying text comparisons.
             -- Equality (=) also runs against the string form so selectors like
             -- [qualified=F[main]] stay human-writable.
@@ -3193,9 +3224,6 @@ CREATE OR REPLACE MACRO ast_select_from(
     -- Additional pseudo-class filters
     -- Each pseudo-class in the selector must be satisfied.
     -- For non-negated pcs: satisfied iff CASE is true.
-
-)SQLMACRO"
-                          R"SQLMACRO(
     -- For negated pcs (inside :not()): satisfied iff CASE is false.
     -- A pc is unsatisfied when (negated = CASE), so NOT EXISTS of that identifies nodes
     -- where every pc is satisfied.
@@ -3383,9 +3411,11 @@ CREATE OR REPLACE MACRO ast_select_from(
                        OR before_sib.type LIKE pc.pseudo_arg || '_%')
             )
 
-            -- Unreachable: pseudo_class_validation fires first for unknown names.
-            -- ELSE false means "unsatisfied" (fail closed) if validation ever misses one.
-            ELSE false
+            ELSE apply(
+                format('ast_selector_predicate_{}', pc.pseudo_name),
+                a,
+                pc.pseudo_arg
+            )::BOOLEAN
         END
     )),
 
@@ -3441,6 +3471,9 @@ CREATE OR REPLACE MACRO ast_select_from(
     --
     -- Kept as a subtree range scan rather than rewriting to
     -- `callee.scope.function = m.node_id` because that would change the
+
+)SQLMACRO"
+        R"SQLMACRO(
     -- semantics: scope.function points to the IMMEDIATE enclosing function,
     -- so a call inside a lambda/nested function would have scope.function
     -- pointing to the inner function, not to m. With the range scan we
@@ -3471,9 +3504,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                 AND m.node_id <= closer.node_id + closer.descendant_count
                 AND is_name_definition(closer.flags)
                 AND closer.name IS NOT NULL AND closer.name != ''
-
-)SQLMACRO"
-                          R"SQLMACRO(
                 AND closer.depth > def.depth
           )
     )

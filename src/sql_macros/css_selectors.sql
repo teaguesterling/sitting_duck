@@ -567,6 +567,14 @@ CREATE OR REPLACE MACRO ast_select_from(
             WHERE cn.name != 'has'
         ),
 
+        -- Detect whether func_apply extension is loaded (provides function_exists)
+        has_func_apply AS (
+            SELECT EXISTS (
+                SELECT 1 FROM duckdb_functions()
+                WHERE function_name = 'function_exists'
+            ) AS available
+        ),
+
         -- Validate that every pseudo-class name we saw is one we know about.
         -- Unknown names raise an error rather than silently matching/mismatching.
         known_pseudo_class_names(name) AS (
@@ -582,19 +590,39 @@ CREATE OR REPLACE MACRO ast_select_from(
         ),
         pseudo_class_validation AS (
             SELECT CASE
-                -- Unknown pseudo-class name
                 WHEN EXISTS (
                     SELECT 1 FROM pseudo_classes pc
                     WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
+                      AND (
+                          NOT (SELECT available FROM has_func_apply)
+                          OR NOT function_exists(format('ast_selector_predicate_{}', pc.pseudo_name))
+                      )
                 ) THEN error(
-                    'ast_select: unknown pseudo-class ":' ||
-                    (SELECT pc.pseudo_name FROM pseudo_classes pc
-                     WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
-                     LIMIT 1) || '"'
+                    CASE WHEN NOT (SELECT available FROM has_func_apply)
+                    THEN format(
+                        'ast_select: unknown pseudo-class ":{}". '
+                        'Custom predicates require the func_apply extension: '
+                        'INSTALL func_apply FROM community; LOAD func_apply; '
+                        'Then define: CREATE MACRO ast_selector_predicate_{}(node, arg) AS (...)',
+                        (SELECT pc.pseudo_name FROM pseudo_classes pc
+                         WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names) LIMIT 1),
+                        (SELECT pc.pseudo_name FROM pseudo_classes pc
+                         WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names) LIMIT 1)
+                    )
+                    ELSE format(
+                        'ast_select: unknown pseudo-class ":{}". '
+                        'No macro named ast_selector_predicate_{} is registered.',
+                        (SELECT pc.pseudo_name FROM pseudo_classes pc
+                         WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
+                           AND NOT function_exists(format('ast_selector_predicate_{}', pc.pseudo_name))
+                         LIMIT 1),
+                        (SELECT pc.pseudo_name FROM pseudo_classes pc
+                         WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
+                           AND NOT function_exists(format('ast_selector_predicate_{}', pc.pseudo_name))
+                         LIMIT 1)
+                    )
+                    END
                 )
-                -- Multiple :match/:contains in one selector — only one pattern per
-                -- selector is supported. The pattern is extracted from the selector
-                -- string via regex; multiple patterns would silently share the first.
                 WHEN (SELECT COUNT(*) FROM pseudo_classes
                       WHERE pseudo_name IN ('match', 'contains')) > 1
                 THEN error(
@@ -1034,9 +1062,11 @@ CREATE OR REPLACE MACRO ast_select_from(
                        OR before_sib.type LIKE pc.pseudo_arg || '_%')
             )
 
-            -- Unreachable: pseudo_class_validation fires first for unknown names.
-            -- ELSE false means "unsatisfied" (fail closed) if validation ever misses one.
-            ELSE false
+            ELSE apply(
+                format('ast_selector_predicate_{}', pc.pseudo_name),
+                a,
+                pc.pseudo_arg
+            )::BOOLEAN
         END
     )),
 
