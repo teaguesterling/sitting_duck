@@ -61,23 +61,38 @@ string RustAdapter::ExtractNodeName(TSNode node, const string &content) const {
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config && config->name_strategy != ExtractionStrategy::CUSTOM) {
-		// Use declarations: extract just the path, not full "use path;" text
+		// Use declarations: extract the source module path
 		if (strcmp(node_type_str, "use_declaration") == 0) {
-			string name = FindChildByType(node, content, "scoped_identifier");
-			if (name.empty()) {
-				name = FindChildByType(node, content, "identifier");
+			// scoped_use_list (use std::io::{Read, Write}):
+			// source module is the scoped_identifier inside the list
+			TSNode scoped_list = FindChildByTypeNode(node, "scoped_use_list");
+			if (!ts_node_is_null(scoped_list)) {
+				return FindChildByType(scoped_list, content, "scoped_identifier");
 			}
-			if (name.empty()) {
-				name = FindChildByType(node, content, "scoped_use_list");
+			// Simple scoped path (use std::collections::HashMap):
+			// source module is the inner scoped_identifier (path without leaf)
+			TSNode outer = FindChildByTypeNode(node, "scoped_identifier");
+			if (!ts_node_is_null(outer)) {
+				TSNode inner = FindChildByTypeNode(outer, "scoped_identifier");
+				if (!ts_node_is_null(inner)) {
+					return ExtractNodeText(inner, content);
+				}
+				// 2-component path (use std::io): first child is the crate/module
+				uint32_t child_count = ts_node_child_count(outer);
+				for (uint32_t i = 0; i < child_count; i++) {
+					TSNode child = ts_node_child(outer, i);
+					const char *ctype = ts_node_type(child);
+					if (strcmp(ctype, "identifier") == 0 || strcmp(ctype, "crate") == 0 ||
+					    strcmp(ctype, "super") == 0 || strcmp(ctype, "self") == 0) {
+						return ExtractNodeText(child, content);
+					}
+				}
+				return ExtractNodeText(outer, content);
 			}
-			if (name.empty()) {
-				name = FindChildByType(node, content, "use_list");
-			}
+			// Bare identifier or use_wildcard
+			string name = FindChildByType(node, content, "identifier");
 			if (name.empty()) {
 				name = FindChildByType(node, content, "use_wildcard");
-			}
-			if (name.empty()) {
-				name = FindChildByType(node, content, "use_as_clause");
 			}
 			return name;
 		}

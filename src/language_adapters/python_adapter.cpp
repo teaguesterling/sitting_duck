@@ -61,14 +61,29 @@ string PythonAdapter::ExtractNodeName(TSNode node, const string &content) const 
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config) {
-		// Import statements: module name is in dotted_name child, not identifier
-		if (strcmp(node_type_str, "import_statement") == 0 || strcmp(node_type_str, "import_from_statement") == 0) {
-			string name = FindChildByType(node, content, "dotted_name");
-			if (name.empty()) {
-				// Relative imports (e.g., "from . import name") have no dotted_name
-				name = FindChildByType(node, content, "identifier");
+		if (strcmp(node_type_str, "import_from_statement") == 0) {
+			// Source module is before the 'import' keyword.
+			// Check for relative_import child first (from . import X, from ..foo import X)
+			TSNode relative = FindChildByTypeNode(node, "relative_import");
+			if (!ts_node_is_null(relative)) {
+				string prefix;
+				TSNode import_prefix = FindChildByTypeNode(relative, "import_prefix");
+				if (!ts_node_is_null(import_prefix)) {
+					prefix = ExtractNodeText(import_prefix, content);
+				}
+				string module_name = FindChildByType(relative, content, "dotted_name");
+				return prefix + module_name;
 			}
-			return name;
+			// Non-relative: first dotted_name child is the source module
+			return FindChildByType(node, content, "dotted_name");
+		}
+		if (strcmp(node_type_str, "import_statement") == 0) {
+			// Check for aliased_import (import os as alias) — extract original module name
+			TSNode aliased = FindChildByTypeNode(node, "aliased_import");
+			if (!ts_node_is_null(aliased)) {
+				return FindChildByType(aliased, content, "dotted_name");
+			}
+			return FindChildByType(node, content, "dotted_name");
 		}
 		return ExtractByStrategy(node, content, config->name_strategy);
 	}

@@ -54,13 +54,13 @@ WHERE type = 'import_from_statement' AND name = 'collections.abc';
 ----
 import_from_statement	collections.abc
 
-# Test: relative import falls back to identifier
+# Test: relative import extracts dot prefix as source module
 query TT
 SELECT type, name
 FROM read_ast('test/data/python/imports.py', context := 'native')
-WHERE type = 'import_from_statement' AND name = 'utils';
+WHERE type = 'import_from_statement' AND name = '.';
 ----
-import_from_statement	utils
+import_from_statement	.
 
 # =============================================================================
 # JAVASCRIPT
@@ -74,7 +74,7 @@ WHERE type = 'import_statement'
 ORDER BY start_line
 LIMIT 1;
 ----
-import_statement	"react"
+import_statement	react
 
 # Test: all JS imports extract module source
 query TT
@@ -83,10 +83,10 @@ FROM read_ast('test/data/javascript/imports.js', context := 'native')
 WHERE type = 'import_statement'
 ORDER BY start_line;
 ----
-import_statement	"react"
-import_statement	"react"
-import_statement	"path"
-import_statement	"side-effect"
+import_statement	react
+import_statement	react
+import_statement	path
+import_statement	side-effect
 
 # =============================================================================
 # TYPESCRIPT
@@ -100,7 +100,7 @@ WHERE type = 'import_statement'
 ORDER BY start_line
 LIMIT 1;
 ----
-import_statement	"react"
+import_statement	react
 
 # =============================================================================
 # C
@@ -151,8 +151,8 @@ FROM read_ast('test/data/rust/imports.rs', context := 'native')
 WHERE type = 'use_declaration'
 ORDER BY start_line;
 ----
-use_declaration	std::collections::HashMap
-use_declaration	std::io
+use_declaration	std::collections
+use_declaration	std
 use_declaration	std::io::*
 
 # =============================================================================

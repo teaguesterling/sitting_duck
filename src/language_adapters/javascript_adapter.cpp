@@ -62,9 +62,18 @@ string JavaScriptAdapter::ExtractNodeName(TSNode node, const string &content) co
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config) {
-		// Import statements: module source is in a string child
+		// Import statements: module source is in a string child.
+		// Extract the string_fragment (without quotes) rather than the full string.
 		if (strcmp(node_type_str, "import_statement") == 0) {
-			return FindChildByType(node, content, "string");
+			TSNode string_node = FindChildByTypeNode(node, "string");
+			if (!ts_node_is_null(string_node)) {
+				string result = FindChildByType(string_node, content, "string_fragment");
+				if (!result.empty()) {
+					return result;
+				}
+				return ExtractNodeText(string_node, content);
+			}
+			return "";
 		}
 		return ExtractByStrategy(node, content, config->name_strategy);
 	}
