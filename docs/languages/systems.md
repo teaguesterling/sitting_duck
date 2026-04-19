@@ -141,7 +141,7 @@ FROM read_ast('**/*.go')
 WHERE type = 'interface_type';
 
 -- Find method receivers
-SELECT name, native
+SELECT name, signature_type, parameters
 FROM read_ast('**/*.go', context := 'native')
 WHERE type = 'method_declaration';
 ```

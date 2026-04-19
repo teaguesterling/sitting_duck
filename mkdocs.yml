@@ -58,9 +58,14 @@ nav:
     - Your First Query: tutorials/quickstart.md
     - CSS Selectors: tutorials/css-selectors.md
     - Pattern Matching: tutorials/pattern-matching.md
+    - Call Graph Analysis: tutorials/call-graphs.md
     - AI Agent Integration: tutorials/ai-agents.md
   - How-to Guides:
     - Common Queries: how-to/common-queries.md
+    - Find Dead Code: how-to/find-dead-code.md
+    - Security Audit: how-to/security-audit.md
+    - Complexity Analysis: how-to/complexity-analysis.md
+    - Parse Once, Query Many: how-to/parse-once-query-many.md
     - Multi-File Processing: how-to/multi-file-processing.md
     - Cross-Language Analysis: how-to/cross-language-analysis.md
     - Context Extraction: how-to/extract-context.md
@@ -115,6 +120,8 @@ nav:
   - Explanation:
     - Architecture: explanation/architecture.md
     - How Parsing Works: explanation/how-parsing-works.md
+    - Scope System: explanation/scope-system.md
+    - Selector Engine: explanation/selector-engine.md
     - Native Extraction: explanation/native-extraction.md
     - Native Extraction Semantics: explanation/native-extraction-semantics.md
     - Languages:

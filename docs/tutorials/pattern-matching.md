@@ -762,6 +762,6 @@ The common thread across all these examples: **grep operates on lines; structura
 
 - [CSS Selectors](css-selectors.md) — Query with `.func:has(.call#execute)` syntax
 - [Structural Search Reference](../how-to/structural-search.md) — Complete wildcard reference and more recipes
-- [Pattern Matching API](pattern-matching.md) — Full `ast_match` parameter reference
+- [Pattern Matching API](../reference/pattern-matching.md) — Full `ast_match` parameter reference
 - [Cookbook](../how-to/cookbook.md) — More practical analysis recipes
 - [Cross-Language Analysis](../how-to/cross-language-analysis.md) — Using `semantic_type` for language-agnostic queries

@@ -213,10 +213,11 @@ test/sql/languages/
 ├── java_refinements.test
 └── typescript_refinements.test
 
-docs/
-├── NATIVE_EXTRACTION_ARCHITECTURE.md  # This document
-├── native_extraction_semantics.md     # Field semantics and query patterns
-└── api/semantic-types.md              # API reference for semantic types
+docs/explanation/
+├── native-extraction.md               # This document
+├── native-extraction-semantics.md     # Field semantics and query patterns
+docs/reference/
+└── semantic-types.md                  # API reference for semantic types
 ```
 
 ## Query Examples
@@ -224,13 +225,13 @@ docs/
 ### Filter by semantic type
 ```sql
 SELECT * FROM read_ast('file.py', context := 'native')
-WHERE semantic_type = semantic_type_id('DEFINITION_FUNCTION');
+WHERE semantic_type = semantic_type_code('DEFINITION_FUNCTION');
 ```
 
 ### Find all async functions
 ```sql
-SELECT name, native FROM read_ast('file.py', context := 'native')
-WHERE semantic_type = semantic_type_id('DEFINITION_FUNCTION')
+SELECT name, signature_type, modifiers FROM read_ast('file.py', context := 'native')
+WHERE semantic_type = semantic_type_code('DEFINITION_FUNCTION')
   AND semantic_type & 0x03 = 3;  -- ASYNC refinement
 ```
 
@@ -247,7 +248,7 @@ ORDER BY COUNT(*) DESC;
 ```sql
 SELECT language, COUNT(*) as function_count
 FROM read_ast(['*.py', '*.js', '*.go'], context := 'node_types_only')
-WHERE semantic_type = semantic_type_id('DEFINITION_FUNCTION')
+WHERE semantic_type = semantic_type_code('DEFINITION_FUNCTION')
 GROUP BY language;
 ```
 

@@ -29,7 +29,7 @@ ORDER BY COUNT(*) DESC;
 Output includes:
 - `type` - Raw AST node type
 - `file_path`, `start_line`, `end_line`, etc.
-- No `semantic_type`, `name`, or `native`
+- No `semantic_type`, `name`, or native fields
 
 ### Node Types Only
 
@@ -70,14 +70,17 @@ Output includes:
 Full semantic analysis with language-specific context:
 
 ```sql
-SELECT type, name, semantic_type, native
+SELECT type, name, semantic_type, signature_type, parameters, modifiers
 FROM read_ast('src/**/*.py', context := 'native')
 WHERE type = 'function_definition';
 ```
 
 Output includes:
 - Everything from `'normalized'`
-- `native` - Rich structured data (signatures, parameters, etc.)
+- `signature_type` — return type or type annotation
+- `parameters` — function parameter list (name and type)
+- `modifiers` — access modifiers and keywords (public, static, async, etc.)
+- `annotations` — decorator/annotation text
 
 ## Native Context Details
 
@@ -87,19 +90,19 @@ For function definitions, native context extracts:
 
 ```sql
 -- Python function with parameters and return type
-SELECT name, native, semantic_type
+SELECT name, signature_type, parameters
 FROM read_ast('test/data/python/sample_app.py', context := 'native')
 WHERE type = 'function_definition';
 ```
 
-Native format: `function_name(param1: type1, param2: type2) -> return_type`
+`signature_type` contains the return type annotation. `parameters` is a `STRUCT[]` with `name` and `type` fields per parameter.
 
 ### Class Extraction
 
 For class definitions:
 
 ```sql
-SELECT name, native, semantic_type
+SELECT name, signature_type, modifiers
 FROM read_ast('Example.java', context := 'native')
 WHERE type = 'class_declaration';
 ```
@@ -108,7 +111,7 @@ WHERE type = 'class_declaration';
 
 ```sql
 -- Java method signatures
-SELECT name, native
+SELECT name, signature_type, parameters, modifiers
 FROM read_ast('MyClass.java', context := 'native')
 WHERE type = 'method_declaration';
 ```
@@ -172,7 +175,8 @@ WHERE is_definition(semantic_type)
 -- Complete function inventory
 SELECT
     name,
-    native as signature,
+    signature_type,
+    parameters,
     file_path,
     start_line
 FROM read_ast('src/**/*.py', context := 'native')
@@ -205,7 +209,7 @@ SELECT COUNT(*) FROM read_ast('**/*.py', context := 'native', ignore_errors := t
 
 ```sql
 -- Full context, full source text
-SELECT type, name, native, peek
+SELECT type, name, signature_type, parameters, peek
 FROM read_ast('test/data/python/sample_app.py', context := 'native', source := 'full');
 ```
 

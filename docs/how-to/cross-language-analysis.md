@@ -78,7 +78,7 @@ FROM read_ast([
     '**/*.java',
     '**/*.go'
 ], ignore_errors := true)
-WHERE semantic_type = 48  -- EXTERNAL_IMPORT
+WHERE semantic_type = 'EXTERNAL_IMPORT'
 GROUP BY language;
 ```
 
@@ -87,9 +87,9 @@ GROUP BY language;
 ```sql
 SELECT
     language,
-    COUNT(CASE WHEN semantic_type = 144 THEN 1 END) as conditionals,
-    COUNT(CASE WHEN semantic_type = 148 THEN 1 END) as loops,
-    COUNT(CASE WHEN semantic_type = 152 THEN 1 END) as jumps,
+    COUNT(CASE WHEN semantic_type = 'FLOW_CONDITIONAL' THEN 1 END) as conditionals,
+    COUNT(CASE WHEN semantic_type = 'FLOW_LOOP' THEN 1 END) as loops,
+    COUNT(CASE WHEN semantic_type = 'FLOW_JUMP' THEN 1 END) as jumps,
     COUNT(*) as total_nodes
 FROM read_ast([
     '**/*.py',
@@ -131,7 +131,7 @@ FROM read_ast([
     '**/*.py',
     '**/*.java'
 ], ignore_errors := true)
-WHERE semantic_type = 36;  -- METADATA_ANNOTATION
+WHERE semantic_type = 'METADATA_ANNOTATION';
 ```
 
 ## Codebase Overview
@@ -156,7 +156,7 @@ SELECT
     language,
     COUNT(CASE WHEN semantic_type = 'DEFINITION_FUNCTION' THEN 1 END) as functions,
     COUNT(CASE WHEN semantic_type = 'DEFINITION_CLASS' THEN 1 END) as classes,
-    COUNT(CASE WHEN semantic_type = 244 THEN 1 END) as variables
+    COUNT(CASE WHEN semantic_type = 'DEFINITION_VARIABLE' THEN 1 END) as variables
 FROM read_ast('**/*.*', ignore_errors := true)
 GROUP BY language
 HAVING COUNT(*) > 100

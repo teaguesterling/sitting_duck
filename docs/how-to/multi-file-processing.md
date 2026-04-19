@@ -74,7 +74,7 @@ FROM read_ast([
     '**/*.js',
     '**/*.java'
 ], ignore_errors := true)
-WHERE semantic_type = 48  -- EXTERNAL_IMPORT
+WHERE semantic_type = 'EXTERNAL_IMPORT'
 GROUP BY language, type
 ORDER BY language, count DESC;
 ```

@@ -432,6 +432,123 @@ WHERE EXISTS (
 );
 ```
 
+## Custom Predicates
+
+Define your own pseudo-classes by registering macros with the `ast_selector_predicate_<name>` naming convention. Once registered, use them in selectors as `:<name>` or `:<name>("arg")`.
+
+### Setup
+
+Custom predicates require the [`func_apply`](https://community-extensions.duckdb.org/extensions/func_apply.html) extension for dynamic dispatch:
+
+```sql
+INSTALL func_apply FROM community;
+LOAD func_apply;
+```
+
+Sitting Duck auto-loads `func_apply` if it's installed. If it's not available, custom predicates are disabled and you'll get a helpful error message suggesting installation.
+
+### Defining a Predicate
+
+A predicate macro takes two arguments: `node` (the AST row as a struct) and `arg` (the string argument from the selector, or `NULL` if none):
+
+```sql
+-- Predicate with an argument: :name_starts("prefix")
+CREATE MACRO ast_selector_predicate_name_starts(node, prefix) AS (
+    node.name IS NOT NULL AND starts_with(node.name, prefix)
+);
+
+-- Predicate with no argument: :is_deep
+CREATE MACRO ast_selector_predicate_is_deep(node, arg) AS (
+    node.depth >= 3
+);
+
+-- Predicate using semantic types: :is_test
+CREATE MACRO ast_selector_predicate_is_test(node, arg) AS (
+    node.name IS NOT NULL AND (
+        starts_with(node.name, 'test_')
+        OR starts_with(node.name, 'Test')
+    )
+);
+```
+
+The `node` struct contains all columns from `read_ast()` — `name`, `type`, `depth`, `semantic_type`, `peek`, `start_line`, `scope`, etc. Use any column to build your predicate logic.
+
+### Using Custom Predicates
+
+Custom predicates work exactly like built-in pseudo-classes:
+
+```sql
+-- With an argument
+SELECT name FROM ast_select('src/*.py', '.func:name_starts("test_")');
+
+-- Without an argument
+SELECT name FROM ast_select('src/*.py', 'function_definition:is_deep');
+
+-- Negation
+SELECT name FROM ast_select('src/*.py', '.func:not(:is_test)');
+
+-- Combined with built-in pseudo-classes
+SELECT name FROM ast_select('src/*.py', '.func:named:is_deep');
+SELECT name FROM ast_select('src/*.py', '.func:is_test:has(return_statement)');
+```
+
+### Discoverability
+
+All registered predicates are discoverable via DuckDB's function catalog:
+
+```sql
+SELECT function_name
+FROM duckdb_functions()
+WHERE function_name LIKE 'ast_selector_predicate_%';
+```
+
+### Example: FTS Predicate
+
+Combine with DuckDB's full-text search to find nodes by content:
+
+```sql
+-- Build a text index on the AST
+CREATE TABLE code AS SELECT * FROM read_ast('src/**/*.py');
+PRAGMA create_fts_index('code', 'node_id', 'peek');
+
+-- Predicate that checks FTS relevance
+CREATE MACRO ast_selector_predicate_mentions(node, term) AS (
+    node.peek IS NOT NULL AND node.peek ILIKE '%' || term || '%'
+);
+
+-- Functions mentioning "database"
+SELECT name FROM ast_select('src/**/*.py', '.func:mentions("database")');
+```
+
+### Error Messages
+
+If you use a custom pseudo-class without the required setup, you'll get targeted guidance:
+
+- **No `func_apply` installed**: suggests `INSTALL func_apply FROM community; LOAD func_apply;`
+- **`func_apply` loaded but no matching macro**: reports the specific macro name that's missing
+
+### Advanced: Custom Dispatch Without `func_apply`
+
+Under the hood, custom predicates are dispatched through the `ast_dispatch_predicate(fn, node, arg)` macro. When `func_apply` is loaded, Sitting Duck registers this as a call to `apply()`. Without `func_apply`, it's a no-op stub.
+
+You can replace this macro with your own dispatcher — no `func_apply` required:
+
+```sql
+CREATE OR REPLACE MACRO ast_dispatch_predicate(fn, node, arg) AS (
+    CASE fn
+        WHEN 'ast_selector_predicate_is_test'
+            THEN node.name IS NOT NULL AND starts_with(node.name, 'test_')
+        WHEN 'ast_selector_predicate_mentions'
+            THEN node.peek IS NOT NULL AND node.peek ILIKE '%' || arg || '%'
+        ELSE false
+    END
+);
+```
+
+This is useful in environments where you can't install community extensions, or when you have a fixed set of predicates and want to avoid the `func_apply` dependency.
+
+---
+
 ## Quick Reference
 
 | Pseudo-class | Meaning |
@@ -476,6 +593,9 @@ WHERE EXISTS (
 | `:typed` | Has type annotation/signature |
 | `:void` | No return type |
 | `:variadic` | Has variadic parameters (*args, ...rest) |
+| **Custom** | |
+| `:<name>` | User-defined predicate (requires `func_apply`) |
+| `:<name>("arg")` | User-defined predicate with argument |
 
 ---
 

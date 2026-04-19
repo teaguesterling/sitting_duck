@@ -146,6 +146,23 @@ SELECT name FROM ast_select('src/*.py', '.func:not(:has(return_statement))');
 SELECT name FROM ast_select('src/*.py', '.func:has(for_statement):not(:has(try_statement))');
 ```
 
+## Custom Pseudo-Classes
+
+Define your own pseudo-classes and use them in selectors:
+
+```sql
+-- Define a predicate
+CREATE MACRO ast_selector_predicate_is_test(node, arg) AS (
+    node.name IS NOT NULL AND starts_with(node.name, 'test_')
+);
+
+-- Use it like any built-in pseudo-class
+SELECT name FROM ast_select('src/*.py', '.func:is_test');
+SELECT name FROM ast_select('src/*.py', '.func:not(:is_test):has(return_statement)');
+```
+
+Requires the `func_apply` extension (`INSTALL func_apply FROM community`). See [Custom Predicates](css-pseudo-classes.md#custom-predicates) for full details.
+
 ## Performance
 
 On 834K AST nodes (2,468 Python files from Rosettacode):

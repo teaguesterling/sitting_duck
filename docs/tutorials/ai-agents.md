@@ -1,7 +1,6 @@
 # AI Agent Guide to DuckDB AST Extension
 
-**Last Updated:** December 2024  
-**Extension Version:** Current (Semantic Taxonomy + Streaming API)
+**Extension Version:** v1.7.4+
 
 ## Overview
 
@@ -148,8 +147,7 @@ WHERE is_definition(semantic_type)
 
 > **💡 Pro Tip**: Use convenience functions for readability during development, then switch to raw semantic type codes for performance in production queries. See the complete semantic type reference in [Semantic Types](../reference/semantic-types.md).
 
-## DuckDB-Consistent Pattern Arrays (NEW!)
-
+## DuckDB-Consistent Pattern Arrays
 The extension now supports **DuckDB-style pattern arrays** following the same conventions as `read_csv`, `read_parquet`, and other DuckDB file functions.
 
 ### Array Syntax
@@ -211,8 +209,8 @@ analysis AS (
         language,
         COUNT(DISTINCT file_path) as files,
         COUNT(*) as total_nodes,
-        COUNT(CASE WHEN semantic_type = 240 THEN 1 END) as functions,
-        COUNT(CASE WHEN semantic_type = 248 THEN 1 END) as classes
+        COUNT(CASE WHEN semantic_type = 'DEFINITION_FUNCTION' THEN 1 END) as functions,
+        COUNT(CASE WHEN semantic_type = 'DEFINITION_CLASS' THEN 1 END) as classes
     FROM read_ast([
         'src/**/*.py', 'lib/**/*.js', 'api/**/*.ts', 'core/**/*.cpp'
     ], ignore_errors := true)
@@ -247,13 +245,9 @@ SELECT COUNT(*) as total_nodes FROM read_ast('script.py');
 -- Analyze with explicit language specification
 SELECT COUNT(*) as total_nodes FROM read_ast('script.js', 'javascript');
 
--- Find all functions using semantic types (readable approach)
+-- Find all functions using semantic types
 SELECT name, type, file_path FROM read_ast('code.py') 
-WHERE is_definition(semantic_type) AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION';
-
--- Or use raw semantic type codes for performance
-SELECT name, type, file_path FROM read_ast('code.py')
-WHERE semantic_type = 240; -- DEFINITION_FUNCTION
+WHERE semantic_type = 'DEFINITION_FUNCTION';
 ```
 
 ### 3. Multi-File Analysis
@@ -264,8 +258,7 @@ SELECT file_path, COUNT(*) as nodes_per_file
 FROM read_ast('src/**/*.py', ignore_errors := true)
 GROUP BY file_path;
 
--- DuckDB-style pattern arrays for precise control (NEW!)
-SELECT file_path, language, COUNT(*) as nodes_per_file 
+-- DuckDB-style pattern arrays for precise controlSELECT file_path, language, COUNT(*) as nodes_per_file 
 FROM read_ast([
     'src/**/*.py',     -- Python source files
     'lib/**/*.js',     -- JavaScript libraries  
@@ -275,19 +268,10 @@ FROM read_ast([
 GROUP BY file_path, language
 ORDER BY nodes_per_file DESC;
 
--- Cross-language analysis using convenience functions
-SELECT 
-    language, 
-    COUNT(*) as total_functions,
-    get_super_kind(semantic_type) as category
-FROM read_ast(['**/*.py', '**/*.js', '**/*.cpp'], ignore_errors := true)
-WHERE is_definition(semantic_type) AND semantic_type_to_string(semantic_type) = 'DEFINITION_FUNCTION'
-GROUP BY language, get_super_kind(semantic_type);
-
--- Performance-optimized version with raw codes and arrays
+-- Cross-language function count
 SELECT language, COUNT(*) as total_functions
 FROM read_ast(['**/*.py', '**/*.js', '**/*.cpp'], ignore_errors := true)
-WHERE semantic_type = 240 -- DEFINITION_FUNCTION
+WHERE semantic_type = 'DEFINITION_FUNCTION'
 GROUP BY language;
 ```
 
@@ -309,29 +293,30 @@ The extension supports **27 programming languages** with automatic detection:
 ```sql
 -- Find all functions regardless of language using semantic types
 SELECT name, type, language, file_path FROM read_ast('**/*.*', ignore_errors := true)
-WHERE semantic_type = 240; -- DEFINITION_FUNCTION
+WHERE semantic_type = 'DEFINITION_FUNCTION';
 
 -- Same query works across Python, JavaScript, C++, etc.
 SELECT COUNT(*) as function_count, language
 FROM read_ast('src/**/*.*', ignore_errors := true)
-WHERE semantic_type = 240
+WHERE semantic_type = 'DEFINITION_FUNCTION'
 GROUP BY language;
 ```
 
 ## Advanced Usage with Semantic Types
 
-### Pattern Matching with Bit Operations
+### Cross-Language Pattern Matching
 ```sql
--- Find all arithmetic operations across languages
-SELECT file_path, type, name, language
-FROM read_ast('**/*.{py,js,cpp}', ignore_errors := true)
-WHERE (semantic_type & 252) = 192; -- OPERATOR_ARITHMETIC (base code 192)
-
 -- Find all conditionals across languages
 SELECT COUNT(*) as conditional_count, language
 FROM read_ast('src/**/*.*', ignore_errors := true)
-WHERE semantic_type = 144 -- FLOW_CONDITIONAL
+WHERE semantic_type = 'FLOW_CONDITIONAL'
 GROUP BY language;
+
+-- Find all call sites
+SELECT file_path, name, language
+FROM read_ast('**/*.{py,js,cpp}', ignore_errors := true)
+WHERE semantic_type = 'COMPUTATION_CALL'
+  AND name IS NOT NULL;
 ```
 
 ### Cross-Language Refactoring Analysis
@@ -339,13 +324,13 @@ GROUP BY language;
 -- Find assignment patterns to refactor
 SELECT file_path, type, name, semantic_type, start_line
 FROM read_ast('**/*.{py,js,cpp}', ignore_errors := true)
-WHERE semantic_type = 204 -- OPERATOR_ASSIGNMENT
+WHERE semantic_type = 'OPERATOR_ASSIGNMENT'
 ORDER BY file_path, start_line;
 
 -- Find complex functions (high depth) for refactoring candidates
 SELECT file_path, name, depth, descendant_count
 FROM read_ast('**/*.py', ignore_errors := true)
-WHERE semantic_type = 240 AND depth > 3 -- Deep function definitions
+WHERE semantic_type = 'DEFINITION_FUNCTION' AND depth > 3 -- Deep function definitions
 ORDER BY descendant_count DESC;
 ```
 
@@ -365,8 +350,7 @@ read_ast('script.js', 'javascript')
 read_ast('src/**/*.py')
 read_ast('**/*.{js,ts,py}')
 
--- DuckDB-style pattern arrays (NEW!)
-read_ast(['src/**/*.py', 'lib/**/*.js', 'tests/**/*.ts'])
+-- DuckDB-style pattern arraysread_ast(['src/**/*.py', 'lib/**/*.js', 'tests/**/*.ts'])
 read_ast(['main.py', 'utils.js'], 'auto')  -- Mixed files with auto-detection
 
 -- With options (works with both single patterns and arrays)
@@ -375,7 +359,7 @@ read_ast(['**/*.py', '**/*.js'], ignore_errors := true, peek_size := 200)
 read_ast(['script.py'], peek_mode := 'lines')
 ```
 
-**Returns columns (20 default, 22 with `source := 'full'`):**
+**Returns columns:**
 - `node_id`: Unique identifier for each AST node
 - `type`: Language-specific node type (e.g., 'function_definition')
 - `semantic_type`: 8-bit universal semantic category (SEMANTIC_TYPE)
@@ -420,8 +404,8 @@ SELECT * FROM parse_ast('def hello(): pass', 'python');
 SELECT
     language,
     COUNT(*) as total_nodes,
-    COUNT(CASE WHEN semantic_type = 240 THEN 1 END) as functions,
-    COUNT(CASE WHEN semantic_type = 248 THEN 1 END) as classes,
+    COUNT(CASE WHEN semantic_type = 'DEFINITION_FUNCTION' THEN 1 END) as functions,
+    COUNT(CASE WHEN semantic_type = 'DEFINITION_CLASS' THEN 1 END) as classes,
     COUNT(DISTINCT file_path) as files
 FROM read_ast('**/*.*', ignore_errors := true)
 GROUP BY language
@@ -436,7 +420,7 @@ SELECT
     language,
     MAX(depth) as max_depth,
     COUNT(*) as total_nodes,
-    COUNT(CASE WHEN semantic_type = 240 THEN 1 END) as function_count
+    COUNT(CASE WHEN semantic_type = 'DEFINITION_FUNCTION' THEN 1 END) as function_count
 FROM read_ast('**/*.*', ignore_errors := true)
 GROUP BY file_path, language
 HAVING function_count > 5
@@ -448,14 +432,14 @@ ORDER BY max_depth DESC, total_nodes DESC;
 -- "Find all test functions across languages"
 SELECT file_path, name, type, language, start_line
 FROM read_ast('**/*.*', ignore_errors := true)
-WHERE semantic_type = 240 -- DEFINITION_FUNCTION
+WHERE semantic_type = 'DEFINITION_FUNCTION'
   AND (name ILIKE '%test%' OR name ILIKE '%spec%')
 ORDER BY file_path, start_line;
 
 -- "Find all error handling constructs"
 SELECT file_path, type, language, COUNT(*) as error_handling_count
 FROM read_ast('**/*.*', ignore_errors := true)
-WHERE (semantic_type & 252) >= 160 AND (semantic_type & 252) <= 172 -- ERROR_* kinds (160-172)
+WHERE semantic_type IN ('ERROR_TRY', 'ERROR_CATCH')
 GROUP BY file_path, type, language
 ORDER BY error_handling_count DESC;
 ```
@@ -472,14 +456,14 @@ SELECT
     start_line
 FROM read_ast('**/*.{py,js,cpp}', ignore_errors := true)
 WHERE depth > 6
-  AND semantic_type IN (240, 248) -- Functions or classes
+  AND semantic_type IN ('DEFINITION_FUNCTION', 'DEFINITION_CLASS')
 ORDER BY depth DESC, descendant_count DESC;
 
 -- "Find files with high cyclomatic complexity indicators"
 SELECT
     file_path,
-    COUNT(CASE WHEN semantic_type = 144 THEN 1 END) as conditionals,
-    COUNT(CASE WHEN semantic_type = 148 THEN 1 END) as loops,
+    COUNT(CASE WHEN semantic_type = 'FLOW_CONDITIONAL' THEN 1 END) as conditionals,
+    COUNT(CASE WHEN semantic_type = 'FLOW_LOOP' THEN 1 END) as loops,
     COUNT(*) as total_nodes
 FROM read_ast('**/*.py', ignore_errors := true)
 GROUP BY file_path
@@ -499,7 +483,7 @@ SELECT
     descendant_count as complexity_score,
     SUBSTR(peek, 1, 50) || '...' as preview
 FROM read_ast('src/**/*.py', ignore_errors := true)
-WHERE semantic_type = 240 AND name IS NOT NULL
+WHERE semantic_type = 'DEFINITION_FUNCTION' AND name IS NOT NULL
 ORDER BY file_path, start_line;
 ```
 
@@ -507,11 +491,11 @@ ORDER BY file_path, start_line;
 
 ### 1. Use Semantic Types for Cross-Language Analysis
 ```sql
--- ✅ GOOD: Works across all languages
-SELECT * FROM read_ast('**/*.*') WHERE semantic_type = 240; -- DEFINITION_FUNCTION
+-- Works across all 27 languages
+SELECT * FROM read_ast('**/*.*') WHERE semantic_type = 'DEFINITION_FUNCTION';
 
--- ❌ AVOID: Language-specific types
-SELECT * FROM read_ast('**/*.*') WHERE type = 'function_definition'; -- Only works for some languages
+-- Language-specific types only match one grammar
+SELECT * FROM read_ast('**/*.*') WHERE type = 'function_definition';
 ```
 
 ### 2. Always Use ignore_errors for Large Codebases
@@ -523,19 +507,20 @@ SELECT * FROM read_ast('**/*.*', ignore_errors := true);
 SELECT * FROM read_ast('**/*.*');
 ```
 
-### 3. Leverage Bit Patterns for Efficient Filtering
+### 3. Use Semantic Category Predicates for Broad Filtering
 ```sql
--- Find all LITERAL types (codes 64-79)
-WHERE (semantic_type & 252) >= 64 AND (semantic_type & 252) < 80;
+-- Find all literal values
+WHERE is_literal(semantic_type);
 
--- Find all OPERATOR types (codes 192-207)
-WHERE (semantic_type & 252) >= 192 AND (semantic_type & 252) < 208;
+-- Find all definitions (functions, classes, variables)
+WHERE is_definition(semantic_type);
 
--- Find all FLOW_CONTROL constructs (codes 144-159)
-WHERE (semantic_type & 252) >= 144 AND (semantic_type & 252) < 160;
+-- Find all control flow
+WHERE is_control_flow(semantic_type);
 
--- Find all DEFINITION types (codes 240-255)
-WHERE (semantic_type & 252) >= 240;
+-- Or use specific types for precision
+WHERE semantic_type = 'DEFINITION_FUNCTION';
+WHERE semantic_type = 'COMPUTATION_CALL';
 ```
 
 ### 4. Use File Patterns Effectively
@@ -578,7 +563,7 @@ LOAD 'sitting_duck';
 -- 2. Get codebase overview
 WITH overview AS (
     SELECT language, COUNT(*) as files,
-           COUNT(CASE WHEN semantic_type = 240 THEN 1 END) as functions
+           COUNT(CASE WHEN semantic_type = 'DEFINITION_FUNCTION' THEN 1 END) as functions
     FROM read_ast('**/*.*', ignore_errors := true)
     GROUP BY language
 ),
@@ -587,7 +572,7 @@ WITH overview AS (
 complex_functions AS (
     SELECT file_path, name, depth, descendant_count
     FROM read_ast('**/*.*', ignore_errors := true)
-    WHERE semantic_type = 240 AND depth > 5
+    WHERE semantic_type = 'DEFINITION_FUNCTION' AND depth > 5
 ),
 
 -- 4. Identify potential issues
@@ -628,7 +613,7 @@ read_ast([
 -- Filter early for performance
 SELECT file_path, COUNT(*) as function_count
 FROM read_ast(['**/*.py', '**/*.js'], ignore_errors := true)
-WHERE semantic_type = 240  -- Filter at source
+WHERE semantic_type = 'DEFINITION_FUNCTION'
 GROUP BY file_path;
 ```
 

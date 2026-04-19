@@ -60,7 +60,7 @@ FROM read_ast('**/*.java')
 WHERE type = 'interface_declaration';
 
 -- Find methods with their signatures
-SELECT name, native as signature
+SELECT name, signature_type, parameters
 FROM read_ast('**/*.java', context := 'native')
 WHERE type = 'method_declaration';
 

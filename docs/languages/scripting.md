@@ -255,7 +255,7 @@ WHERE type = 'command';
 SELECT
     language,
     COUNT(CASE WHEN semantic_type = 'DEFINITION_FUNCTION' THEN 1 END) as functions,
-    COUNT(CASE WHEN semantic_type = 244 THEN 1 END) as variables,
+    COUNT(CASE WHEN semantic_type = 'DEFINITION_VARIABLE' THEN 1 END) as variables,
     COUNT(*) as total_nodes
 FROM read_ast(['**/*.py', '**/*.rb', '**/*.php', '**/*.lua'], ignore_errors := true)
 GROUP BY language

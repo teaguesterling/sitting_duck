@@ -212,7 +212,7 @@ ORDER BY files DESC;
 SELECT
     file_path,
     language,
-    COUNT(CASE WHEN semantic_type = 244 THEN 1 END) as key_count
+    COUNT(CASE WHEN semantic_type = 'DEFINITION_VARIABLE' THEN 1 END) as key_count
 FROM read_ast(['**/*.tf', '**/*.json', '**/*.toml'], ignore_errors := true)
 GROUP BY file_path, language
 ORDER BY key_count DESC;
