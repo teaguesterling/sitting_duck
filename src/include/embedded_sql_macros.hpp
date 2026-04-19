@@ -3326,12 +3326,8 @@ CREATE OR REPLACE MACRO ast_select_from(
                       AND ref.node_id != a.node_id
                 )
 
-            -- :exported — module-level public definition
-            WHEN 'exported' THEN
-                is_name_definition(a.flags)
-                AND (a.scope.current IS NULL OR a.scope.current <= 0)
-                AND a.name IS NOT NULL AND a.name != ''
-                AND a.name NOT LIKE '\_%'
+            -- :exported — publicly visible outside file/module (IS_EXPORTED flag)
+            WHEN 'exported' THEN is_exported(a.flags)
 
             -- :match("code") — the CURRENT node is the root of the parsed pattern.
             -- Strict: target type must equal pattern root type. Use ___ wildcard
@@ -3469,13 +3465,13 @@ CREATE OR REPLACE MACRO ast_select_from(
           AND call_node.semantic_type = 'COMPUTATION_CALL'
           AND call_node.name = m.name
           AND call_node.node_id != m.node_id
-
-)SQLMACRO"
-        R"SQLMACRO(
         JOIN ast caller_fn
           ON caller_fn.node_id = call_node.scope.function
          AND caller_fn.file_path = call_node.file_path
     ),
+
+)SQLMACRO"
+        R"SQLMACRO(
     -- ::callees — calls inside this function (transitive — includes calls
     -- inside nested functions and lambdas).
     --
@@ -3782,11 +3778,7 @@ CREATE OR REPLACE MACRO ast_exports(
 ) AS TABLE
     SELECT *
     FROM read_ast(source, language)
-    WHERE is_name_definition(flags)
-      AND (scope.current IS NULL OR scope.current <= 0)  -- module-level scope
-      AND name IS NOT NULL
-      AND name != ''
-      AND name NOT LIKE '\_%'  -- exclude Python-style private
+    WHERE is_exported(flags)
     ORDER BY file_path, start_line;
 
 

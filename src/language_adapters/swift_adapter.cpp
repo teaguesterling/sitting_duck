@@ -142,7 +142,8 @@ string SwiftAdapter::ExtractNodeValue(TSNode node, const string &content) const 
 }
 
 bool SwiftAdapter::IsPublicNode(TSNode node, const string &content) const {
-	// Check for Swift access modifiers
+	// In Swift, only `public` and `open` are exported.
+	// Default is `internal` (module-visible only, not exported).
 	uint32_t child_count = ts_node_child_count(node);
 	for (uint32_t i = 0; i < child_count; i++) {
 		TSNode child = ts_node_child(node, i);
@@ -153,14 +154,10 @@ bool SwiftAdapter::IsPublicNode(TSNode node, const string &content) const {
 			if (modifier_text.find("public") != string::npos || modifier_text.find("open") != string::npos) {
 				return true;
 			}
-			if (modifier_text.find("private") != string::npos || modifier_text.find("fileprivate") != string::npos) {
-				return false;
-			}
 		}
 	}
 
-	// Default to internal (package-visible) in Swift
-	return true;
+	return false;
 }
 
 const unordered_map<string, NodeConfig> &SwiftAdapter::GetNodeConfigs() const {

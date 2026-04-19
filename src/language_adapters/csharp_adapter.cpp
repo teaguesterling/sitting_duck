@@ -110,39 +110,22 @@ string CSharpAdapter::ExtractNodeValue(TSNode node, const string &content) const
 }
 
 bool CSharpAdapter::IsPublicNode(TSNode node, const string &content) const {
-	const char *node_type_str = ts_node_type(node);
-	const NodeConfig *config = GetNodeConfig(node_type_str);
-
-	if (config) {
-		return false; // IS_PUBLIC not yet implemented
-	}
-
-	// Check for C#-specific public visibility
-	string node_type = string(node_type_str);
-
-	// In C#, declarations need explicit public modifier (private by default for class members)
-	if (node_type.find("declaration") != string::npos) {
-		// Look for visibility modifiers
-		uint32_t child_count = ts_node_child_count(node);
-		for (uint32_t i = 0; i < child_count; i++) {
-			TSNode child = ts_node_child(node, i);
-			const char *child_type = ts_node_type(child);
-
-			if (strcmp(child_type, "modifier") == 0) {
-				// Check the modifier text
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				if (start < content.size() && end <= content.size()) {
-					string modifier_text = content.substr(start, end - start);
-					if (modifier_text == "public") {
-						return true;
-					}
-				}
+	// In C#, check child modifier nodes for public/internal.
+	// Private by default for class members.
+	uint32_t child_count = ts_node_child_count(node);
+	for (uint32_t i = 0; i < child_count; i++) {
+		TSNode child = ts_node_child(node, i);
+		const char *child_type = ts_node_type(child);
+		if (strcmp(child_type, "modifier") == 0) {
+			string mod_text = ExtractNodeText(child, content);
+			if (mod_text == "public" || mod_text == "internal") {
+				return true;
+			}
+			if (mod_text == "private" || mod_text == "protected") {
+				return false;
 			}
 		}
-		return false; // Private by default in C#
 	}
-
 	return false;
 }
 

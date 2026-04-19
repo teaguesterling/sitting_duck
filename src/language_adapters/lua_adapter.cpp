@@ -129,23 +129,15 @@ string LuaAdapter::ExtractNodeValue(TSNode node, const string &content) const {
 
 bool LuaAdapter::IsPublicNode(TSNode node, const string &content) const {
 	const char *node_type_str = ts_node_type(node);
-	const NodeConfig *config = GetNodeConfig(node_type_str);
-
-	if (config) {
-		return false; // IS_PUBLIC not yet implemented
-	}
-
-	// In Lua, there's no built-in public/private - everything is public by default
-	// unless convention (like underscore prefix) is used
 	string node_type = string(node_type_str);
 
-	// Function and variable declarations are "public" by default
+	// Global function/variable declarations are public
 	if (node_type == "function_declaration" || node_type == "variable_declaration") {
 		return true;
 	}
 
 	// Local declarations are private to their scope
-	if (node_type == "local_function_declaration" || node_type == "local_variable_declaration") {
+	if (node_type == "local_function" || node_type == "local_variable_declaration") {
 		return false;
 	}
 

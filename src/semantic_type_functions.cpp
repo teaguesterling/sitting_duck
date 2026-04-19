@@ -414,6 +414,15 @@ static void IsScopeFunction(DataChunk &args, ExpressionState &state, Vector &res
 	                                      [&](uint8_t flags) { return (flags & ASTNodeFlags::IS_SCOPE) != 0; });
 }
 
+// Check if node is exported (visible outside file/module)
+static void IsExportedFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	D_ASSERT(args.ColumnCount() == 1);
+	auto &flags_vector = args.data[0];
+	auto count = args.size();
+	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count,
+	                                      [&](uint8_t flags) { return (flags & ASTNodeFlags::IS_EXPORTED) != 0; });
+}
+
 // Get the name role as an integer (0=none, 1=reference, 2=declaration, 3=definition)
 static void NameRoleFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	D_ASSERT(args.ColumnCount() == 1);
@@ -722,6 +731,10 @@ void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
 	// IS_SCOPE flag function (bit 3)
 	ScalarFunction is_scope_func("is_scope", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsScopeFunction);
 	loader.RegisterFunction(is_scope_func);
+
+	// IS_EXPORTED flag function (bit 4)
+	ScalarFunction is_exported_func("is_exported", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsExportedFunction);
+	loader.RegisterFunction(is_exported_func);
 
 	// DEPRECATED: backward compatibility wrappers
 	ScalarFunction is_declaration_only_func("is_declaration_only", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,

@@ -121,29 +121,23 @@ string KotlinAdapter::ExtractNodeValue(TSNode node, const string &content) const
 
 bool KotlinAdapter::IsPublicNode(TSNode node, const string &content) const {
 	const char *node_type_str = ts_node_type(node);
-	const NodeConfig *config = GetNodeConfig(node_type_str);
-
-	if (config) {
-		return false; // IS_PUBLIC not yet implemented
-	}
-
-	// Check for Kotlin-specific public visibility
 	string node_type = string(node_type_str);
 
-	// In Kotlin, declarations are public by default unless marked private/internal/protected
-	if (node_type.find("declaration") != string::npos) {
-		// Look for visibility modifiers
+	// Kotlin declarations are public by default.
+	// Only private/protected restricts visibility; internal is module-visible (exported).
+	if (node_type.find("declaration") != string::npos || node_type.find("definition") != string::npos) {
 		uint32_t child_count = ts_node_child_count(node);
 		for (uint32_t i = 0; i < child_count; i++) {
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
-
-			if (strcmp(child_type, "private") == 0 || strcmp(child_type, "internal") == 0 ||
-			    strcmp(child_type, "protected") == 0) {
-				return false;
+			if (strcmp(child_type, "visibility_modifier") == 0) {
+				string mod_text = ExtractNodeText(child, content);
+				if (mod_text == "private" || mod_text == "protected") {
+					return false;
+				}
 			}
 		}
-		return true; // Public by default in Kotlin
+		return true;
 	}
 
 	return false;

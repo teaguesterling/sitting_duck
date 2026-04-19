@@ -118,9 +118,34 @@ string PHPAdapter::ExtractNodeValue(TSNode node, const string &content) const {
 }
 
 bool PHPAdapter::IsPublicNode(TSNode node, const string &content) const {
-	// In PHP, check for public visibility modifier
-	string node_text = ExtractNodeText(node, content);
-	return node_text.find("public") != string::npos;
+	const char *node_type_str = ts_node_type(node);
+	string node_type = string(node_type_str);
+
+	// Top-level functions in PHP are public by default
+	if (node_type == "function_definition") {
+		return true;
+	}
+
+	// Class members need explicit public modifier (private by default)
+	if (node_type == "method_declaration" || node_type == "property_declaration") {
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			const char *child_type = ts_node_type(child);
+			if (strcmp(child_type, "visibility_modifier") == 0) {
+				string mod_text = ExtractNodeText(child, content);
+				return mod_text == "public";
+			}
+		}
+		return false;
+	}
+
+	// Class/interface declarations are public
+	if (node_type == "class_declaration" || node_type == "interface_declaration") {
+		return true;
+	}
+
+	return false;
 }
 
 const unordered_map<string, NodeConfig> &PHPAdapter::GetNodeConfigs() const {

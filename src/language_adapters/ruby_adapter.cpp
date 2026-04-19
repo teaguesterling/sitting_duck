@@ -87,28 +87,22 @@ string RubyAdapter::ExtractNodeValue(TSNode node, const string &content) const {
 }
 
 bool RubyAdapter::IsPublicNode(TSNode node, const string &content) const {
-	// In Ruby, methods/variables starting with underscore or all caps constants are often considered private/internal
-	// Methods are public by default unless explicitly marked private/protected
-	string name = ExtractNodeName(node, content);
-
-	if (name.empty()) {
-		return true; // Default to public if no name
+	// In Ruby, methods are public by default. Check preceding siblings for
+	// a bare `private` or `protected` call that changes visibility.
+	TSNode sibling = ts_node_prev_sibling(node);
+	while (!ts_node_is_null(sibling)) {
+		const char *sib_type = ts_node_type(sibling);
+		if (strcmp(sib_type, "call") == 0 || strcmp(sib_type, "identifier") == 0) {
+			string sib_text = ExtractNodeText(sibling, content);
+			if (sib_text == "private" || sib_text == "protected") {
+				return false;
+			}
+			if (sib_text == "public") {
+				return true;
+			}
+		}
+		sibling = ts_node_prev_sibling(sibling);
 	}
-
-	// Check for private/protected access modifiers in the surrounding context
-	// This is a simplified implementation - full implementation would track access modifier state
-
-	// Convention: underscore prefix typically indicates private/internal
-	if (name[0] == '_') {
-		return false;
-	}
-
-	// Convention: methods ending with ? or ! are typically public (Ruby idioms)
-	if (name.back() == '?' || name.back() == '!') {
-		return true;
-	}
-
-	// Default to public (Ruby's default visibility for methods)
 	return true;
 }
 

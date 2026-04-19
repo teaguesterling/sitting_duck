@@ -133,8 +133,8 @@ bool ZigAdapter::IsPublicNode(TSNode node, const string &content) const {
 			}
 		}
 	}
-	// Default to public if no visibility modifier found
-	return true;
+	// No pub modifier found — not exported
+	return false;
 }
 
 const unordered_map<string, NodeConfig> &ZigAdapter::GetNodeConfigs() const {

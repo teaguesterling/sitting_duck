@@ -259,6 +259,11 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			// Only populate semantic fields based on config.context level
 			if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
 				PopulateSemanticFieldsTemplated(ast_node, adapter, entry.node, content, node_configs, config);
+
+				// Set IS_EXPORTED flag via language-specific IsPublicNode check
+				if (adapter->IsPublicNode(entry.node, content)) {
+					ast_node.universal_flags |= ASTNodeFlags::IS_EXPORTED;
+				}
 			} else {
 				// No context info - set minimal defaults (use flat fields)
 				ast_node.semantic_type = 0;

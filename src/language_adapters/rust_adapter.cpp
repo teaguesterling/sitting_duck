@@ -122,9 +122,16 @@ string RustAdapter::ExtractNodeValue(TSNode node, const string &content) const {
 }
 
 bool RustAdapter::IsPublicNode(TSNode node, const string &content) const {
-	// In Rust, check for pub visibility modifier
-	string node_text = ExtractNodeText(node, content);
-	return node_text.find("pub") != string::npos;
+	// Check for `pub` visibility modifier as a child node
+	uint32_t child_count = ts_node_child_count(node);
+	for (uint32_t i = 0; i < child_count; i++) {
+		TSNode child = ts_node_child(node, i);
+		const char *child_type = ts_node_type(child);
+		if (strcmp(child_type, "visibility_modifier") == 0) {
+			return true;
+		}
+	}
+	return false;
 }
 
 const unordered_map<string, NodeConfig> &RustAdapter::GetNodeConfigs() const {

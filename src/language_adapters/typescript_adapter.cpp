@@ -93,49 +93,33 @@ string TypeScriptAdapter::ExtractNodeValue(TSNode node, const string &content) c
 }
 
 bool TypeScriptAdapter::IsPublicNode(TSNode node, const string &content) const {
-	// In TypeScript, check for explicit access modifiers and export statements
 	const char *node_type_str = ts_node_type(node);
 	string node_type = string(node_type_str);
 
-	// Check if it's an export declaration
+	// Check if node or parent is an export statement
 	if (node_type.find("export") != string::npos) {
 		return true;
 	}
-
-	// Check parent nodes for export context
 	TSNode parent = ts_node_parent(node);
 	if (!ts_node_is_null(parent)) {
-		const char *parent_type = ts_node_type(parent);
-		if (string(parent_type).find("export") != string::npos) {
+		string parent_type = string(ts_node_type(parent));
+		if (parent_type.find("export") != string::npos) {
 			return true;
 		}
 	}
 
-	// Check for explicit access modifiers in the node text
-	uint32_t start_byte = ts_node_start_byte(node);
-	uint32_t end_byte = ts_node_end_byte(node);
-	if (start_byte < content.size() && end_byte <= content.size()) {
-		string node_text = content.substr(start_byte, end_byte - start_byte);
-
-		// Look for explicit private/protected keywords
-		if (node_text.find("private ") != string::npos || node_text.find("protected ") != string::npos) {
-			return false;
-		}
-
-		// Look for explicit public keyword
-		if (node_text.find("public ") != string::npos) {
-			return true;
+	// Check child nodes for accessibility modifiers
+	uint32_t child_count = ts_node_child_count(node);
+	for (uint32_t i = 0; i < child_count; i++) {
+		TSNode child = ts_node_child(node, i);
+		const char *child_type = ts_node_type(child);
+		if (strcmp(child_type, "accessibility_modifier") == 0) {
+			string mod_text = ExtractNodeText(child, content);
+			return mod_text == "public";
 		}
 	}
 
-	// Check naming conventions - underscore prefix typically indicates private
-	string name = ExtractNodeName(node, content);
-	if (!name.empty() && name[0] == '_') {
-		return false;
-	}
-
-	// Default to public (TypeScript default visibility)
-	return true;
+	return false;
 }
 
 const unordered_map<string, NodeConfig> &TypeScriptAdapter::GetNodeConfigs() const {

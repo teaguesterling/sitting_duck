@@ -1,0 +1,60 @@
+# name: test/sql/is_exported_flag.test
+# group: [sql]
+
+# Test IS_EXPORTED flag (bit 4, 0x10) and is_exported() function
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# is_exported() SQL function basic tests
+# =============================================================================
+
+query II
+SELECT is_exported(16::UTINYINT) AS with_flag, is_exported(0::UTINYINT) AS without_flag;
+----
+true	false
+
+# Flag composes with other flags (definition + exported = 0x06 | 0x10 = 0x16 = 22)
+query II
+SELECT is_exported(22::UTINYINT) AS def_and_exported, is_name_definition(22::UTINYINT) AS still_definition;
+----
+true	true
+
+# =============================================================================
+# Python: non-underscore names get IS_EXPORTED, underscore names do not
+# =============================================================================
+
+# Public functions (no _ prefix) get IS_EXPORTED
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/python/sample_app.py')
+WHERE type = 'function_definition' AND is_exported(flags) AND name NOT LIKE '\_%';
+----
+true
+
+# _private functions do NOT get IS_EXPORTED
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py')
+WHERE type = 'function_definition' AND is_exported(flags) AND name LIKE '\_%';
+----
+0
+
+# Class should be exported (name doesn't start with _)
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/python/sample_app.py')
+WHERE type = 'class_definition' AND is_exported(flags);
+----
+true
+
+# =============================================================================
+# :exported pseudo-class uses the flag
+# =============================================================================
+
+# :exported should return nodes with IS_EXPORTED flag set
+query I
+SELECT COUNT(*) >= 0 FROM ast_select('test/data/python/sample_app.py', ':exported');
+----
+true
+

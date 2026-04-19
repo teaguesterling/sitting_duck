@@ -92,32 +92,24 @@ string JavaScriptAdapter::ExtractNodeValue(TSNode node, const string &content) c
 }
 
 bool JavaScriptAdapter::IsPublicNode(TSNode node, const string &content) const {
-	// In JavaScript, check for export statements or naming conventions
+	// In JavaScript, exported means wrapped in export statement
 	const char *node_type_str = ts_node_type(node);
 	string node_type = string(node_type_str);
 
-	// Check if it's an export declaration
 	if (node_type.find("export") != string::npos) {
 		return true;
 	}
 
-	// Check parent nodes for export context
+	// Check if parent is an export statement
 	TSNode parent = ts_node_parent(node);
 	if (!ts_node_is_null(parent)) {
-		const char *parent_type = ts_node_type(parent);
-		if (string(parent_type).find("export") != string::npos) {
+		string parent_type = string(ts_node_type(parent));
+		if (parent_type.find("export") != string::npos) {
 			return true;
 		}
 	}
 
-	// Check naming conventions - underscore prefix typically indicates private
-	string name = ExtractNodeName(node, content);
-	if (!name.empty() && name[0] == '_') {
-		return false;
-	}
-
-	// Default to public for JavaScript (no explicit access modifiers)
-	return true;
+	return false;
 }
 
 const unordered_map<string, NodeConfig> &JavaScriptAdapter::GetNodeConfigs() const {

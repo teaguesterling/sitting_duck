@@ -32,11 +32,7 @@ CREATE OR REPLACE MACRO ast_exports(
 ) AS TABLE
     SELECT *
     FROM read_ast(source, language)
-    WHERE is_name_definition(flags)
-      AND (scope.current IS NULL OR scope.current <= 0)  -- module-level scope
-      AND name IS NOT NULL
-      AND name != ''
-      AND name NOT LIKE '\_%'  -- exclude Python-style private
+    WHERE is_exported(flags)
     ORDER BY file_path, start_line;
 
 

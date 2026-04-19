@@ -65,7 +65,8 @@ struct NodeConfig {
 //            10 = DECLARATION(0x04) — introduces name without implementation
 //            11 = DEFINITION (0x06) — introduces name with implementation
 //   Bit 3:   IS_SCOPE        (0x08) — creates scope boundary
-//   Bit 4-7: reserved
+//   Bit 4:   IS_EXPORTED     (0x10) — visible outside file/module
+//   Bit 5-7: reserved
 //
 // Useful bitmask checks:
 //   flags & 0x06          — involved in naming at all
@@ -86,6 +87,9 @@ constexpr uint8_t NAME_DEFINITION = 0x06;  // 11 = introduces name (with body/im
 
 // Bit 3: scope boundary
 constexpr uint8_t IS_SCOPE = 0x08;
+
+// Bit 4: exported / publicly visible outside file/module
+constexpr uint8_t IS_EXPORTED = 0x10;
 
 // Convenience: single-bit check for "binds a name" (definition OR declaration)
 constexpr uint8_t BINDS_NAME = 0x04;

@@ -85,24 +85,24 @@ string JavaAdapter::ExtractNodeValue(TSNode node, const string &content) const {
 }
 
 bool JavaAdapter::IsPublicNode(TSNode node, const string &content) const {
-	// In Java, check for explicit access modifiers
-	uint32_t start_byte = ts_node_start_byte(node);
-	uint32_t end_byte = ts_node_end_byte(node);
-	if (start_byte < content.size() && end_byte <= content.size()) {
-		string node_text = content.substr(start_byte, end_byte - start_byte);
-
-		// Look for explicit private/protected keywords
-		if (node_text.find("private ") != string::npos || node_text.find("protected ") != string::npos) {
+	// Check child modifier nodes for access keywords.
+	// Default (no modifier) = package-private = not exported.
+	uint32_t child_count = ts_node_child_count(node);
+	for (uint32_t i = 0; i < child_count; i++) {
+		TSNode child = ts_node_child(node, i);
+		const char *child_type = ts_node_type(child);
+		if (strcmp(child_type, "modifiers") == 0) {
+			uint32_t mod_count = ts_node_named_child_count(child);
+			for (uint32_t j = 0; j < mod_count; j++) {
+				TSNode mod = ts_node_named_child(child, j);
+				string mod_text = ExtractNodeText(mod, content);
+				if (mod_text == "public") {
+					return true;
+				}
+			}
 			return false;
 		}
-
-		// Look for explicit public keyword
-		if (node_text.find("public ") != string::npos) {
-			return true;
-		}
 	}
-
-	// Default package visibility in Java
 	return false;
 }
 

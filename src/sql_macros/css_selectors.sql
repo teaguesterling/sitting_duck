@@ -977,12 +977,8 @@ CREATE OR REPLACE MACRO ast_select_from(
                       AND ref.node_id != a.node_id
                 )
 
-            -- :exported — module-level public definition
-            WHEN 'exported' THEN
-                is_name_definition(a.flags)
-                AND (a.scope.current IS NULL OR a.scope.current <= 0)
-                AND a.name IS NOT NULL AND a.name != ''
-                AND a.name NOT LIKE '\_%'
+            -- :exported — publicly visible outside file/module (IS_EXPORTED flag)
+            WHEN 'exported' THEN is_exported(a.flags)
 
             -- :match("code") — the CURRENT node is the root of the parsed pattern.
             -- Strict: target type must equal pattern root type. Use ___ wildcard
