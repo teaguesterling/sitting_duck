@@ -2947,9 +2947,10 @@ CREATE OR REPLACE MACRO ast_select_from(
                     CASE WHEN NOT (SELECT available FROM has_func_apply)
                     THEN format(
                         'ast_select: unknown pseudo-class ":{}". '
-                        'Custom predicates require the func_apply extension: '
-                        'INSTALL func_apply FROM community; LOAD func_apply; '
-                        'Then define: CREATE MACRO ast_selector_predicate_{}(node, arg) AS (...)',
+                        'For dynamic custom predicates: '
+                        'INSTALL func_apply FROM community; then PRAGMA sitting_duck_enable_dynamic_predicates; '
+                        'Then define: CREATE MACRO ast_selector_predicate_{}(node, arg) AS (...). '
+                        'Or override ast_dispatch_predicate directly (see docs).',
                         (SELECT pc.pseudo_name FROM pseudo_classes pc
                          WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names) LIMIT 1),
                         (SELECT pc.pseudo_name FROM pseudo_classes pc
@@ -3190,10 +3191,10 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- Native extraction: annotations string
             WHEN ac.attr_name = 'annotation' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.annotations LIKE '%' || ac.attr_value || '%'
-                                WHEN '^=' THEN a.annotations LIKE ac.attr_value || '%'
 
 )SQLMACRO"
         R"SQLMACRO(
+                                WHEN '^=' THEN a.annotations LIKE ac.attr_value || '%'
                                 WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value
                                 ELSE a.annotations = ac.attr_value END
 
@@ -3468,11 +3469,11 @@ CREATE OR REPLACE MACRO ast_select_from(
           AND call_node.semantic_type = 'COMPUTATION_CALL'
           AND call_node.name = m.name
           AND call_node.node_id != m.node_id
-        JOIN ast caller_fn
-          ON caller_fn.node_id = call_node.scope.function
 
 )SQLMACRO"
         R"SQLMACRO(
+        JOIN ast caller_fn
+          ON caller_fn.node_id = call_node.scope.function
          AND caller_fn.file_path = call_node.file_path
     ),
     -- ::callees — calls inside this function (transitive — includes calls

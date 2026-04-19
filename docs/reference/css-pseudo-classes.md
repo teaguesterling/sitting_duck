@@ -438,14 +438,14 @@ Define your own pseudo-classes by registering macros with the `ast_selector_pred
 
 ### Setup
 
-Custom predicates require the [`func_apply`](https://community-extensions.duckdb.org/extensions/func_apply.html) extension for dynamic dispatch:
+Dynamic custom predicates require the [`func_apply`](https://community-extensions.duckdb.org/extensions/func_apply.html) extension for runtime dispatch:
 
 ```sql
 INSTALL func_apply FROM community;
-LOAD func_apply;
+PRAGMA sitting_duck_enable_dynamic_predicates;
 ```
 
-Sitting Duck auto-loads `func_apply` if it's installed. If it's not available, custom predicates are disabled and you'll get a helpful error message suggesting installation.
+The pragma loads `func_apply` and replaces the internal dispatch stub with a real `apply()`-based dispatcher. If `func_apply` isn't installed, the pragma raises a clear error with next steps.
 
 ### Defining a Predicate
 
@@ -524,7 +524,7 @@ SELECT name FROM ast_select('src/**/*.py', '.func:mentions("database")');
 
 If you use a custom pseudo-class without the required setup, you'll get targeted guidance:
 
-- **No `func_apply` installed**: suggests `INSTALL func_apply FROM community; LOAD func_apply;`
+- **No `func_apply` installed**: suggests `INSTALL func_apply FROM community;` then `PRAGMA sitting_duck_enable_dynamic_predicates;`
 - **`func_apply` loaded but no matching macro**: reports the specific macro name that's missing
 
 ### Advanced: Custom Dispatch Without `func_apply`

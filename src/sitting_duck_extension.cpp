@@ -4,6 +4,8 @@
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/main/extension_helper.hpp"
+#include "duckdb/function/pragma_function.hpp"
+#include "duckdb/main/connection.hpp"
 // #include "read_ast_objects_hybrid.hpp" // Removed
 #include "ast_sql_macros.hpp"
 // #include "short_names_function.hpp" // Removed
@@ -25,6 +27,19 @@ void RegisterASTTypeMapFunction(ExtensionLoader &loader);
 // Temporarily disabled:
 // void RegisterASTObjectsFunction(ExtensionLoader &loader);
 // void RegisterASTHelperFunctions(ExtensionLoader &loader);
+
+static void PragmaEnableDynamicPredicates(ClientContext &context, const FunctionParameters &parameters) {
+	bool loaded = ExtensionHelper::TryAutoLoadExtension(DatabaseInstance::GetDatabase(context), "func_apply");
+	if (!loaded) {
+		throw InvalidInputException(
+		    "sitting_duck_enable_dynamic_predicates: func_apply extension is not available.\n"
+		    "Install it with: INSTALL func_apply FROM community;\n"
+		    "Then restart your session and run: PRAGMA sitting_duck_enable_dynamic_predicates;");
+	}
+	auto conn = make_uniq<Connection>(DatabaseInstance::GetDatabase(context));
+	conn->Query("CREATE OR REPLACE MACRO ast_dispatch_predicate(fn, node, arg) AS "
+	            "(apply(fn, node, arg)::BOOLEAN)");
+}
 
 static void LoadInternal(ExtensionLoader &loader) {
 	// Force-load core_functions before we register our SQL macros. In
@@ -70,6 +85,10 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	// Register SQL macros for natural AST querying (depends on functions above)
 	RegisterASTSQLMacros(loader);
+
+	// Register pragma to enable dynamic custom predicate dispatch via func_apply
+	loader.RegisterFunction(
+	    PragmaFunction::PragmaStatement("sitting_duck_enable_dynamic_predicates", PragmaEnableDynamicPredicates));
 
 	// Short names system removed for simplicity
 

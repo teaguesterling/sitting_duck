@@ -601,9 +601,10 @@ CREATE OR REPLACE MACRO ast_select_from(
                     CASE WHEN NOT (SELECT available FROM has_func_apply)
                     THEN format(
                         'ast_select: unknown pseudo-class ":{}". '
-                        'Custom predicates require the func_apply extension: '
-                        'INSTALL func_apply FROM community; LOAD func_apply; '
-                        'Then define: CREATE MACRO ast_selector_predicate_{}(node, arg) AS (...)',
+                        'For dynamic custom predicates: '
+                        'INSTALL func_apply FROM community; then PRAGMA sitting_duck_enable_dynamic_predicates; '
+                        'Then define: CREATE MACRO ast_selector_predicate_{}(node, arg) AS (...). '
+                        'Or override ast_dispatch_predicate directly (see docs).',
                         (SELECT pc.pseudo_name FROM pseudo_classes pc
                          WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names) LIMIT 1),
                         (SELECT pc.pseudo_name FROM pseudo_classes pc

@@ -161,7 +161,7 @@ SELECT name FROM ast_select('src/*.py', '.func:is_test');
 SELECT name FROM ast_select('src/*.py', '.func:not(:is_test):has(return_statement)');
 ```
 
-Requires the `func_apply` extension (`INSTALL func_apply FROM community`). See [Custom Predicates](css-pseudo-classes.md#custom-predicates) for full details.
+For dynamic dispatch, install `func_apply` and run `PRAGMA sitting_duck_enable_dynamic_predicates`. You can also override `ast_dispatch_predicate` directly for a static set of predicates without any dependencies. See [Custom Predicates](css-pseudo-classes.md#custom-predicates) for full details.
 
 ## Performance
 
