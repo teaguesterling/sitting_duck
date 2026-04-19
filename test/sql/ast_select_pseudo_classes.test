@@ -215,3 +215,75 @@ statement error
 SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:not(:alsonotreal)');
 ----
 unknown pseudo-class
+
+# =============================================================================
+# Custom predicates via ast_selector_predicate_* macros
+# Uses a mock ast_dispatch_predicate that hardcodes test predicates via CASE.
+# In production, sitting_duck auto-loads func_apply and registers a real
+# dispatcher that uses apply() for dynamic dispatch.
+# =============================================================================
+
+# Define test predicate macros (these register in duckdb_functions)
+statement ok
+CREATE OR REPLACE MACRO ast_selector_predicate_name_starts(node, prefix) AS (
+    node.name IS NOT NULL AND starts_with(node.name, prefix)
+);
+
+statement ok
+CREATE OR REPLACE MACRO ast_selector_predicate_is_deep(node, arg) AS (
+    node.depth >= 3
+);
+
+# Mock dispatcher: routes by function name to hardcoded predicate implementations
+statement ok
+CREATE OR REPLACE MACRO ast_dispatch_predicate(fn, node, arg) AS (
+    CASE fn
+        WHEN 'ast_selector_predicate_name_starts'
+            THEN node.name IS NOT NULL AND starts_with(node.name, arg)
+        WHEN 'ast_selector_predicate_is_deep'
+            THEN node.depth >= 3
+        ELSE false
+    END
+);
+
+# Custom predicate with argument — 2 functions start with "outer"
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py',
+    'function_definition:name_starts("outer")');
+----
+2
+
+# Custom predicate with no argument (arg is NULL)
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py',
+    'function_definition:is_deep');
+----
+true
+
+# Negation: :not(:custom_pred)
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py',
+    'function_definition:not(:is_deep)');
+----
+true
+
+# Custom predicate combined with built-in pseudo-class
+# :named:is_deep — named function definitions at depth >= 3 (the 2 inner functions)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py',
+    'function_definition:named:is_deep');
+----
+2
+
+# Discoverability: registered predicates appear in duckdb_functions()
+query I
+SELECT COUNT(*) >= 2 FROM duckdb_functions()
+WHERE function_name LIKE 'ast_selector_predicate_%';
+----
+true
+
+# Error: unknown custom predicate (no matching macro registered)
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:no_such_predicate');
+----
+unknown pseudo-class

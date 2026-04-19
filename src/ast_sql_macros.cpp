@@ -66,6 +66,9 @@ void RegisterASTSQLMacros(ExtensionLoader &loader) {
 	// Ensure core_functions extension is loaded - needed for bitwise operators (&, |) used in SQL macros
 	ExtensionHelper::TryAutoLoadExtension(loader.GetDatabaseInstance(), "core_functions");
 
+	// Try to load func_apply for custom selector predicate dispatch
+	bool has_func_apply = ExtensionHelper::TryAutoLoadExtension(loader.GetDatabaseInstance(), "func_apply");
+
 	// Get a connection to execute SQL
 	auto conn = make_uniq<Connection>(loader.GetDatabaseInstance());
 
@@ -106,6 +109,14 @@ void RegisterASTSQLMacros(ExtensionLoader &loader) {
 			}
 			successful_statements++;
 		}
+	}
+
+	// Register the predicate dispatch macro based on func_apply availability
+	if (has_func_apply) {
+		conn->Query("CREATE OR REPLACE MACRO ast_dispatch_predicate(fn, node, arg) AS "
+		            "(apply(fn, node, arg)::BOOLEAN)");
+	} else {
+		conn->Query("CREATE OR REPLACE MACRO ast_dispatch_predicate(fn, node, arg) AS (false)");
 	}
 }
 

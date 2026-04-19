@@ -593,9 +593,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 WHEN EXISTS (
                     SELECT 1 FROM pseudo_classes pc
                     WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
-                      AND (
-                          NOT (SELECT available FROM has_func_apply)
-                          OR NOT function_exists(format('ast_selector_predicate_{}', pc.pseudo_name))
+                      AND NOT EXISTS (
+                          SELECT 1 FROM duckdb_functions()
+                          WHERE function_name = format('ast_selector_predicate_{}', pc.pseudo_name)
                       )
                 ) THEN error(
                     CASE WHEN NOT (SELECT available FROM has_func_apply)
@@ -614,11 +614,17 @@ CREATE OR REPLACE MACRO ast_select_from(
                         'No macro named ast_selector_predicate_{} is registered.',
                         (SELECT pc.pseudo_name FROM pseudo_classes pc
                          WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
-                           AND NOT function_exists(format('ast_selector_predicate_{}', pc.pseudo_name))
+                           AND NOT EXISTS (
+                               SELECT 1 FROM duckdb_functions()
+                               WHERE function_name = format('ast_selector_predicate_{}', pc.pseudo_name)
+                           )
                          LIMIT 1),
                         (SELECT pc.pseudo_name FROM pseudo_classes pc
                          WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
-                           AND NOT function_exists(format('ast_selector_predicate_{}', pc.pseudo_name))
+                           AND NOT EXISTS (
+                               SELECT 1 FROM duckdb_functions()
+                               WHERE function_name = format('ast_selector_predicate_{}', pc.pseudo_name)
+                           )
                          LIMIT 1)
                     )
                     END
@@ -1062,11 +1068,11 @@ CREATE OR REPLACE MACRO ast_select_from(
                        OR before_sib.type LIKE pc.pseudo_arg || '_%')
             )
 
-            ELSE apply(
+            ELSE ast_dispatch_predicate(
                 format('ast_selector_predicate_{}', pc.pseudo_name),
                 a,
                 pc.pseudo_arg
-            )::BOOLEAN
+            )
         END
     )),
 

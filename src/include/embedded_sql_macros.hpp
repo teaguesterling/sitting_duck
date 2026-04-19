@@ -2939,9 +2939,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 WHEN EXISTS (
                     SELECT 1 FROM pseudo_classes pc
                     WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
-                      AND (
-                          NOT (SELECT available FROM has_func_apply)
-                          OR NOT function_exists(format('ast_selector_predicate_{}', pc.pseudo_name))
+                      AND NOT EXISTS (
+                          SELECT 1 FROM duckdb_functions()
+                          WHERE function_name = format('ast_selector_predicate_{}', pc.pseudo_name)
                       )
                 ) THEN error(
                     CASE WHEN NOT (SELECT available FROM has_func_apply)
@@ -2960,11 +2960,17 @@ CREATE OR REPLACE MACRO ast_select_from(
                         'No macro named ast_selector_predicate_{} is registered.',
                         (SELECT pc.pseudo_name FROM pseudo_classes pc
                          WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
-                           AND NOT function_exists(format('ast_selector_predicate_{}', pc.pseudo_name))
+                           AND NOT EXISTS (
+                               SELECT 1 FROM duckdb_functions()
+                               WHERE function_name = format('ast_selector_predicate_{}', pc.pseudo_name)
+                           )
                          LIMIT 1),
                         (SELECT pc.pseudo_name FROM pseudo_classes pc
                          WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
-                           AND NOT function_exists(format('ast_selector_predicate_{}', pc.pseudo_name))
+                           AND NOT EXISTS (
+                               SELECT 1 FROM duckdb_functions()
+                               WHERE function_name = format('ast_selector_predicate_{}', pc.pseudo_name)
+                           )
                          LIMIT 1)
                     )
                     END
@@ -3185,14 +3191,14 @@ CREATE OR REPLACE MACRO ast_select_from(
             WHEN ac.attr_name = 'annotation' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.annotations LIKE '%' || ac.attr_value || '%'
                                 WHEN '^=' THEN a.annotations LIKE ac.attr_value || '%'
+
+)SQLMACRO"
+        R"SQLMACRO(
                                 WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value
                                 ELSE a.annotations = ac.attr_value END
 
             -- Native extraction: qualified_name. The column is a LIST<STRUCT>,
             -- so we render it to the legacy bracket string via
-
-)SQLMACRO"
-        R"SQLMACRO(
             -- ast_qualified_name_as_string() before applying text comparisons.
             -- Equality (=) also runs against the string form so selectors like
             -- [qualified=F[main]] stay human-writable.
@@ -3411,11 +3417,11 @@ CREATE OR REPLACE MACRO ast_select_from(
                        OR before_sib.type LIKE pc.pseudo_arg || '_%')
             )
 
-            ELSE apply(
+            ELSE ast_dispatch_predicate(
                 format('ast_selector_predicate_{}', pc.pseudo_name),
                 a,
                 pc.pseudo_arg
-            )::BOOLEAN
+            )
         END
     )),
 
@@ -3464,6 +3470,9 @@ CREATE OR REPLACE MACRO ast_select_from(
           AND call_node.node_id != m.node_id
         JOIN ast caller_fn
           ON caller_fn.node_id = call_node.scope.function
+
+)SQLMACRO"
+        R"SQLMACRO(
          AND caller_fn.file_path = call_node.file_path
     ),
     -- ::callees — calls inside this function (transitive — includes calls
@@ -3471,9 +3480,6 @@ CREATE OR REPLACE MACRO ast_select_from(
     --
     -- Kept as a subtree range scan rather than rewriting to
     -- `callee.scope.function = m.node_id` because that would change the
-
-)SQLMACRO"
-        R"SQLMACRO(
     -- semantics: scope.function points to the IMMEDIATE enclosing function,
     -- so a call inside a lambda/nested function would have scope.function
     -- pointing to the inner function, not to m. With the range scan we
