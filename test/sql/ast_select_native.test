@@ -13,11 +13,11 @@ LOAD sitting_duck;
 # =============================================================================
 
 # [modifier=X] — check modifiers array
-# Python doesn't have many modifiers, but we can test the mechanism
+# Async functions should have 'async' in modifiers (bug #009 regression)
 query I
-SELECT COUNT(*) >= 0 FROM ast_select('test/data/python/simple.py', '.func[modifier=async]');
+SELECT COUNT(*) FROM ast_select('test/data/test_native_context.py', '.func[modifier=async]');
 ----
-true
+1
 
 # [annotation*=X] — substring match on annotations
 query I
