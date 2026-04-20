@@ -85,7 +85,7 @@ pathlib	Path	import_from_statement
 # Comprehensive Python import forms
 query III
 SELECT source_module, imported_name, import_type
-FROM ast_imports('workspace/sandbox/import_forms.py')
+FROM ast_imports('test/data/python/import_forms.py')
 ORDER BY start_line, imported_name;
 ----
 os	os	import_statement
@@ -119,7 +119,7 @@ pathlib	Path
 # =============================================================================
 
 query I
-SELECT COUNT(*) FROM ast_imports('workspace/sandbox/import_forms.*')
+SELECT COUNT(*) FROM ast_imports('test/data/*/import_forms.*')
 WHERE source_module LIKE '%react%' AND file_path NOT LIKE '%.js' AND file_path NOT LIKE '%.ts';
 ----
 0

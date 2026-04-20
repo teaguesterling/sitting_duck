@@ -57,18 +57,21 @@ CREATE OR REPLACE MACRO ast_imports(
         ast AS (
             SELECT * FROM read_ast(source, language)
         ),
-        -- Find import nodes via semantic type.
-        -- Require non-empty name to exclude structural wrappers
-        -- (JS import_clause, Go import_declaration) that also carry
-        -- EXTERNAL_IMPORT but hold no module path themselves.
+        -- Find top-level import nodes via semantic type.
+        -- Filters:
+        --   name != '' excludes structural wrappers (JS import_clause, Go import_declaration)
+        --   parent NOT EXTERNAL_IMPORT excludes sub-import nodes (Python aliased_import,
+        --     JS import_specifier) that also carry the semantic type from their parent
         import_nodes AS (
-            SELECT node_id, name as source_module, type as import_type,
-                   descendant_count, file_path, start_line, language as lang
-            FROM ast
-            WHERE semantic_type = 'EXTERNAL_IMPORT'
-              AND NOT is_syntax_only(flags)
-              AND descendant_count > 0
-              AND name IS NOT NULL AND name != ''
+            SELECT a.node_id, a.name as source_module, a.type as import_type,
+                   a.descendant_count, a.file_path, a.start_line
+            FROM ast a
+            LEFT JOIN ast p ON p.node_id = a.parent_id AND p.file_path = a.file_path
+            WHERE a.semantic_type = 'EXTERNAL_IMPORT'
+              AND NOT is_syntax_only(a.flags)
+              AND a.descendant_count > 0
+              AND a.name IS NOT NULL AND a.name != ''
+              AND (p.semantic_type IS NULL OR p.semantic_type != 'EXTERNAL_IMPORT')
         ),
         -- Locate the 'import' keyword within each import node (split point)
         import_keywords AS (
