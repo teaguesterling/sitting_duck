@@ -38,6 +38,14 @@ struct PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 		auto decorators = ExtractPythonDecorators(node, content);
 		context.modifiers = decorators;
 
+		// Scan children for keyword modifiers (async, etc.)
+		// tree-sitter-python emits 'async' as a child of function_definition,
+		// not as a compound 'async_function_definition' node type.
+		auto keyword_modifiers = ExtractModifiersFromNode(node, content);
+		for (const auto &mod : keyword_modifiers) {
+			context.modifiers.insert(context.modifiers.begin(), mod);
+		}
+
 		return context;
 	}
 
