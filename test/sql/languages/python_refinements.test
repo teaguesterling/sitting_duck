@@ -164,13 +164,13 @@ WHERE type = 'import_from_statement' AND name = 'collections.abc';
 ----
 import_from_statement	collections.abc
 
-# Test: relative import (from . import name) falls back to identifier
+# Test: relative import (from . import name) extracts dot prefix as source module
 query TT
 SELECT type, name
 FROM read_ast('test/data/python/imports.py', context := 'native')
-WHERE type = 'import_from_statement' AND name = 'utils';
+WHERE type = 'import_from_statement' AND name = '.';
 ----
-import_from_statement	utils
+import_from_statement	.
 
 # =============================================================================
 # CALL REFINEMENTS

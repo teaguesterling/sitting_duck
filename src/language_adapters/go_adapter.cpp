@@ -65,6 +65,18 @@ string GoAdapter::ExtractNodeName(TSNode node, const string &content) const {
 				return FindChildByType(node, content, "package_identifier");
 			}
 		}
+		// import_spec: extract module path without quotes
+		if (strcmp(node_type_str, "import_spec") == 0) {
+			TSNode str_node = FindChildByTypeNode(node, "interpreted_string_literal");
+			if (!ts_node_is_null(str_node)) {
+				string result = FindChildByType(str_node, content, "interpreted_string_literal_content");
+				if (!result.empty()) {
+					return result;
+				}
+				return ExtractNodeText(str_node, content);
+			}
+			return "";
+		}
 		return ExtractByStrategy(node, content, config->name_strategy);
 	}
 

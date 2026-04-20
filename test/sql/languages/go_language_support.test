@@ -48,7 +48,7 @@ WHERE type IN ('package_identifier', 'import_spec') AND name IS NOT NULL
 ORDER BY start_line;
 ----
 main	package_identifier
-"fmt"	import_spec
+fmt	import_spec
 
 # Test 6: Go semantic types
 # =========================

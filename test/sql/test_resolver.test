@@ -1,0 +1,125 @@
+# name: test/sql/test_resolver.test
+# group: [sql]
+
+# Tests for ast_exports / ast_imports compatibility and cross-file resolution
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# ast_exports: module-level public definitions only
+# =============================================================================
+
+# Should return exactly 10 module-level public definitions
+query I
+SELECT COUNT(*) FROM ast_exports('test/data/python/sample_app.py');
+----
+10
+
+# Every export is a name definition with IS_EXPORTED flag
+query I
+SELECT COUNT(*) FROM ast_exports('test/data/python/sample_app.py')
+WHERE NOT is_name_definition(flags) OR NOT is_exported(flags);
+----
+0
+
+# No nested definitions leak through (all at module scope)
+query I
+SELECT COUNT(*) FROM ast_exports('test/data/python/sample_app.py')
+WHERE scope.current != 0;
+----
+0
+
+# Class methods should NOT appear in exports
+query I
+SELECT COUNT(*) FROM ast_exports('test/data/python/sample_app.py')
+WHERE type = 'function_definition' AND name IN ('load', 'get', 'connect', 'execute', 'get_user');
+----
+0
+
+# Module-level functions SHOULD appear
+query I
+SELECT COUNT(*) FROM ast_exports('test/data/python/sample_app.py')
+WHERE type = 'function_definition' AND name IN ('process_file', 'transform', 'validate_email', 'main');
+----
+4
+
+# Classes SHOULD appear
+query I
+SELECT COUNT(*) FROM ast_exports('test/data/python/sample_app.py')
+WHERE type = 'class_definition';
+----
+3
+
+# =============================================================================
+# IS_EXPORTED flag is only on definitions (not references or syntax)
+# =============================================================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py')
+WHERE is_name_reference(flags) AND is_exported(flags);
+----
+0
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py')
+WHERE is_syntax_only(flags) AND is_exported(flags);
+----
+0
+
+# =============================================================================
+# ast_imports: Python import extraction
+# =============================================================================
+
+# All imports extract correctly (bare and from-imports)
+query III
+SELECT source_module, imported_name, import_type
+FROM ast_imports('test/data/python/sample_app.py');
+----
+os	os	import_statement
+json	json	import_statement
+pathlib	Path	import_from_statement
+
+# Comprehensive Python import forms
+query III
+SELECT source_module, imported_name, import_type
+FROM ast_imports('test/data/python/import_forms.py')
+ORDER BY start_line, imported_name;
+----
+os	os	import_statement
+os.path	os.path	import_statement
+os	operating_system	import_statement
+pathlib	Path	import_from_statement
+pathlib	Path	import_from_statement
+pathlib	PurePath	import_from_statement
+collections.abc	Mapping	import_from_statement
+.	utils	import_from_statement
+..	base	import_from_statement
+..foo	bar	import_from_statement
+..foo.bar	baz	import_from_statement
+..foo.bar	qux	import_from_statement
+
+# =============================================================================
+# Cross-file resolution: imports + exports join surface
+# =============================================================================
+
+# Imports from sample_app.py should be resolvable against pathlib exports
+# (within-project resolution would work for project-internal imports)
+query II
+SELECT i.source_module, i.imported_name
+FROM ast_imports('test/data/python/sample_app.py') i
+WHERE i.source_module NOT IN ('os', 'json');
+----
+pathlib	Path
+
+# =============================================================================
+# Multi-file glob: no cross-contamination between files
+# =============================================================================
+
+query I
+SELECT COUNT(*) FROM ast_imports('test/data/*/import_forms.*')
+WHERE source_module LIKE '%react%' AND file_path NOT LIKE '%.js' AND file_path NOT LIKE '%.ts';
+----
+0

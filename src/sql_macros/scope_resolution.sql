@@ -32,7 +32,9 @@ CREATE OR REPLACE MACRO ast_exports(
 ) AS TABLE
     SELECT *
     FROM read_ast(source, language)
-    WHERE is_exported(flags)
+    WHERE is_name_definition(flags)
+      AND is_exported(flags)
+      AND COALESCE(scope.current, 0) = 0
     ORDER BY file_path, start_line;
 
 
@@ -55,44 +57,158 @@ CREATE OR REPLACE MACRO ast_imports(
         ast AS (
             SELECT * FROM read_ast(source, language)
         ),
-        -- Find import statements via semantic type
+        -- Find top-level import nodes via semantic type.
+        -- Filters:
+        --   name != '' excludes structural wrappers (JS import_clause, Go import_declaration)
+        --   parent NOT EXTERNAL_IMPORT excludes sub-import nodes (Python aliased_import,
+        --     JS import_specifier) that also carry the semantic type from their parent
         import_nodes AS (
-            SELECT node_id, name as source_module, type as import_type,
-                   descendant_count, file_path, start_line, language
-            FROM ast
-            WHERE semantic_type = 'EXTERNAL_IMPORT'
-              AND NOT is_syntax_only(flags)
-              AND descendant_count > 0  -- exclude keyword tokens
+            SELECT a.node_id, a.name as source_module, a.type as import_type,
+                   a.descendant_count, a.file_path, a.start_line
+            FROM ast a
+            LEFT JOIN ast p ON p.node_id = a.parent_id AND p.file_path = a.file_path
+            WHERE a.semantic_type = 'EXTERNAL_IMPORT'
+              AND NOT is_syntax_only(a.flags)
+              AND a.descendant_count > 0
+              AND a.name IS NOT NULL AND a.name != ''
+              AND (p.semantic_type IS NULL OR p.semantic_type != 'EXTERNAL_IMPORT')
         ),
-        -- Extract imported names: named identifier children of import nodes
-        -- that are not the module name itself
-        imported_names AS (
-            SELECT
-                i.file_path,
-                i.source_module,
-                i.import_type,
-                a.name as imported_name,
-                i.start_line
+        -- Locate the 'import' keyword within each import node (split point)
+        import_keywords AS (
+            SELECT i.node_id as import_id, i.file_path,
+                   MIN(a.node_id) as keyword_id
+            FROM import_nodes i
+            JOIN ast a ON a.parent_id = i.node_id
+              AND a.file_path = i.file_path
+              AND a.type IN ('import', 'use')
+            GROUP BY i.node_id, i.file_path
+        ),
+        -- Case 1: from-imports (Python import_from_statement)
+        -- Imported names are direct children after the 'import' keyword
+        from_import_names AS (
+            SELECT i.file_path, i.source_module, a.name as imported_name,
+                   i.import_type, i.start_line
+            FROM import_nodes i
+            JOIN import_keywords k ON k.import_id = i.node_id
+              AND k.file_path = i.file_path
+            JOIN ast a ON a.parent_id = i.node_id
+              AND a.file_path = i.file_path
+              AND a.node_id > k.keyword_id
+              AND a.type IN ('dotted_name', 'identifier')
+              AND a.name IS NOT NULL AND a.name != ''
+            WHERE i.import_type IN ('import_from_statement')
+        ),
+        -- Case 2: statement-imports with named specifiers (JS import { X } from 'Y',
+        --         Python import X as Y, Go aliased import_spec)
+        specifier_names AS (
+            SELECT i.file_path, i.source_module, a.name as imported_name,
+                   i.import_type, i.start_line
             FROM import_nodes i
             JOIN ast a ON a.node_id > i.node_id
               AND a.node_id <= i.node_id + i.descendant_count
-              AND a.type IN ('dotted_name', 'identifier', 'import_specifier',
-                            'import_default_specifier', 'scoped_identifier')
+              AND a.file_path = i.file_path
+              AND a.type IN ('import_specifier', 'import_default_specifier',
+                            'namespace_import', 'aliased_import',
+                            'import_spec')
               AND a.name IS NOT NULL AND a.name != ''
-              AND a.name != i.source_module  -- exclude the module name itself
-              AND a.depth = (
-                  -- Get the shallowest named children (avoid deep duplicates)
-                  SELECT MIN(a2.depth) FROM ast a2
-                  WHERE a2.node_id > i.node_id
-                    AND a2.node_id <= i.node_id + i.descendant_count
-                    AND a2.type IN ('dotted_name', 'identifier', 'import_specifier',
-                                   'import_default_specifier', 'scoped_identifier')
-                    AND a2.name IS NOT NULL AND a2.name != ''
-                    AND a2.name != i.source_module
+            WHERE i.import_type NOT IN ('import_from_statement')
+        ),
+        -- Case 3: JS default imports (import React from 'react')
+        -- The default name is an identifier direct child of import_clause
+        js_default_names AS (
+            SELECT i.file_path, i.source_module, a.name as imported_name,
+                   i.import_type, i.start_line
+            FROM import_nodes i
+            JOIN ast clause ON clause.parent_id = i.node_id
+              AND clause.file_path = i.file_path
+              AND clause.type = 'import_clause'
+            JOIN ast a ON a.parent_id = clause.node_id
+              AND a.file_path = i.file_path
+              AND a.type = 'identifier'
+              AND a.name IS NOT NULL AND a.name != ''
+            WHERE i.import_type NOT IN ('import_from_statement')
+              AND NOT EXISTS (
+                  SELECT 1 FROM specifier_names s
+                  WHERE s.file_path = i.file_path AND s.start_line = i.start_line
               )
+        ),
+        -- Case 3b: Rust simple use (use std::collections::HashMap)
+        -- The imported name is the last identifier child of the
+        -- top-level scoped_identifier
+        rust_use_names AS (
+            SELECT i.file_path, i.source_module, a.name as imported_name,
+                   i.import_type, i.start_line
+            FROM import_nodes i
+            JOIN ast sc ON sc.parent_id = i.node_id
+              AND sc.file_path = i.file_path
+              AND sc.type = 'scoped_identifier'
+            JOIN ast a ON a.parent_id = sc.node_id
+              AND a.file_path = i.file_path
+              AND a.type = 'identifier'
+              AND a.name IS NOT NULL AND a.name != ''
+              AND a.node_id = (
+                  SELECT MAX(a2.node_id) FROM ast a2
+                  WHERE a2.parent_id = sc.node_id
+                    AND a2.file_path = i.file_path
+                    AND a2.type = 'identifier'
+              )
+            WHERE i.import_type NOT IN ('import_from_statement')
+        ),
+        -- Case 3c: Rust use_list imports (use std::io::{Read, Write})
+        -- Identifiers inside use_list are the imported names
+        use_list_names AS (
+            SELECT i.file_path, i.source_module, a.name as imported_name,
+                   i.import_type, i.start_line
+            FROM import_nodes i
+            JOIN ast ul ON ul.node_id > i.node_id
+              AND ul.node_id <= i.node_id + i.descendant_count
+              AND ul.file_path = i.file_path
+              AND ul.type = 'use_list'
+            JOIN ast a ON a.parent_id = ul.node_id
+              AND a.file_path = i.file_path
+              AND a.type = 'identifier'
+              AND a.name IS NOT NULL AND a.name != ''
+            WHERE i.import_type NOT IN ('import_from_statement')
+        ),
+        -- Case 4: Bare imports (Python import os, Go import "fmt", Rust use std::io)
+        -- No separate imported name — the module itself is the import
+        bare_import_names AS (
+            SELECT i.file_path, i.source_module,
+                   i.source_module as imported_name,
+                   i.import_type, i.start_line
+            FROM import_nodes i
+            WHERE i.source_module IS NOT NULL AND i.source_module != ''
+              AND NOT EXISTS (
+                  SELECT 1 FROM from_import_names f
+                  WHERE f.file_path = i.file_path AND f.start_line = i.start_line
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM specifier_names s
+                  WHERE s.file_path = i.file_path AND s.start_line = i.start_line
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM js_default_names j
+                  WHERE j.file_path = i.file_path AND j.start_line = i.start_line
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM rust_use_names r
+                  WHERE r.file_path = i.file_path AND r.start_line = i.start_line
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM use_list_names u
+                  WHERE u.file_path = i.file_path AND u.start_line = i.start_line
+              )
+        ),
+        all_imports AS (
+            SELECT * FROM from_import_names
+            UNION ALL SELECT * FROM specifier_names
+            UNION ALL SELECT * FROM js_default_names
+            UNION ALL SELECT * FROM rust_use_names
+            UNION ALL SELECT * FROM use_list_names
+            UNION ALL SELECT * FROM bare_import_names
         )
     SELECT file_path, source_module, imported_name, import_type, start_line
-    FROM imported_names
+    FROM all_imports
     ORDER BY file_path, start_line, imported_name;
 
 

@@ -260,8 +260,12 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
 				PopulateSemanticFieldsTemplated(ast_node, adapter, entry.node, content, node_configs, config);
 
-				// Set IS_EXPORTED flag via language-specific IsPublicNode check
-				if (adapter->IsPublicNode(entry.node, content)) {
+				// Set IS_EXPORTED on name-binding nodes (declarations AND definitions).
+				// NAME_DECLARATION (0x04) bitmask matches both DECLARATION and DEFINITION
+				// since DEFINITION (0x06) also has bit 2 set. ast_exports() further
+				// narrows to definitions only via is_name_definition().
+				if ((ast_node.universal_flags & ASTNodeFlags::NAME_DECLARATION) &&
+				    adapter->IsPublicNode(entry.node, content)) {
 					ast_node.universal_flags |= ASTNodeFlags::IS_EXPORTED;
 				}
 			} else {

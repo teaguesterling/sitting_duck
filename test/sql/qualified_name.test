@@ -173,18 +173,21 @@ F	V[F]
 # Test 13: Import statements get I[name] prefix
 # =============================================================================
 
-# Python aliased import produces I[np]
+# Python aliased import: import_statement gets I[numpy], alias gets I[np]
 query II
 SELECT name, ast_qualified_name_as_string(qualified_name)
 FROM parse_ast('import numpy as np', 'python')
-WHERE ast_qualified_name_as_string(qualified_name) LIKE 'I[%';
+WHERE ast_qualified_name_as_string(qualified_name) LIKE 'I[%'
+ORDER BY name;
 ----
 np	I[np]
+numpy	I[numpy]
 
 # =============================================================================
 # Test 14: Filter by import kind with 'I[' prefix pattern
 # =============================================================================
 
+# 4 nodes: import_statement os, import_statement sys, import_statement numpy, aliased_import np
 query I
 SELECT COUNT(*)
 FROM parse_ast('
@@ -194,7 +197,7 @@ import numpy as np
 ', 'python')
 WHERE ast_qualified_name_as_string(qualified_name) LIKE 'I[%';
 ----
-3
+4
 
 # =============================================================================
 # Test 15: JavaScript export specifiers get E[name] prefix
