@@ -31,6 +31,32 @@ struct JavaScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>
 			// Set signature type to indicate JavaScript function
 			context.signature_type = "function";
 
+			// Extract keyword modifiers from direct children (async, static)
+			auto keyword_modifiers = ExtractModifiersFromNode(node, content);
+			context.modifiers = keyword_modifiers;
+
+			// Also check parent siblings for modifiers (e.g., static/async on
+			// method_definition nodes inside class bodies)
+			TSNode parent = ts_node_parent(node);
+			if (!ts_node_is_null(parent)) {
+				uint32_t parent_count = ts_node_child_count(parent);
+				for (uint32_t i = 0; i < parent_count; i++) {
+					TSNode sibling = ts_node_child(parent, i);
+					if (ts_node_eq(sibling, node)) break;
+					const char *sibling_type = ts_node_type(sibling);
+					if (strcmp(sibling_type, "async") == 0 || strcmp(sibling_type, "static") == 0) {
+						string mod(sibling_type);
+						bool already_present = false;
+						for (const auto &existing : context.modifiers) {
+							if (existing == mod) { already_present = true; break; }
+						}
+						if (!already_present) {
+							context.modifiers.push_back(mod);
+						}
+					}
+				}
+			}
+
 		} catch (...) {
 			context.signature_type = "";
 			context.parameters.clear();
