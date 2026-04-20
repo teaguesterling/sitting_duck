@@ -1,0 +1,73 @@
+# name: test/sql/native_extraction/modifier_extraction_audit.test
+# description: Systematic audit of modifier extraction across languages
+# group: [native_extraction]
+#
+# This test harness verifies that keyword modifiers (async, static, etc.)
+# are correctly extracted into the modifiers[] column across languages.
+# Add new test cases here when supporting new modifier types or languages.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# PYTHON: async modifier extraction
+# =============================================================================
+
+# Async functions should have [async] (possibly with decorators)
+query TT
+SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.py', context := 'native')
+WHERE is_function_definition(semantic_type)
+ORDER BY start_line;
+----
+fetch_data	[async]
+sync_helper	[]
+process_items	[async]
+
+# Verify: list_contains works for filtering
+query I
+SELECT COUNT(*) FROM read_ast('test/data/modifier_audit/async_functions.py', context := 'native')
+WHERE is_function_definition(semantic_type) AND list_contains(modifiers, 'async');
+----
+2
+
+# Verify: sync functions do NOT have async
+query I
+SELECT COUNT(*) FROM read_ast('test/data/modifier_audit/async_functions.py', context := 'native')
+WHERE is_function_definition(semantic_type) AND NOT list_contains(modifiers, 'async');
+----
+1
+
+# =============================================================================
+# JAVASCRIPT: async and static modifier extraction
+# =============================================================================
+
+# Top-level and method async/static modifiers
+query TT
+SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.js', context := 'native')
+WHERE is_function_definition(semantic_type)
+ORDER BY start_line;
+----
+fetchData	[async]
+syncHelper	[]
+start	[async]
+stop	[]
+create	[static]
+initialize	[static, async]
+
+# =============================================================================
+# TYPESCRIPT: async, static, and access modifiers
+# =============================================================================
+
+query TT
+SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.ts', context := 'native')
+WHERE is_function_definition(semantic_type)
+ORDER BY start_line;
+----
+fetchData	[async]
+syncHelper	[]
+exportedAsync	[async]
+start	[async]
+stop	[]
+create	[static, async]
