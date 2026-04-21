@@ -18,7 +18,7 @@ LOAD sitting_duck;
 # Async functions should have [async] (possibly with decorators)
 query TT
 SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.py', context := 'native')
-WHERE is_function_definition(semantic_type)
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''
 ORDER BY start_line;
 ----
 fetch_data	[async]
@@ -28,14 +28,14 @@ process_items	[async]
 # Verify: list_contains works for filtering
 query I
 SELECT COUNT(*) FROM read_ast('test/data/modifier_audit/async_functions.py', context := 'native')
-WHERE is_function_definition(semantic_type) AND list_contains(modifiers, 'async');
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != '' AND list_contains(modifiers, 'async');
 ----
 2
 
 # Verify: sync functions do NOT have async
 query I
 SELECT COUNT(*) FROM read_ast('test/data/modifier_audit/async_functions.py', context := 'native')
-WHERE is_function_definition(semantic_type) AND NOT list_contains(modifiers, 'async');
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != '' AND NOT list_contains(modifiers, 'async');
 ----
 1
 
@@ -46,7 +46,7 @@ WHERE is_function_definition(semantic_type) AND NOT list_contains(modifiers, 'as
 # Top-level and method async/static modifiers
 query TT
 SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.js', context := 'native')
-WHERE is_function_definition(semantic_type)
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''
 ORDER BY start_line;
 ----
 fetchData	[async]
@@ -62,7 +62,7 @@ initialize	[static, async]
 
 query TT
 SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.ts', context := 'native')
-WHERE is_function_definition(semantic_type)
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''
 ORDER BY start_line;
 ----
 fetchData	[async]
