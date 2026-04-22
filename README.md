@@ -1,4 +1,4 @@
-[![DuckDB Community Extension](https://img.shields.io/badge/webbed-DuckDB_Community_Extension-blue?logo=duckdb)](https://duckdb.org/community_extensions/extensions/sitting_duck.html)
+[![DuckDB Community Extension](https://img.shields.io/badge/sitting_duck-DuckDB_Community_Extension-blue?logo=duckdb)](https://duckdb.org/community_extensions/extensions/sitting_duck.html)
 [![Documentation](https://img.shields.io/badge/docs-readthedocs-blue)](https://sitting-duck.readthedocs.io)
 
 # Sitting Duck 🦆
