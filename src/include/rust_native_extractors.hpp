@@ -208,7 +208,7 @@ private:
 			}
 		}
 
-		// Also check siblings (for nodes wrapped by parent containers)
+		// Also check preceding siblings (for nodes wrapped by parent containers)
 		TSNode parent = ts_node_parent(node);
 		if (!ts_node_is_null(parent)) {
 			uint32_t parent_count = ts_node_child_count(parent);
@@ -218,18 +218,13 @@ private:
 				const char *sibling_type = ts_node_type(sibling);
 
 				if (strcmp(sibling_type, "visibility_modifier") == 0 ||
-				    strcmp(sibling_type, "attribute_item") == 0) {
+				    strcmp(sibling_type, "attribute_item") == 0 ||
+				    strcmp(sibling_type, "async") == 0 || strcmp(sibling_type, "unsafe") == 0 ||
+				    strcmp(sibling_type, "extern") == 0 || strcmp(sibling_type, "const") == 0) {
 					uint32_t start = ts_node_start_byte(sibling);
 					uint32_t end = ts_node_end_byte(sibling);
 					if (start < content.length() && end <= content.length()) {
-						string text = content.substr(start, end - start);
-						bool already_present = false;
-						for (const auto &m : modifiers) {
-							if (m == text) { already_present = true; break; }
-						}
-						if (!already_present) {
-							modifiers.push_back(text);
-						}
+						EnsureModifier(modifiers, content.substr(start, end - start));
 					}
 				}
 			}
@@ -244,13 +239,7 @@ template <>
 struct RustNativeExtractor<NativeExtractionStrategy::ASYNC_FUNCTION> {
 	static NativeContext Extract(TSNode node, const string &content) {
 		auto context = RustNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
-		bool has_async = false;
-		for (const auto &mod : context.modifiers) {
-			if (mod == "async") { has_async = true; break; }
-		}
-		if (!has_async) {
-			context.modifiers.insert(context.modifiers.begin(), "async");
-		}
+		EnsureModifier(context.modifiers, "async", true);
 		return context;
 	}
 };

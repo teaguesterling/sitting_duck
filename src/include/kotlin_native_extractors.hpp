@@ -573,11 +573,12 @@ public:
 			}
 		}
 
-		// Also get regular function modifiers
 		auto regular_modifiers =
 		    KotlinNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractKotlinModifiers(node,
 		                                                                                                  content);
-		modifiers.insert(modifiers.end(), regular_modifiers.begin(), regular_modifiers.end());
+		for (const auto &rm : regular_modifiers) {
+			EnsureModifier(modifiers, rm);
+		}
 
 		return modifiers;
 	}
@@ -622,11 +623,12 @@ public:
 			}
 		}
 
-		// Also get regular function modifiers
 		auto regular_modifiers =
 		    KotlinNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractKotlinModifiers(node,
 		                                                                                                  content);
-		modifiers.insert(modifiers.end(), regular_modifiers.begin(), regular_modifiers.end());
+		for (const auto &rm : regular_modifiers) {
+			EnsureModifier(modifiers, rm);
+		}
 
 		return modifiers;
 	}

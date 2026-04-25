@@ -15,7 +15,7 @@ LOAD sitting_duck;
 # PYTHON: async modifier extraction
 # =============================================================================
 
-# Async functions should have [async] (possibly with decorators)
+# Async functions should have [async] (including decorated async)
 query TT
 SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.py', context := 'native')
 WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''
@@ -24,20 +24,22 @@ ORDER BY start_line;
 fetch_data	[async]
 sync_helper	[]
 process_items	[async]
+some_decorator	[]
+decorated_async	[async, @some_decorator]
 
 # Verify: list_contains works for filtering
 query I
 SELECT COUNT(*) FROM read_ast('test/data/modifier_audit/async_functions.py', context := 'native')
 WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != '' AND list_contains(modifiers, 'async');
 ----
-2
+3
 
 # Verify: sync functions do NOT have async
 query I
 SELECT COUNT(*) FROM read_ast('test/data/modifier_audit/async_functions.py', context := 'native')
 WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != '' AND NOT list_contains(modifiers, 'async');
 ----
-1
+2
 
 # =============================================================================
 # JAVASCRIPT: async and static modifier extraction
@@ -162,6 +164,9 @@ asyncMethod	[async]
 # C#: public, async, static, private, virtual modifier extraction
 # =============================================================================
 
+# NOTE: C# name extraction has a known issue where 'private async Task PrivateAsync()'
+# extracts name='Task' (the return type) instead of 'PrivateAsync'. This is a
+# pre-existing FIND_IDENTIFIER name extraction bug, not a modifier extraction issue.
 query TT
 SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.cs', context := 'native')
 WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''

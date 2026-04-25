@@ -238,16 +238,9 @@ public:
 template <>
 struct JavaScriptNativeExtractor<NativeExtractionStrategy::ASYNC_FUNCTION> {
 	static NativeContext Extract(TSNode node, const string &content) {
-		// Reuse FUNCTION_WITH_PARAMS logic and add async modifier if not already present
 		auto context =
 		    JavaScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
-		bool has_async = false;
-		for (const auto &mod : context.modifiers) {
-			if (mod == "async") { has_async = true; break; }
-		}
-		if (!has_async) {
-			context.modifiers.push_back("async");
-		}
+		EnsureModifier(context.modifiers, "async");
 		return context;
 	}
 };

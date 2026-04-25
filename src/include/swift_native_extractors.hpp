@@ -566,17 +566,10 @@ public:
 			}
 		}
 
-		// Also get regular function modifiers (dedup against what we already found)
 		auto regular_modifiers =
 		    SwiftNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractSwiftModifiers(node, content);
 		for (const auto &rm : regular_modifiers) {
-			bool already_present = false;
-			for (const auto &m : modifiers) {
-				if (m == rm) { already_present = true; break; }
-			}
-			if (!already_present) {
-				modifiers.push_back(rm);
-			}
+			EnsureModifier(modifiers, rm);
 		}
 
 		return modifiers;

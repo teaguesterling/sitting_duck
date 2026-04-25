@@ -251,15 +251,8 @@ private:
 template <>
 struct PythonNativeExtractor<NativeExtractionStrategy::ASYNC_FUNCTION> {
 	static NativeContext Extract(TSNode node, const string &content) {
-		// Reuse FUNCTION_WITH_PARAMS logic and add async modifier if not already present
 		auto context = PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
-		bool has_async = false;
-		for (const auto &mod : context.modifiers) {
-			if (mod == "async") { has_async = true; break; }
-		}
-		if (!has_async) {
-			context.modifiers.insert(context.modifiers.begin(), "async");
-		}
+		EnsureModifier(context.modifiers, "async", true);
 		return context;
 	}
 };
@@ -1088,13 +1081,7 @@ struct PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_DECORATORS>
 				// Handle async functions (dedup: FUNCTION_WITH_PARAMS may already have detected async)
 				if (node_type == "async_function_definition") {
 					context.signature_type = "async_" + context.signature_type;
-					bool has_async = false;
-					for (const auto &mod : context.modifiers) {
-						if (mod == "async") { has_async = true; break; }
-					}
-					if (!has_async) {
-						context.modifiers.insert(context.modifiers.begin(), "async");
-					}
+					EnsureModifier(context.modifiers, "async", true);
 				}
 			} else if (node_type == "decorated_definition") {
 				context = ExtractDecoratedFunction(node, content);
@@ -1146,13 +1133,7 @@ private:
 		// Check for function-specific modifiers
 		string node_type = ts_node_type(node);
 		if (node_type == "async_function_definition") {
-			bool has_async = false;
-			for (const auto &mod : modifiers) {
-				if (mod == "async") { has_async = true; break; }
-			}
-			if (!has_async) {
-				modifiers.push_back("async");
-			}
+			EnsureModifier(modifiers, "async");
 		}
 
 		// Check for special method names
@@ -1222,7 +1203,7 @@ private:
 
 				if (child_type == "async_function_definition") {
 					context.signature_type = "async_" + context.signature_type;
-					context.modifiers.insert(context.modifiers.begin(), "async");
+					EnsureModifier(context.modifiers, "async", true);
 				}
 
 				break;

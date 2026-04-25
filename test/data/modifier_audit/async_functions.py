@@ -9,3 +9,10 @@ def sync_helper():
 async def process_items(items):
     for item in items:
         await handle(item)
+
+def some_decorator(fn):
+    return fn
+
+@some_decorator
+async def decorated_async():
+    await asyncio.sleep(1)

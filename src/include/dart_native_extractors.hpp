@@ -371,7 +371,7 @@ struct DartNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 				TSNode body_child = ts_node_child(body_node, j);
 				string text = dart_helpers::ExtractNodeText(body_child, content);
 				if (text == "async" || text == "async*" || text == "sync*") {
-					context.modifiers.push_back(text);
+					EnsureModifier(context.modifiers, text);
 				}
 			}
 		};
@@ -417,17 +417,16 @@ struct DartNativeExtractor<NativeExtractionStrategy::ASYNC_FUNCTION> {
 		NativeContext context =
 		    DartNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
 
-		// Ensure async is in modifiers
-		bool has_async = false;
+		// Ensure some form of async is present
+		bool has_any_async = false;
 		for (const auto &mod : context.modifiers) {
 			if (mod == "async" || mod == "async*" || mod == "sync*") {
-				has_async = true;
+				has_any_async = true;
 				break;
 			}
 		}
-
-		if (!has_async) {
-			context.modifiers.push_back("async");
+		if (!has_any_async) {
+			EnsureModifier(context.modifiers, "async");
 		}
 
 		return context;
