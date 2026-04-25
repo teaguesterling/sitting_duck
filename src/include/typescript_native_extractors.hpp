@@ -255,12 +255,20 @@ public:
 	static vector<string> ExtractTypeScriptModifiers(TSNode node, const string &content) {
 		vector<string> modifiers;
 
-		// Check for function modifiers
+		// Check direct children for keyword modifiers (async, static, etc.)
+		// Covers top-level async functions where async is a child of
+		// function_declaration, not a sibling.
+		auto keyword_modifiers = ExtractModifiersFromNode(node, content);
+		modifiers.insert(modifiers.end(), keyword_modifiers.begin(), keyword_modifiers.end());
+
+		// Check parent siblings for modifiers (covers class methods where
+		// async/static/public are siblings of method_definition)
 		TSNode parent = ts_node_parent(node);
 		if (!ts_node_is_null(parent)) {
 			uint32_t parent_count = ts_node_child_count(parent);
 			for (uint32_t i = 0; i < parent_count; i++) {
 				TSNode sibling = ts_node_child(parent, i);
+				if (ts_node_eq(sibling, node)) break;
 				const char *sibling_type = ts_node_type(sibling);
 
 				if (strcmp(sibling_type, "accessibility_modifier") == 0 || strcmp(sibling_type, "readonly") == 0 ||
@@ -269,7 +277,14 @@ public:
 					uint32_t start = ts_node_start_byte(sibling);
 					uint32_t end = ts_node_end_byte(sibling);
 					if (start < content.length() && end <= content.length()) {
-						modifiers.push_back(content.substr(start, end - start));
+						string mod = content.substr(start, end - start);
+						bool already_present = false;
+						for (const auto &existing : modifiers) {
+							if (existing == mod) { already_present = true; break; }
+						}
+						if (!already_present) {
+							modifiers.push_back(mod);
+						}
 					}
 				}
 			}
@@ -344,10 +359,9 @@ public:
 template <>
 struct TypeScriptNativeExtractor<NativeExtractionStrategy::ASYNC_FUNCTION> {
 	static NativeContext Extract(TSNode node, const string &content) {
-		// Reuse FUNCTION_WITH_PARAMS logic and add async modifier
 		auto context =
 		    TypeScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
-		context.modifiers.insert(context.modifiers.begin(), "async");
+		EnsureModifier(context.modifiers, "async", true);
 		return context;
 	}
 };

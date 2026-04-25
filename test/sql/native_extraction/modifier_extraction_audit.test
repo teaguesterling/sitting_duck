@@ -1,0 +1,179 @@
+# name: test/sql/native_extraction/modifier_extraction_audit.test
+# description: Systematic audit of modifier extraction across languages
+# group: [native_extraction]
+#
+# This test harness verifies that keyword modifiers (async, static, etc.)
+# are correctly extracted into the modifiers[] column across languages.
+# Add new test cases here when supporting new modifier types or languages.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# PYTHON: async modifier extraction
+# =============================================================================
+
+# Async functions should have [async] (including decorated async)
+query TT
+SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.py', context := 'native')
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''
+ORDER BY start_line;
+----
+fetch_data	[async]
+sync_helper	[]
+process_items	[async]
+some_decorator	[]
+decorated_async	[async, @some_decorator]
+
+# Verify: list_contains works for filtering
+query I
+SELECT COUNT(*) FROM read_ast('test/data/modifier_audit/async_functions.py', context := 'native')
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != '' AND list_contains(modifiers, 'async');
+----
+3
+
+# Verify: sync functions do NOT have async
+query I
+SELECT COUNT(*) FROM read_ast('test/data/modifier_audit/async_functions.py', context := 'native')
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != '' AND NOT list_contains(modifiers, 'async');
+----
+2
+
+# =============================================================================
+# JAVASCRIPT: async and static modifier extraction
+# =============================================================================
+
+# Top-level and method async/static modifiers
+query TT
+SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.js', context := 'native')
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''
+ORDER BY start_line;
+----
+fetchData	[async]
+syncHelper	[]
+start	[async]
+stop	[]
+create	[static]
+initialize	[static, async]
+
+# =============================================================================
+# TYPESCRIPT: async, static, and access modifiers
+# =============================================================================
+
+query TT
+SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.ts', context := 'native')
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''
+ORDER BY start_line;
+----
+fetchData	[async]
+syncHelper	[]
+exportedAsync	[async]
+start	[async]
+stop	[]
+create	[static, async]
+
+# =============================================================================
+# RUST: async, pub, unsafe modifier extraction
+# =============================================================================
+
+query TT
+SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.rs', context := 'native')
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''
+ORDER BY start_line;
+----
+fetch_data	[async]
+sync_helper	[]
+public_async	[pub, async]
+unsafe_helper	[unsafe]
+public_sync	[pub]
+
+# Verify: list_contains for async
+query I
+SELECT COUNT(*) FROM read_ast('test/data/modifier_audit/async_functions.rs', context := 'native')
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != '' AND list_contains(modifiers, 'async');
+----
+2
+
+# =============================================================================
+# KOTLIN: suspend, private, inline modifier extraction
+# =============================================================================
+
+query TT
+SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.kt', context := 'native')
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''
+ORDER BY start_line;
+----
+fetchData	[suspend]
+syncHelper	[]
+privateAsync	[private, suspend]
+inlineHelper	[inline]
+
+# Verify: list_contains for suspend (Kotlin's async equivalent)
+query I
+SELECT COUNT(*) FROM read_ast('test/data/modifier_audit/async_functions.kt', context := 'native')
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != '' AND list_contains(modifiers, 'suspend');
+----
+2
+
+# =============================================================================
+# SWIFT: async, static, mutating, public modifier extraction
+# =============================================================================
+
+query TT
+SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.swift', context := 'native')
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''
+ORDER BY start_line;
+----
+syncHelper	[]
+fetchData	[async]
+staticHelper	[static]
+update	[mutating]
+publicHelper	[public]
+
+# Verify: list_contains for async
+query I
+SELECT COUNT(*) FROM read_ast('test/data/modifier_audit/async_functions.swift', context := 'native')
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != '' AND list_contains(modifiers, 'async');
+----
+1
+
+# =============================================================================
+# DART: async, async*, static modifier extraction
+# =============================================================================
+
+# Dart class methods emit both method_signature and function_signature;
+# deduplicate by preferring method_signature
+query TT
+SELECT name, modifiers FROM (
+  SELECT DISTINCT ON (name, start_line) name, modifiers, start_line
+  FROM read_ast('test/data/modifier_audit/async_functions.dart', context := 'native')
+  WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''
+  ORDER BY name, start_line, CASE WHEN type = 'method_signature' THEN 0 ELSE 1 END
+)
+ORDER BY start_line;
+----
+fetchData	[async]
+syncHelper	[]
+generateNumbers	[async*]
+staticHelper	[static]
+asyncMethod	[async]
+
+# =============================================================================
+# C#: public, async, static, private, virtual modifier extraction
+# =============================================================================
+
+# NOTE: C# name extraction has a known issue where 'private async Task PrivateAsync()'
+# extracts name='Task' (the return type) instead of 'PrivateAsync'. This is a
+# pre-existing FIND_IDENTIFIER name extraction bug, not a modifier extraction issue.
+query TT
+SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.cs', context := 'native')
+WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''
+ORDER BY start_line;
+----
+FetchData	[public, async]
+SyncHelper	[public]
+StaticHelper	[public, static]
+Task	[private, async]
+VirtualMethod	[protected, virtual]

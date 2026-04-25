@@ -38,6 +38,14 @@ struct PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 		auto decorators = ExtractPythonDecorators(node, content);
 		context.modifiers = decorators;
 
+		// Scan children for keyword modifiers (async, etc.)
+		// tree-sitter-python emits 'async' as a child of function_definition,
+		// not as a compound 'async_function_definition' node type.
+		auto keyword_modifiers = ExtractModifiersFromNode(node, content);
+		for (const auto &mod : keyword_modifiers) {
+			context.modifiers.insert(context.modifiers.begin(), mod);
+		}
+
 		return context;
 	}
 
@@ -243,9 +251,8 @@ private:
 template <>
 struct PythonNativeExtractor<NativeExtractionStrategy::ASYNC_FUNCTION> {
 	static NativeContext Extract(TSNode node, const string &content) {
-		// Reuse FUNCTION_WITH_PARAMS logic and add async modifier
 		auto context = PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
-		context.modifiers.insert(context.modifiers.begin(), "async");
+		EnsureModifier(context.modifiers, "async", true);
 		return context;
 	}
 };
@@ -1071,10 +1078,10 @@ struct PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_DECORATORS>
 					context.signature_type = "decorated_" + context.signature_type;
 				}
 
-				// Handle async functions
+				// Handle async functions (dedup: FUNCTION_WITH_PARAMS may already have detected async)
 				if (node_type == "async_function_definition") {
 					context.signature_type = "async_" + context.signature_type;
-					context.modifiers.insert(context.modifiers.begin(), "async");
+					EnsureModifier(context.modifiers, "async", true);
 				}
 			} else if (node_type == "decorated_definition") {
 				context = ExtractDecoratedFunction(node, content);
@@ -1126,7 +1133,7 @@ private:
 		// Check for function-specific modifiers
 		string node_type = ts_node_type(node);
 		if (node_type == "async_function_definition") {
-			modifiers.push_back("async");
+			EnsureModifier(modifiers, "async");
 		}
 
 		// Check for special method names
@@ -1196,7 +1203,7 @@ private:
 
 				if (child_type == "async_function_definition") {
 					context.signature_type = "async_" + context.signature_type;
-					context.modifiers.insert(context.modifiers.begin(), "async");
+					EnsureModifier(context.modifiers, "async", true);
 				}
 
 				break;

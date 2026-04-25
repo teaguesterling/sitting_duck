@@ -283,6 +283,18 @@ vector<ParameterInfo> ExtractParameterList(TSNode params_node, const string &con
 // Helper function to extract modifiers from various patterns
 vector<string> ExtractModifiersFromNode(TSNode node, const string &content);
 
+// Ensure a modifier is present in the list (dedup). Prepends if prepend=true.
+inline void EnsureModifier(vector<string> &modifiers, const string &mod, bool prepend = false) {
+	for (const auto &m : modifiers) {
+		if (m == mod) return;
+	}
+	if (prepend) {
+		modifiers.insert(modifiers.begin(), mod);
+	} else {
+		modifiers.push_back(mod);
+	}
+}
+
 // Helper function to build qualified name from context
 string BuildQualifiedName(TSNode node, const string &content, const string &base_name);
 

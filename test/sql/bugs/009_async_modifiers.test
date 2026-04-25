@@ -1,0 +1,38 @@
+# name: test/sql/bugs/009_async_modifiers.test
+# description: Bug #009 - async modifier must appear in modifiers[] for async functions
+# group: [bugs]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Python: async def should have 'async' in modifiers
+# =============================================================================
+
+query TT
+SELECT name, modifiers FROM read_ast('test/data/test_native_context.py', context := 'native')
+WHERE is_function_definition(semantic_type) AND name = 'async_function';
+----
+async_function	[async]
+
+# =============================================================================
+# JavaScript: async function should have 'async' in modifiers
+# =============================================================================
+
+query TT
+SELECT name, modifiers FROM read_ast('test/data/javascript_test.js', context := 'native')
+WHERE is_function_definition(semantic_type) AND name = 'asyncFunction';
+----
+asyncFunction	[async]
+
+# =============================================================================
+# TypeScript: async function should have 'async' in modifiers
+# =============================================================================
+
+query TT
+SELECT name, modifiers FROM read_ast('test/data/typescript_test.ts', context := 'native')
+WHERE is_function_definition(semantic_type) AND name = 'asyncTypedFunction';
+----
+asyncTypedFunction	[async]
