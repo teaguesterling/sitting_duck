@@ -171,35 +171,65 @@ private:
 	static vector<string> ExtractRustModifiers(TSNode node, const string &content) {
 		vector<string> modifiers;
 
-		// Check for function modifiers and attributes
+		auto extract_modifier_text = [&](TSNode n) {
+			uint32_t start = ts_node_start_byte(n);
+			uint32_t end = ts_node_end_byte(n);
+			if (start < content.length() && end <= content.length()) {
+				modifiers.push_back(content.substr(start, end - start));
+			}
+		};
+
+		// Check direct children for modifiers (tree-sitter-rust structure:
+		// function_item > function_modifiers > {async, unsafe, ...}
+		// function_item > visibility_modifier
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			const char *child_type = ts_node_type(child);
+
+			if (strcmp(child_type, "function_modifiers") == 0) {
+				uint32_t mod_count = ts_node_child_count(child);
+				for (uint32_t j = 0; j < mod_count; j++) {
+					TSNode mod = ts_node_child(child, j);
+					const char *mod_type = ts_node_type(mod);
+					if (strcmp(mod_type, "async") == 0 || strcmp(mod_type, "unsafe") == 0 ||
+					    strcmp(mod_type, "extern") == 0 || strcmp(mod_type, "const") == 0 ||
+					    strcmp(mod_type, "default") == 0) {
+						extract_modifier_text(mod);
+					}
+				}
+			} else if (strcmp(child_type, "visibility_modifier") == 0) {
+				extract_modifier_text(child);
+			} else if (strcmp(child_type, "attribute_item") == 0) {
+				extract_modifier_text(child);
+			} else if (strcmp(child_type, "async") == 0 || strcmp(child_type, "unsafe") == 0 ||
+			           strcmp(child_type, "extern") == 0 || strcmp(child_type, "const") == 0) {
+				extract_modifier_text(child);
+			}
+		}
+
+		// Also check siblings (for nodes wrapped by parent containers)
 		TSNode parent = ts_node_parent(node);
 		if (!ts_node_is_null(parent)) {
 			uint32_t parent_count = ts_node_child_count(parent);
 			for (uint32_t i = 0; i < parent_count; i++) {
 				TSNode sibling = ts_node_child(parent, i);
+				if (ts_node_eq(sibling, node)) break;
 				const char *sibling_type = ts_node_type(sibling);
 
-				if (strcmp(sibling_type, "visibility_modifier") == 0) {
-					// pub, pub(crate), etc.
+				if (strcmp(sibling_type, "visibility_modifier") == 0 ||
+				    strcmp(sibling_type, "attribute_item") == 0) {
 					uint32_t start = ts_node_start_byte(sibling);
 					uint32_t end = ts_node_end_byte(sibling);
 					if (start < content.length() && end <= content.length()) {
-						modifiers.push_back(content.substr(start, end - start));
-					}
-				} else if (strcmp(sibling_type, "attribute_item") == 0) {
-					// #[...] attributes
-					uint32_t start = ts_node_start_byte(sibling);
-					uint32_t end = ts_node_end_byte(sibling);
-					if (start < content.length() && end <= content.length()) {
-						modifiers.push_back(content.substr(start, end - start));
-					}
-				} else if (strcmp(sibling_type, "async") == 0 || strcmp(sibling_type, "unsafe") == 0 ||
-				           strcmp(sibling_type, "extern") == 0 || strcmp(sibling_type, "const") == 0) {
-					// Function keywords
-					uint32_t start = ts_node_start_byte(sibling);
-					uint32_t end = ts_node_end_byte(sibling);
-					if (start < content.length() && end <= content.length()) {
-						modifiers.push_back(content.substr(start, end - start));
+						string text = content.substr(start, end - start);
+						bool already_present = false;
+						for (const auto &m : modifiers) {
+							if (m == text) { already_present = true; break; }
+						}
+						if (!already_present) {
+							modifiers.push_back(text);
+						}
 					}
 				}
 			}
@@ -213,9 +243,14 @@ private:
 template <>
 struct RustNativeExtractor<NativeExtractionStrategy::ASYNC_FUNCTION> {
 	static NativeContext Extract(TSNode node, const string &content) {
-		// Reuse FUNCTION_WITH_PARAMS logic and add async modifier
 		auto context = RustNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::Extract(node, content);
-		context.modifiers.insert(context.modifiers.begin(), "async");
+		bool has_async = false;
+		for (const auto &mod : context.modifiers) {
+			if (mod == "async") { has_async = true; break; }
+		}
+		if (!has_async) {
+			context.modifiers.insert(context.modifiers.begin(), "async");
+		}
 		return context;
 	}
 };

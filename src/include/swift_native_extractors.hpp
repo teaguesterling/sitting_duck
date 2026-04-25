@@ -209,23 +209,22 @@ public:
 	static vector<string> ExtractSwiftModifiers(TSNode node, const string &content) {
 		vector<string> modifiers;
 
-		// Swift AST: modifiers are in a "modifiers" child node of the function_declaration
-		// modifiers > {mutation_modifier, member_modifier, property_modifier, etc.} > keyword
 		uint32_t child_count = ts_node_child_count(node);
 		for (uint32_t i = 0; i < child_count; i++) {
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
 
 			if (strcmp(child_type, "modifiers") == 0) {
+				// modifiers > {mutation_modifier, member_modifier, visibility_modifier, ...}
 				uint32_t mod_count = ts_node_child_count(child);
 				for (uint32_t j = 0; j < mod_count; j++) {
 					TSNode mod = ts_node_child(child, j);
 					const char *mod_type = ts_node_type(mod);
 
 					if (strcmp(mod_type, "mutation_modifier") == 0 || strcmp(mod_type, "member_modifier") == 0 ||
-					    strcmp(mod_type, "property_modifier") == 0 || strcmp(mod_type, "access_level_modifier") == 0 ||
-					    strcmp(mod_type, "inheritance_modifier") == 0 || strcmp(mod_type, "attribute") == 0) {
-						// Extract the text of the modifier (e.g., "mutating", "override", "static")
+					    strcmp(mod_type, "property_modifier") == 0 || strcmp(mod_type, "visibility_modifier") == 0 ||
+					    strcmp(mod_type, "access_level_modifier") == 0 || strcmp(mod_type, "inheritance_modifier") == 0 ||
+					    strcmp(mod_type, "attribute") == 0 || strcmp(mod_type, "ownership_modifier") == 0) {
 						uint32_t start = ts_node_start_byte(mod);
 						uint32_t end = ts_node_end_byte(mod);
 						if (start < content.length() && end <= content.length()) {
@@ -233,7 +232,14 @@ public:
 						}
 					}
 				}
-				break;
+			} else if (strcmp(child_type, "async") == 0 || strcmp(child_type, "throws") == 0 ||
+			           strcmp(child_type, "rethrows") == 0) {
+				// Standalone keyword children (async appears after params, not in modifiers node)
+				uint32_t start = ts_node_start_byte(child);
+				uint32_t end = ts_node_end_byte(child);
+				if (start < content.length() && end <= content.length()) {
+					modifiers.push_back(content.substr(start, end - start));
+				}
 			}
 		}
 
@@ -560,10 +566,18 @@ public:
 			}
 		}
 
-		// Also get regular function modifiers
+		// Also get regular function modifiers (dedup against what we already found)
 		auto regular_modifiers =
 		    SwiftNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractSwiftModifiers(node, content);
-		modifiers.insert(modifiers.end(), regular_modifiers.begin(), regular_modifiers.end());
+		for (const auto &rm : regular_modifiers) {
+			bool already_present = false;
+			for (const auto &m : modifiers) {
+				if (m == rm) { already_present = true; break; }
+			}
+			if (!already_present) {
+				modifiers.push_back(rm);
+			}
+		}
 
 		return modifiers;
 	}

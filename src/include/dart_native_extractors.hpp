@@ -362,21 +362,43 @@ struct DartNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 		// Extract modifiers
 		context.modifiers = dart_helpers::ExtractDartModifiers(node, content);
 
-		// Check for async/sync modifiers in function body
+		// Check for async/sync modifiers in function body.
+		// In Dart's tree-sitter, function_body is a sibling of function_signature
+		// (both children of the same parent), not a child of function_signature.
+		auto check_body_for_async = [&](TSNode body_node) {
+			uint32_t body_count = ts_node_child_count(body_node);
+			for (uint32_t j = 0; j < body_count && j < 5; j++) {
+				TSNode body_child = ts_node_child(body_node, j);
+				string text = dart_helpers::ExtractNodeText(body_child, content);
+				if (text == "async" || text == "async*" || text == "sync*") {
+					context.modifiers.push_back(text);
+				}
+			}
+		};
+
+		// First check direct children (for node types that contain their body)
 		uint32_t child_count = ts_node_child_count(node);
 		for (uint32_t i = 0; i < child_count; i++) {
 			TSNode child = ts_node_child(node, i);
-			const char *child_type = ts_node_type(child);
+			if (strcmp(ts_node_type(child), "function_body") == 0) {
+				check_body_for_async(child);
+			}
+		}
 
-			if (strcmp(child_type, "function_body") == 0) {
-				// Check for async/sync* markers
-				uint32_t body_count = ts_node_child_count(child);
-				for (uint32_t j = 0; j < body_count && j < 5; j++) {
-					TSNode body_child = ts_node_child(child, j);
-					string text = dart_helpers::ExtractNodeText(body_child, content);
-					if (text == "async" || text == "async*" || text == "sync*") {
-						context.modifiers.push_back(text);
-					}
+		// Then check siblings (for function_signature where body is a sibling)
+		TSNode parent = ts_node_parent(node);
+		if (!ts_node_is_null(parent)) {
+			bool found_self = false;
+			uint32_t parent_count = ts_node_child_count(parent);
+			for (uint32_t i = 0; i < parent_count; i++) {
+				TSNode sibling = ts_node_child(parent, i);
+				if (ts_node_eq(sibling, node)) {
+					found_self = true;
+					continue;
+				}
+				if (found_self && strcmp(ts_node_type(sibling), "function_body") == 0) {
+					check_body_for_async(sibling);
+					break;
 				}
 			}
 		}
