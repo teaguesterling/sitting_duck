@@ -1,6 +1,6 @@
 # DuckDB AST Extension - Development Priorities
 
-**Last Updated:** 2026-03-30
+**Last Updated:** 2026-04-25
 
 ## Priority Levels
 
@@ -11,7 +11,12 @@
 
 ## Current Status
 
-### Completed (since last update on 2026-03-04)
+### Completed (since last update on 2026-04-25)
+- Async/modifier extraction across all 8 languages (PR #69) — `list_contains(modifiers, 'async')` now works for Python, JS, TS, Rust, Kotlin, Swift, Dart, C#
+- `ast_imports`/`ast_exports` correctness for cross-file resolution (PR #68) — IS_EXPORTED flag gated to name-binding nodes, import dedup, 5-language adapter fixes
+- IS_EXPORTED flag for file-level visibility (PR #65) — scope-aware export detection
+- Custom selector predicates via `ast_selector_predicate_*` macros (PR #67)
+- CSS selector bug fixes: `:has(.class)`, `:not(:has())`, combinator+pseudo-class, compound filter leaks, decorrelated join performance (17x speedup)
 - Recursive pattern matching (#57) — `<**>` any-depth wildcards, relational operators (`ast_has`, `ast_not_has`, `ast_inside`, `ast_precedes`, `ast_follows`)
 - Optional `<?>` and negation `<~>` wildcards (#58, #59) — complete wildcard cardinality system
 - `detect_language()` scalar function (#56) — expose language detection for downstream tools
@@ -37,14 +42,16 @@
 - Children/descendant counts for O(1) subtree operations
 - Parser ownership refactor, KIND taxonomy integration
 - 87 test files covering all languages and features
-- Bugs #001-005, #007-013 all fixed (13 of 13 total)
+- Bugs #001-005, #007-013 all fixed
 - IS_SYNTAX_ONLY flags, punctuation consistency, comparison type fixes
+- 104 test files, 5457 assertions
 
 ### Stalled
 - #023 Unified function architecture — no activity since January 2026, deprioritized
 
-### Only Open Bug
+### Open Bugs
 - #006 Performance tests slow (26s vs 0.1s for basic tests) - Medium priority
+- #010 C# name extraction picks up return type instead of method name - Medium priority
 
 ## Immediate Priorities
 
