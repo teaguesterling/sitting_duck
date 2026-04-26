@@ -1997,4 +1997,31 @@ void UnifiedASTBackend::ResetStructVectorState(Vector &vector) {
 	}
 }
 
+void CompilePrunePolicy(const string &policy_name, ExtractionConfig &config) {
+	config.has_prune = true;
+	if (policy_name == "syntax") {
+		config.prune_flag_mask |= ASTNodeFlags::IS_SYNTAX_ONLY;
+	} else if (policy_name == "comments") {
+		config.prune_type_filters.push_back({0xFC, SemanticTypes::METADATA_COMMENT});
+	} else if (policy_name == "literals") {
+		config.prune_type_filters.push_back({0xF0, SemanticTypes::LITERAL});
+	} else if (policy_name == "imports") {
+		config.prune_type_filters.push_back({0xF0, SemanticTypes::EXTERNAL});
+	} else if (policy_name == "types") {
+		config.prune_type_filters.push_back({0xF0, SemanticTypes::TYPE});
+	} else if (policy_name == "punctuation") {
+		config.prune_type_filters.push_back({0xFC, SemanticTypes::PARSER_PUNCTUATION});
+	} else if (policy_name == "unnamed") {
+		config.prune_unnamed = true;
+	} else if (policy_name == "leaves") {
+		config.prune_leaves = true;
+	} else if (policy_name == "internal") {
+		config.prune_internal = true;
+	} else {
+		throw BinderException("Unknown prune policy: '" + policy_name +
+		    "'. Valid policies: syntax, comments, literals, imports, types, "
+		    "punctuation, unnamed, leaves, internal");
+	}
+}
+
 } // namespace duckdb
