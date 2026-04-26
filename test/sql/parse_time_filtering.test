@@ -13,3 +13,148 @@ statement error
 SELECT * FROM read_ast('test/data/python/sample_app.py', prune := ['invalid_policy']);
 ----
 Unknown prune policy
+
+# =============================================================================
+# Section 2: max_depth filtering
+# =============================================================================
+
+# max_depth := 0 returns only the root node
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', max_depth := 0);
+----
+1
+
+# Root at max_depth 0 has descendant_count = 0
+query II
+SELECT type, descendant_count
+FROM read_ast('test/data/python/sample_app.py', max_depth := 0);
+----
+module	0
+
+# max_depth := 1 returns root + direct children only
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', max_depth := 1)
+WHERE depth > 1;
+----
+0
+
+# Boundary nodes at max_depth have children_count = 0
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', max_depth := 1)
+WHERE depth = 1 AND children_count > 0;
+----
+0
+
+# Without max_depth, same file has nodes at depth > 1
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/python/sample_app.py')
+WHERE depth > 1;
+----
+true
+
+# max_depth := -1 (default) has no effect
+query I
+SELECT COUNT(*) > 0 FROM read_ast('test/data/python/sample_app.py', max_depth := -1)
+WHERE depth > 5;
+----
+true
+
+# =============================================================================
+# Section 3: prune -- syntax policy
+# =============================================================================
+
+# No syntax-only nodes in output
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', prune := ['syntax'])
+WHERE is_syntax_only(flags);
+----
+0
+
+# Fewer total nodes with syntax pruned
+query I
+SELECT
+    (SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py')) >
+    (SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', prune := ['syntax']));
+----
+true
+
+# =============================================================================
+# Section 4: prune -- comments policy
+# =============================================================================
+
+# No comment nodes in output (METADATA_COMMENT = 0x20, super_type mask = 0xFC)
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', prune := ['comments'])
+WHERE (semantic_type & 252) = 32;
+----
+0
+
+# =============================================================================
+# Section 5: prune -- composition
+# =============================================================================
+
+# Multiple policies compose
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', prune := ['syntax', 'comments'])
+WHERE is_syntax_only(flags) OR (semantic_type & 252) = 32;
+----
+0
+
+# =============================================================================
+# Section 6: Tree consistency after pruning
+# =============================================================================
+
+# Every parent_id references an emitted node
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', prune := ['syntax']) a
+WHERE a.parent_id >= 0
+  AND a.parent_id NOT IN (
+    SELECT node_id FROM read_ast('test/data/python/sample_app.py', prune := ['syntax'])
+  );
+----
+0
+
+# Sibling indices contiguous per parent
+query I
+SELECT COUNT(*) FROM (
+    SELECT parent_id, MAX(sibling_index) + 1 AS max_sib, COUNT(*) AS child_count
+    FROM read_ast('test/data/python/sample_app.py', prune := ['syntax'])
+    WHERE parent_id >= 0
+    GROUP BY parent_id
+    HAVING max_sib != child_count
+);
+----
+0
+
+# descendant_count matches actual descendants
+query I
+SELECT COUNT(*) FROM (
+    WITH ast AS (SELECT * FROM read_ast('test/data/python/sample_app.py', prune := ['syntax']))
+    SELECT a.node_id, a.descendant_count,
+           (SELECT COUNT(*) FROM ast b WHERE b.node_id > a.node_id AND b.node_id <= a.node_id + a.descendant_count) AS actual
+    FROM ast a
+    WHERE a.descendant_count != actual
+);
+----
+0
+
+# =============================================================================
+# Section 7: Empty prune list = no change
+# =============================================================================
+
+query I
+SELECT
+    (SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py')) =
+    (SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', prune := []));
+----
+true
+
+# =============================================================================
+# Section 8: prune + max_depth combined
+# =============================================================================
+
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', prune := ['syntax'], max_depth := 2)
+WHERE is_syntax_only(flags) OR depth > 2;
+----
+0
