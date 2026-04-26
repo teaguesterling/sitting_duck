@@ -4230,6 +4230,165 @@ CREATE OR REPLACE MACRO ast_callers(
     WHERE c.semantic_type = 'COMPUTATION_CALL'
       AND c.name IS NOT NULL AND c.name != ''
     ORDER BY c.file_path, c.start_line;
+
+
+-- =============================================================================
+-- ast_find_references: Find all uses of a symbol via scope-chain resolution
+-- =============================================================================
+--
+-- Given a target name, finds every reference and call site that resolves to
+-- a definition of that name through the scope chain. Handles shadowed names
+-- correctly: if two scopes define the same name, only references that resolve
+-- to the specific definition are returned.
+--
+-- Usage:
+--   SELECT * FROM ast_find_references('src/**/*.py', 'process');
+--   SELECT * FROM ast_find_references('src/main.py', 'x') WHERE ref_kind = 'call';
+--   SELECT * FROM ast_find_references('src/*.py', 'Service', language := 'python');
+
+CREATE OR REPLACE MACRO ast_find_references(
+    source,
+    target_name,
+    language := NULL
+) AS TABLE
+    WITH
+        ast AS (
+            SELECT * FROM read_ast(source, language)
+        ),
+        -- Target definitions: all definitions matching the name
+        target_defs AS (
+            SELECT
+                a.node_id AS def_node_id,
+                a.name,
+                a.type AS def_type,
+                a.file_path,
+                a.start_line AS def_line,
+                a.peek AS def_peek,
+                a.scope.current AS def_scope
+            FROM ast a
+            WHERE is_name_definition(a.flags)
+              AND a.name = target_name
+        ),
+        -- All identifier references to the target name with scope chain.
+        -- Excludes name-binding identifiers inside definition/declaration
+        -- nodes (e.g., the 'process' identifier inside 'def process():').
+        refs AS (
+            SELECT
+                a.node_id AS ref_node_id,
+                a.name AS ref_name,
+                a.type AS ref_type,
+                a.start_line AS ref_line,
+                a.file_path,
+                a.parent_id,
+                a.scope.current AS scope_current,
+                s.scope.stack AS scope_stack
+            FROM ast a
+            JOIN ast s ON s.node_id = a.scope.current AND s.file_path = a.file_path
+            LEFT JOIN ast p ON p.node_id = a.parent_id AND p.file_path = a.file_path
+            WHERE is_name_reference(a.flags)
+              AND a.name = target_name
+              AND s.scope.stack IS NOT NULL
+              AND NOT COALESCE(binds_name(p.flags), false)
+        ),
+        -- Unnest scope chain for each reference
+        search_scopes AS (
+            SELECT
+                r.ref_node_id, r.ref_name, r.ref_type, r.ref_line,
+                r.file_path, r.parent_id,
+                unnest(r.scope_stack).id AS search_scope_id,
+                generate_series(1, len(r.scope_stack)) AS scope_distance
+            FROM refs r
+        ),
+        -- Find which target definition each reference resolves to
+        candidates AS (
+            SELECT
+                ss.ref_node_id,
+                ss.ref_line,
+                ss.ref_type,
+                ss.file_path,
+                ss.parent_id,
+                ss.scope_distance,
+                td.def_node_id,
+                td.def_line
+            FROM search_scopes ss
+            JOIN ast d ON d.scope.current = ss.search_scope_id
+              AND d.file_path = ss.file_path
+              AND d.name = ss.ref_name
+              AND is_name_definition(d.flags)
+            JOIN target_defs td ON td.def_node_id = d.node_id
+              AND td.file_path = d.file_path
+        ),
+        -- Pick closest definition per reference (innermost scope)
+        resolved_refs AS (
+            SELECT DISTINCT ON (ref_node_id)
+                ref_node_id, ref_line, ref_type, file_path, parent_id,
+                def_node_id, def_line
+            FROM candidates
+            ORDER BY ref_node_id, scope_distance DESC
+        ),
+        -- Classify: if the ref's parent is a call node, this is a call site.
+        -- For calls, promote to the call node (type, line, peek).
+        -- For references, use the parent's peek for surrounding context.
+        classified_refs AS (
+            SELECT
+                rr.file_path,
+                target_name AS name,
+                CASE
+                    WHEN is_function_call(p.semantic_type) THEN 'call'
+                    ELSE 'reference'
+                END AS ref_kind,
+                COALESCE(
+                    CASE WHEN is_function_call(p.semantic_type) THEN p.type END,
+                    rr.ref_type
+                ) AS node_type,
+                COALESCE(
+                    CASE WHEN is_function_call(p.semantic_type) THEN p.start_line END,
+                    rr.ref_line
+                ) AS start_line,
+                COALESCE(p.peek, ref_node.peek) AS peek,
+                COALESCE(f.name, '<module>') AS scope_name,
+                rr.def_node_id,
+                rr.ref_node_id
+            FROM resolved_refs rr
+            LEFT JOIN ast p ON p.node_id = rr.parent_id AND p.file_path = rr.file_path
+            LEFT JOIN ast ref_node ON ref_node.node_id = rr.ref_node_id AND ref_node.file_path = rr.file_path
+            LEFT JOIN ast f ON f.node_id = ref_node.scope.function AND f.file_path = rr.file_path
+        ),
+        -- Definition sites
+        def_sites AS (
+            SELECT
+                td.file_path,
+                target_name AS name,
+                'definition' AS ref_kind,
+                td.def_type AS node_type,
+                td.def_line AS start_line,
+                td.def_peek AS peek,
+                COALESCE(f.name, '<module>') AS scope_name,
+                td.def_node_id
+            FROM target_defs td
+            LEFT JOIN ast d ON d.node_id = td.def_node_id AND d.file_path = td.file_path
+            LEFT JOIN ast f ON f.node_id = d.scope.function AND f.file_path = td.file_path
+        ),
+        combined AS (
+            SELECT file_path, name, ref_kind, node_type, start_line,
+                   peek, scope_name, def_node_id
+            FROM def_sites
+            UNION
+            SELECT file_path, name, ref_kind, node_type, start_line,
+                   peek, scope_name, def_node_id
+            FROM classified_refs
+        )
+    SELECT
+        file_path,
+        name,
+        ref_kind,
+        node_type,
+        start_line,
+        peek,
+        scope_name,
+        def_node_id
+    FROM combined
+    ORDER BY file_path, start_line, ref_kind;
 )SQLMACRO"},
 };
 
