@@ -74,7 +74,7 @@ static int ShouldPruneNode(const ASTNode &node, uint32_t ts_child_count,
 	for (auto &f : config.prune_type_filters) {
 		if ((node.semantic_type & f.mask) == f.value) {
 			uint8_t kind = node.semantic_type & 0xF0;
-			if (kind == SemanticTypes::LITERAL || kind == SemanticTypes::EXTERNAL) {
+			if (kind == SemanticTypes::LITERAL || kind == SemanticTypes::EXTERNAL || kind == SemanticTypes::TYPE) {
 				return 2; // subtree prune
 			}
 			return 1;
