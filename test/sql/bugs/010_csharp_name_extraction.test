@@ -1,0 +1,24 @@
+# name: test/sql/bugs/010_csharp_name_extraction.test
+# description: Bug #010 — C# method name extraction picks return type instead of method name
+# group: [bugs]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Methods with non-primitive return types should extract the method name, not the return type.
+# 'private async Task PrivateAsync()' should have name='PrivateAsync', not name='Task'
+# 'public async Task<string> FetchData(string url)' should have name='FetchData', not name='Task'
+
+query II
+SELECT name, type
+FROM read_ast('test/data/modifier_audit/async_functions.cs')
+WHERE type = 'method_declaration'
+ORDER BY start_line;
+----
+FetchData	method_declaration
+SyncHelper	method_declaration
+StaticHelper	method_declaration
+PrivateAsync	method_declaration
+VirtualMethod	method_declaration
