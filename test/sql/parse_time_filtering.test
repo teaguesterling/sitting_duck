@@ -1,0 +1,15 @@
+# name: test/sql/parse_time_filtering.test
+# description: Test parse-time filtering (max_depth and prune parameters)
+# group: [sitting_duck]
+
+require sitting_duck
+
+# =============================================================================
+# Section 1: Parameter validation
+# =============================================================================
+
+# Invalid prune policy name throws error
+statement error
+SELECT * FROM read_ast('test/data/python/sample_app.py', prune := ['invalid_policy']);
+----
+Unknown prune policy
