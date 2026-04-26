@@ -17,6 +17,7 @@ namespace duckdb {
 struct SemanticFilter {
 	uint8_t mask;
 	uint8_t value;
+	bool subtree; // true = prune node + all descendants; false = re-parent children
 };
 
 struct ExtractionConfig {

@@ -181,6 +181,58 @@ true
 # Section 10: prune reduces node count significantly
 # =============================================================================
 
+# =============================================================================
+# Section 10: Node prune re-parents children to grandparent
+# =============================================================================
+
+# When an unnamed non-leaf node is pruned, its children should appear
+# under the pruned node's parent. Verify by checking that every emitted
+# node's parent_id references another emitted node (no orphans).
+query I
+SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', prune := ['unnamed']) a
+WHERE a.parent_id >= 0
+  AND a.parent_id NOT IN (
+    SELECT node_id FROM read_ast('test/data/python/sample_app.py', prune := ['unnamed'])
+  );
+----
+0
+
+# Sibling indices remain contiguous after re-parenting
+query I
+SELECT COUNT(*) FROM (
+    SELECT parent_id, MAX(sibling_index) + 1 AS max_sib, COUNT(*) AS child_count
+    FROM read_ast('test/data/python/sample_app.py', prune := ['unnamed'])
+    WHERE parent_id >= 0
+    GROUP BY parent_id
+    HAVING max_sib != child_count
+);
+----
+0
+
+# descendant_count stays consistent after re-parenting
+query I
+SELECT COUNT(*) FROM (
+    WITH ast AS (SELECT * FROM read_ast('test/data/python/sample_app.py', prune := ['unnamed']))
+    SELECT a.node_id, a.descendant_count,
+           (SELECT COUNT(*) FROM ast b WHERE b.node_id > a.node_id AND b.node_id <= a.node_id + a.descendant_count) AS actual
+    FROM ast a
+    WHERE a.descendant_count != actual
+);
+----
+0
+
+# Unnamed prune should actually remove nodes (unnamed nodes exist in this file)
+query I
+SELECT
+    (SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py')) >
+    (SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', prune := ['unnamed']));
+----
+true
+
+# =============================================================================
+# Section 11: prune reduces node count significantly
+# =============================================================================
+
 # Syntax nodes are typically 30-60% of all nodes
 query I
 SELECT

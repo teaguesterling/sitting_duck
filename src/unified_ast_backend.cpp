@@ -2002,15 +2002,15 @@ void CompilePrunePolicy(const string &policy_name, ExtractionConfig &config) {
 	if (policy_name == "syntax") {
 		config.prune_flag_mask |= ASTNodeFlags::IS_SYNTAX_ONLY;
 	} else if (policy_name == "comments") {
-		config.prune_type_filters.push_back({0xFC, SemanticTypes::METADATA_COMMENT});
+		config.prune_type_filters.push_back({0xFC, SemanticTypes::METADATA_COMMENT, false});
 	} else if (policy_name == "literals") {
-		config.prune_type_filters.push_back({0xF0, SemanticTypes::LITERAL});
+		config.prune_type_filters.push_back({0xF0, SemanticTypes::LITERAL, true});
 	} else if (policy_name == "imports") {
-		config.prune_type_filters.push_back({0xF0, SemanticTypes::EXTERNAL});
+		config.prune_type_filters.push_back({0xF0, SemanticTypes::EXTERNAL, true});
 	} else if (policy_name == "types") {
-		config.prune_type_filters.push_back({0xF0, SemanticTypes::TYPE});
+		config.prune_type_filters.push_back({0xF0, SemanticTypes::TYPE, true});
 	} else if (policy_name == "punctuation") {
-		config.prune_type_filters.push_back({0xFC, SemanticTypes::PARSER_PUNCTUATION});
+		config.prune_type_filters.push_back({0xFC, SemanticTypes::PARSER_PUNCTUATION, false});
 	} else if (policy_name == "unnamed") {
 		config.prune_unnamed = true;
 	} else if (policy_name == "leaves") {
