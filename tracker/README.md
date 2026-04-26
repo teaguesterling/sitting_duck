@@ -74,7 +74,8 @@ Covers all languages, pattern matching, semantic types, edge cases, and regressi
 - #023 Unified function architecture (Phase 1)
 
 ### Open / Planned (by priority)
-- **P1**: ast_get_source with context (#013), parse-time filtering (#014), parent chain (#015), find references (#016), get calls (#017)
+- **P1**: ast_get_source with context (#013), parse-time filtering (#014), parent chain (#015)
+- **P1 Done**: find references (#016), get calls (#017)
 - **P2**: Native tree-sitter query API (#028), pattern by example (#029), pattern matching C++ (#030), columnar AST (#012-columnar)
 - **P2**: Taxonomy exposure audit (#020), concise CLI syntax (#022), standardized extraction API (#026)
 - **P3**: Native AST type (#011), AI agent UX (#010), performance caching, AST diff analysis

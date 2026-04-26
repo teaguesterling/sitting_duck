@@ -28,7 +28,7 @@ Based on peer review feedback, Phase 2 should focus on performance optimization 
 - [x] `ast_definitions()` — list all functions/classes/variables
 - [x] `ast_function_metrics()` — complexity metrics
 - [x] `ast_source_of()` — find and extract function source
-- [ ] `code_find_callers()` - Find function callers — tracked as #017
+- [x] `ast_get_calls()` / `ast_call_graph()` — call extraction with type classification (#017)
 - [ ] `code_find_implementations()` - Find interface implementations
 - [x] `ast_nesting_analysis()` — nesting complexity
 

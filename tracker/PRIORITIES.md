@@ -1,6 +1,6 @@
 # DuckDB AST Extension - Development Priorities
 
-**Last Updated:** 2026-04-25
+**Last Updated:** 2026-04-26
 
 ## Priority Levels
 
@@ -11,7 +11,9 @@
 
 ## Current Status
 
-### Completed (since last update on 2026-04-25)
+### Completed (since last update on 2026-04-26)
+- `ast_find_references()` with scope-chain resolution (#016) — finds all definition/reference/call sites for a symbol, resolves through scope chain, tested across Python, JS, Rust, Go (200 assertions)
+- `ast_get_calls()` and `ast_call_graph()` (#017) — scope-aware call extraction with call-type classification (function/method/constructor/macro), O(1) caller attribution via scope.function, tested across Python, JS, Rust, Go (392 assertions)
 - Async/modifier extraction across all 8 languages (PR #69) — `list_contains(modifiers, 'async')` now works for Python, JS, TS, Rust, Kotlin, Swift, Dart, C#
 - `ast_imports`/`ast_exports` correctness for cross-file resolution (PR #68) — IS_EXPORTED flag gated to name-binding nodes, import dedup, 5-language adapter fixes
 - IS_EXPORTED flag for file-level visibility (PR #65) — scope-aware export detection
@@ -44,7 +46,7 @@
 - 87 test files covering all languages and features
 - Bugs #001-005, #007-013 all fixed
 - IS_SYNTAX_ONLY flags, punctuation consistency, comparison type fixes
-- 104 test files, 5457 assertions
+- 106 test files, 6049 assertions
 
 ### Stalled
 - #023 Unified function architecture — no activity since January 2026, deprioritized
@@ -59,14 +61,6 @@
 1. **[FEATURE] Parse-Time Filtering** (#014)
    - Add `only_types`, `max_depth` parameters to read_ast
    - Essential for large codebases, 5-50x memory reduction
-
-2. **[FEATURE] ast_find_references()** (#016)
-   - Find all uses of a variable/function within scope
-   - Core navigation feature
-
-3. **[FEATURE] ast_get_calls()** (#017)
-   - Extract function/method calls within a node
-   - Essential for call graph analysis
 
 ### P2 - Pattern Matching Evolution
 1. **[FEATURE] Native Tree-sitter Query API** (#028)

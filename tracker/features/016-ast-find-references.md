@@ -2,96 +2,58 @@
 
 **Source**: Peer Review Feedback
 **Priority**: P1 (High - Core navigation feature)
-**Status**: Design Phase
+**Status**: Complete
 
 ## Overview
 
-Find all references to a name within a given scope. Essential for understanding code dependencies and refactoring.
+Find all references to a named symbol within a file, using scope-chain resolution to correctly associate references with their definitions.
 
-## API Design
-
-```sql
--- Function signatures
-ast_find_references(name, scope_id := NULL) → TABLE(node_id, type, line, context)
-ast_find_references(nodes, name, scope_id := NULL) → JSON[]
-
--- Macro version
-.find_references(name, scope_id := NULL)
-```
-
-## Usage Examples
+## Implemented API
 
 ```sql
--- Find all calls to a function
-SELECT * FROM ast_find_references('calculate_tax', NULL)
-FROM read_ast_objects('billing/*.py', 'python');
+-- Find all definitions, references, and call sites for 'process'
+SELECT ref_kind, node_type, start_line, scope_name, peek
+FROM ast_find_references('src/main.py', 'process')
+ORDER BY start_line;
 
--- Find references within a specific class
-WITH class_scope AS (
-    SELECT node_id 
-    FROM read_ast_objects('models.py', 'python')
-    WHERE type = 'class_definition' AND name = 'Order'
-)
-SELECT * FROM ast_find_references('total_amount', class_scope.node_id)
-FROM read_ast_objects('models.py', 'python'), class_scope;
+-- Filter to just call sites
+SELECT start_line, scope_name, peek
+FROM ast_find_references('src/**/*.rs', 'helper')
+WHERE ref_kind = 'call';
 
--- Chain syntax
-SELECT ast(nodes)
-    .find_references('user_id')
-    .get_source(1) as usage_contexts
-FROM read_ast_objects('api.py', 'python');
+-- Count references per kind
+SELECT ref_kind, COUNT(*)
+FROM ast_find_references('src/app.js', 'Service')
+GROUP BY ref_kind;
 ```
 
-## Implementation Challenges
+## Output Columns
 
-1. **Name Resolution**: Same name can refer to different things in different scopes
-2. **Language Specific**: Each language has different scoping rules
-3. **Performance**: Need efficient scope-aware search
+| Column | Type | Description |
+|--------|------|-------------|
+| file_path | VARCHAR | Source file path |
+| name | VARCHAR | Symbol name |
+| ref_kind | VARCHAR | `definition`, `reference`, or `call` |
+| node_type | VARCHAR | Tree-sitter node type (e.g., `function_item`, `identifier`) |
+| start_line | UINTEGER | Line number |
+| peek | VARCHAR | Source context |
+| scope_name | VARCHAR | Containing scope name (or `<module>`) |
+| def_node_id | BIGINT | Node ID of the resolved definition |
 
-## Implementation Strategy
+## Implementation
 
-### Phase 1: Simple Text Matching
-```sql
--- Basic implementation: find by name match
-CREATE FUNCTION ast_find_references_simple(
-    nodes JSON,
-    target_name VARCHAR,
-    scope_id INTEGER DEFAULT NULL
-) AS (
-    SELECT node
-    FROM json_array_elements(nodes) as node
-    WHERE node->>'name' = target_name
-      AND node->>'type' IN ('identifier', 'variable_reference', 'function_call')
-      AND (scope_id IS NULL OR is_within_scope(node, scope_id))
-);
-```
+- **Location**: `src/sql_macros/scope_resolution.sql`
+- **Signature**: `ast_find_references(source, target_name, language := NULL)`
+- **Approach**: Inlines the `ast_resolve` pattern filtered to a target name
+  - Finds all `is_name_definition` nodes matching the target
+  - Finds all `is_name_reference` nodes matching the target (excluding `binds_name` identifiers)
+  - Walks scope chains via `scope.stack` to resolve each reference to its innermost definition
+  - Promotes references whose parent is a call node to `ref_kind = 'call'`
+  - UNIONs definition sites with resolved reference sites
 
-### Phase 2: Scope-Aware Search
-- Track variable definitions and their scopes
-- Resolve names based on language scoping rules
-- Handle imports and qualified names
+## Test Coverage
 
-### Phase 3: Smart References
-- Understand method calls vs function calls
-- Handle renamed imports
-- Track type information where available
-
-## Benefits
-
-- **Navigation**: Jump to all uses of a variable/function
-- **Refactoring**: Find what needs updating
-- **Understanding**: See how code is used
-- **Analysis**: Identify unused code
-
-## Related Features
-
-- Works with `ast_get_parent_chain()` for scope analysis
-- Combines with `ast_get_source()` to show usage context
-- Enhanced by annotation system for better accuracy
-
-## Next Steps
-
-1. Implement basic name matching
-2. Add scope containment checking  
-3. Create language-specific refinements
-4. Consider semantic analysis integration
+- **Test file**: `test/sql/scope_resolution/find_references.test`
+- **Assertions**: 200 across Python, JavaScript, Rust, Go
+- **Fixtures**: `test/data/find_references/refs.{py,js,rs,go}`
+- **Scenarios**: Function refs, class/struct refs, variable shadowing, method refs, constructor calls, filtering patterns, empty results, def_node_id disambiguation
