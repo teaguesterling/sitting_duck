@@ -54,8 +54,8 @@ FROM read_ast('test/data/python/simple.py', 'python',
 ORDER BY node_id
 LIMIT 2;
 ----
-(empty)	1	0	4
-hello	1	0	5
+(empty)	1	1	4
+hello	1	1	5
 
 # Test 4: Removed read_ast_hierarchical (deprecated)
 

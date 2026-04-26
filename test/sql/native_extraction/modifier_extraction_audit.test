@@ -164,9 +164,6 @@ asyncMethod	[async]
 # C#: public, async, static, private, virtual modifier extraction
 # =============================================================================
 
-# NOTE: C# name extraction has a known issue where 'private async Task PrivateAsync()'
-# extracts name='Task' (the return type) instead of 'PrivateAsync'. This is a
-# pre-existing FIND_IDENTIFIER name extraction bug, not a modifier extraction issue.
 query TT
 SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.cs', context := 'native')
 WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''
@@ -175,5 +172,5 @@ ORDER BY start_line;
 FetchData	[public, async]
 SyncHelper	[public]
 StaticHelper	[public, static]
-Task	[private, async]
+PrivateAsync	[private, async]
 VirtualMethod	[protected, virtual]

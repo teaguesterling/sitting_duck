@@ -18,3 +18,6 @@ package-lock.json
 # IDE tools
 /.lq/
 /.mcp.json
+
+# Claude Code agent worktrees
+/.claude/

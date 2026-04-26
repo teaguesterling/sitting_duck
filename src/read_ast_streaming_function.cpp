@@ -398,13 +398,9 @@ static void ReadASTFlatStreamingFunction(ClientContext &context, TableFunctionIn
 			content.resize(file_size);
 			fs.Read(*file_handle, (void *)content.data(), file_size);
 
-			// Parse using cached adapter's parsing function
-			auto parsing_fn = adapter->GetParsingFunction();
+			// Parse using unified backend with full ExtractionConfig (supports max_depth, prune)
 			auto &config = global_state.extraction_config;
-			string peek_mode_str = config.peek == PeekLevel::NONE   ? "none"
-			                       : config.peek == PeekLevel::FULL ? "full"
-			                                                        : "smart";
-			ASTResult result = parsing_fn(adapter, content, file_language, file_path, config.peek_size, peek_mode_str);
+			ASTResult result = UnifiedASTBackend::ParseToASTResult(content, file_language, file_path, config);
 
 			local_state.current_result = make_uniq<ASTResult>(std::move(result));
 			local_state.current_row_idx = 0;
@@ -604,12 +600,9 @@ static void ReadASTHierarchicalFunction(ClientContext &context, TableFunctionInp
 			content.resize(file_size);
 			fs.Read(*file_handle, (void *)content.data(), file_size);
 
-			auto parsing_fn = adapter->GetParsingFunction();
+			// Parse using unified backend with full ExtractionConfig (supports max_depth, prune)
 			auto &config = global_state.extraction_config;
-			string peek_mode_str = config.peek == PeekLevel::NONE   ? "none"
-			                       : config.peek == PeekLevel::FULL ? "full"
-			                                                        : "smart";
-			ASTResult result = parsing_fn(adapter, content, file_language, file_path, config.peek_size, peek_mode_str);
+			ASTResult result = UnifiedASTBackend::ParseToASTResult(content, file_language, file_path, config);
 
 			local_state.current_result = make_uniq<ASTResult>(std::move(result));
 			local_state.current_row_idx = 0;
