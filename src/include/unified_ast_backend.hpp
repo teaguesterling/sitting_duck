@@ -14,6 +14,12 @@ namespace duckdb {
 // Extraction Configuration System
 //==============================================================================
 
+struct SemanticFilter {
+	uint8_t mask;
+	uint8_t value;
+	bool subtree; // true = prune node + all descendants; false = re-parent children
+};
+
 struct ExtractionConfig {
 	ContextLevel context = ContextLevel::NATIVE; // Default to native for backward compatibility
 	SourceLevel source = SourceLevel::LINES;
@@ -21,6 +27,15 @@ struct ExtractionConfig {
 	PeekLevel peek = PeekLevel::SMART;
 	int32_t peek_size = 120;          // Used when peek == CUSTOM
 	bool include_full_schema = false; // When true, schema includes all columns regardless of level settings
+
+	// Parse-time filtering (#014)
+	int32_t max_depth = -1;                     // -1 = unlimited
+	uint8_t prune_flag_mask = 0;                // prune if (flags & mask) != 0
+	vector<SemanticFilter> prune_type_filters;  // prune if (type & f.mask) == f.value
+	bool prune_unnamed = false;
+	bool prune_leaves = false;
+	bool prune_internal = false;
+	bool has_prune = false;
 
 	// Get a schema-level config: if include_full_schema, return max levels for schema generation
 	ExtractionConfig GetSchemaConfig() const {
@@ -59,6 +74,7 @@ struct ExtractionConfig {
 // Parse extraction config from SQL parameters
 ExtractionConfig ParseExtractionConfig(const string &context_str, const string &source_str, const string &structure_str,
                                        const string &peek_str, int32_t peek_size = 120);
+void CompilePrunePolicy(const string &policy_name, ExtractionConfig &config);
 
 // Result structure for unified parsing backend
 struct ASTSource {

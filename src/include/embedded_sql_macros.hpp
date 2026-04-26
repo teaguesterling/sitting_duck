@@ -1124,6 +1124,107 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
         dc.reason
     FROM dead_code dc
     ORDER BY dc.file_path, dc.start_line;
+
+-- =============================================================================
+-- Call Extraction
+-- =============================================================================
+
+-- Extract all function/method calls from source code
+-- Returns one row per call site with the containing function (caller) identified.
+-- Uses scope-aware attribution: nested function calls belong to the inner function.
+-- Usage: SELECT * FROM ast_get_calls('src/**/*.py')
+-- Usage: SELECT * FROM ast_get_calls('src/main.py') WHERE call_type = 'method'
+-- See also: ast_callees/ast_callers in scope_resolution.sql for simpler
+-- caller/callee pairs without call-type classification.
+CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
+    WITH
+        ast AS (
+            SELECT * FROM read_ast(source, language)
+        ),
+        calls AS (
+            SELECT
+                a.node_id,
+                a.name,
+                a.type,
+                a.peek,
+                a.file_path,
+                a.language,
+                a.start_line,
+                a.scope.function AS scope_function
+            FROM ast a
+            WHERE is_function_call(a.semantic_type)
+              AND a.name IS NOT NULL AND a.name != ''
+        ),
+        call_targets AS (
+            SELECT
+                c.node_id AS call_id,
+                child.type AS target_type
+            FROM calls c
+            JOIN ast child
+              ON child.parent_id = c.node_id
+             AND child.sibling_index = 0
+        ),
+        calls_with_caller AS (
+            SELECT
+                c.node_id,
+                c.name AS called_name,
+                c.type AS call_node_type,
+                c.peek,
+                c.file_path,
+                c.language,
+                c.start_line,
+                ct.target_type,
+                f.node_id AS caller_node_id,
+                f.name AS caller_name
+            FROM calls c
+            LEFT JOIN call_targets ct ON ct.call_id = c.node_id
+            LEFT JOIN ast f
+              ON f.node_id = c.scope_function
+             AND f.file_path = c.file_path
+        )
+    SELECT
+        cwc.file_path,
+        COALESCE(cwc.caller_name, '<module>') AS caller_name,
+        cwc.called_name,
+        cwc.peek AS call_expression,
+        CASE
+            WHEN cwc.call_node_type IN ('new_expression', 'object_creation_expression',
+                                         'constructor_invocation', 'init_expression',
+                                         'composite_literal', 'struct_expression')
+                THEN 'constructor'
+            WHEN cwc.call_node_type IN ('macro_invocation')
+                THEN 'macro'
+            WHEN cwc.target_type IN ('attribute', 'member_expression',
+                                      'field_expression', 'selector_expression',
+                                      'navigation_expression', 'field_access')
+                THEN 'method'
+            ELSE 'function'
+        END AS call_type,
+        cwc.language,
+        cwc.start_line,
+        cwc.node_id,
+        cwc.caller_node_id
+    FROM calls_with_caller cwc
+    ORDER BY cwc.file_path, cwc.start_line;
+
+-- Build a call graph from source code
+-- Returns aggregated caller→callee pairs with call counts.
+-- Usage: SELECT * FROM ast_call_graph('src/**/*.py') ORDER BY call_count DESC
+-- Usage: SELECT * FROM ast_call_graph('src/**/*.py') WHERE caller = 'main'
+CREATE OR REPLACE MACRO ast_call_graph(source, language := NULL) AS TABLE
+    WITH
+        raw_calls AS (
+            SELECT * FROM ast_get_calls(source, language)
+        )
+    SELECT
+        rc.file_path,
+        rc.caller_name AS caller,
+        rc.called_name AS callee,
+        rc.call_type,
+        COUNT(*) AS call_count
+    FROM raw_calls rc
+    GROUP BY rc.file_path, rc.caller_name, rc.called_name, rc.call_type
+    ORDER BY rc.file_path, rc.caller_name, rc.called_name;
 )SQLMACRO"},
     {"pattern_matching.sql", R"SQLMACRO(
 -- =============================================================================
@@ -4043,6 +4144,9 @@ CREATE OR REPLACE MACRO ast_resolve(
 -- For each function definition, finds all call expressions within its scope.
 -- Returns (caller_name, caller_line, callee_name, callee_line) pairs.
 --
+-- See also: ast_get_calls/ast_call_graph in tree_navigation.sql for richer
+-- call extraction with call-type classification (function/method/constructor/macro).
+--
 -- Usage:
 --   SELECT * FROM ast_callees('src/**/*.py');
 --   SELECT caller, callee FROM ast_callees('src/*.py') WHERE caller = 'main';
@@ -4055,14 +4159,14 @@ CREATE OR REPLACE MACRO ast_callees(
     -- enclosing function — precomputed at parse time. So "find calls inside
     -- function F" collapses from an O(calls x funcs) range join into a
     -- simple hash join on scope.function. The range-join version this
+
+)SQLMACRO"
+        R"SQLMACRO(
     -- replaces took up to 20 seconds on DuckDB's own source tree; this
     -- runs in under a second.
     WITH ast AS (
         SELECT * FROM read_ast(source, language)
     )
-
-)SQLMACRO"
-        R"SQLMACRO(
     SELECT f.name         AS caller,
            f.qualified_name AS caller_qualified,
            f.start_line   AS caller_line,
@@ -4115,6 +4219,165 @@ CREATE OR REPLACE MACRO ast_callers(
     WHERE c.semantic_type = 'COMPUTATION_CALL'
       AND c.name IS NOT NULL AND c.name != ''
     ORDER BY c.file_path, c.start_line;
+
+
+-- =============================================================================
+-- ast_find_references: Find all uses of a symbol via scope-chain resolution
+-- =============================================================================
+--
+-- Given a target name, finds every reference and call site that resolves to
+-- a definition of that name through the scope chain. Handles shadowed names
+-- correctly: if two scopes define the same name, only references that resolve
+-- to the specific definition are returned.
+--
+-- Usage:
+--   SELECT * FROM ast_find_references('src/**/*.py', 'process');
+--   SELECT * FROM ast_find_references('src/main.py', 'x') WHERE ref_kind = 'call';
+--   SELECT * FROM ast_find_references('src/*.py', 'Service', language := 'python');
+
+CREATE OR REPLACE MACRO ast_find_references(
+    source,
+    target_name,
+    language := NULL
+) AS TABLE
+    WITH
+        ast AS (
+            SELECT * FROM read_ast(source, language)
+        ),
+        -- Target definitions: all definitions matching the name
+        target_defs AS (
+            SELECT
+                a.node_id AS def_node_id,
+                a.name,
+                a.type AS def_type,
+                a.file_path,
+                a.start_line AS def_line,
+                a.peek AS def_peek,
+                a.scope.current AS def_scope
+            FROM ast a
+            WHERE is_name_definition(a.flags)
+              AND a.name = target_name
+        ),
+        -- All identifier references to the target name with scope chain.
+        -- Excludes name-binding identifiers inside definition/declaration
+        -- nodes (e.g., the 'process' identifier inside 'def process():').
+        refs AS (
+            SELECT
+                a.node_id AS ref_node_id,
+                a.name AS ref_name,
+                a.type AS ref_type,
+                a.start_line AS ref_line,
+                a.file_path,
+                a.parent_id,
+                a.scope.current AS scope_current,
+                s.scope.stack AS scope_stack
+            FROM ast a
+            JOIN ast s ON s.node_id = a.scope.current AND s.file_path = a.file_path
+            LEFT JOIN ast p ON p.node_id = a.parent_id AND p.file_path = a.file_path
+            WHERE is_name_reference(a.flags)
+              AND a.name = target_name
+              AND s.scope.stack IS NOT NULL
+              AND NOT COALESCE(binds_name(p.flags), false)
+        ),
+        -- Unnest scope chain for each reference
+        search_scopes AS (
+            SELECT
+                r.ref_node_id, r.ref_name, r.ref_type, r.ref_line,
+                r.file_path, r.parent_id,
+                unnest(r.scope_stack).id AS search_scope_id,
+                generate_series(1, len(r.scope_stack)) AS scope_distance
+            FROM refs r
+        ),
+        -- Find which target definition each reference resolves to
+        candidates AS (
+            SELECT
+                ss.ref_node_id,
+                ss.ref_line,
+                ss.ref_type,
+                ss.file_path,
+                ss.parent_id,
+                ss.scope_distance,
+                td.def_node_id,
+                td.def_line
+            FROM search_scopes ss
+            JOIN ast d ON d.scope.current = ss.search_scope_id
+              AND d.file_path = ss.file_path
+              AND d.name = ss.ref_name
+              AND is_name_definition(d.flags)
+            JOIN target_defs td ON td.def_node_id = d.node_id
+              AND td.file_path = d.file_path
+        ),
+        -- Pick closest definition per reference (innermost scope)
+        resolved_refs AS (
+            SELECT DISTINCT ON (ref_node_id)
+                ref_node_id, ref_line, ref_type, file_path, parent_id,
+                def_node_id, def_line
+            FROM candidates
+            ORDER BY ref_node_id, scope_distance DESC
+        ),
+        -- Classify: if the ref's parent is a call node, this is a call site.
+        -- For calls, promote to the call node (type, line, peek).
+        -- For references, use the parent's peek for surrounding context.
+        classified_refs AS (
+            SELECT
+                rr.file_path,
+                target_name AS name,
+                CASE
+                    WHEN is_function_call(p.semantic_type) THEN 'call'
+                    ELSE 'reference'
+                END AS ref_kind,
+                COALESCE(
+                    CASE WHEN is_function_call(p.semantic_type) THEN p.type END,
+                    rr.ref_type
+                ) AS node_type,
+                COALESCE(
+                    CASE WHEN is_function_call(p.semantic_type) THEN p.start_line END,
+                    rr.ref_line
+                ) AS start_line,
+                COALESCE(p.peek, ref_node.peek) AS peek,
+                COALESCE(f.name, '<module>') AS scope_name,
+                rr.def_node_id,
+                rr.ref_node_id
+            FROM resolved_refs rr
+            LEFT JOIN ast p ON p.node_id = rr.parent_id AND p.file_path = rr.file_path
+            LEFT JOIN ast ref_node ON ref_node.node_id = rr.ref_node_id AND ref_node.file_path = rr.file_path
+            LEFT JOIN ast f ON f.node_id = ref_node.scope.function AND f.file_path = rr.file_path
+        ),
+        -- Definition sites
+        def_sites AS (
+            SELECT
+                td.file_path,
+                target_name AS name,
+                'definition' AS ref_kind,
+                td.def_type AS node_type,
+                td.def_line AS start_line,
+                td.def_peek AS peek,
+                COALESCE(f.name, '<module>') AS scope_name,
+                td.def_node_id
+            FROM target_defs td
+            LEFT JOIN ast d ON d.node_id = td.def_node_id AND d.file_path = td.file_path
+            LEFT JOIN ast f ON f.node_id = d.scope.function AND f.file_path = td.file_path
+        ),
+        combined AS (
+            SELECT file_path, name, ref_kind, node_type, start_line,
+                   peek, scope_name, def_node_id
+            FROM def_sites
+            UNION
+            SELECT file_path, name, ref_kind, node_type, start_line,
+                   peek, scope_name, def_node_id
+            FROM classified_refs
+        )
+    SELECT
+        file_path,
+        name,
+        ref_kind,
+        node_type,
+        start_line,
+        peek,
+        scope_name,
+        def_node_id
+    FROM combined
+    ORDER BY file_path, start_line, ref_kind;
 )SQLMACRO"},
 };
 

@@ -1,0 +1,287 @@
+# name: test/sql/scope_resolution/find_references.test
+# group: [sitting_duck]
+
+# Test ast_find_references() — scope-aware reference finding
+
+require sitting_duck
+
+# =============================================================================
+# Section 1: Python — basic function references
+# =============================================================================
+
+# Definition + call sites for 'process'
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.py', 'process')
+ORDER BY start_line;
+----
+definition	function_definition	3	<module>
+call	call	9	transform
+call	call	21	run
+
+# 'transform' — defined but never called in this file
+query III
+SELECT ref_kind, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.py', 'transform')
+ORDER BY start_line;
+----
+definition	7	<module>
+
+# =============================================================================
+# Section 2: Python — class references
+# =============================================================================
+
+# Class definition + constructor call
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.py', 'Service')
+ORDER BY start_line;
+----
+definition	class_definition	12	<module>
+call	call	24	main
+
+# =============================================================================
+# Section 3: Python — variable references with shadowing
+# =============================================================================
+
+# 'x' has definitions at module level and inside transform
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.py', 'x')
+ORDER BY start_line;
+----
+definition	assignment	1	<module>
+reference	identifier	3	process
+reference	identifier	4	process
+definition	assignment	8	transform
+reference	identifier	9	transform
+
+# 'result' — local variable in two different scopes
+query III
+SELECT ref_kind, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.py', 'result')
+ORDER BY start_line;
+----
+definition	9	transform
+reference	10	transform
+definition	25	main
+reference	26	main
+
+# =============================================================================
+# Section 4: Python — larger file (sample_app.py)
+# =============================================================================
+
+# validate_email: definition + single call in main
+query III
+SELECT ref_kind, start_line, scope_name
+FROM ast_find_references('test/data/python/sample_app.py', 'validate_email')
+ORDER BY start_line;
+----
+definition	122	<module>
+call	156	main
+
+# process_file: definition + single call in main
+query III
+SELECT ref_kind, start_line, scope_name
+FROM ast_find_references('test/data/python/sample_app.py', 'process_file')
+ORDER BY start_line;
+----
+definition	100	<module>
+call	157	main
+
+# Config: class definition + usage in main
+query III
+SELECT ref_kind, start_line, scope_name
+FROM ast_find_references('test/data/python/sample_app.py', 'Config')
+ORDER BY start_line;
+----
+definition	10	<module>
+call	146	main
+
+# =============================================================================
+# Section 5: JavaScript — function and constructor references
+# =============================================================================
+
+# 'process' in JS
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.js', 'process')
+ORDER BY start_line;
+----
+definition	function_declaration	7	<module>
+call	call_expression	24	run
+
+# 'helper' in JS
+query III
+SELECT ref_kind, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.js', 'helper')
+ORDER BY start_line;
+----
+definition	3	<module>
+call	8	process
+
+# 'Service' class in JS
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.js', 'Service')
+ORDER BY start_line;
+----
+definition	class_declaration	13	<module>
+call	new_expression	28	<module>
+
+# =============================================================================
+# Section 6: Filtering patterns — common use cases
+# =============================================================================
+
+# Only call sites (exclude definition)
+query II
+SELECT start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.py', 'process')
+WHERE ref_kind = 'call';
+----
+9	transform
+21	run
+
+# Only definitions
+query II
+SELECT start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.py', 'x')
+WHERE ref_kind = 'definition';
+----
+1	<module>
+8	transform
+
+# Count references per symbol
+query II
+SELECT ref_kind, COUNT(*)
+FROM ast_find_references('test/data/find_references/refs.py', 'x')
+GROUP BY ref_kind
+ORDER BY ref_kind;
+----
+definition	2
+reference	3
+
+# =============================================================================
+# Section 7: No references found
+# =============================================================================
+
+# Nonexistent symbol returns empty
+query I
+SELECT COUNT(*)
+FROM ast_find_references('test/data/find_references/refs.py', 'nonexistent');
+----
+0
+
+# =============================================================================
+# Section 8: def_node_id output — for disambiguating same-name definitions
+# =============================================================================
+
+# Both 'x' definitions have different def_node_ids
+query II
+SELECT DISTINCT def_node_id, start_line
+FROM ast_find_references('test/data/find_references/refs.py', 'x')
+WHERE ref_kind = 'definition'
+ORDER BY start_line;
+----
+2	1
+36	8
+
+# =============================================================================
+# Section 9: Rust — function and struct references
+# =============================================================================
+
+# 'helper' — definition + call site
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.rs', 'helper')
+ORDER BY start_line;
+----
+definition	function_item	1	<module>
+call	call_expression	7	process
+
+# 'process' — definition + call from method
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.rs', 'process')
+ORDER BY start_line;
+----
+definition	function_item	5	<module>
+call	call_expression	30	run
+
+# 'transform' — definition + call
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.rs', 'transform')
+ORDER BY start_line;
+----
+call	call_expression	6	process
+definition	function_item	11	<module>
+
+# 'Service' — struct def, impl def, type refs
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.rs', 'Service')
+ORDER BY start_line;
+----
+definition	struct_item	15	<module>
+definition	impl_item	19	<module>
+reference	type_identifier	21	new
+reference	identifier	35	main
+
+# 'fetch' — method definition + method call (field_identifier)
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.rs', 'fetch')
+ORDER BY start_line;
+----
+definition	function_item	24	<module>
+reference	field_identifier	29	run
+
+# =============================================================================
+# Section 10: Go — function and method references
+# =============================================================================
+
+# 'helper' — definition + call
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.go', 'helper')
+ORDER BY start_line;
+----
+definition	function_declaration	5	<module>
+call	call_expression	11	process
+
+# 'process' — definition + call from method
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.go', 'process')
+ORDER BY start_line;
+----
+definition	function_declaration	9	<module>
+call	call_expression	33	Run
+
+# 'transform' — definition + call
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.go', 'transform')
+ORDER BY start_line;
+----
+call	call_expression	10	process
+definition	function_declaration	15	<module>
+
+# 'NewService' — definition + constructor call
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.go', 'NewService')
+ORDER BY start_line;
+----
+definition	function_declaration	23	<module>
+call	call_expression	37	main
+
+# 'Fetch' — method definition + method reference (field_identifier)
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.go', 'Fetch')
+ORDER BY start_line;
+----
+definition	method_declaration	27	<module>
+reference	field_identifier	32	Run

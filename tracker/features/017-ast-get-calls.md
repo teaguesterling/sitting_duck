@@ -1,132 +1,73 @@
-# ast_get_calls() - Extract Function Calls
+# ast_get_calls() / ast_call_graph() - Call Extraction
 
 **Source**: Peer Review Feedback
 **Priority**: P1 (High - Essential for dependency analysis)
-**Status**: Ready for Implementation
+**Status**: Complete
 
 ## Overview
 
-Find all function/method calls within a node (usually a function). Critical for understanding dependencies and call graphs.
+Extract function/method calls from source files with call-type classification and scope-aware caller attribution. Build caller→callee call graphs.
 
-## API Design
-
-```sql
--- Function signature  
-ast_get_calls(node_id) → TABLE(called_name, call_type, line, arguments)
-ast_get_calls(nodes) → JSON[]
-
--- Macro version
-.get_calls()
-```
-
-## Usage Examples
+## Implemented API
 
 ```sql
--- Find what functions are called by each function
-SELECT 
-    f.name as function_name,
-    c.called_name,
-    COUNT(*) as call_count
-FROM read_ast_objects('service.py', 'python') f,
-     LATERAL ast_get_calls(f.node_id) c
-WHERE f.type = 'function_definition'
-GROUP BY f.name, c.called_name;
+-- All calls in a file with caller attribution and call type
+SELECT caller_name, called_name, call_type, call_expression, start_line
+FROM ast_get_calls('src/main.py');
 
--- Find external dependencies
-SELECT DISTINCT called_name
-FROM read_ast_objects('module.py', 'python'),
-     LATERAL ast_get_calls(node_id)
-WHERE call_type = 'external'
-ORDER BY called_name;
+-- Only method calls
+SELECT * FROM ast_get_calls('src/**/*.rs')
+WHERE call_type = 'method';
 
--- Chain syntax for complexity analysis
-SELECT ast(nodes)
-    .filter_type(['function_definition'])
-    .with_annotations('calls')
-    .filter_by_annotation('calls.count', '> 10') as complex_functions
-FROM read_ast_objects('app.py', 'python');
+-- Aggregated call graph
+SELECT caller, callee, call_type, call_count
+FROM ast_call_graph('src/service.go');
 ```
 
-## Implementation Strategy
+## ast_get_calls Output Columns
 
-### Direct Implementation
-```sql
-CREATE FUNCTION ast_get_calls_impl(nodes JSON, node_id INTEGER) AS (
-    -- Find all call expressions within the subtree
-    WITH RECURSIVE subtree AS (
-        SELECT node FROM json_array_elements(nodes) node
-        WHERE node->>'id' = node_id::VARCHAR
-        
-        UNION ALL
-        
-        SELECT child.node
-        FROM subtree s,
-             json_array_elements(nodes) child(node)
-        WHERE child.node->>'parent_id' = s.node->>'id'
-    )
-    SELECT 
-        node->>'name' as called_name,
-        node->>'type' as call_type,
-        node->'position'->>'start_row' as line
-    FROM subtree
-    WHERE node->>'normalized_type' = 'function_call'
-);
-```
+| Column | Type | Description |
+|--------|------|-------------|
+| file_path | VARCHAR | Source file path |
+| caller_name | VARCHAR | Containing function name (or `<module>`) |
+| called_name | VARCHAR | Name of the called function/method |
+| call_expression | VARCHAR | Full call expression (peek) |
+| call_type | VARCHAR | `function`, `method`, `constructor`, or `macro` |
+| language | VARCHAR | Source language |
+| start_line | UINTEGER | Line number |
+| node_id | BIGINT | Call node ID |
+| caller_node_id | BIGINT | Caller function node ID |
 
-### As Annotation
-```json
-{
-    "type": "function_definition",
-    "name": "process_order",
-    "annotations": {
-        "calls": {
-            "internal": ["validate_order", "calculate_tax", "save_order"],
-            "external": ["logging.info", "db.commit"],
-            "count": 5
-        }
-    }
-}
-```
+## ast_call_graph Output Columns
 
-## Call Types to Track
+| Column | Type | Description |
+|--------|------|-------------|
+| file_path | VARCHAR | Source file path |
+| caller | VARCHAR | Caller function name |
+| callee | VARCHAR | Called function name |
+| call_type | VARCHAR | Call type classification |
+| call_count | BIGINT | Number of calls |
 
-1. **Function Calls**: `calculate_tax()`
-2. **Method Calls**: `order.calculate_total()`  
-3. **Static Calls**: `OrderService.process()`
-4. **Module Calls**: `math.sqrt()`
-5. **Constructor Calls**: `new User()` / `User()`
+## Call Type Classification
 
-## Benefits
+| Type | Detection Method |
+|------|-----------------|
+| `constructor` | Call node type is `new_expression`, `object_creation_expression`, etc. |
+| `macro` | Call node type is `macro_invocation` |
+| `method` | First child of call node is `attribute`, `member_expression`, `field_expression`, `selector_expression`, etc. |
+| `function` | Default — first child is `identifier` |
 
-- **Dependency Graphs**: Build call relationships
-- **Complexity Metrics**: Count external dependencies
-- **Dead Code Detection**: Find uncalled functions
-- **Impact Analysis**: What calls this function?
+## Implementation
 
-## Integration Ideas
+- **Location**: `src/sql_macros/tree_navigation.sql`
+- **Signatures**: `ast_get_calls(source, language := NULL)`, `ast_call_graph(source, language := NULL)`
+- **Caller attribution**: O(1) via `scope.function` hash join (not range-join)
+- **Method detection**: AST structural check on first child node type (no LIKE patterns)
+- **Related**: `ast_callees`/`ast_callers` in `scope_resolution.sql` provide simpler caller/callee pairs without call-type classification
 
-```sql
--- Build a call graph
-WITH call_data AS (
-    SELECT 
-        f.name as caller,
-        c.called_name as callee
-    FROM read_ast_objects('**/*.py', 'python') f,
-         LATERAL ast_get_calls(f.node_id) c
-    WHERE f.type = 'function_definition'
-)
--- Find most called functions
-SELECT 
-    callee,
-    COUNT(DISTINCT caller) as caller_count
-FROM call_data
-GROUP BY callee
-ORDER BY caller_count DESC;
-```
+## Test Coverage
 
-## Next Steps
-
-1. Implement basic call extraction
-2. Classify call types (internal/external/method)
-3. Add as annotation option
-4. Create call graph visualization helpers
+- **Test file**: `test/sql/tree_navigation/call_extraction.test`
+- **Assertions**: 392 across Python, JavaScript, Rust, Go
+- **Fixtures**: `test/data/call_extraction/calls.{py,js,rs,go}`
+- **Scenarios**: Function calls, method calls, constructor calls, chained calls, macro calls, nested calls, module-level calls, call graph aggregation

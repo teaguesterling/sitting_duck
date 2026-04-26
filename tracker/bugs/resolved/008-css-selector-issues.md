@@ -1,6 +1,6 @@
 # Bug: CSS Selector Issues Discovered During Test Coverage Expansion
 
-**Status:** Open
+**Status:** Resolved (all 6 bugs fixed)
 **Priority:** Medium-High
 **Discovered:** 2026-04-13
 

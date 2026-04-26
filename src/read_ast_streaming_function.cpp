@@ -111,6 +111,23 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
 	ExtractionConfig extraction_config =
 	    ParseExtractionConfig(context_str, source_str, structure_str, peek_mode, peek_size);
 
+	// Parse max_depth parameter (#014)
+	if (seen_parameters.find("max_depth") != seen_parameters.end()) {
+		extraction_config.max_depth = input.named_parameters.at("max_depth").GetValue<int32_t>();
+	}
+
+	// Parse prune parameter (#014)
+	if (seen_parameters.find("prune") != seen_parameters.end()) {
+		auto &prune_value = input.named_parameters.at("prune");
+		auto &policy_list = ListValue::GetChildren(prune_value);
+		for (auto &policy : policy_list) {
+			if (policy.IsNull()) {
+				throw BinderException("Prune policy list cannot contain NULL values");
+			}
+			CompilePrunePolicy(StringUtil::Lower(policy.ToString()), extraction_config);
+		}
+	}
+
 	// Use flat dynamic schema based on extraction config
 	return_types = UnifiedASTBackend::GetFlatDynamicTableSchema(extraction_config);
 	names = UnifiedASTBackend::GetFlatDynamicTableColumnNames(extraction_config);
@@ -217,6 +234,23 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
 	// Create ExtractionConfig from parsed parameters
 	ExtractionConfig extraction_config =
 	    ParseExtractionConfig(context_str, source_str, structure_str, peek_mode, peek_size);
+
+	// Parse max_depth parameter (#014)
+	if (seen_parameters.find("max_depth") != seen_parameters.end()) {
+		extraction_config.max_depth = input.named_parameters.at("max_depth").GetValue<int32_t>();
+	}
+
+	// Parse prune parameter (#014)
+	if (seen_parameters.find("prune") != seen_parameters.end()) {
+		auto &prune_value = input.named_parameters.at("prune");
+		auto &policy_list = ListValue::GetChildren(prune_value);
+		for (auto &policy : policy_list) {
+			if (policy.IsNull()) {
+				throw BinderException("Prune policy list cannot contain NULL values");
+			}
+			CompilePrunePolicy(StringUtil::Lower(policy.ToString()), extraction_config);
+		}
+	}
 
 	// Use flat dynamic schema based on extraction config
 	return_types = UnifiedASTBackend::GetFlatDynamicTableSchema(extraction_config);
@@ -609,6 +643,8 @@ static TableFunction GetReadASTFlatFunctionTwoArg() {
 	read_ast.named_parameters["structure"] = LogicalType::VARCHAR;
 	read_ast.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
 	read_ast.named_parameters["batch_size"] = LogicalType::INTEGER;
+	read_ast.named_parameters["max_depth"] = LogicalType::INTEGER;
+	read_ast.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
 
 	// Legacy parameters for backward compatibility
 	read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -629,6 +665,8 @@ static TableFunction GetReadASTFlatFunctionOneArg() {
 	read_ast.named_parameters["structure"] = LogicalType::VARCHAR;
 	read_ast.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
 	read_ast.named_parameters["batch_size"] = LogicalType::INTEGER;
+	read_ast.named_parameters["max_depth"] = LogicalType::INTEGER;
+	read_ast.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
 
 	// Legacy parameters for backward compatibility
 	read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -648,6 +686,8 @@ static TableFunction GetReadASTStreamingFunctionTwoArg() {
 	read_ast_streaming.named_parameters["peek_size"] = LogicalType::INTEGER;
 	read_ast_streaming.named_parameters["peek_mode"] = LogicalType::VARCHAR;
 	read_ast_streaming.named_parameters["batch_size"] = LogicalType::INTEGER;
+	read_ast_streaming.named_parameters["max_depth"] = LogicalType::INTEGER;
+	read_ast_streaming.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
 	return read_ast_streaming;
 }
 
@@ -661,6 +701,8 @@ static TableFunction GetReadASTStreamingFunctionOneArg() {
 	read_ast_streaming.named_parameters["peek_size"] = LogicalType::INTEGER;
 	read_ast_streaming.named_parameters["peek_mode"] = LogicalType::VARCHAR;
 	read_ast_streaming.named_parameters["batch_size"] = LogicalType::INTEGER;
+	read_ast_streaming.named_parameters["max_depth"] = LogicalType::INTEGER;
+	read_ast_streaming.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
 	return read_ast_streaming;
 }
 
@@ -761,6 +803,23 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientCon
 	// Create ExtractionConfig from parsed parameters
 	ExtractionConfig extraction_config =
 	    ParseExtractionConfig(context_str, source_str, structure_str, peek_mode, peek_size);
+
+	// Parse max_depth parameter (#014)
+	if (seen_parameters.find("max_depth") != seen_parameters.end()) {
+		extraction_config.max_depth = input.named_parameters.at("max_depth").GetValue<int32_t>();
+	}
+
+	// Parse prune parameter (#014)
+	if (seen_parameters.find("prune") != seen_parameters.end()) {
+		auto &prune_value = input.named_parameters.at("prune");
+		auto &policy_list = ListValue::GetChildren(prune_value);
+		for (auto &policy : policy_list) {
+			if (policy.IsNull()) {
+				throw BinderException("Prune policy list cannot contain NULL values");
+			}
+			CompilePrunePolicy(StringUtil::Lower(policy.ToString()), extraction_config);
+		}
+	}
 
 	// Use hierarchical backend schema
 	return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
@@ -870,6 +929,23 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientCon
 	ExtractionConfig extraction_config =
 	    ParseExtractionConfig(context_str, source_str, structure_str, peek_mode, peek_size);
 
+	// Parse max_depth parameter (#014)
+	if (seen_parameters.find("max_depth") != seen_parameters.end()) {
+		extraction_config.max_depth = input.named_parameters.at("max_depth").GetValue<int32_t>();
+	}
+
+	// Parse prune parameter (#014)
+	if (seen_parameters.find("prune") != seen_parameters.end()) {
+		auto &prune_value = input.named_parameters.at("prune");
+		auto &policy_list = ListValue::GetChildren(prune_value);
+		for (auto &policy : policy_list) {
+			if (policy.IsNull()) {
+				throw BinderException("Prune policy list cannot contain NULL values");
+			}
+			CompilePrunePolicy(StringUtil::Lower(policy.ToString()), extraction_config);
+		}
+	}
+
 	// Use hierarchical backend schema
 	return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
 	names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
@@ -892,6 +968,8 @@ static TableFunction GetReadASTFunctionTwoArg() {
 	read_ast_hierarchical_new.named_parameters["structure"] = LogicalType::VARCHAR;
 	read_ast_hierarchical_new.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
 	read_ast_hierarchical_new.named_parameters["batch_size"] = LogicalType::INTEGER;
+	read_ast_hierarchical_new.named_parameters["max_depth"] = LogicalType::INTEGER;
+	read_ast_hierarchical_new.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
 
 	// Legacy parameters for backward compatibility
 	read_ast_hierarchical_new.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -913,6 +991,8 @@ static TableFunction GetReadASTHierarchicalFunctionTwoArg() {
 	read_ast_hierarchical.named_parameters["structure"] = LogicalType::VARCHAR;
 	read_ast_hierarchical.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
 	read_ast_hierarchical.named_parameters["batch_size"] = LogicalType::INTEGER;
+	read_ast_hierarchical.named_parameters["max_depth"] = LogicalType::INTEGER;
+	read_ast_hierarchical.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
 
 	// Legacy parameters for backward compatibility
 	read_ast_hierarchical.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -933,6 +1013,8 @@ static TableFunction GetReadASTFunctionOneArg() {
 	read_ast_hierarchical_new.named_parameters["structure"] = LogicalType::VARCHAR;
 	read_ast_hierarchical_new.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
 	read_ast_hierarchical_new.named_parameters["batch_size"] = LogicalType::INTEGER;
+	read_ast_hierarchical_new.named_parameters["max_depth"] = LogicalType::INTEGER;
+	read_ast_hierarchical_new.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
 
 	// Legacy parameters for backward compatibility
 	read_ast_hierarchical_new.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -952,6 +1034,8 @@ static TableFunction GetReadASTHierarchicalFunctionOneArg() {
 	read_ast_hierarchical.named_parameters["structure"] = LogicalType::VARCHAR;
 	read_ast_hierarchical.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
 	read_ast_hierarchical.named_parameters["batch_size"] = LogicalType::INTEGER;
+	read_ast_hierarchical.named_parameters["max_depth"] = LogicalType::INTEGER;
+	read_ast_hierarchical.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
 
 	// Legacy parameters for backward compatibility
 	read_ast_hierarchical.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -972,6 +1056,8 @@ static TableFunction GetReadASTFlatAliasFunctionOneArg() {
 	read_ast_flat.named_parameters["structure"] = LogicalType::VARCHAR;
 	read_ast_flat.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
 	read_ast_flat.named_parameters["batch_size"] = LogicalType::INTEGER;
+	read_ast_flat.named_parameters["max_depth"] = LogicalType::INTEGER;
+	read_ast_flat.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
 
 	// Legacy parameters for backward compatibility
 	read_ast_flat.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -991,6 +1077,8 @@ static TableFunction GetReadASTFlatAliasFunctionTwoArg() {
 	read_ast_flat.named_parameters["structure"] = LogicalType::VARCHAR;
 	read_ast_flat.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
 	read_ast_flat.named_parameters["batch_size"] = LogicalType::INTEGER;
+	read_ast_flat.named_parameters["max_depth"] = LogicalType::INTEGER;
+	read_ast_flat.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
 
 	// Legacy parameters for backward compatibility
 	read_ast_flat.named_parameters["peek_size"] = LogicalType::INTEGER;

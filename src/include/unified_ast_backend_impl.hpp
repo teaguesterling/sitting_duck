@@ -59,6 +59,35 @@ static string SanitizeUTF8(const string &input) {
 	return string(char_array.begin(), char_array.end() - 1);         // Exclude null terminator
 }
 
+// Helper: decide whether to prune a node at parse time.
+// Returns: 0 = keep, 1 = node prune (re-parent children), 2 = subtree prune (drop everything)
+static int ShouldPruneNode(const ASTNode &node, uint32_t ts_child_count,
+                           const ExtractionConfig &config) {
+	if (!config.has_prune) return 0;
+
+	// Flag-based (syntax)
+	if (config.prune_flag_mask && (node.universal_flags & config.prune_flag_mask)) {
+		return 1;
+	}
+
+	// Semantic type filters (comments, literals, imports, types, punctuation)
+	for (auto &f : config.prune_type_filters) {
+		if ((node.semantic_type & f.mask) == f.value) {
+			return f.subtree ? 2 : 1;
+		}
+	}
+
+	if (config.prune_unnamed && node.name_raw.empty()) return 1;
+	if (config.prune_leaves && ts_child_count == 0) return 1;
+	if (config.prune_internal) {
+		if ((node.universal_flags & ASTNodeFlags::BINDS_NAME) &&
+		    !(node.universal_flags & ASTNodeFlags::IS_EXPORTED)) {
+			return 2;
+		}
+	}
+	return 0;
+}
+
 // Template implementation with ExtractionConfig - eliminates virtual calls
 template <typename AdapterType>
 ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapter, const string &content,
@@ -120,6 +149,9 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 	// having to re-scan the AST, and also lets us emit a typed scope.stack.
 	vector<ASTNode::ScopeEntry> scope_node_stack;
 
+	// Per-parent sibling counter for re-indexing after prune (only allocated when pruning)
+	unordered_map<int64_t, int32_t> sibling_counters;
+
 	while (!stack.empty()) {
 		// Check if the top entry is processed before copying
 		if (!stack.back().processed) {
@@ -127,20 +159,15 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			auto entry = stack.back();
 			// First visit - create node and add children
 			entry.processed = true;
-			entry.node_index = result.nodes.size();
+			// NOTE: node_index assignment is DEFERRED until after prune check.
+			// Pruned nodes never get added to result.nodes, so they must not
+			// claim an index.
 
-			// Update the stack entry with the processed flag and node_index
+			// Update the stack entry with the processed flag
 			stack.back().processed = true;
-			stack.back().node_index = entry.node_index;
 
-			// Track max depth
-			max_depth = std::max(max_depth, entry.depth);
-
-			// Create ASTNode
+			// Create ASTNode (properties extracted before prune check)
 			ASTNode ast_node;
-
-			// Basic information - use node_index as node_id
-			ast_node.node_id = entry.node_index;
 
 			// MEMORY SAFETY: Explicit copy of tree-sitter string data
 			const char *ts_type = ts_node_type(entry.node); // Points to tree-sitter memory
@@ -217,11 +244,11 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			}
 
 			// Extract source text (peek) with configurable size and mode
-			uint32_t start_byte = ts_node_start_byte(entry.node); // By-value copy ✅
-			uint32_t end_byte = ts_node_end_byte(entry.node);     // By-value copy ✅
+			uint32_t start_byte = ts_node_start_byte(entry.node); // By-value copy
+			uint32_t end_byte = ts_node_end_byte(entry.node);     // By-value copy
 			if (start_byte < content.size() && end_byte <= content.size() && end_byte > start_byte) {
 				// MEMORY SAFETY: Create owned copy of source text slice
-				string source_text = content.substr(start_byte, end_byte - start_byte); // COPY ✅
+				string source_text = content.substr(start_byte, end_byte - start_byte); // COPY
 
 				// Apply peek configuration and sanitize UTF-8
 				if (config.peek == PeekLevel::NONE || config.peek_size == 0) {
@@ -276,6 +303,44 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 				ast_node.type_normalized = "";
 				ast_node.native_extraction_attempted = false;
 			}
+
+			// === PRUNE CHECK ===
+			// Must happen AFTER property extraction (semantic_type, flags, name needed
+			// for policy evaluation) and BEFORE emit/scope tracking.
+			if (config.has_prune) {
+				int prune_action = ShouldPruneNode(ast_node, child_count, config);
+				if (prune_action == 2) {
+					// Subtree prune: drop this node AND all children
+					stack.pop_back();
+					continue;
+				}
+				if (prune_action == 1) {
+					// Node prune: skip this node but re-parent children
+					stack.pop_back();
+					if (child_count > 0) {
+						for (int32_t i = child_count - 1; i >= 0; i--) {
+							TSNode child = ts_node_child(entry.node, i);
+							// Re-parent to pruned node's parent, keep same depth
+							stack.push_back({child, entry.parent_id, entry.depth, i, false, 0});
+						}
+					}
+					continue;
+				}
+			}
+
+			// === ASSIGN NODE INDEX (deferred until after prune check) ===
+			entry.node_index = result.nodes.size();
+			stack.back().node_index = entry.node_index;
+			ast_node.node_id = entry.node_index;
+
+			// Assign sibling_index: when pruning, use per-parent counters for
+			// contiguous sibling indices; otherwise use tree-sitter's index.
+			if (config.has_prune) {
+				ast_node.sibling_index = sibling_counters[entry.parent_id]++;
+			}
+
+			// Track max depth (only for emitted nodes)
+			max_depth = std::max(max_depth, entry.depth);
 
 			// Scope tracking: populate the scope struct for every node.
 			//   scope.current = nearest enclosing scope (top of stack)
@@ -369,10 +434,16 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			result.nodes.push_back(ast_node);
 
 			// Add children to stack in reverse order for correct processing
-			int64_t current_id = ast_node.node_index;
-			for (int32_t i = child_count - 1; i >= 0; i--) {
-				TSNode child = ts_node_child(entry.node, i);
-				stack.push_back({child, current_id, entry.depth + 1, i, false, 0});
+			// max_depth check: when depth-limited, don't push children
+			bool depth_limited = (config.max_depth >= 0 && entry.depth >= static_cast<uint32_t>(config.max_depth));
+			if (depth_limited) {
+				result.nodes.back().children_count = 0;
+			} else {
+				int64_t current_id = ast_node.node_id;
+				for (int32_t i = child_count - 1; i >= 0; i--) {
+					TSNode child = ts_node_child(entry.node, i);
+					stack.push_back({child, current_id, entry.depth + 1, i, false, 0});
+				}
 			}
 		} else {
 			// Second visit - get the processed entry for descendant calculation
@@ -385,6 +456,14 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			if (config.structure >= StructureLevel::FULL) {
 				int32_t descendant_count = result.nodes.size() - entry.node_index - 1;
 				result.nodes[entry.node_index].descendant_count = descendant_count;
+
+				// When pruning, children_count must reflect actual emitted children
+				// (some may have been pruned, others re-parented from pruned nodes).
+				if (config.has_prune) {
+					auto it = sibling_counters.find(static_cast<int64_t>(entry.node_index));
+					result.nodes[entry.node_index].children_count =
+					    (it != sibling_counters.end()) ? it->second : 0;
+				}
 			}
 
 			// Update legacy fields after descendant count change

@@ -60,6 +60,16 @@ string CSharpAdapter::ExtractNodeName(TSNode node, const string &content) const 
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config) {
+		// method_declaration: use grammar field API to get the 'name' field directly.
+		// FindChildByType / FIND_IDENTIFIER returns the first identifier child, which is the
+		// return type for non-primitive return types (e.g. Task, Task<string>).
+		if (strcmp(node_type_str, "method_declaration") == 0) {
+			TSNode name_node = ts_node_child_by_field_name(node, "name", 4);
+			if (!ts_node_is_null(name_node)) {
+				return ExtractNodeText(name_node, content);
+			}
+		}
+
 		if (config->name_strategy == ExtractionStrategy::CUSTOM) {
 			// C#-specific custom extraction
 			string node_type = string(node_type_str);

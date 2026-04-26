@@ -1,0 +1,236 @@
+# name: test/sql/tree_navigation/call_extraction.test
+# group: [sitting_duck]
+
+# Test ast_get_calls() and ast_call_graph() SQL macros
+
+require sitting_duck
+
+# =============================================================================
+# Section 1: Python — ast_get_calls basic functionality
+# =============================================================================
+
+# All calls with caller attribution and call type
+query IIIII
+SELECT caller_name, called_name, call_type, call_expression, start_line
+FROM ast_get_calls('test/data/call_extraction/calls.py')
+ORDER BY start_line;
+----
+process	transform	function	transform(data)	8
+process	validate	function	validate(result)	9
+process	exists	method	os.path.exists("/tmp")	10
+transform	loads	method	json.loads(data)	14
+validate	len	function	len(data)	17
+fetch	execute	method	self.db.execute(query)	24
+fetch	fetchall	method	result.fetchall()	25
+process_all	fetch	method	self.fetch("SELECT 1")	28
+process_all	transform	function	transform(data)	29
+inner	helper	function	helper()	33
+outer	inner	function	inner()	34
+outer	process	function	process("test")	35
+<module>	print	function	print("module level")	37
+
+# Nested function scope: inner() calls helper, not outer
+query II
+SELECT caller_name, called_name
+FROM ast_get_calls('test/data/call_extraction/calls.py')
+WHERE called_name = 'helper';
+----
+inner	helper
+
+# Module-level calls
+query II
+SELECT caller_name, called_name
+FROM ast_get_calls('test/data/call_extraction/calls.py')
+WHERE caller_name = '<module>';
+----
+<module>	print
+
+# Method calls only
+query III
+SELECT caller_name, called_name, call_expression
+FROM ast_get_calls('test/data/call_extraction/calls.py')
+WHERE call_type = 'method'
+ORDER BY start_line;
+----
+process	exists	os.path.exists("/tmp")
+transform	loads	json.loads(data)
+fetch	execute	self.db.execute(query)
+fetch	fetchall	result.fetchall()
+process_all	fetch	self.fetch("SELECT 1")
+
+# =============================================================================
+# Section 2: JavaScript — constructor detection
+# =============================================================================
+
+query IIIII
+SELECT caller_name, called_name, call_type, call_expression, start_line
+FROM ast_get_calls('test/data/call_extraction/calls.js')
+ORDER BY start_line;
+----
+process	transform	function	transform(data)	6
+process	log	method	console.log("processing")	7
+transform	parse	method	JSON.parse(data)	12
+fetch	execute	method	this.db.execute(query)	21
+fetch	fetchAll	method	result.fetchAll()	22
+processAll	fetch	method	this.fetch("SELECT 1")	26
+processAll	transform	function	transform(data)	27
+inner	helper	function	helper()	33
+outer	inner	function	inner()	35
+outer	process	function	process("test")	36
+<module>	Service	constructor	new Service("db")	39
+<module>	log	method	console.log("module level")	40
+
+# Constructor calls only
+query II
+SELECT caller_name, called_name
+FROM ast_get_calls('test/data/call_extraction/calls.js')
+WHERE call_type = 'constructor';
+----
+<module>	Service
+
+# =============================================================================
+# Section 3: Rust — macro detection
+# =============================================================================
+
+query IIIII
+SELECT caller_name, called_name, call_type, call_expression, start_line
+FROM ast_get_calls('test/data/call_extraction/calls.rs')
+ORDER BY start_line;
+----
+process	transform	function	transform(data)	6
+process	validate	function	validate(&result)	7
+process	println	macro	println!("processing")	8
+transform	to_string	method	data.to_string()	13
+validate	trim	method	data.trim()	17
+validate	to_string	method	data.trim().to_string()	17
+new	to_string	method	db.to_string()	26
+fetch	execute	method	self.db.execute(query)	30
+process_all	fetch	method	self.fetch("SELECT 1")	34
+process_all	transform	function	transform(&data[0])	35
+inner	helper	function	helper()	41
+outer	inner	function	inner()	43
+outer	process	function	process("test")	44
+main	new	function	Service::new("db")	48
+main	println	macro	println!("done")	49
+
+# Macro calls only
+query II
+SELECT caller_name, called_name
+FROM ast_get_calls('test/data/call_extraction/calls.rs')
+WHERE call_type = 'macro'
+ORDER BY start_line;
+----
+process	println
+main	println
+
+# =============================================================================
+# Section 4: Go — method receiver syntax
+# =============================================================================
+
+query IIIII
+SELECT caller_name, called_name, call_type, call_expression, start_line
+FROM ast_get_calls('test/data/call_extraction/calls.go')
+ORDER BY start_line;
+----
+process	transform	function	transform(data)	10
+process	validate	function	validate(result)	11
+process	Println	method	fmt.Println("processing")	12
+validate	len	function	len(data)	21
+Fetch	Execute	method	s.db.Execute(query)	33
+ProcessAll	Fetch	method	s.Fetch("SELECT 1")	37
+ProcessAll	transform	function	transform(data[0])	38
+outer	helper	function	helper()	42
+outer	process	function	process("test")	43
+main	NewService	function	NewService("db")	47
+main	Println	method	fmt.Println(svc)	48
+
+# =============================================================================
+# Section 5: ast_call_graph — aggregation
+# =============================================================================
+
+# Python call graph
+query IIII
+SELECT caller, callee, call_type, call_count
+FROM ast_call_graph('test/data/call_extraction/calls.py')
+ORDER BY caller, callee;
+----
+<module>	print	function	1
+fetch	execute	method	1
+fetch	fetchall	method	1
+inner	helper	function	1
+outer	inner	function	1
+outer	process	function	1
+process	exists	method	1
+process	transform	function	1
+process	validate	function	1
+process_all	fetch	method	1
+process_all	transform	function	1
+transform	loads	method	1
+validate	len	function	1
+
+# =============================================================================
+# Section 6: Filtering patterns — common use cases
+# =============================================================================
+
+# What does process() call? (Python)
+query II
+SELECT called_name, call_type
+FROM ast_get_calls('test/data/call_extraction/calls.py')
+WHERE caller_name = 'process'
+ORDER BY start_line;
+----
+transform	function
+validate	function
+exists	method
+
+# Who calls transform? (Python)
+query I
+SELECT caller_name
+FROM ast_get_calls('test/data/call_extraction/calls.py')
+WHERE called_name = 'transform'
+ORDER BY start_line;
+----
+process
+process_all
+
+# =============================================================================
+# Section 7: ast_get_calls with sample_app.py (larger file)
+# =============================================================================
+
+# Call graph for a realistic file
+query IIII
+SELECT caller, callee, call_type, call_count
+FROM ast_call_graph('test/data/python/sample_app.py')
+WHERE caller = 'main'
+ORDER BY callee;
+----
+main	Config	function	1
+main	DatabaseConnection	function	1
+main	UserService	function	1
+main	close	method	1
+main	connect	method	1
+main	export_users	method	1
+main	get	method	1
+main	len	function	1
+main	load	method	1
+main	print	function	1
+main	process_file	function	1
+main	validate_email	function	1
+
+# =============================================================================
+# Section 8: Language column verification
+# =============================================================================
+
+query II
+SELECT DISTINCT language, call_type
+FROM ast_get_calls('test/data/call_extraction/calls.rs')
+WHERE call_type = 'macro';
+----
+rust	macro
+
+query II
+SELECT DISTINCT language, call_type
+FROM ast_get_calls('test/data/call_extraction/calls.js')
+WHERE call_type = 'constructor';
+----
+javascript	constructor
