@@ -786,6 +786,15 @@ CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
             WHERE is_function_call(a.semantic_type)
               AND a.name IS NOT NULL AND a.name != ''
         ),
+        call_targets AS (
+            SELECT
+                c.node_id AS call_id,
+                child.type AS target_type
+            FROM calls c
+            JOIN ast child
+              ON child.parent_id = c.node_id
+             AND child.sibling_index = 0
+        ),
         calls_with_caller AS (
             SELECT
                 c.node_id,
@@ -795,9 +804,11 @@ CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
                 c.file_path,
                 c.language,
                 c.start_line,
+                ct.target_type,
                 f.func_id AS caller_node_id,
                 f.func_name AS caller_name
             FROM calls c
+            LEFT JOIN call_targets ct ON ct.call_id = c.node_id
             LEFT JOIN functions f
               ON f.file_path = c.file_path
              AND f.func_id < c.node_id
@@ -819,7 +830,9 @@ CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
                 THEN 'constructor'
             WHEN cwc.call_node_type IN ('macro_invocation')
                 THEN 'macro'
-            WHEN cwc.peek LIKE '%.' || cwc.called_name || '(%'
+            WHEN cwc.target_type IN ('attribute', 'member_expression',
+                                      'field_expression', 'selector_expression',
+                                      'navigation_expression', 'field_access')
                 THEN 'method'
             ELSE 'function'
         END AS call_type,
