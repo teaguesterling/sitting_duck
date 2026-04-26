@@ -17,7 +17,7 @@ tracker/
 └── README.md                 # This file
 ```
 
-## Current Status (Updated 2026-03-04)
+## Current Status (Updated 2026-04-26)
 
 ### Language Support: 27 languages
 Bash, C, C++, C#, CSS, Dart, Go, GraphQL, HCL, HTML, Java, JavaScript, JSON,
@@ -34,7 +34,7 @@ YAML, Zig
 - Source code extraction (`ast_get_source()`)
 - Comprehensive semantic predicate functions (`is_function_definition()`, etc.)
 
-### Test Suite: 75 test files
+### Test Suite: 87+ test files
 Covers all languages, pattern matching, semantic types, edge cases, and regressions.
 
 ## Bug Summary
@@ -52,10 +52,11 @@ Covers all languages, pattern matching, semantic types, edge cases, and regressi
 | 009 | is_syntax_only Not Set for Delimiters | Fixed |
 | 010 | Inconsistent Punctuation Types | Fixed |
 | 011 | Comparison Semantic Type Mismatch | Fixed |
+| 010b | C# Name Extraction Picks Up Return Type | Fixed |
 | 012 | Import Name Extraction | Fixed |
 | 013 | FIND_IDENTIFIER Missing Types | Fixed |
 
-**12 of 13 bugs fixed.** Only #006 (performance tests slow) remains open.
+**13 of 14 bugs fixed.** Only #006 (performance tests slow) remains open.
 
 ## Feature Summary
 
@@ -74,8 +75,8 @@ Covers all languages, pattern matching, semantic types, edge cases, and regressi
 - #023 Unified function architecture (Phase 1)
 
 ### Open / Planned (by priority)
-- **P1**: ast_get_source with context (#013), parse-time filtering (#014), parent chain (#015)
-- **P1 Done**: find references (#016), get calls (#017)
+- **P1**: ast_get_source with context (#013), parent chain (#015)
+- **P1 Done**: parse-time filtering (#014), find references (#016), get calls (#017)
 - **P2**: Native tree-sitter query API (#028), pattern by example (#029), pattern matching C++ (#030), columnar AST (#012-columnar)
 - **P2**: Taxonomy exposure audit (#020), concise CLI syntax (#022), standardized extraction API (#026)
 - **P3**: Native AST type (#011), AI agent UX (#010), performance caching, AST diff analysis

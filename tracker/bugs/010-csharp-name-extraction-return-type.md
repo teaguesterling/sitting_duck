@@ -1,9 +1,10 @@
 # Bug #010: C# name extraction picks up return type instead of method name
 
-**Status:** Open
+**Status:** Fixed
 **Severity:** Medium
 **Component:** C# language adapter / FIND_IDENTIFIER strategy
 **Reported:** 2026-04-25
+**Fixed:** 2026-04-26
 
 ## Summary
 
@@ -45,3 +46,7 @@ The `FIND_IDENTIFIER` strategy takes the first `identifier` child, which is the 
 
 - Affects any C# method with a non-predefined return type (Task, List, etc.)
 - Methods returning `void`, `int`, `string` etc. are unaffected (those are `predefined_type` nodes, not `identifier`)
+
+## Fix
+
+Used `ts_node_child_by_field_name(node, "name")` in the C# language adapter instead of the generic `FIND_IDENTIFIER` strategy (which takes the first `identifier` child). The `method_declaration` grammar node exposes a `name` field that points directly to the method name, bypassing the return type `identifier`. The fix was implemented in the C# adapter's name extraction path.

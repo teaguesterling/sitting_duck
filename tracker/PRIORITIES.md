@@ -1,6 +1,6 @@
 # DuckDB AST Extension - Development Priorities
 
-**Last Updated:** 2026-04-26
+**Last Updated:** 2026-04-26 (post-sprint update)
 
 ## Priority Levels
 
@@ -12,6 +12,8 @@
 ## Current Status
 
 ### Completed (since last update on 2026-04-26)
+- **Parse-time filtering (#014)** — `prune` and `max_depth` parameters on `read_ast`; named prune policies (`syntax`, `comments`); tree-healing DFS maintains parent_id, sibling_index, descendant_count consistency
+- **Bug #010: C# name extraction return type** — Fixed C# adapter to use `ts_node_child_by_field_name(node, "name")` instead of first-identifier scan; async Task methods now extract method name correctly
 - `ast_find_references()` with scope-chain resolution (#016) — finds all definition/reference/call sites for a symbol, resolves through scope chain, tested across Python, JS, Rust, Go (200 assertions)
 - `ast_get_calls()` and `ast_call_graph()` (#017) — scope-aware call extraction with call-type classification (function/method/constructor/macro), O(1) caller attribution via scope.function, tested across Python, JS, Rust, Go (392 assertions)
 - Async/modifier extraction across all 8 languages (PR #69) — `list_contains(modifiers, 'async')` now works for Python, JS, TS, Rust, Kotlin, Swift, Dart, C#
@@ -53,14 +55,12 @@
 
 ### Open Bugs
 - #006 Performance tests slow (26s vs 0.1s for basic tests) - Medium priority
-- #010 C# name extraction picks up return type instead of method name - Medium priority
+- #010 C# name extraction picks up return type instead of method name - **Fixed 2026-04-26**
 
 ## Immediate Priorities
 
 ### P1 - Core Analysis Functions
-1. **[FEATURE] Parse-Time Filtering** (#014)
-   - Add `only_types`, `max_depth` parameters to read_ast
-   - Essential for large codebases, 5-50x memory reduction
+*(#014 parse-time filtering is complete — see Completed section above)*
 
 ### P2 - Pattern Matching Evolution
 1. **[FEATURE] Native Tree-sitter Query API** (#028)

@@ -158,3 +158,33 @@ SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', prune := ['synta
 WHERE is_syntax_only(flags) OR depth > 2;
 ----
 0
+
+# =============================================================================
+# Section 9: Integration — macros work on pruned ASTs
+# =============================================================================
+
+# ast_definitions works on unpruned source (default prune=[])
+query I
+SELECT COUNT(*) > 0
+FROM ast_definitions('test/data/python/sample_app.py');
+----
+true
+
+# ast_get_calls works on unpruned source
+query I
+SELECT COUNT(*) > 0
+FROM ast_get_calls('test/data/python/sample_app.py');
+----
+true
+
+# =============================================================================
+# Section 10: prune reduces node count significantly
+# =============================================================================
+
+# Syntax nodes are typically 30-60% of all nodes
+query I
+SELECT
+    (SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', prune := ['syntax'])) <
+    (SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py')) * 0.8;
+----
+true
