@@ -1124,6 +1124,108 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
         dc.reason
     FROM dead_code dc
     ORDER BY dc.file_path, dc.start_line;
+
+-- =============================================================================
+-- Call Extraction
+-- =============================================================================
+
+-- Extract all function/method calls from source code
+-- Returns one row per call site with the containing function (caller) identified.
+-- Uses scope-aware attribution: nested function calls belong to the inner function.
+-- Usage: SELECT * FROM ast_get_calls('src/**/*.py')
+-- Usage: SELECT * FROM ast_get_calls('src/main.py') WHERE call_type = 'method'
+CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
+    WITH
+        ast AS (
+            SELECT * FROM read_ast(source, language)
+        ),
+        functions AS (
+            SELECT
+                a.node_id AS func_id,
+                a.name AS func_name,
+                a.file_path,
+                a.language AS func_lang,
+                a.descendant_count
+            FROM ast a
+            WHERE is_function_definition(a.semantic_type)
+              AND is_construct(a.flags)
+              AND a.name IS NOT NULL AND a.name != ''
+        ),
+        calls AS (
+            SELECT
+                a.node_id,
+                a.name,
+                a.type,
+                a.peek,
+                a.file_path,
+                a.language,
+                a.start_line
+            FROM ast a
+            WHERE is_function_call(a.semantic_type)
+              AND a.name IS NOT NULL AND a.name != ''
+        ),
+        calls_with_caller AS (
+            SELECT
+                c.node_id,
+                c.name AS called_name,
+                c.type AS call_node_type,
+                c.peek,
+                c.file_path,
+                c.language,
+                c.start_line,
+                f.func_id AS caller_node_id,
+                f.func_name AS caller_name
+            FROM calls c
+            LEFT JOIN functions f
+              ON f.file_path = c.file_path
+             AND f.func_id < c.node_id
+             AND c.node_id <= f.func_id + f.descendant_count
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY c.node_id
+                ORDER BY f.func_id DESC NULLS LAST
+            ) = 1
+        )
+    SELECT
+        cwc.file_path,
+        COALESCE(cwc.caller_name, '<module>') AS caller_name,
+        cwc.called_name,
+        cwc.peek AS call_expression,
+        CASE
+            WHEN cwc.call_node_type IN ('new_expression', 'object_creation_expression',
+                                         'constructor_invocation', 'init_expression',
+                                         'composite_literal', 'struct_expression')
+                THEN 'constructor'
+            WHEN cwc.call_node_type IN ('macro_invocation')
+                THEN 'macro'
+            WHEN cwc.peek LIKE '%.' || cwc.called_name || '(%'
+                THEN 'method'
+            ELSE 'function'
+        END AS call_type,
+        cwc.language,
+        cwc.start_line,
+        cwc.node_id,
+        cwc.caller_node_id
+    FROM calls_with_caller cwc
+    ORDER BY cwc.file_path, cwc.start_line;
+
+-- Build a call graph from source code
+-- Returns aggregated caller→callee pairs with call counts.
+-- Usage: SELECT * FROM ast_call_graph('src/**/*.py') ORDER BY call_count DESC
+-- Usage: SELECT * FROM ast_call_graph('src/**/*.py') WHERE caller = 'main'
+CREATE OR REPLACE MACRO ast_call_graph(source, language := NULL) AS TABLE
+    WITH
+        raw_calls AS (
+            SELECT * FROM ast_get_calls(source, language)
+        )
+    SELECT
+        rc.file_path,
+        rc.caller_name AS caller,
+        rc.called_name AS callee,
+        rc.call_type,
+        COUNT(*) AS call_count
+    FROM raw_calls rc
+    GROUP BY rc.file_path, rc.caller_name, rc.called_name, rc.call_type
+    ORDER BY rc.file_path, rc.caller_name, rc.called_name;
 )SQLMACRO"},
     {"pattern_matching.sql", R"SQLMACRO(
 -- =============================================================================
