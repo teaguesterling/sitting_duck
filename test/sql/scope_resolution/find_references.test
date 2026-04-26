@@ -185,3 +185,103 @@ ORDER BY start_line;
 ----
 2	1
 36	8
+
+# =============================================================================
+# Section 9: Rust — function and struct references
+# =============================================================================
+
+# 'helper' — definition + call site
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.rs', 'helper')
+ORDER BY start_line;
+----
+definition	function_item	1	<module>
+call	call_expression	7	process
+
+# 'process' — definition + call from method
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.rs', 'process')
+ORDER BY start_line;
+----
+definition	function_item	5	<module>
+call	call_expression	30	run
+
+# 'transform' — definition + call
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.rs', 'transform')
+ORDER BY start_line;
+----
+call	call_expression	6	process
+definition	function_item	11	<module>
+
+# 'Service' — struct def, impl def, type refs
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.rs', 'Service')
+ORDER BY start_line;
+----
+definition	struct_item	15	<module>
+definition	impl_item	19	<module>
+reference	type_identifier	21	new
+reference	identifier	35	main
+
+# 'fetch' — method definition + method call (field_identifier)
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.rs', 'fetch')
+ORDER BY start_line;
+----
+definition	function_item	24	<module>
+reference	field_identifier	29	run
+
+# =============================================================================
+# Section 10: Go — function and method references
+# =============================================================================
+
+# 'helper' — definition + call
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.go', 'helper')
+ORDER BY start_line;
+----
+definition	function_declaration	5	<module>
+call	call_expression	11	process
+
+# 'process' — definition + call from method
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.go', 'process')
+ORDER BY start_line;
+----
+definition	function_declaration	9	<module>
+call	call_expression	33	Run
+
+# 'transform' — definition + call
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.go', 'transform')
+ORDER BY start_line;
+----
+call	call_expression	10	process
+definition	function_declaration	15	<module>
+
+# 'NewService' — definition + constructor call
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.go', 'NewService')
+ORDER BY start_line;
+----
+definition	function_declaration	23	<module>
+call	call_expression	37	main
+
+# 'Fetch' — method definition + method reference (field_identifier)
+query IIII
+SELECT ref_kind, node_type, start_line, scope_name
+FROM ast_find_references('test/data/find_references/refs.go', 'Fetch')
+ORDER BY start_line;
+----
+definition	method_declaration	27	<module>
+reference	field_identifier	32	Run

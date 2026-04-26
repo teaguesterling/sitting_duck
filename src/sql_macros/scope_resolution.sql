@@ -297,6 +297,9 @@ CREATE OR REPLACE MACRO ast_resolve(
 -- For each function definition, finds all call expressions within its scope.
 -- Returns (caller_name, caller_line, callee_name, callee_line) pairs.
 --
+-- See also: ast_get_calls/ast_call_graph in tree_navigation.sql for richer
+-- call extraction with call-type classification (function/method/constructor/macro).
+--
 -- Usage:
 --   SELECT * FROM ast_callees('src/**/*.py');
 --   SELECT caller, callee FROM ast_callees('src/*.py') WHERE caller = 'main';

@@ -1134,22 +1134,12 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
 -- Uses scope-aware attribution: nested function calls belong to the inner function.
 -- Usage: SELECT * FROM ast_get_calls('src/**/*.py')
 -- Usage: SELECT * FROM ast_get_calls('src/main.py') WHERE call_type = 'method'
+-- See also: ast_callees/ast_callers in scope_resolution.sql for simpler
+-- caller/callee pairs without call-type classification.
 CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
     WITH
         ast AS (
             SELECT * FROM read_ast(source, language)
-        ),
-        functions AS (
-            SELECT
-                a.node_id AS func_id,
-                a.name AS func_name,
-                a.file_path,
-                a.language AS func_lang,
-                a.descendant_count
-            FROM ast a
-            WHERE is_function_definition(a.semantic_type)
-              AND is_construct(a.flags)
-              AND a.name IS NOT NULL AND a.name != ''
         ),
         calls AS (
             SELECT
@@ -1159,7 +1149,8 @@ CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
                 a.peek,
                 a.file_path,
                 a.language,
-                a.start_line
+                a.start_line,
+                a.scope.function AS scope_function
             FROM ast a
             WHERE is_function_call(a.semantic_type)
               AND a.name IS NOT NULL AND a.name != ''
@@ -1183,18 +1174,13 @@ CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
                 c.language,
                 c.start_line,
                 ct.target_type,
-                f.func_id AS caller_node_id,
-                f.func_name AS caller_name
+                f.node_id AS caller_node_id,
+                f.name AS caller_name
             FROM calls c
             LEFT JOIN call_targets ct ON ct.call_id = c.node_id
-            LEFT JOIN functions f
-              ON f.file_path = c.file_path
-             AND f.func_id < c.node_id
-             AND c.node_id <= f.func_id + f.descendant_count
-            QUALIFY ROW_NUMBER() OVER (
-                PARTITION BY c.node_id
-                ORDER BY f.func_id DESC NULLS LAST
-            ) = 1
+            LEFT JOIN ast f
+              ON f.node_id = c.scope_function
+             AND f.file_path = c.file_path
         )
     SELECT
         cwc.file_path,
@@ -4158,6 +4144,9 @@ CREATE OR REPLACE MACRO ast_resolve(
 -- For each function definition, finds all call expressions within its scope.
 -- Returns (caller_name, caller_line, callee_name, callee_line) pairs.
 --
+-- See also: ast_get_calls/ast_call_graph in tree_navigation.sql for richer
+-- call extraction with call-type classification (function/method/constructor/macro).
+--
 -- Usage:
 --   SELECT * FROM ast_callees('src/**/*.py');
 --   SELECT caller, callee FROM ast_callees('src/*.py') WHERE caller = 'main';
@@ -4170,14 +4159,14 @@ CREATE OR REPLACE MACRO ast_callees(
     -- enclosing function — precomputed at parse time. So "find calls inside
     -- function F" collapses from an O(calls x funcs) range join into a
     -- simple hash join on scope.function. The range-join version this
+
+)SQLMACRO"
+        R"SQLMACRO(
     -- replaces took up to 20 seconds on DuckDB's own source tree; this
     -- runs in under a second.
     WITH ast AS (
         SELECT * FROM read_ast(source, language)
     )
-
-)SQLMACRO"
-        R"SQLMACRO(
     SELECT f.name         AS caller,
            f.qualified_name AS caller_qualified,
            f.start_line   AS caller_line,
