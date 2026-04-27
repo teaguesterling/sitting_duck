@@ -1,5 +1,5 @@
 # name: test/sql/scope_resolution/find_references.test
-# group: [sitting_duck]
+# group: [scope_resolution]
 
 # Test ast_find_references() — scope-aware reference finding
 

@@ -2019,8 +2019,8 @@ void CompilePrunePolicy(const string &policy_name, ExtractionConfig &config) {
 		config.prune_internal = true;
 	} else {
 		throw BinderException("Unknown prune policy: '" + policy_name +
-		    "'. Valid policies: syntax, comments, literals, imports, types, "
-		    "punctuation, unnamed, leaves, internal");
+		                      "'. Valid policies: syntax, comments, literals, imports, types, "
+		                      "punctuation, unnamed, leaves, internal");
 	}
 }
 

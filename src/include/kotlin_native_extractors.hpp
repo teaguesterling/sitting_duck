@@ -189,12 +189,9 @@ public:
 				TSNode modifier = ts_node_child(modifiers_node, j);
 				const char *mod_type = ts_node_type(modifier);
 
-				if (strcmp(mod_type, "visibility_modifier") == 0 ||
-				    strcmp(mod_type, "function_modifier") == 0 ||
-				    strcmp(mod_type, "member_modifier") == 0 ||
-				    strcmp(mod_type, "parameter_modifier") == 0 ||
-				    strcmp(mod_type, "inheritance_modifier") == 0 ||
-				    strcmp(mod_type, "class_modifier") == 0 ||
+				if (strcmp(mod_type, "visibility_modifier") == 0 || strcmp(mod_type, "function_modifier") == 0 ||
+				    strcmp(mod_type, "member_modifier") == 0 || strcmp(mod_type, "parameter_modifier") == 0 ||
+				    strcmp(mod_type, "inheritance_modifier") == 0 || strcmp(mod_type, "class_modifier") == 0 ||
 				    strcmp(mod_type, "annotation") == 0) {
 					uint32_t start = ts_node_start_byte(modifier);
 					uint32_t end = ts_node_end_byte(modifier);
@@ -221,7 +218,8 @@ public:
 				uint32_t parent_count = ts_node_child_count(parent);
 				for (uint32_t i = 0; i < parent_count; i++) {
 					TSNode sibling = ts_node_child(parent, i);
-					if (ts_node_eq(sibling, node)) break;
+					if (ts_node_eq(sibling, node))
+						break;
 					if (strcmp(ts_node_type(sibling), "modifiers") == 0) {
 						extract_from_modifiers_node(sibling);
 					}

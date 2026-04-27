@@ -286,7 +286,8 @@ vector<string> ExtractModifiersFromNode(TSNode node, const string &content);
 // Ensure a modifier is present in the list (dedup). Prepends if prepend=true.
 inline void EnsureModifier(vector<string> &modifiers, const string &mod, bool prepend = false) {
 	for (const auto &m : modifiers) {
-		if (m == mod) return;
+		if (m == mod)
+			return;
 	}
 	if (prepend) {
 		modifiers.insert(modifiers.begin(), mod);

@@ -1,6 +1,6 @@
 # name: test/sql/parse_time_filtering.test
 # description: Test parse-time filtering (max_depth and prune parameters)
-# group: [sitting_duck]
+# group: [sql]
 
 require sitting_duck
 

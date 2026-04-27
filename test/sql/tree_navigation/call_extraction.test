@@ -1,5 +1,5 @@
 # name: test/sql/tree_navigation/call_extraction.test
-# group: [sitting_duck]
+# group: [tree_navigation]
 
 # Test ast_get_calls() and ast_call_graph() SQL macros
 

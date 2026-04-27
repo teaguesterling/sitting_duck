@@ -214,11 +214,11 @@ private:
 			uint32_t parent_count = ts_node_child_count(parent);
 			for (uint32_t i = 0; i < parent_count; i++) {
 				TSNode sibling = ts_node_child(parent, i);
-				if (ts_node_eq(sibling, node)) break;
+				if (ts_node_eq(sibling, node))
+					break;
 				const char *sibling_type = ts_node_type(sibling);
 
-				if (strcmp(sibling_type, "visibility_modifier") == 0 ||
-				    strcmp(sibling_type, "attribute_item") == 0 ||
+				if (strcmp(sibling_type, "visibility_modifier") == 0 || strcmp(sibling_type, "attribute_item") == 0 ||
 				    strcmp(sibling_type, "async") == 0 || strcmp(sibling_type, "unsafe") == 0 ||
 				    strcmp(sibling_type, "extern") == 0 || strcmp(sibling_type, "const") == 0) {
 					uint32_t start = ts_node_start_byte(sibling);

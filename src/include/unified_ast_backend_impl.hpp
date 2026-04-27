@@ -61,9 +61,9 @@ static string SanitizeUTF8(const string &input) {
 
 // Helper: decide whether to prune a node at parse time.
 // Returns: 0 = keep, 1 = node prune (re-parent children), 2 = subtree prune (drop everything)
-static int ShouldPruneNode(const ASTNode &node, uint32_t ts_child_count,
-                           const ExtractionConfig &config) {
-	if (!config.has_prune) return 0;
+static int ShouldPruneNode(const ASTNode &node, uint32_t ts_child_count, const ExtractionConfig &config) {
+	if (!config.has_prune)
+		return 0;
 
 	// Flag-based (syntax)
 	if (config.prune_flag_mask && (node.universal_flags & config.prune_flag_mask)) {
@@ -77,11 +77,12 @@ static int ShouldPruneNode(const ASTNode &node, uint32_t ts_child_count,
 		}
 	}
 
-	if (config.prune_unnamed && node.name_raw.empty()) return 1;
-	if (config.prune_leaves && ts_child_count == 0) return 1;
+	if (config.prune_unnamed && node.name_raw.empty())
+		return 1;
+	if (config.prune_leaves && ts_child_count == 0)
+		return 1;
 	if (config.prune_internal) {
-		if ((node.universal_flags & ASTNodeFlags::BINDS_NAME) &&
-		    !(node.universal_flags & ASTNodeFlags::IS_EXPORTED)) {
+		if ((node.universal_flags & ASTNodeFlags::BINDS_NAME) && !(node.universal_flags & ASTNodeFlags::IS_EXPORTED)) {
 			return 2;
 		}
 	}
@@ -461,8 +462,7 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 				// (some may have been pruned, others re-parented from pruned nodes).
 				if (config.has_prune) {
 					auto it = sibling_counters.find(static_cast<int64_t>(entry.node_index));
-					result.nodes[entry.node_index].children_count =
-					    (it != sibling_counters.end()) ? it->second : 0;
+					result.nodes[entry.node_index].children_count = (it != sibling_counters.end()) ? it->second : 0;
 				}
 			}
 

@@ -223,8 +223,9 @@ public:
 
 					if (strcmp(mod_type, "mutation_modifier") == 0 || strcmp(mod_type, "member_modifier") == 0 ||
 					    strcmp(mod_type, "property_modifier") == 0 || strcmp(mod_type, "visibility_modifier") == 0 ||
-					    strcmp(mod_type, "access_level_modifier") == 0 || strcmp(mod_type, "inheritance_modifier") == 0 ||
-					    strcmp(mod_type, "attribute") == 0 || strcmp(mod_type, "ownership_modifier") == 0) {
+					    strcmp(mod_type, "access_level_modifier") == 0 ||
+					    strcmp(mod_type, "inheritance_modifier") == 0 || strcmp(mod_type, "attribute") == 0 ||
+					    strcmp(mod_type, "ownership_modifier") == 0) {
 						uint32_t start = ts_node_start_byte(mod);
 						uint32_t end = ts_node_end_byte(mod);
 						if (start < content.length() && end <= content.length()) {

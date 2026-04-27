@@ -29,9 +29,9 @@ struct ExtractionConfig {
 	bool include_full_schema = false; // When true, schema includes all columns regardless of level settings
 
 	// Parse-time filtering (#014)
-	int32_t max_depth = -1;                     // -1 = unlimited
-	uint8_t prune_flag_mask = 0;                // prune if (flags & mask) != 0
-	vector<SemanticFilter> prune_type_filters;  // prune if (type & f.mask) == f.value
+	int32_t max_depth = -1;                    // -1 = unlimited
+	uint8_t prune_flag_mask = 0;               // prune if (flags & mask) != 0
+	vector<SemanticFilter> prune_type_filters; // prune if (type & f.mask) == f.value
 	bool prune_unnamed = false;
 	bool prune_leaves = false;
 	bool prune_internal = false;

@@ -42,13 +42,17 @@ struct JavaScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>
 				uint32_t parent_count = ts_node_child_count(parent);
 				for (uint32_t i = 0; i < parent_count; i++) {
 					TSNode sibling = ts_node_child(parent, i);
-					if (ts_node_eq(sibling, node)) break;
+					if (ts_node_eq(sibling, node))
+						break;
 					const char *sibling_type = ts_node_type(sibling);
 					if (strcmp(sibling_type, "async") == 0 || strcmp(sibling_type, "static") == 0) {
 						string mod(sibling_type);
 						bool already_present = false;
 						for (const auto &existing : context.modifiers) {
-							if (existing == mod) { already_present = true; break; }
+							if (existing == mod) {
+								already_present = true;
+								break;
+							}
 						}
 						if (!already_present) {
 							context.modifiers.push_back(mod);

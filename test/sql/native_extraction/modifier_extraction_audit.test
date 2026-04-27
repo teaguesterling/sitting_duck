@@ -1,6 +1,7 @@
 # name: test/sql/native_extraction/modifier_extraction_audit.test
 # description: Systematic audit of modifier extraction across languages
 # group: [native_extraction]
+
 #
 # This test harness verifies that keyword modifiers (async, static, etc.)
 # are correctly extracted into the modifiers[] column across languages.

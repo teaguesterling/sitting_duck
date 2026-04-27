@@ -706,7 +706,7 @@ CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language :
     WITH
 
 )SQLMACRO"
-        R"SQLMACRO(
+                            R"SQLMACRO(
         ast AS (
             SELECT * FROM read_ast(source, language)
         ),
@@ -1042,7 +1042,7 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
             FROM ast a
 
 )SQLMACRO"
-        R"SQLMACRO(
+                            R"SQLMACRO(
             WHERE is_function_definition(a.semantic_type)
               AND a.name IS NOT NULL AND a.name != ''
               -- Exclude special methods (constructors, dunder methods, etc.)
@@ -1521,7 +1521,7 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
 --   SELECT * FROM ast_match('src/**/*.py', 'my_func(__X__)');
 
 )SQLMACRO"
-        R"SQLMACRO(
+                             R"SQLMACRO(
 --   SELECT * FROM ast_match('src/main.py', 'my_func(__X__)', match_syntax := true);
 --   SELECT * FROM ast_match('src/**/*.py', '__F__(__X__)', match_by := 'semantic_type');
 --
@@ -1773,7 +1773,7 @@ CREATE OR REPLACE MACRO ast_match(
                 t.file_path = mc.file_path
 
 )SQLMACRO"
-        R"SQLMACRO(
+                             R"SQLMACRO(
                 AND t.node_id >= mc.candidate_root
                 AND t.node_id <= mc.candidate_root + mc.candidate_descendants
                 -- Depth matching: flexible when at/below recursive wildcard wrapper depth
@@ -2081,7 +2081,7 @@ CREATE OR REPLACE MACRO ast_match(
             FROM captures_single_listed
 
 )SQLMACRO"
-        R"SQLMACRO(
+                             R"SQLMACRO(
             UNION ALL
             SELECT candidate_file, candidate_root, capture_name, capture_list
             FROM captures_variadic_listed
@@ -2717,7 +2717,7 @@ CREATE OR REPLACE MACRO ast_select_from(
 
 
 )SQLMACRO"
-        R"SQLMACRO(
+                          R"SQLMACRO(
         -- #id name filter
         -- Top-level #id (not inside :has()/:not() arguments).
         -- Same shape as simple_type: rank candidates by node order, pick rn=1 via
@@ -3008,7 +3008,7 @@ CREATE OR REPLACE MACRO ast_select_from(
             JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = not_pcs.node_id
 
 )SQLMACRO"
-        R"SQLMACRO(
+                          R"SQLMACRO(
             LEFT JOIN sel_pcs_first_tag_or_int ftoi ON ftoi.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_string     fstr ON fstr.pcs_id = pcs.node_id
             WHERE cn.name != 'has'
@@ -3294,7 +3294,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 CASE ac.attr_op WHEN '*=' THEN a.annotations LIKE '%' || ac.attr_value || '%'
 
 )SQLMACRO"
-        R"SQLMACRO(
+                          R"SQLMACRO(
                                 WHEN '^=' THEN a.annotations LIKE ac.attr_value || '%'
                                 WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value
                                 ELSE a.annotations = ac.attr_value END
@@ -3572,7 +3572,7 @@ CREATE OR REPLACE MACRO ast_select_from(
     ),
 
 )SQLMACRO"
-        R"SQLMACRO(
+                          R"SQLMACRO(
     -- ::callees — calls inside this function (transitive — includes calls
     -- inside nested functions and lambdas).
     --
@@ -4161,7 +4161,7 @@ CREATE OR REPLACE MACRO ast_callees(
     -- simple hash join on scope.function. The range-join version this
 
 )SQLMACRO"
-        R"SQLMACRO(
+                             R"SQLMACRO(
     -- replaces took up to 20 seconds on DuckDB's own source tree; this
     -- runs in under a second.
     WITH ast AS (
