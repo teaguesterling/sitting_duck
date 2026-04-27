@@ -255,6 +255,64 @@ SELECT * FROM read_ast('file.py', peek_mode := 'smart');
 
 ---
 
+### `max_depth`
+
+**Type:** `INTEGER`
+**Default:** `-1` (unlimited)
+**Introduced:** v1.8.0
+
+Limit AST tree depth at parse time. Nodes beyond the specified depth are not emitted. Boundary nodes at the depth limit have `children_count = 0` and `descendant_count = 0`.
+
+```sql
+-- Root node only
+SELECT * FROM read_ast('file.py', max_depth := 0);
+
+-- Root + direct children
+SELECT * FROM read_ast('file.py', max_depth := 1);
+
+-- Unlimited (default)
+SELECT * FROM read_ast('file.py', max_depth := -1);
+```
+
+---
+
+### `prune`
+
+**Type:** `LIST(VARCHAR)`
+**Default:** `[]` (no pruning)
+**Introduced:** v1.8.0
+
+Remove categories of nodes at parse time. The tree is automatically healed — `parent_id`, `children_count`, `descendant_count`, and `sibling_index` stay valid after pruning.
+
+```sql
+-- Remove syntax-only nodes
+SELECT * FROM read_ast('file.py', prune := ['syntax']);
+
+-- Remove comments and literals
+SELECT * FROM read_ast('file.py', prune := ['comments', 'literals']);
+
+-- Combine with max_depth
+SELECT * FROM read_ast('file.py', prune := ['syntax'], max_depth := 3);
+```
+
+Available policies:
+
+| Policy | Removes | Mode |
+|--------|---------|------|
+| `syntax` | Syntax-only nodes (keywords, operators, brackets) | Re-parents children |
+| `comments` | Comment nodes | Re-parents children |
+| `punctuation` | Parser punctuation tokens | Re-parents children |
+| `unnamed` | Nodes with empty names | Re-parents children |
+| `literals` | Literal value nodes | Drops subtree |
+| `imports` | Import/use statements | Drops subtree |
+| `types` | Type annotation nodes | Drops subtree |
+| `leaves` | Leaf nodes (no children) | Re-parents children |
+| `internal` | Non-exported internal definitions | Drops subtree |
+
+**Re-parents children**: The pruned node is removed but its children are attached to the grandparent. **Drops subtree**: The node and all its descendants are removed entirely.
+
+---
+
 ### `batch_size`
 
 **Type:** `INTEGER`

@@ -131,6 +131,11 @@ nav:
       - Scripting: languages/scripting.md
       - Enterprise: languages/enterprise.md
       - Infrastructure: languages/infrastructure.md
+  - Releases:
+    - v1.8.0: releases/v1.8.0.md
+    - v1.7.4: releases/v1.7.4.md
+    - v1.7.1: releases/v1.7.1.md
+    - v1.7.0: releases/v1.7.0.md
   - Development:
     - Contributing: development/contributing.md
     - Adding Languages: development/adding-languages.md

@@ -1,6 +1,6 @@
 # AI Agent Guide to DuckDB AST Extension
 
-**Extension Version:** v1.7.4+
+**Extension Version:** v1.8.0+
 
 ## Overview
 

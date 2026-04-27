@@ -30,6 +30,12 @@ SQL table macros for navigating and analyzing AST structure. These macros accept
 | `ast_function_metrics(table)` | Complexity metrics per function |
 | `ast_nesting_analysis(table)` | Nesting depth analysis per function |
 | `ast_functions_containing(table, type)` | Find functions with specific node types |
+| **Call Analysis** | |
+| `ast_get_calls(source)` | Extract calls with caller attribution and type |
+| `ast_call_graph(source)` | Aggregated caller→callee graph |
+| `ast_find_references(source, name)` | Scope-aware symbol reference resolution |
+| `ast_callees(source)` | What does each function call? |
+| `ast_callers(source)` | Who calls each function? |
 | **Quality Analysis** | |
 | `ast_security_audit(table)` | Detect security anti-patterns |
 | `ast_dead_code(table)` | Find unused functions/classes |
@@ -381,6 +387,107 @@ WHERE match_name = 'eval';
 | `match_peek` | Preview of matched node |
 
 **Scope awareness**: Respects function boundaries - nested function contents attributed to the nested function, not the outer one.
+
+---
+
+## Call Analysis
+
+### `ast_get_calls(source, language := NULL)`
+
+Extract all function/method calls with caller attribution and call-type classification. Uses `scope.function` for O(1) caller lookup.
+
+```sql
+-- All calls in a codebase
+SELECT caller_name, called_name, call_type, start_line
+FROM ast_get_calls('src/**/*.py');
+
+-- Method calls only
+SELECT caller_name, called_name
+FROM ast_get_calls('src/**/*.py')
+WHERE call_type = 'method';
+```
+
+| Column | Description |
+|--------|-------------|
+| `file_path` | Source file |
+| `caller_name` | Containing function (or `<module>`) |
+| `called_name` | Called function/method name |
+| `call_expression` | Code preview |
+| `call_type` | `function`, `method`, `constructor`, or `macro` |
+| `language` | Source language |
+| `start_line` | Call site line |
+| `node_id` | Call node ID |
+| `caller_node_id` | Caller function node ID |
+
+### `ast_call_graph(source, language := NULL)`
+
+Build an aggregated caller-to-callee graph with call counts.
+
+```sql
+-- Full call graph
+SELECT caller, callee, call_type, call_count
+FROM ast_call_graph('src/**/*.py')
+ORDER BY call_count DESC;
+
+-- What does main() call?
+SELECT callee, call_type, call_count
+FROM ast_call_graph('src/**/*.py')
+WHERE caller = 'main';
+```
+
+| Column | Description |
+|--------|-------------|
+| `file_path` | Source file |
+| `caller` | Caller function name |
+| `callee` | Called function name |
+| `call_type` | Call classification |
+| `call_count` | Number of calls |
+
+### `ast_find_references(source, target_name, language := NULL)`
+
+Find all uses of a symbol via scope-chain resolution. Handles shadowed names correctly — if two scopes define the same name, only references that resolve to the specific definition are returned.
+
+```sql
+-- All references to 'process'
+SELECT ref_kind, start_line, scope_name, peek
+FROM ast_find_references('src/**/*.py', 'process');
+
+-- Call sites only
+SELECT start_line, peek
+FROM ast_find_references('src/**/*.py', 'execute')
+WHERE ref_kind = 'call';
+```
+
+| Column | Description |
+|--------|-------------|
+| `file_path` | Source file |
+| `name` | Target symbol name |
+| `ref_kind` | `definition`, `call`, or `reference` |
+| `node_type` | AST node type |
+| `start_line` | Location |
+| `peek` | Code preview |
+| `scope_name` | Containing function (or `<module>`) |
+| `def_node_id` | Resolved definition's node ID |
+
+### `ast_callees(source, language := NULL)`
+
+Find what each function calls. Simpler than `ast_get_calls` — no call-type classification.
+
+```sql
+SELECT caller, callee, callee_line
+FROM ast_callees('src/**/*.py')
+WHERE caller = 'main';
+```
+
+### `ast_callers(source, language := NULL)`
+
+Find who calls each function. Module-level calls get `caller = '<module>'`.
+
+```sql
+SELECT caller, callee, call_line
+FROM ast_callers('src/**/*.py')
+WHERE callee = 'execute';
+```
 
 ---
 
