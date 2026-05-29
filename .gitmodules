@@ -1,3 +1,6 @@
+# NOTE: the pinned commit (gitlink) is authoritative — currently duckdb v1.5.x.
+# `branch = main` only affects `git submodule update --remote`; a normal
+# `clone --recursive` / `submodule update` checks out the pinned commit, not main's HEAD.
 [submodule "duckdb"]
 	path = duckdb
 	url = https://github.com/duckdb/duckdb

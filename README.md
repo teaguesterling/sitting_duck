@@ -107,8 +107,12 @@ Each doc includes extraction quality ratings, implementation notes, and known li
 git clone --recursive https://github.com/teaguesterling/sitting_duck.git
 cd sitting_duck
 
-# Build the extension
-make
+# Build the extension.
+# NOTE: a bare `make` builds single-threaded. To use all cores, set the cmake
+# parallel level (the build invokes `cmake --build` without -j):
+CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) make
+# (Alternatively `GEN=ninja make` if ninja is installed — ninja parallelizes by default.)
+# vcpkg is NOT required: vcpkg.json declares no dependencies.
 
 # Test it works
 ./build/release/duckdb -c "LOAD './build/release/extension/sitting_duck/sitting_duck.duckdb_extension'; SELECT COUNT(*) FROM read_ast('README.md');"
