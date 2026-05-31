@@ -1,4 +1,5 @@
 #include "duckdb.hpp"
+#include "duckdb_compat.hpp"
 #include "language_adapter.hpp"
 #include "include/ast_file_utils.hpp"
 
@@ -67,7 +68,7 @@ static void SupportedLanguagesFunction(ClientContext &context, TableFunctionInpu
 		count++;
 		data.offset++;
 	}
-	output.SetCardinality(count);
+	CompatSetOutputCardinality(output, count);
 }
 
 void RegisterASTSupportedLanguagesFunction(ExtensionLoader &loader) {

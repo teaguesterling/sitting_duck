@@ -1,4 +1,5 @@
 #include "ast_helper_functions.hpp"
+#include "duckdb_compat.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/types/value.hpp"
@@ -128,7 +129,7 @@ void ASTFunctionsFunction::Execute(ClientContext &context, TableFunctionInput &d
 		data.current_idx++;
 	}
 
-	output.SetCardinality(count);
+	CompatSetOutputCardinality(output, count);
 
 	// Reset if done
 	if (data.current_idx >= data.nodes.size()) {
@@ -205,7 +206,7 @@ void ASTClassesFunction::Execute(ClientContext &context, TableFunctionInput &dat
 		data.current_idx++;
 	}
 
-	output.SetCardinality(count);
+	CompatSetOutputCardinality(output, count);
 
 	if (data.current_idx >= data.nodes.size()) {
 		data.current_idx = 0;
@@ -277,7 +278,7 @@ void ASTImportsFunction::Execute(ClientContext &context, TableFunctionInput &dat
 		data.current_idx++;
 	}
 
-	output.SetCardinality(count);
+	CompatSetOutputCardinality(output, count);
 
 	if (data.current_idx >= data.nodes.size()) {
 		data.current_idx = 0;

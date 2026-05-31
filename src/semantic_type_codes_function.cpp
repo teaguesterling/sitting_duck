@@ -1,4 +1,5 @@
 #include "duckdb.hpp"
+#include "duckdb_compat.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "semantic_types.hpp"
 
@@ -38,7 +39,7 @@ static void SemanticTypeCodesFunction(ClientContext &context, TableFunctionInput
 
 	// Check if we're done
 	if (global_state.current_code > 252) {
-		output.SetCardinality(0);
+		CompatSetOutputCardinality(output, 0);
 		return;
 	}
 
@@ -325,7 +326,7 @@ static void SemanticTypeCodesFunction(ClientContext &context, TableFunctionInput
 		global_state.current_code += 4; // Increment by 4 as requested
 	}
 
-	output.SetCardinality(output_count);
+	CompatSetOutputCardinality(output, output_count);
 }
 
 void RegisterSemanticTypeCodesFunction(ExtensionLoader &loader) {
