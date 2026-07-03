@@ -99,9 +99,21 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 	result.source.language = language;
 	auto start_time = std::chrono::system_clock::now();
 
+	// === RESOURCE CAPS ===
+	// Every parse entry point (scalar, table, streaming, parallel) funnels
+	// through this function, so the caps are enforced here exactly once.
+	// Oversized input is rejected before tree-sitter allocates anything.
+	if (config.max_source_bytes > 0 && content.size() > static_cast<size_t>(config.max_source_bytes)) {
+		throw InvalidInputException(
+		    "Refusing to parse '" + file_path + "': input is " + std::to_string(content.size()) +
+		    " bytes, which exceeds max_source_bytes (" + std::to_string(config.max_source_bytes) +
+		    "). Raise the limit with max_source_bytes := N or disable it with max_source_bytes := 0");
+	}
+
 	// === TREE-SITTER MEMORY PHASE BEGIN ===
-	// Parse the content using the adapter's smart pointer wrapper
-	TSTreePtr tree = adapter->ParseContent(content);
+	// Parse the content using the adapter's smart pointer wrapper.
+	// config.parse_timeout_ms bounds the parse via tree-sitter's progress callback.
+	TSTreePtr tree = adapter->ParseContent(content, config.parse_timeout_ms);
 	if (!tree) {
 		throw InternalException("Failed to parse content");
 	}
@@ -431,6 +443,15 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 
 			// Update legacy fields for backward compatibility
 			ast_node.UpdateComputedLegacyFields();
+
+			// Resource cap: bound the number of nodes materialized from a single
+			// input so pathological sources cannot exhaust memory.
+			if (config.max_parse_nodes > 0 && result.nodes.size() >= static_cast<size_t>(config.max_parse_nodes)) {
+				throw InvalidInputException(
+				    "Refusing to extract more than max_parse_nodes (" + std::to_string(config.max_parse_nodes) +
+				    ") AST nodes from '" + file_path +
+				    "'. Raise the limit with max_parse_nodes := N or disable it with max_parse_nodes := 0");
+			}
 
 			result.nodes.push_back(ast_node);
 

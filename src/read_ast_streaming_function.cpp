@@ -128,6 +128,9 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
 		}
 	}
 
+	// Parse resource cap parameters (max_source_bytes, parse_timeout_ms, max_parse_nodes)
+	ParseResourceCapParameters(input.named_parameters, extraction_config);
+
 	// Use flat dynamic schema based on extraction config
 	return_types = UnifiedASTBackend::GetFlatDynamicTableSchema(extraction_config);
 	names = UnifiedASTBackend::GetFlatDynamicTableColumnNames(extraction_config);
@@ -251,6 +254,9 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
 			CompilePrunePolicy(StringUtil::Lower(policy.ToString()), extraction_config);
 		}
 	}
+
+	// Parse resource cap parameters (max_source_bytes, parse_timeout_ms, max_parse_nodes)
+	ParseResourceCapParameters(input.named_parameters, extraction_config);
 
 	// Use flat dynamic schema based on extraction config
 	return_types = UnifiedASTBackend::GetFlatDynamicTableSchema(extraction_config);
@@ -390,16 +396,12 @@ static void ReadASTFlatStreamingFunction(ClientContext &context, TableFunctionIn
 				continue;
 			}
 
-			// Read file content
+			// Read file content, enforcing the configured source-size cap up front
+			auto &config = global_state.extraction_config;
 			auto &fs = FileSystem::GetFileSystem(context);
-			auto file_handle = fs.OpenFile(file_path, FileFlags::FILE_FLAGS_READ);
-			auto file_size = fs.GetFileSize(*file_handle);
-			string content;
-			content.resize(file_size);
-			fs.Read(*file_handle, (void *)content.data(), file_size);
+			string content = ReadSourceFileWithCap(fs, file_path, config.max_source_bytes);
 
 			// Parse using unified backend with full ExtractionConfig (supports max_depth, prune)
-			auto &config = global_state.extraction_config;
 			ASTResult result = UnifiedASTBackend::ParseToASTResult(content, file_language, file_path, config);
 
 			local_state.current_result = make_uniq<ASTResult>(std::move(result));
@@ -593,15 +595,12 @@ static void ReadASTHierarchicalFunction(ClientContext &context, TableFunctionInp
 				continue;
 			}
 
+			// Read file content, enforcing the configured source-size cap up front
+			auto &config = global_state.extraction_config;
 			auto &fs = FileSystem::GetFileSystem(context);
-			auto file_handle = fs.OpenFile(file_path, FileFlags::FILE_FLAGS_READ);
-			auto file_size = fs.GetFileSize(*file_handle);
-			string content;
-			content.resize(file_size);
-			fs.Read(*file_handle, (void *)content.data(), file_size);
+			string content = ReadSourceFileWithCap(fs, file_path, config.max_source_bytes);
 
 			// Parse using unified backend with full ExtractionConfig (supports max_depth, prune)
-			auto &config = global_state.extraction_config;
 			ASTResult result = UnifiedASTBackend::ParseToASTResult(content, file_language, file_path, config);
 
 			local_state.current_result = make_uniq<ASTResult>(std::move(result));
@@ -617,6 +616,14 @@ static void ReadASTHierarchicalFunction(ClientContext &context, TableFunctionInp
 	}
 
 	output.SetCardinality(output_index);
+}
+
+// Register the resource cap named parameters on a table function (shared by
+// every read_ast variant so no registration site can drift)
+static void AddResourceCapNamedParameters(TableFunction &func) {
+	func.named_parameters["max_source_bytes"] = LogicalType::BIGINT;
+	func.named_parameters["parse_timeout_ms"] = LogicalType::BIGINT;
+	func.named_parameters["max_parse_nodes"] = LogicalType::BIGINT;
 }
 
 //==============================================================================
@@ -638,6 +645,7 @@ static TableFunction GetReadASTFlatFunctionTwoArg() {
 	read_ast.named_parameters["batch_size"] = LogicalType::INTEGER;
 	read_ast.named_parameters["max_depth"] = LogicalType::INTEGER;
 	read_ast.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	AddResourceCapNamedParameters(read_ast);
 
 	// Legacy parameters for backward compatibility
 	read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -660,6 +668,7 @@ static TableFunction GetReadASTFlatFunctionOneArg() {
 	read_ast.named_parameters["batch_size"] = LogicalType::INTEGER;
 	read_ast.named_parameters["max_depth"] = LogicalType::INTEGER;
 	read_ast.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	AddResourceCapNamedParameters(read_ast);
 
 	// Legacy parameters for backward compatibility
 	read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -681,6 +690,7 @@ static TableFunction GetReadASTStreamingFunctionTwoArg() {
 	read_ast_streaming.named_parameters["batch_size"] = LogicalType::INTEGER;
 	read_ast_streaming.named_parameters["max_depth"] = LogicalType::INTEGER;
 	read_ast_streaming.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	AddResourceCapNamedParameters(read_ast_streaming);
 	return read_ast_streaming;
 }
 
@@ -696,6 +706,7 @@ static TableFunction GetReadASTStreamingFunctionOneArg() {
 	read_ast_streaming.named_parameters["batch_size"] = LogicalType::INTEGER;
 	read_ast_streaming.named_parameters["max_depth"] = LogicalType::INTEGER;
 	read_ast_streaming.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	AddResourceCapNamedParameters(read_ast_streaming);
 	return read_ast_streaming;
 }
 
@@ -813,6 +824,9 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientCon
 			CompilePrunePolicy(StringUtil::Lower(policy.ToString()), extraction_config);
 		}
 	}
+
+	// Parse resource cap parameters (max_source_bytes, parse_timeout_ms, max_parse_nodes)
+	ParseResourceCapParameters(input.named_parameters, extraction_config);
 
 	// Use hierarchical backend schema
 	return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
@@ -939,6 +953,9 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientCon
 		}
 	}
 
+	// Parse resource cap parameters (max_source_bytes, parse_timeout_ms, max_parse_nodes)
+	ParseResourceCapParameters(input.named_parameters, extraction_config);
+
 	// Use hierarchical backend schema
 	return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
 	names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
@@ -963,6 +980,7 @@ static TableFunction GetReadASTFunctionTwoArg() {
 	read_ast_hierarchical_new.named_parameters["batch_size"] = LogicalType::INTEGER;
 	read_ast_hierarchical_new.named_parameters["max_depth"] = LogicalType::INTEGER;
 	read_ast_hierarchical_new.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	AddResourceCapNamedParameters(read_ast_hierarchical_new);
 
 	// Legacy parameters for backward compatibility
 	read_ast_hierarchical_new.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -986,6 +1004,7 @@ static TableFunction GetReadASTHierarchicalFunctionTwoArg() {
 	read_ast_hierarchical.named_parameters["batch_size"] = LogicalType::INTEGER;
 	read_ast_hierarchical.named_parameters["max_depth"] = LogicalType::INTEGER;
 	read_ast_hierarchical.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	AddResourceCapNamedParameters(read_ast_hierarchical);
 
 	// Legacy parameters for backward compatibility
 	read_ast_hierarchical.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -1008,6 +1027,7 @@ static TableFunction GetReadASTFunctionOneArg() {
 	read_ast_hierarchical_new.named_parameters["batch_size"] = LogicalType::INTEGER;
 	read_ast_hierarchical_new.named_parameters["max_depth"] = LogicalType::INTEGER;
 	read_ast_hierarchical_new.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	AddResourceCapNamedParameters(read_ast_hierarchical_new);
 
 	// Legacy parameters for backward compatibility
 	read_ast_hierarchical_new.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -1029,6 +1049,7 @@ static TableFunction GetReadASTHierarchicalFunctionOneArg() {
 	read_ast_hierarchical.named_parameters["batch_size"] = LogicalType::INTEGER;
 	read_ast_hierarchical.named_parameters["max_depth"] = LogicalType::INTEGER;
 	read_ast_hierarchical.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	AddResourceCapNamedParameters(read_ast_hierarchical);
 
 	// Legacy parameters for backward compatibility
 	read_ast_hierarchical.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -1051,6 +1072,7 @@ static TableFunction GetReadASTFlatAliasFunctionOneArg() {
 	read_ast_flat.named_parameters["batch_size"] = LogicalType::INTEGER;
 	read_ast_flat.named_parameters["max_depth"] = LogicalType::INTEGER;
 	read_ast_flat.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	AddResourceCapNamedParameters(read_ast_flat);
 
 	// Legacy parameters for backward compatibility
 	read_ast_flat.named_parameters["peek_size"] = LogicalType::INTEGER;
@@ -1072,6 +1094,7 @@ static TableFunction GetReadASTFlatAliasFunctionTwoArg() {
 	read_ast_flat.named_parameters["batch_size"] = LogicalType::INTEGER;
 	read_ast_flat.named_parameters["max_depth"] = LogicalType::INTEGER;
 	read_ast_flat.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	AddResourceCapNamedParameters(read_ast_flat);
 
 	// Legacy parameters for backward compatibility
 	read_ast_flat.named_parameters["peek_size"] = LogicalType::INTEGER;

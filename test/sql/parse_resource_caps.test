@@ -1,0 +1,108 @@
+# name: test/sql/parse_resource_caps.test
+# description: Resource caps bound parse work (source size / timeout / node count) and surface clean errors
+# group: [sql]
+#
+# These are bounded reproductions: each over-limit input is a few KB with a
+# deliberately low cap, so the tests assert "clean DuckDB error at the
+# boundary" without ever committing an input that could hang or OOM CI.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# ---------------------------------------------------------------------------
+# Positive: default caps must not reject reasonable inputs
+# ---------------------------------------------------------------------------
+
+query I
+SELECT count(*) > 0 FROM parse_ast('def hello(): return 42', 'python');
+----
+true
+
+query I
+SELECT count(*) > 0 FROM read_ast('test/data/python/simple.py', 'python');
+----
+true
+
+# Explicitly-set generous caps behave like defaults
+query I
+SELECT count(*) > 0 FROM parse_ast('def hello(): pass', 'python',
+    max_source_bytes := 1048576, parse_timeout_ms := 60000, max_parse_nodes := 100000);
+----
+true
+
+# ---------------------------------------------------------------------------
+# max_source_bytes: an input just over a low cap yields a clean DuckDB error
+# ---------------------------------------------------------------------------
+
+statement error
+SELECT * FROM parse_ast(repeat('y = 2' || chr(10), 500), 'python', max_source_bytes := 1024);
+----
+exceeds max_source_bytes
+
+statement error
+SELECT * FROM read_ast('test/data/python/simple.py', 'python', max_source_bytes := 16);
+----
+exceeds max_source_bytes
+
+# Under ignore_errors an over-cap file is recorded per-file and skipped cleanly
+query I
+SELECT count(*) FROM read_ast('test/data/python/simple.py', 'python',
+    max_source_bytes := 16, ignore_errors := true);
+----
+0
+
+# The cap applies to the flat alias and hierarchical variants too
+statement error
+SELECT * FROM read_ast_flat('test/data/python/simple.py', 'python', max_source_bytes := 16);
+----
+exceeds max_source_bytes
+
+statement error
+SELECT * FROM read_ast_hierarchical('test/data/python/simple.py', 'python', max_source_bytes := 16);
+----
+exceeds max_source_bytes
+
+# ---------------------------------------------------------------------------
+# max_parse_nodes: a small source with a low node cap yields a clean error
+# ---------------------------------------------------------------------------
+
+statement error
+SELECT * FROM parse_ast(repeat('x = 1' || chr(10), 200), 'python', max_parse_nodes := 50);
+----
+max_parse_nodes
+
+statement error
+SELECT * FROM read_ast('test/data/python/simple.py', 'python', max_parse_nodes := 5);
+----
+max_parse_nodes
+
+# Under ignore_errors a node-cap failure is also absorbed per-file
+query I
+SELECT count(*) FROM read_ast('test/data/python/simple.py', 'python',
+    max_parse_nodes := 5, ignore_errors := true);
+----
+0
+
+# Caps can be disabled explicitly (<= 0 disables that cap)
+query I
+SELECT count(*) > 50 FROM parse_ast(repeat('x = 1' || chr(10), 200), 'python', max_parse_nodes := 0);
+----
+true
+
+# ---------------------------------------------------------------------------
+# parse_timeout_ms: the deadline-bounded parse path parses normal input fine.
+# We intentionally do NOT commit an input that actually times out — the
+# assertion here is that the bounded-parse code path is exercised and correct.
+# ---------------------------------------------------------------------------
+
+query I
+SELECT count(*) > 0 FROM parse_ast('def f(): pass', 'python', parse_timeout_ms := 30000);
+----
+true
+
+query I
+SELECT count(*) > 0 FROM read_ast('test/data/python/simple.py', 'python', parse_timeout_ms := 30000);
+----
+true

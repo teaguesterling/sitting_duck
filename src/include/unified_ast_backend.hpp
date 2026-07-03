@@ -10,6 +10,8 @@
 
 namespace duckdb {
 
+class FileSystem;
+
 //==============================================================================
 // Extraction Configuration System
 //==============================================================================
@@ -36,6 +38,17 @@ struct ExtractionConfig {
 	bool prune_leaves = false;
 	bool prune_internal = false;
 	bool has_prune = false;
+
+	// Resource caps: bound the work a single parse can do so oversized or
+	// pathological inputs produce a clean DuckDB error instead of unbounded
+	// CPU/memory consumption. A value <= 0 disables that cap.
+	static constexpr int64_t DEFAULT_MAX_SOURCE_BYTES = 50LL * 1024 * 1024; // 50 MiB per input
+	static constexpr int64_t DEFAULT_PARSE_TIMEOUT_MS = 30000;              // 30 s per input
+	static constexpr int64_t DEFAULT_MAX_PARSE_NODES = 10000000;            // 10M AST nodes per input
+
+	int64_t max_source_bytes = DEFAULT_MAX_SOURCE_BYTES; // reject inputs larger than this before parsing
+	int64_t parse_timeout_ms = DEFAULT_PARSE_TIMEOUT_MS; // cancel tree-sitter parses that run longer than this
+	int64_t max_parse_nodes = DEFAULT_MAX_PARSE_NODES;   // abort extraction once this many nodes were produced
 
 	// Get a schema-level config: if include_full_schema, return max levels for schema generation
 	ExtractionConfig GetSchemaConfig() const {
@@ -75,6 +88,16 @@ struct ExtractionConfig {
 ExtractionConfig ParseExtractionConfig(const string &context_str, const string &source_str, const string &structure_str,
                                        const string &peek_str, int32_t peek_size = 120);
 void CompilePrunePolicy(const string &policy_name, ExtractionConfig &config);
+
+// Bind-time helper: apply the resource-cap named parameters (max_source_bytes,
+// parse_timeout_ms, max_parse_nodes) to an ExtractionConfig. Shared by every
+// function that exposes the caps so no entry point can drift.
+void ParseResourceCapParameters(const named_parameter_map_t &named_parameters, ExtractionConfig &config);
+
+// Read a source file into memory, enforcing max_source_bytes BEFORE allocating
+// the content buffer. Throws InvalidInputException when the file exceeds the cap.
+// Shared by every file-reading parse entry point (streaming, parallel, single).
+string ReadSourceFileWithCap(FileSystem &fs, const string &file_path, int64_t max_source_bytes);
 
 // Result structure for unified parsing backend
 struct ASTSource {

@@ -81,6 +81,9 @@ private:
 
 	// Helper method to process a single file
 	void ProcessSingleFile(idx_t file_idx);
+
+	// Record a per-file error; returns true when absorbed under ignore_errors
+	bool TryRecordFileError(idx_t file_idx, const string &message);
 };
 
 } // namespace duckdb

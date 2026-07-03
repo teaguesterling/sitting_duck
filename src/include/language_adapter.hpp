@@ -62,9 +62,10 @@ public:
 
 	// Parse content directly and return owned tree
 	// Creates a fresh parser instance for each call to avoid shared state issues
-	TSTreePtr ParseContent(const string &content) const {
+	// parse_timeout_ms > 0 cancels the parse once the deadline is exceeded (clean error)
+	TSTreePtr ParseContent(const string &content, int64_t parse_timeout_ms = -1) const {
 		auto fresh_parser = CreateFreshParser();
-		return fresh_parser->ParseString(content);
+		return fresh_parser->ParseString(content, parse_timeout_ms);
 	}
 
 	// Pure virtual method to get the static node configs map - each adapter implements this

@@ -19,18 +19,36 @@ void ASTParsingTask::ExecuteTask() {
 	}
 }
 
+// Record a per-file error under ignore_errors. Returns true when the error was
+// absorbed (caller should continue with the next file); false when the caller
+// must propagate a clean DuckDB exception instead.
+bool ASTParsingTask::TryRecordFileError(idx_t file_idx, const string &message) {
+	parsing_state.errors_encountered.fetch_add(1);
+
+	if (!parsing_state.ignore_errors) {
+		return false;
+	}
+
+	// Store error message for later reporting
+	{
+		std::lock_guard<std::mutex> lock(parsing_state.errors_mutex);
+		parsing_state.error_messages.push_back("Error processing file " + parsing_state.file_paths[file_idx] + ": " +
+		                                       message);
+	}
+
+	// Continue processing other files
+	parsing_state.files_processed.fetch_add(1);
+	return true;
+}
+
 void ASTParsingTask::ProcessSingleFile(idx_t file_idx) {
 	try {
 		const auto &file_path = parsing_state.file_paths[file_idx];
 
-		// Read file content using DuckDB's thread-safe file system
+		// Read file content using DuckDB's thread-safe file system, enforcing the
+		// source-size cap before the content buffer is allocated
 		auto &fs = FileSystem::GetFileSystem(parsing_state.context);
-		auto handle = fs.OpenFile(file_path, FileFlags::FILE_FLAGS_READ);
-		auto file_size = fs.GetFileSize(*handle);
-
-		string content;
-		content.resize(file_size);
-		fs.Read(*handle, (void *)content.data(), file_size);
+		string content = ReadSourceFileWithCap(fs, file_path, ExtractionConfig::DEFAULT_MAX_SOURCE_BYTES);
 
 		// Get language for this specific file
 		const auto &file_language = parsing_state.languages[file_idx];
@@ -72,22 +90,23 @@ void ASTParsingTask::ProcessSingleFile(idx_t file_idx) {
 		parsing_state.per_thread_results[thread_id].push_back(std::move(result));
 
 	} catch (const Exception &e) {
-		// Handle errors based on ignore_errors flag
-		parsing_state.errors_encountered.fetch_add(1);
-
-		if (parsing_state.ignore_errors) {
-			// Store error message for later reporting
-			{
-				std::lock_guard<std::mutex> lock(parsing_state.errors_mutex);
-				parsing_state.error_messages.push_back("Error processing file " + parsing_state.file_paths[file_idx] +
-				                                       ": " + string(e.what()));
-			}
-
-			// Continue processing other files
-			parsing_state.files_processed.fetch_add(1);
-		} else {
+		// DuckDB exception: keep its type when propagating
+		if (!TryRecordFileError(file_idx, e.what())) {
 			// Re-throw to stop all tasks
 			throw;
+		}
+	} catch (const std::exception &e) {
+		// Non-DuckDB failure (std::bad_alloc from huge inputs, std::length_error,
+		// parse failures, ...). Previously these escaped the narrow catch above —
+		// bypassing ignore_errors and losing the file context. Convert them to a
+		// clean DuckDB error, matching the streaming path.
+		if (!TryRecordFileError(file_idx, e.what())) {
+			throw IOException("Failed to process " + parsing_state.file_paths[file_idx] + ": " + string(e.what()));
+		}
+	} catch (...) {
+		// No exception may escape a worker task
+		if (!TryRecordFileError(file_idx, "unknown error")) {
+			throw IOException("Failed to process " + parsing_state.file_paths[file_idx] + ": unknown error");
 		}
 	}
 }
