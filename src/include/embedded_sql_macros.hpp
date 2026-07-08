@@ -706,7 +706,7 @@ CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language :
     WITH
 
 )SQLMACRO"
-        R"SQLMACRO(
+                            R"SQLMACRO(
         ast AS (
             SELECT * FROM read_ast(source, language)
         ),
@@ -1042,7 +1042,7 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
             FROM ast a
 
 )SQLMACRO"
-        R"SQLMACRO(
+                            R"SQLMACRO(
             WHERE is_function_definition(a.semantic_type)
               AND a.name IS NOT NULL AND a.name != ''
               -- Exclude special methods (constructors, dunder methods, etc.)
@@ -1521,7 +1521,7 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
 --   SELECT * FROM ast_match('src/**/*.py', 'my_func(__X__)');
 
 )SQLMACRO"
-        R"SQLMACRO(
+                             R"SQLMACRO(
 --   SELECT * FROM ast_match('src/main.py', 'my_func(__X__)', match_syntax := true);
 --   SELECT * FROM ast_match('src/**/*.py', '__F__(__X__)', match_by := 'semantic_type');
 --
@@ -1773,7 +1773,7 @@ CREATE OR REPLACE MACRO ast_match(
                 t.file_path = mc.file_path
 
 )SQLMACRO"
-        R"SQLMACRO(
+                             R"SQLMACRO(
                 AND t.node_id >= mc.candidate_root
                 AND t.node_id <= mc.candidate_root + mc.candidate_descendants
                 -- Depth matching: flexible when at/below recursive wildcard wrapper depth
@@ -2081,7 +2081,7 @@ CREATE OR REPLACE MACRO ast_match(
             FROM captures_single_listed
 
 )SQLMACRO"
-        R"SQLMACRO(
+                             R"SQLMACRO(
             UNION ALL
             SELECT candidate_file, candidate_root, capture_name, capture_list
             FROM captures_variadic_listed
@@ -2456,12 +2456,7 @@ CREATE OR REPLACE MACRO parse_ast_list_table(code, language) AS TABLE
 --   A + B                         - B immediately follows A
 --   :has(selector)                - Contains a descendant matching selector
 --   :not(:has(selector))          - Does NOT contain a descendant matching selector
---   [name=value]                  - Attribute filter. Supported attributes:
---                                     name, type, language, semantic, peek,
---                                     qualified, signature, params, modifier,
---                                     annotation, receiver. Operators: = *= ^= $=.
---                                     Example: .call#connect[receiver="duckdb"]
---                                     matches duckdb.connect(...) but not db.connect()
+--   [name=value]                  - Attribute filter (name, type, language)
 --   Compound: type#name:has(...)  - Multiple conditions on same element
 --
 -- Usage:
@@ -2709,9 +2704,6 @@ CREATE OR REPLACE MACRO ast_select_from(
              AND t.node_id <= a.node_id + a.descendant_count
             WHERE t.node_id >= (SELECT node_id FROM sel_root)
               AND t.node_id <= (SELECT node_id + descendant_count FROM sel_root)
-
-)SQLMACRO"
-        R"SQLMACRO(
               AND a.node_id IS NULL  -- not contained in any arguments block
         ),
         simple_type AS (
@@ -2723,6 +2715,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             ) as type_filter
         ),
 
+
+)SQLMACRO"
+                          R"SQLMACRO(
         -- #id name filter
         -- Top-level #id (not inside :has()/:not() arguments).
         -- Same shape as simple_type: rank candidates by node order, pick rn=1 via
@@ -3006,14 +3001,14 @@ CREATE OR REPLACE MACRO ast_select_from(
             FROM sel_pseudo_classes pcs
             JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
             -- The inner pseudo-class must be a direct child of :not()'s arguments
-
-)SQLMACRO"
-        R"SQLMACRO(
             JOIN sel_arg_blocks not_args ON not_args.node_id = pcs.parent_id
             JOIN sel_pseudo_classes not_pcs ON not_pcs.node_id = not_args.parent_id
             JOIN sel_class_names not_cn ON not_cn.parent_id = not_pcs.node_id AND not_cn.name = 'not'
             -- The enclosing :not() must be top-level
             JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = not_pcs.node_id
+
+)SQLMACRO"
+                          R"SQLMACRO(
             LEFT JOIN sel_pcs_first_tag_or_int ftoi ON ftoi.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_string     fstr ON fstr.pcs_id = pcs.node_id
             WHERE cn.name != 'has'
@@ -3291,15 +3286,15 @@ CREATE OR REPLACE MACRO ast_select_from(
 
             -- Native extraction: modifiers array
             WHEN ac.attr_name = 'modifier' THEN
-
-)SQLMACRO"
-        R"SQLMACRO(
                 CASE ac.attr_op WHEN '*=' THEN list_contains(a.modifiers, ac.attr_value)
                                 ELSE list_contains(a.modifiers, ac.attr_value) END
 
             -- Native extraction: annotations string
             WHEN ac.attr_name = 'annotation' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.annotations LIKE '%' || ac.attr_value || '%'
+
+)SQLMACRO"
+                          R"SQLMACRO(
                                 WHEN '^=' THEN a.annotations LIKE ac.attr_value || '%'
                                 WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value
                                 ELSE a.annotations = ac.attr_value END
@@ -3330,25 +3325,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             WHEN ac.attr_name = 'peek' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.peek LIKE '%' || ac.attr_value || '%'
                                 ELSE a.peek = ac.attr_value END
-
-            -- Receiver of a call/method: the dotted path before the method name.
-            --   duckdb.connect(...)        -> 'duckdb'
-            --   db.connect()               -> 'db'
-            --   connect()                  -> '' (no receiver — never matches a non-empty value)
-            --   obj.attr.method()          -> 'obj.attr' (full dotted chain)
-            -- Disambiguates `.call#connect[receiver="duckdb"]` from bare `connect()` or
-            -- `db.connect()` — the AST schema treats them all as `.call#connect` because
-            -- only the method name is bound, but callers usually want receiver-qualified
-            -- matching for things like duckdb.connect / Path.glob / requests.get.
-            -- Derived from `peek` rather than the AST tree because the parent-attribute
-            -- shape varies per-language and per-grammar; the regex is grammar-agnostic.
-            WHEN ac.attr_name = 'receiver' THEN
-                CASE ac.attr_op
-                    WHEN '*=' THEN regexp_extract(a.peek, '^(.+?)\.\w+\s*\(', 1) LIKE '%' || ac.attr_value || '%'
-                    WHEN '^=' THEN regexp_extract(a.peek, '^(.+?)\.\w+\s*\(', 1) LIKE ac.attr_value || '%'
-                    WHEN '$=' THEN regexp_extract(a.peek, '^(.+?)\.\w+\s*\(', 1) LIKE '%' || ac.attr_value
-                    ELSE regexp_extract(a.peek, '^(.+?)\.\w+\s*\(', 1) = ac.attr_value
-                END
 
             ELSE false
         END
@@ -3551,9 +3527,6 @@ CREATE OR REPLACE MACRO ast_select_from(
     -- Pseudo-element dispatch: navigate FROM matched nodes to related nodes
     -- =====================================================================
 
-
-)SQLMACRO"
-        R"SQLMACRO(
     -- The matched nodes (before pseudo-element transformation)
     matched AS (
         SELECT * FROM matched_raw
@@ -3597,6 +3570,9 @@ CREATE OR REPLACE MACRO ast_select_from(
           ON caller_fn.node_id = call_node.scope.function
          AND caller_fn.file_path = call_node.file_path
     ),
+
+)SQLMACRO"
+                          R"SQLMACRO(
     -- ::callees — calls inside this function (transitive — includes calls
     -- inside nested functions and lambdas).
     --
@@ -4185,7 +4161,7 @@ CREATE OR REPLACE MACRO ast_callees(
     -- simple hash join on scope.function. The range-join version this
 
 )SQLMACRO"
-        R"SQLMACRO(
+                             R"SQLMACRO(
     -- replaces took up to 20 seconds on DuckDB's own source tree; this
     -- runs in under a second.
     WITH ast AS (
