@@ -726,26 +726,34 @@ void LanguageAdapterRegistry::RegisterDynamicLanguage(shared_ptr<const DynamicLa
 		       dynamic_languages.find(alias_it->second) == dynamic_languages.end();
 	};
 
-	if (is_builtin_name(name)) {
-		throw InvalidInputException("Cannot register language '%s': it collides with a built-in language or alias",
-		                            name);
-	}
-	for (const auto &alias : info->aliases) {
-		if (is_builtin_name(alias)) {
-			throw InvalidInputException("Cannot register alias '%s': it collides with a built-in language or alias",
-			                            alias);
+	// Every identifier this registration claims (the name and each alias) must
+	// be free: not a built-in, not another dynamic language's name, and not
+	// another dynamic language's alias. Entries already owned by `name` itself
+	// are allowed; that is the overwrite path.
+	auto check_identifier = [&](const string &candidate, const char *what) {
+		if (is_builtin_name(candidate)) {
+			throw InvalidInputException("Cannot register %s '%s': it collides with a built-in language or alias", what,
+			                            candidate);
 		}
+		if (candidate != name && dynamic_languages.find(candidate) != dynamic_languages.end()) {
+			throw InvalidInputException("Cannot register %s '%s': it is already registered as a dynamic language", what,
+			                            candidate);
+		}
+		auto alias_it = alias_to_language.find(candidate);
+		if (alias_it != alias_to_language.end() && alias_it->second != name) {
+			throw InvalidInputException(
+			    "Cannot register %s '%s': it is already registered as an alias of dynamic language '%s'", what,
+			    candidate, alias_it->second);
+		}
+	};
+	check_identifier(name, "language");
+	for (const auto &alias : info->aliases) {
+		check_identifier(alias, "alias");
 	}
 
 	auto existing_it = dynamic_languages.find(name);
 	if (existing_it != dynamic_languages.end() && !overwrite) {
 		throw InvalidInputException("Language '%s' is already registered. Use overwrite := true to replace it", name);
-	}
-	for (const auto &alias : info->aliases) {
-		auto alias_it = alias_to_language.find(alias);
-		if (alias_it != alias_to_language.end() && alias_it->second != name) {
-			throw InvalidInputException("Alias '%s' is already registered for language '%s'", alias, alias_it->second);
-		}
 	}
 	for (const auto &ext : info->extensions) {
 		auto ext_it = dynamic_extension_to_language.find(ext);
@@ -788,14 +796,8 @@ void LanguageAdapterRegistry::RegisterDynamicLanguage(shared_ptr<const DynamicLa
 }
 
 shared_ptr<const DynamicLanguageInfo> LanguageAdapterRegistry::GetDynamicLanguageInfo(const string &language) const {
-	lock_guard<mutex> lock(registry_mutex_);
-	string actual_language = language;
-	auto alias_it = alias_to_language.find(language);
-	if (alias_it != alias_to_language.end()) {
-		actual_language = alias_it->second;
-	}
-	auto it = dynamic_languages.find(actual_language);
-	return it != dynamic_languages.end() ? it->second : nullptr;
+	string normalized;
+	return ResolveDynamicLanguage(language, normalized);
 }
 
 string LanguageAdapterRegistry::FindDynamicLanguageForExtension(const string &extension) const {

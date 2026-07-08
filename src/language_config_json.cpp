@@ -4,9 +4,9 @@
 #include "yyjson.h"
 
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/string_util.hpp"
 
 #include <memory>
-#include <unordered_set>
 
 namespace duckdb {
 
@@ -34,13 +34,16 @@ ExtractionStrategy ParseNameStrategy(const string &name, const string &node_type
 	    {"FIND_IN_DECLARATOR", ExtractionStrategy::FIND_IN_DECLARATOR},
 	    {"FIND_CALL_TARGET", ExtractionStrategy::FIND_CALL_TARGET},
 	};
-	if (name == "CUSTOM") {
+	// Case-insensitive: ast_type_map() displays these names lowercased, and a
+	// config author copying from its output should not be rejected.
+	const string upper_name = StringUtil::Upper(name);
+	if (upper_name == "CUSTOM") {
 		throw InvalidInputException(
 		    "name_strategy \"CUSTOM\" is not allowed in a runtime language config (node type \"%s\"): "
 		    "CUSTOM requires native C++ logic that cannot be loaded at runtime",
 		    node_type);
 	}
-	auto it = name_strategies.find(name);
+	auto it = name_strategies.find(upper_name);
 	if (it == name_strategies.end()) {
 		throw InvalidInputException("Unknown name_strategy \"%s\" for node type \"%s\"", name, node_type);
 	}
@@ -61,32 +64,6 @@ uint8_t ParseFlagName(const string &name, const string &node_type) {
 		throw InvalidInputException("Unknown flag \"%s\" for node type \"%s\"", name, node_type);
 	}
 	return it->second;
-}
-
-// Native context extraction is out of scope for runtime configs (v1): the name is
-// validated against the NativeExtractionStrategy enum for forward compatibility, but
-// the stored strategy is always coerced to NONE by the caller.
-void ValidateNativeStrategy(const string &name, const string &node_type) {
-	static const std::unordered_set<string> valid_native_strategies = {"NONE",
-	                                                                   "FUNCTION_WITH_PARAMS",
-	                                                                   "FUNCTION_WITH_DECORATORS",
-	                                                                   "ARROW_FUNCTION",
-	                                                                   "ASYNC_FUNCTION",
-	                                                                   "CLASS_WITH_INHERITANCE",
-	                                                                   "CLASS_WITH_METHODS",
-	                                                                   "VARIABLE_WITH_TYPE",
-	                                                                   "GENERIC_FUNCTION",
-	                                                                   "METHOD_DEFINITION",
-	                                                                   "CONSTRUCTOR_DEFINITION",
-	                                                                   "INTERFACE_DEFINITION",
-	                                                                   "ENUM_DEFINITION",
-	                                                                   "IMPORT_STATEMENT",
-	                                                                   "EXPORT_STATEMENT",
-	                                                                   "FUNCTION_CALL",
-	                                                                   "CUSTOM"};
-	if (valid_native_strategies.find(name) == valid_native_strategies.end()) {
-		throw InvalidInputException("Unknown native_strategy \"%s\" for node type \"%s\"", name, node_type);
-	}
 }
 
 string RequireString(yyjson_val *val, const string &key, const string &node_type) {
@@ -135,8 +112,13 @@ NodeConfig ParseNodeEntry(yyjson_val *entry, const string &node_type) {
 		} else if (field == "name_strategy") {
 			name_strategy = ParseNameStrategy(RequireString(val, field, node_type), node_type);
 		} else if (field == "native_strategy") {
-			// Validated for forward compatibility but always coerced to NONE (see ValidateNativeStrategy).
-			ValidateNativeStrategy(RequireString(val, field, node_type), node_type);
+			// Rejected rather than silently ignored: accepting the key would let a
+			// config author believe native context extraction is active when it
+			// never runs for runtime-registered languages.
+			throw InvalidInputException(
+			    "\"native_strategy\" is not supported in runtime language configs (node type \"%s\"): "
+			    "native context extraction requires compiled-in language support",
+			    node_type);
 		} else if (field == "flags") {
 			if (!yyjson_is_arr(val)) {
 				throw InvalidInputException("Field \"flags\" must be an array for node type \"%s\"", node_type);

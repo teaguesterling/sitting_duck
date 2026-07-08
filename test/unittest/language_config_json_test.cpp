@@ -92,8 +92,10 @@ TEST_CASE("ParseLanguageConfigJSON accepts a config without the language field",
 	REQUIRE(configs.count("document") == 1);
 }
 
-TEST_CASE("ParseLanguageConfigJSON coerces native_strategy to NONE", "[language_config_json]") {
-	SECTION("valid native_strategy name is accepted but stored as NONE") {
+TEST_CASE("ParseLanguageConfigJSON rejects native_strategy", "[language_config_json]") {
+	// Native context extraction never runs for runtime-registered languages, so
+	// the key is rejected rather than accepted-and-ignored.
+	SECTION("native_strategy key is rejected even with a valid name") {
 		const char *json = R"JSON({
   "node_types": {
     "func": {
@@ -102,21 +104,23 @@ TEST_CASE("ParseLanguageConfigJSON coerces native_strategy to NONE", "[language_
     }
   }
 })JSON";
-		auto configs = ParseLanguageConfigJSON(json, "lang");
-		REQUIRE(configs.at("func").native_strategy == NativeExtractionStrategy::NONE);
+		REQUIRE_THROWS_AS(ParseLanguageConfigJSON(json, "lang"), InvalidInputException);
 	}
+}
 
-	SECTION("unknown native_strategy name errors") {
-		const char *json = R"JSON({
+TEST_CASE("ParseLanguageConfigJSON accepts case-insensitive name_strategy", "[language_config_json]") {
+	// ast_type_map() displays strategy names lowercased; configs copying that
+	// casing must work.
+	const char *json = R"JSON({
   "node_types": {
     "func": {
       "semantic_type": "DEFINITION_FUNCTION",
-      "native_strategy": "NOT_A_REAL_STRATEGY"
+      "name_strategy": "find_identifier"
     }
   }
 })JSON";
-		REQUIRE_THROWS_AS(ParseLanguageConfigJSON(json, "lang"), InvalidInputException);
-	}
+	auto configs = ParseLanguageConfigJSON(json, "lang");
+	REQUIRE(configs.at("func").name_strategy == ExtractionStrategy::FIND_IDENTIFIER);
 }
 
 TEST_CASE("ParseLanguageConfigJSON rejects invalid configs", "[language_config_json]") {
@@ -172,6 +176,13 @@ TEST_CASE("ParseLanguageConfigJSON rejects invalid configs", "[language_config_j
 	SECTION("CUSTOM name_strategy is explicitly rejected") {
 		const char *json = R"JSON({
   "node_types": { "x": { "semantic_type": "DEFINITION_MODULE", "name_strategy": "CUSTOM" } }
+})JSON";
+		REQUIRE_THROWS_AS(ParseLanguageConfigJSON(json, "foo"), InvalidInputException);
+	}
+
+	SECTION("CUSTOM name_strategy is rejected case-insensitively") {
+		const char *json = R"JSON({
+  "node_types": { "x": { "semantic_type": "DEFINITION_MODULE", "name_strategy": "custom" } }
 })JSON";
 		REQUIRE_THROWS_AS(ParseLanguageConfigJSON(json, "foo"), InvalidInputException);
 	}

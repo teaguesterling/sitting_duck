@@ -618,8 +618,8 @@ Each entry under `node_types` accepts these keys:
 |-----|----------|-----------------|
 | `semantic_type` | Yes | Any semantic type name from the [semantic type system](#semantic-type-system), for example `DEFINITION_VARIABLE` or `LITERAL_STRUCTURED`. |
 | `refinement` | No | Integer `0`-`3`, OR'd into the low bits of the semantic type. |
-| `name_strategy` | No | How to extract the node's name. One of `NONE` (default), `NODE_TEXT`, `FIRST_CHILD`, `FIND_IDENTIFIER`, `FIND_PROPERTY`, `FIND_ASSIGNMENT_TARGET`, `FIND_QUALIFIED_IDENTIFIER`, `FIND_IN_DECLARATOR`, `FIND_CALL_TARGET`. `CUSTOM` is rejected because it needs native code. |
-| `native_strategy` | No | Accepted for forward compatibility but ignored in v1 (always treated as `NONE`). |
+| `name_strategy` | No | How to extract the node's name. One of `NONE` (default), `NODE_TEXT`, `FIRST_CHILD`, `FIND_IDENTIFIER`, `FIND_PROPERTY`, `FIND_ASSIGNMENT_TARGET`, `FIND_QUALIFIED_IDENTIFIER`, `FIND_IN_DECLARATOR`, `FIND_CALL_TARGET`. Names are case-insensitive, so the lowercase forms shown by `ast_type_map()` also work. `CUSTOM` is rejected because it needs native code. |
+| `native_strategy` | No | Rejected. Native context extraction requires compiled-in language support and never runs for runtime-registered languages. |
 | `flags` | No | Array of flag names: `IS_SYNTAX_ONLY`, `NAME_REFERENCE`, `NAME_DECLARATION`, `NAME_DEFINITION`, `IS_SCOPE`, `IS_EXPORTED`. |
 
 Any unknown key, unknown value name, or out-of-range refinement is rejected with an error naming the offending node type.

@@ -79,6 +79,27 @@ SELECT name FROM parse_ast('{"a": [1, true]}', 'jsond') WHERE type = 'pair';
 ----
 "a"
 
+# An alias colliding with an existing dynamic language name is rejected
+statement error
+SELECT * FROM register_language('aliassteal', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := 'tree_sitter_json', aliases := ['jsond']);
+----
+<REGEX>:.*already registered.*
+
+# A language name colliding with an existing dynamic alias is rejected
+statement error
+SELECT * FROM register_language('jsondyn', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := 'tree_sitter_json');
+----
+<REGEX>:.*already registered.*
+
+# NULL named parameters are rejected cleanly
+statement error
+SELECT * FROM register_language('nulltest', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := NULL);
+----
+<REGEX>:.*cannot be NULL.*
+
 # Registering over a built-in language name is always rejected
 statement error
 SELECT * FROM register_language('python', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',

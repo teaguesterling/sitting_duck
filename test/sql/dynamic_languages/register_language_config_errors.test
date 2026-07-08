@@ -1,0 +1,94 @@
+# name: test/sql/dynamic_languages/register_language_config_errors.test
+# description: register_language() config parsing failure modes
+# group: [dynamic_languages]
+
+require sitting_duck
+
+require-env SITTING_DUCK_TEST_GRAMMAR_DIR
+
+# Every case registers under a unique name so a failure here cannot mask or be
+# masked by earlier cases, and each failed registration must leave the registry
+# unchanged (verified for the first case, same code path for the rest).
+
+statement error
+SELECT * FROM register_language('cfgmalformed', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := 'tree_sitter_json',
+                                config := 'test/data/dynamic_grammars/invalid/malformed.json');
+----
+<REGEX>:.*Failed to parse language config JSON.*
+
+# A failed registration leaves the language unregistered
+statement error
+SELECT * FROM parse_ast('{}', 'cfgmalformed');
+----
+<REGEX>:.*Unsupported language.*
+
+statement error
+SELECT * FROM register_language('cfgtopkey', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := 'tree_sitter_json',
+                                config := 'test/data/dynamic_grammars/invalid/unknown_top_key.json');
+----
+<REGEX>:.*Unknown top-level key "extra".*
+
+statement error
+SELECT * FROM register_language('cfgmismatch', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := 'tree_sitter_json',
+                                config := 'test/data/dynamic_grammars/invalid/language_mismatch.json');
+----
+<REGEX>:.*declares language "somethingelse" but is being registered as "cfgmismatch".*
+
+statement error
+SELECT * FROM register_language('cfgmissing', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := 'tree_sitter_json',
+                                config := 'test/data/dynamic_grammars/invalid/missing_node_types.json');
+----
+<REGEX>:.*missing the required "node_types" object.*
+
+statement error
+SELECT * FROM register_language('cfgnosem', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := 'tree_sitter_json',
+                                config := 'test/data/dynamic_grammars/invalid/missing_semantic_type.json');
+----
+<REGEX>:.*missing the required "semantic_type" field.*
+
+statement error
+SELECT * FROM register_language('cfgbadsem', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := 'tree_sitter_json',
+                                config := 'test/data/dynamic_grammars/invalid/unknown_semantic_type.json');
+----
+<REGEX>:.*Unknown semantic_type "NOT_A_TYPE" for node type "document".*
+
+statement error
+SELECT * FROM register_language('cfgbadstrat', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := 'tree_sitter_json',
+                                config := 'test/data/dynamic_grammars/invalid/unknown_name_strategy.json');
+----
+<REGEX>:.*Unknown name_strategy "MADE_UP".*
+
+statement error
+SELECT * FROM register_language('cfgcustom', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := 'tree_sitter_json',
+                                config := 'test/data/dynamic_grammars/invalid/custom_name_strategy.json');
+----
+<REGEX>:.*is not allowed in a runtime language config.*
+
+statement error
+SELECT * FROM register_language('cfgnative', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := 'tree_sitter_json',
+                                config := 'test/data/dynamic_grammars/invalid/native_strategy.json');
+----
+<REGEX>:.*"native_strategy" is not supported in runtime language configs.*
+
+statement error
+SELECT * FROM register_language('cfgbadflag', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := 'tree_sitter_json',
+                                config := 'test/data/dynamic_grammars/invalid/unknown_flag.json');
+----
+<REGEX>:.*Unknown flag "NOT_A_FLAG".*
+
+statement error
+SELECT * FROM register_language('cfgbadref', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := 'tree_sitter_json',
+                                config := 'test/data/dynamic_grammars/invalid/refinement_range.json');
+----
+<REGEX>:.*must be between 0 and 3.*

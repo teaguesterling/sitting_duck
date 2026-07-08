@@ -1,3 +1,4 @@
+#include "ast_file_utils.hpp"
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/file_system.hpp"
@@ -36,16 +37,6 @@ static bool IsValidLanguageName(const string &name) {
 	return true;
 }
 
-static string ReadFileToString(ClientContext &context, const string &path) {
-	auto &fs = FileSystem::GetFileSystem(context);
-	auto handle = fs.OpenFile(path, FileFlags::FILE_FLAGS_READ);
-	auto size = fs.GetFileSize(*handle);
-	string content;
-	content.resize(size);
-	fs.Read(*handle, (void *)content.data(), size);
-	return content;
-}
-
 static unique_ptr<FunctionData> RegisterLanguageBind(ClientContext &context, TableFunctionBindInput &input,
                                                      vector<LogicalType> &return_types, vector<string> &names) {
 	if (input.inputs[0].IsNull() || input.inputs[1].IsNull()) {
@@ -58,10 +49,16 @@ static unique_ptr<FunctionData> RegisterLanguageBind(ClientContext &context, Tab
 	result->symbol = "tree_sitter_" + result->name;
 
 	for (auto &kv : input.named_parameters) {
+		if (kv.second.IsNull()) {
+			throw BinderException("register_language: %s cannot be NULL", kv.first);
+		}
 		if (kv.first == "config") {
 			result->config_path = kv.second.GetValue<string>();
 		} else if (kv.first == "extensions") {
 			for (auto &ext : ListValue::GetChildren(kv.second)) {
+				if (ext.IsNull()) {
+					throw BinderException("register_language: extensions cannot be NULL");
+				}
 				// Store without a leading dot, lowercased to match detection
 				auto extension = StringUtil::Lower(ext.ToString());
 				if (!extension.empty() && extension[0] == '.') {
@@ -74,6 +71,9 @@ static unique_ptr<FunctionData> RegisterLanguageBind(ClientContext &context, Tab
 			}
 		} else if (kv.first == "aliases") {
 			for (auto &alias : ListValue::GetChildren(kv.second)) {
+				if (alias.IsNull()) {
+					throw BinderException("register_language: aliases cannot be NULL");
+				}
 				if (alias.ToString().empty()) {
 					throw BinderException("register_language: aliases cannot be empty");
 				}
@@ -150,7 +150,8 @@ static void RegisterLanguageFunction(ClientContext &context, TableFunctionInput 
 	info->extensions = bind_data.extensions;
 	info->language = language;
 	if (!bind_data.config_path.empty()) {
-		auto config_text = ReadFileToString(context, bind_data.config_path);
+		auto &fs = FileSystem::GetFileSystem(context);
+		auto config_text = ASTFileUtils::ReadFileToString(fs, bind_data.config_path);
 		info->node_configs = ParseLanguageConfigJSON(config_text, bind_data.name);
 	}
 	auto node_type_count = static_cast<int32_t>(info->node_configs.size());

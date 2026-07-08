@@ -71,6 +71,18 @@ public:
 	static string GetBuiltinLanguageForExtension(const string &extension);
 
 	/**
+	 * @brief Read an entire file into a string
+	 *
+	 * Loops until all bytes are consumed and errors on premature EOF, so a
+	 * short read from the filesystem cannot silently truncate the content.
+	 *
+	 * @param fs Filesystem to read through
+	 * @param path Path to the file
+	 * @return string Complete file content
+	 */
+	static string ReadFileToString(FileSystem &fs, const string &path);
+
+	/**
 	 * @brief Check if a path has a URI scheme (e.g., "git://", "s3://", "http://")
 	 *
 	 * @param path Path to check

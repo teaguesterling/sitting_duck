@@ -1,0 +1,6 @@
+{
+  "node_types": {
+    "document": { "semantic_type": "DEFINITION_MODULE" }
+  },
+  "extra": true
+}

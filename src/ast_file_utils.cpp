@@ -263,6 +263,26 @@ vector<string> ASTFileUtils::GetGlobFiles(ClientContext &context, const string &
 	return result;
 }
 
+string ASTFileUtils::ReadFileToString(FileSystem &fs, const string &path) {
+	auto handle = fs.OpenFile(path, FileFlags::FILE_FLAGS_READ);
+	auto size = fs.GetFileSize(*handle);
+	string content;
+	content.resize(size);
+	// FileSystem::Read performs a single read() that may return short; loop
+	// until every byte is in, and fail loudly instead of returning a
+	// NUL-padded tail.
+	idx_t total_read = 0;
+	while (total_read < static_cast<idx_t>(size)) {
+		auto bytes_read = fs.Read(*handle, (void *)(content.data() + total_read), size - total_read);
+		if (bytes_read <= 0) {
+			throw IOException("Unexpected end of file while reading '%s': got %llu of %llu bytes", path,
+			                  static_cast<uint64_t>(total_read), static_cast<uint64_t>(size));
+		}
+		total_read += static_cast<idx_t>(bytes_read);
+	}
+	return content;
+}
+
 bool ASTFileUtils::HasURIScheme(const string &path) {
 	auto scheme_pos = path.find("://");
 	if (scheme_pos == string::npos || scheme_pos == 0) {
