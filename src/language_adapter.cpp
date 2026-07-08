@@ -686,6 +686,7 @@ unique_ptr<LanguageAdapter> LanguageAdapterRegistry::CreateAdapter(const string 
 }
 
 vector<string> LanguageAdapterRegistry::GetSupportedLanguages() const {
+	lock_guard<mutex> lock(registry_mutex_);
 	vector<string> languages;
 
 	// Include already-created adapters
@@ -702,6 +703,108 @@ vector<string> LanguageAdapterRegistry::GetSupportedLanguages() const {
 	}
 
 	return languages;
+}
+
+void LanguageAdapterRegistry::RegisterDynamicLanguage(shared_ptr<const DynamicLanguageInfo> info, bool overwrite) {
+	if (!info || !info->language) {
+		throw InvalidInputException("Cannot register a dynamic language without a loaded grammar");
+	}
+
+	lock_guard<mutex> lock(registry_mutex_);
+	const string &name = info->name;
+
+	// Built-in = registered as a factory or alias but not through this path.
+	// Built-ins can never be shadowed: the dispatch chains resolve them first.
+	auto is_builtin_name = [&](const string &candidate) {
+		if (language_factories.find(candidate) != language_factories.end() &&
+		    dynamic_languages.find(candidate) == dynamic_languages.end()) {
+			return true;
+		}
+		auto alias_it = alias_to_language.find(candidate);
+		return alias_it != alias_to_language.end() &&
+		       dynamic_languages.find(alias_it->second) == dynamic_languages.end();
+	};
+
+	if (is_builtin_name(name)) {
+		throw InvalidInputException("Cannot register language '%s': it collides with a built-in language or alias",
+		                            name);
+	}
+	for (const auto &alias : info->aliases) {
+		if (is_builtin_name(alias)) {
+			throw InvalidInputException("Cannot register alias '%s': it collides with a built-in language or alias",
+			                            alias);
+		}
+	}
+
+	auto existing_it = dynamic_languages.find(name);
+	if (existing_it != dynamic_languages.end() && !overwrite) {
+		throw InvalidInputException("Language '%s' is already registered. Use overwrite := true to replace it", name);
+	}
+	for (const auto &alias : info->aliases) {
+		auto alias_it = alias_to_language.find(alias);
+		if (alias_it != alias_to_language.end() && alias_it->second != name) {
+			throw InvalidInputException("Alias '%s' is already registered for language '%s'", alias, alias_it->second);
+		}
+	}
+	for (const auto &ext : info->extensions) {
+		auto ext_it = dynamic_extension_to_language.find(ext);
+		if (ext_it != dynamic_extension_to_language.end() && ext_it->second != name) {
+			throw InvalidInputException("Extension '%s' is already registered for language '%s'", ext, ext_it->second);
+		}
+	}
+
+	// All validation passed; mutate. On overwrite, drop the old registration's
+	// aliases and extensions first (the new set may differ).
+	if (existing_it != dynamic_languages.end()) {
+		for (const auto &alias : existing_it->second->aliases) {
+			auto alias_it = alias_to_language.find(alias);
+			if (alias_it != alias_to_language.end() && alias_it->second == name) {
+				alias_to_language.erase(alias_it);
+			}
+		}
+		for (const auto &ext : existing_it->second->extensions) {
+			auto ext_it = dynamic_extension_to_language.find(ext);
+			if (ext_it != dynamic_extension_to_language.end() && ext_it->second == name) {
+				dynamic_extension_to_language.erase(ext_it);
+			}
+		}
+	}
+
+	// Register the factory inline: RegisterLanguageFactory would instantiate a
+	// temporary adapter and does not lock, so it cannot be reused here.
+	language_factories[name] = [info]() -> unique_ptr<LanguageAdapter> {
+		return make_uniq<DynamicLanguageAdapter>(info);
+	};
+	for (const auto &alias : info->aliases) {
+		alias_to_language[alias] = name;
+	}
+	for (const auto &ext : info->extensions) {
+		dynamic_extension_to_language[ext] = name;
+	}
+	dynamic_languages[name] = std::move(info);
+}
+
+shared_ptr<const DynamicLanguageInfo> LanguageAdapterRegistry::GetDynamicLanguageInfo(const string &language) const {
+	lock_guard<mutex> lock(registry_mutex_);
+	string actual_language = language;
+	auto alias_it = alias_to_language.find(language);
+	if (alias_it != alias_to_language.end()) {
+		actual_language = alias_it->second;
+	}
+	auto it = dynamic_languages.find(actual_language);
+	return it != dynamic_languages.end() ? it->second : nullptr;
+}
+
+string LanguageAdapterRegistry::FindDynamicLanguageForExtension(const string &extension) const {
+	lock_guard<mutex> lock(registry_mutex_);
+	auto it = dynamic_extension_to_language.find(extension);
+	return it != dynamic_extension_to_language.end() ? it->second : "";
+}
+
+vector<string> LanguageAdapterRegistry::GetDynamicExtensions(const string &language) const {
+	lock_guard<mutex> lock(registry_mutex_);
+	auto it = dynamic_languages.find(language);
+	return it != dynamic_languages.end() ? it->second->extensions : vector<string>();
 }
 
 void LanguageAdapterRegistry::ValidateLanguageABI(const LanguageAdapter *adapter) const {

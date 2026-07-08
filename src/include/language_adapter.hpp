@@ -633,6 +633,46 @@ private:
 	static const unordered_map<string, NodeConfig> node_configs;
 };
 
+// Immutable description of a runtime-registered (dlopen'd) tree-sitter grammar.
+// Owned by the registry via shared_ptr; in-flight parses hold their own reference,
+// so overwriting a registration never invalidates running queries. The library
+// handle is intentionally never closed: the TSLanguage must stay valid for the
+// lifetime of the process.
+struct DynamicLanguageInfo {
+	string name;
+	vector<string> aliases;
+	vector<string> extensions;
+	string library_path;
+	string symbol_name;
+	void *library_handle = nullptr;
+	const TSLanguage *language = nullptr;
+	unordered_map<string, NodeConfig> node_configs;
+	uint32_t abi_version = 0;
+};
+
+// Generic adapter for runtime-registered grammars. Stays a cheap fresh-per-parse
+// object (matching the dispatch chains); long-lived state lives in the shared info.
+class DynamicLanguageAdapter : public LanguageAdapter {
+public:
+	explicit DynamicLanguageAdapter(shared_ptr<const DynamicLanguageInfo> info);
+
+	string GetLanguageName() const override;
+	vector<string> GetAliases() const override;
+	string GetNormalizedType(const string &node_type) const override;
+	string ExtractNodeName(TSNode node, const string &content) const override;
+	string ExtractNodeValue(TSNode node, const string &content) const override;
+	bool IsPublicNode(TSNode node, const string &content) const override;
+	ParsingFunction GetParsingFunction() const override;
+	const unordered_map<string, NodeConfig> &GetNodeConfigs() const override;
+
+protected:
+	void InitializeParser() const override;
+	unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+
+private:
+	shared_ptr<const DynamicLanguageInfo> info_;
+};
+
 // Language adapter registry
 class LanguageAdapterRegistry {
 public:
@@ -659,6 +699,19 @@ public:
 	// Get list of supported languages
 	vector<string> GetSupportedLanguages() const;
 
+	// Register a runtime-loaded grammar. Rejects collisions with built-in names
+	// and aliases; duplicate dynamic names error unless overwrite is true.
+	void RegisterDynamicLanguage(shared_ptr<const DynamicLanguageInfo> info, bool overwrite);
+
+	// Look up a dynamic language by name or alias (nullptr if not dynamic)
+	shared_ptr<const DynamicLanguageInfo> GetDynamicLanguageInfo(const string &language) const;
+
+	// Map a file extension to a dynamic language name ("" if none)
+	string FindDynamicLanguageForExtension(const string &extension) const;
+
+	// Extensions registered for a dynamic language (empty if not dynamic)
+	vector<string> GetDynamicExtensions(const string &language) const;
+
 	// Fast runtime dispatch to compile-time templates - ZERO virtual calls in hot loop!
 	ASTResult ParseContentTemplated(const string &content, const string &language, const string &file_path,
 	                                const ExtractionConfig &config) const;
@@ -673,6 +726,8 @@ private:
 	mutable unordered_map<string, unique_ptr<LanguageAdapter>> adapters; // mutable for lazy creation
 	mutable unordered_map<string, AdapterFactory> language_factories;    // mutable for lazy creation
 	unordered_map<string, string> alias_to_language;
+	unordered_map<string, shared_ptr<const DynamicLanguageInfo>> dynamic_languages;
+	unordered_map<string, string> dynamic_extension_to_language;
 
 	void InitializeDefaultAdapters();
 

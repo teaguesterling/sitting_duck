@@ -33,11 +33,25 @@ void LanguageAdapterRegistry::InitializeDefaultAdapters() {
 ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string &content, const string &language,
                                                          const string &file_path,
                                                          const ExtractionConfig &config) const {
-	// Normalize language name using alias resolution
+	// Resolve aliases and look up dynamic registrations under the registry lock
+	// (both maps are mutated at runtime by register_language). The copied
+	// shared_ptr keeps the grammar alive, so parsing happens unlocked.
 	string normalized_language = language;
-	auto alias_it = alias_to_language.find(language);
-	if (alias_it != alias_to_language.end()) {
-		normalized_language = alias_it->second;
+	shared_ptr<const DynamicLanguageInfo> dynamic_info;
+	{
+		lock_guard<mutex> lock(registry_mutex_);
+		auto alias_it = alias_to_language.find(language);
+		if (alias_it != alias_to_language.end()) {
+			normalized_language = alias_it->second;
+		}
+		auto dynamic_it = dynamic_languages.find(normalized_language);
+		if (dynamic_it != dynamic_languages.end()) {
+			dynamic_info = dynamic_it->second;
+		}
+	}
+	if (dynamic_info) {
+		DynamicLanguageAdapter adapter(std::move(dynamic_info));
+		return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, config);
 	}
 
 	// CRITICAL FIX: Use fresh adapter instances to prevent static state accumulation
@@ -59,18 +73,33 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string &content, 
 #undef SD_BUILTIN_LANGUAGE_NATIVE
 
 	// Fallback for unsupported languages
-	throw InvalidInputException("Unsupported language: " + language);
+	throw InvalidInputException("Unsupported language: " + language +
+	                            ". Use register_language() to add a custom tree-sitter grammar.");
 }
 
 // Legacy version for backward compatibility
 ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string &content, const string &language,
                                                          const string &file_path, int32_t peek_size,
                                                          const string &peek_mode) const {
-	// Normalize language name using alias resolution
+	// Resolve aliases and look up dynamic registrations under the registry lock
+	// (see the ExtractionConfig overload above for the locking rationale)
 	string normalized_language = language;
-	auto alias_it = alias_to_language.find(language);
-	if (alias_it != alias_to_language.end()) {
-		normalized_language = alias_it->second;
+	shared_ptr<const DynamicLanguageInfo> dynamic_info;
+	{
+		lock_guard<mutex> lock(registry_mutex_);
+		auto alias_it = alias_to_language.find(language);
+		if (alias_it != alias_to_language.end()) {
+			normalized_language = alias_it->second;
+		}
+		auto dynamic_it = dynamic_languages.find(normalized_language);
+		if (dynamic_it != dynamic_languages.end()) {
+			dynamic_info = dynamic_it->second;
+		}
+	}
+	if (dynamic_info) {
+		DynamicLanguageAdapter adapter(std::move(dynamic_info));
+		return UnifiedASTBackend::ParseToASTResultTemplated(&adapter, content, language, file_path, peek_size,
+		                                                    peek_mode);
 	}
 
 	// CRITICAL FIX: Use fresh adapter instances to prevent static state accumulation (legacy version)
@@ -91,7 +120,8 @@ ASTResult LanguageAdapterRegistry::ParseContentTemplated(const string &content, 
 #undef SD_BUILTIN_LANGUAGE_NATIVE
 
 	// Fallback for unsupported languages
-	throw InvalidInputException("Unsupported language: " + language);
+	throw InvalidInputException("Unsupported language: " + language +
+	                            ". Use register_language() to add a custom tree-sitter grammar.");
 }
 
 } // namespace duckdb

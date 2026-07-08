@@ -29,11 +29,13 @@ SELECT (SELECT count(*) FROM parse_ast('{"a": [1, 2]}', 'jsond')) =
 true
 
 # Without a semantic config, unknown node types degrade to PARSER_CONSTRUCT
-# and the heuristic name extractor finds no name for `pair`
+# and the heuristic name extractor finds no name for `pair` (empty string,
+# matching the built-in adapters' no-name convention)
 query TT
-SELECT semantic_type::VARCHAR, name FROM parse_ast('{"a": 1}', 'jsond') WHERE type = 'pair';
+SELECT semantic_type::VARCHAR, CASE WHEN name = '' THEN '<no name>' ELSE name END
+FROM parse_ast('{"a": 1}', 'jsond') WHERE type = 'pair';
 ----
-PARSER_CONSTRUCT	NULL
+PARSER_CONSTRUCT	<no name>
 
 # Aliases resolve to the registered language
 query I

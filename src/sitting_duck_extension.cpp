@@ -24,6 +24,7 @@ void RegisterASTSQLMacros(ExtensionLoader &loader);
 // void RegisterDuckDBASTShortNamesFunction(ExtensionLoader &loader); // Removed
 void RegisterASTSupportedLanguagesFunction(ExtensionLoader &loader);
 void RegisterASTTypeMapFunction(ExtensionLoader &loader);
+void RegisterLanguageRegistrationFunction(ExtensionLoader &loader);
 // Temporarily disabled:
 // void RegisterASTObjectsFunction(ExtensionLoader &loader);
 // void RegisterASTHelperFunctions(ExtensionLoader &loader);
@@ -80,6 +81,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	// Register ast_type_map() for node type discovery
 	RegisterASTTypeMapFunction(loader);
+
+	// Register register_language() for runtime-loaded tree-sitter grammars
+	RegisterLanguageRegistrationFunction(loader);
 
 	// Register SQL macros for natural AST querying (depends on functions above)
 	RegisterASTSQLMacros(loader);
