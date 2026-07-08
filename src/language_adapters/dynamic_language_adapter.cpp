@@ -57,8 +57,9 @@ string DynamicLanguageAdapter::ExtractNodeName(TSNode node, const string &conten
 	if (!ts_node_is_null(name_child)) {
 		return ExtractNodeText(name_child, content);
 	}
-	string node_type(node_type_str);
-	if (node_type.find("definition") != string::npos || node_type.find("declaration") != string::npos) {
+	// strstr on the raw type: this runs for every unconfigured node, so avoid
+	// allocating a string per node
+	if (strstr(node_type_str, "definition") || strstr(node_type_str, "declaration")) {
 		return FindChildByType(node, content, "identifier");
 	}
 	return "";

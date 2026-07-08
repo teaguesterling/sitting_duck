@@ -321,10 +321,9 @@ string ASTFileUtils::DetectLanguageFromPath(const string &file_path) {
 	std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
 	// Look up the language (compiled-in languages only)
-	const auto &extension_map = GetExtensionToLanguageMap();
-	auto it = extension_map.find(extension);
-	if (it != extension_map.end()) {
-		return it->second;
+	auto builtin = GetBuiltinLanguageForExtension(extension);
+	if (!builtin.empty()) {
+		return builtin;
 	}
 
 	// Runtime-registered languages
@@ -334,6 +333,14 @@ string ASTFileUtils::DetectLanguageFromPath(const string &file_path) {
 	}
 
 	return "auto"; // Extension not recognized
+}
+
+string ASTFileUtils::GetBuiltinLanguageForExtension(const string &extension) {
+	// Filtered map: a language compiled out via -DSITTING_DUCK_LANGUAGES is absent
+	// here, so its extensions read as unrecognized rather than built-in.
+	const auto &extension_map = GetExtensionToLanguageMap();
+	auto it = extension_map.find(extension);
+	return it != extension_map.end() ? it->second : "";
 }
 
 bool ASTFileUtils::IsFileTypeSupported(const string &file_path, const string &language) {
@@ -347,9 +354,9 @@ vector<string> ASTFileUtils::GetSupportedExtensions(const string &language) {
 	if (it != language_map.end()) {
 		return it->second;
 	}
-	// Runtime-registered languages (empty if the language is not registered or
-	// not compiled into this build)
-	return LanguageAdapterRegistry::GetInstance().GetDynamicExtensions(language);
+	// Runtime-registered languages (empty if the language is not registered)
+	auto info = LanguageAdapterRegistry::GetInstance().GetDynamicLanguageInfo(language);
+	return info ? info->extensions : vector<string>();
 }
 
 // Helper function to check if a file extension is in the supported list

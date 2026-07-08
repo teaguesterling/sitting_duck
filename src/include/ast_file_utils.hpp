@@ -61,6 +61,16 @@ public:
 	static string DetectLanguageFromPath(const string &file_path);
 
 	/**
+	 * @brief Look up the built-in language for a file extension
+	 *
+	 * Consults only the static extension map, never runtime registrations.
+	 *
+	 * @param extension Extension without a leading dot, lowercased
+	 * @return string Built-in language identifier or "" if none
+	 */
+	static string GetBuiltinLanguageForExtension(const string &extension);
+
+	/**
 	 * @brief Check if a path has a URI scheme (e.g., "git://", "s3://", "http://")
 	 *
 	 * @param path Path to check

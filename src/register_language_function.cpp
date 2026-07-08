@@ -3,7 +3,6 @@
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/main/settings.hpp"
-#include "ast_file_utils.hpp"
 #include "dynamic_library_loader.hpp"
 #include "language_adapter.hpp"
 #include "language_config_json.hpp"
@@ -30,7 +29,7 @@ static bool IsValidLanguageName(const string &name) {
 		return false;
 	}
 	for (char c : name) {
-		if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')) {
+		if (!((c >= 'a' && c <= 'z') || StringUtil::CharacterIsDigit(c) || c == '_')) {
 			return false;
 		}
 	}
@@ -117,16 +116,6 @@ static void RegisterLanguageFunction(ClientContext &context, TableFunctionInput 
 		throw InvalidInputException("Invalid language name '%s': must match [a-z][a-z0-9_]*", bind_data.name);
 	}
 
-	// Built-in extension detection always wins, so a shadowed dynamic extension
-	// would silently never be used. Reject it instead. Collisions with other
-	// dynamic languages are rejected by RegisterDynamicLanguage below.
-	for (const auto &ext : bind_data.extensions) {
-		auto detected = ASTFileUtils::DetectLanguageFromPath("file." + ext);
-		if (detected != "auto" && !LanguageAdapterRegistry::GetInstance().GetDynamicLanguageInfo(detected)) {
-			throw InvalidInputException("Extension '%s' is already handled by built-in language '%s'", ext, detected);
-		}
-	}
-
 	// All validation happens before any registry mutation: a failure below
 	// leaves previously registered languages untouched.
 	void *handle = DynamicLibraryLoader::LoadGrammarLibrary(bind_data.library_path);
@@ -141,7 +130,7 @@ static void RegisterLanguageFunction(ClientContext &context, TableFunctionInput 
 	}
 
 	uint32_t abi_version = ts_language_version(language);
-	if (abi_version < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION || abi_version > TREE_SITTER_LANGUAGE_VERSION) {
+	if (!IsCompatibleLanguageAbi(abi_version)) {
 		throw InvalidInputException("Incompatible language version for " + bind_data.name +
 		                            ". Expected: " + std::to_string(TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION) +
 		                            " to " + std::to_string(TREE_SITTER_LANGUAGE_VERSION) +
@@ -159,11 +148,7 @@ static void RegisterLanguageFunction(ClientContext &context, TableFunctionInput 
 	info->name = bind_data.name;
 	info->aliases = bind_data.aliases;
 	info->extensions = bind_data.extensions;
-	info->library_path = bind_data.library_path;
-	info->symbol_name = bind_data.symbol;
-	info->library_handle = handle;
 	info->language = language;
-	info->abi_version = abi_version;
 	if (!bind_data.config_path.empty()) {
 		auto config_text = ReadFileToString(context, bind_data.config_path);
 		info->node_configs = ParseLanguageConfigJSON(config_text, bind_data.name);

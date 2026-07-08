@@ -23,62 +23,44 @@ struct YYJSONDocDeleter {
 using YYJSONDocPtr = std::unique_ptr<yyjson_doc, YYJSONDocDeleter>;
 
 ExtractionStrategy ParseNameStrategy(const string &name, const string &node_type) {
-	if (name == "NONE") {
-		return ExtractionStrategy::NONE;
-	}
-	if (name == "NODE_TEXT") {
-		return ExtractionStrategy::NODE_TEXT;
-	}
-	if (name == "FIRST_CHILD") {
-		return ExtractionStrategy::FIRST_CHILD;
-	}
-	if (name == "FIND_IDENTIFIER") {
-		return ExtractionStrategy::FIND_IDENTIFIER;
-	}
-	if (name == "FIND_PROPERTY") {
-		return ExtractionStrategy::FIND_PROPERTY;
-	}
-	if (name == "FIND_ASSIGNMENT_TARGET") {
-		return ExtractionStrategy::FIND_ASSIGNMENT_TARGET;
-	}
-	if (name == "FIND_QUALIFIED_IDENTIFIER") {
-		return ExtractionStrategy::FIND_QUALIFIED_IDENTIFIER;
-	}
-	if (name == "FIND_IN_DECLARATOR") {
-		return ExtractionStrategy::FIND_IN_DECLARATOR;
-	}
-	if (name == "FIND_CALL_TARGET") {
-		return ExtractionStrategy::FIND_CALL_TARGET;
-	}
+	static const unordered_map<string, ExtractionStrategy> name_strategies = {
+	    {"NONE", ExtractionStrategy::NONE},
+	    {"NODE_TEXT", ExtractionStrategy::NODE_TEXT},
+	    {"FIRST_CHILD", ExtractionStrategy::FIRST_CHILD},
+	    {"FIND_IDENTIFIER", ExtractionStrategy::FIND_IDENTIFIER},
+	    {"FIND_PROPERTY", ExtractionStrategy::FIND_PROPERTY},
+	    {"FIND_ASSIGNMENT_TARGET", ExtractionStrategy::FIND_ASSIGNMENT_TARGET},
+	    {"FIND_QUALIFIED_IDENTIFIER", ExtractionStrategy::FIND_QUALIFIED_IDENTIFIER},
+	    {"FIND_IN_DECLARATOR", ExtractionStrategy::FIND_IN_DECLARATOR},
+	    {"FIND_CALL_TARGET", ExtractionStrategy::FIND_CALL_TARGET},
+	};
 	if (name == "CUSTOM") {
 		throw InvalidInputException(
 		    "name_strategy \"CUSTOM\" is not allowed in a runtime language config (node type \"%s\"): "
 		    "CUSTOM requires native C++ logic that cannot be loaded at runtime",
 		    node_type);
 	}
-	throw InvalidInputException("Unknown name_strategy \"%s\" for node type \"%s\"", name, node_type);
+	auto it = name_strategies.find(name);
+	if (it == name_strategies.end()) {
+		throw InvalidInputException("Unknown name_strategy \"%s\" for node type \"%s\"", name, node_type);
+	}
+	return it->second;
 }
 
 uint8_t ParseFlagName(const string &name, const string &node_type) {
-	if (name == "IS_SYNTAX_ONLY") {
-		return ASTNodeFlags::IS_SYNTAX_ONLY;
+	static const unordered_map<string, uint8_t> flag_names = {
+	    {"IS_SYNTAX_ONLY", ASTNodeFlags::IS_SYNTAX_ONLY},
+	    {"NAME_REFERENCE", ASTNodeFlags::NAME_REFERENCE},
+	    {"NAME_DECLARATION", ASTNodeFlags::NAME_DECLARATION},
+	    {"NAME_DEFINITION", ASTNodeFlags::NAME_DEFINITION},
+	    {"IS_SCOPE", ASTNodeFlags::IS_SCOPE},
+	    {"IS_EXPORTED", ASTNodeFlags::IS_EXPORTED},
+	};
+	auto it = flag_names.find(name);
+	if (it == flag_names.end()) {
+		throw InvalidInputException("Unknown flag \"%s\" for node type \"%s\"", name, node_type);
 	}
-	if (name == "NAME_REFERENCE") {
-		return ASTNodeFlags::NAME_REFERENCE;
-	}
-	if (name == "NAME_DECLARATION") {
-		return ASTNodeFlags::NAME_DECLARATION;
-	}
-	if (name == "NAME_DEFINITION") {
-		return ASTNodeFlags::NAME_DEFINITION;
-	}
-	if (name == "IS_SCOPE") {
-		return ASTNodeFlags::IS_SCOPE;
-	}
-	if (name == "IS_EXPORTED") {
-		return ASTNodeFlags::IS_EXPORTED;
-	}
-	throw InvalidInputException("Unknown flag \"%s\" for node type \"%s\"", name, node_type);
+	return it->second;
 }
 
 // Native context extraction is out of scope for runtime configs (v1): the name is

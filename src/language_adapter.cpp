@@ -1,5 +1,6 @@
 #include "language_adapter.hpp"
 #include "semantic_types.hpp"
+#include "ast_file_utils.hpp"
 #include "ast_type.hpp" // For ASTResult definition
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
@@ -706,15 +707,15 @@ vector<string> LanguageAdapterRegistry::GetSupportedLanguages() const {
 }
 
 void LanguageAdapterRegistry::RegisterDynamicLanguage(shared_ptr<const DynamicLanguageInfo> info, bool overwrite) {
-	if (!info || !info->language) {
-		throw InvalidInputException("Cannot register a dynamic language without a loaded grammar");
-	}
+	D_ASSERT(info && info->language);
 
 	lock_guard<mutex> lock(registry_mutex_);
 	const string &name = info->name;
 
 	// Built-in = registered as a factory or alias but not through this path.
-	// Built-ins can never be shadowed: the dispatch chains resolve them first.
+	// This registration-time rejection is the SOLE enforcement of built-in
+	// shadowing: the dispatch preludes check dynamic_languages first, so a
+	// dynamic entry under a built-in name would actually win if allowed in.
 	auto is_builtin_name = [&](const string &candidate) {
 		if (language_factories.find(candidate) != language_factories.end() &&
 		    dynamic_languages.find(candidate) == dynamic_languages.end()) {
@@ -751,22 +752,24 @@ void LanguageAdapterRegistry::RegisterDynamicLanguage(shared_ptr<const DynamicLa
 		if (ext_it != dynamic_extension_to_language.end() && ext_it->second != name) {
 			throw InvalidInputException("Extension '%s' is already registered for language '%s'", ext, ext_it->second);
 		}
+		// Built-in extension detection always wins, so a shadowed dynamic
+		// extension would silently never be used. Reject it instead.
+		auto builtin = ASTFileUtils::GetBuiltinLanguageForExtension(ext);
+		if (!builtin.empty()) {
+			throw InvalidInputException("Extension '%s' is already handled by built-in language '%s'", ext, builtin);
+		}
 	}
 
 	// All validation passed; mutate. On overwrite, drop the old registration's
 	// aliases and extensions first (the new set may differ).
 	if (existing_it != dynamic_languages.end()) {
+		// The validation above guarantees these entries still map to this
+		// language, so they can be erased unconditionally.
 		for (const auto &alias : existing_it->second->aliases) {
-			auto alias_it = alias_to_language.find(alias);
-			if (alias_it != alias_to_language.end() && alias_it->second == name) {
-				alias_to_language.erase(alias_it);
-			}
+			alias_to_language.erase(alias);
 		}
 		for (const auto &ext : existing_it->second->extensions) {
-			auto ext_it = dynamic_extension_to_language.find(ext);
-			if (ext_it != dynamic_extension_to_language.end() && ext_it->second == name) {
-				dynamic_extension_to_language.erase(ext_it);
-			}
+			dynamic_extension_to_language.erase(ext);
 		}
 	}
 
@@ -799,12 +802,6 @@ string LanguageAdapterRegistry::FindDynamicLanguageForExtension(const string &ex
 	lock_guard<mutex> lock(registry_mutex_);
 	auto it = dynamic_extension_to_language.find(extension);
 	return it != dynamic_extension_to_language.end() ? it->second : "";
-}
-
-vector<string> LanguageAdapterRegistry::GetDynamicExtensions(const string &language) const {
-	lock_guard<mutex> lock(registry_mutex_);
-	auto it = dynamic_languages.find(language);
-	return it != dynamic_languages.end() ? it->second->extensions : vector<string>();
 }
 
 void LanguageAdapterRegistry::ValidateLanguageABI(const LanguageAdapter *adapter) const {

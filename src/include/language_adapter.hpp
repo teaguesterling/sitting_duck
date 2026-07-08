@@ -635,19 +635,15 @@ private:
 
 // Immutable description of a runtime-registered (dlopen'd) tree-sitter grammar.
 // Owned by the registry via shared_ptr; in-flight parses hold their own reference,
-// so overwriting a registration never invalidates running queries. The library
-// handle is intentionally never closed: the TSLanguage must stay valid for the
-// lifetime of the process.
+// so overwriting a registration never invalidates running queries. The loaded
+// library is intentionally never closed (see DynamicLibraryLoader): the TSLanguage
+// must stay valid for the lifetime of the process.
 struct DynamicLanguageInfo {
 	string name;
 	vector<string> aliases;
 	vector<string> extensions;
-	string library_path;
-	string symbol_name;
-	void *library_handle = nullptr;
 	const TSLanguage *language = nullptr;
 	unordered_map<string, NodeConfig> node_configs;
-	uint32_t abi_version = 0;
 };
 
 // Generic adapter for runtime-registered grammars. Stays a cheap fresh-per-parse
@@ -709,9 +705,6 @@ public:
 	// Map a file extension to a dynamic language name ("" if none)
 	string FindDynamicLanguageForExtension(const string &extension) const;
 
-	// Extensions registered for a dynamic language (empty if not dynamic)
-	vector<string> GetDynamicExtensions(const string &language) const;
-
 	// Fast runtime dispatch to compile-time templates - ZERO virtual calls in hot loop!
 	ASTResult ParseContentTemplated(const string &content, const string &language, const string &file_path,
 	                                const ExtractionConfig &config) const;
@@ -722,6 +715,13 @@ public:
 
 private:
 	LanguageAdapterRegistry();
+
+	// Resolve aliases and look up dynamic registrations under the registry lock
+	// (both maps are mutated at runtime by register_language). The returned
+	// shared_ptr keeps the grammar alive, so parsing happens unlocked; normalized
+	// receives the alias-resolved name for built-in dispatch.
+	shared_ptr<const DynamicLanguageInfo> ResolveDynamicLanguage(const string &language, string &normalized) const;
+
 	mutable mutex registry_mutex_;                                       // Synchronize access to mutable shared state
 	mutable unordered_map<string, unique_ptr<LanguageAdapter>> adapters; // mutable for lazy creation
 	mutable unordered_map<string, AdapterFactory> language_factories;    // mutable for lazy creation
