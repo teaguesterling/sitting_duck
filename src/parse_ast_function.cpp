@@ -1,4 +1,5 @@
 #include "parse_ast_function.hpp"
+#include "duckdb_compat.hpp"
 #include "unified_ast_backend.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/function/table_function.hpp"
@@ -84,7 +85,7 @@ static void ParseASTExecute(ClientContext &context, TableFunctionInput &data_p, 
 	idx_t output_index = 0;
 	UnifiedASTBackend::ProjectToDynamicTable(data.result, output, data.current_row, output_index,
 	                                         data.extraction_config);
-	output.SetCardinality(output_index);
+	CompatSetOutputCardinality(output, output_index);
 }
 
 //==============================================================================
@@ -163,7 +164,7 @@ static void ParseASTHierarchicalExecute(ClientContext &context, TableFunctionInp
 	idx_t rows_processed = output_index - old_output_index;
 	data.current_row += rows_processed;
 
-	output.SetCardinality(output_index);
+	CompatSetOutputCardinality(output, output_index);
 }
 
 void ParseASTFunction::Register(ExtensionLoader &loader) {

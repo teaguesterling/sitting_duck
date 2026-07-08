@@ -1,4 +1,5 @@
 #include "duckdb.hpp"
+#include "duckdb_compat.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "include/language_adapter.hpp"
 #include "include/node_config.hpp"
@@ -215,7 +216,7 @@ static void TypeMapFunction(ClientContext &context, TableFunctionInput &data_p, 
 		state.current_row++;
 	}
 
-	output.SetCardinality(count);
+	CompatSetOutputCardinality(output, count);
 }
 
 void RegisterASTTypeMapFunction(ExtensionLoader &loader) {

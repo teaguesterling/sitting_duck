@@ -1,4 +1,5 @@
 #include "duckdb.hpp"
+#include "duckdb_compat.hpp"
 #include "include/semantic_types.hpp"
 #include "include/node_config.hpp"
 #include "include/ast_file_utils.hpp"
@@ -216,16 +217,16 @@ static void SemanticTypeCodeFunction(DataChunk &args, ExpressionState &state, Ve
 	auto &name_vector = args.data[0];
 	auto count = args.size();
 
-	UnaryExecutor::ExecuteWithNulls<string_t, uint8_t>(
-	    name_vector, result, count, [&](string_t name_str, ValidityMask &mask, idx_t idx) {
-		    string name = name_str.GetString();
-		    uint8_t code = SemanticTypes::GetSemanticTypeCode(name);
-		    if (code == 255) {
-			    mask.SetInvalid(idx);
-			    return uint8_t(0); // Return value doesn't matter when NULL
-		    }
-		    return code;
-	    });
+	CompatUnaryExecuteWithNulls<string_t, uint8_t>(name_vector, result, count,
+	                                               [&](string_t name_str, ValidityMask &mask, idx_t idx) {
+		                                               string name = name_str.GetString();
+		                                               uint8_t code = SemanticTypes::GetSemanticTypeCode(name);
+		                                               if (code == 255) {
+			                                               mask.SetInvalid(idx);
+			                                               return uint8_t(0); // Return value doesn't matter when NULL
+		                                               }
+		                                               return code;
+	                                               });
 }
 
 // Function that converts kind name to code
@@ -235,16 +236,16 @@ static void KindCodeFunction(DataChunk &args, ExpressionState &state, Vector &re
 	auto &name_vector = args.data[0];
 	auto count = args.size();
 
-	UnaryExecutor::ExecuteWithNulls<string_t, uint8_t>(
-	    name_vector, result, count, [&](string_t name_str, ValidityMask &mask, idx_t idx) {
-		    string name = name_str.GetString();
-		    uint8_t code = SemanticTypes::GetKindCode(name);
-		    if (code == 255) {
-			    mask.SetInvalid(idx);
-			    return uint8_t(0); // Return value doesn't matter when NULL
-		    }
-		    return code;
-	    });
+	CompatUnaryExecuteWithNulls<string_t, uint8_t>(name_vector, result, count,
+	                                               [&](string_t name_str, ValidityMask &mask, idx_t idx) {
+		                                               string name = name_str.GetString();
+		                                               uint8_t code = SemanticTypes::GetKindCode(name);
+		                                               if (code == 255) {
+			                                               mask.SetInvalid(idx);
+			                                               return uint8_t(0); // Return value doesn't matter when NULL
+		                                               }
+		                                               return code;
+	                                               });
 }
 
 // Function that checks if semantic type belongs to a specific kind
@@ -617,7 +618,7 @@ static void DetectLanguageFunction(DataChunk &args, ExpressionState &state, Vect
 	auto &path_vector = args.data[0];
 	auto count = args.size();
 
-	UnaryExecutor::ExecuteWithNulls<string_t, string_t>(
+	CompatUnaryExecuteWithNulls<string_t, string_t>(
 	    path_vector, result, count, [&](string_t path_str, ValidityMask &mask, idx_t idx) {
 		    string file_path = path_str.GetString();
 		    string language = ASTFileUtils::DetectLanguageFromPath(file_path);

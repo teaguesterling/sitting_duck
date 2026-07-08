@@ -15,7 +15,12 @@
 --   A + B                         - B immediately follows A
 --   :has(selector)                - Contains a descendant matching selector
 --   :not(:has(selector))          - Does NOT contain a descendant matching selector
---   [name=value]                  - Attribute filter (name, type, language)
+--   [name=value]                  - Attribute filter. Supported attributes:
+--                                     name, type, language, semantic, peek,
+--                                     qualified, signature, params, modifier,
+--                                     annotation, receiver. Operators: = *= ^= $=.
+--                                     Example: .call#connect[receiver="duckdb"]
+--                                     matches duckdb.connect(...) but not db.connect()
 --   Compound: type#name:has(...)  - Multiple conditions on same element
 --
 -- Usage:
@@ -875,6 +880,25 @@ CREATE OR REPLACE MACRO ast_select_from(
             WHEN ac.attr_name = 'peek' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.peek LIKE '%' || ac.attr_value || '%'
                                 ELSE a.peek = ac.attr_value END
+
+            -- Receiver of a call/method: the dotted path before the method name.
+            --   duckdb.connect(...)        -> 'duckdb'
+            --   db.connect()               -> 'db'
+            --   connect()                  -> '' (no receiver — never matches a non-empty value)
+            --   obj.attr.method()          -> 'obj.attr' (full dotted chain)
+            -- Disambiguates `.call#connect[receiver="duckdb"]` from bare `connect()` or
+            -- `db.connect()` — the AST schema treats them all as `.call#connect` because
+            -- only the method name is bound, but callers usually want receiver-qualified
+            -- matching for things like duckdb.connect / Path.glob / requests.get.
+            -- Derived from `peek` rather than the AST tree because the parent-attribute
+            -- shape varies per-language and per-grammar; the regex is grammar-agnostic.
+            WHEN ac.attr_name = 'receiver' THEN
+                CASE ac.attr_op
+                    WHEN '*=' THEN regexp_extract(a.peek, '^(.+?)\.\w+\s*\(', 1) LIKE '%' || ac.attr_value || '%'
+                    WHEN '^=' THEN regexp_extract(a.peek, '^(.+?)\.\w+\s*\(', 1) LIKE ac.attr_value || '%'
+                    WHEN '$=' THEN regexp_extract(a.peek, '^(.+?)\.\w+\s*\(', 1) LIKE '%' || ac.attr_value
+                    ELSE regexp_extract(a.peek, '^(.+?)\.\w+\s*\(', 1) = ac.attr_value
+                END
 
             ELSE false
         END

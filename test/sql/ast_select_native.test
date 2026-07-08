@@ -52,6 +52,44 @@ SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py'
 true
 
 # =============================================================================
+# [receiver=X] — receiver of a call/method
+# =============================================================================
+# The call's dotted prefix before the method name. Disambiguates calls that
+# share a method name but different receivers (db.connect vs duckdb.connect vs
+# bare connect()).
+
+# [receiver=db] matches only `db.connect()`, not `self._conn.execute` etc.
+# sample_app.py line 148 has `db.connect()`.
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/sample_app.py', '.call#connect[receiver=db]');
+----
+1
+
+# [receiver=self] matches `self.execute(...)` — line 42's
+# `result = self.execute(query, params)`.
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/sample_app.py', '.call#execute[receiver=self]');
+----
+1
+
+# [receiver*=db] substring-matches the receiver, picking up self.db.execute
+# (which has "db" inside "self.db") but not self._conn.execute (no "db").
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/sample_app.py', '.call#execute[receiver*=db]');
+----
+true
+
+# Negative check: a receiver that does not exist returns 0.
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/sample_app.py', '.call#connect[receiver=nonexistent]');
+----
+0
+
+# Negative check: bare connect() with no receiver should NOT match [receiver=db].
+# (sample_app.py only has receiver-qualified calls, so this is implicit, but
+# the receiver regex returns '' for bare calls — never equals a non-empty value.)
+
+# =============================================================================
 # CSS attribute operators
 # =============================================================================
 
