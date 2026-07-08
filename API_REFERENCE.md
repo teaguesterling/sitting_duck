@@ -9,7 +9,8 @@
 3. [Utility Functions](#utility-functions)
 4. [Semantic Type System](#semantic-type-system)
 5. [Language Support](#language-support)
-6. [Common Usage Patterns](#common-usage-patterns)
+6. [Runtime Language Registration](#runtime-language-registration)
+7. [Common Usage Patterns](#common-usage-patterns)
 
 ---
 
@@ -537,6 +538,151 @@ SELECT * FROM read_ast('script.py');  -- Detects Python
 -- Explicit language
 SELECT * FROM read_ast('Makefile', 'bash');  -- Force specific language
 ```
+
+---
+
+## Runtime Language Registration
+
+Beyond the built-in languages, you can register additional tree-sitter grammars at runtime from a compiled shared library. This loads a grammar the extension was not built with, gives it a name and file extensions, and optionally attaches a semantic config so its nodes map into the semantic type system.
+
+### `register_language(name, lib_path, [symbol], [config], [extensions], [aliases], [overwrite])`
+
+**Grammar registration function** - Loads a tree-sitter grammar from a shared library and registers it under a new language name.
+
+#### Parameters
+
+- `name` (VARCHAR): Language name to register. Must match `[a-z][a-z0-9_]*` (lowercase letter first, then lowercase letters, digits, or underscores).
+- `lib_path` (VARCHAR): Path to the compiled grammar shared library (`.so`, `.dylib`, or `.dll`).
+- `symbol` (VARCHAR, optional): Name of the exported parser function to load from the library. Defaults to `tree_sitter_<name>`. Override this when the library's symbol does not match the name you are registering under.
+- `config` (VARCHAR, optional): Path to a JSON semantic config file (see [JSON semantic config](#json-semantic-config)). Without it, nodes fall back to default classification.
+- `extensions` (VARCHAR[], optional): File extensions that should auto-detect as this language, for example `['jsond']`.
+- `aliases` (VARCHAR[], optional): Alternate names that resolve to this language.
+- `overwrite` (BOOLEAN, optional): Replace an existing dynamic registration with the same name. Default `false`. Attempting to register an already-registered name without this errors.
+
+#### Returns
+
+A single summary row.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `language` | VARCHAR | The registered language name |
+| `abi_version` | INTEGER | The grammar's tree-sitter ABI version |
+| `node_type_count` | INTEGER | Number of node types loaded from the config (`0` when no config is given) |
+| `status` | VARCHAR | `registered` on success |
+
+#### Example
+
+```sql
+-- Register a grammar under 'jsond' from a library that exports tree_sitter_json
+SELECT language, abi_version, node_type_count, status
+FROM register_language(
+    'jsond',
+    '/path/to/libjson_dyn.so',
+    symbol := 'tree_sitter_json',
+    config := 'jsond_types.json',
+    extensions := ['jsond'],
+    aliases := ['jsondyn']
+);
+```
+
+Registration fails with a clear error when the name is invalid, the name or an alias collides with a built-in language, the library cannot be loaded, or the symbol cannot be resolved.
+
+### Building a Grammar Library
+
+The library must export a parser function named `tree_sitter_<name>()` (or whatever you pass as `symbol`) that returns a `TSLanguage *`. The simplest way to produce one is the tree-sitter CLI:
+
+```sh
+tree-sitter build --output libmylang.so
+```
+
+You can also compile the generated `parser.c` (plus `scanner.c` if the grammar has an external scanner) directly:
+
+```sh
+cc -shared -fPIC -I src src/parser.c src/scanner.c -o libmylang.so
+```
+
+The resulting library is specific to the OS and CPU architecture it was built on.
+
+### JSON Semantic Config
+
+The optional `config` file maps raw tree-sitter node types onto the semantic type system. Its top level is a JSON object.
+
+| Key | Required | Description |
+|-----|----------|-------------|
+| `language` | No | If present, must equal the `name` you are registering under. |
+| `node_types` | Yes | Object whose keys are raw tree-sitter node types and whose values are node-config objects. |
+
+Each entry under `node_types` accepts these keys:
+
+| Key | Required | Accepted values |
+|-----|----------|-----------------|
+| `semantic_type` | Yes | Any semantic type name from the [semantic type system](#semantic-type-system), for example `DEFINITION_VARIABLE` or `LITERAL_STRUCTURED`. |
+| `refinement` | No | Integer `0`-`3`, OR'd into the low bits of the semantic type. |
+| `name_strategy` | No | How to extract the node's name. One of `NONE` (default), `NODE_TEXT`, `FIRST_CHILD`, `FIND_IDENTIFIER`, `FIND_PROPERTY`, `FIND_ASSIGNMENT_TARGET`, `FIND_QUALIFIED_IDENTIFIER`, `FIND_IN_DECLARATOR`, `FIND_CALL_TARGET`. `CUSTOM` is rejected because it needs native code. |
+| `native_strategy` | No | Accepted for forward compatibility but ignored in v1 (always treated as `NONE`). |
+| `flags` | No | Array of flag names: `IS_SYNTAX_ONLY`, `NAME_REFERENCE`, `NAME_DECLARATION`, `NAME_DEFINITION`, `IS_SCOPE`, `IS_EXPORTED`. |
+
+Any unknown key, unknown value name, or out-of-range refinement is rejected with an error naming the offending node type.
+
+#### Example Config
+
+```json
+{
+  "language": "jsond",
+  "node_types": {
+    "document": {
+      "semantic_type": "DEFINITION_MODULE",
+      "flags": ["IS_SCOPE"]
+    },
+    "object": {
+      "semantic_type": "LITERAL_STRUCTURED",
+      "refinement": 2
+    },
+    "pair": {
+      "semantic_type": "DEFINITION_VARIABLE",
+      "name_strategy": "FIRST_CHILD",
+      "flags": ["NAME_DEFINITION"]
+    },
+    "string": {
+      "semantic_type": "LITERAL_STRING",
+      "name_strategy": "NODE_TEXT"
+    }
+  }
+}
+```
+
+### Behavior Without a Config
+
+A grammar registered without a config still parses. Every node type it produces is classified as `PARSER_CONSTRUCT`, and name extraction falls back to heuristics: the node's `name` field if the grammar exposes one, otherwise the first identifier child for definition and declaration nodes. Node types that carry their name elsewhere resolve to a `NULL` name until you supply a config.
+
+### Caveats
+
+- `register_language()` loads and runs native code, so it needs `enable_external_access` (on by default). It errors with a permission message when external access is disabled. Only register libraries you built or trust.
+- A registration lives in the current process and is not persisted. Re-run `register_language()` in each new session, for example from an init script.
+- There is no unregister function. Use `overwrite := true` to replace an existing dynamic registration.
+- The library must be built for the current operating system and CPU architecture.
+- The grammar's ABI version must fall within the tree-sitter ABI range this extension supports.
+
+### Auto-Detection and Introspection
+
+Once registered, a dynamic language behaves like a built-in one:
+
+```sql
+-- Extensions feed auto-detection
+SELECT detect_language('some/file.jsond');   -- 'jsond'
+
+-- read_ast auto-detects from the extension, or takes the language explicitly
+SELECT * FROM read_ast('data/config.jsond');
+SELECT * FROM read_ast('data/*.jsond', 'jsond');
+
+-- Dynamic languages appear in the language catalog with a distinct parser_type
+SELECT language, extensions, parser_type, node_type_count
+FROM ast_supported_languages()
+WHERE language = 'jsond';
+-- jsond  [jsond]  tree-sitter (dynamic)  ...
+```
+
+Dynamic registrations report a `parser_type` of `tree-sitter (dynamic)` in `ast_supported_languages()`, distinguishing them from the compiled-in grammars.
 
 ---
 
