@@ -54,7 +54,14 @@ static void SupportedLanguagesFunction(ClientContext &context, TableFunctionInpu
 		output.SetValue(1, count, Value::LIST(LogicalType::VARCHAR, ext_values));
 
 		// Column 2: parser type
-		string parser_type = (lang == "duckdb") ? "native" : "tree-sitter";
+		string parser_type;
+		if (lang == "duckdb") {
+			parser_type = "native";
+		} else if (registry.GetDynamicLanguageInfo(lang)) {
+			parser_type = "tree-sitter (dynamic)";
+		} else {
+			parser_type = "tree-sitter";
+		}
 		output.SetValue(2, count, Value(parser_type));
 
 		// Column 3: node type count

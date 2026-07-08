@@ -327,6 +327,12 @@ string ASTFileUtils::DetectLanguageFromPath(const string &file_path) {
 		return it->second;
 	}
 
+	// Runtime-registered languages
+	auto dynamic_language = LanguageAdapterRegistry::GetInstance().FindDynamicLanguageForExtension(extension);
+	if (!dynamic_language.empty()) {
+		return dynamic_language;
+	}
+
 	return "auto"; // Extension not recognized
 }
 
@@ -341,7 +347,9 @@ vector<string> ASTFileUtils::GetSupportedExtensions(const string &language) {
 	if (it != language_map.end()) {
 		return it->second;
 	}
-	return {}; // Language not recognized (or not compiled into this build)
+	// Runtime-registered languages (empty if the language is not registered or
+	// not compiled into this build)
+	return LanguageAdapterRegistry::GetInstance().GetDynamicExtensions(language);
 }
 
 // Helper function to check if a file extension is in the supported list
