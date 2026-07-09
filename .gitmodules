@@ -1,11 +1,11 @@
 [submodule "duckdb"]
 	path = duckdb
 	url = https://github.com/duckdb/duckdb
-	branch = main
+	branch = v1.5-variegata
 [submodule "extension-ci-tools"]
 	path = extension-ci-tools
 	url = https://github.com/duckdb/extension-ci-tools
-	branch = main
+	branch = v1.5-variegata
 [submodule "grammars/tree-sitter-python"]
 	path = grammars/tree-sitter-python
 	url = https://github.com/tree-sitter/tree-sitter-python.git

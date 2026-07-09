@@ -1,4 +1,5 @@
 #include "duckdb.hpp"
+#include "duckdb_compat.hpp"
 #include "duckdb/function/cast/cast_function_set.hpp"
 #include "duckdb/function/cast/default_casts.hpp"
 #include "include/semantic_types.hpp"
@@ -48,19 +49,21 @@ static bool SemanticTypeToVarcharCast(Vector &source, Vector &result, idx_t coun
 //------------------------------------------------------------------------------
 
 static bool VarcharToSemanticTypeCast(Vector &source, Vector &result, idx_t count, CastParameters &parameters) {
-	auto &result_validity = FlatVector::Validity(result);
-
-	UnaryExecutor::ExecuteWithNulls<string_t, uint8_t>(
-	    source, result, count, [&](string_t name_str, ValidityMask &mask, idx_t idx) -> uint8_t {
-		    string name = name_str.GetString();
-		    uint8_t code = SemanticTypes::GetSemanticTypeCode(name);
-		    if (code == 255) {
-			    // Unknown type name - return NULL
-			    result_validity.SetInvalid(idx);
-			    return 0;
-		    }
-		    return code;
-	    });
+	// Note: we use the `mask` lambda parameter (not a captured
+	// FlatVector::Validity(result)) to emit NULL outputs. The CompatExecuteWithNulls
+	// wrappers on duckdb main pass a scratch per-row mask to the lambda and
+	// translate `mask.SetInvalid` to `std::nullopt` for the new Execute API;
+	// writing to result's validity directly would be bypassed there.
+	CompatUnaryExecuteWithNulls<string_t, uint8_t>(source, result, count,
+	                                               [&](string_t name_str, ValidityMask &mask, idx_t idx) -> uint8_t {
+		                                               string name = name_str.GetString();
+		                                               uint8_t code = SemanticTypes::GetSemanticTypeCode(name);
+		                                               if (code == 255) {
+			                                               mask.SetInvalid(idx); // Unknown type name → SQL NULL
+			                                               return 0;
+		                                               }
+		                                               return code;
+	                                               });
 	return true;
 }
 
