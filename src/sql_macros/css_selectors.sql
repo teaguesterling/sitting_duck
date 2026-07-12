@@ -457,6 +457,15 @@ CREATE OR REPLACE MACRO ast_select_from(
                 FROM sel_integer_values iv
             ) WHERE rn = 1
         ),
+        -- Quoted attribute values: [name="foo"]. The string_value node carries the
+        -- surrounding quotes, so trim them (mirrors sel_pcs_first_string).
+        sel_attr_first_str AS (
+            SELECT parent_id AS attr_id, trim(name, '"''') AS name FROM (
+                SELECT sv.parent_id, sv.name,
+                       row_number() OVER (PARTITION BY sv.parent_id ORDER BY sv.node_id) AS rn
+                FROM sel_string_values sv
+            ) WHERE rn = 1
+        ),
 
         -- :has() — pseudo_class_selectors named 'has' that are NOT inside :not() args.
         has_conditions AS (
@@ -500,28 +509,38 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- Uses precomputed sel_attr_* helpers for value/op detection so there are
         -- no correlated subqueries.
         attr_conditions AS (
-            SELECT fname.name AS attr_name,
-                   COALESCE(fplain.name, fint.name) AS attr_value,
-                   CASE
-                       WHEN starswith.attr_id IS NOT NULL THEN '*='
-                       WHEN caret.attr_id    IS NOT NULL THEN '^='
-                       WHEN dollar.attr_id   IS NOT NULL THEN '$='
-                       ELSE '='
-                   END AS attr_op
-            FROM sel_attribute_selectors s
-            JOIN sel_attr_outside_args outside ON outside.attr_id = s.node_id
-            LEFT JOIN sel_attr_first_name  fname  ON fname.attr_id  = s.node_id
-            LEFT JOIN sel_attr_first_plain fplain ON fplain.attr_id = s.node_id
-            LEFT JOIN sel_attr_first_int   fint   ON fint.attr_id   = s.node_id
-            LEFT JOIN (
-                SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_starswith
-            ) starswith ON starswith.attr_id = s.node_id
-            LEFT JOIN (
-                SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_caret
-            ) caret ON caret.attr_id = s.node_id
-            LEFT JOIN (
-                SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_dollar
-            ) dollar ON dollar.attr_id = s.node_id
+            -- attr_value_esc escapes LIKE metacharacters (\ % _) in the value so the
+            -- *=/^=/$= arms can use `LIKE ... ESCAPE '\'` and match literally (e.g.
+            -- [name^=_] means "starts with underscore", not "any char"). Computed in an
+            -- outer SELECT because a sibling alias (attr_value) isn't visible in the same one.
+            SELECT attr_name, attr_value, attr_op,
+                   replace(replace(replace(attr_value, '\', '\\'), '%', '\%'), '_', '\_')
+                       AS attr_value_esc
+            FROM (
+                SELECT fname.name AS attr_name,
+                       COALESCE(fplain.name, fstr.name, fint.name) AS attr_value,
+                       CASE
+                           WHEN starswith.attr_id IS NOT NULL THEN '*='
+                           WHEN caret.attr_id    IS NOT NULL THEN '^='
+                           WHEN dollar.attr_id   IS NOT NULL THEN '$='
+                           ELSE '='
+                       END AS attr_op
+                FROM sel_attribute_selectors s
+                JOIN sel_attr_outside_args outside ON outside.attr_id = s.node_id
+                LEFT JOIN sel_attr_first_name  fname  ON fname.attr_id  = s.node_id
+                LEFT JOIN sel_attr_first_plain fplain ON fplain.attr_id = s.node_id
+                LEFT JOIN sel_attr_first_str   fstr   ON fstr.attr_id   = s.node_id
+                LEFT JOIN sel_attr_first_int   fint   ON fint.attr_id   = s.node_id
+                LEFT JOIN (
+                    SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_starswith
+                ) starswith ON starswith.attr_id = s.node_id
+                LEFT JOIN (
+                    SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_caret
+                ) caret ON caret.attr_id = s.node_id
+                LEFT JOIN (
+                    SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_dollar
+                ) dollar ON dollar.attr_id = s.node_id
+            )
         ),
 
         -- =====================================================================
@@ -829,9 +848,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         WHERE NOT CASE
             -- Core columns
             WHEN ac.attr_name = 'name' THEN
-                CASE ac.attr_op WHEN '*=' THEN a.name LIKE '%' || ac.attr_value || '%'
-                                WHEN '^=' THEN a.name LIKE ac.attr_value || '%'
-                                WHEN '$=' THEN a.name LIKE '%' || ac.attr_value
+                CASE ac.attr_op WHEN '*=' THEN a.name LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '^=' THEN a.name LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '$=' THEN a.name LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.name = ac.attr_value END
             WHEN ac.attr_name = 'type' THEN a.type = ac.attr_value
             WHEN ac.attr_name = 'language' THEN a.language = ac.attr_value
@@ -844,9 +863,9 @@ CREATE OR REPLACE MACRO ast_select_from(
 
             -- Native extraction: annotations string
             WHEN ac.attr_name = 'annotation' THEN
-                CASE ac.attr_op WHEN '*=' THEN a.annotations LIKE '%' || ac.attr_value || '%'
-                                WHEN '^=' THEN a.annotations LIKE ac.attr_value || '%'
-                                WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value
+                CASE ac.attr_op WHEN '*=' THEN a.annotations LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '^=' THEN a.annotations LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.annotations = ac.attr_value END
 
             -- Native extraction: qualified_name. The column is a LIST<STRUCT>,
@@ -856,15 +875,15 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- [qualified=F[main]] stay human-writable.
             WHEN ac.attr_name = 'qualified' THEN
                 CASE ac.attr_op
-                    WHEN '*=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value || '%'
-                    WHEN '^=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE ac.attr_value || '%'
-                    WHEN '$=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value
+                    WHEN '*=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                    WHEN '^=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                    WHEN '$=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value_esc ESCAPE '\'
                     ELSE ast_qualified_name_as_string(a.qualified_name) = ac.attr_value
                 END
 
             -- Native extraction: signature_type
             WHEN ac.attr_name = 'signature' THEN
-                CASE ac.attr_op WHEN '*=' THEN a.signature_type LIKE '%' || ac.attr_value || '%'
+                CASE ac.attr_op WHEN '*=' THEN a.signature_type LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                                 ELSE a.signature_type = ac.attr_value END
 
             -- Native extraction: parameter count
@@ -873,7 +892,7 @@ CREATE OR REPLACE MACRO ast_select_from(
 
             -- Peek (source text) content search
             WHEN ac.attr_name = 'peek' THEN
-                CASE ac.attr_op WHEN '*=' THEN a.peek LIKE '%' || ac.attr_value || '%'
+                CASE ac.attr_op WHEN '*=' THEN a.peek LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                                 ELSE a.peek = ac.attr_value END
 
             ELSE false
