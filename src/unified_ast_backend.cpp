@@ -285,6 +285,38 @@ ExtractionConfig ParseExtractionConfig(const string &context_str, const string &
 	return config;
 }
 
+void ParseResourceCapParameters(const named_parameter_map_t &named_parameters, ExtractionConfig &config) {
+	for (auto &param : named_parameters) {
+		if (param.first == "max_source_bytes") {
+			config.max_source_bytes = param.second.GetValue<int64_t>();
+		} else if (param.first == "parse_timeout_ms") {
+			config.parse_timeout_ms = param.second.GetValue<int64_t>();
+		} else if (param.first == "max_parse_nodes") {
+			config.max_parse_nodes = param.second.GetValue<int64_t>();
+		}
+	}
+}
+
+string ReadSourceFileWithCap(FileSystem &fs, const string &file_path, int64_t max_source_bytes) {
+	auto handle = fs.OpenFile(file_path, FileFlags::FILE_FLAGS_READ);
+	auto file_size = fs.GetFileSize(*handle);
+	if (file_size < 0) {
+		throw IOException("Could not determine size of file: " + file_path);
+	}
+	// Enforce the cap BEFORE allocating the content buffer so oversized files
+	// are rejected cleanly instead of (attempting to) materialize in memory.
+	if (max_source_bytes > 0 && file_size > max_source_bytes) {
+		throw InvalidInputException(
+		    "Refusing to read '" + file_path + "': file is " + to_string(file_size) +
+		    " bytes, which exceeds max_source_bytes (" + to_string(max_source_bytes) +
+		    "). Raise the limit with max_source_bytes := N or disable it with max_source_bytes := 0");
+	}
+	string content;
+	content.resize(static_cast<size_t>(file_size));
+	fs.Read(*handle, (void *)content.data(), file_size);
+	return content;
+}
+
 vector<LogicalType> UnifiedASTBackend::GetFlatTableSchema() {
 	return {
 	    LogicalType::BIGINT,   // node_id
@@ -1766,12 +1798,9 @@ ASTResultCollection UnifiedASTBackend::ParseFilesToASTCollection(ClientContext &
 				continue; // Skip missing files
 			}
 
-			auto handle = fs.OpenFile(file_path, FileFlags::FILE_FLAGS_READ);
-			auto file_size = fs.GetFileSize(*handle);
-
-			string content;
-			content.resize(file_size);
-			fs.Read(*handle, (void *)content.data(), file_size);
+			// Read file content with the default source-size cap (legacy path has
+			// no ExtractionConfig; the remaining caps apply inside ParseToASTResult)
+			string content = ReadSourceFileWithCap(fs, file_path, ExtractionConfig::DEFAULT_MAX_SOURCE_BYTES);
 
 			// Parse this file as a separate result
 			auto file_result = ParseToASTResult(content, file_language, file_path, peek_size, peek_mode);
@@ -1815,12 +1844,9 @@ unique_ptr<ASTResult> UnifiedASTBackend::ParseSingleFileToASTResult(ClientContex
 			return nullptr; // Skip missing files
 		}
 
-		auto handle = fs.OpenFile(file_path, FileFlags::FILE_FLAGS_READ);
-		auto file_size = fs.GetFileSize(*handle);
-
-		string content;
-		content.resize(file_size);
-		fs.Read(*handle, (void *)content.data(), file_size);
+		// Read file content with the default source-size cap (legacy path has
+		// no ExtractionConfig; the remaining caps apply inside ParseToASTResult)
+		string content = ReadSourceFileWithCap(fs, file_path, ExtractionConfig::DEFAULT_MAX_SOURCE_BYTES);
 
 		// Parse this file
 		auto result = make_uniq<ASTResult>(ParseToASTResult(content, file_language, file_path, peek_size, peek_mode));
@@ -1859,12 +1885,8 @@ unique_ptr<ASTResult> UnifiedASTBackend::ParseSingleFileToASTResult(ClientContex
 			return nullptr; // Skip missing files
 		}
 
-		auto handle = fs.OpenFile(file_path, FileFlags::FILE_FLAGS_READ);
-		auto file_size = fs.GetFileSize(*handle);
-
-		string content;
-		content.resize(file_size);
-		fs.Read(*handle, (void *)content.data(), file_size);
+		// Read file content, enforcing the configured source-size cap up front
+		string content = ReadSourceFileWithCap(fs, file_path, config.max_source_bytes);
 
 		// Parse this file with ExtractionConfig
 		auto result = make_uniq<ASTResult>(ParseToASTResult(content, file_language, file_path, config));

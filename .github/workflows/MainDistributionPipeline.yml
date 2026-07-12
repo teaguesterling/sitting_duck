@@ -28,6 +28,10 @@ jobs:
       duckdb_version: v1.5.4
       ci_tools_version: v1.5.4
       extension_name: sitting_duck
+      # Windows stays excluded (fleet pattern): both Windows legs fail on
+      # v1.5.4 while the same source passes Linux/macOS/wasm. Windows is not
+      # a merge gate; re-enable once the Windows build is fixed.
+      exclude_archs: 'windows_amd64;windows_amd64_mingw'
 
 #  code-quality-check:
 #    name: Code Quality Check

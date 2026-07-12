@@ -1,6 +1,7 @@
 #include "ast_parser.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
+#include <limits>
 
 // Tree-sitter headers
 extern "C" {
@@ -22,7 +23,13 @@ TSParser *ASTParser::CreateParser(const string &language) {
 }
 
 TSTree *ASTParser::ParseString(const string &content, TSParser *parser) {
-	TSTree *tree = ts_parser_parse_string(parser, nullptr, content.c_str(), content.length());
+	// tree-sitter takes the input length as uint32_t; larger inputs would be
+	// silently truncated to a partial parse, so reject them explicitly.
+	if (content.length() > std::numeric_limits<uint32_t>::max()) {
+		throw InvalidInputException("Cannot parse input of " + std::to_string(content.length()) +
+		                            " bytes: exceeds tree-sitter's 4 GiB input limit");
+	}
+	TSTree *tree = ts_parser_parse_string(parser, nullptr, content.c_str(), static_cast<uint32_t>(content.length()));
 	if (!tree) {
 		throw InvalidInputException("Failed to parse content");
 	}

@@ -59,6 +59,9 @@ static unique_ptr<FunctionData> ParseASTBind(ClientContext &context, TableFuncti
 	// Create extraction config
 	ExtractionConfig config = ParseExtractionConfig(context_str, source_str, structure_str, peek_str, peek_size);
 
+	// Parse resource cap parameters (max_source_bytes, parse_timeout_ms, max_parse_nodes)
+	ParseResourceCapParameters(input.named_parameters, config);
+
 	// Use flat dynamic schema based on extraction config
 	return_types = UnifiedASTBackend::GetFlatDynamicTableSchema(config);
 	names = UnifiedASTBackend::GetFlatDynamicTableColumnNames(config);
@@ -136,6 +139,9 @@ static unique_ptr<FunctionData> ParseASTHierarchicalBind(ClientContext &context,
 	// Create extraction config
 	ExtractionConfig config = ParseExtractionConfig(context_str, source_str, structure_str, peek_str, peek_size);
 
+	// Parse resource cap parameters (max_source_bytes, parse_timeout_ms, max_parse_nodes)
+	ParseResourceCapParameters(input.named_parameters, config);
+
 	return make_uniq<ParseASTData>(code, language, config);
 }
 
@@ -178,6 +184,9 @@ void ParseASTFunction::Register(ExtensionLoader &loader) {
 	parse_ast_func.named_parameters["source"] = LogicalType::VARCHAR;
 	parse_ast_func.named_parameters["structure"] = LogicalType::VARCHAR;
 	parse_ast_func.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
+	parse_ast_func.named_parameters["max_source_bytes"] = LogicalType::BIGINT;
+	parse_ast_func.named_parameters["parse_timeout_ms"] = LogicalType::BIGINT;
+	parse_ast_func.named_parameters["max_parse_nodes"] = LogicalType::BIGINT;
 
 	loader.RegisterFunction(parse_ast_func);
 
@@ -191,6 +200,9 @@ void ParseASTFunction::Register(ExtensionLoader &loader) {
 	parse_ast_flat_func.named_parameters["source"] = LogicalType::VARCHAR;
 	parse_ast_flat_func.named_parameters["structure"] = LogicalType::VARCHAR;
 	parse_ast_flat_func.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
+	parse_ast_flat_func.named_parameters["max_source_bytes"] = LogicalType::BIGINT;
+	parse_ast_flat_func.named_parameters["parse_timeout_ms"] = LogicalType::BIGINT;
+	parse_ast_flat_func.named_parameters["max_parse_nodes"] = LogicalType::BIGINT;
 
 	loader.RegisterFunction(parse_ast_flat_func);
 
@@ -204,6 +216,9 @@ void ParseASTFunction::Register(ExtensionLoader &loader) {
 	parse_ast_hierarchical_func.named_parameters["source"] = LogicalType::VARCHAR;
 	parse_ast_hierarchical_func.named_parameters["structure"] = LogicalType::VARCHAR;
 	parse_ast_hierarchical_func.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
+	parse_ast_hierarchical_func.named_parameters["max_source_bytes"] = LogicalType::BIGINT;
+	parse_ast_hierarchical_func.named_parameters["parse_timeout_ms"] = LogicalType::BIGINT;
+	parse_ast_hierarchical_func.named_parameters["max_parse_nodes"] = LogicalType::BIGINT;
 
 	loader.RegisterFunction(parse_ast_hierarchical_func);
 }
