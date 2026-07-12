@@ -18,8 +18,10 @@ Guidelines for contributing to Sitting Duck.
 git clone --recursive https://github.com/teaguesterling/sitting_duck.git
 cd sitting_duck
 
-# Build
-make
+# Build. A bare `make` is single-threaded (it runs `cmake --build` without -j).
+# Use all cores by setting the cmake parallel level:
+CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) make
+# (or `GEN=ninja make` if ninja is installed). vcpkg is not required — vcpkg.json has no deps.
 
 # Run tests
 make test
