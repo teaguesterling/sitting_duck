@@ -1,4 +1,5 @@
 #include "duckdb.hpp"
+#include "duckdb_compat.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
@@ -416,7 +417,7 @@ static void ReadASTFlatStreamingFunction(ClientContext &context, TableFunctionIn
 		}
 	}
 
-	output.SetCardinality(output_index);
+	CompatSetOutputCardinality(output, output_index);
 }
 
 //==============================================================================
@@ -615,7 +616,7 @@ static void ReadASTHierarchicalFunction(ClientContext &context, TableFunctionInp
 		}
 	}
 
-	output.SetCardinality(output_index);
+	CompatSetOutputCardinality(output, output_index);
 }
 
 // Register the resource cap named parameters on a table function (shared by
