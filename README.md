@@ -448,7 +448,9 @@ When using `context := 'native'`, the following fields provide semantic informat
 ## Performance Notes
 
 - **Streaming**: Parses files one-by-one, so you see results immediately
-- **Memory efficient**: Only one file's AST in memory at a time
+- **Memory efficient**: the streaming `read_ast` path holds only one file's AST in
+  memory at a time. (The internal parallel batch path buffers each file's parsed
+  result until the batch completes, so peak memory there scales with batch size.)
 - **Glob patterns**: Use `**/*.ext` for recursive directory searches
 - **Peek modes**: Control how much source text to extract (affects performance)
 
