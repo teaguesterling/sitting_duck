@@ -42,6 +42,9 @@ EXT_FLAGS='-DSITTING_DUCK_EXCLUDE_LANGUAGES=dart,swift' make release
 ```
 
 Unknown language names fail the configure step with the list of valid names.
+Like any CMake cache variable, the selection sticks to the build directory:
+to return an existing build to the full set, pass
+`-DSITTING_DUCK_LANGUAGES=all` (or wipe the build directory).
 The per-language wiring lives in one place, `cmake/BuiltinLanguages.cmake`,
 which generates the registration table consumed by
 `src/language_adapter_registry_init.cpp`.
