@@ -15,8 +15,25 @@
 --   A + B                         - B immediately follows A
 --   :has(selector)                - Contains a descendant matching selector
 --   :not(:has(selector))          - Does NOT contain a descendant matching selector
---   [name=value]                  - Attribute filter (name, type, language)
+--   [name=value]                  - Attribute filter. Supported attributes:
+--                                     name, type, language, semantic, peek,
+--                                     qualified, signature, params, modifier,
+--                                     annotation. Operators: = *= ^= $=.
+--                                     Example: .func[signature^=int] matches
+--                                     functions whose return type starts with "int"
 --   Compound: type#name:has(...)  - Multiple conditions on same element
+--
+-- NULL semantics (BEHAVIOR CHANGE, issue #81): attribute filters and
+-- pseudo-classes are NULL-definite. A filter or pseudo-class evaluated over a
+-- NULL column (e.g. [signature=int] where signature_type is NULL, or :async
+-- where modifiers is NULL) matches NOTHING; its :not() form matches the node.
+-- Previously a NULL comparison silently matched EVERYTHING. Consequence for
+-- reduced-context tables fed to ast_select_from: if the table was parsed
+-- without native context or peek, filters over those columns now return zero
+-- rows instead of all rows. [peek...] against a table with no peek text at all
+-- raises an error with a re-parse hint (see peek_filter_validation below);
+-- other columns cannot be guarded that way because all-NULL is a legitimate
+-- state for them (untyped / undecorated / unmodified code).
 --
 -- Usage:
 --   SELECT * FROM ast_select('src/**/*.py', '.function:has(return_statement)');
@@ -115,10 +132,15 @@ CREATE OR REPLACE MACRO ast_select_from(
             SELECT node_id, parent_id FROM sel WHERE type = '$='
         ),
 
-        -- Parse source files. Keep native context (needed for attribute filters like
-        -- [params=N] and pseudo-classes like :decorated, :typed, :async, etc.) but
-        -- skip peek computation since no selector feature references it. The +schema
-        -- suffix keeps the peek column in the schema as NULL.
+        -- The pre-parsed AST table. Native context columns (modifiers, annotations,
+        -- signature_type, parameters, qualified_name) are needed for attribute
+        -- filters and pseudo-classes like :decorated, :typed, :async, etc.
+        -- NOTE: attribute filters are NULL-definite — a filter over a column that
+        -- is NULL in this table matches NOTHING (see the COALESCE in the attribute
+        -- filter below). In particular, [peek...] requires a materialized peek
+        -- column (read_ast(..., peek := 'full')); against a table parsed with
+        -- peek := 'none' it raises an error with a re-parse hint. The ast_select
+        -- wrapper materializes peek automatically when the selector needs it.
         ast AS (
             SELECT * FROM query_table(source)
         ),
@@ -659,6 +681,30 @@ CREATE OR REPLACE MACRO ast_select_from(
             END as ok
         ),
 
+        -- [peek...] guard: a peek filter against a table whose peek column was
+        -- never materialized (peek := 'none' / 'none+schema' — every row NULL)
+        -- would silently match nothing under NULL-definite semantics. An
+        -- entirely-NULL peek column can only mean "peek was not extracted"
+        -- (materialized peek is never NULL), so this is almost certainly a
+        -- mis-parsed table rather than intent — raise a targeted error with a
+        -- re-parse hint instead of returning zero rows. Only peek gets this
+        -- guard: all-NULL signature/annotation/modifiers/qualified columns are
+        -- legitimate (plain untyped/undecorated code) and must keep returning
+        -- zero rows without complaint.
+        peek_filter_validation AS (
+            SELECT CASE
+                WHEN EXISTS (SELECT 1 FROM attr_conditions WHERE attr_name = 'peek')
+                     AND EXISTS (SELECT 1 FROM ast)
+                     AND NOT EXISTS (SELECT 1 FROM ast WHERE peek IS NOT NULL)
+                THEN error(
+                    'ast_select: the selector filters on [peek...] but the source has no peek text '
+                    '(the peek column is entirely NULL — parsed with peek := ''none''?). '
+                    'Re-parse with read_ast(..., peek := ''full'') to use peek filters.'
+                )
+                ELSE true
+            END AS ok
+        ),
+
         -- Detect pseudo-element (::callers, ::callees, etc.).
         -- Finds the LAST tag_name child of any pseudo_element_selector.
         -- Refactored to use typed CTEs + window function — avoids the correlated
@@ -843,9 +889,14 @@ CREATE OR REPLACE MACRO ast_select_from(
         )
     )
     -- [attr op value] filters — supports native extraction columns and CSS operators
+    -- The CASE is wrapped in COALESCE(..., false): when the attribute column is
+    -- NULL (e.g. peek on a table parsed with peek := 'none', or a NULL
+    -- signature_type) the comparison yields NULL, and without the COALESCE the
+    -- NOT EXISTS would treat that as "condition satisfied" — making the filter
+    -- match EVERYTHING (issue #81). NULL attribute values must match NOTHING.
     AND NOT EXISTS (
         SELECT 1 FROM attr_conditions ac
-        WHERE NOT CASE
+        WHERE NOT COALESCE(CASE
             -- Core columns
             WHEN ac.attr_name = 'name' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.name LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
@@ -884,6 +935,8 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- Native extraction: signature_type
             WHEN ac.attr_name = 'signature' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.signature_type LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '^=' THEN a.signature_type LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '$=' THEN a.signature_type LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.signature_type = ac.attr_value END
 
             -- Native extraction: parameter count
@@ -893,21 +946,31 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- Peek (source text) content search
             WHEN ac.attr_name = 'peek' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.peek LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '^=' THEN a.peek LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '$=' THEN a.peek LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.peek = ac.attr_value END
 
             ELSE false
-        END
+        END, false)
     )
+    AND (SELECT ok FROM peek_filter_validation)
     -- Additional pseudo-class filters
     -- Each pseudo-class in the selector must be satisfied.
     -- For non-negated pcs: satisfied iff CASE is true.
     -- For negated pcs (inside :not()): satisfied iff CASE is false.
     -- A pc is unsatisfied when (negated = CASE), so NOT EXISTS of that identifies nodes
     -- where every pc is satisfied.
+    -- The CASE is wrapped in COALESCE(..., false): several arms yield NULL when
+    -- their column is NULL (e.g. list_contains(NULL, 'async') for :async over a
+    -- table without modifiers), and NULL = pc.negated filters the row out of the
+    -- EXISTS — which would make the pseudo-class match EVERYTHING (issue #81,
+    -- same defect as the attribute-filter site above). NULL pseudo-class
+    -- evaluations must count as "not satisfied": :async over NULL modifiers
+    -- matches nothing, :not(:async) matches the node.
     AND (SELECT ok FROM pseudo_class_validation)
     AND NOT EXISTS (
         SELECT 1 FROM pseudo_classes pc
-        WHERE pc.negated = CASE pc.pseudo_name
+        WHERE pc.negated = COALESCE(CASE pc.pseudo_name
 
             -- Standard CSS positional pseudo-classes
             WHEN 'first-child' THEN a.sibling_index = 0
@@ -1089,7 +1152,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 a,
                 pc.pseudo_arg
             )
-        END
+        END, false)
     )),
 
     -- =====================================================================
@@ -1218,7 +1281,27 @@ CREATE OR REPLACE MACRO ast_select(
     -- Parse into a temp name, then delegate to ast_select_from.
     -- We use read_ast directly and wrap with ast_select_from via a CTE trick:
     -- DuckDB table macros can accept subqueries as table arguments.
+    --
+    -- peek is skipped by default (it is the expensive part of extraction) but is
+    -- materialized when the selector uses a [peek...] attribute filter —
+    -- attribute filters are NULL-definite, so with an unmaterialized peek those
+    -- selectors would match nothing (issue #81). The probe matches the actual
+    -- attribute-filter syntax ('[peek' — covers [peek=, [peek*=, [peek^=,
+    -- [peek$=), not a bare 'peek' substring, so selectors like '#peek_handler'
+    -- or ':has(#on_peek_update)' no longer trigger full-corpus peek extraction.
+    -- Materialization uses peek := 'full' (not 'smart'): smart peek truncates to
+    -- the first line capped at ~77 chars + '...', which silently blinds
+    -- [peek*=/$=...] to anything past that window. The honest cost: full peek
+    -- copies each node's complete source text, so every ancestor of a match
+    -- carries a copy of the matched region (roughly O(file_size x tree_depth)
+    -- extracted text per file) — paid only when the selector filters on peek.
+    -- NOTE for ast_select_rules (currently WIP, duckdb/duckdb#21890): a
+    -- column-valued selector cannot fold this CASE at bind time; if the lateral
+    -- dispatch is revived, it should pre-parse with peek := 'full' and use
+    -- ast_select_from directly instead of this wrapper.
     WITH __ast_src AS (
-        SELECT * FROM read_ast(source, language, peek := 'none+schema')
+        SELECT * FROM read_ast(source, language,
+            peek := CASE WHEN selector LIKE '%[peek%'
+                         THEN 'full' ELSE 'none+schema' END)
     )
     SELECT * FROM ast_select_from('__ast_src', selector);

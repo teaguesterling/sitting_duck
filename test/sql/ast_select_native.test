@@ -45,11 +45,113 @@ SELECT COUNT(*) >= 0 FROM ast_select('test/data/python/simple.py', '.func[signat
 ----
 true
 
-# [peek*=X] — source text content search
+# [peek*=X] — source text content search. Row-pinned: `string` prefix-matches
+# string + string_content, and recursive_match.py has "SELECT 1" literals at
+# exactly these lines — a wrong-row regression cannot ship green on COUNT alone.
+query II
+SELECT type, start_line FROM ast_select('test/data/python/macros/recursive_match.py', 'string[peek*=SELECT]');
+----
+string	19
+string_content	19
+string	24
+string_content	24
+string	29
+string_content	29
+string	34
+string_content	34
+string	39
+string_content	39
+
+# [peek*=X] must not match everything: a peek filter that matches nothing in the
+# file returns 0 rows, not all rows (issue #81 — NULL peek was NULL-permissive).
 query I
-SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py', 'string[peek*=SELECT]');
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py', 'string[peek*=zz_no_such_text_zz]');
+----
+0
+
+# [peek^=X] — prefix match on the node's full source text. Only the call at
+# line 148 starts with "db.connect".
+query II
+SELECT name, start_line FROM ast_select('test/data/python/sample_app.py', '.call[peek^="db.connect"]');
+----
+connect	148
+
+# [peek$=X] — suffix match on the node's full source text. ast_select
+# materializes peek := 'full', so the suffix is the true end of the node text
+# (smart peek's first-line truncation would break this). Two calls end with
+# "close()": self._conn.close() at line 47 and db.close() at line 159.
+query II
+SELECT name, start_line FROM ast_select('test/data/python/sample_app.py', '.call[peek$="close()"]');
+----
+close	47
+close	159
+
+# =============================================================================
+# [signature^=X] / [signature$=X] — prefix/suffix on signature_type
+# =============================================================================
+# test_native_context.py: async_function -> str (line 5),
+# method_with_types -> bool (line 18).
+
+query II
+SELECT name, start_line FROM ast_select('test/data/test_native_context.py', '.func[signature^=s]');
+----
+async_function	5
+
+query II
+SELECT name, start_line FROM ast_select('test/data/test_native_context.py', '.func[signature$=ool]');
+----
+method_with_types	18
+
+# =============================================================================
+# Peek filters against a table without peek materialized (issue #81)
+# =============================================================================
+# ast_select_from on a table parsed with peek := 'none+schema' (peek entirely
+# NULL) cannot evaluate a [peek...] filter. Under NULL-definite matching that
+# would silently return 0 rows — instead it raises an error with a re-parse
+# hint (an all-NULL peek column always means peek was never extracted).
+
+statement ok
+CREATE TABLE zz_no_peek_ast AS SELECT * FROM read_ast('test/data/python/sample_app.py', peek := 'none+schema');
+
+statement error
+SELECT COUNT(*) FROM ast_select_from('zz_no_peek_ast', '.call[peek*=execute]');
+----
+no peek text
+
+# Sanity: the same table still matches non-peek selectors normally.
+query I
+SELECT COUNT(*) > 0 FROM ast_select_from('zz_no_peek_ast', '.call#execute');
 ----
 true
+
+statement ok
+DROP TABLE zz_no_peek_ast;
+
+# =============================================================================
+# Pseudo-classes over NULL columns (issue #81, second dispatch site)
+# =============================================================================
+# The pseudo-class dispatch had the same NULL-permissive defect as the
+# attribute filters: over a table with NULL modifiers, `.call:async` returned
+# every call node. NULL pseudo-class evaluations must count as "not satisfied":
+# :async matches nothing, :not(:async) matches everything.
+
+statement ok
+CREATE TABLE zz_null_mods_ast AS SELECT * REPLACE (NULL::VARCHAR[] AS modifiers) FROM read_ast('test/data/python/sample_app.py');
+
+query I
+SELECT COUNT(*) FROM ast_select_from('zz_null_mods_ast', '.call:async');
+----
+0
+
+query I
+SELECT (SELECT COUNT(*) FROM ast_select_from('zz_null_mods_ast', '.call:not(:async)'))
+     = (SELECT COUNT(*) FROM ast_select_from('zz_null_mods_ast', '.call'))
+   AND (SELECT COUNT(*) FROM ast_select_from('zz_null_mods_ast', '.call')) > 0;
+----
+true
+
+statement ok
+DROP TABLE zz_null_mods_ast;
 
 # =============================================================================
 # CSS attribute operators
