@@ -74,9 +74,14 @@ CREATE OR REPLACE MACRO wildcard_capture_name(name) AS
 
 -- Mask off language-specific bits (0-1) for cross-language semantic type comparison
 -- Semantic type layout: [ ss kk tt ll ] where ll = language-specific bits
--- 0xFC = 11111100 masks off the last 2 bits
+-- Clearing the low 2 bits == flooring to a multiple of 4: (x // 4) * 4 equals
+-- x & 0xFC for the whole UTINYINT domain (0-255).
+-- Deliberately arithmetic, NOT bitwise: on DuckDB v1.5+ `&` lives in the
+-- core_functions extension, which is not loaded while sitting_duck registers
+-- its embedded macros in a from-source dev shell — a `&` here makes the
+-- extension fail to LOAD (issue #82).
 CREATE OR REPLACE MACRO semantic_type_base(sem_type) AS
-    (sem_type::INTEGER & 252)::UTINYINT;
+    ((sem_type::INTEGER // 4) * 4)::UTINYINT;
 
 -- =============================================================================
 -- Extended Wildcard Preprocessor
@@ -130,30 +135,14 @@ CREATE OR REPLACE MACRO parse_html_wildcard(html_str) AS {
 -- Legacy Syntax Support
 -- =============================================================================
 
--- Extract rules from legacy %__NAME<rules>__% syntax
-CREATE OR REPLACE MACRO extract_wildcard_rules(pattern_str) AS (
-    WITH
-    matches AS (
-        SELECT regexp_extract_all(pattern_str, '%__([A-Z][A-Z0-9_]*)?<([^>]+)>__%') as all_matches
-    ),
-    unnested AS (
-        SELECT unnest(all_matches) as match_text FROM matches
-    )
-    SELECT list({
-        name: NULLIF(regexp_extract(match_text, '%__([A-Z][A-Z0-9_]*)?<', 1), ''),
-        rules_raw: regexp_extract(match_text, '<([^>]+)>', 1),
-        is_variadic: regexp_extract(match_text, '<([^>]+)>', 1) LIKE '%*%'
-                  OR regexp_extract(match_text, '<([^>]+)>', 1) LIKE '%+%',
-        variadic_min: CASE
-            WHEN regexp_extract(match_text, '<([^>]+)>', 1) LIKE '%+%' THEN 1
-            WHEN regexp_extract(match_text, '<([^>]+)>', 1) LIKE '%*%' THEN 0
-            ELSE NULL
-        END,
-        type_constraint: regexp_extract(match_text, 'type=([a-z_]+)', 1)
-    }) as wildcards
-    FROM unnested
-    WHERE match_text IS NOT NULL AND match_text != ''
-);
+-- NOTE (issue #82): the former helper macros extract_wildcard_rules() and
+-- get_variadic_names() were removed here. They were unused (no callers in any
+-- SQL macro, C++ code, test, or doc — the parse_pattern pipeline does its
+-- variadic/recursive detection inline via pattern_has_variadic(),
+-- pattern_has_recursive() and position() checks below), and their `list()`
+-- aggregate is core_functions-only on DuckDB v1.5+, which made scalar-macro
+-- registration — and therefore LOAD of the whole extension — fail in a
+-- from-source dev shell where core_functions is not yet loaded.
 
 -- =============================================================================
 -- Pattern Cleaning (handles both syntaxes)
@@ -193,16 +182,6 @@ CREATE OR REPLACE MACRO pattern_has_recursive(pattern_str) AS
     regexp_matches(pattern_str, '%__[A-Z]*<\*\*>__%')
     -- HTML syntax: ** as modifier inside %__<...>__%
     OR regexp_matches(pattern_str, '%__<[A-Z_]*\*\*[^*>]*>__%');
-
--- Get list of variadic wildcard names
-CREATE OR REPLACE MACRO get_variadic_names(pattern_str) AS (
-    SELECT COALESCE(
-        (SELECT list(w.name)
-         FROM (SELECT unnest(extract_wildcard_rules(pattern_str)) as w)
-         WHERE w.is_variadic),
-        []::VARCHAR[]
-    )
-);
 
 -- =============================================================================
 -- Pattern Parsing (Table Macro - for inspection)

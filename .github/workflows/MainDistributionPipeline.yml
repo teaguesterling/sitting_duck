@@ -32,6 +32,39 @@ jobs:
             exit 1
           fi
 
+  # Guard for issue #82: a from-source dev build (no OVERRIDE_GIT_DESCRIBE)
+  # must produce an extension that LOADs in the bundled dev shell. During
+  # sitting_duck's LoadInternal, core_functions is NOT available: sitting_duck
+  # is loaded first at startup (extension_config.cmake order), and the
+  # best-effort autoload resolves ~/.duckdb/extensions/<version stamp>/... —
+  # empty on a fresh runner, and nonexistent for dev-stamped builds on dev
+  # machines. Anything that binds at CREATE MACRO time (scalar macro bodies;
+  # e.g. bitwise `&`/`|`/`<<`, or the `list()` aggregate, all core_functions-
+  # only on DuckDB v1.5+) aborts registration and makes LOAD fail. Table-macro
+  # bodies bind at use time, when core_functions is available in any practical
+  # shell. This job proves the README "test it works" one-liner holds for
+  # exactly such a build.
+  from-source-load:
+    name: From-source dev build LOADs without core_functions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Build release WITHOUT OVERRIDE_GIT_DESCRIBE
+        run: GEN=ninja make release
+      - name: LOAD the extension in the bundled dev shell (README one-liner)
+        run: |
+          ./build/release/duckdb -c "LOAD './build/release/extension/sitting_duck/sitting_duck.duckdb_extension'; SELECT COUNT(*) FROM read_ast('README.md');"
+      - name: Confirm core_functions was not needed (bitwise ops absent or autoloaded later)
+        run: |
+          # The dev shell auto-loads sitting_duck at startup; if macro
+          # registration needed core_functions this command would have failed
+          # before -c even ran. Record what the shell reports for diagnosis.
+          ./build/release/duckdb -c "SELECT extension_name, loaded FROM duckdb_extensions() WHERE extension_name IN ('sitting_duck','core_functions');"
+
   duckdb-next-build:
     name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
