@@ -64,6 +64,31 @@ jobs:
           # registration needed core_functions this command would have failed
           # before -c even ran. Record what the shell reports for diagnosis.
           ./build/release/duckdb -c "SELECT extension_name, loaded FROM duckdb_extensions() WHERE extension_name IN ('sitting_duck','core_functions');"
+  # Built-in languages are compile-time modules selected via
+  # -DSITTING_DUCK_LANGUAGES / -DSITTING_DUCK_EXCLUDE_LANGUAGES (groundwork for
+  # grammar packs / sitting_duckling, issue #87). The default legs above always
+  # build all languages, so this job keeps the subset path honest: build a
+  # two-language subset and verify that compiled-in languages parse, compiled-out
+  # languages fail exactly like unknown ones, and ast_supported_languages()
+  # reflects the subset.
+  language-subset-build:
+    name: Language subset build (python;cpp)
+    runs-on: ubuntu-latest
+    env:
+      GEN: ninja
+      OVERRIDE_GIT_DESCRIBE: v1.5.4
+      EXT_FLAGS: -DSITTING_DUCK_LANGUAGES="python;cpp"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout required submodules
+        # Pre-generated parsers are committed, so grammar submodules are not needed
+        run: git submodule update --init duckdb extension-ci-tools third_party/tree-sitter
+      - name: Install ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Build subset
+        run: make release
+      - name: Smoke test subset behavior
+        run: ./scripts/test_language_subset.sh build/release/duckdb
 
   duckdb-next-build:
     name: Build extension binaries
