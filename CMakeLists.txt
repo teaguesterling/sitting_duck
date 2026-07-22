@@ -220,11 +220,23 @@ if(NOT WASM_LOADABLE_EXTENSIONS)
             ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")
 endif()
 
+#############################
+# Built-in Language Selection
+#############################
+# Each built-in language (grammar + adapter + semantic config) is a build-time
+# module declared in cmake/BuiltinLanguages.cmake and selected via
+# -DSITTING_DUCK_LANGUAGES / -DSITTING_DUCK_EXCLUDE_LANGUAGES (default: all).
+# Groundwork for grammar packs / sitting_duckling (issue #87).
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuiltinLanguages.cmake)
+sitting_duck_configure_languages(${PARSER_SOURCE_DIR})
+
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
 project(${TARGET_NAME})
 include_directories(src/include)
+# Generated built-in language registration table (sitting_duck_builtin_languages.def)
+include_directories(${SD_LANGUAGE_DEF_INCLUDE_DIR})
 # Include tree-sitter headers - both public API and internal headers
 include_directories(third_party/tree-sitter/lib/include)
 include_directories(third_party/tree-sitter/lib/src)
@@ -274,33 +286,8 @@ set(EXTENSION_SOURCES
     src/sitting_duck_extension.cpp
     src/language_adapter.cpp
     src/language_adapter_registry_init.cpp
-    src/language_adapters/python_adapter.cpp
-    src/language_adapters/javascript_adapter.cpp
-    src/language_adapters/cpp_adapter.cpp
-    src/language_adapters/typescript_adapter.cpp
-    src/language_adapters/sql_adapter.cpp
-    src/language_adapters/duckdb_adapter.cpp
-    src/language_adapters/go_adapter.cpp
-    src/language_adapters/ruby_adapter.cpp
-    src/language_adapters/markdown_adapter.cpp
-    src/language_adapters/java_adapter.cpp
-    src/language_adapters/php_adapter.cpp
-    src/language_adapters/rust_adapter.cpp
-    src/language_adapters/html_adapter.cpp
-    src/language_adapters/css_adapter.cpp
-    src/language_adapters/c_adapter.cpp
-    src/language_adapters/json_adapter.cpp
-    src/language_adapters/bash_adapter.cpp
-    src/language_adapters/swift_adapter.cpp
-    src/language_adapters/r_adapter.cpp
-    src/language_adapters/kotlin_adapter.cpp
-    src/language_adapters/csharp_adapter.cpp
-    src/language_adapters/lua_adapter.cpp
-    src/language_adapters/hcl_adapter.cpp
-    src/language_adapters/graphql_adapter.cpp
-    src/language_adapters/toml_adapter.cpp
-    src/language_adapters/zig_adapter.cpp
-    src/language_adapters/dart_adapter.cpp
+    # Per-language adapter sources for the enabled languages (cmake/BuiltinLanguages.cmake)
+    ${SD_LANGUAGE_ADAPTER_SOURCES}
     src/read_ast_streaming_function.cpp
     # src/read_ast_objects_hybrid.cpp (removed - objects API not used)
     src/ast_sql_macros.cpp
@@ -317,53 +304,9 @@ set(EXTENSION_SOURCES
     src/ast_supported_languages_function.cpp
     src/ast_type_map_function.cpp
     src/native_context_extraction.cpp
-    # Parser source files - from PARSER_SOURCE_DIR (either generated_parsers/ or grammars/)
-    ${PARSER_SOURCE_DIR}/tree-sitter-python/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-python/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-javascript/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-javascript/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-cpp/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-cpp/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-typescript/typescript/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-typescript/typescript/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-sql/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-sql/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-go/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-ruby/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-ruby/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-markdown/tree-sitter-markdown/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-markdown/tree-sitter-markdown/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-java/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-php/php/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-php/php/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-html/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-html/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-css/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-css/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-c/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-rust/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-rust/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-json/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-bash/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-bash/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-swift/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-swift/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-r/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-r/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-kotlin/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-kotlin/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-c-sharp/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-c-sharp/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-lua/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-lua/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-hcl/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-hcl/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-graphql/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-toml/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-toml/src/scanner.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-zig/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-dart/src/parser.c
-    ${PARSER_SOURCE_DIR}/tree-sitter-dart/src/scanner.c
+    # Parser source files for the enabled languages - from PARSER_SOURCE_DIR
+    # (either generated_parsers/ or grammars/), see cmake/BuiltinLanguages.cmake
+    ${SD_LANGUAGE_PARSER_SOURCES}
     )
 
 # For WASM builds, include tree-sitter source directly in the extension sources

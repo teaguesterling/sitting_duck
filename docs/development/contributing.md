@@ -27,6 +27,42 @@ CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) make
 make test
 ```
 
+### Building a Language Subset
+
+Every built-in language (tree-sitter grammar + adapter + semantic-type config)
+is a build-time module. The default build compiles all of them; two CMake cache
+variables select a subset:
+
+```bash
+# Only these languages (comma or semicolon separated; semicolons need quoting)
+EXT_FLAGS='-DSITTING_DUCK_LANGUAGES=python,cpp' make release
+
+# Or subtract from the full set
+EXT_FLAGS='-DSITTING_DUCK_EXCLUDE_LANGUAGES=dart,swift' make release
+```
+
+Unknown language names fail the configure step with the list of valid names.
+Like any CMake cache variable, the selection sticks to the build directory:
+to return an existing build to the full set, pass
+`-DSITTING_DUCK_LANGUAGES=all` (or wipe the build directory).
+The per-language wiring lives in one place, `cmake/BuiltinLanguages.cmake`,
+which generates the registration table consumed by
+`src/language_adapter_registry_init.cpp`.
+
+A compiled-out language behaves exactly like a language sitting_duck never
+supported: `detect_language()` misses its extensions, glob expansion skips its
+files, and naming it explicitly raises the usual `Unsupported language` error.
+`ast_supported_languages()` reflects only what was compiled in. (Once runtime
+grammar registration lands, a compiled-out language's name is deliberately free
+for runtime registration — built-ins only shadow names they actually contain.)
+
+Subset builds exist as groundwork for grammar packs and the slim
+"sitting_duckling" distribution — see
+[issue #87](https://github.com/teaguesterling/sitting_duck/issues/87).
+`scripts/test_language_subset.sh` smoke-tests a `python;cpp` build (run in CI by
+the `language-subset-build` job). Note that the SQL test suite assumes the full
+set; run it against a default build.
+
 ## Development Workflow
 
 ### Making Changes

@@ -1,13 +1,21 @@
 #include "ast_file_utils.hpp"
+#include "language_adapter.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/file_system.hpp"
 #include <algorithm>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace duckdb {
 
-// Static mapping of file extensions to languages
+// Static mapping of file extensions to languages, covering every language
+// sitting_duck can be built with. Lookups go through the accessors below,
+// which filter these tables against the adapter registry once, so a language
+// compiled out via -DSITTING_DUCK_LANGUAGES behaves exactly like a language
+// sitting_duck never heard of: extension detection misses and glob expansion
+// has no extensions to match. In the default (all languages) build the
+// filtered tables are identical to these.
 static const std::unordered_map<string, string> EXTENSION_TO_LANGUAGE = {
     {"cpp", "cpp"},
     {"cc", "cpp"},
@@ -97,6 +105,46 @@ static const std::unordered_map<string, vector<string>> LANGUAGE_TO_EXTENSIONS =
     {"toml", {"toml"}},
     {"zig", {"zig"}},
     {"dart", {"dart"}}};
+
+// Built-in languages actually compiled into this build. The built-in set is
+// fixed once LanguageAdapterRegistry is constructed, so caching it here is
+// safe; runtime-registered languages (future work) must extend detection via
+// the registry, not these static tables.
+static const std::unordered_set<string> &GetCompiledLanguages() {
+	static const std::unordered_set<string> compiled = [] {
+		auto languages = LanguageAdapterRegistry::GetInstance().GetSupportedLanguages();
+		return std::unordered_set<string>(languages.begin(), languages.end());
+	}();
+	return compiled;
+}
+
+static const std::unordered_map<string, string> &GetExtensionToLanguageMap() {
+	static const std::unordered_map<string, string> filtered = [] {
+		const auto &compiled = GetCompiledLanguages();
+		std::unordered_map<string, string> result;
+		for (const auto &entry : EXTENSION_TO_LANGUAGE) {
+			if (compiled.count(entry.second)) {
+				result.insert(entry);
+			}
+		}
+		return result;
+	}();
+	return filtered;
+}
+
+static const std::unordered_map<string, vector<string>> &GetLanguageToExtensionsMap() {
+	static const std::unordered_map<string, vector<string>> filtered = [] {
+		const auto &compiled = GetCompiledLanguages();
+		std::unordered_map<string, vector<string>> result;
+		for (const auto &entry : LANGUAGE_TO_EXTENSIONS) {
+			if (compiled.count(entry.first)) {
+				result.insert(entry);
+			}
+		}
+		return result;
+	}();
+	return filtered;
+}
 
 vector<string> ASTFileUtils::GetFiles(ClientContext &context, const Value &path_value, bool ignore_errors,
                                       const vector<string> &supported_extensions) {
@@ -272,9 +320,10 @@ string ASTFileUtils::DetectLanguageFromPath(const string &file_path) {
 	// Convert to lowercase for case-insensitive matching
 	std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
-	// Look up the language
-	auto it = EXTENSION_TO_LANGUAGE.find(extension);
-	if (it != EXTENSION_TO_LANGUAGE.end()) {
+	// Look up the language (compiled-in languages only)
+	const auto &extension_map = GetExtensionToLanguageMap();
+	auto it = extension_map.find(extension);
+	if (it != extension_map.end()) {
 		return it->second;
 	}
 
@@ -287,11 +336,12 @@ bool ASTFileUtils::IsFileTypeSupported(const string &file_path, const string &la
 }
 
 vector<string> ASTFileUtils::GetSupportedExtensions(const string &language) {
-	auto it = LANGUAGE_TO_EXTENSIONS.find(language);
-	if (it != LANGUAGE_TO_EXTENSIONS.end()) {
+	const auto &language_map = GetLanguageToExtensionsMap();
+	auto it = language_map.find(language);
+	if (it != language_map.end()) {
 		return it->second;
 	}
-	return {}; // Language not recognized
+	return {}; // Language not recognized (or not compiled into this build)
 }
 
 // Helper function to check if a file extension is in the supported list
