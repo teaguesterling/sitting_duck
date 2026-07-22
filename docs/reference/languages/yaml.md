@@ -2,6 +2,13 @@
 
 > YAML data format node type mappings for AST semantic extraction
 
+> **Note: YAML support is currently disabled.** The tree-sitter YAML grammar's
+> self-modifying structure is incompatible with the tree-sitter CLI used to
+> generate parsers, so the YAML adapter is not registered (see
+> `src/language_adapter_registry_init.cpp`). This page documents the intended
+> node-type mappings (`src/language_configs/yaml_types.def`) for when the
+> grammar issue is resolved; `read_ast` does not accept `'yaml'` today.
+
 ## Node Categories
 
 - [Document Structure](#document-structure)

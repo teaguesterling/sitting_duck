@@ -48,12 +48,12 @@ Sitting Duck lets you analyze source code using SQL queries with language-specif
 LOAD sitting_duck;
 
 -- Find all functions with their signatures (native context)
-SELECT name, semantic_type as signature, start_line, end_line 
-FROM read_ast('my_script.py', 'python', context := 'native') 
+SELECT name, signature_type, parameters, start_line, end_line
+FROM read_ast('my_script.py', 'python', context := 'native')
 WHERE type = 'function_definition';
 
 -- Analyze Java method return types
-SELECT name, semantic_type as return_type, start_line
+SELECT name, signature_type as return_type, start_line
 FROM read_ast('MyClass.java', 'java', context := 'native')
 WHERE type = 'method_declaration';
 
@@ -72,12 +72,12 @@ Sitting Duck transforms your source code into queriable data structures:
 2. **Native semantic extraction** - Language-specific semantic analysis with type information
 3. **Multiple context levels** - From basic parsing to full semantic understanding
 4. **SQL interface** - Rich table functions with DuckDB-consistent design
-5. **Memory-safe processing** - Production-ready with comprehensive error handling
+5. **Memory-safe processing** - Comprehensive error handling, backed by memory-safety stress tests
 6. **Streaming design** - Efficient processing of large codebases
 
 ## Supported Languages
 
-Currently supports **27 languages** via Tree-sitter parsers with full semantic analysis:
+Currently supports **27 languages** via Tree-sitter parsers, all with universal semantic type classification. Native extraction depth (names, signatures, parameters, modifiers) varies by language — see the per-language docs below for quality ratings:
 
 | Category | Languages |
 |----------|-----------|
@@ -267,12 +267,12 @@ The extension supports multiple context extraction levels via the `context` para
 - **`'normalized'`**: Cross-language semantic normalization  
 - **`'native'`**: Full language-specific semantic analysis (recommended)
 
-In native context mode, `semantic_type` contains language-specific semantic information:
-- **Go**: Function types, method receivers, return types, parameter types
-- **Java**: Method signatures, class types, return types, access modifiers
-- **C++**: Function signatures, class/struct types, template information
-- **Python**: Function/class definitions, decorators, type hints
-- **JavaScript**: Function types, arrow functions, class methods
+`semantic_type` always contains the universal semantic category (the same taxonomy in every mode). Native context mode additionally populates the extraction fields — `name`, `signature_type`, `parameters`, `modifiers` — with language-specific detail:
+- **Go**: return types, method receivers, parameter names
+- **Java**: return types, parameters, access modifiers
+- **C++**: return types, parameters, class/struct kinds
+- **Python**: parameters, decorators, class kinds
+- **JavaScript**: parameters, arrow functions, const/let/var
 
 ## Quick Start
 
@@ -448,20 +448,27 @@ When using `context := 'native'`, the following fields provide semantic informat
 ## Performance Notes
 
 - **Streaming**: Parses files one-by-one, so you see results immediately
-- **Memory efficient**: Only one file's AST in memory at a time
+- **Memory efficient**: the streaming `read_ast` path holds only one file's AST in
+  memory at a time. (The internal parallel batch path buffers each file's parsed
+  result until the batch completes, so peak memory there scales with batch size.)
 - **Glob patterns**: Use `**/*.ext` for recursive directory searches
 - **Peek modes**: Control how much source text to extract (affects performance)
 
 ```sql
 -- Fastest: no source text
-SELECT COUNT(*) FROM read_ast('**/*.py', peek_mode := 'none');
+SELECT COUNT(*) FROM read_ast('**/*.py', peek := 'none');
 
--- Balanced: compact source snippets  
-SELECT COUNT(*) FROM read_ast('**/*.py', peek_mode := 'compact');
+-- Balanced: adaptive snippets (the default)
+SELECT COUNT(*) FROM read_ast('**/*.py', peek := 'smart');
+
+-- Fixed-size snippets: at most N characters per node
+SELECT COUNT(*) FROM read_ast('**/*.py', peek := 60);
 
 -- Complete: full source text (slower)
-SELECT COUNT(*) FROM read_ast('**/*.py', peek_mode := 'smart');
+SELECT COUNT(*) FROM read_ast('**/*.py', peek := 'full');
 ```
+
+> `peek_size` and `peek_mode` are accepted as legacy aliases for backward compatibility; new code should use `peek`.
 
 ## Utility Functions
 
@@ -520,15 +527,14 @@ FROM read_ast('main.py', 'python', context := 'native')
 WHERE type = 'function_definition';
 
 -- Compare Java and C++ method signatures
-UNION ALL
 (
-  SELECT 'java' as lang, name, semantic_type as signature
+  SELECT 'java' as lang, name, signature_type as return_type
   FROM read_ast('MyClass.java', 'java', context := 'native')
   WHERE type = 'method_declaration'
 )
-UNION ALL  
+UNION ALL
 (
-  SELECT 'cpp' as lang, name, semantic_type as signature
+  SELECT 'cpp' as lang, name, signature_type as return_type
   FROM read_ast('MyClass.cpp', 'cpp', context := 'native')
   WHERE type = 'function_definition'
 );
@@ -544,10 +550,10 @@ ORDER BY complexity DESC;
 ```
 
 **Native Context Features:**
-- **Language-specific semantic types**: Method signatures, return types, parameter types
+- **Language-specific extraction**: Method signatures, return types, and parameters via `signature_type`, `parameters`, `modifiers`
 - **Cross-language compatibility**: Compare similar constructs across languages
 - **Enhanced analysis**: More detailed semantic information than normalized context
-- **Production ready**: Thoroughly tested with memory safety guarantees
+- **Extensively tested**: Includes memory-safety stress tests and multi-execution stability tests
 
 > Use `context := 'native'` for the most detailed analysis. See language-specific tests for examples.
 
@@ -559,7 +565,7 @@ The native context mode provides language-specific semantic analysis:
 -- Get Java method signatures with return types
 SELECT 
     name as method_name,
-    semantic_type as return_type,
+    signature_type as return_type,
     start_line
 FROM read_ast('MyClass.java', 'java', context := 'native')
 WHERE type = 'method_declaration';
@@ -567,7 +573,8 @@ WHERE type = 'method_declaration';
 -- Find Go function signatures
 SELECT 
     name as function_name,
-    semantic_type as signature,
+    signature_type as return_type,
+    parameters,
     file_path
 FROM read_ast('*.go', 'go', context := 'native')
 WHERE type = 'function_declaration';
@@ -575,7 +582,7 @@ WHERE type = 'function_declaration';
 -- Analyze C++ class hierarchies
 SELECT 
     name as class_name,
-    semantic_type as class_info,
+    signature_type as class_kind,
     descendant_count as complexity
 FROM read_ast('*.cpp', 'cpp', context := 'native')
 WHERE type = 'class_specifier'
