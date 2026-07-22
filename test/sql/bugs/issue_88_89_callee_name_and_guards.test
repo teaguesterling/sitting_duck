@@ -1,0 +1,311 @@
+# name: test/sql/bugs/issue_88_89_callee_name_and_guards.test
+# group: [bugs]
+
+# Issue #88: CSS #name on call nodes must bind the CALLEE name uniformly across
+# grammars. The FIND_CALL_TARGET extraction strategy self-names call nodes for
+# C-family (and most grammars), but Kotlin/Swift (simple_identifier +
+# navigation_expression), PHP (name / variable_name), C# member calls
+# (member_access_expression), and Lua method-call wrappers
+# (function_call > method_index_expression) fell through the strategy's type
+# lists and produced UNNAMED call nodes — so `.call#foo` silently returned
+# empty for those languages.
+#
+# Issue #89: where the engine cannot honor a selector's semantics it must say
+# so. Covered here: #name bound to call nodes over a source whose call nodes
+# carry no callee names (bash command_substitution), unknown attribute names,
+# and documented-but-unsupported attribute/operator combos — all raise errors
+# instead of returning silently-wrong/empty results.
+#
+# Row-pinned per the #83 convention: matched rows assert name + start_line,
+# not just COUNT(*).
+
+require sitting_duck
+
+# =============================================================================
+# Section 1: C ground truth — callee names on call_expression (issue #88 repro)
+# =============================================================================
+
+# Every call in the C fixture is named with its callee, including calls through
+# a struct field function pointer (r->seek_fn -> seek_fn).
+query III
+SELECT type, name, start_line
+FROM read_ast('test/data/call_extraction/calls.c')
+WHERE is_semantic_type(semantic_type, 'CALL')
+ORDER BY start_line, node_id;
+----
+call_expression	fseeko	13
+call_expression	check_offset	13
+call_expression	ftello	16
+call_expression	fseeko	20
+call_expression	seek_fn	23
+call_expression	read_block	28
+call_expression	printf	29
+call_expression	skip_block	30
+
+# .call#fseeko binds the callee name (the issue-#88 headline case)
+query II
+SELECT name, start_line
+FROM ast_select('test/data/call_extraction/calls.c', '.call#fseeko')
+ORDER BY start_line;
+----
+fseeko	13
+fseeko	20
+
+# .func:has(.call#fseeko) — the field-report selector — is non-empty and pinned
+query III
+SELECT name, type, start_line
+FROM ast_select('test/data/call_extraction/calls.c', '.func:has(.call#fseeko)')
+ORDER BY start_line;
+----
+read_block	function_definition	12
+skip_block	function_definition	19
+
+# ...and agrees with the raw read_ast parent/child (subtree) join
+query II
+SELECT DISTINCT f.name, f.start_line
+FROM read_ast('test/data/call_extraction/calls.c') f
+JOIN read_ast('test/data/call_extraction/calls.c') c
+  ON c.node_id > f.node_id
+ AND c.node_id <= f.node_id + f.descendant_count
+ AND c.type = 'call_expression'
+ AND c.name = 'fseeko'
+WHERE f.type = 'function_definition'
+ORDER BY f.start_line;
+----
+read_block	12
+skip_block	19
+
+# Legitimately-empty twin (#89 test convention): a callee that does not exist
+# returns 0 rows WITHOUT an error — the C fixture's calls are named, so empty
+# means "searched correctly, not there".
+query I
+SELECT COUNT(*) FROM ast_select('test/data/call_extraction/calls.c', '.call#zz_absent_callee');
+----
+0
+
+query I
+SELECT COUNT(*) FROM ast_select('test/data/call_extraction/calls.c', '.func:has(.call#zz_absent_callee)');
+----
+0
+
+# =============================================================================
+# Section 2: Python parity — the same selector shape on a grammar that always
+# self-named calls (regression in both directions, proving uniformity)
+# =============================================================================
+
+query II
+SELECT name, start_line
+FROM ast_select('test/data/call_extraction/calls.py', '.call#transform')
+ORDER BY start_line;
+----
+transform	8
+transform	29
+
+query III
+SELECT name, type, start_line
+FROM ast_select('test/data/call_extraction/calls.py', '.func:has(.call#transform)')
+ORDER BY start_line;
+----
+process	function_definition	7
+process_all	function_definition	27
+
+# =============================================================================
+# Section 3: previously false-empty grammars now bind callee names (issue #88)
+# Kotlin/Swift: simple_identifier callee + navigation_expression member calls;
+# PHP: name/variable_name callee anatomy (incl. scoped :: calls and `new`);
+# C#: member_access_expression; Lua: function_call > method_index_expression.
+# =============================================================================
+
+query IIII
+SELECT file_path.split('/')[-1] AS f, type, name, start_line
+FROM read_ast(['test/data/call_extraction/calls.kt',
+               'test/data/call_extraction/calls.swift',
+               'test/data/call_extraction/calls.php',
+               'test/data/call_extraction/calls.cs',
+               'test/data/call_extraction/calls.lua'])
+WHERE is_semantic_type(semantic_type, 'CALL')
+ORDER BY f, start_line, node_id;
+----
+calls.cs	invocation_expression	Trim	7
+calls.cs	invocation_expression	Helper	8
+calls.kt	call_expression	helper	6
+calls.kt	call_expression	append	7
+calls.kt	call_expression	helper	8
+calls.lua	function_call	helper	7
+calls.lua	function_call	helper	10
+calls.lua	function_call	render	11
+calls.lua	method_index_expression	render	11
+calls.php	function_call_expression	strtoupper	8
+calls.php	object_creation_expression	Widget	12
+calls.php	function_call_expression	helper	13
+calls.php	member_call_expression	render	14
+calls.php	scoped_call_expression	render	15
+calls.swift	call_expression	uppercased	6
+calls.swift	call_expression	helper	7
+
+# The selector layer over a previously false-empty grammar (Kotlin)
+query II
+SELECT name, start_line
+FROM ast_select('test/data/call_extraction/calls.kt', '.call#helper')
+ORDER BY start_line;
+----
+helper	6
+helper	8
+
+# Member-call callee (was empty: name lived inside navigation_suffix)
+query II
+SELECT name, start_line
+FROM ast_select('test/data/call_extraction/calls.kt', '.func:has(.call#append)')
+ORDER BY start_line;
+----
+caller	5
+
+# =============================================================================
+# Section 4: #89 guards — "can't answer" raises, never a silent empty
+# =============================================================================
+
+# Bash command_substitution is CALL-semantic but carries no single callee name.
+# Binding a #name to call nodes over such a source is unanswerable: error.
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.sh', '.call#date');
+----
+no call node in this source carries a callee name
+
+# Same guard for the :has() composition...
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.sh', 'program:has(.call#date)');
+----
+no call node in this source carries a callee name
+
+# ...and for :not(:has()) — where the failure mode would be matching EVERYTHING
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.sh', 'program:not(:has(.call#date))');
+----
+no call node in this source carries a callee name
+
+# .call WITHOUT a name filter over the same source is answerable and stays quiet
+query I
+SELECT COUNT(*) FROM ast_select('test/data/call_extraction/calls.sh', '.call');
+----
+1
+
+# Unknown attribute names error instead of falling through to `ELSE false`
+# (which silently matched nothing)
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.c', '.call[frobnicate=x]');
+----
+unknown attribute "[frobnicate...]"
+
+# Documented-looking operators the dispatch silently ignored now error:
+# type/language/semantic/params implement exact match only
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.c', '[type^=call]');
+----
+attribute "type" only supports exact match
+
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.c', '[semantic$=CALL]');
+----
+attribute "semantic" only supports exact match
+
+# modifier is a list: = and *= both mean "has this modifier"; ^=/$= are not
+# implementable and used to silently degrade to containment
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.c', '.func[modifier^=sta]');
+----
+attribute "modifier" supports = and *=
+
+# Exact-match forms still work (regression guard for the new validation)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/call_extraction/calls.c', '[type=call_expression]');
+----
+8
+
+# Operators stay supported on name
+query II
+SELECT name, start_line
+FROM ast_select('test/data/call_extraction/calls.c', '.call[name^=fse]')
+ORDER BY start_line;
+----
+fseeko	13
+fseeko	20
+
+# Unknown pseudo-elements error: the routing UNION has no arm for them, so
+# ::bogus silently returned 0 rows
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.c', 'function_definition::bogus');
+----
+unknown pseudo-element "::bogus"
+
+# Known pseudo-elements still route (regression guard), row-pinned
+query II
+SELECT name, start_line
+FROM ast_select('test/data/call_extraction/calls.c', 'function_definition#read_block::callers')
+ORDER BY start_line;
+----
+main	26
+
+# :has() arguments only honor a type, #name, and .class — anything else was
+# silently DROPPED, making :has match more than asked (silently wrong results).
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.c', '.func:has([name=fseeko])');
+----
+attribute filters inside :has(...) are not supported
+
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.c', '.func:has(.call:first-child)');
+----
+pseudo-classes inside :has(...) are not supported
+
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.c', '.func:has(if_statement > call_expression)');
+----
+combinators inside :has(...) are not supported
+
+# The supported :has forms keep working (compound type + #name)
+query II
+SELECT name, start_line
+FROM ast_select('test/data/call_extraction/calls.c', '.func:has(call_expression#ftello)')
+ORDER BY start_line;
+----
+read_block	12
+
+# =============================================================================
+# Section 5: guards fire even when the base match is EMPTY. The #83 peek guard
+# lived in matched_raw's WHERE, which is never evaluated over an empty base —
+# exactly the silent-empty situations being guarded. All validations now gate
+# matched_base via sel_props.validations_ok (a join build side, always
+# materialized).
+# =============================================================================
+
+statement ok
+CREATE TABLE zz_issue89_no_peek AS
+SELECT * FROM read_ast('test/data/call_extraction/calls.c', peek := 'none+schema');
+
+# The type filter matches nothing -> base is empty -> the peek guard must
+# STILL fire (before this fix it silently returned 0 rows).
+statement error
+SELECT * FROM ast_select_from('zz_issue89_no_peek', 'zz_no_such_type[peek*=x]');
+----
+no peek text
+
+statement ok
+DROP TABLE zz_issue89_no_peek;
+
+# =============================================================================
+# Section 6: ast_get_calls over C (was untested for C-family)
+# =============================================================================
+
+query III
+SELECT caller_name, called_name, start_line
+FROM ast_get_calls('test/data/call_extraction/calls.c')
+ORDER BY start_line, called_name;
+----
+read_block	check_offset	13
+read_block	fseeko	13
+read_block	ftello	16
+skip_block	fseeko	20
+skip_block	seek_fn	23
+main	read_block	28
+main	printf	29
+main	skip_block	30

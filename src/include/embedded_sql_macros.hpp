@@ -2438,7 +2438,15 @@ CREATE OR REPLACE MACRO parse_ast_list_table(code, language) AS TABLE
 --   [name=value]                  - Attribute filter. Supported attributes:
 --                                     name, type, language, semantic, peek,
 --                                     qualified, signature, params, modifier,
---                                     annotation. Operators: = *= ^= $=.
+--                                     annotation.
+--                                     Operators = *= ^= $= are supported for
+--                                     name, annotation, qualified, signature,
+--                                     peek. type/language/semantic/params take
+--                                     = only; modifier takes = or *= (both mean
+--                                     "has this modifier"). Unknown attributes
+--                                     and unsupported operator combinations
+--                                     raise an error (issue #89) instead of
+--                                     silently returning wrong/empty results.
 --                                     Example: .func[signature^=int] matches
 --                                     functions whose return type starts with "int"
 --   Compound: type#name:has(...)  - Multiple conditions on same element
@@ -2672,6 +2680,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- Left = first tag_name child of sel_root, Right = last tag_name child.
         -- Refactored to use sel_tag_names + a single window pass instead of two
         -- correlated LIMIT 1 scalar subqueries on sel.
+
+)SQLMACRO"
+        R"SQLMACRO(
         combinator_parts AS (
             SELECT
                 MAX(name) FILTER (WHERE first_rn = 1) AS left_type,
@@ -2686,9 +2697,6 @@ CREATE OR REPLACE MACRO ast_select_from(
         ),
 
         -- For simple/compound selectors: extract type, #name, .class filters.
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- Type filter: find the tag_name in the selector tree (may be nested in compound selectors).
         -- Exclude tag_names inside :has()/:not() arguments — those are descendant filters, not the base type.
         --
@@ -2965,6 +2973,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 SELECT fname.name AS attr_name,
                        COALESCE(fplain.name, fstr.name, fint.name) AS attr_value,
                        CASE
+
+)SQLMACRO"
+        R"SQLMACRO(
                            WHEN starswith.attr_id IS NOT NULL THEN '*='
                            WHEN caret.attr_id    IS NOT NULL THEN '^='
                            WHEN dollar.attr_id   IS NOT NULL THEN '$='
@@ -2974,9 +2985,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                 JOIN sel_attr_outside_args outside ON outside.attr_id = s.node_id
                 LEFT JOIN sel_attr_first_name  fname  ON fname.attr_id  = s.node_id
                 LEFT JOIN sel_attr_first_plain fplain ON fplain.attr_id = s.node_id
-
-)SQLMACRO"
-        R"SQLMACRO(
                 LEFT JOIN sel_attr_first_str   fstr   ON fstr.attr_id   = s.node_id
                 LEFT JOIN sel_attr_first_int   fint   ON fint.attr_id   = s.node_id
                 LEFT JOIN (
@@ -3131,6 +3139,105 @@ CREATE OR REPLACE MACRO ast_select_from(
             END AS ok
         ),
 
+        -- Attribute filter validation (issue #89): reject documented-looking but
+        -- unsupported attribute filters at query time instead of silently
+        -- matching nothing (unknown attribute names fell through to `ELSE false`
+        -- in the dispatch CASE) or silently ignoring the operator (the type/
+        -- language/semantic/params arms only implement exact match; modifier
+        -- implements = and *= as list containment). "Can't answer" must be an
+        -- error, never an empty result.
+        known_attribute_names(name) AS (
+            VALUES ('name'), ('type'), ('language'), ('semantic'),
+                   ('modifier'), ('annotation'), ('qualified'), ('signature'),
+                   ('params'), ('peek')
+        ),
+        attr_filter_validation AS (
+            SELECT CASE
+                WHEN EXISTS (
+                    SELECT 1 FROM attr_conditions ac
+                    WHERE ac.attr_name IS NOT NULL
+                      AND ac.attr_name NOT IN (SELECT name FROM known_attribute_names)
+                ) THEN error(format(
+                    'ast_select: unknown attribute "[{}...]". Supported attributes: '
+                    'name, type, language, semantic, modifier, annotation, qualified, '
+                    'signature, params, peek.',
+                    (SELECT ac.attr_name FROM attr_conditions ac
+                     WHERE ac.attr_name IS NOT NULL
+                       AND ac.attr_name NOT IN (SELECT name FROM known_attribute_names)
+                     LIMIT 1)
+                ))
+                WHEN EXISTS (
+                    SELECT 1 FROM attr_conditions ac
+                    WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params')
+                ) THEN error(format(
+                    'ast_select: attribute "{}" only supports exact match (=), not "{}". '
+                    'For prefix/suffix/substring matching on node types use a bare type '
+                    'selector (e.g. `call` matches call_expression), or filter the '
+                    'result rows in SQL.',
+                    (SELECT ac.attr_name FROM attr_conditions ac
+                     WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params')
+                     LIMIT 1),
+                    (SELECT ac.attr_op FROM attr_conditions ac
+                     WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params')
+                     LIMIT 1)
+                ))
+                WHEN EXISTS (
+                    SELECT 1 FROM attr_conditions ac
+                    WHERE ac.attr_op IN ('^=', '$=') AND ac.attr_name = 'modifier'
+                ) THEN error(
+                    'ast_select: attribute "modifier" supports = and *= (both meaning '
+                    '"has this modifier" — modifiers is a list), not ^= or $=.'
+                )
+                ELSE true
+            END AS ok
+        ),
+
+        -- #name-on-call binding guard (issues #88/#89): a selector that binds a
+        -- name to CALL-semantic nodes (`.call#foo`, `.call[name=foo]`,
+        -- `:has(.call#foo)`, `:not(:has(.call#foo))`) requires call nodes to
+        -- carry their callee's name. Extraction self-names calls for the
+        -- registered grammars (FIND_CALL_TARGET), but some call-semantic nodes
+        -- have no single callee (bash command_substitution) and future grammars
+        -- may not be covered. If the source HAS call nodes but NONE of them are
+        -- named, the selector cannot bind — raise instead of returning 0 rows
+        -- (or, for the :not(:has()) form, matching everything).
+        -- When only SOME calls are unnamed this stays silent: mixed sources are
+        -- legitimate and per-row errors would drown real results (#89: no false
+        -- alarms where all-NULL is not the whole story).
+        call_name_binding_validation AS (
+            SELECT CASE
+                WHEN (
+                    (UPPER(COALESCE((SELECT class_filter FROM simple_class), ''))
+                         IN ('CALL', 'INVOKE', 'COMPUTATION_CALL')
+                     AND ((SELECT name_filter FROM simple_id) IS NOT NULL
+                          OR EXISTS (SELECT 1 FROM attr_conditions WHERE attr_name = 'name')))
+                    OR EXISTS (SELECT 1 FROM has_conditions h
+                               WHERE h.has_name IS NOT NULL
+                                 AND UPPER(h.has_class) IN ('CALL', 'INVOKE', 'COMPUTATION_CALL'))
+                    OR EXISTS (SELECT 1 FROM not_has_conditions nh
+                               WHERE nh.not_has_name IS NOT NULL
+                                 AND UPPER(nh.not_has_class) IN ('CALL', 'INVOKE', 'COMPUTATION_CALL'))
+                )
+                AND EXISTS (SELECT 1 FROM ast WHERE is_semantic_type(semantic_type, 'CALL'))
+                AND NOT EXISTS (SELECT 1 FROM ast
+
+)SQLMACRO"
+        R"SQLMACRO(
+                                WHERE is_semantic_type(semantic_type, 'CALL')
+                                  AND name IS NOT NULL AND name != '')
+                THEN error(
+                    'ast_select: the selector binds a name to call nodes (e.g. .call#foo) '
+                    'but no call node in this source carries a callee name. Either the '
+                    'grammar''s call nodes are not covered by callee-name extraction, or '
+                    'the table was parsed without name extraction. Query the callee '
+                    'structurally instead: join the call node''s children via parent_id '
+                    '(see read_ast docs), and please report the language so extraction '
+                    'can be extended.'
+                )
+                ELSE true
+            END AS ok
+        ),
+
         -- Detect pseudo-element (::callers, ::callees, etc.).
         -- Finds the LAST tag_name child of any pseudo_element_selector.
         -- Refactored to use typed CTEs + window function — avoids the correlated
@@ -3143,6 +3250,78 @@ CREATE OR REPLACE MACRO ast_select_from(
         ),
         pseudo_element AS (
             SELECT (SELECT name FROM sel_pe_tag_names_ranked WHERE rn = 1) AS element_name
+        ),
+
+        -- Unknown pseudo-elements error (issue #89): the final routing UNION
+        -- only has arms for the known names, so an unrecognized ::element fell
+        -- through every arm and silently returned 0 rows.
+        known_pseudo_element_names(name) AS (
+            VALUES ('parent'), ('parent-definition'), ('scope'),
+                   ('next-sibling'), ('prev-sibling'), ('previous-sibling'),
+                   ('callers'), ('callees')
+        ),
+        pseudo_element_validation AS (
+            SELECT CASE
+                WHEN (SELECT element_name FROM pseudo_element) IS NOT NULL
+                     AND (SELECT element_name FROM pseudo_element) NOT IN
+                         (SELECT name FROM known_pseudo_element_names)
+                THEN error(format(
+                    'ast_select: unknown pseudo-element "::{}". Supported: ::parent, '
+                    '::parent-definition, ::scope, ::next-sibling, ::prev-sibling, '
+                    '::callers, ::callees.',
+                    (SELECT element_name FROM pseudo_element)
+                ))
+                ELSE true
+            END AS ok
+        ),
+
+        -- :has() argument validation (issue #89): has_conditions extracts only
+        -- a type, an #id, and a .class from the :has(...) argument. Attribute
+        -- filters, pseudo-classes, and combinators inside the argument were
+        -- silently DROPPED — the :has matched more than the user asked for
+        -- (silently wrong results, the same failure family as silent empties).
+        -- Reject them until the engine can honor them.
+        sel_has_arg_blocks AS (
+            SELECT pa.args_id, pa.args_descendants
+            FROM sel_pcs_to_args pa
+            JOIN sel_class_names cn ON cn.parent_id = pa.pcs_id AND cn.name = 'has'
+        ),
+        has_args_validation AS (
+            SELECT CASE
+                WHEN EXISTS (
+                    SELECT 1 FROM sel_attribute_selectors s
+                    JOIN sel_has_arg_blocks hb
+                      ON s.node_id > hb.args_id
+                     AND s.node_id <= hb.args_id + hb.args_descendants
+                ) THEN error(
+                    'ast_select: attribute filters inside :has(...) are not supported '
+                    '(only a type, #name, and .class are honored there). Filter the '
+                    'attribute in SQL over the result, or chain ast_select calls.'
+                )
+                WHEN EXISTS (
+                    SELECT 1 FROM sel_pseudo_classes pcs
+                    JOIN sel_has_arg_blocks hb
+                      ON pcs.node_id > hb.args_id
+                     AND pcs.node_id <= hb.args_id + hb.args_descendants
+                ) THEN error(
+                    'ast_select: pseudo-classes inside :has(...) are not supported '
+                    '(only a type, #name, and .class are honored there). Chain '
+                    'ast_select calls to compose conditions.'
+                )
+                WHEN EXISTS (
+                    SELECT 1 FROM sel c
+                    JOIN sel_has_arg_blocks hb
+                      ON c.node_id > hb.args_id
+                     AND c.node_id <= hb.args_id + hb.args_descendants
+                    WHERE c.type IN ('child_selector', 'descendant_selector',
+                                     'sibling_selector', 'adjacent_sibling_selector')
+                ) THEN error(
+                    'ast_select: combinators inside :has(...) are not supported '
+                    '(only a type, #name, and .class are honored there). Chain '
+                    'ast_select calls to compose structural conditions.'
+                )
+                ELSE true
+            END AS ok
         ),
 
         -- :match("code") / :contains("code") — structural code pattern.
@@ -3185,7 +3364,15 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- Apply selector: single scan with CASE dispatch (no UNION ALL)
         -- =====================================================================
 
-        -- Precompute selector properties as scalars
+        -- Precompute selector properties as scalars.
+        -- validations_ok folds ALL "can't answer" guards (#89) into the one-row
+        -- CTE that every matched_base branch cross-joins. This is deliberate:
+        -- the guards must fire even when the branch's row filters match ZERO
+        -- rows (the guarded situations — e.g. `.call#foo` over unnamed call
+        -- nodes — produce exactly that empty base). A join build side is
+        -- materialized regardless of probe cardinality, so error() here cannot
+        -- be skipped; a filter in matched_raw's WHERE would never be evaluated
+        -- over an already-empty base.
         sel_props AS (
             SELECT
                 (SELECT type FROM root_type) as sel_type,
@@ -3196,7 +3383,13 @@ CREATE OR REPLACE MACRO ast_select_from(
                 (SELECT left_type FROM combinator_parts) as left_type,
                 (SELECT left_type || '_%' FROM combinator_parts) as left_type_like,
                 (SELECT right_type FROM combinator_parts) as right_type,
-                (SELECT right_type || '_%' FROM combinator_parts) as right_type_like
+                (SELECT right_type || '_%' FROM combinator_parts) as right_type_like,
+                ((SELECT ok FROM pseudo_class_validation)
+                 AND (SELECT ok FROM peek_filter_validation)
+                 AND (SELECT ok FROM attr_filter_validation)
+                 AND (SELECT ok FROM call_name_binding_validation)
+                 AND (SELECT ok FROM pseudo_element_validation)
+                 AND (SELECT ok FROM has_args_validation)) as validations_ok
         ),
 
     -- Dispatch by sel_type using UNION ALL instead of a single CASE.
@@ -3215,7 +3408,8 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- Bare type matching: `if` matches `if` and `if_statement`, `if_clause`, etc.
         SELECT a.*
         FROM ast a, sel_props sp
-        WHERE sp.sel_type IN ('tag_name', 'id_selector', 'class_selector',
+        WHERE sp.validations_ok
+          AND sp.sel_type IN ('tag_name', 'id_selector', 'class_selector',
                               'attribute_selector', 'pseudo_class_selector')
           AND (sp.type_filter IS NULL OR a.type = sp.type_filter OR a.type LIKE sp.type_filter_like)
           AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
@@ -3228,15 +3422,13 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- Descendant combinator: A B
         SELECT a.*
         FROM ast a, sel_props sp
-        WHERE sp.sel_type = 'descendant_selector'
+        WHERE sp.validations_ok
+          AND sp.sel_type = 'descendant_selector'
           AND (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
           AND EXISTS (
               SELECT 1 FROM ast anc
               WHERE anc.file_path = a.file_path
                 AND a.node_id > anc.node_id
-
-)SQLMACRO"
-        R"SQLMACRO(
                 AND a.node_id <= anc.node_id + anc.descendant_count
                 AND (anc.type = sp.left_type OR anc.type LIKE sp.left_type_like)
           )
@@ -3246,7 +3438,8 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- Child combinator: A > B
         SELECT a.*
         FROM ast a, sel_props sp
-        WHERE sp.sel_type = 'child_selector'
+        WHERE sp.validations_ok
+          AND sp.sel_type = 'child_selector'
           AND (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
           AND EXISTS (
               SELECT 1 FROM ast par
@@ -3259,7 +3452,8 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- General sibling: A ~ B
         SELECT a.*
         FROM ast a, sel_props sp
-        WHERE sp.sel_type = 'sibling_selector'
+        WHERE sp.validations_ok
+          AND sp.sel_type = 'sibling_selector'
           AND (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
           AND EXISTS (
               SELECT 1 FROM ast sib
@@ -3274,7 +3468,8 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- Adjacent sibling: A + B
         SELECT a.*
         FROM ast a, sel_props sp
-        WHERE sp.sel_type = 'adjacent_sibling_selector'
+        WHERE sp.validations_ok
+          AND sp.sel_type = 'adjacent_sibling_selector'
           AND (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
           AND EXISTS (
               SELECT 1 FROM ast adj
@@ -3313,6 +3508,9 @@ CREATE OR REPLACE MACRO ast_select_from(
               AND d.node_id <= a.node_id + a.descendant_count
               AND (nh.not_has_type IS NULL OR d.type = nh.not_has_type)
               AND (nh.not_has_name IS NULL OR d.name = nh.not_has_name)
+
+)SQLMACRO"
+        R"SQLMACRO(
               AND (nh.not_has_class IS NULL
                    OR is_semantic_type(d.semantic_type, UPPER(nh.not_has_class)))
         )
@@ -3382,7 +3580,11 @@ CREATE OR REPLACE MACRO ast_select_from(
             ELSE false
         END, false)
     )
-    AND (SELECT ok FROM peek_filter_validation)
+    -- NOTE: the "can't answer" validations (pseudo_class / peek / attribute /
+    -- call-name binding) are evaluated in sel_props.validations_ok, which every
+    -- matched_base branch checks. They must NOT live here: this WHERE clause is
+    -- only evaluated for rows that survived matched_base, and the guarded
+    -- failure modes produce an EMPTY base — a guard here would never fire.
     -- Additional pseudo-class filters
     -- Each pseudo-class in the selector must be satisfied.
     -- For non-negated pcs: satisfied iff CASE is true.
@@ -3396,7 +3598,6 @@ CREATE OR REPLACE MACRO ast_select_from(
     -- same defect as the attribute-filter site above). NULL pseudo-class
     -- evaluations must count as "not satisfied": :async over NULL modifiers
     -- matches nothing, :not(:async) matches the node.
-    AND (SELECT ok FROM pseudo_class_validation)
     AND NOT EXISTS (
         SELECT 1 FROM pseudo_classes pc
         WHERE pc.negated = COALESCE(CASE pc.pseudo_name
@@ -3509,9 +3710,6 @@ CREATE OR REPLACE MACRO ast_select_from(
 
             -- :contains("code") — some descendant of the current node is the
             -- root of the parsed pattern. Equivalent to :has(:match(...)).
-
-)SQLMACRO"
-        R"SQLMACRO(
             -- Iterates descendants in the DFS node array and runs the same
             -- contiguity check as :match at each candidate root.
             WHEN 'contains' THEN (SELECT len FROM ast_pattern_len) > 0 AND EXISTS (
@@ -3555,6 +3753,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                                 AND a.node_id <= nested.node_id + nested.descendant_count
                                 AND (nested.type = pc.pseudo_arg
                                      OR nested.type LIKE pc.pseudo_arg || '_%')
+
+)SQLMACRO"
+        R"SQLMACRO(
                           )
                     )
                 END

@@ -11,6 +11,13 @@ Use `[attr operator value]` syntax to query AST nodes by their metadata fields. 
 | `^=` | Starts with | `[name^=test_]` |
 | `$=` | Ends with | `[name$=_handler]` |
 
+Not every operator applies to every attribute: the text attributes (`name`,
+`annotation`, `qualified`, `signature`, `peek`) support all four;
+`type`/`language`/`semantic`/`params` support `=` only; `modifier` supports
+`=` and `*=` (both mean "has this modifier" — modifiers is a list). An
+unsupported combination (or an unknown attribute name) raises an error rather
+than silently returning wrong or empty results (issue #89).
+
 ## Core Attributes
 
 These correspond to columns in the `read_ast()` output.

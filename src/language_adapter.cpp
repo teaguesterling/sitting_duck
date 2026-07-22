@@ -5,6 +5,7 @@
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/helper.hpp"
 #include <cstring>
+#include <functional>
 
 namespace duckdb {
 
@@ -421,6 +422,14 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 	case ExtractionStrategy::FIND_CALL_TARGET: {
 		// Extract method/function name from call expressions
 		// Handles: simple calls (print), method calls (obj.method), qualified calls (pkg.func)
+		//
+		// The callee's node anatomy varies per grammar (issue #88): some grammars
+		// put an identifier-like leaf directly under the call node (C, Python,
+		// PHP function_call), others wrap the callee in a member-access node
+		// whose method name may itself be nested one level deeper (Kotlin/Swift
+		// navigation_suffix). The type sets below cover all registered grammars;
+		// keeping them uniform here is what makes `.call#name` selectors work
+		// identically across languages.
 		if (ts_node_child_count(node) == 0) {
 			return "";
 		}
@@ -430,22 +439,63 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 			return "";
 		}
 
+		// Identifier-like leaf types that can carry a callee name:
+		//   identifier            — most grammars
+		//   property_identifier   — JS/TS member access
+		//   field_identifier      — C++/Rust member access
+		//   simple_identifier     — Kotlin, Swift
+		//   name                  — PHP
+		auto is_callee_identifier = [](const string &t) {
+			return t == "identifier" || t == "property_identifier" || t == "field_identifier" ||
+			       t == "simple_identifier" || t == "name";
+		};
+		// Argument containers: sibling scans must stop here so we never mistake
+		// an argument for the callee.
+		auto is_argument_container = [](const string &t) {
+			return t == "argument_list" || t == "arguments" || t == "call_suffix" || t == "value_arguments";
+		};
+		// Rightmost identifier-like descendant of n, preferring later children
+		// (the method name in a member chain is the last leaf: obj.a().b -> b).
+		// Never descends into argument containers. Depth-bounded for safety.
+		std::function<string(TSNode, int)> find_rightmost_identifier = [&](TSNode n, int depth) -> string {
+			if (depth > 6) {
+				return "";
+			}
+			uint32_t cc = ts_node_child_count(n);
+			for (int i = static_cast<int>(cc) - 1; i >= 0; i--) {
+				TSNode c = ts_node_child(n, static_cast<uint32_t>(i));
+				string ct = ts_node_type(c);
+				if (is_callee_identifier(ct)) {
+					return ExtractNodeText(c, content);
+				}
+				if (is_argument_container(ct)) {
+					continue;
+				}
+				string r = find_rightmost_identifier(c, depth + 1);
+				if (!r.empty()) {
+					return r;
+				}
+			}
+			return "";
+		};
+
 		string first_child_type = ts_node_type(first_child);
 
-		// Simple function call: first child is identifier
-		// But in Java method_invocation, the first identifier is the object, not the method.
-		// Check if there's a later identifier sibling (before argument_list) which would be the method name.
-		if (first_child_type == "identifier") {
+		// Simple function call: first child is an identifier-like leaf.
+		// But in Java method_invocation (obj.bar()), the first identifier is the
+		// object, not the method; in PHP scoped_call_expression (Cls::baz()) the
+		// first `name` is the class. Check for a later identifier sibling
+		// (before the argument container) which would be the method name.
+		if (is_callee_identifier(first_child_type)) {
 			uint32_t node_child_count = ts_node_child_count(node);
 			for (uint32_t i = 1; i < node_child_count; i++) {
 				TSNode sibling = ts_node_child(node, i);
 				string sibling_type = ts_node_type(sibling);
 				// Stop at argument containers
-				if (sibling_type == "argument_list" || sibling_type == "arguments") {
+				if (is_argument_container(sibling_type)) {
 					break;
 				}
-				if (sibling_type == "identifier" || sibling_type == "property_identifier" ||
-				    sibling_type == "field_identifier" || sibling_type == "simple_identifier") {
+				if (is_callee_identifier(sibling_type)) {
 					return ExtractNodeText(sibling, content);
 				}
 			}
@@ -456,43 +506,62 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		// Method/member call patterns: find the rightmost identifier (method name)
 		// Python: attribute (obj.method), JS/TS: member_expression, C++: field_expression
 		// Go: selector_expression, Rust: field_expression, Java: field_access
+		// Kotlin/Swift: navigation_expression, C#: member_access_expression
+		// Lua: method_index_expression (obj:bar), PHP: variable_name ($obj->bar)
 		if (first_child_type == "attribute" || first_child_type == "member_expression" ||
 		    first_child_type == "field_expression" || first_child_type == "selector_expression" ||
 		    first_child_type == "field_access" || first_child_type == "scoped_identifier" ||
-		    first_child_type == "qualified_identifier") {
+		    first_child_type == "qualified_identifier" || first_child_type == "navigation_expression" ||
+		    first_child_type == "member_access_expression" || first_child_type == "method_index_expression" ||
+		    first_child_type == "variable_name") {
 			// Java method_invocation has a special structure: the method name is a sibling
 			// of field_access, not inside it. E.g., System.out.println():
 			//   method_invocation -> field_access("System.out"), ".", identifier("println"), argument_list
+			// PHP member_call_expression is the same shape:
+			//   member_call_expression -> variable_name("$obj"), "->", name("bar"), arguments
 			// Check for an identifier sibling after the first child (the object expression)
 			uint32_t node_child_count = ts_node_child_count(node);
 			for (uint32_t i = 1; i < node_child_count; i++) {
 				TSNode sibling = ts_node_child(node, i);
 				string sibling_type = ts_node_type(sibling);
-				if (sibling_type == "identifier" || sibling_type == "property_identifier" ||
-				    sibling_type == "field_identifier" || sibling_type == "simple_identifier") {
+				if (is_argument_container(sibling_type)) {
+					break;
+				}
+				if (is_callee_identifier(sibling_type)) {
 					return ExtractNodeText(sibling, content);
 				}
 			}
 
-			// Fallback: find the last identifier inside the first child
-			// (Python attribute, JS member_expression, etc.)
-			uint32_t child_count = ts_node_child_count(first_child);
-			for (int i = child_count - 1; i >= 0; i--) {
-				TSNode child = ts_node_child(first_child, i);
-				string child_type = ts_node_type(child);
-
-				if (child_type == "identifier" || child_type == "property_identifier" ||
-				    child_type == "field_identifier" || child_type == "simple_identifier") {
-					return ExtractNodeText(child, content);
-				}
+			// Fallback: rightmost identifier-like descendant of the first child.
+			// Direct children handle Python attribute / JS member_expression;
+			// the recursive descent handles Kotlin/Swift navigation_expression,
+			// where the method name lives inside a navigation_suffix wrapper.
+			string nested = find_rightmost_identifier(first_child, 0);
+			if (!nested.empty()) {
+				return nested;
 			}
 
 			// Fallback: return the full expression text
 			return ExtractNodeText(first_child, content);
 		}
 
-		// Other patterns (subscript calls, etc.): try to find any identifier
-		return FindChildByType(node, content, "identifier");
+		// Other patterns (subscript calls, new-expressions, etc.): first
+		// identifier-like direct child (e.g. PHP object_creation_expression:
+		// `new` keyword, then name("Widget"), then arguments).
+		{
+			uint32_t node_child_count = ts_node_child_count(node);
+			for (uint32_t i = 0; i < node_child_count; i++) {
+				TSNode child = ts_node_child(node, i);
+				string child_type = ts_node_type(child);
+				if (is_argument_container(child_type)) {
+					break;
+				}
+				if (is_callee_identifier(child_type)) {
+					return ExtractNodeText(child, content);
+				}
+			}
+		}
+		return "";
 	}
 	case ExtractionStrategy::CUSTOM:
 		// Will be overridden by specific language adapters
