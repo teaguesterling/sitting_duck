@@ -706,7 +706,7 @@ CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language :
     WITH
 
 )SQLMACRO"
-                            R"SQLMACRO(
+        R"SQLMACRO(
         ast AS (
             SELECT * FROM read_ast(source, language)
         ),
@@ -1042,7 +1042,7 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
             FROM ast a
 
 )SQLMACRO"
-                            R"SQLMACRO(
+        R"SQLMACRO(
             WHERE is_function_definition(a.semantic_type)
               AND a.name IS NOT NULL AND a.name != ''
               -- Exclude special methods (constructors, dunder methods, etc.)
@@ -1521,7 +1521,7 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
 --   SELECT * FROM ast_match('src/**/*.py', 'my_func(__X__)');
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
 --   SELECT * FROM ast_match('src/main.py', 'my_func(__X__)', match_syntax := true);
 --   SELECT * FROM ast_match('src/**/*.py', '__F__(__X__)', match_by := 'semantic_type');
 --
@@ -1773,7 +1773,7 @@ CREATE OR REPLACE MACRO ast_match(
                 t.file_path = mc.file_path
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
                 AND t.node_id >= mc.candidate_root
                 AND t.node_id <= mc.candidate_root + mc.candidate_descendants
                 -- Depth matching: flexible when at/below recursive wildcard wrapper depth
@@ -2081,7 +2081,7 @@ CREATE OR REPLACE MACRO ast_match(
             FROM captures_single_listed
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
             UNION ALL
             SELECT candidate_file, candidate_root, capture_name, capture_list
             FROM captures_variadic_listed
@@ -2456,8 +2456,25 @@ CREATE OR REPLACE MACRO parse_ast_list_table(code, language) AS TABLE
 --   A + B                         - B immediately follows A
 --   :has(selector)                - Contains a descendant matching selector
 --   :not(:has(selector))          - Does NOT contain a descendant matching selector
---   [name=value]                  - Attribute filter (name, type, language)
+--   [name=value]                  - Attribute filter. Supported attributes:
+--                                     name, type, language, semantic, peek,
+--                                     qualified, signature, params, modifier,
+--                                     annotation. Operators: = *= ^= $=.
+--                                     Example: .func[signature^=int] matches
+--                                     functions whose return type starts with "int"
 --   Compound: type#name:has(...)  - Multiple conditions on same element
+--
+-- NULL semantics (BEHAVIOR CHANGE, issue #81): attribute filters and
+-- pseudo-classes are NULL-definite. A filter or pseudo-class evaluated over a
+-- NULL column (e.g. [signature=int] where signature_type is NULL, or :async
+-- where modifiers is NULL) matches NOTHING; its :not() form matches the node.
+-- Previously a NULL comparison silently matched EVERYTHING. Consequence for
+-- reduced-context tables fed to ast_select_from: if the table was parsed
+-- without native context or peek, filters over those columns now return zero
+-- rows instead of all rows. [peek...] against a table with no peek text at all
+-- raises an error with a re-parse hint (see peek_filter_validation below);
+-- other columns cannot be guarded that way because all-NULL is a legitimate
+-- state for them (untyped / undecorated / unmodified code).
 --
 -- Usage:
 --   SELECT * FROM ast_select('src/**/*.py', '.function:has(return_statement)');
@@ -2556,10 +2573,15 @@ CREATE OR REPLACE MACRO ast_select_from(
             SELECT node_id, parent_id FROM sel WHERE type = '$='
         ),
 
-        -- Parse source files. Keep native context (needed for attribute filters like
-        -- [params=N] and pseudo-classes like :decorated, :typed, :async, etc.) but
-        -- skip peek computation since no selector feature references it. The +schema
-        -- suffix keeps the peek column in the schema as NULL.
+        -- The pre-parsed AST table. Native context columns (modifiers, annotations,
+        -- signature_type, parameters, qualified_name) are needed for attribute
+        -- filters and pseudo-classes like :decorated, :typed, :async, etc.
+        -- NOTE: attribute filters are NULL-definite — a filter over a column that
+        -- is NULL in this table matches NOTHING (see the COALESCE in the attribute
+        -- filter below). In particular, [peek...] requires a materialized peek
+        -- column (read_ast(..., peek := 'full')); against a table parsed with
+        -- peek := 'none' it raises an error with a re-parse hint. The ast_select
+        -- wrapper materializes peek automatically when the selector needs it.
         ast AS (
             SELECT * FROM query_table(source)
         ),
@@ -2685,6 +2707,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         ),
 
         -- For simple/compound selectors: extract type, #name, .class filters.
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- Type filter: find the tag_name in the selector tree (may be nested in compound selectors).
         -- Exclude tag_names inside :has()/:not() arguments — those are descendant filters, not the base type.
         --
@@ -2715,9 +2740,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             ) as type_filter
         ),
 
-
-)SQLMACRO"
-                          R"SQLMACRO(
         -- #id name filter
         -- Top-level #id (not inside :has()/:not() arguments).
         -- Same shape as simple_type: rank candidates by node order, pick rn=1 via
@@ -2901,6 +2923,15 @@ CREATE OR REPLACE MACRO ast_select_from(
                 FROM sel_integer_values iv
             ) WHERE rn = 1
         ),
+        -- Quoted attribute values: [name="foo"]. The string_value node carries the
+        -- surrounding quotes, so trim them (mirrors sel_pcs_first_string).
+        sel_attr_first_str AS (
+            SELECT parent_id AS attr_id, trim(name, '"''') AS name FROM (
+                SELECT sv.parent_id, sv.name,
+                       row_number() OVER (PARTITION BY sv.parent_id ORDER BY sv.node_id) AS rn
+                FROM sel_string_values sv
+            ) WHERE rn = 1
+        ),
 
         -- :has() — pseudo_class_selectors named 'has' that are NOT inside :not() args.
         has_conditions AS (
@@ -2944,28 +2975,41 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- Uses precomputed sel_attr_* helpers for value/op detection so there are
         -- no correlated subqueries.
         attr_conditions AS (
-            SELECT fname.name AS attr_name,
-                   COALESCE(fplain.name, fint.name) AS attr_value,
-                   CASE
-                       WHEN starswith.attr_id IS NOT NULL THEN '*='
-                       WHEN caret.attr_id    IS NOT NULL THEN '^='
-                       WHEN dollar.attr_id   IS NOT NULL THEN '$='
-                       ELSE '='
-                   END AS attr_op
-            FROM sel_attribute_selectors s
-            JOIN sel_attr_outside_args outside ON outside.attr_id = s.node_id
-            LEFT JOIN sel_attr_first_name  fname  ON fname.attr_id  = s.node_id
-            LEFT JOIN sel_attr_first_plain fplain ON fplain.attr_id = s.node_id
-            LEFT JOIN sel_attr_first_int   fint   ON fint.attr_id   = s.node_id
-            LEFT JOIN (
-                SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_starswith
-            ) starswith ON starswith.attr_id = s.node_id
-            LEFT JOIN (
-                SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_caret
-            ) caret ON caret.attr_id = s.node_id
-            LEFT JOIN (
-                SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_dollar
-            ) dollar ON dollar.attr_id = s.node_id
+            -- attr_value_esc escapes LIKE metacharacters (\ % _) in the value so the
+            -- *=/^=/$= arms can use `LIKE ... ESCAPE '\'` and match literally (e.g.
+            -- [name^=_] means "starts with underscore", not "any char"). Computed in an
+            -- outer SELECT because a sibling alias (attr_value) isn't visible in the same one.
+            SELECT attr_name, attr_value, attr_op,
+                   replace(replace(replace(attr_value, '\', '\\'), '%', '\%'), '_', '\_')
+                       AS attr_value_esc
+            FROM (
+                SELECT fname.name AS attr_name,
+                       COALESCE(fplain.name, fstr.name, fint.name) AS attr_value,
+                       CASE
+                           WHEN starswith.attr_id IS NOT NULL THEN '*='
+                           WHEN caret.attr_id    IS NOT NULL THEN '^='
+                           WHEN dollar.attr_id   IS NOT NULL THEN '$='
+                           ELSE '='
+                       END AS attr_op
+                FROM sel_attribute_selectors s
+                JOIN sel_attr_outside_args outside ON outside.attr_id = s.node_id
+                LEFT JOIN sel_attr_first_name  fname  ON fname.attr_id  = s.node_id
+                LEFT JOIN sel_attr_first_plain fplain ON fplain.attr_id = s.node_id
+
+)SQLMACRO"
+        R"SQLMACRO(
+                LEFT JOIN sel_attr_first_str   fstr   ON fstr.attr_id   = s.node_id
+                LEFT JOIN sel_attr_first_int   fint   ON fint.attr_id   = s.node_id
+                LEFT JOIN (
+                    SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_starswith
+                ) starswith ON starswith.attr_id = s.node_id
+                LEFT JOIN (
+                    SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_caret
+                ) caret ON caret.attr_id = s.node_id
+                LEFT JOIN (
+                    SELECT DISTINCT parent_id AS attr_id FROM sel_attr_op_dollar
+                ) dollar ON dollar.attr_id = s.node_id
+            )
         ),
 
         -- =====================================================================
@@ -3006,9 +3050,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             JOIN sel_class_names not_cn ON not_cn.parent_id = not_pcs.node_id AND not_cn.name = 'not'
             -- The enclosing :not() must be top-level
             JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = not_pcs.node_id
-
-)SQLMACRO"
-                          R"SQLMACRO(
             LEFT JOIN sel_pcs_first_tag_or_int ftoi ON ftoi.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_string     fstr ON fstr.pcs_id = pcs.node_id
             WHERE cn.name != 'has'
@@ -3085,6 +3126,30 @@ CREATE OR REPLACE MACRO ast_select_from(
                 )
                 ELSE true
             END as ok
+        ),
+
+        -- [peek...] guard: a peek filter against a table whose peek column was
+        -- never materialized (peek := 'none' / 'none+schema' — every row NULL)
+        -- would silently match nothing under NULL-definite semantics. An
+        -- entirely-NULL peek column can only mean "peek was not extracted"
+        -- (materialized peek is never NULL), so this is almost certainly a
+        -- mis-parsed table rather than intent — raise a targeted error with a
+        -- re-parse hint instead of returning zero rows. Only peek gets this
+        -- guard: all-NULL signature/annotation/modifiers/qualified columns are
+        -- legitimate (plain untyped/undecorated code) and must keep returning
+        -- zero rows without complaint.
+        peek_filter_validation AS (
+            SELECT CASE
+                WHEN EXISTS (SELECT 1 FROM attr_conditions WHERE attr_name = 'peek')
+                     AND EXISTS (SELECT 1 FROM ast)
+                     AND NOT EXISTS (SELECT 1 FROM ast WHERE peek IS NOT NULL)
+                THEN error(
+                    'ast_select: the selector filters on [peek...] but the source has no peek text '
+                    '(the peek column is entirely NULL — parsed with peek := ''none''?). '
+                    'Re-parse with read_ast(..., peek := ''full'') to use peek filters.'
+                )
+                ELSE true
+            END AS ok
         ),
 
         -- Detect pseudo-element (::callers, ::callees, etc.).
@@ -3190,6 +3255,9 @@ CREATE OR REPLACE MACRO ast_select_from(
               SELECT 1 FROM ast anc
               WHERE anc.file_path = a.file_path
                 AND a.node_id > anc.node_id
+
+)SQLMACRO"
+        R"SQLMACRO(
                 AND a.node_id <= anc.node_id + anc.descendant_count
                 AND (anc.type = sp.left_type OR anc.type LIKE sp.left_type_like)
           )
@@ -3271,14 +3339,19 @@ CREATE OR REPLACE MACRO ast_select_from(
         )
     )
     -- [attr op value] filters — supports native extraction columns and CSS operators
+    -- The CASE is wrapped in COALESCE(..., false): when the attribute column is
+    -- NULL (e.g. peek on a table parsed with peek := 'none', or a NULL
+    -- signature_type) the comparison yields NULL, and without the COALESCE the
+    -- NOT EXISTS would treat that as "condition satisfied" — making the filter
+    -- match EVERYTHING (issue #81). NULL attribute values must match NOTHING.
     AND NOT EXISTS (
         SELECT 1 FROM attr_conditions ac
-        WHERE NOT CASE
+        WHERE NOT COALESCE(CASE
             -- Core columns
             WHEN ac.attr_name = 'name' THEN
-                CASE ac.attr_op WHEN '*=' THEN a.name LIKE '%' || ac.attr_value || '%'
-                                WHEN '^=' THEN a.name LIKE ac.attr_value || '%'
-                                WHEN '$=' THEN a.name LIKE '%' || ac.attr_value
+                CASE ac.attr_op WHEN '*=' THEN a.name LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '^=' THEN a.name LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '$=' THEN a.name LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.name = ac.attr_value END
             WHEN ac.attr_name = 'type' THEN a.type = ac.attr_value
             WHEN ac.attr_name = 'language' THEN a.language = ac.attr_value
@@ -3291,12 +3364,9 @@ CREATE OR REPLACE MACRO ast_select_from(
 
             -- Native extraction: annotations string
             WHEN ac.attr_name = 'annotation' THEN
-                CASE ac.attr_op WHEN '*=' THEN a.annotations LIKE '%' || ac.attr_value || '%'
-
-)SQLMACRO"
-                          R"SQLMACRO(
-                                WHEN '^=' THEN a.annotations LIKE ac.attr_value || '%'
-                                WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value
+                CASE ac.attr_op WHEN '*=' THEN a.annotations LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '^=' THEN a.annotations LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.annotations = ac.attr_value END
 
             -- Native extraction: qualified_name. The column is a LIST<STRUCT>,
@@ -3306,15 +3376,17 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- [qualified=F[main]] stay human-writable.
             WHEN ac.attr_name = 'qualified' THEN
                 CASE ac.attr_op
-                    WHEN '*=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value || '%'
-                    WHEN '^=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE ac.attr_value || '%'
-                    WHEN '$=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value
+                    WHEN '*=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                    WHEN '^=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                    WHEN '$=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value_esc ESCAPE '\'
                     ELSE ast_qualified_name_as_string(a.qualified_name) = ac.attr_value
                 END
 
             -- Native extraction: signature_type
             WHEN ac.attr_name = 'signature' THEN
-                CASE ac.attr_op WHEN '*=' THEN a.signature_type LIKE '%' || ac.attr_value || '%'
+                CASE ac.attr_op WHEN '*=' THEN a.signature_type LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '^=' THEN a.signature_type LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '$=' THEN a.signature_type LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.signature_type = ac.attr_value END
 
             -- Native extraction: parameter count
@@ -3323,22 +3395,32 @@ CREATE OR REPLACE MACRO ast_select_from(
 
             -- Peek (source text) content search
             WHEN ac.attr_name = 'peek' THEN
-                CASE ac.attr_op WHEN '*=' THEN a.peek LIKE '%' || ac.attr_value || '%'
+                CASE ac.attr_op WHEN '*=' THEN a.peek LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '^=' THEN a.peek LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '$=' THEN a.peek LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.peek = ac.attr_value END
 
             ELSE false
-        END
+        END, false)
     )
+    AND (SELECT ok FROM peek_filter_validation)
     -- Additional pseudo-class filters
     -- Each pseudo-class in the selector must be satisfied.
     -- For non-negated pcs: satisfied iff CASE is true.
     -- For negated pcs (inside :not()): satisfied iff CASE is false.
     -- A pc is unsatisfied when (negated = CASE), so NOT EXISTS of that identifies nodes
     -- where every pc is satisfied.
+    -- The CASE is wrapped in COALESCE(..., false): several arms yield NULL when
+    -- their column is NULL (e.g. list_contains(NULL, 'async') for :async over a
+    -- table without modifiers), and NULL = pc.negated filters the row out of the
+    -- EXISTS — which would make the pseudo-class match EVERYTHING (issue #81,
+    -- same defect as the attribute-filter site above). NULL pseudo-class
+    -- evaluations must count as "not satisfied": :async over NULL modifiers
+    -- matches nothing, :not(:async) matches the node.
     AND (SELECT ok FROM pseudo_class_validation)
     AND NOT EXISTS (
         SELECT 1 FROM pseudo_classes pc
-        WHERE pc.negated = CASE pc.pseudo_name
+        WHERE pc.negated = COALESCE(CASE pc.pseudo_name
 
             -- Standard CSS positional pseudo-classes
             WHEN 'first-child' THEN a.sibling_index = 0
@@ -3448,6 +3530,9 @@ CREATE OR REPLACE MACRO ast_select_from(
 
             -- :contains("code") — some descendant of the current node is the
             -- root of the parsed pattern. Equivalent to :has(:match(...)).
+
+)SQLMACRO"
+        R"SQLMACRO(
             -- Iterates descendants in the DFS node array and runs the same
             -- contiguity check as :match at each candidate root.
             WHEN 'contains' THEN (SELECT len FROM ast_pattern_len) > 0 AND EXISTS (
@@ -3520,7 +3605,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 a,
                 pc.pseudo_arg
             )
-        END
+        END, false)
     )),
 
     -- =====================================================================
@@ -3570,9 +3655,6 @@ CREATE OR REPLACE MACRO ast_select_from(
           ON caller_fn.node_id = call_node.scope.function
          AND caller_fn.file_path = call_node.file_path
     ),
-
-)SQLMACRO"
-                          R"SQLMACRO(
     -- ::callees — calls inside this function (transitive — includes calls
     -- inside nested functions and lambdas).
     --
@@ -3652,8 +3734,28 @@ CREATE OR REPLACE MACRO ast_select(
     -- Parse into a temp name, then delegate to ast_select_from.
     -- We use read_ast directly and wrap with ast_select_from via a CTE trick:
     -- DuckDB table macros can accept subqueries as table arguments.
+    --
+    -- peek is skipped by default (it is the expensive part of extraction) but is
+    -- materialized when the selector uses a [peek...] attribute filter —
+    -- attribute filters are NULL-definite, so with an unmaterialized peek those
+    -- selectors would match nothing (issue #81). The probe matches the actual
+    -- attribute-filter syntax ('[peek' — covers [peek=, [peek*=, [peek^=,
+    -- [peek$=), not a bare 'peek' substring, so selectors like '#peek_handler'
+    -- or ':has(#on_peek_update)' no longer trigger full-corpus peek extraction.
+    -- Materialization uses peek := 'full' (not 'smart'): smart peek truncates to
+    -- the first line capped at ~77 chars + '...', which silently blinds
+    -- [peek*=/$=...] to anything past that window. The honest cost: full peek
+    -- copies each node's complete source text, so every ancestor of a match
+    -- carries a copy of the matched region (roughly O(file_size x tree_depth)
+    -- extracted text per file) — paid only when the selector filters on peek.
+    -- NOTE for ast_select_rules (currently WIP, duckdb/duckdb#21890): a
+    -- column-valued selector cannot fold this CASE at bind time; if the lateral
+    -- dispatch is revived, it should pre-parse with peek := 'full' and use
+    -- ast_select_from directly instead of this wrapper.
     WITH __ast_src AS (
-        SELECT * FROM read_ast(source, language, peek := 'none+schema')
+        SELECT * FROM read_ast(source, language,
+            peek := CASE WHEN selector LIKE '%[peek%'
+                         THEN 'full' ELSE 'none+schema' END)
     )
     SELECT * FROM ast_select_from('__ast_src', selector);
 )SQLMACRO"},
@@ -4161,7 +4263,7 @@ CREATE OR REPLACE MACRO ast_callees(
     -- simple hash join on scope.function. The range-join version this
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
     -- replaces took up to 20 seconds on DuckDB's own source tree; this
     -- runs in under a second.
     WITH ast AS (
