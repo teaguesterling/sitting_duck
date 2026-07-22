@@ -12,6 +12,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The committed src/include/embedded_sql_macros.hpp must match regeneration
+  # from src/sql_macros/*.sql. The build regenerates it when Python3 is present
+  # (CMake only WARNS on failure), so source builds without Python3 use the
+  # committed copy verbatim — a .sql-only commit silently ships stale macros to
+  # those builds (this happened: main shipped without #74's LIKE escaping).
+  # This check makes that divergence a hard CI failure.
+  embedded-header-sync:
+    name: Embedded SQL macros header in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Regenerate embedded_sql_macros.hpp from src/sql_macros/*.sql
+        run: python3 scripts/embed_sql_macros.py
+      - name: Verify committed header matches
+        run: |
+          if ! git diff --exit-code -- src/include/embedded_sql_macros.hpp; then
+            echo '::error file=src/include/embedded_sql_macros.hpp::embedded_sql_macros.hpp is out of sync with src/sql_macros/*.sql. Run `python3 scripts/embed_sql_macros.py` and commit the regenerated header alongside the .sql change.'
+            exit 1
+          fi
+
   duckdb-next-build:
     name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
