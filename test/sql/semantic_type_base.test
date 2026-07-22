@@ -1,0 +1,47 @@
+# name: test/sql/semantic_type_base.test
+# group: [sql]
+
+# Row-pinned semantics for semantic_type_base() (issue #82).
+#
+# semantic_type_base must clear the low two (language-specific) bits of a
+# semantic type — the same result as `sem_type & 0xFC` — but the macro itself
+# MUST NOT use bitwise operators: on DuckDB v1.5+ `&`/`|`/`~`/`<<`/`>>` live in
+# the core_functions extension, which is not loaded while sitting_duck registers
+# its embedded SQL macros in a from-source dev shell (sitting_duck is loaded
+# first at startup, and a dev-stamped build cannot autoload core_functions from
+# the extension directory). A bitwise operator in any embedded macro therefore
+# makes the extension fail to LOAD.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Pinned flag values across the UTINYINT domain edges and a mixed-bit value.
+# Layout: [ss kk tt ll] where ll = language-specific bits 0-1.
+query IIIIIIII
+SELECT semantic_type_base(0::UTINYINT),
+       semantic_type_base(1::UTINYINT),
+       semantic_type_base(3::UTINYINT),
+       semantic_type_base(4::UTINYINT),
+       semantic_type_base(115::UTINYINT),
+       semantic_type_base(252::UTINYINT),
+       semantic_type_base(253::UTINYINT),
+       semantic_type_base(255::UTINYINT);
+----
+0	0	0	4	112	252	252	252
+
+# Return type is unchanged by the arithmetic rewrite.
+query I
+SELECT typeof(semantic_type_base(255::UTINYINT));
+----
+UTINYINT
+
+# Exhaustive equivalence with the original bitwise definition over the whole
+# UTINYINT domain. (`&` is available here because the test harness links
+# core_functions; the macro definition itself must not rely on it.)
+query I
+SELECT count(*) FROM range(256) t(x)
+WHERE semantic_type_base(x::UTINYINT) IS DISTINCT FROM ((x & 252)::UTINYINT);
+----
+0

@@ -42,20 +42,18 @@ static void PragmaEnableDynamicPredicates(ClientContext &context, const Function
 }
 
 static void LoadInternal(ExtensionLoader &loader) {
-	// Force-load core_functions before we register our SQL macros. In
-	// DuckDB v1.5+ the bitwise operators (`&`, `|`, `<<`, etc.) live in
-	// core_functions, and pattern_matching.sql uses `&` when comparing
-	// masked-off semantic type bits. If core_functions isn't loaded yet
-	// the macro registration fails at parse time with
-	//   Catalog Error: Scalar Function with name "&" is not in the catalog,
-	//     but it exists in the core_functions extension.
-	//
-	// NOTE: this call alone is not yet sufficient to make `LOAD sitting_duck`
-	// work on a vanilla CLI without `LOAD core_functions` first — deferred
-	// investigation. Kept in place as the starting point for the follow-up.
+	// Best-effort load of core_functions for the user's convenience (bitwise
+	// operators etc. in DuckDB v1.5+ live there). Our own embedded SQL macros
+	// deliberately do NOT depend on it (issue #82): this call resolves
+	// core_functions from ~/.duckdb/extensions/<version>/<platform>/, which
+	// only works when the running version stamp matches an installed release
+	// (e.g. a clean-tag or OVERRIDE_GIT_DESCRIBE build). In a from-source dev
+	// build the stamp is a git-describe string (or the v0.0.1 shallow-clone
+	// fallback), no such directory exists, and this call silently no-ops —
+	// so anything registered in LoadInternal must use always-available
+	// functions only. CI enforces that via the from-source-load job.
 	// TryAutoLoadAvailableExtension is noexcept and doesn't respect the user's
-	// autoload_known_extensions setting (unlike TryAutoLoadExtension), so it's
-	// the right API shape even if more plumbing is still needed.
+	// autoload_known_extensions setting (unlike TryAutoLoadExtension).
 	ExtensionHelper::TryAutoLoadAvailableExtension(loader.GetDatabaseInstance(), "core_functions");
 
 	// Register SEMANTIC_TYPE logical type and its cast functions (must be first)
