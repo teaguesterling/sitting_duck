@@ -13,7 +13,7 @@ independently, without multiplying repos or CI beyond what we can maintain.
 
 | Repo | Identity | Ships |
 |---|---|---|
-| `sitting_duckling` | The engine AND the lightweight DIY foundation product (one identity — the engine's build output *is* the slim extension) | `sitting_duckling.duckdb_extension`: AST backend, registry + module ABI, core accessor macros, splice/rewrite, runtime grammar loader; **zero languages** |
+| `sitting_duckling` | The engine AND the lightweight DIY foundation product (one identity — the engine's build output *is* the slim extension) | `sitting_duckling.duckdb_extension`: AST backend, registry + module ABI, core accessor macros, splice/rewrite, runtime grammar loader, **plus the native host-language modules** (duckdb SQL today; DuckPL when it exists) — no tree-sitter languages |
 | `sitting_duck_languages` | Languages monorepo: source + recipes, **no release matrix** | Nothing by default. Each `languages/<lang>/` builds on demand to: a static lib (composition), a standalone pack extension, or a loadable grammar |
 | `sitting_duck` | The existing repo, refitted as the batteries-included composition — keeps issues, docs, stars, and the community-extensions registration | The full 27-language extension (today's product), pinning duckling + languages as submodules |
 
@@ -41,6 +41,14 @@ languages/<lang>/
 A module is the **complete** language implementation: an independently built module
 has full native semantics, because grammar + adapter + config move together. (This
 supersedes the earlier idea of keeping adapters in core — no degraded tier.)
+
+**Module placement rule** (mirror of the macro rule): a language module lives in
+duckling iff its parser depends only on the host engine — i.e. NATIVE-kind
+adapters with no external grammar (duckdb SQL today; DuckPL when it exists).
+External-grammar (tree-sitter) modules live in `sitting_duck_languages`, which
+keeps that repo's anatomy uniform (every module there has a grammar submodule +
+generated parser). A side effect worth having: a bare duckling can parse and
+introspect the language it is embedded in.
 
 ## The contract (duckling's most important deliverable)
 
