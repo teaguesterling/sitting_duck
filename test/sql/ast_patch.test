@@ -1,0 +1,424 @@
+# name: test/sql/ast_patch.test
+# description: ast_patch / ast_node_edit / ast_replace — AST-anchored source patching
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Fixture: test/data/python/macros/patch_demo.py
+#   1  def greet(name):
+#   2      return "hello " + name
+#   3
+#   4  def unused():
+#   5      pass
+#   6
+#   7  total = 1 + 2
+#   8  nested = (1 + (2 + 3))
+#
+# Fixture: test/data/python/macros/patch_unicode.py
+#   1  # café menu
+#   2  prix = 1
+#   3  café = 2
+
+# =============================================================================
+# Position semantics ground truth (the contract ast_patch is built on):
+# lines 1-indexed inclusive; columns 1-indexed BYTE offsets;
+# end_column EXCLUSIVE (one past the node's last byte).
+# =============================================================================
+
+# identifier 'greet': line 1, bytes [5, 10) of 'def greet(name):'
+query IIII
+SELECT start_line, start_column, end_line, end_column
+FROM read_ast('test/data/python/macros/patch_demo.py', source := 'full')
+WHERE type = 'identifier' AND name = 'greet';
+----
+1	5	1	10
+
+# end_column exclusive: substr(line, start_column, end_column - start_column)
+# recovers the node text exactly (ASCII line: bytes == chars)
+query I
+SELECT substr(ast_get_source_line('test/data/python/macros/patch_demo.py', start_line),
+              start_column, end_column - start_column)
+FROM read_ast('test/data/python/macros/patch_demo.py', source := 'full')
+WHERE type = 'identifier' AND name = 'greet';
+----
+greet
+
+# Columns are BYTES, not characters: identifier 'café' is 4 characters but
+# 5 bytes — end_column is 6 (byte-exclusive), not 5.
+query II
+SELECT start_column, end_column
+FROM read_ast('test/data/python/macros/patch_unicode.py', source := 'full')
+WHERE type = 'identifier' AND name = 'café' AND start_line = 3;
+----
+1	6
+
+# =============================================================================
+# ast_node_edit: well-formed edit rows from an AST row's location columns
+# =============================================================================
+
+query IIIIIII
+SELECT unnest(ast_node_edit(r, 'replace', 'salute'))
+FROM read_ast('test/data/python/macros/patch_demo.py', source := 'full') r
+WHERE r.type = 'identifier' AND r.name = 'greet';
+----
+test/data/python/macros/patch_demo.py	1	5	1	10	replace	salute
+
+# =============================================================================
+# Identity edit: replace a node with its own exact text (via ast_get_source,
+# never peek) — output must be byte-identical to the input file.
+# function_definition 'unused' spans full lines 4-5 (col 1 to end-of-line),
+# so ast_get_source(file, 4, 5) is exactly its source text.
+# =============================================================================
+
+# (Edit built with explicit columns rather than unnest(ast_node_edit(...)):
+# ast_get_source expands to a scalar subquery, and DuckDB cannot plan a
+# subquery inside an unnest-ed struct — "Cannot copy BoundSubqueryExpression".)
+statement ok
+CREATE TABLE identity_edit AS
+SELECT r.file_path, r.start_line, r.start_column, r.end_line, r.end_column,
+       'replace' AS edit_kind,
+       ast_get_source('test/data/python/macros/patch_demo.py',
+                      r.start_line, r.end_line) AS new_text
+FROM read_ast('test/data/python/macros/patch_demo.py', source := 'full') r
+WHERE r.type = 'function_definition' AND r.name = 'unused';
+
+query I
+SELECT patched_source = (SELECT content FROM read_text('test/data/python/macros/patch_demo.py'))
+FROM ast_patch('identity_edit', 'test/data/python/macros/patch_demo.py');
+----
+true
+
+# =============================================================================
+# Replace a function body, then RE-PARSE the patched output: the new structure
+# must be present (structural verification, not just string comparison).
+# 'pass' in unused() -> 'return 42'
+# =============================================================================
+
+# Baseline: original has exactly 1 return_statement (greet's) and no integer 42
+query II
+SELECT
+    len(list_filter(l, x -> x.type = 'return_statement')),
+    len(list_filter(l, x -> x.type = 'integer' AND x.peek = '42'))
+FROM (SELECT parse_ast_list(content, 'python') AS l
+      FROM read_text('test/data/python/macros/patch_demo.py'));
+----
+1	0
+
+statement ok
+CREATE TABLE body_edit AS
+SELECT unnest(ast_node_edit(r, 'replace', 'return 42'))
+FROM read_ast('test/data/python/macros/patch_demo.py', source := 'full') r
+WHERE r.type = 'pass_statement';
+
+statement ok
+CREATE TABLE body_patched AS
+SELECT * FROM ast_patch('body_edit', 'test/data/python/macros/patch_demo.py');
+
+# Re-parse: now 2 return_statements, and the 42 lives inside function 'unused'
+query II
+SELECT
+    len(list_filter(l, x -> x.type = 'return_statement')),
+    len(list_filter(l, x -> x.type = 'integer' AND x.peek = '42'))
+FROM (SELECT parse_ast_list(patched_source, 'python') AS l FROM body_patched);
+----
+2	1
+
+query I
+SELECT count(*)
+FROM (SELECT unnest(parse_ast_list(patched_source, 'python')) AS n FROM body_patched)
+WHERE n.type = 'function_definition' AND n.name = 'unused'
+  AND n.descendant_count > 0;
+----
+1
+
+# =============================================================================
+# delete kind: remove 'total = 1 + 2' (line 7, full statement) — re-parse
+# shows one fewer assignment and no 'total' identifier
+# =============================================================================
+
+statement ok
+CREATE TABLE delete_edit AS
+SELECT unnest(ast_node_edit(r, 'delete', NULL))
+FROM read_ast('test/data/python/macros/patch_demo.py', source := 'full') r
+WHERE r.type = 'expression_statement' AND r.start_line = 7;
+
+query I
+SELECT len(list_filter(parse_ast_list(patched_source, 'python'),
+                       x -> x.type = 'identifier' AND x.name = 'total'))
+FROM ast_patch('delete_edit', 'test/data/python/macros/patch_demo.py');
+----
+0
+
+# =============================================================================
+# insert_before / insert_after kinds (zero-width anchors; nothing removed)
+# =============================================================================
+
+statement ok
+CREATE TABLE insert_edits AS
+SELECT unnest(ast_node_edit(r, 'insert_before', '@decorated' || chr(10)))
+FROM read_ast('test/data/python/macros/patch_demo.py', source := 'full') r
+WHERE r.type = 'function_definition' AND r.name = 'greet';
+
+# Re-parse: greet is now decorated
+query I
+SELECT len(list_filter(parse_ast_list(patched_source, 'python'),
+                       x -> x.type = 'decorator'))
+FROM ast_patch('insert_edits', 'test/data/python/macros/patch_demo.py');
+----
+1
+
+statement ok
+CREATE TABLE append_edits AS
+SELECT unnest(ast_node_edit(r, 'insert_after', '  # checked'))
+FROM read_ast('test/data/python/macros/patch_demo.py', source := 'full') r
+WHERE r.type = 'expression_statement' AND r.start_line = 7;
+
+query I
+SELECT len(list_filter(parse_ast_list(patched_source, 'python'),
+                       x -> x.type = 'comment' AND x.peek = '# checked'))
+FROM ast_patch('append_edits', 'test/data/python/macros/patch_demo.py');
+----
+1
+
+# =============================================================================
+# Multi-edit, one file, LATER-position edit FIRST in table order — offsets are
+# resolved against pristine content, so table order must not matter.
+# Rename both 'unused' (line 4) and 'greet' (line 1), listed in that order.
+# =============================================================================
+
+statement ok
+CREATE TABLE multi_edits AS
+SELECT * FROM (
+    SELECT unnest(ast_node_edit(r, 'replace', 'retired'))
+    FROM read_ast('test/data/python/macros/patch_demo.py', source := 'full') r
+    WHERE r.type = 'identifier' AND r.name = 'unused'
+    UNION ALL
+    SELECT unnest(ast_node_edit(r, 'replace', 'salute'))
+    FROM read_ast('test/data/python/macros/patch_demo.py', source := 'full') r
+    WHERE r.type = 'identifier' AND r.name = 'greet'
+);
+
+query I
+SELECT list_sort(list_transform(
+           list_filter(parse_ast_list(patched_source, 'python'),
+                       x -> x.type = 'function_definition'),
+           x -> x.name))
+FROM ast_patch('multi_edits', 'test/data/python/macros/patch_demo.py');
+----
+[retired, salute]
+
+# Byte-anchored patching is unicode-safe: multibyte characters BEFORE the edit
+# do not shift it. Replace the literal 2 after 'café = ' (byte cols 8..9).
+statement ok
+CREATE TABLE uni_edit AS
+SELECT unnest(ast_node_edit(r, 'replace', '99'))
+FROM read_ast('test/data/python/macros/patch_unicode.py', source := 'full') r
+WHERE r.type = 'integer' AND r.start_line = 3;
+
+query I
+SELECT patched_source = '# café menu' || chr(10) || 'prix = 1' || chr(10) || 'café = 99' || chr(10)
+FROM ast_patch('uni_edit', 'test/data/python/macros/patch_unicode.py');
+----
+true
+
+# =============================================================================
+# Error paths (#89: no silent wrong output), each beside its positive twin
+# =============================================================================
+
+# Unknown edit_kind
+statement ok
+CREATE TABLE bad_kind AS
+SELECT 'test/data/python/macros/patch_demo.py' AS file_path,
+       1 AS start_line, 1 AS start_column, 1 AS end_line, 4 AS end_column,
+       'wrap' AS edit_kind, 'x' AS new_text;
+
+statement error
+SELECT * FROM ast_patch('bad_kind', 'test/data/python/macros/patch_demo.py');
+----
+ast_patch: unknown edit_kind 'wrap'
+
+# NULL new_text for a non-delete kind
+statement ok
+CREATE TABLE null_text AS
+SELECT 'test/data/python/macros/patch_demo.py' AS file_path,
+       1 AS start_line, 1 AS start_column, 1 AS end_line, 4 AS end_column,
+       'replace' AS edit_kind, NULL::VARCHAR AS new_text;
+
+statement error
+SELECT * FROM ast_patch('null_text', 'test/data/python/macros/patch_demo.py');
+----
+ast_patch: NULL new_text for a non-delete edit
+
+# Overlapping edits: the outer binary_operator on line 8 contains the inner one
+statement ok
+CREATE TABLE overlap_edits AS
+SELECT unnest(ast_node_edit(r, 'replace', 'X'))
+FROM read_ast('test/data/python/macros/patch_demo.py', source := 'full') r
+WHERE r.type = 'binary_operator' AND r.start_line = 8;
+
+statement error
+SELECT * FROM ast_patch('overlap_edits', 'test/data/python/macros/patch_demo.py');
+----
+ast_patch: overlapping edits
+
+# Positive twin: ADJACENT edits (one ends exactly where the next starts) apply
+statement ok
+CREATE TABLE adjacent_edits AS
+SELECT * FROM (VALUES
+    ('test/data/python/macros/patch_unicode.py', 2, 1, 2, 5, 'replace', 'cost'),
+    ('test/data/python/macros/patch_unicode.py', 2, 5, 2, 9, 'replace', ' = 7'))
+    t(file_path, start_line, start_column, end_line, end_column, edit_kind, new_text);
+
+query I
+SELECT patched_source LIKE '%cost = 7%'
+FROM ast_patch('adjacent_edits', 'test/data/python/macros/patch_unicode.py');
+----
+true
+
+# Two inserts at the same point: ambiguous ordering, rejected
+statement ok
+CREATE TABLE same_point AS
+SELECT * FROM (VALUES
+    ('test/data/python/macros/patch_demo.py', 1, 1, 1, 1, 'insert_before', 'a'),
+    ('test/data/python/macros/patch_demo.py', 1, 1, 1, 1, 'insert_before', 'b'))
+    t(file_path, start_line, start_column, end_line, end_column, edit_kind, new_text);
+
+statement error
+SELECT * FROM ast_patch('same_point', 'test/data/python/macros/patch_demo.py');
+----
+ast_patch: overlapping edits
+
+# File not covered by the files argument (unreadable / wrong glob)
+statement ok
+CREATE TABLE wrong_file AS
+SELECT 'test/data/python/macros/no_such_file.py' AS file_path,
+       1 AS start_line, 1 AS start_column, 1 AS end_line, 2 AS end_column,
+       'replace' AS edit_kind, 'x' AS new_text;
+
+statement error
+SELECT * FROM ast_patch('wrong_file', 'test/data/python/macros/patch_demo.py');
+----
+was not readable via the files argument
+
+# Position out of range for CURRENT file content (stale-edit guard):
+# line beyond EOF
+statement ok
+CREATE TABLE stale_line AS
+SELECT 'test/data/python/macros/patch_demo.py' AS file_path,
+       999 AS start_line, 1 AS start_column, 999 AS end_line, 2 AS end_column,
+       'replace' AS edit_kind, 'x' AS new_text;
+
+statement error
+SELECT * FROM ast_patch('stale_line', 'test/data/python/macros/patch_demo.py');
+----
+position out of range for current file content
+
+# ... and column beyond end of line
+statement ok
+CREATE TABLE stale_col AS
+SELECT 'test/data/python/macros/patch_demo.py' AS file_path,
+       1 AS start_line, 1 AS start_column, 1 AS end_line, 999 AS end_column,
+       'replace' AS edit_kind, 'x' AS new_text;
+
+statement error
+SELECT * FROM ast_patch('stale_col', 'test/data/python/macros/patch_demo.py');
+----
+position out of range for current file content
+
+# Positive twin for the column bound: one-past-end-of-line is a valid
+# (exclusive / zero-width) position — insert at end of line 7
+statement ok
+CREATE TABLE eol_edit AS
+SELECT * FROM (VALUES
+    ('test/data/python/macros/patch_demo.py', 7, 14, 7, 14, 'insert_before', '  # sum'))
+    t(file_path, start_line, start_column, end_line, end_column, edit_kind, new_text);
+
+query I
+SELECT patched_source LIKE '%total = 1 + 2  # sum%'
+FROM ast_patch('eol_edit', 'test/data/python/macros/patch_demo.py');
+----
+true
+
+# In-memory parse_ast output cannot be patched: no file to re-read (peek is
+# never a correctness substrate; no config retains per-node source text)
+statement ok
+CREATE TABLE inline_edits AS
+SELECT file_path, start_line, 1 AS start_column, end_line, 2 AS end_column,
+       'replace' AS edit_kind, 'x' AS new_text
+FROM parse_ast('def f(): pass', 'python')
+WHERE type = 'identifier';
+
+statement error
+SELECT * FROM ast_patch('inline_edits', 'test/data/python/macros/patch_demo.py');
+----
+in-memory parse_ast() output
+
+# NULL position columns (table parsed without source := 'full')
+statement ok
+CREATE TABLE no_columns AS
+SELECT 'test/data/python/macros/patch_demo.py' AS file_path,
+       1 AS start_line, NULL::INTEGER AS start_column,
+       1 AS end_line, NULL::INTEGER AS end_column,
+       'replace' AS edit_kind, 'x' AS new_text;
+
+statement error
+SELECT * FROM ast_patch('no_columns', 'test/data/python/macros/patch_demo.py');
+----
+NULL position columns
+
+# Zero edit rows -> zero output rows (searched correctly, nothing to do)
+statement ok
+CREATE TABLE no_edits (file_path VARCHAR, start_line INTEGER, start_column INTEGER,
+                       end_line INTEGER, end_column INTEGER,
+                       edit_kind VARCHAR, new_text VARCHAR);
+
+query I
+SELECT count(*) FROM ast_patch('no_edits', 'test/data/python/macros/patch_demo.py');
+----
+0
+
+# =============================================================================
+# ast_replace: selector-driven replacement (matcher = the ast_select engine)
+# =============================================================================
+
+# Rename a function: replace the 'greet' identifier, re-parse, and verify the
+# new structure — function 'salute' exists, 'greet' is gone
+statement ok
+CREATE TABLE renamed AS
+SELECT * FROM ast_replace('test/data/python/macros/patch_demo.py',
+                          'identifier[name=greet]', 'salute');
+
+query II
+SELECT
+    len(list_filter(l, x -> x.type = 'function_definition' AND x.name = 'salute')),
+    len(list_filter(l, x -> x.type = 'function_definition' AND x.name = 'greet'))
+FROM (SELECT parse_ast_list(patched_source, 'python') AS l FROM renamed);
+----
+1	0
+
+# Multi-match replacement: every integer literal in the file becomes 9
+query I
+SELECT len(list_filter(parse_ast_list(patched_source, 'python'),
+                       x -> x.type = 'integer' AND x.peek != '9'))
+FROM ast_replace('test/data/python/macros/patch_demo.py', 'integer', '9');
+----
+0
+
+# No matches -> zero rows (searched correctly, not there), not an error
+query I
+SELECT count(*)
+FROM ast_replace('test/data/python/macros/patch_demo.py',
+                 'identifier[name=nonexistent_name]', 'x');
+----
+0
+
+# A selector matching both a node and its descendant produces overlapping
+# edits -> loud error from ast_patch (refine the selector)
+statement error
+SELECT * FROM ast_replace('test/data/python/macros/patch_demo.py',
+                          'binary_operator', 'X');
+----
+ast_patch: overlapping edits
