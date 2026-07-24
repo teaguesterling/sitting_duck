@@ -108,18 +108,22 @@ language module or embodies an analysis opinion is an add-on.
      peek-less tables, per the #89 principle), and
      `ast_replace(source, pattern, replacement)` generating edits from the
      pattern matcher — codemods in SQL before any unparser exists.
-   - **`write_ast` — declarative, .def-driven unparse.** Correctness bar is the
-     round-trip law, not byte fidelity:
-     `read_ast(write_ast(read_ast(x))) = read_ast(x)`.
-     Serialization rules (delimiters, separators, keyword tokens) are DATA in
-     each module's `.def` — "how to write" lives beside "how to read"; the
-     engine is a generic walker with no language knowledge. Modules declare
-     write-support as a capability; **the round-trip law is enforced by the
-     conformance kit** over each module's fixtures, making unparse correctness
-     a checked law rather than a per-language argument.
-   - **Byte splicing is an optional fidelity layer**, not a foundation: when
-     original text is available, untouched subtrees keep it verbatim and only
-     synthesized nodes are generated. Never required for correctness.
+   - **`write_ast` — declarative, .def-driven unparse.** Two laws, two owners:
+     - **Structural law (universal, per-module)**:
+       `read_ast(write_ast(read_ast(x))) = read_ast(x)` — the only requirement
+       every write-capable module owes. Serialization rules (delimiters,
+       separators, keyword tokens) are DATA in each module's `.def` — "how to
+       write" lives beside "how to read"; the engine is a generic walker with
+       no language knowledge. Enforced by the **conformance kit** over each
+       module's fixtures.
+     - **Textual law (conditional, engine-owned)**:
+       `write_ast(read_ast(x, source := 'full')) = x` — verbatim reproduction
+       is only defined when the parse retained the source, and is then
+       delivered by the engine's splice layer (untouched subtrees keep their
+       text; only synthesized nodes are generated). Language-agnostic, no
+       module involvement. On tables without retained source, `write_ast`
+       produces structurally-correct output and makes no textual claim (#89:
+       never pretend).
 4. **Incremental reparse**: tree-sitter's edit-aware reparsing, exposed for
    edit-and-requery loops (agent workflows).
 5. **New languages (DuckPL, …)**: the architecture's acceptance test — *one module,
