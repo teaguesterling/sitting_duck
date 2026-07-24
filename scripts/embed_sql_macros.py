@@ -53,6 +53,7 @@ def generate_header(sql_dir, output_file):
         'css_selectors.sql',
         'ast_select_rules.sql',
         'scope_resolution.sql',
+        'duck_blocks.sql',
     ]
 
     header_content = """// Auto-generated file - DO NOT EDIT

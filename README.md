@@ -625,6 +625,69 @@ FROM ast_match('code',
 
 See **[Pattern Matching Guide](docs/guide/pattern-matching.md)** for full documentation.
 
+## Rendering Code as Documents (duck_blocks)
+
+`ast_to_blocks` converts parsed ASTs into **duck_blocks** — the document-element
+STRUCT spec shared by the markdown / webbed / duck_block_utils extensions — so
+code structure renders as a readable document: definitions become headings
+(definition nesting depth → heading level), definition bodies become code
+blocks, and each file opens with a YAML metadata block.
+
+duck_blocks is a **spec, not a dependency**: `ast_to_blocks` emits conforming
+STRUCTs with nothing loaded. If the `duck_block_utils` extension *is* available,
+rendering straight to the terminal is one query:
+
+```sql
+LOAD sitting_duck;
+LOAD duck_block_utils;
+PRAGMA duck_block_render;
+
+-- One query: parse a file, render its structure as an ANSI document
+SELECT db_render_blocks(blocks) FROM ast_to_blocks_list('src/main.py');
+```
+
+The row-shaped macro composes with the standard `list(... ORDER BY ...)` idiom:
+
+```sql
+-- One duck_block per row (columns: file_path, element_order, block)
+SELECT * FROM ast_to_blocks('src/main.py');
+
+-- Aggregate to LIST(duck_block) yourself (what ast_to_blocks_list does)
+SELECT db_render_blocks(list(block ORDER BY element_order))
+FROM ast_to_blocks('src/main.py')
+GROUP BY file_path;
+
+-- Convert a pre-parsed table (parse with peek := 'full' for complete bodies)
+CREATE TABLE code AS SELECT * FROM read_ast('src/**/*.py', peek := 'full');
+SELECT * FROM ast_to_blocks_from('code', style := 'summary');
+```
+
+**Parameters** (same tuning names on all three macros; `language` only on the
+parsing variants):
+
+| Parameter | Default | Meaning |
+|-----------|---------|---------|
+| `style` | `'outline'` | `'outline'` = nested headings + code bodies for leaf definitions; `'summary'` = headings + one-line signature paragraphs, no bodies; `'flat'` = every definition at one heading level, each with its body. Unknown values raise an error. |
+| `include_bodies` | `true` | `false` suppresses code blocks in any style |
+| `include_metadata` | `true` | Leading per-file `metadata` block (yaml: file_path, language, definition counts) |
+| `base_heading_level` | `1` | Heading level of a top-level definition |
+| `max_heading_level` | `6` | Demotion cap: definitions nested deeper render at this level |
+
+Spec conformance (duck_blocks v0.4.0): headings carry the semantic level in
+`attributes['heading_level']` (as a string) with a NULL `level` field; code
+blocks carry `attributes['language']`; metadata blocks use `encoding = 'yaml'`;
+`element_order` starts at 0 per file and follows document order.
+
+Body fidelity note: code-block content comes from the `peek` column — a
+*presentation* substrate, which is exactly what this macro is (peek is never
+used for correctness features). `ast_to_blocks` parses with `peek := 'full'`
+internally; for `ast_to_blocks_from`, body fidelity follows the input table's
+extraction config — `peek := 'smart'` input yields truncated bodies (not
+detectable per row), and an all-NULL peek column (`peek := 'none'`) raises an
+error with a re-parse hint. No extraction configuration retains per-node
+source text (`source :=` controls location columns only); exact-source
+extraction is planned v2 work.
+
 ## Limitations
 
 - **Parse-only**: This analyzes syntax, not semantics (no type checking, symbol resolution, etc.)
