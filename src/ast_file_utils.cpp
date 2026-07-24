@@ -107,12 +107,15 @@ static const std::unordered_map<string, vector<string>> LANGUAGE_TO_EXTENSIONS =
     {"dart", {"dart"}}};
 
 // Built-in languages actually compiled into this build. The built-in set is
-// fixed once LanguageAdapterRegistry is constructed, so caching it here is
-// safe; runtime-registered languages (future work) must extend detection via
-// the registry, not these static tables.
+// fixed once LanguageAdapterRegistry is constructed, so caching it here is safe.
+// GetBuiltinLanguages() excludes runtime-registered dynamic languages, so this
+// snapshot stays correct even if the first call happens after register_language()
+// has run: a dynamic language must not leak the static extension entries of a
+// compiled-out built-in that shares its name. Dynamic languages extend detection
+// through the registry's own maps, not these static tables.
 static const std::unordered_set<string> &GetCompiledLanguages() {
 	static const std::unordered_set<string> compiled = [] {
-		auto languages = LanguageAdapterRegistry::GetInstance().GetSupportedLanguages();
+		auto languages = LanguageAdapterRegistry::GetInstance().GetBuiltinLanguages();
 		return std::unordered_set<string>(languages.begin(), languages.end());
 	}();
 	return compiled;

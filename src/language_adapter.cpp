@@ -585,6 +585,9 @@ LanguageAdapterRegistry &LanguageAdapterRegistry::GetInstance() {
 	return instance;
 }
 
+// Init-time only: called from InitializeDefaultAdapters() during single-threaded
+// extension load, before any query runs. It mutates the shared maps without
+// taking registry_mutex_ on purpose, since no concurrent access is possible yet.
 void LanguageAdapterRegistry::RegisterAdapter(unique_ptr<LanguageAdapter> adapter) {
 	if (!adapter) {
 		throw InvalidInputException("Cannot register null adapter");
@@ -706,8 +709,33 @@ vector<string> LanguageAdapterRegistry::GetSupportedLanguages() const {
 	return languages;
 }
 
+vector<string> LanguageAdapterRegistry::GetBuiltinLanguages() const {
+	lock_guard<mutex> lock(registry_mutex_);
+	vector<string> languages;
+	// Built-ins are factory-registered under a name that is not also a dynamic
+	// registration. Dynamic languages register a factory too (see
+	// RegisterDynamicLanguage), so they are filtered out by dynamic_languages.
+	for (const auto &pair : language_factories) {
+		if (dynamic_languages.find(pair.first) == dynamic_languages.end()) {
+			languages.push_back(pair.first);
+		}
+	}
+	return languages;
+}
+
 void LanguageAdapterRegistry::RegisterDynamicLanguage(shared_ptr<const DynamicLanguageInfo> info, bool overwrite) {
 	D_ASSERT(info && info->language);
+
+	// Built-in extension ownership is compile-time fixed, so it is validated
+	// before taking the lock. The lookup lazily snapshots the registry on first
+	// use (GetSupportedLanguages, which locks registry_mutex_); running that
+	// while already holding the lock would deadlock the non-recursive mutex.
+	for (const auto &ext : info->extensions) {
+		auto builtin = ASTFileUtils::GetBuiltinLanguageForExtension(ext);
+		if (!builtin.empty()) {
+			throw InvalidInputException("Extension '%s' is already handled by built-in language '%s'", ext, builtin);
+		}
+	}
 
 	lock_guard<mutex> lock(registry_mutex_);
 	const string &name = info->name;
@@ -756,15 +784,11 @@ void LanguageAdapterRegistry::RegisterDynamicLanguage(shared_ptr<const DynamicLa
 		throw InvalidInputException("Language '%s' is already registered. Use overwrite := true to replace it", name);
 	}
 	for (const auto &ext : info->extensions) {
+		// Built-in collisions were rejected before the lock. Only dynamic
+		// extension ownership by a different language remains to check.
 		auto ext_it = dynamic_extension_to_language.find(ext);
 		if (ext_it != dynamic_extension_to_language.end() && ext_it->second != name) {
 			throw InvalidInputException("Extension '%s' is already registered for language '%s'", ext, ext_it->second);
-		}
-		// Built-in extension detection always wins, so a shadowed dynamic
-		// extension would silently never be used. Reject it instead.
-		auto builtin = ASTFileUtils::GetBuiltinLanguageForExtension(ext);
-		if (!builtin.empty()) {
-			throw InvalidInputException("Extension '%s' is already handled by built-in language '%s'", ext, builtin);
 		}
 	}
 
@@ -837,6 +861,10 @@ void LanguageAdapterRegistry::ValidateLanguageABI(const LanguageAdapter *adapter
 // InitializeDefaultAdapters() is implemented in language_adapter_registry_init.cpp
 // to avoid circular dependencies with the adapter implementations
 
+// Init-time only: called from InitializeDefaultAdapters() during single-threaded
+// extension load, before any query runs. Like RegisterAdapter, it mutates the
+// shared maps without registry_mutex_ on purpose. The runtime register_language()
+// path cannot reuse it and instead registers inline under the lock.
 void LanguageAdapterRegistry::RegisterLanguageFactory(const string &language, AdapterFactory factory) {
 	if (!factory) {
 		throw InvalidInputException("Cannot register null factory");

@@ -695,6 +695,13 @@ public:
 	// Get list of supported languages
 	vector<string> GetSupportedLanguages() const;
 
+	// Get only the compiled-in (built-in) languages, excluding runtime-registered
+	// dynamic ones. Unlike GetSupportedLanguages this is stable regardless of when
+	// it is called relative to register_language(), so callers that need the fixed
+	// compile-time set (e.g. filtering the static extension tables) get a correct
+	// answer even after dynamic languages have been registered.
+	vector<string> GetBuiltinLanguages() const;
+
 	// Register a runtime-loaded grammar. Rejects collisions with built-in names
 	// and aliases; duplicate dynamic names error unless overwrite is true.
 	void RegisterDynamicLanguage(shared_ptr<const DynamicLanguageInfo> info, bool overwrite);
