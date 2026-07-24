@@ -1,0 +1,6 @@
+{
+  "language": "somethingelse",
+  "node_types": {
+    "document": { "semantic_type": "DEFINITION_MODULE" }
+  }
+}

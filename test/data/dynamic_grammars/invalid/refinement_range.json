@@ -1,0 +1,5 @@
+{
+  "node_types": {
+    "document": { "semantic_type": "LITERAL_STRUCTURED", "refinement": 4 }
+  }
+}

@@ -313,7 +313,18 @@ string ReadSourceFileWithCap(FileSystem &fs, const string &file_path, int64_t ma
 	}
 	string content;
 	content.resize(static_cast<size_t>(file_size));
-	fs.Read(*handle, (void *)content.data(), file_size);
+	// FileSystem::Read performs a single read() that may return short (large
+	// files, virtual filesystems); loop until every byte is in, and fail loudly
+	// instead of returning a NUL-padded tail. Mirrors ASTFileUtils::ReadFileToString.
+	idx_t total_read = 0;
+	while (total_read < static_cast<idx_t>(file_size)) {
+		auto bytes_read = fs.Read(*handle, (void *)(content.data() + total_read), file_size - total_read);
+		if (bytes_read <= 0) {
+			throw IOException("Unexpected end of file while reading '%s': got %llu of %llu bytes", file_path,
+			                  static_cast<uint64_t>(total_read), static_cast<uint64_t>(file_size));
+		}
+		total_read += static_cast<idx_t>(bytes_read);
+	}
 	return content;
 }
 

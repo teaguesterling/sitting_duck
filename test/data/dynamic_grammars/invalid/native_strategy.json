@@ -1,0 +1,5 @@
+{
+  "node_types": {
+    "document": { "semantic_type": "DEFINITION_MODULE", "native_strategy": "FUNCTION_WITH_PARAMS" }
+  }
+}

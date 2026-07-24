@@ -1,0 +1,42 @@
+{
+  "language": "jsond",
+  "node_types": {
+    "document": {
+      "semantic_type": "DEFINITION_MODULE",
+      "flags": ["IS_SCOPE"]
+    },
+    "object": {
+      "semantic_type": "LITERAL_STRUCTURED",
+      "refinement": 2
+    },
+    "array": {
+      "semantic_type": "LITERAL_STRUCTURED",
+      "refinement": 1
+    },
+    "pair": {
+      "semantic_type": "DEFINITION_VARIABLE",
+      "name_strategy": "FIRST_CHILD",
+      "flags": ["NAME_DEFINITION"]
+    },
+    "string": {
+      "semantic_type": "LITERAL_STRING",
+      "name_strategy": "NODE_TEXT"
+    },
+    "number": {
+      "semantic_type": "LITERAL_NUMBER",
+      "name_strategy": "NODE_TEXT"
+    },
+    "true": {
+      "semantic_type": "LITERAL_ATOMIC",
+      "name_strategy": "NODE_TEXT"
+    },
+    "false": {
+      "semantic_type": "LITERAL_ATOMIC",
+      "name_strategy": "NODE_TEXT"
+    },
+    "null": {
+      "semantic_type": "LITERAL_ATOMIC",
+      "name_strategy": "NODE_TEXT"
+    }
+  }
+}

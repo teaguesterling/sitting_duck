@@ -1,0 +1,5 @@
+{
+  "node_types": {
+    "document": { "name_strategy": "NODE_TEXT" }
+  }
+}

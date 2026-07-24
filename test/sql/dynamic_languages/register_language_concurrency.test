@@ -1,0 +1,112 @@
+# name: test/sql/dynamic_languages/register_language_concurrency.test
+# description: Parallel glob scans over a dynamically registered grammar, across
+#              the overwrite/config registration lifecycle
+# group: [dynamic_languages]
+
+require sitting_duck
+
+# Requires the test grammar library built by `make test-grammar-lib`.
+# Run with: SITTING_DUCK_TEST_GRAMMAR_DIR=build/test_grammars make test
+require-env SITTING_DUCK_TEST_GRAMMAR_DIR
+
+# register_language() loads native code, so it is disabled by default.
+statement ok
+SET sitting_duck_enable_runtime_grammars = true;
+
+statement ok
+PRAGMA threads=8;
+
+# Build a 200-file corpus of structurally identical JSON documents. Each file
+# holds one object with exactly four keys, so every file yields the same node
+# count and the same four pair names. That makes the parallel-scan assertions
+# below order-independent and count-exact regardless of how threads interleave.
+# The single-column CSV writer with quoting disabled emits the JSON verbatim;
+# a tab delimiter never occurs in the payload, so no field is ever quoted.
+loop i 0 200
+
+statement ok
+COPY (
+  SELECT printf(
+    '{"id": %d, "name": "item_%d", "values": [%d, %d, %d], "active": %s}',
+    ${i}, ${i}, ${i}, ${i} * 2, ${i} * 3,
+    CASE WHEN ${i} % 2 = 0 THEN 'true' ELSE 'false' END
+  ) AS body
+) TO '__TEST_DIR__/regconc_${i}.jsond'
+  (FORMAT csv, HEADER false, DELIMITER '\t', ESCAPE '', QUOTE '');
+
+endloop
+
+# Register the dynamic JSON grammar with no semantic config yet. Extension
+# mapping lets the scans below auto-detect .jsond files.
+query IT
+SELECT node_type_count, status
+FROM register_language('jsond', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                       symbol := 'tree_sitter_json',
+                       extensions := ['jsond'],
+                       overwrite := true);
+----
+0	registered
+
+# A single parallel scan across 8 threads visits every file in the corpus.
+query I
+SELECT COUNT(DISTINCT file_path)
+FROM read_ast('__TEST_DIR__/regconc_*.jsond');
+----
+200
+
+# Every file yields an identical node count (the documents are structurally
+# identical), so thread interleaving cannot change any per-file result.
+query I
+SELECT COUNT(DISTINCT n)
+FROM (
+  SELECT file_path, COUNT(*) AS n
+  FROM read_ast('__TEST_DIR__/regconc_*.jsond')
+  GROUP BY file_path
+);
+----
+1
+
+# Node-count parity with the built-in json grammar: the runtime-loaded parser
+# and the compiled-in one produce the same tree. read_ast filters glob matches
+# by the language's registered extensions (built-in json does not own .jsond),
+# so the built-in side is measured with parse_ast on one representative document
+# and scaled by the file count. Every file is structurally identical (asserted
+# above), so the total dynamic node count is exactly that per-document count
+# times 200.
+query I
+SELECT (SELECT COUNT(*) FROM read_ast('__TEST_DIR__/regconc_*.jsond', 'jsond')) =
+       200 * (SELECT COUNT(*)
+              FROM parse_ast('{"id": 0, "name": "item_0", "values": [0, 0, 0], "active": true}', 'json'));
+----
+true
+
+# Re-register the same language with a semantic config (overwrite lifecycle).
+query IT
+SELECT node_type_count, status
+FROM register_language('jsond', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                       symbol := 'tree_sitter_json',
+                       config := 'test/data/dynamic_grammars/jsond_types.json',
+                       extensions := ['jsond'],
+                       overwrite := true);
+----
+9	registered
+
+# After the overwrite the config drives semantic types uniformly across every
+# file: 4 keys x 200 files = 800 pairs, all DEFINITION_VARIABLE. A single
+# aggregate row keeps the assertion insensitive to scan order.
+query TI
+SELECT semantic_type::VARCHAR, COUNT(*)
+FROM read_ast('__TEST_DIR__/regconc_*.jsond')
+WHERE type = 'pair'
+GROUP BY semantic_type::VARCHAR;
+----
+DEFINITION_VARIABLE	800
+
+# Config-driven FIRST_CHILD name extraction is consistent under parallelism:
+# exactly the four JSON keys surface as pair names across the whole corpus.
+query I
+SELECT COUNT(DISTINCT name)
+FROM read_ast('__TEST_DIR__/regconc_*.jsond')
+WHERE type = 'pair';
+----
+4

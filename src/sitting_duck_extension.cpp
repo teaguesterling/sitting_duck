@@ -3,6 +3,7 @@
 #include "sitting_duck_extension.hpp"
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/main/config.hpp"
 #include "duckdb/main/extension_helper.hpp"
 #include "duckdb/function/pragma_function.hpp"
 #include "duckdb/main/connection.hpp"
@@ -24,6 +25,7 @@ void RegisterASTSQLMacros(ExtensionLoader &loader);
 // void RegisterDuckDBASTShortNamesFunction(ExtensionLoader &loader); // Removed
 void RegisterASTSupportedLanguagesFunction(ExtensionLoader &loader);
 void RegisterASTTypeMapFunction(ExtensionLoader &loader);
+void RegisterLanguageRegistrationFunction(ExtensionLoader &loader);
 // Temporarily disabled:
 // void RegisterASTObjectsFunction(ExtensionLoader &loader);
 // void RegisterASTHelperFunctions(ExtensionLoader &loader);
@@ -80,6 +82,17 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	// Register ast_type_map() for node type discovery
 	RegisterASTTypeMapFunction(loader);
+
+	// Gate for register_language(): loading a native grammar library runs
+	// arbitrary in-process code, so it stays off unless explicitly enabled.
+	DBConfig::GetConfig(loader.GetDatabaseInstance())
+	    .AddExtensionOption("sitting_duck_enable_runtime_grammars",
+	                        "Allow register_language() to load native tree-sitter grammar libraries, which executes "
+	                        "arbitrary native code in-process. Disabled by default.",
+	                        LogicalType::BOOLEAN, Value::BOOLEAN(false));
+
+	// Register register_language() for runtime-loaded tree-sitter grammars
+	RegisterLanguageRegistrationFunction(loader);
 
 	// Register SQL macros for natural AST querying (depends on functions above)
 	RegisterASTSQLMacros(loader);

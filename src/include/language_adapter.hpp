@@ -633,6 +633,42 @@ private:
 	static const unordered_map<string, NodeConfig> node_configs;
 };
 
+// Immutable description of a runtime-registered (dlopen'd) tree-sitter grammar.
+// Owned by the registry via shared_ptr; in-flight parses hold their own reference,
+// so overwriting a registration never invalidates running queries. The loaded
+// library is intentionally never closed (see DynamicLibraryLoader): the TSLanguage
+// must stay valid for the lifetime of the process.
+struct DynamicLanguageInfo {
+	string name;
+	vector<string> aliases;
+	vector<string> extensions;
+	const TSLanguage *language = nullptr;
+	unordered_map<string, NodeConfig> node_configs;
+};
+
+// Generic adapter for runtime-registered grammars. Stays a cheap fresh-per-parse
+// object (matching the dispatch chains); long-lived state lives in the shared info.
+class DynamicLanguageAdapter : public LanguageAdapter {
+public:
+	explicit DynamicLanguageAdapter(shared_ptr<const DynamicLanguageInfo> info);
+
+	string GetLanguageName() const override;
+	vector<string> GetAliases() const override;
+	string GetNormalizedType(const string &node_type) const override;
+	string ExtractNodeName(TSNode node, const string &content) const override;
+	string ExtractNodeValue(TSNode node, const string &content) const override;
+	bool IsPublicNode(TSNode node, const string &content) const override;
+	ParsingFunction GetParsingFunction() const override;
+	const unordered_map<string, NodeConfig> &GetNodeConfigs() const override;
+
+protected:
+	void InitializeParser() const override;
+	unique_ptr<TSParserWrapper> CreateFreshParser() const override;
+
+private:
+	shared_ptr<const DynamicLanguageInfo> info_;
+};
+
 // Language adapter registry
 class LanguageAdapterRegistry {
 public:
@@ -659,6 +695,23 @@ public:
 	// Get list of supported languages
 	vector<string> GetSupportedLanguages() const;
 
+	// Get only the compiled-in (built-in) languages, excluding runtime-registered
+	// dynamic ones. Unlike GetSupportedLanguages this is stable regardless of when
+	// it is called relative to register_language(), so callers that need the fixed
+	// compile-time set (e.g. filtering the static extension tables) get a correct
+	// answer even after dynamic languages have been registered.
+	vector<string> GetBuiltinLanguages() const;
+
+	// Register a runtime-loaded grammar. Rejects collisions with built-in names
+	// and aliases; duplicate dynamic names error unless overwrite is true.
+	void RegisterDynamicLanguage(shared_ptr<const DynamicLanguageInfo> info, bool overwrite);
+
+	// Look up a dynamic language by name or alias (nullptr if not dynamic)
+	shared_ptr<const DynamicLanguageInfo> GetDynamicLanguageInfo(const string &language) const;
+
+	// Map a file extension to a dynamic language name ("" if none)
+	string FindDynamicLanguageForExtension(const string &extension) const;
+
 	// Fast runtime dispatch to compile-time templates - ZERO virtual calls in hot loop!
 	ASTResult ParseContentTemplated(const string &content, const string &language, const string &file_path,
 	                                const ExtractionConfig &config) const;
@@ -669,10 +722,19 @@ public:
 
 private:
 	LanguageAdapterRegistry();
+
+	// Resolve aliases and look up dynamic registrations under the registry lock
+	// (both maps are mutated at runtime by register_language). The returned
+	// shared_ptr keeps the grammar alive, so parsing happens unlocked; normalized
+	// receives the alias-resolved name for built-in dispatch.
+	shared_ptr<const DynamicLanguageInfo> ResolveDynamicLanguage(const string &language, string &normalized) const;
+
 	mutable mutex registry_mutex_;                                       // Synchronize access to mutable shared state
 	mutable unordered_map<string, unique_ptr<LanguageAdapter>> adapters; // mutable for lazy creation
 	mutable unordered_map<string, AdapterFactory> language_factories;    // mutable for lazy creation
 	unordered_map<string, string> alias_to_language;
+	unordered_map<string, shared_ptr<const DynamicLanguageInfo>> dynamic_languages;
+	unordered_map<string, string> dynamic_extension_to_language;
 
 	void InitializeDefaultAdapters();
 
