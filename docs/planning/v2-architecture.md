@@ -50,6 +50,17 @@ keeps that repo's anatomy uniform (every module there has a grammar submodule +
 generated parser). A side effect worth having: a bare duckling can parse and
 introspect the language it is embedded in.
 
+## Engine principles (carried into v2 from the 1.x line)
+
+1. **No silent empties** (#89): when the engine can't honor a query's semantics,
+   it says so — 0 rows always means "searched correctly, not there."
+2. **Peek is presentation, not substrate**: no feature may depend on any peek
+   configuration (`'full'` included) for *correctness*. Peek exists for humans;
+   its semantics (truncation, formatting) may evolve. Features that need source
+   text key off **source retention** (`source := 'full'`) or the original file.
+   The single sanctioned exception: `ast_select`'s own `[peek…]` attribute
+   machinery — which is *about* peek by definition and may materialize it.
+
 ## The contract (duckling's most important deliverable)
 
 1. **Module ABI**: versioned C++ interface for adapters — registration, extraction
@@ -103,9 +114,10 @@ language module or embodies an analysis opinion is an add-on.
 3. **Patch / unparse / rewrite** (in that order):
    - **Patch tools first (v1.x, no schema or .def changes)**: edits-as-data
      (node-anchored replace/wrap/delete/insert rows), `ast_patch(source, edits)`
-     applying them via the line/column positions and full-peek text the schema
-     already carries (`ast_patch` requires full-peek input and *errors* on
-     peek-less tables, per the #89 principle), and
+     applying them via line/column positions plus retained source
+     (`source := 'full'`) or the original file — never peek (see the peek
+     principle below); `ast_patch` over a table with neither retained source
+     nor a readable file *errors*, per the #89 principle. Plus
      `ast_replace(source, pattern, replacement)` generating edits from the
      pattern matcher — codemods in SQL before any unparser exists.
    - **`write_ast` — declarative, .def-driven unparse.** Two laws, two owners:
