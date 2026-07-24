@@ -22,18 +22,65 @@ struct YYJSONDocDeleter {
 };
 using YYJSONDocPtr = std::unique_ptr<yyjson_doc, YYJSONDocDeleter>;
 
-ExtractionStrategy ParseNameStrategy(const string &name, const string &node_type) {
-	static const unordered_map<string, ExtractionStrategy> name_strategies = {
-	    {"NONE", ExtractionStrategy::NONE},
-	    {"NODE_TEXT", ExtractionStrategy::NODE_TEXT},
-	    {"FIRST_CHILD", ExtractionStrategy::FIRST_CHILD},
-	    {"FIND_IDENTIFIER", ExtractionStrategy::FIND_IDENTIFIER},
-	    {"FIND_PROPERTY", ExtractionStrategy::FIND_PROPERTY},
-	    {"FIND_ASSIGNMENT_TARGET", ExtractionStrategy::FIND_ASSIGNMENT_TARGET},
-	    {"FIND_QUALIFIED_IDENTIFIER", ExtractionStrategy::FIND_QUALIFIED_IDENTIFIER},
-	    {"FIND_IN_DECLARATOR", ExtractionStrategy::FIND_IN_DECLARATOR},
-	    {"FIND_CALL_TARGET", ExtractionStrategy::FIND_CALL_TARGET},
+// Single source of truth for the runtime-selectable name strategies. The
+// name→enum lookup is derived from this list, and the compile-time guard below
+// ties the list to the ExtractionStrategy enum so the two cannot drift.
+struct NameStrategyEntry {
+	const char *name;
+	ExtractionStrategy strategy;
+};
+
+constexpr NameStrategyEntry NAME_STRATEGY_ENTRIES[] = {
+    {"NONE", ExtractionStrategy::NONE},
+    {"NODE_TEXT", ExtractionStrategy::NODE_TEXT},
+    {"FIRST_CHILD", ExtractionStrategy::FIRST_CHILD},
+    {"FIND_IDENTIFIER", ExtractionStrategy::FIND_IDENTIFIER},
+    {"FIND_PROPERTY", ExtractionStrategy::FIND_PROPERTY},
+    {"FIND_ASSIGNMENT_TARGET", ExtractionStrategy::FIND_ASSIGNMENT_TARGET},
+    {"FIND_QUALIFIED_IDENTIFIER", ExtractionStrategy::FIND_QUALIFIED_IDENTIFIER},
+    {"FIND_IN_DECLARATOR", ExtractionStrategy::FIND_IN_DECLARATOR},
+    {"FIND_CALL_TARGET", ExtractionStrategy::FIND_CALL_TARGET},
+};
+
+// Parity guard: ExtractionStrategy is a contiguous enum whose final value,
+// CUSTOM, needs native C++ logic and is intentionally not runtime-selectable.
+// Every value below CUSTOM must have exactly one entry above, so the entry count
+// equals CUSTOM's integer value. Inserting a strategy before CUSTOM without an
+// entry here (the drift #64/#65 could introduce) breaks that equality and fails
+// the build.
+static_assert(sizeof(NAME_STRATEGY_ENTRIES) / sizeof(NAME_STRATEGY_ENTRIES[0]) ==
+                  static_cast<size_t>(ExtractionStrategy::CUSTOM),
+              "NameStrategy table has drifted from the ExtractionStrategy enum: every strategy before "
+              "CUSTOM needs an entry in NAME_STRATEGY_ENTRIES");
+
+const unordered_map<string, ExtractionStrategy> &NameStrategyTable() {
+	static const unordered_map<string, ExtractionStrategy> table = []() {
+		unordered_map<string, ExtractionStrategy> m;
+		for (const auto &entry : NAME_STRATEGY_ENTRIES) {
+			m[entry.name] = entry.strategy;
+		}
+		return m;
+	}();
+	return table;
+}
+
+const unordered_map<string, uint8_t> &FlagNameTable() {
+	// ASTNodeFlags exposes individual bit constants with no contiguous range to
+	// enumerate, so it has no compile-time count guard like the strategies above.
+	// Only the user-facing single-purpose flags are exposed; masks, the zero
+	// NAME_NONE sentinel, and deprecated aliases are omitted.
+	static const unordered_map<string, uint8_t> flag_names = {
+	    {"IS_SYNTAX_ONLY", ASTNodeFlags::IS_SYNTAX_ONLY},
+	    {"NAME_REFERENCE", ASTNodeFlags::NAME_REFERENCE},
+	    {"NAME_DECLARATION", ASTNodeFlags::NAME_DECLARATION},
+	    {"NAME_DEFINITION", ASTNodeFlags::NAME_DEFINITION},
+	    {"IS_SCOPE", ASTNodeFlags::IS_SCOPE},
+	    {"IS_EXPORTED", ASTNodeFlags::IS_EXPORTED},
 	};
+	return flag_names;
+}
+
+ExtractionStrategy ParseNameStrategy(const string &name, const string &node_type) {
 	// Case-insensitive: ast_type_map() displays these names lowercased, and a
 	// config author copying from its output should not be rejected.
 	const string upper_name = StringUtil::Upper(name);
@@ -43,6 +90,7 @@ ExtractionStrategy ParseNameStrategy(const string &name, const string &node_type
 		    "CUSTOM requires native C++ logic that cannot be loaded at runtime",
 		    node_type);
 	}
+	const auto &name_strategies = NameStrategyTable();
 	auto it = name_strategies.find(upper_name);
 	if (it == name_strategies.end()) {
 		throw InvalidInputException("Unknown name_strategy \"%s\" for node type \"%s\"", name, node_type);
@@ -51,14 +99,7 @@ ExtractionStrategy ParseNameStrategy(const string &name, const string &node_type
 }
 
 uint8_t ParseFlagName(const string &name, const string &node_type) {
-	static const unordered_map<string, uint8_t> flag_names = {
-	    {"IS_SYNTAX_ONLY", ASTNodeFlags::IS_SYNTAX_ONLY},
-	    {"NAME_REFERENCE", ASTNodeFlags::NAME_REFERENCE},
-	    {"NAME_DECLARATION", ASTNodeFlags::NAME_DECLARATION},
-	    {"NAME_DEFINITION", ASTNodeFlags::NAME_DEFINITION},
-	    {"IS_SCOPE", ASTNodeFlags::IS_SCOPE},
-	    {"IS_EXPORTED", ASTNodeFlags::IS_EXPORTED},
-	};
+	const auto &flag_names = FlagNameTable();
 	auto it = flag_names.find(name);
 	if (it == flag_names.end()) {
 		throw InvalidInputException("Unknown flag \"%s\" for node type \"%s\"", name, node_type);
