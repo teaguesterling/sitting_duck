@@ -1,0 +1,359 @@
+# name: test/sql/duck_blocks.test
+# description: ast_to_blocks — render ASTs as duck_blocks document elements
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Fixture: test/data/python/macros/blocks_demo.py
+#   1  CONST = 1
+#   3  class Shape:
+#   4      def area(self):          (nested 1 deep)
+#   7      class Inner:             (nested 1 deep)
+#   8          def deep(self):      (nested 2 deep)
+#  11  def top(x: int, y: int) -> int:
+
+# =============================================================================
+# Spec conformance (duck_blocks v0.4.0)
+# =============================================================================
+
+# Every emitted element is kind='block'
+query I
+SELECT DISTINCT block.kind FROM ast_to_blocks('test/data/python/macros/blocks_demo.py');
+----
+block
+
+# Only recognized block element types are emitted (outline style)
+query I
+SELECT DISTINCT block.element_type FROM ast_to_blocks('test/data/python/macros/blocks_demo.py') ORDER BY 1;
+----
+code
+heading
+metadata
+
+# Headings: level field is NULL; heading_level attribute is a string '1'..'6'
+query I
+SELECT count(*)
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+WHERE block.element_type = 'heading'
+  AND (block.level IS NOT NULL
+       OR block.attributes['heading_level'] IS NULL
+       OR NOT block.attributes['heading_level'] IN ('1', '2', '3', '4', '5', '6'));
+----
+0
+
+# heading_level is stored as VARCHAR (string per spec, not an integer)
+query I
+SELECT DISTINCT typeof(block.attributes['heading_level'])
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+WHERE block.element_type = 'heading';
+----
+VARCHAR
+
+# Code blocks carry attributes['language']
+query II
+SELECT count(*), count(*) FILTER (WHERE block.attributes['language'] = 'python')
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+WHERE block.element_type = 'code';
+----
+4	4
+
+# Metadata block: encoding yaml, structural level 0
+query III
+SELECT block.encoding, block.level, block.element_order
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+WHERE block.element_type = 'metadata';
+----
+yaml	0	0
+
+# element_order starts at 0 and is strictly increasing in document order
+query I
+SELECT count(*)
+FROM (SELECT block.element_order AS eo,
+             row_number() OVER (ORDER BY element_order) - 1 AS expected
+      FROM ast_to_blocks('test/data/python/macros/blocks_demo.py'))
+WHERE eo != expected;
+----
+0
+
+# The struct's element_order matches the hoisted column
+query I
+SELECT count(*)
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+WHERE block.element_order != element_order;
+----
+0
+
+# =============================================================================
+# Outline style (default): exact document sequence
+# =============================================================================
+
+# Full element sequence: metadata, then headings in document order with
+# nesting-derived levels, leaf definitions followed by their code bodies.
+# (Function parameters/locals are excluded: function-scoped variable defs
+# are signature detail, not document structure.)
+query ITT
+SELECT element_order, block.element_type,
+       CASE WHEN block.element_type = 'heading' THEN block.content
+            ELSE coalesce(block.attributes['heading_level'], '-') END AS detail
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+ORDER BY element_order;
+----
+0	metadata	-
+1	heading	CONST: int
+2	code	-
+3	heading	Shape
+4	heading	area(self)
+5	code	-
+6	heading	Inner
+7	heading	deep(self)
+8	code	-
+9	heading	top(x: int, y: int) -> int
+10	code	-
+
+# Heading levels follow definition nesting depth
+query TI
+SELECT block.content, block.attributes['heading_level']::INTEGER AS hl
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+WHERE block.element_type = 'heading'
+ORDER BY element_order;
+----
+CONST: int	1
+Shape	1
+area(self)	2
+Inner	2
+deep(self)	3
+top(x: int, y: int) -> int	1
+
+# Body code block content: full source of the definition (peek := 'full'),
+# pinned by prefix
+query I
+SELECT block.content LIKE 'def top(x: int, y: int) -> int:' || chr(10) || '%'
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+WHERE element_order = 10;
+----
+true
+
+# Outline gives bodies to LEAF definitions only: the class Shape (which
+# contains nested definitions) has no code block of its own
+query I
+SELECT count(*)
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+WHERE block.element_type = 'code' AND block.content LIKE 'class Shape%';
+----
+0
+
+# Metadata content: yaml with file_path, language, and definition counts
+# (newlines flattened to ' | ' for single-line pinning)
+query I
+SELECT replace(block.content, chr(10), ' | ')
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+WHERE block.element_type = 'metadata';
+----
+file_path: test/data/python/macros/blocks_demo.py | language: python | definitions: 6 | functions: 3 | classes: 2
+
+# =============================================================================
+# Summary style: headings + one-line signature paragraphs, never code bodies
+# =============================================================================
+
+query I
+SELECT count(*)
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', style := 'summary')
+WHERE block.element_type = 'code';
+----
+0
+
+query TT
+SELECT block.element_type, block.content
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', style := 'summary')
+WHERE block.element_type = 'paragraph'
+ORDER BY element_order;
+----
+paragraph	variable CONST: int (lines 1-1)
+paragraph	class Shape (lines 3-9)
+paragraph	function area(self) (lines 4-5)
+paragraph	class Inner (lines 7-9)
+paragraph	function deep(self) (lines 8-9)
+paragraph	function top(x: int, y: int) -> int (lines 11-12)
+
+# =============================================================================
+# Flat style: uniform heading level, every definition gets its body
+# =============================================================================
+
+query I
+SELECT DISTINCT block.attributes['heading_level']
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', style := 'flat')
+WHERE block.element_type = 'heading';
+----
+1
+
+query TI
+SELECT block.element_type, count(*)
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', style := 'flat')
+GROUP BY 1 ORDER BY 1;
+----
+code	6
+heading	6
+metadata	1
+
+# =============================================================================
+# Tuning parameters
+# =============================================================================
+
+# include_bodies := false suppresses code blocks (outline)
+query I
+SELECT count(*)
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', include_bodies := false)
+WHERE block.element_type = 'code';
+----
+0
+
+# ...and in flat style
+query I
+SELECT count(*)
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', style := 'flat', include_bodies := false)
+WHERE block.element_type = 'code';
+----
+0
+
+# include_metadata := false drops the leading metadata block
+query I
+SELECT count(*)
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', include_metadata := false)
+WHERE block.element_type = 'metadata';
+----
+0
+
+# max_heading_level := 2 demotes deeper definitions to the cap
+# (deep would be h3; it renders at h2 alongside its parents)
+query II
+SELECT block.attributes['heading_level']::INTEGER AS hl, count(*)
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', max_heading_level := 2)
+WHERE block.element_type = 'heading'
+GROUP BY 1 ORDER BY 1;
+----
+1	3
+2	3
+
+# base_heading_level := 2 shifts the whole outline down one level
+query II
+SELECT block.attributes['heading_level']::INTEGER AS hl, count(*)
+FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', base_heading_level := 2)
+WHERE block.element_type = 'heading'
+GROUP BY 1 ORDER BY 1;
+----
+2	3
+3	2
+4	1
+
+# =============================================================================
+# Parameter validation: unknown values error loudly (issue #89 principle)
+# =============================================================================
+
+statement error
+SELECT * FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', style := 'markdown');
+----
+ast_to_blocks: unknown style 'markdown'. Valid styles: outline, summary, flat.
+
+# Positive twin: the same call with a valid style succeeds
+query I
+SELECT count(*) > 0 FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', style := 'summary');
+----
+true
+
+statement error
+SELECT * FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', max_heading_level := 9);
+----
+ast_to_blocks: max_heading_level must be between 1 and 6
+
+statement error
+SELECT * FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', base_heading_level := 0);
+----
+ast_to_blocks: base_heading_level must be between 1 and 6
+
+# =============================================================================
+# Files with no definitions: metadata-only, never an error
+# =============================================================================
+
+query TT
+SELECT block.element_type, replace(block.content, chr(10), ' | ')
+FROM ast_to_blocks('test/data/python/macros/blocks_empty.py');
+----
+metadata	file_path: test/data/python/macros/blocks_empty.py | language: python | definitions: 0 | functions: 0 | classes: 0
+
+# ...and with metadata off, cleanly empty (zero rows, no error)
+query I
+SELECT count(*) FROM ast_to_blocks('test/data/python/macros/blocks_empty.py', include_metadata := false);
+----
+0
+
+# =============================================================================
+# ast_to_blocks_from: pre-parsed tables
+# =============================================================================
+
+statement ok
+CREATE TABLE blocks_src AS
+SELECT * FROM read_ast('test/data/python/macros/blocks_demo.py', peek := 'full');
+
+# Same document as the parsing wrapper
+query I
+SELECT count(*) FROM ast_to_blocks_from('blocks_src');
+----
+11
+
+query I
+SELECT block.content FROM ast_to_blocks_from('blocks_src') WHERE element_order = 9;
+----
+top(x: int, y: int) -> int
+
+# Bodies need peek text: an all-NULL peek column (peek := 'none+schema')
+# errors with a re-parse hint instead of rendering empty code blocks
+statement ok
+CREATE TABLE blocks_src_nopeek AS
+SELECT * FROM read_ast('test/data/python/macros/blocks_demo.py', peek := 'none+schema');
+
+statement error
+SELECT * FROM ast_to_blocks_from('blocks_src_nopeek');
+----
+ast_to_blocks: bodies requested but the source has no peek text
+
+# Positive twins: the same table works when bodies are off or unneeded
+query I
+SELECT count(*) FROM ast_to_blocks_from('blocks_src_nopeek', include_bodies := false);
+----
+7
+
+query I
+SELECT count(*) FROM ast_to_blocks_from('blocks_src_nopeek', style := 'summary');
+----
+13
+
+# =============================================================================
+# ast_to_blocks_list: LIST(duck_block) per file, ready for renderers
+# =============================================================================
+
+query TI
+SELECT file_path, len(blocks) FROM ast_to_blocks_list('test/data/python/macros/blocks_demo.py');
+----
+test/data/python/macros/blocks_demo.py	11
+
+# The list is in document order, starting at element_order 0
+query II
+SELECT blocks[1].element_order, blocks[len(blocks)].element_order
+FROM ast_to_blocks_list('test/data/python/macros/blocks_demo.py');
+----
+0	10
+
+# =============================================================================
+# Multiple files: element_order restarts per file (each file is a document)
+# =============================================================================
+
+query TII
+SELECT file_path, min(element_order), count(*)
+FROM ast_to_blocks('test/data/python/macros/blocks_*.py')
+GROUP BY file_path ORDER BY file_path;
+----
+test/data/python/macros/blocks_demo.py	0	11
+test/data/python/macros/blocks_empty.py	0	1
