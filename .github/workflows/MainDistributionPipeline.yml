@@ -90,6 +90,33 @@ jobs:
       - name: Smoke test subset behavior
         run: ./scripts/test_language_subset.sh build/release/duckdb
 
+  # Runtime grammar registration (register_language) is exercised only by the
+  # test/sql/dynamic_languages/ suite, which is gated behind
+  # `require-env SITTING_DUCK_TEST_GRAMMAR_DIR`. The default distribution legs
+  # never set that variable, so those tests are skipped there and the feature
+  # would otherwise ship with zero CI coverage. This job builds the standalone
+  # tree-sitter grammar library (make test-grammar-lib) and runs the full test
+  # suite with the variable set, so the require-env tests actually execute.
+  runtime-grammar-tests:
+    name: Runtime grammar registration tests
+    runs-on: ubuntu-latest
+    env:
+      GEN: ninja
+      OVERRIDE_GIT_DESCRIBE: v1.5.4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout required submodules
+        # Pre-generated parsers are committed, so grammar submodules are not needed
+        run: git submodule update --init duckdb extension-ci-tools third_party/tree-sitter
+      - name: Install ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Build release
+        run: make release
+      - name: Build the dynamic grammar test library
+        run: make test-grammar-lib
+      - name: Run the test suite with the runtime-grammar tests enabled
+        run: SITTING_DUCK_TEST_GRAMMAR_DIR=build/test_grammars make test
+
   duckdb-next-build:
     name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
