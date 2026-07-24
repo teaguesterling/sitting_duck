@@ -107,12 +107,15 @@ static const std::unordered_map<string, vector<string>> LANGUAGE_TO_EXTENSIONS =
     {"dart", {"dart"}}};
 
 // Built-in languages actually compiled into this build. The built-in set is
-// fixed once LanguageAdapterRegistry is constructed, so caching it here is
-// safe; runtime-registered languages (future work) must extend detection via
-// the registry, not these static tables.
+// fixed once LanguageAdapterRegistry is constructed, so caching it here is safe.
+// GetBuiltinLanguages() excludes runtime-registered dynamic languages, so this
+// snapshot stays correct even if the first call happens after register_language()
+// has run: a dynamic language must not leak the static extension entries of a
+// compiled-out built-in that shares its name. Dynamic languages extend detection
+// through the registry's own maps, not these static tables.
 static const std::unordered_set<string> &GetCompiledLanguages() {
 	static const std::unordered_set<string> compiled = [] {
-		auto languages = LanguageAdapterRegistry::GetInstance().GetSupportedLanguages();
+		auto languages = LanguageAdapterRegistry::GetInstance().GetBuiltinLanguages();
 		return std::unordered_set<string>(languages.begin(), languages.end());
 	}();
 	return compiled;
@@ -263,6 +266,26 @@ vector<string> ASTFileUtils::GetGlobFiles(ClientContext &context, const string &
 	return result;
 }
 
+string ASTFileUtils::ReadFileToString(FileSystem &fs, const string &path) {
+	auto handle = fs.OpenFile(path, FileFlags::FILE_FLAGS_READ);
+	auto size = fs.GetFileSize(*handle);
+	string content;
+	content.resize(size);
+	// FileSystem::Read performs a single read() that may return short; loop
+	// until every byte is in, and fail loudly instead of returning a
+	// NUL-padded tail.
+	idx_t total_read = 0;
+	while (total_read < static_cast<idx_t>(size)) {
+		auto bytes_read = fs.Read(*handle, (void *)(content.data() + total_read), size - total_read);
+		if (bytes_read <= 0) {
+			throw IOException("Unexpected end of file while reading '%s': got %llu of %llu bytes", path,
+			                  static_cast<uint64_t>(total_read), static_cast<uint64_t>(size));
+		}
+		total_read += static_cast<idx_t>(bytes_read);
+	}
+	return content;
+}
+
 bool ASTFileUtils::HasURIScheme(const string &path) {
 	auto scheme_pos = path.find("://");
 	if (scheme_pos == string::npos || scheme_pos == 0) {
@@ -321,13 +344,26 @@ string ASTFileUtils::DetectLanguageFromPath(const string &file_path) {
 	std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
 	// Look up the language (compiled-in languages only)
-	const auto &extension_map = GetExtensionToLanguageMap();
-	auto it = extension_map.find(extension);
-	if (it != extension_map.end()) {
-		return it->second;
+	auto builtin = GetBuiltinLanguageForExtension(extension);
+	if (!builtin.empty()) {
+		return builtin;
+	}
+
+	// Runtime-registered languages
+	auto dynamic_language = LanguageAdapterRegistry::GetInstance().FindDynamicLanguageForExtension(extension);
+	if (!dynamic_language.empty()) {
+		return dynamic_language;
 	}
 
 	return "auto"; // Extension not recognized
+}
+
+string ASTFileUtils::GetBuiltinLanguageForExtension(const string &extension) {
+	// Filtered map: a language compiled out via -DSITTING_DUCK_LANGUAGES is absent
+	// here, so its extensions read as unrecognized rather than built-in.
+	const auto &extension_map = GetExtensionToLanguageMap();
+	auto it = extension_map.find(extension);
+	return it != extension_map.end() ? it->second : "";
 }
 
 bool ASTFileUtils::IsFileTypeSupported(const string &file_path, const string &language) {
@@ -341,7 +377,9 @@ vector<string> ASTFileUtils::GetSupportedExtensions(const string &language) {
 	if (it != language_map.end()) {
 		return it->second;
 	}
-	return {}; // Language not recognized (or not compiled into this build)
+	// Runtime-registered languages (empty if the language is not registered)
+	auto info = LanguageAdapterRegistry::GetInstance().GetDynamicLanguageInfo(language);
+	return info ? info->extensions : vector<string>();
 }
 
 // Helper function to check if a file extension is in the supported list

@@ -30,6 +30,12 @@ struct TSTreeDeleter {
 using TSParserPtr = unique_ptr<TSParser, TSParserDeleter>;
 using TSTreePtr = unique_ptr<TSTree, TSTreeDeleter>;
 
+// Single home for the supported grammar ABI range
+inline bool IsCompatibleLanguageAbi(uint32_t language_version) {
+	return language_version >= TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION &&
+	       language_version <= TREE_SITTER_LANGUAGE_VERSION;
+}
+
 // RAII wrapper for TSParser with helper methods
 class TSParserWrapper {
 public:
@@ -63,8 +69,7 @@ public:
 
 		// Validate ABI version
 		uint32_t language_version = ts_language_version(language);
-		if (language_version < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION ||
-		    language_version > TREE_SITTER_LANGUAGE_VERSION) {
+		if (!IsCompatibleLanguageAbi(language_version)) {
 			throw InternalException("Incompatible language version for " + language_name +
 			                        ". Expected: " + std::to_string(TREE_SITTER_LANGUAGE_VERSION) +
 			                        ", Got: " + std::to_string(language_version));
