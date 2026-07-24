@@ -110,6 +110,16 @@ language module or embodies an analysis opinion is an add-on.
    edit-and-requery loops (agent workflows).
 5. **New languages (DuckPL, …)**: the architecture's acceptance test — *one module,
    one day, conformance-green*, from the module template + onboarding doc.
+6. **Interop: duck_blocks** (`ast_to_blocks`): render code structure as readable
+   documents — definitions → headings (level from scope depth), bodies → code
+   blocks, with style/tuning parameters. duck_blocks is a *spec, not a
+   dependency* (conforming STRUCTs, no LOAD required), so this is a pure
+   producer; duck_block_utils then supplies TOC/filter/validate and terminal
+   rendering (`db_render_blocks`). Placement: add-on in proper, per the macro
+   rule. The inverse already works for free: markdown code blocks →
+   `parse_ast(content, attributes['language'])` — documents' code is queryable,
+   code's structure is documentable. Exact-source extraction for code blocks
+   rides in with the splice/rewrite work (item 3).
 
 ## Migration sequencing (each milestone shippable)
 
