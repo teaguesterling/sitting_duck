@@ -3,7 +3,7 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
-#include "duckdb/main/settings.hpp"
+#include "duckdb/main/config.hpp"
 #include "dynamic_library_loader.hpp"
 #include "language_adapter.hpp"
 #include "language_config_json.hpp"
@@ -106,10 +106,22 @@ static void RegisterLanguageFunction(ClientContext &context, TableFunctionInput 
 	auto &bind_data = data_p.bind_data->Cast<RegisterLanguageBindData>();
 
 	// Loading a grammar library executes arbitrary native code, so it is gated
-	// behind the same option as DuckDB's own external-access surfaces.
-	if (!Settings::Get<EnableExternalAccessSetting>(context)) {
-		throw PermissionException("register_language requires permission to load native code, "
-		                          "but enable_external_access is false");
+	// behind a dedicated setting that stays off by default.
+	Value enabled;
+	if (!context.TryGetCurrentSetting("sitting_duck_enable_runtime_grammars", enabled) || enabled.IsNull() ||
+	    !enabled.GetValue<bool>()) {
+		throw PermissionException("register_language loads native grammar libraries, which execute arbitrary native "
+		                          "code in-process, and is disabled by default. Enable it with "
+		                          "SET sitting_duck_enable_runtime_grammars = true");
+	}
+
+	// The library path must satisfy the same filesystem restrictions as any
+	// other external file: with enable_external_access off it has to fall
+	// within allowed_directories/allowed_paths.
+	auto &config = DBConfig::GetConfig(context);
+	if (!config.CanAccessFile(bind_data.library_path, FileType::FILE_TYPE_REGULAR)) {
+		throw PermissionException("Cannot access grammar library '%s': path is outside allowed_directories",
+		                          bind_data.library_path);
 	}
 
 	if (!IsValidLanguageName(bind_data.name)) {

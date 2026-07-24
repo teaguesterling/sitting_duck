@@ -6,6 +6,11 @@ require sitting_duck
 
 require-env SITTING_DUCK_TEST_GRAMMAR_DIR
 
+# register_language() loads native code, so it is disabled by default. These
+# cases exercise config parsing, which runs only after this gate is open.
+statement ok
+SET sitting_duck_enable_runtime_grammars = true;
+
 # Every case registers under a unique name so a failure here cannot mask or be
 # masked by earlier cases, and each failed registration must leave the registry
 # unchanged (verified for the first case, same code path for the rest).

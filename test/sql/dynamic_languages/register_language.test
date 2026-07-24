@@ -8,6 +8,10 @@ require sitting_duck
 # Run with: SITTING_DUCK_TEST_GRAMMAR_DIR=build/test_grammars make test
 require-env SITTING_DUCK_TEST_GRAMMAR_DIR
 
+# register_language() loads native code, so it is disabled by default.
+statement ok
+SET sitting_duck_enable_runtime_grammars = true;
+
 # Happy path: register the JSON grammar under a new name with a symbol override.
 # overwrite := true keeps the file re-runnable within one process (registration
 # is process-global).

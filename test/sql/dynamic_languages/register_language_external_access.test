@@ -1,19 +1,32 @@
 # name: test/sql/dynamic_languages/register_language_external_access.test
-# description: register_language() is gated on enable_external_access
+# description: register_language() trust gate: dedicated setting plus filesystem policy
 # group: [dynamic_languages]
 
 require sitting_duck
 
 require-env SITTING_DUCK_TEST_GRAMMAR_DIR
 
-# Separate test file: enable_external_access cannot be reliably re-enabled
-# within a session, so this must not precede other dynamic language tests.
+# Loading a grammar library runs native code in-process, so register_language()
+# is gated by a dedicated setting that is off by default. While it is off,
+# registration is refused before any dlopen, and the message names the setting.
+statement error
+SELECT * FROM register_language('gateoff', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                                symbol := 'tree_sitter_json');
+----
+<REGEX>:.*sitting_duck_enable_runtime_grammars.*
 
+statement ok
+SET sitting_duck_enable_runtime_grammars = true;
+
+# With the gate open the library path still goes through the same filesystem
+# policy as any external file: once external access is locked down, a path
+# outside allowed_directories is refused. enable_external_access cannot be
+# re-enabled within a session, so this file stays separate and sets it last.
 statement ok
 SET enable_external_access = false;
 
 statement error
-SELECT * FROM register_language('extblocked', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+SELECT * FROM register_language('fsblocked', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
                                 symbol := 'tree_sitter_json');
 ----
-<REGEX>:.*[Pp]ermission.*
+<REGEX>:.*outside allowed_directories.*

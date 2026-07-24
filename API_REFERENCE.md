@@ -657,8 +657,9 @@ A grammar registered without a config still parses. Every node type it produces 
 
 ### Caveats
 
-- `register_language()` loads and runs native code, so it needs `enable_external_access` (on by default). It errors with a permission message when external access is disabled. Only register libraries you built or trust.
-- A registration lives in the current process and is not persisted. Re-run `register_language()` in each new session, for example from an init script.
+- `register_language()` loads a shared library and calls into it, so the grammar runs as native code inside the DuckDB process with the privileges of the session. A malicious or broken library can do anything that process can. Only register libraries you built or trust.
+- Because of that, it is off by default. Enable it per session with `SET sitting_duck_enable_runtime_grammars = true`; otherwise the function errors with a permission message. The `lib_path` is also subject to DuckDB's filesystem restrictions: when `enable_external_access` is off, the library must sit within an `allowed_directories`/`allowed_paths` entry or the load is rejected before `dlopen`.
+- A registration is process-global and non-transactional. It takes effect immediately for every connection on the database, is not rolled back if the surrounding transaction aborts, and is not persisted. Re-run `register_language()` in each new session, for example from an init script.
 - There is no unregister function. Use `overwrite := true` to replace an existing dynamic registration.
 - The library must be built for the current operating system and CPU architecture.
 - The grammar's ABI version must fall within the tree-sitter ABI range this extension supports.
