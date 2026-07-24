@@ -100,12 +100,26 @@ language module or embodies an analysis opinion is an add-on.
 2. **On-demand parsers**: `create_parser(grammar, metadata)` via the WASM engine —
    no `.so`, no toolchain. Direct grammar interpretation (Earley/GLR) stays
    parked as research; the WASM tier delivers the capability sooner.
-3. **Unparse / rewrite**: **splice-based lossless rewriting** in duckling — nodes
-   carry exact byte ranges, so reconstruction = original bytes + node-anchored
-   edits; untouched code is byte-identical, only synthesized nodes need
-   formatting. Language-agnostic by construction (no per-language
-   pretty-printers). Composed with pattern matching this yields
-   `ast_rewrite(source, pattern, replacement)` — codemods in SQL.
+3. **Patch / unparse / rewrite** (in that order):
+   - **Patch tools first (v1.x, no schema or .def changes)**: edits-as-data
+     (node-anchored replace/wrap/delete/insert rows), `ast_patch(source, edits)`
+     applying them via the line/column positions and full-peek text the schema
+     already carries (`ast_patch` requires full-peek input and *errors* on
+     peek-less tables, per the #89 principle), and
+     `ast_replace(source, pattern, replacement)` generating edits from the
+     pattern matcher — codemods in SQL before any unparser exists.
+   - **`write_ast` — declarative, .def-driven unparse.** Correctness bar is the
+     round-trip law, not byte fidelity:
+     `read_ast(write_ast(read_ast(x))) = read_ast(x)`.
+     Serialization rules (delimiters, separators, keyword tokens) are DATA in
+     each module's `.def` — "how to write" lives beside "how to read"; the
+     engine is a generic walker with no language knowledge. Modules declare
+     write-support as a capability; **the round-trip law is enforced by the
+     conformance kit** over each module's fixtures, making unparse correctness
+     a checked law rather than a per-language argument.
+   - **Byte splicing is an optional fidelity layer**, not a foundation: when
+     original text is available, untouched subtrees keep it verbatim and only
+     synthesized nodes are generated. Never required for correctness.
 4. **Incremental reparse**: tree-sitter's edit-aware reparsing, exposed for
    edit-and-requery loops (agent workflows).
 5. **New languages (DuckPL, …)**: the architecture's acceptance test — *one module,
