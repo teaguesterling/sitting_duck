@@ -625,6 +625,74 @@ FROM ast_match('code',
 
 See **[Pattern Matching Guide](docs/guide/pattern-matching.md)** for full documentation.
 
+## Patching Source with AST Anchors
+
+`ast_patch` applies **edits-as-data** — plain rows anchored at AST node
+positions — to source files, returning the patched text. Combined with
+`ast_node_edit` (build an edit from a matched node) and `ast_replace`
+(selector → replacement in one call), this is codemods in SQL: the first step
+of the patch → unparse → rewrite plan in the v2 architecture RFC
+(`docs/planning/v2-architecture.md` on the `docs/v2-architecture-rfc` branch).
+
+```sql
+-- One-shot: rename a function everywhere its identifier appears
+SELECT file_path, patched_source
+FROM ast_replace('src/main.py', 'identifier[name=old_fn]', 'new_fn');
+
+-- Or explicitly: match nodes, build edits, apply
+CREATE TABLE edits AS
+SELECT unnest(ast_node_edit(r, 'replace', 'new_fn'))
+FROM read_ast('src/**/*.py', source := 'full') r
+WHERE r.type = 'identifier' AND r.name = 'old_fn';
+
+SELECT file_path, patched_source FROM ast_patch('edits', 'src/**/*.py');
+```
+
+**The edit flow:**
+
+1. Parse with `source := 'full'` (location columns `start_column`/`end_column`
+   only exist at this level; positions are 1-indexed **byte** offsets,
+   `end_column` exclusive).
+2. Match the nodes to change (any `WHERE`, selector, or pattern you like) and
+   build edit rows: `(file_path, start_line, start_column, end_line,
+   end_column, edit_kind, new_text)` with `edit_kind` one of `replace`,
+   `delete`, `insert_before`, `insert_after`. `ast_node_edit(node, kind,
+   new_text)` builds one from an AST row — expand it with `unnest(...)`.
+3. Apply: `ast_patch(edits_table_name, files_glob)` re-reads each file,
+   validates, and returns `(file_path, patched_source)`. The `files` glob is
+   required because DuckDB's `read_text` cannot take per-row paths — pass the
+   same glob you parsed.
+
+**Parse and patch immediately.** Positions anchor to the file content that was
+parsed; `ast_patch` re-reads files at application time, so edits held across
+file changes go stale. Any position that no longer fits the current content
+errors (a cheap staleness guard — it cannot catch same-shape drift, so treat
+parse → build edits → patch as one motion). Overlapping edits, unreadable
+files, unknown kinds, and NULL anchors all error loudly — no partial output.
+
+**Why files are re-read (and `parse_ast` output can't be patched):** no
+extraction configuration retains per-node source text — `source :=` controls
+location columns only, and `peek` is presentation, never a correctness
+substrate. Exact source therefore only exists in the file itself; edits
+anchored to in-memory `parse_ast()` results (`file_path = '<inline>'`) error
+with a clear message. Source-text retention is planned v2 engine work (see the
+RFC's substrate-gap note).
+
+**Writing back:** `ast_patch` is pure — it never writes. To write a patched
+file, use `COPY`:
+
+```sql
+COPY (SELECT patched_source FROM ast_patch('edits', 'src/main.py'))
+TO 'src/main.py' (FORMAT csv, QUOTE '', ESCAPE '', HEADER false);
+```
+
+`ast_replace(source, selector, new_text, language := NULL)` matches via the
+CSS selector engine (`ast_select`) and replaces each match's exact byte range.
+Replacement is literal for now — capture interpolation needs per-capture exact
+source, which is blocked on the same v2 source-retention work. A selector that
+matches both a node and its descendant produces overlapping edits and errors:
+refine the selector.
+
 ## Rendering Code as Documents (duck_blocks)
 
 `ast_to_blocks` converts parsed ASTs into **duck_blocks** — the document-element
