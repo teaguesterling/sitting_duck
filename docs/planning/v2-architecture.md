@@ -54,12 +54,14 @@ introspect the language it is embedded in.
 
 1. **No silent empties** (#89): when the engine can't honor a query's semantics,
    it says so — 0 rows always means "searched correctly, not there."
-2. **Peek is presentation, not substrate**: no feature may depend on any peek
-   configuration (`'full'` included) for *correctness*. Peek exists for humans;
-   its semantics (truncation, formatting) may evolve. Features that need source
-   text key off **source retention** (`source := 'full'`) or the original file.
-   The single sanctioned exception: `ast_select`'s own `[peek…]` attribute
-   machinery — which is *about* peek by definition and may materialize it.
+2. **Peek is presentation, not correctness substrate**: peek may feed features
+   whose *output is presentation* (e.g. `ast_to_blocks` rendering bodies) or
+   whose *semantics are about peek* (`ast_select`'s `[peek…]` filters). It may
+   NEVER feed correctness features — patching, unparse, or anything claiming
+   textual fidelity — which key off **source retention** (`source := 'full'`)
+   or the original file. Corollary: presentation consumers must not pass off
+   truncated peek as full content (smart-peek bodies error with a re-parse
+   hint, per principle 1).
 
 ## The contract (duckling's most important deliverable)
 
