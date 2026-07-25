@@ -1,0 +1,15 @@
+sitting_duck
+Copyright 2024-2026 Teague Sterling
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this software except in compliance with the License. See the LICENSE file for
+the full text.
+
+This product bundles third-party software as git submodules, each under its own
+license:
+
+  - Tree-sitter runtime (third_party/tree-sitter/) — MIT
+  - Tree-sitter language grammars (grammars/<name>/) — MIT or Apache-2.0
+
+Each submodule retains its own LICENSE file. See THIRD_PARTY_LICENSES.md for a
+summary of the bundled components and their copyright notices.
