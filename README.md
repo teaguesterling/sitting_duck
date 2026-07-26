@@ -775,6 +775,13 @@ extraction is planned v2 work.
 
 ## Contributing
 
+Bug reports, feature requests, and questions are welcome — please
+[open an issue](https://github.com/teaguesterling/sitting_duck/issues) on this
+repository. (This is a DuckDB community extension: file issues here, not on the
+main `duckdb/duckdb` repo.) Pull requests are welcome too.
+
+### Adding a language
+
 This project uses Tree-sitter grammars as git submodules. To add a new language:
 
 1. Add the grammar: `git submodule add <grammar-repo> grammars/tree-sitter-<lang>`
@@ -786,7 +793,10 @@ See `docs/development/adding-languages.md` for details.
 
 ## License
 
-MIT License - see LICENSE file for details.
+Apache License 2.0 — see the [LICENSE](LICENSE) file. This extension bundles the
+Tree-sitter runtime and its language grammars (all MIT / Apache-2.0); see
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) and [NOTICE](NOTICE) for the
+bundled components and their copyright notices.
 
 ## Documentation
 
