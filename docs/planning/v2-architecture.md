@@ -76,6 +76,18 @@ introspect the language it is embedded in.
    its declared capabilities, raw-AST-join agreement, and no silent-empty behavior
    (#89 principle). A module either passes conformance or it isn't a module.
    Out-of-tree/third-party modules run the same kit.
+4. **Trust-boundary doc**: `register_language` (#80) executes native code, so the
+   contract must state the boundary plainly — the gate controls *whether*
+   (default-off `sitting_duck_enable_runtime_grammars`) and *from where*
+   (`allowed_directories`/`enable_external_access`), never *what*: no
+   pre-execution check can vet a `.so`, identical to DuckDB's own unsigned-`LOAD`
+   model. Reaching the function requires session `SET` privilege, i.e. a caller
+   who could already `LOAD` an extension — no privilege escalation. This is a
+   settled decision (no additional gates: they add friction, not safety);
+   capturing it here so the doc gets written with the module contract rather
+   than as a standalone task. Signing is the only lever that would add real
+   assurance, and grammars can't realistically be signed — hence the
+   dedicated-setting model over `allow_unsigned_extensions`.
 
 ## Four doors into one registry
 
