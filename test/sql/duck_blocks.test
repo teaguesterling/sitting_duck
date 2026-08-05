@@ -350,8 +350,9 @@ FROM ast_to_blocks_list('test/data/python/macros/blocks_demo.py');
 # Multiple files: element_order restarts per file (each file is a document)
 # =============================================================================
 
+# replace(): glob expansion yields native separators (backslashes on Windows)
 query TII
-SELECT file_path, min(element_order), count(*)
+SELECT replace(file_path, '\', '/') AS file_path, min(element_order), count(*)
 FROM ast_to_blocks('test/data/python/macros/blocks_*.py')
 GROUP BY file_path ORDER BY file_path;
 ----
