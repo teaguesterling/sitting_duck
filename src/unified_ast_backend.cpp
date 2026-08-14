@@ -832,9 +832,9 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult &result, DataChunk &outpu
 		file_path_vec[count] = StringVector::AddString(output.data[3], result.source.file_path);
 		language_vec[count] = StringVector::AddString(output.data[4], result.source.language);
 		start_line_vec[count] = node.start_line;
-		start_column_vec[count] = node.start_column;
+		start_column_vec[count] = node.source_start_column;
 		end_line_vec[count] = node.end_line;
-		end_column_vec[count] = node.end_column;
+		end_column_vec[count] = node.source_end_column;
 
 		if (node.parent_index < 0) {
 			parent_validity.SetInvalid(count);
@@ -1195,8 +1195,8 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 
 			if (schema_config.source >= SourceLevel::FULL) {
 				if (config.source >= SourceLevel::FULL) {
-					start_column_vec[count] = node.start_column;
-					end_column_vec[count] = node.end_column;
+					start_column_vec[count] = node.source_start_column;
+					end_column_vec[count] = node.source_end_column;
 				} else {
 					// +schema: column exists but data wasn't computed — NULL
 					FlatVector::SetNull(output.data[start_column_col], count, true);

@@ -1,0 +1,100 @@
+# name: test/sql/source_full_columns.test
+# description: source := 'full' must populate start_column / end_column
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Fixture: test/data/test_native_context.py
+#   1  def simple_function(param1, param2="default"):
+#   2      """A simple function with parameters."""
+#   3      return param1 + param2
+#   5  async def async_function(data: str, count: int = 5) -> str:
+#
+# Columns are 1-based (the parser adds 1 to tree-sitter's 0-based column), so a
+# definition starting in the leftmost position reports start_column = 1.
+#
+# Regression: both table projections used to read the legacy start_column /
+# end_column members while read_ast's parsing path populated only the flattened
+# source_start_column / source_end_column fields, so every row came back 0.
+# Line numbers were unaffected, which is why this stayed hidden.
+
+# =============================================================================
+# Columns are present and populated at source := 'full'
+# =============================================================================
+
+# A top-level definition starts in the leftmost column.
+query I
+SELECT DISTINCT start_column
+FROM read_ast('test/data/test_native_context.py', source := 'full')
+WHERE semantic_type = 240 AND start_line = 1;
+----
+1
+
+# end_column must be past the start of the node, not zero. Aggregated because
+# line 1 matches more than one node at this semantic type (the whole
+# function_definition and the `def` keyword token both start there).
+query I
+SELECT bool_and(end_column > start_column)
+FROM read_ast('test/data/test_native_context.py', source := 'full')
+WHERE semantic_type = 240 AND start_line = 1;
+----
+true
+
+# The all-zero symptom: no node may report a zero start_column at FULL level.
+query I
+SELECT count(*)
+FROM read_ast('test/data/test_native_context.py', source := 'full')
+WHERE start_column = 0;
+----
+0
+
+# Columns must vary across the file — a constant would pass the checks above
+# while still carrying no positional information.
+query I
+SELECT count(DISTINCT start_column) > 1
+FROM read_ast('test/data/test_native_context.py', source := 'full');
+----
+true
+
+# =============================================================================
+# Columns track nesting, not just presence
+# =============================================================================
+
+# An indented body statement must start further right than its enclosing def.
+query I
+SELECT min(start_column) > 1
+FROM read_ast('test/data/test_native_context.py', source := 'full')
+WHERE start_line = 3;
+----
+true
+
+# =============================================================================
+# Schema: the columns appear only at source := 'full'
+# =============================================================================
+
+query I
+SELECT count(*) FROM (DESCRIBE SELECT * FROM read_ast('test/data/test_native_context.py', source := 'full'))
+WHERE column_name IN ('start_column', 'end_column');
+----
+2
+
+query I
+SELECT count(*) FROM (DESCRIBE SELECT * FROM read_ast('test/data/test_native_context.py', source := 'lines'))
+WHERE column_name IN ('start_column', 'end_column');
+----
+0
+
+# =============================================================================
+# Line numbers keep working (they were never broken — guard the regression)
+# =============================================================================
+
+query I
+SELECT start_line
+FROM read_ast('test/data/test_native_context.py', source := 'full')
+WHERE semantic_type = 240 AND start_line = 1
+LIMIT 1;
+----
+1

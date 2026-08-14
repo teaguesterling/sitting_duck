@@ -28,8 +28,25 @@
   - Cross-language: `'**/*.{py,js,cpp}'` or `['**/*.py', '**/*.js', '**/*.cpp']`
 - `language` (VARCHAR, optional): Language override (auto-detected from extension if omitted)
 - `ignore_errors` (BOOLEAN, optional): Continue processing when encountering syntax errors (default: false)
-- `peek_size` (INTEGER, optional): Number of characters to include in peek field (default: 120)
-- `peek_mode` (VARCHAR, optional): How to extract peek text - 'auto', 'chars', 'lines' (default: 'auto')
+- `peek` (VARCHAR | INTEGER, optional): How much source text to put in the `peek`
+  column (default: `'smart'`). Accepts:
+  - `'none'` — omit the `peek` column entirely
+  - `'smart'` — a short preview, currently capped at 80 characters
+  - `'full'` — the node's complete source text, however large
+  - an INTEGER — requested preview size in characters
+  - any of the above with `'+schema'` appended (e.g. `'none+schema'`) to keep the
+    column in the schema while suppressing its content
+
+  ⚠️ **Known limitation:** a numeric `peek` is accepted but **not currently
+  honoured** — the output is the same 80 characters `'smart'` produces,
+  regardless of the size requested. Until that is fixed, the effective choice is
+  `'smart'` (80 chars) or `'full'` (unbounded). See "Extracting source from
+  minified files" below.
+
+> **Superseded parameters.** `peek_size` (INTEGER) and `peek_mode` (VARCHAR) are
+> legacy and retained only for backward compatibility. Use `peek` instead.
+> Note that `peek_mode` takes `'none' | 'smart' | 'full' | 'custom'` — *not*
+> `'auto' | 'chars' | 'lines'`, which are not valid values and are rejected.
 
 **Returns:** Table with complete AST node data
 
@@ -41,9 +58,9 @@
 | `file_path` | VARCHAR | Source file path |
 | `language` | VARCHAR | Detected programming language |
 | `start_line` | UINTEGER | Starting line number (1-based) |
-| `start_column` | UINTEGER | Starting column (1-based) |
 | `end_line` | UINTEGER | Ending line number (1-based) |
-| `end_column` | UINTEGER | Ending column (1-based) |
+| `start_column` | UINTEGER | Starting column (1-based). **Only present when `source := 'full'`** — see note below |
+| `end_column` | UINTEGER | Ending column (1-based). **Only present when `source := 'full'`** — see note below |
 | `parent_id` | BIGINT | Parent node ID (NULL for root) |
 | `depth` | UINTEGER | Tree depth (0 for root) |
 | `sibling_index` | UINTEGER | Position among siblings (0-based) |
@@ -53,6 +70,51 @@
 | `semantic_type` | UTINYINT | Universal semantic category (0-255) |
 | `flags` | UTINYINT | Universal semantic flags (IS_CONSTRUCT, IS_EMBODIED) |
 | `arity_bin` | UTINYINT | Binned arity for analysis |
+
+> **Column availability.** The default projection is 21 columns. Passing
+> `source := 'full'` adds `start_column` and `end_column` (23 columns).
+>
+> ⚠️ **Released builds return 0.** In published builds up to and including
+> `f7b9c60`, `start_column` and `end_column` are **always 0** on every file:
+> `read_ast`'s parsing path populates the flattened `source_start_column` /
+> `source_end_column` fields, while the table projection read the legacy
+> `start_column` / `end_column` members, which keep their zero initializer.
+> Fixed in this branch; if you are on a released build, verify before relying
+> on these columns.
+
+### Extracting source from minified files
+
+Minified bundles are the hard case for source extraction, because every node
+reports `start_line = end_line = 1`: a single "line" can be tens of thousands of
+characters, so line-addressed extraction returns the whole file.
+
+This matters because **every `ast_get_source*` function is line-addressed**
+(`ast_get_source(file_path, start_line, end_line)`,
+`ast_get_source_numbered(...)`, `ast_get_source_line(file_path, line_num)`).
+On minified input they cannot isolate a node.
+
+That leaves `peek` as the only character-oriented extraction path, and the two
+limitations noted above currently constrain it:
+
+| Approach | Minified input |
+|---|---|
+| `ast_get_source*` | Unusable — line-addressed, and everything is line 1 |
+| `start_column` / `end_column` | Unusable — always 0 (see above) |
+| `peek := 'smart'` | Works, but capped at 80 characters |
+| `peek := <integer>` | Size not yet honoured — behaves as `'smart'` |
+| `peek := 'full'` | Works, but unbounded — a single node can be tens of KB |
+
+**Practical recommendation today:** use `peek := 'smart'` for triage (safe and
+bounded) and `peek := 'full'` when you need the complete node and can tolerate
+the size. Combine with `semantic_type` to narrow the node set first — for
+example `semantic_type = 144` (FLOW_CONDITIONAL) to find decision sites rather
+than every textual match:
+
+```sql
+SELECT type, name, peek
+FROM read_ast('bundle.js', peek := 'full')
+WHERE semantic_type = 144 AND peek LIKE '%win32%';
+```
 
 **Examples:**
 ```sql
