@@ -74,9 +74,13 @@
 > **Column availability.** The default projection is 21 columns. Passing
 > `source := 'full'` adds `start_column` and `end_column` (23 columns).
 >
-> ⚠️ **Known limitation:** `start_column` and `end_column` are currently
-> **always 0**, on every file — they are present in the schema but never
-> populated. Do not build extraction on them yet.
+> ⚠️ **Released builds return 0.** In published builds up to and including
+> `f7b9c60`, `start_column` and `end_column` are **always 0** on every file:
+> `read_ast`'s parsing path populates the flattened `source_start_column` /
+> `source_end_column` fields, while the table projection read the legacy
+> `start_column` / `end_column` members, which keep their zero initializer.
+> Fixed in this branch; if you are on a released build, verify before relying
+> on these columns.
 
 ### Extracting source from minified files
 
