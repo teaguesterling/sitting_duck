@@ -16,10 +16,16 @@ LOAD sitting_duck;
 # Columns are 1-based (the parser adds 1 to tree-sitter's 0-based column), so a
 # definition starting in the leftmost position reports start_column = 1.
 #
-# Regression: both table projections used to read the legacy start_column /
-# end_column members while read_ast's parsing path populated only the flattened
-# source_start_column / source_end_column fields, so every row came back 0.
-# Line numbers were unaffected, which is why this stayed hidden.
+# This is an invariant test, NOT a regression guard for any specific commit.
+# An older community build (extension_version f7b9c60) returned 0 for every
+# node here; builds from v1.9.0 on do not. The projection change in #100 was
+# measured to be a behavioral no-op — pre- and post-change builds emit
+# byte-identical columns over 30,144 nodes across 129 files — so this test
+# passes on both, and would not have caught that change either way.
+#
+# What it does guard: that columns stay populated, vary across the file, and
+# track nesting. Line numbers were unaffected by the historical bug, which is
+# why spot-checking start_line hid it.
 
 # =============================================================================
 # Columns are present and populated at source := 'full'

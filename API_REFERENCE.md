@@ -74,16 +74,16 @@
 > **Column availability.** The default projection is 21 columns. Passing
 > `source := 'full'` adds `start_column` and `end_column` (23 columns).
 >
-> ⚠️ **v1.10.0 and v1.10.1 return 0.** In those two releases `start_column` and
-> `end_column` are **always 0** on every file: since the runtime-loadable
-> grammar work (#80), `read_ast`'s parsing path populates the flattened
-> `source_start_column` / `source_end_column` fields, while the table projection
-> still read the legacy `start_column` / `end_column` members, which keep their
-> zero initializer. Line numbers were unaffected, which is why it went unnoticed.
+> **Older builds returned 0.** A community build reporting `extension_version`
+> `f7b9c60` returned `start_column = 0` for all 169 nodes of
+> `test/data/test_native_context.py` under `source := 'full'`. Line numbers were
+> unaffected, so anything spot-checking `start_line` looked correct.
 >
-> Fixed in **v1.10.2**. Releases before v1.10.0 are also unaffected — they
-> predate #80 and populate the legacy fields. If you are on v1.10.0 or v1.10.1,
-> upgrade rather than working around it.
+> This is **already fixed in v1.9.0 and later** — verified against the community
+> build reporting `1da4374`, which returns 52 distinct column values on that same
+> file. If you see zeros, check what you actually have loaded before anything
+> else: `SELECT extension_version, install_path FROM duckdb_extensions() WHERE
+> extension_name = 'sitting_duck'`.
 
 ### Extracting source from minified files
 
@@ -96,12 +96,12 @@ This matters because **every `ast_get_source*` function is line-addressed**
 `ast_get_source_numbered(...)`, `ast_get_source_line(file_path, line_num)`).
 On minified input they cannot isolate a node.
 
-Two character-oriented paths remain, and on v1.10.2 both work:
+Two character-oriented paths remain, and on v1.9.0+ both work:
 
 | Approach | Minified input |
 |---|---|
 | `ast_get_source*` | Unusable — line-addressed, and everything is line 1 |
-| `start_column` / `end_column` | Works (v1.10.2+) — the only way to locate a node *within* the single line |
+| `start_column` / `end_column` | Works (v1.9.0+) — the only way to locate a node *within* the single line |
 | `peek := 'smart'` | Works, but capped at 80 characters |
 | `peek := <integer>` | Works — an explicit character budget, e.g. `peek := '400'` |
 | `peek := 'full'` | Works, but unbounded — a single node can be tens of KB |
