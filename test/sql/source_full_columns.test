@@ -33,9 +33,11 @@ WHERE semantic_type = 240 AND start_line = 1;
 ----
 1
 
-# end_column must be past the start of the node, not zero.
+# end_column must be past the start of the node, not zero. Aggregated because
+# line 1 matches more than one node at this semantic type (the whole
+# function_definition and the `def` keyword token both start there).
 query I
-SELECT end_column > start_column
+SELECT bool_and(end_column > start_column)
 FROM read_ast('test/data/test_native_context.py', source := 'full')
 WHERE semantic_type = 240 AND start_line = 1;
 ----
