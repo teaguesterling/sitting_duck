@@ -37,11 +37,11 @@
   - any of the above with `'+schema'` appended (e.g. `'none+schema'`) to keep the
     column in the schema while suppressing its content
 
-  ⚠️ **Known limitation:** a numeric `peek` is accepted but **not currently
-  honoured** — the output is the same 80 characters `'smart'` produces,
-  regardless of the size requested. Until that is fixed, the effective choice is
-  `'smart'` (80 chars) or `'full'` (unbounded). See "Extracting source from
-  minified files" below.
+  A numeric `peek` is honoured exactly: `peek := '20'` yields peeks of at most
+  20 characters, `peek := '400'` at most 400. This is the middle ground between
+  `'smart'` (fixed 80-character cap) and `'full'` (unbounded), and it is the
+  setting to reach for on minified input — see "Extracting source from minified
+  files" below.
 
 > **Superseded parameters.** `peek_size` (INTEGER) and `peek_mode` (VARCHAR) are
 > legacy and retained only for backward compatibility. Use `peek` instead.
@@ -74,13 +74,16 @@
 > **Column availability.** The default projection is 21 columns. Passing
 > `source := 'full'` adds `start_column` and `end_column` (23 columns).
 >
-> ⚠️ **Released builds return 0.** In published builds up to and including
-> `f7b9c60`, `start_column` and `end_column` are **always 0** on every file:
-> `read_ast`'s parsing path populates the flattened `source_start_column` /
-> `source_end_column` fields, while the table projection read the legacy
-> `start_column` / `end_column` members, which keep their zero initializer.
-> Fixed in this branch; if you are on a released build, verify before relying
-> on these columns.
+> **Older builds returned 0.** A community build reporting `extension_version`
+> `f7b9c60` returned `start_column = 0` for all 169 nodes of
+> `test/data/test_native_context.py` under `source := 'full'`. Line numbers were
+> unaffected, so anything spot-checking `start_line` looked correct.
+>
+> This is **already fixed in v1.9.0 and later** — verified against the community
+> build reporting `1da4374`, which returns 52 distinct column values on that same
+> file. If you see zeros, check what you actually have loaded before anything
+> else: `SELECT extension_version, install_path FROM duckdb_extensions() WHERE
+> extension_name = 'sitting_duck'`.
 
 ### Extracting source from minified files
 
@@ -93,20 +96,25 @@ This matters because **every `ast_get_source*` function is line-addressed**
 `ast_get_source_numbered(...)`, `ast_get_source_line(file_path, line_num)`).
 On minified input they cannot isolate a node.
 
-That leaves `peek` as the only character-oriented extraction path, and the two
-limitations noted above currently constrain it:
+Two character-oriented paths remain, and on v1.9.0+ both work:
 
 | Approach | Minified input |
 |---|---|
 | `ast_get_source*` | Unusable — line-addressed, and everything is line 1 |
-| `start_column` / `end_column` | Unusable — always 0 (see above) |
+| `start_column` / `end_column` | Works (v1.9.0+) — the only way to locate a node *within* the single line |
 | `peek := 'smart'` | Works, but capped at 80 characters |
-| `peek := <integer>` | Size not yet honoured — behaves as `'smart'` |
+| `peek := <integer>` | Works — an explicit character budget, e.g. `peek := '400'` |
 | `peek := 'full'` | Works, but unbounded — a single node can be tens of KB |
 
-**Practical recommendation today:** use `peek := 'smart'` for triage (safe and
-bounded) and `peek := 'full'` when you need the complete node and can tolerate
-the size. Combine with `semantic_type` to narrow the node set first — for
+On a 40-function minified bundle, `source := 'full'` reports one distinct
+`start_line` and 600 distinct `start_column` values — so the columns carry all
+the positional information the line numbers have lost, and a node can be sliced
+out of the raw text by character offset.
+
+**Practical recommendation:** use `peek := 'smart'` for triage (safe and
+bounded), a numeric `peek` when 80 characters is too few but `'full'` is too
+much, and `peek := 'full'` when you need the complete node and can tolerate the
+size. Combine with `semantic_type` to narrow the node set first — for
 example `semantic_type = 144` (FLOW_CONDITIONAL) to find decision sites rather
 than every textual match:
 
