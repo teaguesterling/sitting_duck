@@ -16,7 +16,8 @@ LOAD sitting_duck;
 # PYTHON: async modifier extraction
 # =============================================================================
 
-# Async functions should have [async] (including decorated async)
+# Async functions should have [async]. Contract A: decorators live in `annotations`,
+# not `modifiers`, so a decorated async function's modifiers are keyword-only ([async]).
 query TT
 SELECT name, modifiers FROM read_ast('test/data/modifier_audit/async_functions.py', context := 'native')
 WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags) AND name != ''
@@ -26,7 +27,7 @@ fetch_data	[async]
 sync_helper	[]
 process_items	[async]
 some_decorator	[]
-decorated_async	[async, @some_decorator]
+decorated_async	[async]
 
 # Verify: list_contains works for filtering
 query I
