@@ -296,6 +296,28 @@ inline void EnsureModifier(vector<string> &modifiers, const string &mod, bool pr
 	}
 }
 
+// Contract A: annotations/decorators are always '@'-prefixed in extracted text.
+// Split them out of a mixed modifier list into the dedicated `annotations` string
+// (joined by ", "), leaving `modifiers` keyword-only. No-op when there are none.
+inline void SplitAnnotations(vector<string> &modifiers, string &annotations) {
+	vector<string> keyword_only;
+	string annots;
+	for (const auto &m : modifiers) {
+		if (!m.empty() && m[0] == '@') {
+			if (!annots.empty()) {
+				annots += ", ";
+			}
+			annots += m;
+		} else {
+			keyword_only.push_back(m);
+		}
+	}
+	if (!annots.empty()) {
+		annotations = annots;
+	}
+	modifiers = std::move(keyword_only);
+}
+
 // Helper function to build qualified name from context
 string BuildQualifiedName(TSNode node, const string &content, const string &base_name);
 
