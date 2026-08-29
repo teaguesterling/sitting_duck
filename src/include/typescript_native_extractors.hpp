@@ -34,6 +34,12 @@ struct TypeScriptNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>
 		auto modifiers = ExtractTypeScriptModifiers(node, content);
 		context.modifiers = modifiers;
 
+		// Contract A: decorators -> annotations (TS previously dropped them entirely)
+		for (const auto &deco : ExtractDecoratorTexts(node, content)) {
+			context.modifiers.push_back(deco);
+		}
+		SplitAnnotations(context.modifiers, context.annotations);
+
 		return context;
 	}
 
@@ -413,6 +419,11 @@ struct TypeScriptNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
 			context.parameters.clear();
 		}
 
+		// Contract A: class/interface/enum decorators -> annotations
+		for (const auto &deco : ExtractDecoratorTexts(node, content)) {
+			context.modifiers.push_back(deco);
+		}
+		SplitAnnotations(context.modifiers, context.annotations);
 		return context;
 	}
 

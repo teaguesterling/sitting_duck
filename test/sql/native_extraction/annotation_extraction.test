@@ -72,3 +72,39 @@ WHERE name = 'process'
   AND list_contains(modifiers, 'public') AND list_contains(modifiers, 'synchronized');
 ----
 1
+
+# =============================================================================
+# TYPESCRIPT — decorators -> annotations (previously dropped entirely)
+# =============================================================================
+
+# No decorator ('@...') leaks into modifiers.
+query I
+SELECT COUNT(*) FROM read_ast('test/data/annotation_extraction/decorators.ts', context := 'native')
+WHERE (is_function_definition(semantic_type) OR is_class_definition(semantic_type))
+  AND array_to_string(modifiers, ',') LIKE '%@%';
+----
+0
+
+# Class and method decorators are exposed via annotations.
+query TT
+SELECT name, annotations FROM read_ast('test/data/annotation_extraction/decorators.ts', context := 'native')
+WHERE name IN ('Service', 'fetch') AND annotations IS NOT NULL AND annotations != ''
+ORDER BY name;
+----
+Service	@Component({selector: "app"})
+fetch	@Input()
+
+# :decorated (reads annotations) matches the decorated class + method.
+query I
+SELECT COUNT(*) FROM ast_select('test/data/annotation_extraction/decorators.ts', ':decorated');
+----
+2
+
+# An undecorated method after a decorated one must NOT inherit the prior decorator
+# (contiguous-run guard: preceding-sibling scan stops at the first non-decorator).
+query I
+SELECT COUNT(*) FROM read_ast('test/data/annotation_extraction/decorators.ts', context := 'native')
+WHERE name = 'validate' AND is_function_definition(semantic_type)
+  AND (annotations IS NULL OR annotations IN ('', '{}'));
+----
+1
