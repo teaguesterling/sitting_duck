@@ -1,0 +1,42 @@
+# name: test/sql/numeric_peek.test
+# description: numeric peek := N truncates previews to N characters (guards the
+#   behavior falsely reported broken in tracker bug #012 — the report came from
+#   a stale local install; this pins the real contract so a regression cannot
+#   hide behind schema-shaped output)
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# read_ast: every non-NULL peek respects the requested cap
+query I
+SELECT bool_and(length(peek) <= 20) FROM read_ast('test/data/python/simple.py', peek := 20) WHERE peek IS NOT NULL;
+----
+true
+
+# ...and the cap actually bites: at least one node's smart preview would exceed it
+query I
+SELECT max(length(peek)) = 20 FROM read_ast('test/data/python/simple.py', peek := 20) WHERE peek IS NOT NULL;
+----
+true
+
+# parse_ast honours the same contract
+query I
+SELECT bool_and(length(peek) <= 15) FROM parse_ast('def f():' || chr(10) || '    return "a deliberately long string constant exceeding any smart preview cap"', 'python', peek := 15) WHERE peek IS NOT NULL;
+----
+true
+
+# different sizes yield different truncation (the parameter is not a no-op)
+query I
+SELECT (SELECT max(length(peek)) FROM read_ast('test/data/python/simple.py', peek := 20) WHERE peek IS NOT NULL)
+     < (SELECT max(length(peek)) FROM read_ast('test/data/python/simple.py', peek := 60) WHERE peek IS NOT NULL);
+----
+true
+
+# smart mode still caps at 80 (documents the default's contract alongside)
+query I
+SELECT bool_and(length(peek) <= 80) FROM read_ast('test/data/python/simple.py', peek := 'smart') WHERE peek IS NOT NULL;
+----
+true
