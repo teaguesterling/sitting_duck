@@ -42,6 +42,7 @@ struct JavaNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 		// Extract access modifiers and other modifiers
 		auto modifiers = ExtractJavaModifiers(node, content);
 		context.modifiers = modifiers;
+		SplitAnnotations(context.modifiers, context.annotations);
 
 		return context;
 	}
@@ -305,6 +306,7 @@ struct JavaNativeExtractor<NativeExtractionStrategy::CLASS_WITH_METHODS> {
 			context.parameters.clear();
 		}
 
+		SplitAnnotations(context.modifiers, context.annotations);
 		return context;
 	}
 
@@ -710,6 +712,7 @@ struct JavaNativeExtractor<NativeExtractionStrategy::VARIABLE_WITH_TYPE> {
 			context.modifiers.clear();
 		}
 
+		SplitAnnotations(context.modifiers, context.annotations);
 		return context;
 	}
 

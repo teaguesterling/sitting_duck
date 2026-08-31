@@ -76,12 +76,13 @@ WHERE type = 'interface_declaration' AND name = 'Athlete';
 ----
 Athlete	[{'name': Runner, 'type': extends}, {'name': Serializable, 'type': extends}]	[interface]
 
-# Test: Functional interface with annotation
-query ITTT
-SELECT name, signature_type, parameters, modifiers FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
+# Test: Functional interface with annotation.
+# Contract A: @FunctionalInterface lands in `annotations`, not `modifiers`.
+query ITTTT
+SELECT name, signature_type, parameters, modifiers, annotations FROM read_ast('test/data/languages/java/Inheritance.java', context := 'native')
 WHERE type = 'interface_declaration' AND name = 'SoundMaker';
 ----
-SoundMaker	functional_interface	[]	[interface, @FunctionalInterface]
+SoundMaker	functional_interface	[]	[interface]	@FunctionalInterface
 
 # =============================================================================
 # DEFINITION_ENUM - Enum Declarations
@@ -98,19 +99,20 @@ DogBreed	[{'name': Serializable, 'type': implements}]	[enum]
 # DEFINITION_FUNCTION - Method Declarations
 # =============================================================================
 
-# Test: Method return types are extracted correctly (includes inner interface method)
-query ITT
-SELECT name, signature_type, modifiers FROM read_ast('test/data/languages/java/Test.java', context := 'native')
+# Test: Method return types are extracted correctly (includes inner interface method).
+# Contract A: @Override moves from modifiers to the annotations column.
+query ITTT
+SELECT name, signature_type, modifiers, annotations FROM read_ast('test/data/languages/java/Test.java', context := 'native')
 WHERE type = 'method_declaration' AND name IS NOT NULL
 ORDER BY start_line;
 ----
-toString	String	[@Override, public]
-increment	void	[public]
-getCounter	int	[protected]
-reset	void	[private]
-main	void	[public, static]
-processData	String	[private, static]
-process	void	[]
+toString	String	[public]	@Override
+increment	void	[public]	NULL
+getCounter	int	[protected]	NULL
+reset	void	[private]	NULL
+main	void	[public, static]	NULL
+processData	String	[private, static]	NULL
+process	void	[]	NULL
 
 # Test: Method parameters are extracted
 query IT

@@ -34,9 +34,16 @@ struct PythonNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 		// Extract function parameters
 		context.parameters = ExtractPythonParameters(node, content);
 
-		// Extract decorators if present
+		// Contract A: decorators belong in `annotations`; `modifiers` stays keyword-only.
 		auto decorators = ExtractPythonDecorators(node, content);
-		context.modifiers = decorators;
+		if (!decorators.empty()) {
+			string joined;
+			for (size_t k = 0; k < decorators.size(); k++) {
+				joined += (k ? ", " : "");
+				joined += decorators[k];
+			}
+			context.annotations = joined;
+		}
 
 		// Scan children for keyword modifiers (async, etc.)
 		// tree-sitter-python emits 'async' as a child of function_definition,

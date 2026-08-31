@@ -296,6 +296,76 @@ inline void EnsureModifier(vector<string> &modifiers, const string &mod, bool pr
 	}
 }
 
+// Contract A: annotations/decorators are always '@'-prefixed in extracted text.
+// Split them out of a mixed modifier list into the dedicated `annotations` string
+// (joined by ", "), leaving `modifiers` keyword-only. No-op when there are none.
+inline void SplitAnnotations(vector<string> &modifiers, string &annotations) {
+	vector<string> keyword_only;
+	string annots;
+	for (const auto &m : modifiers) {
+		if (!m.empty() && m[0] == '@') {
+			if (!annots.empty()) {
+				annots += ", ";
+			}
+			annots += m;
+		} else {
+			keyword_only.push_back(m);
+		}
+	}
+	if (!annots.empty()) {
+		annotations = annots;
+	}
+	modifiers = std::move(keyword_only);
+}
+
+// Collect '@decorator' text from a declaration node's children and its preceding
+// siblings (decorators sit before/inside the declaration in TS/Python-style grammars).
+inline vector<string> ExtractDecoratorTexts(TSNode node, const string &content) {
+	vector<string> out;
+	auto grab = [&](TSNode n) {
+		if (string(ts_node_type(n)) == "decorator") {
+			uint32_t s = ts_node_start_byte(n);
+			uint32_t e = ts_node_end_byte(n);
+			if (s < content.size() && e <= content.size() && e > s) {
+				out.push_back(content.substr(s, e - s));
+			}
+		}
+	};
+	uint32_t child_count = ts_node_child_count(node);
+	for (uint32_t i = 0; i < child_count; i++) {
+		grab(ts_node_child(node, i));
+	}
+	// Preceding siblings: only the CONTIGUOUS run of decorators immediately before
+	// the node belong to it. A non-decorator sibling (e.g. a prior method) ends the
+	// run, so an earlier declaration's decorators don't bleed onto this one.
+	TSNode parent = ts_node_parent(node);
+	if (!ts_node_is_null(parent)) {
+		uint32_t parent_count = ts_node_child_count(parent);
+		uint32_t self_idx = parent_count;
+		for (uint32_t i = 0; i < parent_count; i++) {
+			if (ts_node_eq(ts_node_child(parent, i), node)) {
+				self_idx = i;
+				break;
+			}
+		}
+		vector<string> preceding;
+		for (uint32_t i = self_idx; i-- > 0;) {
+			TSNode sib = ts_node_child(parent, i);
+			if (string(ts_node_type(sib)) != "decorator") {
+				break; // run ends at the first non-decorator
+			}
+			uint32_t s = ts_node_start_byte(sib);
+			uint32_t e = ts_node_end_byte(sib);
+			if (s < content.size() && e <= content.size() && e > s) {
+				preceding.push_back(content.substr(s, e - s));
+			}
+		}
+		// preceding was collected nearest-first; restore source order
+		out.insert(out.end(), preceding.rbegin(), preceding.rend());
+	}
+	return out;
+}
+
 // Helper function to build qualified name from context
 string BuildQualifiedName(TSNode node, const string &content, const string &base_name);
 

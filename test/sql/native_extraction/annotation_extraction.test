@@ -1,0 +1,110 @@
+# name: test/sql/native_extraction/annotation_extraction.test
+# description: Contract A — decorators/annotations land in the `annotations` column, not `modifiers`.
+#              `modifiers` stays keyword-only; `:decorated` (which reads `annotations`) starts matching.
+# group: [native_extraction]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# PYTHON — function decorators -> annotations (not modifiers)
+# =============================================================================
+
+# Contract A invariant: no decorator ('@...') leaks into modifiers.
+query I
+SELECT COUNT(*) FROM read_ast('test/data/annotation_extraction/decorators.py', context := 'native')
+WHERE is_function_definition(semantic_type) AND array_to_string(modifiers, ',') LIKE '%@%';
+----
+0
+
+# Decorators are exposed via the annotations column, in source order.
+query TT
+SELECT name, annotations FROM read_ast('test/data/annotation_extraction/decorators.py', context := 'native')
+WHERE is_function_definition(semantic_type) AND name IN ('handler', 'name')
+ORDER BY name;
+----
+handler	@app.route("/api"), @staticmethod
+name	@property
+
+# Undecorated functions carry no annotations.
+query I
+SELECT COUNT(*) FROM read_ast('test/data/annotation_extraction/decorators.py', context := 'native')
+WHERE is_function_definition(semantic_type) AND name = 'plain'
+  AND (annotations IS NULL OR annotations IN ('', '{}'));
+----
+1
+
+# The :decorated pseudo-class (reads annotations) now matches the two decorated defs.
+query I
+SELECT COUNT(*) FROM ast_select('test/data/annotation_extraction/decorators.py', '.func:decorated');
+----
+2
+
+# =============================================================================
+# JAVA — @Annotations -> annotations column (methods AND classes), not modifiers
+# =============================================================================
+
+# No annotation ('@...') leaks into modifiers, for methods or classes.
+query I
+SELECT COUNT(*) FROM read_ast('test/data/annotation_extraction/Annotated.java', context := 'native')
+WHERE (is_function_definition(semantic_type) OR is_class_definition(semantic_type))
+  AND array_to_string(modifiers, ',') LIKE '%@%';
+----
+0
+
+# Annotated methods and the class expose their annotation via annotations.
+query TT
+SELECT name, annotations FROM read_ast('test/data/annotation_extraction/Annotated.java', context := 'native')
+WHERE name IN ('Base', 'process', 'legacy')
+  AND annotations IS NOT NULL AND annotations != ''
+ORDER BY name;
+----
+Base	@Deprecated
+legacy	@Deprecated
+process	@Override
+
+# Keyword modifiers still land in modifiers (order-independent).
+query I
+SELECT COUNT(*) FROM read_ast('test/data/annotation_extraction/Annotated.java', context := 'native')
+WHERE name = 'process'
+  AND list_contains(modifiers, 'public') AND list_contains(modifiers, 'synchronized');
+----
+1
+
+# =============================================================================
+# TYPESCRIPT — decorators -> annotations (previously dropped entirely)
+# =============================================================================
+
+# No decorator ('@...') leaks into modifiers.
+query I
+SELECT COUNT(*) FROM read_ast('test/data/annotation_extraction/decorators.ts', context := 'native')
+WHERE (is_function_definition(semantic_type) OR is_class_definition(semantic_type))
+  AND array_to_string(modifiers, ',') LIKE '%@%';
+----
+0
+
+# Class and method decorators are exposed via annotations.
+query TT
+SELECT name, annotations FROM read_ast('test/data/annotation_extraction/decorators.ts', context := 'native')
+WHERE name IN ('Service', 'fetch') AND annotations IS NOT NULL AND annotations != ''
+ORDER BY name;
+----
+Service	@Component({selector: "app"})
+fetch	@Input()
+
+# :decorated (reads annotations) matches the decorated class + method.
+query I
+SELECT COUNT(*) FROM ast_select('test/data/annotation_extraction/decorators.ts', ':decorated');
+----
+2
+
+# An undecorated method after a decorated one must NOT inherit the prior decorator
+# (contiguous-run guard: preceding-sibling scan stops at the first non-decorator).
+query I
+SELECT COUNT(*) FROM read_ast('test/data/annotation_extraction/decorators.ts', context := 'native')
+WHERE name = 'validate' AND is_function_definition(semantic_type)
+  AND (annotations IS NULL OR annotations IN ('', '{}'));
+----
+1
