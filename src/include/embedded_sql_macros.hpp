@@ -196,7 +196,7 @@ CREATE OR REPLACE MACRO ast_qualified_name_as_string(qn) AS (
     CASE
         WHEN qn IS NULL OR len(qn) = 0 THEN NULL
         ELSE list_aggregate(
-            list_transform(qn, s ->
+            list_transform(qn, lambda s:
                 CASE
                     WHEN is_function_definition(s.semantic_type) THEN 'F'
                     WHEN is_class_definition(s.semantic_type) THEN 'C'

@@ -1,0 +1,31 @@
+# name: test/sql/lambda_syntax.test
+# description: Macros must use the modern `lambda x:` syntax, not the deprecated `x ->`
+#              arrow (removed in a future DuckDB release). Guards against regressions
+#              in embedded SQL macros like ast_qualified_name_as_string.
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Force DuckDB to REJECT the deprecated single-arrow lambda. If any embedded macro
+# still uses `x -> ...`, evaluating it under this setting errors out.
+statement ok
+SET lambda_syntax='DISABLE_SINGLE_ARROW';
+
+# ast_qualified_name_as_string uses list_transform with a lambda; it must work with
+# single-arrow disabled (i.e. it uses the modern `lambda s:` form).
+statement ok
+SELECT ast_qualified_name_as_string(qualified_name)
+FROM read_ast('test/data/comprehensive_python_test.py', context := 'native')
+WHERE is_function_definition(semantic_type) AND qualified_name IS NOT NULL;
+
+# And it still produces the expected scope-path string.
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/comprehensive_python_test.py', context := 'native')
+WHERE is_function_definition(semantic_type)
+  AND ast_qualified_name_as_string(qualified_name) = 'F[basic_function]';
+----
+1
