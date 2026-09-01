@@ -23,10 +23,11 @@ true
 # Test 3: Explicit Go language specification
 # ==========================================
 
+# go grammar v0.25.0 (#107) names finer-grained nodes (e.g. interpreted_string_literal_content): 51 -> 53
 query I
 SELECT COUNT(*) FROM read_ast('test/data/go/simple.go', 'go') WHERE name IS NOT NULL;
 ----
-51
+53
 
 # Test 4: Go function name extraction
 # ===================================
@@ -67,11 +68,12 @@ package_identifier	NAME_IDENTIFIER	1
 # Test 7: Go tree structure validation
 # ====================================
 
+# go grammar v0.25.0 (#107): +2 nodes, +1 depth level (string-literal-content nesting): 8/51 -> 9/53
 query II
 SELECT MAX(depth) as max_depth, COUNT(*) as total_nodes
 FROM read_ast('test/data/go/simple.go');
 ----
-8	51
+9	53
 
 # Test 8: Go identifier extraction
 # ================================

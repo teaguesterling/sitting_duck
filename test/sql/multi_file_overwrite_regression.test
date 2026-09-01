@@ -94,7 +94,7 @@ FROM read_ast([
 GROUP BY language
 ORDER BY language;
 ----
-go	51	1
+go	53	1
 javascript	309	1
 python	110	1
 
