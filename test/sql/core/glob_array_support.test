@@ -115,7 +115,7 @@ HAVING COUNT(*) > 0
 ORDER BY language;
 ----
 cpp	534	2
-go	501	4
+go	515	4
 javascript	877	5
 python	3272	17
 

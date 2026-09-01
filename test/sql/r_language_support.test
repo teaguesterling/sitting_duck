@@ -69,11 +69,12 @@ WHERE type = 'comment';
 16
 
 # Test 10: Identifier detection
+# r grammar bump (#107): +2 named identifiers, 73 -> 75 (no ERROR nodes)
 query I
-SELECT COUNT(*) FROM read_ast('test/data/r/simple.R') 
+SELECT COUNT(*) FROM read_ast('test/data/r/simple.R')
 WHERE type = 'identifier' AND name IS NOT NULL;
 ----
-73
+75
 
 # Test 11: R-specific operators (assignment operators)
 query I
