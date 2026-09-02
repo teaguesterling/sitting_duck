@@ -4,7 +4,8 @@
 --
 -- ast_to_blocks converts parsed ASTs into duck_blocks — the document-element
 -- STRUCT spec shared by the markdown / webbed / duck_block_utils extensions
--- (duck_block_utils docs/duck_blocks_spec.md, v0.4.0).
+-- (duck_block_utils SPEC_VERSION 6.2; vendored vocabulary + conformance macros
+-- in third_party/duck_block_utils/, validated by test/sql/duck_blocks_conformance.test).
 --
 -- duck_blocks is a SPEC, not a dependency: these macros emit conforming
 -- STRUCTs and require nothing to be loaded. If duck_block_utils IS loaded,
@@ -14,7 +15,7 @@
 --   PRAGMA duck_block_render;
 --   SELECT db_render_blocks(blocks) FROM ast_to_blocks_list('src/main.py');
 --
--- Element shape (spec v0.4.0):
+-- Element shape (SPEC_VERSION 6.2):
 --   STRUCT(kind VARCHAR, element_type VARCHAR, content VARCHAR, level INTEGER,
 --          encoding VARCHAR, attributes MAP(VARCHAR, VARCHAR),
 --          element_order INTEGER)
@@ -22,8 +23,10 @@
 -- Spec fine print this producer honors:
 --   * kind is always 'block' (we emit no inlines).
 --   * A heading's semantic level lives in attributes['heading_level'] as a
---     STRING ('1'..'6'); the `level` field is NULL for headings. `level` is
---     structural nesting depth and is only set for metadata blocks (0).
+--     STRING ('1'..'6'), NOT in the `level` field. `level` is structural
+--     nesting depth: SPEC_VERSION 3.0+ requires it >= 1 for every element
+--     (no NULLs, never semantic). This outline is flat — no section/div
+--     containers — so every block we emit is a top-level sibling at level 1.
 --   * code blocks carry attributes['language']; metadata uses encoding 'yaml'.
 --   * element_order starts at 0 and increases in document order, restarting
 --     per file (each file's element list is a document of its own; when
@@ -210,7 +213,7 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
                 'classes: ' || (SELECT count(*) FROM defs d
                                 WHERE d.file_path = f.file_path
                                   AND is_class_definition(d.semantic_type))::VARCHAR AS content,
-                0 AS level,
+                1 AS level,
                 'yaml' AS encoding,
                 MAP([], [])::MAP(VARCHAR, VARCHAR) AS attributes
             FROM files f
@@ -219,14 +222,15 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
             UNION ALL
 
             -- One heading per definition. Semantic level goes in
-            -- attributes['heading_level'] (string) per spec; level is NULL.
+            -- attributes['heading_level'] (string) per spec; structural level
+            -- is 1 (flat outline — headings are leaf blocks, not containers).
             SELECT
                 d.file_path,
                 d.node_id,
                 0,
                 'heading',
                 d.signature,
-                CAST(NULL AS INTEGER),
+                1,
                 'text',
                 MAP {'heading_level':
                      CASE WHEN style = 'flat'
@@ -246,7 +250,7 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
                 'paragraph',
                 d.definition_kind || ' ' || d.signature ||
                     ' (lines ' || d.start_line::VARCHAR || '-' || d.end_line::VARCHAR || ')',
-                CAST(NULL AS INTEGER),
+                1,
                 'text',
                 MAP([], [])::MAP(VARCHAR, VARCHAR)
             FROM def_info d
@@ -263,7 +267,7 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
                 2,
                 'code',
                 d.peek,
-                CAST(NULL AS INTEGER),
+                1,
                 'text',
                 MAP {'language': coalesce(d.language, 'unknown')}
             FROM def_info d

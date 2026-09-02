@@ -16,7 +16,7 @@ LOAD sitting_duck;
 #  11  def top(x: int, y: int) -> int:
 
 # =============================================================================
-# Spec conformance (duck_blocks v0.4.0)
+# Spec conformance (duck_blocks SPEC_VERSION 6.2)
 # =============================================================================
 
 # Every emitted element is kind='block'
@@ -33,12 +33,13 @@ code
 heading
 metadata
 
-# Headings: level field is NULL; heading_level attribute is a string '1'..'6'
+# Headings: structural level is 1 (SPEC 3.0+ requires an explicit depth >= 1, no NULLs);
+# the heading rank lives in the heading_level attribute as a string '1'..'6'
 query I
 SELECT count(*)
 FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
 WHERE block.element_type = 'heading'
-  AND (block.level IS NOT NULL
+  AND (block.level IS DISTINCT FROM 1
        OR block.attributes['heading_level'] IS NULL
        OR NOT block.attributes['heading_level'] IN ('1', '2', '3', '4', '5', '6'));
 ----
@@ -60,13 +61,13 @@ WHERE block.element_type = 'code';
 ----
 4	4
 
-# Metadata block: encoding yaml, structural level 0
+# Metadata block: encoding yaml, structural level 1 (SPEC 3.0+), first in document order
 query III
 SELECT block.encoding, block.level, block.element_order
 FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
 WHERE block.element_type = 'metadata';
 ----
-yaml	0	0
+yaml	1	0
 
 # element_order starts at 0 and is strictly increasing in document order
 query I

@@ -1,0 +1,81 @@
+# name: test/sql/duck_blocks_conformance.test
+# description: ast_to_blocks output validated against the vendored duck_blocks conformance macros
+# group: [sql]
+#
+# Runs the duck_block_utils conformance validator over real ast_to_blocks output,
+# so producer/spec drift is caught (tracker/bugs/014). The three macros below are
+# copied VERBATIM from third_party/duck_block_utils/duck_block_conformance.sql
+# (SPEC_VERSION 6.2, upstream 3bd7ff8) — resync BOTH together when the vendored
+# copy is bumped. See third_party/duck_block_utils/PROVENANCE.md.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# --- vendored validator (verbatim copy; keep in sync with third_party/) ---
+
+statement ok
+CREATE OR REPLACE MACRO duck_block_declared_kinds() AS (['block', 'inline', 'value']);
+
+statement ok
+CREATE OR REPLACE MACRO duck_block_declared_encodings() AS (
+    ['text', 'json', 'yaml', 'html', 'xml', 'latex', 'markdown', 'toml']
+);
+
+statement ok
+CREATE OR REPLACE MACRO duck_block_is_valid(elem) AS (
+    list_contains(duck_block_declared_kinds(), elem.kind)
+    AND elem.element_type IS NOT NULL
+    AND list_contains(duck_block_declared_encodings(), elem.encoding)
+    AND elem.level IS NOT NULL
+    AND elem.level >= 1
+    AND elem.element_order IS NOT NULL
+    AND elem.element_order >= 0
+);
+
+# =============================================================================
+# Every emitted block is conformant (level >= 1, valid kind/encoding, order >= 0)
+# =============================================================================
+
+# Python (classes + nested defs + module metadata)
+query I
+SELECT count(*) FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+WHERE NOT duck_block_is_valid(block);
+----
+0
+
+# Go (functions; regenerated grammar in #108)
+query I
+SELECT count(*) FROM ast_to_blocks('test/data/go/simple.go', 'go')
+WHERE NOT duck_block_is_valid(block);
+----
+0
+
+# summary style (emits paragraph blocks) is also conformant
+query I
+SELECT count(*) FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', style := 'summary')
+WHERE NOT duck_block_is_valid(block);
+----
+0
+
+# flat style is conformant
+query I
+SELECT count(*) FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', style := 'flat')
+WHERE NOT duck_block_is_valid(block);
+----
+0
+
+# metadata-only file (no definitions) still emits a conformant metadata block
+query I
+SELECT count(*) FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', include_bodies := false)
+WHERE NOT duck_block_is_valid(block);
+----
+0
+
+# Every block carries an explicit structural level >= 1 (no NULLs, no 0)
+query I
+SELECT count(*) FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
+WHERE block.level IS NULL OR block.level < 1;
+----
+0
