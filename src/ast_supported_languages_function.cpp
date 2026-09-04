@@ -12,7 +12,7 @@ struct SupportedLanguagesData : public GlobalTableFunctionState {
 };
 
 static unique_ptr<FunctionData> SupportedLanguagesBind(ClientContext &context, TableFunctionBindInput &input,
-                                                       vector<LogicalType> &return_types, vector<string> &names) {
+                                                       vector<LogicalType> &return_types, vector<CompatName> &names) {
 	names.emplace_back("language");
 	return_types.emplace_back(LogicalType::VARCHAR);
 

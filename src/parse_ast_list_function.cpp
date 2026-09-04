@@ -1,5 +1,6 @@
 #include "parse_ast_list_function.hpp"
 #include "unified_ast_backend.hpp"
+#include "duckdb_compat.hpp"
 #include "semantic_type_logical_type.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/function/scalar_function.hpp"
@@ -44,9 +45,9 @@ static LogicalType BuildASTStructType(const ExtractionConfig &config) {
 	for (idx_t i = 0; i < types.size(); i++) {
 		// Replace SEMANTIC_TYPE custom logical type with plain UTINYINT
 		if (IsSemanticType(types[i])) {
-			struct_children.push_back(make_pair(names[i], LogicalType::UTINYINT));
+			struct_children.push_back(make_pair(CompatMakeChildKey(names[i]), LogicalType::UTINYINT));
 		} else {
-			struct_children.push_back(make_pair(names[i], types[i]));
+			struct_children.push_back(make_pair(CompatMakeChildKey(names[i]), types[i]));
 		}
 	}
 
@@ -65,9 +66,9 @@ static Value ConvertASTResultToList(const ASTResult &result, const ExtractionCon
 	child_list_t<LogicalType> struct_children;
 	for (idx_t i = 0; i < types.size(); i++) {
 		if (IsSemanticType(types[i])) {
-			struct_children.push_back(make_pair(names[i], LogicalType::UTINYINT));
+			struct_children.push_back(make_pair(CompatMakeChildKey(names[i]), LogicalType::UTINYINT));
 		} else {
-			struct_children.push_back(make_pair(names[i], types[i]));
+			struct_children.push_back(make_pair(CompatMakeChildKey(names[i]), types[i]));
 		}
 	}
 	auto element_type = LogicalType::STRUCT(struct_children);
@@ -184,8 +185,10 @@ static Value ConvertASTResultToList(const ASTResult &result, const ExtractionCon
 // Bind Function
 //==============================================================================
 
-static unique_ptr<FunctionData> ParseASTListBind(ClientContext &context, ScalarFunction &bound_function,
-                                                 vector<unique_ptr<Expression>> &arguments) {
+// DuckDB v2.0 collapsed the scalar bind signature's three parameters into a
+// single BindScalarFunctionInput; DUCKDB_SCALAR_BIND_PARAMS expands to whichever
+// shape the DuckDB in scope declares. This bind reads none of them.
+static unique_ptr<FunctionData> ParseASTListBind(DUCKDB_SCALAR_BIND_PARAMS) {
 	return make_uniq<ParseASTListBindData>();
 }
 
@@ -194,7 +197,8 @@ static unique_ptr<FunctionData> ParseASTListBind(ClientContext &context, ScalarF
 //==============================================================================
 
 static void ParseASTListExecute(DataChunk &args, ExpressionState &state, Vector &result) {
-	auto &bind_data = state.expr.Cast<BoundFunctionExpression>().bind_info->Cast<ParseASTListBindData>();
+	// BoundFunctionExpression::bind_info is private on v2.0 (BindInfo() replaces it).
+	auto &bind_data = CompatBoundBindInfo(state.expr.Cast<BoundFunctionExpression>())->Cast<ParseASTListBindData>();
 	auto &code_vector = args.data[0];
 	auto &language_vector = args.data[1];
 
@@ -204,8 +208,8 @@ static void ParseASTListExecute(DataChunk &args, ExpressionState &state, Vector 
 	code_vector.Flatten(count);
 	language_vector.Flatten(count);
 
-	auto code_data = FlatVector::GetData<string_t>(code_vector);
-	auto language_data = FlatVector::GetData<string_t>(language_vector);
+	auto code_data = CompatFlatDataMutable<string_t>(code_vector);
+	auto language_data = CompatFlatDataMutable<string_t>(language_vector);
 	auto &code_validity = FlatVector::Validity(code_vector);
 	auto &language_validity = FlatVector::Validity(language_vector);
 
@@ -240,6 +244,26 @@ void RegisterParseASTListFunction(ExtensionLoader &loader) {
 
 	ScalarFunction func("parse_ast_list", {LogicalType::VARCHAR, LogicalType::VARCHAR}, return_type,
 	                    ParseASTListExecute, ParseASTListBind);
+
+	// This function can throw at EXECUTION time: ParseToASTResult raises
+	// InternalException when tree-sitter fails to produce a tree, and the parse
+	// timeout / node cap surface the same way. Only InvalidInputException is
+	// caught and turned into a NULL row. DuckDB v2.0 requires a scalar function
+	// that can throw to declare it -- otherwise the throw is re-raised as
+	// "threw an execution error, but the function is not marked as fallible".
+	// Enforcement is an assertion, so an unmarked function is green wherever
+	// assertions are off and red where they are on, and only on error-path
+	// tests. Set before registering: on v2.0 a FunctionSet's members are
+	// shared_ptr<const T> and cannot be configured after being added.
+	//
+	// Nothing else here needs it: the semantic-type scalar functions are pure
+	// table lookups that signal "unknown" by returning NULL, and semantic_types.cpp
+	// contains no throw at all. Marking precisely matters on BOTH lines -- the
+	// pinned v1.5 has SetFallible too (function.hpp:211) and `errors` feeds
+	// CanThrow(), which gates conjunct reordering, filter pushdown and dictionary
+	// caching. No shim: the method is identical on both, so calling it directly
+	// is both simpler and honest about there being nothing to adapt.
+	func.SetFallible();
 
 	loader.RegisterFunction(func);
 }

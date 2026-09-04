@@ -1,4 +1,5 @@
 #include "duckdb_adapter.hpp"
+#include "duckdb_compat.hpp"
 #include "unified_ast_backend_impl.hpp"
 #include "semantic_types.hpp"
 #include "duckdb/common/exception.hpp"
@@ -31,6 +32,115 @@
 #include <algorithm> // for std::sort
 
 namespace duckdb {
+
+//==============================================================================
+// DuckDB v2.0 parser-object accessors (local to this file)
+//==============================================================================
+//
+// v2.0 closed the parser data structures' public name fields and moved them
+// behind a QualifiedName: CreateInfo & friends grew Get<Entry>Name() returning
+// an Identifier, and BaseTableRef::table_name became Table(). v1.5 has the bare
+// string fields and none of the accessors, so each needs a shim rather than a
+// rename.
+//
+// These live here rather than in duckdb_compat.hpp deliberately. They would
+// drag ten parser/parsed_data headers into a file that fourteen translation
+// units include, and this adapter -- the only code in the extension that walks
+// DuckDB's own parse tree -- is their only consumer.
+//
+// ONE probe for the whole refactor, because it IS one upstream change: the
+// entry names all moved into CreateInfo::qualified_name together. Probing
+// GetQualifiedName() asks for the v2.0-only API, never the one being replaced,
+// so it cannot be true on both lines the way a probe aimed at the old field
+// would be.
+namespace {
+
+template <class T, class = void>
+struct HasQualifiedName : std::false_type {};
+template <class T>
+struct HasQualifiedName<T, decltype(void(std::declval<const T &>().GetQualifiedName()))> : std::true_type {};
+
+typedef HasQualifiedName<CreateInfo> QualifiedNameTag;
+
+// Tag dispatch rather than `if constexpr`: this extension compiles at C++11 on
+// Linux (see CMakeLists.txt). Only the selected overload is instantiated, so the
+// branch naming the absent member is never compiled.
+template <class INFO>
+string CreateEntryName(const INFO &info, std::true_type) {
+	return info.GetFunctionName().GetIdentifierName();
+}
+template <class INFO>
+string CreateEntryName(const INFO &info, std::false_type) {
+	return info.name;
+}
+
+template <class INFO>
+string CreateTableEntryName(const INFO &info, std::true_type) {
+	return info.GetTableName().GetIdentifierName();
+}
+template <class INFO>
+string CreateTableEntryName(const INFO &info, std::false_type) {
+	return info.table;
+}
+
+template <class INFO>
+string CreateViewEntryName(const INFO &info, std::true_type) {
+	return info.GetViewName().GetIdentifierName();
+}
+template <class INFO>
+string CreateViewEntryName(const INFO &info, std::false_type) {
+	return info.view_name;
+}
+
+template <class INFO>
+string CreateSequenceEntryName(const INFO &info, std::true_type) {
+	return info.GetSequenceName().GetIdentifierName();
+}
+template <class INFO>
+string CreateSequenceEntryName(const INFO &info, std::false_type) {
+	return info.name;
+}
+
+template <class INFO>
+string CreateTypeEntryName(const INFO &info, std::true_type) {
+	return info.GetTypeName().GetIdentifierName();
+}
+template <class INFO>
+string CreateTypeEntryName(const INFO &info, std::false_type) {
+	return info.name;
+}
+
+template <class INFO>
+string CreateIndexEntryName(const INFO &info, std::true_type) {
+	return info.GetIndexName().GetIdentifierName();
+}
+template <class INFO>
+string CreateIndexEntryName(const INFO &info, std::false_type) {
+	return info.index_name;
+}
+
+// CREATE SCHEMA is the one entry whose name does NOT live in the Name() slot on
+// v2.0: CreateSchemaInfo encodes the path as [catalog, parents..., new_schema,
+// <empty name>] and exposes SchemaName() to read it back.
+template <class INFO>
+string CreateSchemaName(const INFO &info, std::true_type) {
+	return info.template Cast<CreateSchemaInfo>().SchemaName().GetIdentifierName();
+}
+template <class INFO>
+string CreateSchemaName(const INFO &info, std::false_type) {
+	return info.schema;
+}
+
+template <class REF>
+string BaseTableName(const REF &ref, std::true_type) {
+	return ref.Table().GetIdentifierName();
+}
+template <class REF>
+string BaseTableName(const REF &ref, std::false_type) {
+	return ref.table_name;
+}
+
+} // namespace
 
 //==============================================================================
 // DuckDB Native Parser Adapter - Architecture Plan Implementation
@@ -285,7 +395,7 @@ vector<ASTNode> DuckDBAdapter::ConvertCreateStatement(const CreateStatement &stm
 	case CatalogType::MACRO_ENTRY: {
 		// CreateMacroInfo inherits from CreateFunctionInfo, so we can cast to the base
 		const auto &macro_info = info.Cast<CreateFunctionInfo>();
-		name = macro_info.name;
+		name = CreateEntryName(macro_info, QualifiedNameTag());
 		node_type = "create_macro";
 		semantic_type = SemanticTypes::DEFINITION_FUNCTION;
 		break;
@@ -293,42 +403,42 @@ vector<ASTNode> DuckDBAdapter::ConvertCreateStatement(const CreateStatement &stm
 	case CatalogType::TABLE_MACRO_ENTRY: {
 		// CreateMacroInfo inherits from CreateFunctionInfo, so we can cast to the base
 		const auto &macro_info = info.Cast<CreateFunctionInfo>();
-		name = macro_info.name;
+		name = CreateEntryName(macro_info, QualifiedNameTag());
 		node_type = "create_table_macro";
 		semantic_type = SemanticTypes::DEFINITION_FUNCTION;
 		break;
 	}
 	case CatalogType::TABLE_ENTRY: {
 		const auto &table_info = info.Cast<CreateTableInfo>();
-		name = table_info.table;
+		name = CreateTableEntryName(table_info, QualifiedNameTag());
 		node_type = "create_table";
 		semantic_type = SemanticTypes::DEFINITION_CLASS;
 		break;
 	}
 	case CatalogType::VIEW_ENTRY: {
 		const auto &view_info = info.Cast<CreateViewInfo>();
-		name = view_info.view_name;
+		name = CreateViewEntryName(view_info, QualifiedNameTag());
 		node_type = "create_view";
 		semantic_type = SemanticTypes::DEFINITION_CLASS;
 		break;
 	}
 	case CatalogType::SEQUENCE_ENTRY: {
 		const auto &seq_info = info.Cast<CreateSequenceInfo>();
-		name = seq_info.name;
+		name = CreateSequenceEntryName(seq_info, QualifiedNameTag());
 		node_type = "create_sequence";
 		semantic_type = SemanticTypes::DEFINITION_VARIABLE;
 		break;
 	}
 	case CatalogType::TYPE_ENTRY: {
 		const auto &type_info = info.Cast<CreateTypeInfo>();
-		name = type_info.name;
+		name = CreateTypeEntryName(type_info, QualifiedNameTag());
 		node_type = "create_type";
 		semantic_type = SemanticTypes::DEFINITION_CLASS;
 		break;
 	}
 	case CatalogType::INDEX_ENTRY: {
 		const auto &idx_info = info.Cast<CreateIndexInfo>();
-		name = idx_info.index_name;
+		name = CreateIndexEntryName(idx_info, QualifiedNameTag());
 		node_type = "create_index";
 		semantic_type = SemanticTypes::DEFINITION_VARIABLE;
 		break;
@@ -338,7 +448,7 @@ vector<ASTNode> DuckDBAdapter::ConvertCreateStatement(const CreateStatement &stm
 	case CatalogType::AGGREGATE_FUNCTION_ENTRY:
 	case CatalogType::PRAGMA_FUNCTION_ENTRY: {
 		const auto &func_info = info.Cast<CreateFunctionInfo>();
-		name = func_info.name;
+		name = CreateEntryName(func_info, QualifiedNameTag());
 		node_type = "create_function";
 		semantic_type = SemanticTypes::DEFINITION_FUNCTION;
 		break;
@@ -346,7 +456,7 @@ vector<ASTNode> DuckDBAdapter::ConvertCreateStatement(const CreateStatement &stm
 	case CatalogType::SCHEMA_ENTRY: {
 		// For CREATE SCHEMA, the schema name is stored in the base CreateInfo::schema field
 		node_type = "create_schema";
-		name = info.schema;
+		name = CreateSchemaName(info, QualifiedNameTag());
 		semantic_type = SemanticTypes::DEFINITION_MODULE;
 		break;
 	}
@@ -576,18 +686,22 @@ vector<ASTNode> DuckDBAdapter::ConvertExpression(const ParsedExpression &expr, u
 
 vector<ASTNode> DuckDBAdapter::HandleColumnReference(const ParsedExpression &expr, uint32_t &node_counter) const {
 	const auto &col_ref = expr.Cast<ColumnRefExpression>();
-	auto node = CreateASTNode("column_reference", col_ref.GetColumnName(), col_ref.ToString(),
+	// GetColumnName() returns an Identifier on v2.0 and a string on v1.5;
+	// CompatNameStr has an overload for each, so no probe is needed here.
+	auto node = CreateASTNode("column_reference", CompatNameStr(col_ref.GetColumnName()), col_ref.ToString(),
 	                          SemanticTypes::NAME_IDENTIFIER, node_counter++, -1, 0);
 	return {node};
 }
 
 vector<ASTNode> DuckDBAdapter::HandleConstant(const ParsedExpression &expr, uint32_t &node_counter) const {
 	const auto &const_expr = expr.Cast<ConstantExpression>();
-	string value = const_expr.value.ToString();
+	// v2.0 made ConstantExpression::value private (GetValue()).
+	const auto &const_value = CompatConstantValue(const_expr);
+	string value = const_value.ToString();
 
 	// Determine appropriate semantic type based on value type
 	uint8_t semantic_type;
-	auto value_type = const_expr.value.type();
+	auto value_type = const_value.type();
 	if (value_type == LogicalType::VARCHAR) {
 		semantic_type = SemanticTypes::LITERAL_STRING;
 	} else if (value_type == LogicalType::INTEGER || value_type == LogicalType::BIGINT ||
@@ -605,13 +719,17 @@ vector<ASTNode> DuckDBAdapter::HandleConstant(const ParsedExpression &expr, uint
 
 vector<ASTNode> DuckDBAdapter::HandleFunction(const ParsedExpression &expr, uint32_t &node_counter) const {
 	const auto &func_expr = expr.Cast<FunctionExpression>();
-	string normalized_name = NormalizeFunctionName(func_expr.function_name);
+	// v2.0 made FunctionExpression::function_name private (an Identifier behind
+	// FunctionName()) and replaced `children` with a vector<FunctionArgument>.
+	const string function_name = CompatFunctionName(func_expr);
+	const auto func_args = CompatFunctionArgExprs(func_expr);
+	string normalized_name = NormalizeFunctionName(function_name);
 	vector<ASTNode> nodes;
 
 	// Skip internal constructor functions that users don't typically write explicitly
-	if (func_expr.function_name == "list_value" || func_expr.function_name == "struct_pack_internal") {
+	if (function_name == "list_value" || function_name == "struct_pack_internal") {
 		// Process arguments but don't create the function call node
-		for (const auto &arg : func_expr.children) {
+		for (const auto *arg : func_args) {
 			if (!arg) {
 				continue;
 			}
@@ -630,7 +748,7 @@ vector<ASTNode> DuckDBAdapter::HandleFunction(const ParsedExpression &expr, uint
 		nodes.push_back(node);
 
 		// Process function arguments
-		for (const auto &arg : func_expr.children) {
+		for (const auto *arg : func_args) {
 			if (!arg) {
 				continue; // Skip NULL function arguments
 			}
@@ -657,8 +775,11 @@ vector<ASTNode> DuckDBAdapter::HandleComparison(const ParsedExpression &expr, ui
 	nodes.push_back(comp_node);
 
 	// Process left and right operands
-	if (comp_expr.left) {
-		auto left_nodes = ConvertExpression(*comp_expr.left, node_counter);
+	// v2.0 made ComparisonExpression::left/right private (Left()/Right()).
+	const auto *comp_left = CompatComparisonLeft(comp_expr);
+	const auto *comp_right = CompatComparisonRight(comp_expr);
+	if (comp_left) {
+		auto left_nodes = ConvertExpression(*comp_left, node_counter);
 		for (auto &ln : left_nodes) {
 			if (ln.parent_id == -1) {
 				ln.parent_id = comp_node.node_id;
@@ -667,8 +788,8 @@ vector<ASTNode> DuckDBAdapter::HandleComparison(const ParsedExpression &expr, ui
 			nodes.push_back(ln);
 		}
 	}
-	if (comp_expr.right) {
-		auto right_nodes = ConvertExpression(*comp_expr.right, node_counter);
+	if (comp_right) {
+		auto right_nodes = ConvertExpression(*comp_right, node_counter);
 		for (auto &rn : right_nodes) {
 			if (rn.parent_id == -1) {
 				rn.parent_id = comp_node.node_id;
@@ -689,8 +810,9 @@ vector<ASTNode> DuckDBAdapter::HandleConjunction(const ParsedExpression &expr, u
 	    CreateASTNode("conjunction", "", expr.ToString(), SemanticTypes::OPERATOR_LOGICAL, node_counter++, -1, 0);
 	nodes.push_back(conj_node);
 
+	// v2.0 made ConjunctionExpression::children private (GetChildren()).
 	// Process all child expressions
-	for (const auto &child : conj_expr.children) {
+	for (const auto *child : CompatConjunctionChildren(conj_expr)) {
 		if (!child)
 			continue;
 		auto child_nodes = ConvertExpression(*child, node_counter);
@@ -740,7 +862,9 @@ vector<ASTNode> DuckDBAdapter::HandleOperator(const ParsedExpression &expr, uint
 	string operator_name = "";
 	uint8_t semantic_type = SemanticTypes::OPERATOR_LOGICAL;
 
-	switch (expr.type) {
+	// BaseExpression::type is protected on v2.0; GetExpressionType() exists on
+	// both versions, so no shim is needed -- just use the accessor.
+	switch (expr.GetExpressionType()) {
 	case ExpressionType::OPERATOR_IS_NULL:
 		operator_name = "is_null";
 		break;
@@ -790,7 +914,7 @@ vector<ASTNode> DuckDBAdapter::HandleIncompleteExpression(const ParsedExpression
 
 	// Try to get a meaningful type name
 	try {
-		expr_type_name = StringUtil::Format("ExpressionType_%d", static_cast<int>(expr.type));
+		expr_type_name = StringUtil::Format("ExpressionType_%d", static_cast<int>(expr.GetExpressionType()));
 	} catch (...) {
 		expr_type_name = "unknown_expression_type";
 	}
@@ -814,8 +938,9 @@ vector<ASTNode> DuckDBAdapter::ConvertTableRef(const TableRef &table_ref, uint32
 	switch (table_ref.type) {
 	case TableReferenceType::BASE_TABLE: {
 		const auto &base_table = table_ref.Cast<BaseTableRef>();
-		auto node = CreateASTNode("table_reference", base_table.table_name, base_table.table_name,
-		                          SemanticTypes::NAME_QUALIFIED, node_counter++, -1, 0);
+		const auto base_table_name = BaseTableName(base_table, QualifiedNameTag());
+		auto node = CreateASTNode("table_reference", base_table_name, base_table_name, SemanticTypes::NAME_QUALIFIED,
+		                          node_counter++, -1, 0);
 		nodes.push_back(node);
 		break;
 	}

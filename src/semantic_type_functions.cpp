@@ -476,8 +476,8 @@ static void StringContainsAnyFunction(DataChunk &args, ExpressionState &state, V
 	patterns_child.ToUnifiedFormat(ListVector::GetListSize(patterns_vector), patterns_child_data);
 	auto patterns_child_entries = UnifiedVectorFormat::GetData<string_t>(patterns_child_data);
 
-	auto result_data = FlatVector::GetData<bool>(result);
-	auto &result_validity = FlatVector::Validity(result);
+	auto result_data = CompatFlatDataMutable<bool>(result);
+	auto &result_validity = CompatFlatValidityMutable<>(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto str_idx = str_data.sel->get_index(i);
@@ -532,8 +532,8 @@ static void StringContainsAnyIFunction(DataChunk &args, ExpressionState &state, 
 	patterns_child.ToUnifiedFormat(ListVector::GetListSize(patterns_vector), patterns_child_data);
 	auto patterns_child_entries = UnifiedVectorFormat::GetData<string_t>(patterns_child_data);
 
-	auto result_data = FlatVector::GetData<bool>(result);
-	auto &result_validity = FlatVector::Validity(result);
+	auto result_data = CompatFlatDataMutable<bool>(result);
+	auto &result_validity = CompatFlatValidityMutable<>(result);
 
 	// Helper to convert string to lowercase
 	auto to_lower = [](const string &s) {
@@ -583,13 +583,13 @@ static void GetSearchableTypesFunction(DataChunk &args, ExpressionState &state, 
 
 	// Create a list value for each row
 	auto &list_vector = result;
-	auto list_entries = FlatVector::GetData<list_entry_t>(list_vector);
+	auto list_entries = CompatFlatDataMutable<list_entry_t>(list_vector);
 
 	// Create child vector to hold the semantic type values
 	auto list_size = searchable_types.size();
 	ListVector::Reserve(list_vector, list_size * count);
 	auto &child_vector = ListVector::GetEntry(list_vector);
-	auto child_data = FlatVector::GetData<uint8_t>(child_vector);
+	auto child_data = CompatFlatDataMutable<uint8_t>(child_vector);
 
 	idx_t offset = 0;
 	for (idx_t i = 0; i < count; i++) {

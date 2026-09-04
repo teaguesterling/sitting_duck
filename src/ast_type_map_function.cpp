@@ -130,7 +130,7 @@ static string GetExtractionStrategyName(ExtractionStrategy strategy) {
 }
 
 static unique_ptr<FunctionData> TypeMapBind(ClientContext &context, TableFunctionBindInput &input,
-                                            vector<LogicalType> &return_types, vector<string> &names) {
+                                            vector<LogicalType> &return_types, vector<CompatName> &names) {
 	auto bind_data = make_uniq<TypeMapBindData>();
 
 	// Optional language parameter
