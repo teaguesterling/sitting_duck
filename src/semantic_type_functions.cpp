@@ -477,7 +477,7 @@ static void StringContainsAnyFunction(DataChunk &args, ExpressionState &state, V
 	auto patterns_child_entries = UnifiedVectorFormat::GetData<string_t>(patterns_child_data);
 
 	auto result_data = CompatFlatDataMutable<bool>(result);
-	auto &result_validity = FlatVector::Validity(result);
+	auto &result_validity = CompatFlatValidityMutable<>(result);
 
 	for (idx_t i = 0; i < count; i++) {
 		auto str_idx = str_data.sel->get_index(i);
@@ -533,7 +533,7 @@ static void StringContainsAnyIFunction(DataChunk &args, ExpressionState &state, 
 	auto patterns_child_entries = UnifiedVectorFormat::GetData<string_t>(patterns_child_data);
 
 	auto result_data = CompatFlatDataMutable<bool>(result);
-	auto &result_validity = FlatVector::Validity(result);
+	auto &result_validity = CompatFlatValidityMutable<>(result);
 
 	// Helper to convert string to lowercase
 	auto to_lower = [](const string &s) {

@@ -804,9 +804,9 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult &result, DataChunk &outpu
 	// qualified_name is LIST<STRUCT>; written via SetValue, not a direct data pointer.
 
 	// Get validity masks for nullable fields
-	auto &name_validity = FlatVector::Validity(output.data[2]);
-	auto &parent_validity = FlatVector::Validity(output.data[9]);
-	auto &peek_validity = FlatVector::Validity(output.data[15]);
+	auto &name_validity = CompatFlatValidityMutable<>(output.data[2]);
+	auto &parent_validity = CompatFlatValidityMutable<>(output.data[9]);
+	auto &peek_validity = CompatFlatValidityMutable<>(output.data[15]);
 
 	idx_t count = 0;
 	idx_t max_count = STANDARD_VECTOR_SIZE;
@@ -968,8 +968,8 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 		annotations_col = col_idx++;
 		signature_type_vec = CompatFlatDataMutable<string_t>(output.data[signature_type_col]);
 		annotations_vec = CompatFlatDataMutable<string_t>(output.data[annotations_col]);
-		signature_type_validity = &FlatVector::Validity(output.data[signature_type_col]);
-		annotations_validity = &FlatVector::Validity(output.data[annotations_col]);
+		signature_type_validity = &CompatFlatValidityMutable<>(output.data[signature_type_col]);
+		annotations_validity = &CompatFlatValidityMutable<>(output.data[annotations_col]);
 		// Note: parameters and modifiers columns are LIST types, handled separately
 	}
 
@@ -1020,7 +1020,7 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 			parent_id_col = col_idx++;
 			depth_col = col_idx++;
 			parent_id_vec = CompatFlatDataMutable<int64_t>(output.data[parent_id_col]);
-			parent_validity = &FlatVector::Validity(output.data[parent_id_col]);
+			parent_validity = &CompatFlatValidityMutable<>(output.data[parent_id_col]);
 			depth_vec = CompatFlatDataMutable<uint32_t>(output.data[depth_col]);
 		}
 
@@ -1044,7 +1044,7 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 	if (schema_config.peek != PeekLevel::NONE) {
 		peek_col = col_idx++;
 		peek_vec = CompatFlatDataMutable<string_t>(output.data[peek_col]);
-		peek_validity = &FlatVector::Validity(output.data[peek_col]);
+		peek_validity = &CompatFlatValidityMutable<>(output.data[peek_col]);
 	}
 
 	// Handle file_path and language per row (not as constant vectors)
@@ -1352,7 +1352,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult &result, Data
 	auto peek_vec = CompatFlatDataMutable<string_t>(output.data[5]);
 
 	// Get validity masks
-	auto &peek_validity = FlatVector::Validity(output.data[5]);
+	auto &peek_validity = CompatFlatValidityMutable<>(output.data[5]);
 
 	idx_t count = 0;
 	idx_t max_count = STANDARD_VECTOR_SIZE;
@@ -1548,7 +1548,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 	auto node_id_vec = CompatFlatDataMutable<int64_t>(output.data[0]);
 	auto type_vec = CompatFlatDataMutable<string_t>(output.data[1]);
 	auto peek_vec = CompatFlatDataMutable<string_t>(output.data[5]);
-	auto &peek_validity = FlatVector::Validity(output.data[5]);
+	auto &peek_validity = CompatFlatValidityMutable<>(output.data[5]);
 
 	// Get STRUCT child vectors using StructVector::GetEntries()
 	auto &source_entries = StructVector::GetEntries(output.data[2]);
@@ -1565,7 +1565,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 
 	// Structure STRUCT child vectors
 	auto structure_parent_id_vec = CompatFlatDataMutable<int64_t>(CompatStructEntry(structure_entries[0]));
-	auto &structure_parent_validity = FlatVector::Validity(CompatStructEntry(structure_entries[0]));
+	auto &structure_parent_validity = CompatFlatValidityMutable<>(CompatStructEntry(structure_entries[0]));
 	auto structure_depth_vec = CompatFlatDataMutable<uint32_t>(CompatStructEntry(structure_entries[1]));
 	auto structure_sibling_index_vec = CompatFlatDataMutable<int32_t>(CompatStructEntry(structure_entries[2]));
 	auto structure_children_count_vec = CompatFlatDataMutable<uint32_t>(CompatStructEntry(structure_entries[3]));
@@ -1576,20 +1576,20 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 
 	// Context STRUCT child vectors
 	auto context_name_vec = CompatFlatDataMutable<string_t>(CompatStructEntry(context_entries[0]));
-	auto &context_name_validity = FlatVector::Validity(CompatStructEntry(context_entries[0]));
+	auto &context_name_validity = CompatFlatValidityMutable<>(CompatStructEntry(context_entries[0]));
 	// qualified_name (context_entries[1]) is LIST<STRUCT>; written via SetValue.
 	auto context_semantic_type_vec = CompatFlatDataMutable<uint8_t>(CompatStructEntry(context_entries[2]));
 	auto context_flags_vec = CompatFlatDataMutable<uint8_t>(CompatStructEntry(context_entries[3]));
 
 	// Native context STRUCT child vectors
 	auto &native_entries = StructVector::GetEntries(CompatStructEntry(context_entries[4]));
-	auto &native_validity = FlatVector::Validity(CompatStructEntry(context_entries[4]));
+	auto &native_validity = CompatFlatValidityMutable<>(CompatStructEntry(context_entries[4]));
 
 	// Get native field vectors
 	auto native_signature_type_vec = CompatFlatDataMutable<string_t>(CompatStructEntry(native_entries[0]));
-	auto &native_signature_type_validity = FlatVector::Validity(CompatStructEntry(native_entries[0]));
+	auto &native_signature_type_validity = CompatFlatValidityMutable<>(CompatStructEntry(native_entries[0]));
 	auto native_annotations_vec = CompatFlatDataMutable<string_t>(CompatStructEntry(native_entries[3]));
-	auto &native_annotations_validity = FlatVector::Validity(CompatStructEntry(native_entries[3]));
+	auto &native_annotations_validity = CompatFlatValidityMutable<>(CompatStructEntry(native_entries[3]));
 
 	// Get ListVectors for separate processing - TODO: restore when implementing parameter/modifier arrays
 	// auto &parameters_list_vector = CompatStructEntry(native_entries[1]);

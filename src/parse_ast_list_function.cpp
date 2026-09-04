@@ -245,6 +245,26 @@ void RegisterParseASTListFunction(ExtensionLoader &loader) {
 	ScalarFunction func("parse_ast_list", {LogicalType::VARCHAR, LogicalType::VARCHAR}, return_type,
 	                    ParseASTListExecute, ParseASTListBind);
 
+	// This function can throw at EXECUTION time: ParseToASTResult raises
+	// InternalException when tree-sitter fails to produce a tree, and the parse
+	// timeout / node cap surface the same way. Only InvalidInputException is
+	// caught and turned into a NULL row. DuckDB v2.0 requires a scalar function
+	// that can throw to declare it -- otherwise the throw is re-raised as
+	// "threw an execution error, but the function is not marked as fallible".
+	// Enforcement is an assertion, so an unmarked function is green wherever
+	// assertions are off and red where they are on, and only on error-path
+	// tests. Set before registering: on v2.0 a FunctionSet's members are
+	// shared_ptr<const T> and cannot be configured after being added.
+	//
+	// Nothing else here needs it: the semantic-type scalar functions are pure
+	// table lookups that signal "unknown" by returning NULL, and semantic_types.cpp
+	// contains no throw at all. Marking precisely matters on BOTH lines -- the
+	// pinned v1.5 has SetFallible too (function.hpp:211) and `errors` feeds
+	// CanThrow(), which gates conjunct reordering, filter pushdown and dictionary
+	// caching. No shim: the method is identical on both, so calling it directly
+	// is both simpler and honest about there being nothing to adapt.
+	func.SetFallible();
+
 	loader.RegisterFunction(func);
 }
 

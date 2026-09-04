@@ -99,7 +99,7 @@ void ASTFunctionsFunction::Execute(ClientContext &context, TableFunctionInput &d
 	auto param_count_data = CompatFlatDataMutable<int32_t>(output.data[3]);
 	auto is_method_data = CompatFlatDataMutable<bool>(output.data[4]);
 	auto parent_class_data = CompatFlatDataMutable<string_t>(output.data[5]);
-	auto &parent_class_validity = FlatVector::Validity(output.data[5]);
+	auto &parent_class_validity = CompatFlatValidityMutable<>(output.data[5]);
 
 	while (data.current_idx < data.nodes.size() && count < STANDARD_VECTOR_SIZE) {
 		const auto &func_node = data.nodes[data.current_idx];
@@ -254,7 +254,7 @@ void ASTImportsFunction::Execute(ClientContext &context, TableFunctionInput &dat
 	auto alias_data = CompatFlatDataMutable<string_t>(output.data[2]);
 	auto line_data = CompatFlatDataMutable<int32_t>(output.data[3]);
 	auto is_from_data = CompatFlatDataMutable<bool>(output.data[4]);
-	auto &alias_validity = FlatVector::Validity(output.data[2]);
+	auto &alias_validity = CompatFlatValidityMutable<>(output.data[2]);
 
 	while (data.current_idx < data.nodes.size() && count < STANDARD_VECTOR_SIZE) {
 		const auto &import_node = data.nodes[data.current_idx];

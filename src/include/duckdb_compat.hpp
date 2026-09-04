@@ -47,10 +47,21 @@
 // construction from a RUNTIME string is explicit by design -- promoting a
 // string to an identifier is meant to be a deliberate act at the call site --
 // so boundary helpers are needed rather than an implicit conversion.
+//
+// This __has_include gates only whether a CompatNameStr(const Identifier &)
+// overload can EXIST. It deliberately does NOT decide what CompatName is: the
+// header was BACKPORTED to the stable branch without changing
+// table_function_bind_t, so on v1.5-variegata's current tip identifier.hpp is
+// present while binds still take vector<string>. Keying CompatName off the
+// header would flip it to Identifier on the next submodule bump and break every
+// bind signature at once. See CompatName below for what is used instead.
 #if __has_include("duckdb/common/identifier.hpp")
 #define DUCKDB_HAS_IDENTIFIER 1
 #include "duckdb/common/identifier.hpp"
 #endif
+
+#include "duckdb/function/table_function.hpp"
+#include <utility>
 
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 #include "duckdb/parser/expression/comparison_expression.hpp"
@@ -93,23 +104,30 @@ namespace duckdb {
 // returns vector<string>), so CompatAssignNames exists for that case: it is the
 // element-wise conversion that `names = helper()` used to be for free.
 
-#ifdef DUCKDB_HAS_IDENTIFIER
-using CompatName = Identifier;
-inline string CompatNameStr(const Identifier &id) {
-	return id.GetIdentifierName();
-}
-inline Identifier CompatMakeName(string name) {
-	return Identifier(std::move(name));
-}
-#else
-using CompatName = string;
+// Ask DuckDB what its own bind-name type is, rather than inferring it from a
+// header's presence. TableFunctionBindInput::input_table_names has the same
+// element type as the bind out-parameter on both lines -- vector<string> on the
+// pin (table_function.hpp:110 / :288), vector<Identifier> on main (:123 / :319)
+// -- so this cannot drift from the thing that actually changed. A probe on
+// identifier.hpp can and does: that header is already present on
+// v1.5-variegata's tip, where binds still take strings.
+using CompatName = typename std::remove_reference<decltype(
+    std::declval<TableFunctionBindInput &>().input_table_names)>::type::value_type;
+
 inline string CompatNameStr(const string &name) {
 	return name;
 }
-inline string CompatMakeName(string name) {
-	return name;
+#ifdef DUCKDB_HAS_IDENTIFIER
+inline string CompatNameStr(const Identifier &id) {
+	return id.GetIdentifierName();
 }
 #endif
+
+//! Promote a runtime string to whatever the bind-name type is. Named rather
+//! than implicit because Identifier(const string &) is explicit by design.
+inline CompatName CompatMakeName(string name) {
+	return CompatName(std::move(name));
+}
 
 //! Replace `names` with the element-wise conversion of a runtime-built
 //! vector<string>. Use where the pre-v2.0 code did `names = <helper>()`.
@@ -152,9 +170,15 @@ inline LogicalType CompatWithAliasImpl(TYPE type, string alias, std::false_type)
 	type.SetAlias(std::move(alias));
 	return type;
 }
-template <class TYPE = LogicalType>
-inline LogicalType CompatWithAlias(TYPE type, string alias) {
-	return CompatWithAliasImpl(std::move(type), std::move(alias), CompatHasWithAlias<TYPE>());
+// The entry point is deliberately NOT a template with a defaulted parameter.
+// A default template argument is inert when deduction succeeds, so
+// `CompatWithAlias(LogicalType::VARCHAR, "x")` would deduce TYPE =
+// LogicalTypeId -- LogicalType::VARCHAR is a static constexpr LogicalTypeId,
+// not a LogicalType -- and hard-error on the member lookup. Taking a concrete
+// LogicalType by value converts at the call site instead. Only the Impl
+// overloads are templates, which is all the tag dispatch needs.
+inline LogicalType CompatWithAlias(LogicalType type, string alias) {
+	return CompatWithAliasImpl(std::move(type), std::move(alias), CompatHasWithAlias<LogicalType>());
 }
 
 //===--------------------------------------------------------------------===//
@@ -187,6 +211,44 @@ inline VALUE *CompatFlatDataMutableImpl(Vector &vec, std::false_type) {
 template <class VALUE, class FV = FlatVector>
 inline VALUE *CompatFlatDataMutable(Vector &vec) {
 	return CompatFlatDataMutableImpl<VALUE, FV>(vec, CompatHasFlatGetDataMutable<FV>());
+}
+
+//===--------------------------------------------------------------------===//
+// CompatFlatValidityMutable
+//===--------------------------------------------------------------------===//
+//
+// FlatVector::Validity got the same copy-on-write const split as GetData:
+//   v2.0: const ValidityMask &Validity(const Vector &)   -- through Buffer()
+//         ValidityMask &ValidityMutable(Vector &)        -- through BufferMutable()
+//
+// This one hides better than the GetData case. `auto &m = FlatVector::Validity(v);`
+// still COMPILES on v2.0, silently deducing a CONST reference; the error only
+// appears later at the mutation, as "passing 'const duckdb::ValidityMask' as
+// 'this' argument discards qualifiers" -- naming neither Validity nor
+// FlatVector. So grep for the MUTATION (SetInvalid / SetValid / SetAllInvalid /
+// SetAllValid) and walk back to where the reference was bound.
+//
+// Use this ONLY on vectors being written. Reading an INPUT vector's validity
+// through the mutable accessor would go through BufferMutable() and un-share a
+// copy-on-write buffer for no reason.
+
+template <class T, class = void>
+struct CompatHasFlatValidityMutable : std::false_type {};
+template <class T>
+struct CompatHasFlatValidityMutable<T, decltype(void(T::ValidityMutable(std::declval<Vector &>())))> : std::true_type {
+};
+
+template <class FV>
+inline ValidityMask &CompatFlatValidityMutableImpl(Vector &vec, std::true_type) {
+	return FV::ValidityMutable(vec);
+}
+template <class FV>
+inline ValidityMask &CompatFlatValidityMutableImpl(Vector &vec, std::false_type) {
+	return FV::Validity(vec);
+}
+template <class FV = FlatVector>
+inline ValidityMask &CompatFlatValidityMutable(Vector &vec) {
+	return CompatFlatValidityMutableImpl<FV>(vec, CompatHasFlatValidityMutable<FV>());
 }
 
 //===--------------------------------------------------------------------===//
@@ -325,6 +387,32 @@ inline vector<const ParsedExpression *> CompatConjunctionChildren(const Conjunct
 // CompatSetOutputCardinality
 //===--------------------------------------------------------------------===//
 
+// On v2.0 this forwards to SetChildCardinality, which does strictly MORE than
+// the deprecated SetCardinality (that one now just assigns the chunk's count via
+// SetCardinalityUnsafe). Two things worth knowing before touching a call site:
+//
+// It is not destructive. DuckDB main's doc comment on SetCardinality warns that
+// forwarding "would resize/overwrite their data", which reads alarming, but
+// every leaf on the path is a size assignment behind a bounds check --
+// DataChunk::SetChildCardinality -> FlatVector::SetSize ->
+// VectorBuffer::SetVectorSize assigns v_size and reallocates nothing, and
+// VectorStructBuffer::SetVectorSize only propagates the same count to children.
+// No element bytes are touched, and there is no VectorListBuffer override, so
+// LIST/MAP children are left alone too.
+//
+// It is also what makes this extension work at all under v2.0's per-vector size
+// tracking. Every call site here writes children by INDEX first (raw
+// CompatFlatDataMutable pointers, or Vector::SetValue) and sets the cardinality
+// afterwards. Index writes never touch v_size, so the child vectors are still
+// size 0 when the row loop ends; SetChildCardinality is what publishes them.
+//
+// The real hazard is LOUD, not silent: SetChildCardinality throws an
+// InternalException if a column is neither flat nor constant and its size
+// disagrees, or if the count exceeds a flat vector's capacity. Both are
+// satisfied here -- output columns stay flat (ResetStructVectorState forces
+// FLAT_VECTOR on struct children) and every producing loop is bounded by
+// STANDARD_VECTOR_SIZE. A future call site that appends with Vector::Append,
+// whose children are already sized, must not use this helper.
 inline void CompatSetOutputCardinality(DataChunk &chunk, idx_t count) {
 #ifdef DUCKDB_HAS_NEW_VECTOR_HEADERS
 	chunk.SetChildCardinality(count);

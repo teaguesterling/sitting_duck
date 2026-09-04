@@ -100,7 +100,10 @@ static unique_ptr<GlobalTableFunctionState> RegisterLanguageInit(ClientContext &
 static void RegisterLanguageFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
 	auto &state = data_p.global_state->Cast<RegisterLanguageGlobalState>();
 	if (state.done) {
-		output.SetCardinality(0);
+		// CompatSetOutputCardinality, not DataChunk::SetCardinality: on DuckDB
+		// v2.0 the per-vector sizes must be set too (SetChildCardinality). Same
+		// call as SetCardinality on the pinned v1.5.
+		CompatSetOutputCardinality(output, 0);
 		return;
 	}
 	state.done = true;
@@ -176,7 +179,7 @@ static void RegisterLanguageFunction(ClientContext &context, TableFunctionInput 
 	output.SetValue(1, 0, Value::INTEGER(static_cast<int32_t>(abi_version)));
 	output.SetValue(2, 0, Value::INTEGER(node_type_count));
 	output.SetValue(3, 0, Value("registered"));
-	output.SetCardinality(1);
+	CompatSetOutputCardinality(output, 1);
 }
 
 void RegisterLanguageRegistrationFunction(ExtensionLoader &loader) {
