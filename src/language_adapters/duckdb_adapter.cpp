@@ -1,4 +1,5 @@
 #include "duckdb_adapter.hpp"
+#include "duckdb_compat.hpp"
 #include "unified_ast_backend_impl.hpp"
 #include "semantic_types.hpp"
 #include "duckdb/common/exception.hpp"
@@ -583,11 +584,13 @@ vector<ASTNode> DuckDBAdapter::HandleColumnReference(const ParsedExpression &exp
 
 vector<ASTNode> DuckDBAdapter::HandleConstant(const ParsedExpression &expr, uint32_t &node_counter) const {
 	const auto &const_expr = expr.Cast<ConstantExpression>();
-	string value = const_expr.value.ToString();
+	// v2.0 made ConstantExpression::value private (GetValue()).
+	const auto &const_value = CompatConstantValue(const_expr);
+	string value = const_value.ToString();
 
 	// Determine appropriate semantic type based on value type
 	uint8_t semantic_type;
-	auto value_type = const_expr.value.type();
+	auto value_type = const_value.type();
 	if (value_type == LogicalType::VARCHAR) {
 		semantic_type = SemanticTypes::LITERAL_STRING;
 	} else if (value_type == LogicalType::INTEGER || value_type == LogicalType::BIGINT ||
@@ -605,13 +608,17 @@ vector<ASTNode> DuckDBAdapter::HandleConstant(const ParsedExpression &expr, uint
 
 vector<ASTNode> DuckDBAdapter::HandleFunction(const ParsedExpression &expr, uint32_t &node_counter) const {
 	const auto &func_expr = expr.Cast<FunctionExpression>();
-	string normalized_name = NormalizeFunctionName(func_expr.function_name);
+	// v2.0 made FunctionExpression::function_name private (an Identifier behind
+	// FunctionName()) and replaced `children` with a vector<FunctionArgument>.
+	const string function_name = CompatFunctionName(func_expr);
+	const auto func_args = CompatFunctionArgExprs(func_expr);
+	string normalized_name = NormalizeFunctionName(function_name);
 	vector<ASTNode> nodes;
 
 	// Skip internal constructor functions that users don't typically write explicitly
-	if (func_expr.function_name == "list_value" || func_expr.function_name == "struct_pack_internal") {
+	if (function_name == "list_value" || function_name == "struct_pack_internal") {
 		// Process arguments but don't create the function call node
-		for (const auto &arg : func_expr.children) {
+		for (const auto *arg : func_args) {
 			if (!arg) {
 				continue;
 			}
@@ -630,7 +637,7 @@ vector<ASTNode> DuckDBAdapter::HandleFunction(const ParsedExpression &expr, uint
 		nodes.push_back(node);
 
 		// Process function arguments
-		for (const auto &arg : func_expr.children) {
+		for (const auto *arg : func_args) {
 			if (!arg) {
 				continue; // Skip NULL function arguments
 			}
@@ -657,8 +664,11 @@ vector<ASTNode> DuckDBAdapter::HandleComparison(const ParsedExpression &expr, ui
 	nodes.push_back(comp_node);
 
 	// Process left and right operands
-	if (comp_expr.left) {
-		auto left_nodes = ConvertExpression(*comp_expr.left, node_counter);
+	// v2.0 made ComparisonExpression::left/right private (Left()/Right()).
+	const auto *comp_left = CompatComparisonLeft(comp_expr);
+	const auto *comp_right = CompatComparisonRight(comp_expr);
+	if (comp_left) {
+		auto left_nodes = ConvertExpression(*comp_left, node_counter);
 		for (auto &ln : left_nodes) {
 			if (ln.parent_id == -1) {
 				ln.parent_id = comp_node.node_id;
@@ -667,8 +677,8 @@ vector<ASTNode> DuckDBAdapter::HandleComparison(const ParsedExpression &expr, ui
 			nodes.push_back(ln);
 		}
 	}
-	if (comp_expr.right) {
-		auto right_nodes = ConvertExpression(*comp_expr.right, node_counter);
+	if (comp_right) {
+		auto right_nodes = ConvertExpression(*comp_right, node_counter);
 		for (auto &rn : right_nodes) {
 			if (rn.parent_id == -1) {
 				rn.parent_id = comp_node.node_id;
@@ -689,8 +699,9 @@ vector<ASTNode> DuckDBAdapter::HandleConjunction(const ParsedExpression &expr, u
 	    CreateASTNode("conjunction", "", expr.ToString(), SemanticTypes::OPERATOR_LOGICAL, node_counter++, -1, 0);
 	nodes.push_back(conj_node);
 
+	// v2.0 made ConjunctionExpression::children private (GetChildren()).
 	// Process all child expressions
-	for (const auto &child : conj_expr.children) {
+	for (const auto *child : CompatConjunctionChildren(conj_expr)) {
 		if (!child)
 			continue;
 		auto child_nodes = ConvertExpression(*child, node_counter);
@@ -740,7 +751,9 @@ vector<ASTNode> DuckDBAdapter::HandleOperator(const ParsedExpression &expr, uint
 	string operator_name = "";
 	uint8_t semantic_type = SemanticTypes::OPERATOR_LOGICAL;
 
-	switch (expr.type) {
+	// BaseExpression::type is protected on v2.0; GetExpressionType() exists on
+	// both versions, so no shim is needed -- just use the accessor.
+	switch (expr.GetExpressionType()) {
 	case ExpressionType::OPERATOR_IS_NULL:
 		operator_name = "is_null";
 		break;
@@ -790,7 +803,7 @@ vector<ASTNode> DuckDBAdapter::HandleIncompleteExpression(const ParsedExpression
 
 	// Try to get a meaningful type name
 	try {
-		expr_type_name = StringUtil::Format("ExpressionType_%d", static_cast<int>(expr.type));
+		expr_type_name = StringUtil::Format("ExpressionType_%d", static_cast<int>(expr.GetExpressionType()));
 	} catch (...) {
 		expr_type_name = "unknown_expression_type";
 	}

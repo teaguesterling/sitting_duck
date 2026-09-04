@@ -1,5 +1,6 @@
 #include "ast_file_utils.hpp"
 #include "duckdb.hpp"
+#include "duckdb_compat.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
@@ -38,7 +39,7 @@ static bool IsValidLanguageName(const string &name) {
 }
 
 static unique_ptr<FunctionData> RegisterLanguageBind(ClientContext &context, TableFunctionBindInput &input,
-                                                     vector<LogicalType> &return_types, vector<string> &names) {
+                                                     vector<LogicalType> &return_types, vector<CompatName> &names) {
 	if (input.inputs[0].IsNull() || input.inputs[1].IsNull()) {
 		throw BinderException("register_language: name and library path cannot be NULL");
 	}
@@ -50,7 +51,7 @@ static unique_ptr<FunctionData> RegisterLanguageBind(ClientContext &context, Tab
 
 	for (auto &kv : input.named_parameters) {
 		if (kv.second.IsNull()) {
-			throw BinderException("register_language: %s cannot be NULL", kv.first);
+			throw BinderException("register_language: %s cannot be NULL", CompatNameStr(kv.first));
 		}
 		if (kv.first == "config") {
 			result->config_path = kv.second.GetValue<string>();

@@ -16,7 +16,7 @@ struct SemanticTypeCodesGlobalState : public GlobalTableFunctionState {
 };
 
 static unique_ptr<FunctionData> SemanticTypeCodesBind(ClientContext &context, TableFunctionBindInput &input,
-                                                      vector<LogicalType> &return_types, vector<string> &names) {
+                                                      vector<LogicalType> &return_types, vector<CompatName> &names) {
 	return_types = {
 	    LogicalType::UTINYINT, // code
 	    LogicalType::VARCHAR,  // super_kind_name
@@ -46,11 +46,11 @@ static void SemanticTypeCodesFunction(ClientContext &context, TableFunctionInput
 	idx_t output_count = 0;
 
 	// Get output vectors
-	auto code_vec = FlatVector::GetData<uint8_t>(output.data[0]);
-	auto super_kind_vec = FlatVector::GetData<string_t>(output.data[1]);
-	auto kind_vec = FlatVector::GetData<string_t>(output.data[2]);
-	auto super_type_vec = FlatVector::GetData<string_t>(output.data[3]);
-	auto full_name_vec = FlatVector::GetData<string_t>(output.data[4]);
+	auto code_vec = CompatFlatDataMutable<uint8_t>(output.data[0]);
+	auto super_kind_vec = CompatFlatDataMutable<string_t>(output.data[1]);
+	auto kind_vec = CompatFlatDataMutable<string_t>(output.data[2]);
+	auto super_type_vec = CompatFlatDataMutable<string_t>(output.data[3]);
+	auto full_name_vec = CompatFlatDataMutable<string_t>(output.data[4]);
 
 	while (output_count < STANDARD_VECTOR_SIZE && global_state.current_code <= 252) {
 		uint8_t code = global_state.current_code;

@@ -1,5 +1,6 @@
 #include "parse_ast_list_function.hpp"
 #include "unified_ast_backend.hpp"
+#include "duckdb_compat.hpp"
 #include "semantic_type_logical_type.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/function/scalar_function.hpp"
@@ -184,8 +185,10 @@ static Value ConvertASTResultToList(const ASTResult &result, const ExtractionCon
 // Bind Function
 //==============================================================================
 
-static unique_ptr<FunctionData> ParseASTListBind(ClientContext &context, ScalarFunction &bound_function,
-                                                 vector<unique_ptr<Expression>> &arguments) {
+// DuckDB v2.0 collapsed the scalar bind signature's three parameters into a
+// single BindScalarFunctionInput; DUCKDB_SCALAR_BIND_PARAMS expands to whichever
+// shape the DuckDB in scope declares. This bind reads none of them.
+static unique_ptr<FunctionData> ParseASTListBind(DUCKDB_SCALAR_BIND_PARAMS) {
 	return make_uniq<ParseASTListBindData>();
 }
 
@@ -194,7 +197,8 @@ static unique_ptr<FunctionData> ParseASTListBind(ClientContext &context, ScalarF
 //==============================================================================
 
 static void ParseASTListExecute(DataChunk &args, ExpressionState &state, Vector &result) {
-	auto &bind_data = state.expr.Cast<BoundFunctionExpression>().bind_info->Cast<ParseASTListBindData>();
+	// BoundFunctionExpression::bind_info is private on v2.0 (BindInfo() replaces it).
+	auto &bind_data = CompatBoundBindInfo(state.expr.Cast<BoundFunctionExpression>())->Cast<ParseASTListBindData>();
 	auto &code_vector = args.data[0];
 	auto &language_vector = args.data[1];
 
@@ -204,8 +208,8 @@ static void ParseASTListExecute(DataChunk &args, ExpressionState &state, Vector 
 	code_vector.Flatten(count);
 	language_vector.Flatten(count);
 
-	auto code_data = FlatVector::GetData<string_t>(code_vector);
-	auto language_data = FlatVector::GetData<string_t>(language_vector);
+	auto code_data = CompatFlatDataMutable<string_t>(code_vector);
+	auto language_data = CompatFlatDataMutable<string_t>(language_vector);
 	auto &code_validity = FlatVector::Validity(code_vector);
 	auto &language_validity = FlatVector::Validity(language_vector);
 

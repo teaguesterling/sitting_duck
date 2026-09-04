@@ -13,7 +13,7 @@ namespace duckdb {
 // Bind function for flat streaming two-argument version (explicit language)
 static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &context, TableFunctionBindInput &input,
                                                                vector<LogicalType> &return_types,
-                                                               vector<string> &names) {
+                                                               vector<CompatName> &names) {
 	if (input.inputs.size() != 2) {
 		throw BinderException("read_ast requires exactly 2 arguments: file_path and language");
 	}
@@ -48,10 +48,13 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
 	// Check for duplicate parameters (following DuckDB YAML extension pattern)
 	std::unordered_set<std::string> seen_parameters;
 	for (auto &param : input.named_parameters) {
-		if (seen_parameters.find(param.first) != seen_parameters.end()) {
-			throw BinderException("Duplicate parameter name: " + param.first);
+		// param.first is an Identifier on DuckDB v2.0 (a string on v1.5);
+		// seen_parameters is a plain set of strings, so convert at the boundary.
+		const auto param_name = CompatNameStr(param.first);
+		if (seen_parameters.find(param_name) != seen_parameters.end()) {
+			throw BinderException("Duplicate parameter name: " + param_name);
 		}
-		seen_parameters.insert(param.first);
+		seen_parameters.insert(param_name);
 	}
 
 	// Parse optional named parameters
@@ -134,7 +137,10 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
 
 	// Use flat dynamic schema based on extraction config
 	return_types = UnifiedASTBackend::GetFlatDynamicTableSchema(extraction_config);
-	names = UnifiedASTBackend::GetFlatDynamicTableColumnNames(extraction_config);
+	// On DuckDB v2.0 `names` is a vector<Identifier>; the helper returns
+	// vector<string>, and promoting a runtime string to an Identifier is
+	// explicit by design, so the assignment is element-wise.
+	CompatAssignNames(names, UnifiedASTBackend::GetFlatDynamicTableColumnNames(extraction_config));
 
 	// Use the new ExtractionConfig constructor
 	return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, extraction_config, batch_size);
@@ -143,7 +149,7 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
 // Bind function for flat streaming one-argument version (auto-detect language)
 static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &context, TableFunctionBindInput &input,
                                                                vector<LogicalType> &return_types,
-                                                               vector<string> &names) {
+                                                               vector<CompatName> &names) {
 	if (input.inputs.size() != 1) {
 		throw BinderException("read_ast requires exactly 1 argument: file_path");
 	}
@@ -172,10 +178,13 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
 	// Check for duplicate parameters (following DuckDB YAML extension pattern)
 	std::unordered_set<std::string> seen_parameters;
 	for (auto &param : input.named_parameters) {
-		if (seen_parameters.find(param.first) != seen_parameters.end()) {
-			throw BinderException("Duplicate parameter name: " + param.first);
+		// param.first is an Identifier on DuckDB v2.0 (a string on v1.5);
+		// seen_parameters is a plain set of strings, so convert at the boundary.
+		const auto param_name = CompatNameStr(param.first);
+		if (seen_parameters.find(param_name) != seen_parameters.end()) {
+			throw BinderException("Duplicate parameter name: " + param_name);
 		}
-		seen_parameters.insert(param.first);
+		seen_parameters.insert(param_name);
 	}
 
 	// Parse optional named parameters
@@ -261,7 +270,10 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
 
 	// Use flat dynamic schema based on extraction config
 	return_types = UnifiedASTBackend::GetFlatDynamicTableSchema(extraction_config);
-	names = UnifiedASTBackend::GetFlatDynamicTableColumnNames(extraction_config);
+	// On DuckDB v2.0 `names` is a vector<Identifier>; the helper returns
+	// vector<string>, and promoting a runtime string to an Identifier is
+	// explicit by design, so the assignment is element-wise.
+	CompatAssignNames(names, UnifiedASTBackend::GetFlatDynamicTableColumnNames(extraction_config));
 
 	// Use the new ExtractionConfig constructor
 	return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, extraction_config, batch_size);
@@ -427,7 +439,7 @@ static void ReadASTFlatStreamingFunction(ClientContext &context, TableFunctionIn
 // Hierarchical bind function for two-argument version (explicit language)
 static unique_ptr<FunctionData> ReadASTHierarchicalBindTwoArg(ClientContext &context, TableFunctionBindInput &input,
                                                               vector<LogicalType> &return_types,
-                                                              vector<string> &names) {
+                                                              vector<CompatName> &names) {
 	if (input.inputs.size() != 2) {
 		throw BinderException("read_ast requires exactly 2 arguments: file_path and language");
 	}
@@ -477,7 +489,10 @@ static unique_ptr<FunctionData> ReadASTHierarchicalBindTwoArg(ClientContext &con
 
 	// Use hierarchical backend schema for structured access
 	return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
-	names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
+	// On DuckDB v2.0 `names` is a vector<Identifier>; the helper returns
+	// vector<string>, and promoting a runtime string to an Identifier is
+	// explicit by design, so the assignment is element-wise.
+	CompatAssignNames(names, UnifiedASTBackend::GetHierarchicalTableColumnNames());
 
 	return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode,
 	                                           batch_size);
@@ -486,7 +501,7 @@ static unique_ptr<FunctionData> ReadASTHierarchicalBindTwoArg(ClientContext &con
 // Hierarchical bind function for one-argument version (auto-detect language)
 static unique_ptr<FunctionData> ReadASTHierarchicalBindOneArg(ClientContext &context, TableFunctionBindInput &input,
                                                               vector<LogicalType> &return_types,
-                                                              vector<string> &names) {
+                                                              vector<CompatName> &names) {
 	if (input.inputs.size() != 1) {
 		throw BinderException("read_ast requires exactly 1 argument: file_path");
 	}
@@ -538,7 +553,10 @@ static unique_ptr<FunctionData> ReadASTHierarchicalBindOneArg(ClientContext &con
 
 	// Use hierarchical backend schema for structured access
 	return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
-	names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
+	// On DuckDB v2.0 `names` is a vector<Identifier>; the helper returns
+	// vector<string>, and promoting a runtime string to an Identifier is
+	// explicit by design, so the assignment is element-wise.
+	CompatAssignNames(names, UnifiedASTBackend::GetHierarchicalTableColumnNames());
 
 	return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, peek_size, peek_mode,
 	                                           batch_size);
@@ -715,7 +733,7 @@ static TableFunction GetReadASTStreamingFunctionOneArg() {
 static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientContext &context,
                                                                        TableFunctionBindInput &input,
                                                                        vector<LogicalType> &return_types,
-                                                                       vector<string> &names) {
+                                                                       vector<CompatName> &names) {
 	if (input.inputs.size() != 2) {
 		throw BinderException("read_ast requires exactly 2 arguments: file_path and language");
 	}
@@ -745,10 +763,13 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientCon
 	// Check for duplicate parameters (following DuckDB YAML extension pattern)
 	std::unordered_set<std::string> seen_parameters;
 	for (auto &param : input.named_parameters) {
-		if (seen_parameters.find(param.first) != seen_parameters.end()) {
-			throw BinderException("Duplicate parameter name: " + param.first);
+		// param.first is an Identifier on DuckDB v2.0 (a string on v1.5);
+		// seen_parameters is a plain set of strings, so convert at the boundary.
+		const auto param_name = CompatNameStr(param.first);
+		if (seen_parameters.find(param_name) != seen_parameters.end()) {
+			throw BinderException("Duplicate parameter name: " + param_name);
 		}
-		seen_parameters.insert(param.first);
+		seen_parameters.insert(param_name);
 	}
 
 	// Parse optional named parameters
@@ -831,7 +852,10 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientCon
 
 	// Use hierarchical backend schema
 	return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
-	names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
+	// On DuckDB v2.0 `names` is a vector<Identifier>; the helper returns
+	// vector<string>, and promoting a runtime string to an Identifier is
+	// explicit by design, so the assignment is element-wise.
+	CompatAssignNames(names, UnifiedASTBackend::GetHierarchicalTableColumnNames());
 
 	// Use the new ExtractionConfig constructor
 	return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, extraction_config, batch_size);
@@ -841,7 +865,7 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientCon
 static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientContext &context,
                                                                        TableFunctionBindInput &input,
                                                                        vector<LogicalType> &return_types,
-                                                                       vector<string> &names) {
+                                                                       vector<CompatName> &names) {
 	if (input.inputs.size() != 1) {
 		throw BinderException("read_ast requires exactly 1 argument: file_path");
 	}
@@ -870,10 +894,13 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientCon
 	// Check for duplicate parameters (following DuckDB YAML extension pattern)
 	std::unordered_set<std::string> seen_parameters;
 	for (auto &param : input.named_parameters) {
-		if (seen_parameters.find(param.first) != seen_parameters.end()) {
-			throw BinderException("Duplicate parameter name: " + param.first);
+		// param.first is an Identifier on DuckDB v2.0 (a string on v1.5);
+		// seen_parameters is a plain set of strings, so convert at the boundary.
+		const auto param_name = CompatNameStr(param.first);
+		if (seen_parameters.find(param_name) != seen_parameters.end()) {
+			throw BinderException("Duplicate parameter name: " + param_name);
 		}
-		seen_parameters.insert(param.first);
+		seen_parameters.insert(param_name);
 	}
 
 	// Parse optional named parameters
@@ -959,7 +986,10 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientCon
 
 	// Use hierarchical backend schema
 	return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
-	names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
+	// On DuckDB v2.0 `names` is a vector<Identifier>; the helper returns
+	// vector<string>, and promoting a runtime string to an Identifier is
+	// explicit by design, so the assignment is element-wise.
+	CompatAssignNames(names, UnifiedASTBackend::GetHierarchicalTableColumnNames());
 
 	// Use the new ExtractionConfig constructor
 	return make_uniq<ReadASTStreamingBindData>(file_patterns, language, ignore_errors, extraction_config, batch_size);

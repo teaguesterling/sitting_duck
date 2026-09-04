@@ -61,7 +61,7 @@ TableFunction ASTFunctionsFunction::GetFunction() {
 }
 
 unique_ptr<FunctionData> ASTFunctionsFunction::Bind(ClientContext &context, TableFunctionBindInput &input,
-                                                    vector<LogicalType> &return_types, vector<string> &names) {
+                                                    vector<LogicalType> &return_types, vector<CompatName> &names) {
 	if (input.inputs.size() != 1) {
 		throw BinderException("ast_functions requires exactly 1 argument: ast");
 	}
@@ -93,12 +93,12 @@ void ASTFunctionsFunction::Execute(ClientContext &context, TableFunctionInput &d
 	}
 
 	idx_t count = 0;
-	auto name_data = FlatVector::GetData<string_t>(output.data[0]);
-	auto start_line_data = FlatVector::GetData<int32_t>(output.data[1]);
-	auto end_line_data = FlatVector::GetData<int32_t>(output.data[2]);
-	auto param_count_data = FlatVector::GetData<int32_t>(output.data[3]);
-	auto is_method_data = FlatVector::GetData<bool>(output.data[4]);
-	auto parent_class_data = FlatVector::GetData<string_t>(output.data[5]);
+	auto name_data = CompatFlatDataMutable<string_t>(output.data[0]);
+	auto start_line_data = CompatFlatDataMutable<int32_t>(output.data[1]);
+	auto end_line_data = CompatFlatDataMutable<int32_t>(output.data[2]);
+	auto param_count_data = CompatFlatDataMutable<int32_t>(output.data[3]);
+	auto is_method_data = CompatFlatDataMutable<bool>(output.data[4]);
+	auto parent_class_data = CompatFlatDataMutable<string_t>(output.data[5]);
 	auto &parent_class_validity = FlatVector::Validity(output.data[5]);
 
 	while (data.current_idx < data.nodes.size() && count < STANDARD_VECTOR_SIZE) {
@@ -145,7 +145,7 @@ TableFunction ASTClassesFunction::GetFunction() {
 }
 
 unique_ptr<FunctionData> ASTClassesFunction::Bind(ClientContext &context, TableFunctionBindInput &input,
-                                                  vector<LogicalType> &return_types, vector<string> &names) {
+                                                  vector<LogicalType> &return_types, vector<CompatName> &names) {
 	if (input.inputs.size() != 1) {
 		throw BinderException("ast_classes requires exactly 1 argument: ast");
 	}
@@ -174,10 +174,10 @@ void ASTClassesFunction::Execute(ClientContext &context, TableFunctionInput &dat
 	}
 
 	idx_t count = 0;
-	auto name_data = FlatVector::GetData<string_t>(output.data[0]);
-	auto start_line_data = FlatVector::GetData<int32_t>(output.data[1]);
-	auto end_line_data = FlatVector::GetData<int32_t>(output.data[2]);
-	auto method_count_data = FlatVector::GetData<int32_t>(output.data[3]);
+	auto name_data = CompatFlatDataMutable<string_t>(output.data[0]);
+	auto start_line_data = CompatFlatDataMutable<int32_t>(output.data[1]);
+	auto end_line_data = CompatFlatDataMutable<int32_t>(output.data[2]);
+	auto method_count_data = CompatFlatDataMutable<int32_t>(output.data[3]);
 
 	while (data.current_idx < data.nodes.size() && count < STANDARD_VECTOR_SIZE) {
 		const auto &class_node = data.nodes[data.current_idx];
@@ -198,7 +198,7 @@ void ASTClassesFunction::Execute(ClientContext &context, TableFunctionInput &dat
 
 		// Base classes - simplified for now
 		ListVector::SetListSize(output.data[4], 0);
-		auto list_entries = FlatVector::GetData<list_entry_t>(output.data[4]);
+		auto list_entries = CompatFlatDataMutable<list_entry_t>(output.data[4]);
 		list_entries[count].offset = 0;
 		list_entries[count].length = 0;
 
@@ -221,7 +221,7 @@ TableFunction ASTImportsFunction::GetFunction() {
 }
 
 unique_ptr<FunctionData> ASTImportsFunction::Bind(ClientContext &context, TableFunctionBindInput &input,
-                                                  vector<LogicalType> &return_types, vector<string> &names) {
+                                                  vector<LogicalType> &return_types, vector<CompatName> &names) {
 	if (input.inputs.size() != 1) {
 		throw BinderException("ast_imports requires exactly 1 argument: ast");
 	}
@@ -250,10 +250,10 @@ void ASTImportsFunction::Execute(ClientContext &context, TableFunctionInput &dat
 	}
 
 	idx_t count = 0;
-	auto module_data = FlatVector::GetData<string_t>(output.data[0]);
-	auto alias_data = FlatVector::GetData<string_t>(output.data[2]);
-	auto line_data = FlatVector::GetData<int32_t>(output.data[3]);
-	auto is_from_data = FlatVector::GetData<bool>(output.data[4]);
+	auto module_data = CompatFlatDataMutable<string_t>(output.data[0]);
+	auto alias_data = CompatFlatDataMutable<string_t>(output.data[2]);
+	auto line_data = CompatFlatDataMutable<int32_t>(output.data[3]);
+	auto is_from_data = CompatFlatDataMutable<bool>(output.data[4]);
 	auto &alias_validity = FlatVector::Validity(output.data[2]);
 
 	while (data.current_idx < data.nodes.size() && count < STANDARD_VECTOR_SIZE) {
@@ -270,7 +270,7 @@ void ASTImportsFunction::Execute(ClientContext &context, TableFunctionInput &dat
 
 		// Empty names list for now
 		ListVector::SetListSize(output.data[1], 0);
-		auto list_entries = FlatVector::GetData<list_entry_t>(output.data[1]);
+		auto list_entries = CompatFlatDataMutable<list_entry_t>(output.data[1]);
 		list_entries[count].offset = 0;
 		list_entries[count].length = 0;
 

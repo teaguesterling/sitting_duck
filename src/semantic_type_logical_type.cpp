@@ -11,9 +11,10 @@ static constexpr const char *SEMANTIC_TYPE_NAME = "SEMANTIC_TYPE";
 
 // Create the SEMANTIC_TYPE logical type (UTINYINT with alias)
 LogicalType SemanticTypeLogicalType() {
-	auto semantic_type = LogicalType(LogicalTypeId::UTINYINT);
-	semantic_type.SetAlias(SEMANTIC_TYPE_NAME);
-	return semantic_type;
+	// DuckDB v2.0 removed LogicalType::SetAlias (it mutated a type whose
+	// type-info may be shared) in favour of WithAlias, which returns a copy.
+	// CompatWithAlias picks whichever exists; the resulting type is identical.
+	return CompatWithAlias(LogicalType(LogicalTypeId::UTINYINT), SEMANTIC_TYPE_NAME);
 }
 
 // Check if a type is SEMANTIC_TYPE

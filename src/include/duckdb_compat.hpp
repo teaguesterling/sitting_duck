@@ -1,6 +1,7 @@
 #pragma once
 
 #include "duckdb.hpp"
+#include <type_traits>
 
 // duckdb_compat.hpp — cross-version shim for DuckDB extensions.
 //
@@ -32,7 +33,293 @@
 #include <optional> // C++17, only needed on the new-API path
 #endif
 
+// --- DuckDB v2.0 (the `main` line) -------------------------------------------
+//
+// The shims below cover the v2.0 API breaks. They are probed SEPARATELY from
+// DUCKDB_HAS_NEW_VECTOR_HEADERS above and separately from each other: a version
+// macro says *when* something changed, a probe says whether it changed *here*,
+// which keeps working if a change is backported, reverted, or lands on a branch
+// we did not expect. Tying several changes to one macro silently picks the
+// wrong branch the moment they land in different releases.
+//
+// duckdb::Identifier replaced std::string as the name type in table-function
+// and COPY bind signatures. Identifier compares case-insensitively, and
+// construction from a RUNTIME string is explicit by design -- promoting a
+// string to an identifier is meant to be a deliberate act at the call site --
+// so boundary helpers are needed rather than an implicit conversion.
+#if __has_include("duckdb/common/identifier.hpp")
+#define DUCKDB_HAS_IDENTIFIER 1
+#include "duckdb/common/identifier.hpp"
+#endif
+
+#include "duckdb/planner/expression/bound_function_expression.hpp"
+#include "duckdb/parser/expression/comparison_expression.hpp"
+#include "duckdb/parser/expression/conjunction_expression.hpp"
+#include "duckdb/parser/expression/constant_expression.hpp"
+#include "duckdb/parser/expression/function_expression.hpp"
+
+// The scalar bind-function signature collapsed its three parameters into one
+// input object on v2.0:
+//   v1.5: (ClientContext &, ScalarFunction &, vector<unique_ptr<Expression>> &)
+//   v2.0: (BindScalarFunctionInput &)
+// Declare bind functions with DUCKDB_SCALAR_BIND_PARAMS and reach the pieces
+// through DUCKDB_SCALAR_BIND_CONTEXT / DUCKDB_SCALAR_BIND_ARGS.
+#ifdef DUCKDB_HAS_NEW_VECTOR_HEADERS
+#define DUCKDB_SCALAR_BIND_PARAMS  duckdb::BindScalarFunctionInput &bind_input
+#define DUCKDB_SCALAR_BIND_CONTEXT bind_input.GetClientContext()
+#define DUCKDB_SCALAR_BIND_ARGS    bind_input.GetArguments()
+#else
+#define DUCKDB_SCALAR_BIND_PARAMS                                                                                      \
+	duckdb::ClientContext &context, duckdb::ScalarFunction &bound_function,                                            \
+	    duckdb::vector<duckdb::unique_ptr<duckdb::Expression>> &arguments
+#define DUCKDB_SCALAR_BIND_CONTEXT context
+#define DUCKDB_SCALAR_BIND_ARGS    arguments
+#endif
+
 namespace duckdb {
+
+//===--------------------------------------------------------------------===//
+// CompatName / CompatNameStr / CompatMakeName / CompatAssignNames
+//===--------------------------------------------------------------------===//
+//
+// The bind-signature name type. Every table-function bind callback declares its
+// names parameter as `vector<CompatName> &`; string LITERALS still work
+// unchanged (`Identifier(const char *)` is implicit), so only the signatures
+// move. Runtime strings crossing the boundary use CompatMakeName (in) and
+// CompatNameStr (out).
+//
+// sitting_duck builds several of its column-name lists at runtime from the
+// language/extraction configuration (UnifiedASTBackend::GetFlat...ColumnNames
+// returns vector<string>), so CompatAssignNames exists for that case: it is the
+// element-wise conversion that `names = helper()` used to be for free.
+
+#ifdef DUCKDB_HAS_IDENTIFIER
+using CompatName = Identifier;
+inline string CompatNameStr(const Identifier &id) {
+	return id.GetIdentifierName();
+}
+inline Identifier CompatMakeName(string name) {
+	return Identifier(std::move(name));
+}
+#else
+using CompatName = string;
+inline string CompatNameStr(const string &name) {
+	return name;
+}
+inline string CompatMakeName(string name) {
+	return name;
+}
+#endif
+
+//! Replace `names` with the element-wise conversion of a runtime-built
+//! vector<string>. Use where the pre-v2.0 code did `names = <helper>()`.
+inline void CompatAssignNames(vector<CompatName> &names, const vector<string> &source) {
+	names.clear();
+	names.reserve(source.size());
+	for (auto &name : source) {
+		names.push_back(CompatMakeName(name));
+	}
+}
+
+//===--------------------------------------------------------------------===//
+// CompatWithAlias
+//===--------------------------------------------------------------------===//
+//
+// v1.5: void SetAlias(string)                -- mutates in place
+// v2.0: LogicalType WithAlias(string) const  -- returns a copy, never mutating
+//       a type whose type-info may be shared. SetAlias is REMOVED, not
+//       deprecated: on main the compiler says LogicalType "has no member named
+//       SetAlias".
+//
+// Dispatched on a tag rather than with `if constexpr`, so this header also
+// compiles at C++11 (see the linkage note at the top of the file -- forcing
+// C++17 on the extension but not on libduckdb produces multiple-definition
+// errors). Tag dispatch has the property that matters here: only the selected
+// overload is instantiated, so the branch naming the absent member is never
+// compiled. The member probe itself is valid C++11 in this form.
+
+template <class T, class = void>
+struct CompatHasWithAlias : std::false_type {};
+template <class T>
+struct CompatHasWithAlias<T, decltype(void(std::declval<const T &>().WithAlias(string())))> : std::true_type {};
+
+template <class TYPE>
+inline LogicalType CompatWithAliasImpl(TYPE type, string alias, std::true_type) {
+	return type.WithAlias(std::move(alias));
+}
+template <class TYPE>
+inline LogicalType CompatWithAliasImpl(TYPE type, string alias, std::false_type) {
+	type.SetAlias(std::move(alias));
+	return type;
+}
+template <class TYPE = LogicalType>
+inline LogicalType CompatWithAlias(TYPE type, string alias) {
+	return CompatWithAliasImpl(std::move(type), std::move(alias), CompatHasWithAlias<TYPE>());
+}
+
+//===--------------------------------------------------------------------===//
+// CompatFlatDataMutable
+//===--------------------------------------------------------------------===//
+//
+// v1.5: FlatVector::GetData<T>(vec)         returns T*
+// v2.0: FlatVector::GetData<T>(vec)         returns const T*
+//       FlatVector::GetDataMutable<T>(vec)  returns T*
+//
+// Writing through the v2.0 read accessor is a compile error, which is the point
+// of the split -- the WRITE path must ask for mutability explicitly. Note that
+// ConstantVector::GetData<T> kept its non-const overload, so only FlatVector
+// needs this.
+
+template <class T, class = void>
+struct CompatHasFlatGetDataMutable : std::false_type {};
+template <class T>
+struct CompatHasFlatGetDataMutable<T, decltype(void(T::template GetDataMutable<bool>(std::declval<Vector &>())))>
+    : std::true_type {};
+
+template <class VALUE, class FV>
+inline VALUE *CompatFlatDataMutableImpl(Vector &vec, std::true_type) {
+	return FV::template GetDataMutable<VALUE>(vec);
+}
+template <class VALUE, class FV>
+inline VALUE *CompatFlatDataMutableImpl(Vector &vec, std::false_type) {
+	return FV::template GetData<VALUE>(vec);
+}
+template <class VALUE, class FV = FlatVector>
+inline VALUE *CompatFlatDataMutable(Vector &vec) {
+	return CompatFlatDataMutableImpl<VALUE, FV>(vec, CompatHasFlatGetDataMutable<FV>());
+}
+
+//===--------------------------------------------------------------------===//
+// CompatStructEntry / CompatStructGetField
+//===--------------------------------------------------------------------===//
+//
+// v1.5: StructVector::GetEntries(vec) -> vector<unique_ptr<Vector>> &
+// v2.0: StructVector::GetEntries(vec) -> vector<Vector> &
+//
+// So `*entries[i]` and `entries[i]->Foo()` stop compiling on v2.0. No probe is
+// needed here: plain overload resolution distinguishes the two element types,
+// and only the viable overload is ever selected. (A probe would also work, but
+// this cannot get its polarity backwards.)
+
+inline Vector &CompatStructEntry(Vector &entry) {
+	return entry;
+}
+inline const Vector &CompatStructEntry(const Vector &entry) {
+	return entry;
+}
+inline Vector &CompatStructEntry(const unique_ptr<Vector> &entry) {
+	return *entry;
+}
+
+//! Child vector `field_idx` of a STRUCT vector, on either version.
+inline Vector &CompatStructGetField(Vector &vec, idx_t field_idx) {
+	return CompatStructEntry(StructVector::GetEntries(vec)[field_idx]);
+}
+
+//===--------------------------------------------------------------------===//
+// CompatBoundBindInfo
+//===--------------------------------------------------------------------===//
+//
+// BoundFunctionExpression::bind_info became private on v2.0; BindInfo() /
+// BindInfoMutable() replace it. Execute callbacks read it through
+// ExpressionState::expr, which is a const reference, so the const overload is
+// the one that matters here.
+
+#ifdef DUCKDB_HAS_NEW_VECTOR_HEADERS
+inline const unique_ptr<FunctionData> &CompatBoundBindInfo(const BoundFunctionExpression &expr) {
+	return expr.BindInfo();
+}
+inline unique_ptr<FunctionData> &CompatBoundBindInfo(BoundFunctionExpression &expr) {
+	return expr.BindInfoMutable();
+}
+#else
+inline const unique_ptr<FunctionData> &CompatBoundBindInfo(const BoundFunctionExpression &expr) {
+	return expr.bind_info;
+}
+inline unique_ptr<FunctionData> &CompatBoundBindInfo(BoundFunctionExpression &expr) {
+	return expr.bind_info;
+}
+#endif
+
+//===--------------------------------------------------------------------===//
+// Parsed-expression accessors
+//===--------------------------------------------------------------------===//
+//
+// v2.0 made the parser expression hierarchy's data members private and added
+// accessors; v1.5 has the public fields and (for most of these) no accessor, so
+// a shim is needed in both directions rather than a straight rename.
+//
+//   ConstantExpression::value       -> GetValue()
+//   FunctionExpression::function_name -> FunctionName()          (an Identifier)
+//   FunctionExpression::children    -> GetArguments()            (vector<FunctionArgument>,
+//                                                                 each wrapping an expression)
+//   ComparisonExpression::left/right-> Left() / Right()
+//   ConjunctionExpression::children -> GetChildren()
+//
+// The argument/child helpers return a vector of raw pointers rather than
+// exposing either container shape, because the two versions no longer store the
+// same thing: v2.0's FunctionExpression holds named FunctionArguments, not bare
+// child expressions.
+
+#ifdef DUCKDB_HAS_NEW_VECTOR_HEADERS
+
+inline const Value &CompatConstantValue(const ConstantExpression &expr) {
+	return expr.GetValue();
+}
+inline string CompatFunctionName(const FunctionExpression &expr) {
+	return expr.FunctionName().GetIdentifierName();
+}
+inline vector<const ParsedExpression *> CompatFunctionArgExprs(const FunctionExpression &expr) {
+	vector<const ParsedExpression *> result;
+	for (auto &arg : expr.GetArguments()) {
+		result.push_back(&arg.GetExpression());
+	}
+	return result;
+}
+inline const ParsedExpression *CompatComparisonLeft(const ComparisonExpression &expr) {
+	return &expr.Left();
+}
+inline const ParsedExpression *CompatComparisonRight(const ComparisonExpression &expr) {
+	return &expr.Right();
+}
+inline vector<const ParsedExpression *> CompatConjunctionChildren(const ConjunctionExpression &expr) {
+	vector<const ParsedExpression *> result;
+	for (auto &child : expr.GetChildren()) {
+		result.push_back(child.get());
+	}
+	return result;
+}
+
+#else
+
+inline const Value &CompatConstantValue(const ConstantExpression &expr) {
+	return expr.value;
+}
+inline string CompatFunctionName(const FunctionExpression &expr) {
+	return expr.function_name;
+}
+inline vector<const ParsedExpression *> CompatFunctionArgExprs(const FunctionExpression &expr) {
+	vector<const ParsedExpression *> result;
+	for (auto &child : expr.children) {
+		result.push_back(child.get());
+	}
+	return result;
+}
+inline const ParsedExpression *CompatComparisonLeft(const ComparisonExpression &expr) {
+	return expr.left.get();
+}
+inline const ParsedExpression *CompatComparisonRight(const ComparisonExpression &expr) {
+	return expr.right.get();
+}
+inline vector<const ParsedExpression *> CompatConjunctionChildren(const ConjunctionExpression &expr) {
+	vector<const ParsedExpression *> result;
+	for (auto &child : expr.children) {
+		result.push_back(child.get());
+	}
+	return result;
+}
+
+#endif
 
 //===--------------------------------------------------------------------===//
 // CompatSetOutputCardinality
