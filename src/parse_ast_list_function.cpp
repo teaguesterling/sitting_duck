@@ -45,9 +45,9 @@ static LogicalType BuildASTStructType(const ExtractionConfig &config) {
 	for (idx_t i = 0; i < types.size(); i++) {
 		// Replace SEMANTIC_TYPE custom logical type with plain UTINYINT
 		if (IsSemanticType(types[i])) {
-			struct_children.push_back(make_pair(names[i], LogicalType::UTINYINT));
+			struct_children.push_back(make_pair(CompatMakeChildKey(names[i]), LogicalType::UTINYINT));
 		} else {
-			struct_children.push_back(make_pair(names[i], types[i]));
+			struct_children.push_back(make_pair(CompatMakeChildKey(names[i]), types[i]));
 		}
 	}
 
@@ -66,9 +66,9 @@ static Value ConvertASTResultToList(const ASTResult &result, const ExtractionCon
 	child_list_t<LogicalType> struct_children;
 	for (idx_t i = 0; i < types.size(); i++) {
 		if (IsSemanticType(types[i])) {
-			struct_children.push_back(make_pair(names[i], LogicalType::UTINYINT));
+			struct_children.push_back(make_pair(CompatMakeChildKey(names[i]), LogicalType::UTINYINT));
 		} else {
-			struct_children.push_back(make_pair(names[i], types[i]));
+			struct_children.push_back(make_pair(CompatMakeChildKey(names[i]), types[i]));
 		}
 	}
 	auto element_type = LogicalType::STRUCT(struct_children);

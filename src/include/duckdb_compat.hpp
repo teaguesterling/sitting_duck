@@ -131,6 +131,23 @@ inline CompatName CompatMakeName(string name) {
 
 //! Replace `names` with the element-wise conversion of a runtime-built
 //! vector<string>. Use where the pre-v2.0 code did `names = <helper>()`.
+// A child_list_t KEY is a THIRD container, derived separately on purpose.
+//
+// CompatName above comes from the bind out-parameter; child_list_t's key comes
+// from STRUCT/UNION field names. Those are independent upstream declarations and
+// they have already diverged in practice: on the DuckDB the stable CI leg builds,
+// bind names are Identifier while child_list_t keys are still string, so pairing
+// a bind name straight into a child_list_t stopped compiling. Deriving each from
+// its own container is what makes that a non-event.
+//
+// CompatChildKey(string) constructs correctly on both lines -- a copy where the
+// key is string, the explicit Identifier ctor where it is not.
+using CompatChildKey = typename child_list_t<LogicalType>::value_type::first_type;
+
+inline CompatChildKey CompatMakeChildKey(const CompatName &name) {
+	return CompatChildKey(CompatNameStr(name));
+}
+
 inline void CompatAssignNames(vector<CompatName> &names, const vector<string> &source) {
 	names.clear();
 	names.reserve(source.size());
