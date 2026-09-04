@@ -6,6 +6,7 @@
 #include "duckdb/parser/statement/select_statement.hpp"
 #include "duckdb/parser/query_node/select_node.hpp"
 #include "duckdb/parser/tableref.hpp"
+#include "duckdb/parser/statement/create_statement.hpp"
 #include "duckdb/parser/parsed_expression.hpp"
 #include <mutex>
 
