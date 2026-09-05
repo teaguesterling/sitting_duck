@@ -1,6 +1,7 @@
 #pragma once
 
 #include "duckdb.hpp"
+#include "duckdb_compat.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "ast_type.hpp"
 
@@ -19,7 +20,7 @@ public:
 
 private:
 	static unique_ptr<FunctionData> Bind(ClientContext &context, TableFunctionBindInput &input,
-	                                     vector<LogicalType> &return_types, vector<string> &names);
+	                                     vector<LogicalType> &return_types, vector<CompatName> &names);
 	static void Execute(ClientContext &context, TableFunctionInput &data_p, DataChunk &output);
 };
 
@@ -30,7 +31,7 @@ public:
 
 private:
 	static unique_ptr<FunctionData> Bind(ClientContext &context, TableFunctionBindInput &input,
-	                                     vector<LogicalType> &return_types, vector<string> &names);
+	                                     vector<LogicalType> &return_types, vector<CompatName> &names);
 	static void Execute(ClientContext &context, TableFunctionInput &data_p, DataChunk &output);
 };
 
@@ -41,7 +42,7 @@ public:
 
 private:
 	static unique_ptr<FunctionData> Bind(ClientContext &context, TableFunctionBindInput &input,
-	                                     vector<LogicalType> &return_types, vector<string> &names);
+	                                     vector<LogicalType> &return_types, vector<CompatName> &names);
 	static void Execute(ClientContext &context, TableFunctionInput &data_p, DataChunk &output);
 };
 

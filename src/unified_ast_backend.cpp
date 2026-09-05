@@ -1,4 +1,5 @@
 #include "unified_ast_backend.hpp"
+#include "duckdb_compat.hpp"
 #include "unified_ast_backend_impl.hpp"
 #include "language_adapter.hpp"
 #include "semantic_types.hpp"
@@ -781,31 +782,31 @@ void UnifiedASTBackend::ProjectToTable(const ASTResult &result, DataChunk &outpu
 	//   14:scope (STRUCT) 15:peek 16:semantic_type 17:flags 18:qualified_name
 
 	// Get output vectors
-	auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
-	auto type_vec = FlatVector::GetData<string_t>(output.data[1]);
-	auto name_vec = FlatVector::GetData<string_t>(output.data[2]);
-	auto file_path_vec = FlatVector::GetData<string_t>(output.data[3]);
-	auto language_vec = FlatVector::GetData<string_t>(output.data[4]);
-	auto start_line_vec = FlatVector::GetData<uint32_t>(output.data[5]);
-	auto start_column_vec = FlatVector::GetData<uint32_t>(output.data[6]);
-	auto end_line_vec = FlatVector::GetData<uint32_t>(output.data[7]);
-	auto end_column_vec = FlatVector::GetData<uint32_t>(output.data[8]);
-	auto parent_id_vec = FlatVector::GetData<int64_t>(output.data[9]);
-	auto depth_vec = FlatVector::GetData<uint32_t>(output.data[10]);
-	auto sibling_index_vec = FlatVector::GetData<int32_t>(output.data[11]);
-	auto children_count_vec = FlatVector::GetData<uint32_t>(output.data[12]);
-	auto descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[13]);
+	auto node_id_vec = CompatFlatDataMutable<int64_t>(output.data[0]);
+	auto type_vec = CompatFlatDataMutable<string_t>(output.data[1]);
+	auto name_vec = CompatFlatDataMutable<string_t>(output.data[2]);
+	auto file_path_vec = CompatFlatDataMutable<string_t>(output.data[3]);
+	auto language_vec = CompatFlatDataMutable<string_t>(output.data[4]);
+	auto start_line_vec = CompatFlatDataMutable<uint32_t>(output.data[5]);
+	auto start_column_vec = CompatFlatDataMutable<uint32_t>(output.data[6]);
+	auto end_line_vec = CompatFlatDataMutable<uint32_t>(output.data[7]);
+	auto end_column_vec = CompatFlatDataMutable<uint32_t>(output.data[8]);
+	auto parent_id_vec = CompatFlatDataMutable<int64_t>(output.data[9]);
+	auto depth_vec = CompatFlatDataMutable<uint32_t>(output.data[10]);
+	auto sibling_index_vec = CompatFlatDataMutable<int32_t>(output.data[11]);
+	auto children_count_vec = CompatFlatDataMutable<uint32_t>(output.data[12]);
+	auto descendant_count_vec = CompatFlatDataMutable<uint32_t>(output.data[13]);
 	// scope (col 14) is STRUCT<current, function, class, module, stack>; written via SetValue.
-	auto peek_vec = FlatVector::GetData<string_t>(output.data[15]);
+	auto peek_vec = CompatFlatDataMutable<string_t>(output.data[15]);
 	// Semantic type fields
-	auto semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[16]);
-	auto flags_vec = FlatVector::GetData<uint8_t>(output.data[17]);
+	auto semantic_type_vec = CompatFlatDataMutable<uint8_t>(output.data[16]);
+	auto flags_vec = CompatFlatDataMutable<uint8_t>(output.data[17]);
 	// qualified_name is LIST<STRUCT>; written via SetValue, not a direct data pointer.
 
 	// Get validity masks for nullable fields
-	auto &name_validity = FlatVector::Validity(output.data[2]);
-	auto &parent_validity = FlatVector::Validity(output.data[9]);
-	auto &peek_validity = FlatVector::Validity(output.data[15]);
+	auto &name_validity = CompatFlatValidityMutable<>(output.data[2]);
+	auto &parent_validity = CompatFlatValidityMutable<>(output.data[9]);
+	auto &peek_validity = CompatFlatValidityMutable<>(output.data[15]);
 
 	idx_t count = 0;
 	idx_t max_count = STANDARD_VECTOR_SIZE;
@@ -924,8 +925,8 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 	idx_t type_col = col_idx++;
 
 	// Get vectors for core columns (always present)
-	auto *node_id_vec = FlatVector::GetData<int64_t>(output.data[node_id_col]);
-	auto *type_vec = FlatVector::GetData<string_t>(output.data[type_col]);
+	auto *node_id_vec = CompatFlatDataMutable<int64_t>(output.data[node_id_col]);
+	auto *type_vec = CompatFlatDataMutable<string_t>(output.data[type_col]);
 
 	// Context columns based on schema_config.context (AGENT J FIX: Track indices)
 	idx_t semantic_type_col = 0, flags_col = 0, name_col = 0;
@@ -942,12 +943,12 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 		if (schema_config.context >= ContextLevel::NODE_TYPES_ONLY) {
 			semantic_type_col = col_idx++;
 			flags_col = col_idx++;
-			semantic_type_vec = FlatVector::GetData<uint8_t>(output.data[semantic_type_col]);
-			flags_vec = FlatVector::GetData<uint8_t>(output.data[flags_col]);
+			semantic_type_vec = CompatFlatDataMutable<uint8_t>(output.data[semantic_type_col]);
+			flags_vec = CompatFlatDataMutable<uint8_t>(output.data[flags_col]);
 		}
 		if (schema_config.context >= ContextLevel::NORMALIZED) {
 			name_col = col_idx++;
-			name_vec = FlatVector::GetData<string_t>(output.data[name_col]);
+			name_vec = CompatFlatDataMutable<string_t>(output.data[name_col]);
 			qualified_name_col = col_idx++;
 			have_qualified_name_col = true;
 		}
@@ -965,10 +966,10 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 		parameters_col = col_idx++;
 		modifiers_col = col_idx++;
 		annotations_col = col_idx++;
-		signature_type_vec = FlatVector::GetData<string_t>(output.data[signature_type_col]);
-		annotations_vec = FlatVector::GetData<string_t>(output.data[annotations_col]);
-		signature_type_validity = &FlatVector::Validity(output.data[signature_type_col]);
-		annotations_validity = &FlatVector::Validity(output.data[annotations_col]);
+		signature_type_vec = CompatFlatDataMutable<string_t>(output.data[signature_type_col]);
+		annotations_vec = CompatFlatDataMutable<string_t>(output.data[annotations_col]);
+		signature_type_validity = &CompatFlatValidityMutable<>(output.data[signature_type_col]);
+		annotations_validity = &CompatFlatValidityMutable<>(output.data[annotations_col]);
 		// Note: parameters and modifiers columns are LIST types, handled separately
 	}
 
@@ -985,21 +986,21 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 	if (schema_config.source != SourceLevel::NONE) {
 		file_path_col = col_idx++;
 		language_col = col_idx++;
-		file_path_vec = FlatVector::GetData<string_t>(output.data[file_path_col]);
-		language_vec = FlatVector::GetData<string_t>(output.data[language_col]);
+		file_path_vec = CompatFlatDataMutable<string_t>(output.data[file_path_col]);
+		language_vec = CompatFlatDataMutable<string_t>(output.data[language_col]);
 
 		if (schema_config.source >= SourceLevel::LINES_ONLY) {
 			start_line_col = col_idx++;
 			end_line_col = col_idx++;
-			start_line_vec = FlatVector::GetData<uint32_t>(output.data[start_line_col]);
-			end_line_vec = FlatVector::GetData<uint32_t>(output.data[end_line_col]);
+			start_line_vec = CompatFlatDataMutable<uint32_t>(output.data[start_line_col]);
+			end_line_vec = CompatFlatDataMutable<uint32_t>(output.data[end_line_col]);
 		}
 
 		if (schema_config.source >= SourceLevel::FULL) {
 			start_column_col = col_idx++;
 			end_column_col = col_idx++;
-			start_column_vec = FlatVector::GetData<uint32_t>(output.data[start_column_col]);
-			end_column_vec = FlatVector::GetData<uint32_t>(output.data[end_column_col]);
+			start_column_vec = CompatFlatDataMutable<uint32_t>(output.data[start_column_col]);
+			end_column_vec = CompatFlatDataMutable<uint32_t>(output.data[end_column_col]);
 		}
 	}
 
@@ -1018,9 +1019,9 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 		if (schema_config.structure >= StructureLevel::MINIMAL) {
 			parent_id_col = col_idx++;
 			depth_col = col_idx++;
-			parent_id_vec = FlatVector::GetData<int64_t>(output.data[parent_id_col]);
-			parent_validity = &FlatVector::Validity(output.data[parent_id_col]);
-			depth_vec = FlatVector::GetData<uint32_t>(output.data[depth_col]);
+			parent_id_vec = CompatFlatDataMutable<int64_t>(output.data[parent_id_col]);
+			parent_validity = &CompatFlatValidityMutable<>(output.data[parent_id_col]);
+			depth_vec = CompatFlatDataMutable<uint32_t>(output.data[depth_col]);
 		}
 
 		if (schema_config.structure >= StructureLevel::FULL) {
@@ -1028,9 +1029,9 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 			children_count_col = col_idx++;
 			descendant_count_col = col_idx++;
 			scope_col = col_idx++;
-			sibling_index_vec = FlatVector::GetData<int32_t>(output.data[sibling_index_col]);
-			children_count_vec = FlatVector::GetData<uint32_t>(output.data[children_count_col]);
-			descendant_count_vec = FlatVector::GetData<uint32_t>(output.data[descendant_count_col]);
+			sibling_index_vec = CompatFlatDataMutable<int32_t>(output.data[sibling_index_col]);
+			children_count_vec = CompatFlatDataMutable<uint32_t>(output.data[children_count_col]);
+			descendant_count_vec = CompatFlatDataMutable<uint32_t>(output.data[descendant_count_col]);
 			has_scope_col = true;
 		}
 	}
@@ -1042,8 +1043,8 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 
 	if (schema_config.peek != PeekLevel::NONE) {
 		peek_col = col_idx++;
-		peek_vec = FlatVector::GetData<string_t>(output.data[peek_col]);
-		peek_validity = &FlatVector::Validity(output.data[peek_col]);
+		peek_vec = CompatFlatDataMutable<string_t>(output.data[peek_col]);
+		peek_validity = &CompatFlatValidityMutable<>(output.data[peek_col]);
 	}
 
 	// Handle file_path and language per row (not as constant vectors)
@@ -1109,9 +1110,9 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 						                            std::move(param_structs)));
 
 						// Same for modifiers
-						auto modifiers_list_data = FlatVector::GetData<list_entry_t>(output.data[modifiers_col]);
+						auto modifiers_list_data = CompatFlatDataMutable<list_entry_t>(output.data[modifiers_col]);
 						auto &modifiers_child = ListVector::GetEntry(output.data[modifiers_col]);
-						auto modifiers_child_data = FlatVector::GetData<string_t>(modifiers_child);
+						auto modifiers_child_data = CompatFlatDataMutable<string_t>(modifiers_child);
 
 						modifiers_list_data[count].offset = ListVector::GetListSize(output.data[modifiers_col]);
 						modifiers_list_data[count].length = node.native.modifiers.size();
@@ -1121,7 +1122,7 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 							if (child_idx >= ListVector::GetListCapacity(output.data[modifiers_col])) {
 								ListVector::Reserve(output.data[modifiers_col], (child_idx + 1) * 2);
 								modifiers_child_data =
-								    FlatVector::GetData<string_t>(ListVector::GetEntry(output.data[modifiers_col]));
+								    CompatFlatDataMutable<string_t>(ListVector::GetEntry(output.data[modifiers_col]));
 							}
 							modifiers_child_data[child_idx] =
 							    StringVector::AddString(modifiers_child, node.native.modifiers[i]);
@@ -1142,8 +1143,8 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 						annotations_validity->SetInvalid(count);
 
 						// For LIST types, create empty lists with proper indexing
-						auto list_data = FlatVector::GetData<list_entry_t>(output.data[parameters_col]);
-						auto modifiers_list_data = FlatVector::GetData<list_entry_t>(output.data[modifiers_col]);
+						auto list_data = CompatFlatDataMutable<list_entry_t>(output.data[parameters_col]);
+						auto modifiers_list_data = CompatFlatDataMutable<list_entry_t>(output.data[modifiers_col]);
 
 						// Set empty list entries for both parameters and modifiers
 						list_data[count].offset = ListVector::GetListSize(output.data[parameters_col]);
@@ -1158,8 +1159,8 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 					annotations_validity->SetInvalid(count);
 
 					// For LIST types, create empty lists with proper indexing
-					auto list_data = FlatVector::GetData<list_entry_t>(output.data[parameters_col]);
-					auto modifiers_list_data = FlatVector::GetData<list_entry_t>(output.data[modifiers_col]);
+					auto list_data = CompatFlatDataMutable<list_entry_t>(output.data[parameters_col]);
+					auto modifiers_list_data = CompatFlatDataMutable<list_entry_t>(output.data[modifiers_col]);
 
 					list_data[count].offset = ListVector::GetListSize(output.data[parameters_col]);
 					list_data[count].length = 0;
@@ -1343,15 +1344,15 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult &result, Data
 	}
 
 	// Get output vectors for hierarchical schema: node_id, type, source, structure, context, peek
-	auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
-	auto type_vec = FlatVector::GetData<string_t>(output.data[1]);
+	auto node_id_vec = CompatFlatDataMutable<int64_t>(output.data[0]);
+	auto type_vec = CompatFlatDataMutable<string_t>(output.data[1]);
 	auto &source_vector = output.data[2];    // STRUCT column
 	auto &structure_vector = output.data[3]; // STRUCT column
 	auto &context_vector = output.data[4];   // STRUCT column
-	auto peek_vec = FlatVector::GetData<string_t>(output.data[5]);
+	auto peek_vec = CompatFlatDataMutable<string_t>(output.data[5]);
 
 	// Get validity masks
-	auto &peek_validity = FlatVector::Validity(output.data[5]);
+	auto &peek_validity = CompatFlatValidityMutable<>(output.data[5]);
 
 	idx_t count = 0;
 	idx_t max_count = STANDARD_VECTOR_SIZE;
@@ -1376,7 +1377,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult &result, Data
 		source_values.push_back(make_pair("end_line", Value::UINTEGER(node.end_line)));
 		source_values.push_back(make_pair("end_column", Value::UINTEGER(node.end_column)));
 		Value source_struct = Value::STRUCT(source_values);
-		FlatVector::GetData<Value>(source_vector)[row_idx] = source_struct;
+		CompatFlatDataMutable<Value>(source_vector)[row_idx] = source_struct;
 
 		// Create structure STRUCT (use legacy fields for now)
 		child_list_t<Value> structure_values;
@@ -1391,7 +1392,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult &result, Data
 		structure_values.push_back(make_pair("descendant_count", Value::UINTEGER(node.legacy_descendant_count)));
 		structure_values.push_back(make_pair("scope", ScopeValue(node.scope)));
 		Value structure_struct = Value::STRUCT(structure_values);
-		FlatVector::GetData<Value>(structure_vector)[row_idx] = structure_struct;
+		CompatFlatDataMutable<Value>(structure_vector)[row_idx] = structure_struct;
 
 		// Create context STRUCT (use legacy fields for now)
 		child_list_t<Value> context_values;
@@ -1405,7 +1406,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTable(const ASTResult &result, Data
 		context_values.push_back(make_pair("semantic_type", Value::UTINYINT(node.semantic_type)));
 		context_values.push_back(make_pair("flags", Value::UTINYINT(node.universal_flags)));
 		Value context_struct = Value::STRUCT(context_values);
-		FlatVector::GetData<Value>(context_vector)[row_idx] = context_struct;
+		CompatFlatDataMutable<Value>(context_vector)[row_idx] = context_struct;
 
 		// Content Preview
 		if (!node.peek.empty()) {
@@ -1544,10 +1545,10 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 	// PASS 2: Build all DuckDB vectors using collected data (SAFE - no interference)
 
 	// Get output vectors for new 6-column schema: node_id, type, source, structure, context, peek
-	auto node_id_vec = FlatVector::GetData<int64_t>(output.data[0]);
-	auto type_vec = FlatVector::GetData<string_t>(output.data[1]);
-	auto peek_vec = FlatVector::GetData<string_t>(output.data[5]);
-	auto &peek_validity = FlatVector::Validity(output.data[5]);
+	auto node_id_vec = CompatFlatDataMutable<int64_t>(output.data[0]);
+	auto type_vec = CompatFlatDataMutable<string_t>(output.data[1]);
+	auto peek_vec = CompatFlatDataMutable<string_t>(output.data[5]);
+	auto &peek_validity = CompatFlatValidityMutable<>(output.data[5]);
 
 	// Get STRUCT child vectors using StructVector::GetEntries()
 	auto &source_entries = StructVector::GetEntries(output.data[2]);
@@ -1555,44 +1556,44 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 	auto &context_entries = StructVector::GetEntries(output.data[4]);
 
 	// Source STRUCT child vectors
-	auto source_file_path_vec = FlatVector::GetData<string_t>(*source_entries[0]);
-	auto source_language_vec = FlatVector::GetData<string_t>(*source_entries[1]);
-	auto source_start_line_vec = FlatVector::GetData<uint32_t>(*source_entries[2]);
-	auto source_start_column_vec = FlatVector::GetData<uint32_t>(*source_entries[3]);
-	auto source_end_line_vec = FlatVector::GetData<uint32_t>(*source_entries[4]);
-	auto source_end_column_vec = FlatVector::GetData<uint32_t>(*source_entries[5]);
+	auto source_file_path_vec = CompatFlatDataMutable<string_t>(CompatStructEntry(source_entries[0]));
+	auto source_language_vec = CompatFlatDataMutable<string_t>(CompatStructEntry(source_entries[1]));
+	auto source_start_line_vec = CompatFlatDataMutable<uint32_t>(CompatStructEntry(source_entries[2]));
+	auto source_start_column_vec = CompatFlatDataMutable<uint32_t>(CompatStructEntry(source_entries[3]));
+	auto source_end_line_vec = CompatFlatDataMutable<uint32_t>(CompatStructEntry(source_entries[4]));
+	auto source_end_column_vec = CompatFlatDataMutable<uint32_t>(CompatStructEntry(source_entries[5]));
 
 	// Structure STRUCT child vectors
-	auto structure_parent_id_vec = FlatVector::GetData<int64_t>(*structure_entries[0]);
-	auto &structure_parent_validity = FlatVector::Validity(*structure_entries[0]);
-	auto structure_depth_vec = FlatVector::GetData<uint32_t>(*structure_entries[1]);
-	auto structure_sibling_index_vec = FlatVector::GetData<int32_t>(*structure_entries[2]);
-	auto structure_children_count_vec = FlatVector::GetData<uint32_t>(*structure_entries[3]);
-	auto structure_descendant_count_vec = FlatVector::GetData<uint32_t>(*structure_entries[4]);
+	auto structure_parent_id_vec = CompatFlatDataMutable<int64_t>(CompatStructEntry(structure_entries[0]));
+	auto &structure_parent_validity = CompatFlatValidityMutable<>(CompatStructEntry(structure_entries[0]));
+	auto structure_depth_vec = CompatFlatDataMutable<uint32_t>(CompatStructEntry(structure_entries[1]));
+	auto structure_sibling_index_vec = CompatFlatDataMutable<int32_t>(CompatStructEntry(structure_entries[2]));
+	auto structure_children_count_vec = CompatFlatDataMutable<uint32_t>(CompatStructEntry(structure_entries[3]));
+	auto structure_descendant_count_vec = CompatFlatDataMutable<uint32_t>(CompatStructEntry(structure_entries[4]));
 	// structure_entries[5] is scope STRUCT<current, function, class, module, stack>;
 	// written via SetValue on the containing struct.
-	auto &structure_scope_vec = *structure_entries[5];
+	auto &structure_scope_vec = CompatStructEntry(structure_entries[5]);
 
 	// Context STRUCT child vectors
-	auto context_name_vec = FlatVector::GetData<string_t>(*context_entries[0]);
-	auto &context_name_validity = FlatVector::Validity(*context_entries[0]);
+	auto context_name_vec = CompatFlatDataMutable<string_t>(CompatStructEntry(context_entries[0]));
+	auto &context_name_validity = CompatFlatValidityMutable<>(CompatStructEntry(context_entries[0]));
 	// qualified_name (context_entries[1]) is LIST<STRUCT>; written via SetValue.
-	auto context_semantic_type_vec = FlatVector::GetData<uint8_t>(*context_entries[2]);
-	auto context_flags_vec = FlatVector::GetData<uint8_t>(*context_entries[3]);
+	auto context_semantic_type_vec = CompatFlatDataMutable<uint8_t>(CompatStructEntry(context_entries[2]));
+	auto context_flags_vec = CompatFlatDataMutable<uint8_t>(CompatStructEntry(context_entries[3]));
 
 	// Native context STRUCT child vectors
-	auto &native_entries = StructVector::GetEntries(*context_entries[4]);
-	auto &native_validity = FlatVector::Validity(*context_entries[4]);
+	auto &native_entries = StructVector::GetEntries(CompatStructEntry(context_entries[4]));
+	auto &native_validity = CompatFlatValidityMutable<>(CompatStructEntry(context_entries[4]));
 
 	// Get native field vectors
-	auto native_signature_type_vec = FlatVector::GetData<string_t>(*native_entries[0]);
-	auto &native_signature_type_validity = FlatVector::Validity(*native_entries[0]);
-	auto native_annotations_vec = FlatVector::GetData<string_t>(*native_entries[3]);
-	auto &native_annotations_validity = FlatVector::Validity(*native_entries[3]);
+	auto native_signature_type_vec = CompatFlatDataMutable<string_t>(CompatStructEntry(native_entries[0]));
+	auto &native_signature_type_validity = CompatFlatValidityMutable<>(CompatStructEntry(native_entries[0]));
+	auto native_annotations_vec = CompatFlatDataMutable<string_t>(CompatStructEntry(native_entries[3]));
+	auto &native_annotations_validity = CompatFlatValidityMutable<>(CompatStructEntry(native_entries[3]));
 
 	// Get ListVectors for separate processing - TODO: restore when implementing parameter/modifier arrays
-	// auto &parameters_list_vector = *native_entries[1];
-	// auto &modifiers_list_vector = *native_entries[2];
+	// auto &parameters_list_vector = CompatStructEntry(native_entries[1]);
+	// auto &modifiers_list_vector = CompatStructEntry(native_entries[2]);
 
 	// Process all collected rows - populate basic fields first
 	for (idx_t i = 0; i < collected_rows.size(); i++) {
@@ -1635,7 +1636,7 @@ void UnifiedASTBackend::ProjectToHierarchicalTableStreaming(const vector<ASTNode
 			context_name_validity.SetInvalid(row_idx);
 		}
 		// Qualified name (top-level context field, LIST<STRUCT<semantic_type, name, index>>)
-		context_entries[1]->SetValue(row_idx, QualifiedNameValue(row_data.qualified_name_segments));
+		CompatStructEntry(context_entries[1]).SetValue(row_idx, QualifiedNameValue(row_data.qualified_name_segments));
 		context_semantic_type_vec[row_idx] = row_data.semantic_type;
 		context_flags_vec[row_idx] = row_data.flags;
 
@@ -1999,19 +2000,21 @@ void UnifiedASTBackend::ResetStructVectorState(Vector &vector) {
 		// Get struct child vectors
 		auto &entries = StructVector::GetEntries(vector);
 
-		// Recursively reset each child vector
+		// Recursively reset each child vector.
+		// `entries[i]` is a unique_ptr<Vector> on v1.5 and a Vector on v2.0;
+		// CompatStructEntry yields the Vector& either way.
 		for (idx_t i = 0; i < entries.size(); i++) {
-			auto &entry = entries[i];
+			auto &entry = CompatStructEntry(entries[i]);
 
 			// Always set vector type for child vectors
-			entry->SetVectorType(VectorType::FLAT_VECTOR);
+			entry.SetVectorType(VectorType::FLAT_VECTOR);
 
-			if (entry->GetType().id() == LogicalTypeId::LIST) {
+			if (entry.GetType().id() == LogicalTypeId::LIST) {
 				// Get child vector to check its state
-				auto &list_child = ListVector::GetEntry(*entry);
+				auto &list_child = ListVector::GetEntry(entry);
 
 				// Try more aggressive reset - not just size but the underlying buffer
-				ListVector::SetListSize(*entry, 0);
+				ListVector::SetListSize(entry, 0);
 
 				// Force reset of the child vector data buffer completely
 				list_child.SetVectorType(VectorType::FLAT_VECTOR);
@@ -2021,9 +2024,9 @@ void UnifiedASTBackend::ResetStructVectorState(Vector &vector) {
 					ResetStructVectorState(list_child);
 				}
 
-			} else if (entry->GetType().id() == LogicalTypeId::STRUCT) {
+			} else if (entry.GetType().id() == LogicalTypeId::STRUCT) {
 				// Recursively reset nested struct vectors
-				ResetStructVectorState(*entry);
+				ResetStructVectorState(entry);
 			}
 			// For simple types, ensure they're flat vectors
 		}

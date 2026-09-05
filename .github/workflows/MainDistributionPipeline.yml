@@ -117,10 +117,19 @@ jobs:
       - name: Run the test suite with the runtime-grammar tests enabled
         run: SITTING_DUCK_TEST_GRAMMAR_DIR=build/test_grammars make test
 
+  # Canary: builds AND tests against DuckDB main (the v2.0 line), which is what
+  # duckdb/community-extensions' `test_against_latest` runs on every release PR.
+  # Gated rather than disabled, so a port can drive it on demand:
+  #   gh workflow run MainDistributionPipeline.yml --ref <branch>
+  # It must not run on pull_request: a push and a PR both fire on the same commit
+  # and a PR's check rollup includes both, so an ungated canary shows red on every
+  # PR. Use `if:` and not `continue-on-error:` -- a job calling a reusable workflow
+  # accepts only a fixed key set, and `continue-on-error` makes the whole workflow
+  # fail to parse, scheduling zero jobs.
   duckdb-next-build:
     name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
-    if: false
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     with:
       duckdb_version: main
       ci_tools_version: main

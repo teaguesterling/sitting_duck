@@ -20,7 +20,7 @@ struct ParseASTData : public TableFunctionData {
 };
 
 static unique_ptr<FunctionData> ParseASTBind(ClientContext &context, TableFunctionBindInput &input,
-                                             vector<LogicalType> &return_types, vector<string> &names) {
+                                             vector<LogicalType> &return_types, vector<CompatName> &names) {
 	if (input.inputs.size() != 2) {
 		throw BinderException("parse_ast requires exactly 2 arguments: code and language");
 	}
@@ -64,7 +64,10 @@ static unique_ptr<FunctionData> ParseASTBind(ClientContext &context, TableFuncti
 
 	// Use flat dynamic schema based on extraction config
 	return_types = UnifiedASTBackend::GetFlatDynamicTableSchema(config);
-	names = UnifiedASTBackend::GetFlatDynamicTableColumnNames(config);
+	// On DuckDB v2.0 `names` is a vector<Identifier>; the helper returns
+	// vector<string>, and promoting a runtime string to an Identifier is
+	// explicit by design, so the assignment is element-wise.
+	CompatAssignNames(names, UnifiedASTBackend::GetFlatDynamicTableColumnNames(config));
 
 	return make_uniq<ParseASTData>(code, language, config);
 }
@@ -96,7 +99,7 @@ static void ParseASTExecute(ClientContext &context, TableFunctionInput &data_p, 
 //==============================================================================
 
 static unique_ptr<FunctionData> ParseASTHierarchicalBind(ClientContext &context, TableFunctionBindInput &input,
-                                                         vector<LogicalType> &return_types, vector<string> &names) {
+                                                         vector<LogicalType> &return_types, vector<CompatName> &names) {
 	if (input.inputs.size() != 2) {
 		throw BinderException("parse_ast requires exactly 2 arguments: code and language");
 	}
@@ -106,7 +109,10 @@ static unique_ptr<FunctionData> ParseASTHierarchicalBind(ClientContext &context,
 
 	// Use hierarchical STRUCT schema
 	return_types = UnifiedASTBackend::GetHierarchicalTableSchema();
-	names = UnifiedASTBackend::GetHierarchicalTableColumnNames();
+	// On DuckDB v2.0 `names` is a vector<Identifier>; the helper returns
+	// vector<string>, and promoting a runtime string to an Identifier is
+	// explicit by design, so the assignment is element-wise.
+	CompatAssignNames(names, UnifiedASTBackend::GetHierarchicalTableColumnNames());
 
 	// Parse extraction config parameters (same as read_ast)
 	string context_str = "native"; // Default to native for backward compatibility
