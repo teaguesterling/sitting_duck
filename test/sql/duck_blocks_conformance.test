@@ -5,7 +5,7 @@
 # Runs the duck_block_utils conformance validator over real ast_to_blocks output,
 # so producer/spec drift is caught (tracker/bugs/014). The three macros below are
 # copied VERBATIM from third_party/duck_block_utils/duck_block_conformance.sql
-# (SPEC_VERSION 6.2, upstream 3bd7ff8) — resync BOTH together when the vendored
+# (SPEC_VERSION 6.5, upstream 5017b86) — resync BOTH together when the vendored
 # copy is bumped. See third_party/duck_block_utils/PROVENANCE.md.
 
 require sitting_duck
