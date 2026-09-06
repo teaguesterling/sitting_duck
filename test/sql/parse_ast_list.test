@@ -69,7 +69,7 @@ SELECT COUNT(*) FROM (
 # scope is STRUCT<current, function, class, module, stack>; stack is a
 # LIST<STRUCT<id, kind>> populated only on IS_SCOPE nodes.
 query III
-SELECT node.type, node.scope.current, list_transform(node.scope.stack, s -> s.id) FROM (
+SELECT node.type, node.scope.current, list_transform(node.scope.stack, lambda s: s.id) FROM (
     SELECT unnest(parse_ast_list('def foo():
     pass', 'python')) as node
 ) WHERE node.type IN ('module', 'function_definition')

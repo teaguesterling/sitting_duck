@@ -100,8 +100,8 @@ true
 # Baseline: original has exactly 1 return_statement (greet's) and no integer 42
 query II
 SELECT
-    len(list_filter(l, x -> x.type = 'return_statement')),
-    len(list_filter(l, x -> x.type = 'integer' AND x.peek = '42'))
+    len(list_filter(l, lambda x: x.type = 'return_statement')),
+    len(list_filter(l, lambda x: x.type = 'integer' AND x.peek = '42'))
 FROM (SELECT parse_ast_list(content, 'python') AS l
       FROM read_text('test/data/python/macros/patch_demo.py'));
 ----
@@ -120,8 +120,8 @@ SELECT * FROM ast_patch('body_edit', 'test/data/python/macros/patch_demo.py');
 # Re-parse: now 2 return_statements, and the 42 lives inside function 'unused'
 query II
 SELECT
-    len(list_filter(l, x -> x.type = 'return_statement')),
-    len(list_filter(l, x -> x.type = 'integer' AND x.peek = '42'))
+    len(list_filter(l, lambda x: x.type = 'return_statement')),
+    len(list_filter(l, lambda x: x.type = 'integer' AND x.peek = '42'))
 FROM (SELECT parse_ast_list(patched_source, 'python') AS l FROM body_patched);
 ----
 2	1
@@ -147,7 +147,7 @@ WHERE r.type = 'expression_statement' AND r.start_line = 7;
 
 query I
 SELECT len(list_filter(parse_ast_list(patched_source, 'python'),
-                       x -> x.type = 'identifier' AND x.name = 'total'))
+                       lambda x: x.type = 'identifier' AND x.name = 'total'))
 FROM ast_patch('delete_edit', 'test/data/python/macros/patch_demo.py');
 ----
 0
@@ -165,7 +165,7 @@ WHERE r.type = 'function_definition' AND r.name = 'greet';
 # Re-parse: greet is now decorated
 query I
 SELECT len(list_filter(parse_ast_list(patched_source, 'python'),
-                       x -> x.type = 'decorator'))
+                       lambda x: x.type = 'decorator'))
 FROM ast_patch('insert_edits', 'test/data/python/macros/patch_demo.py');
 ----
 1
@@ -178,7 +178,7 @@ WHERE r.type = 'expression_statement' AND r.start_line = 7;
 
 query I
 SELECT len(list_filter(parse_ast_list(patched_source, 'python'),
-                       x -> x.type = 'comment' AND x.peek = '# checked'))
+                       lambda x: x.type = 'comment' AND x.peek = '# checked'))
 FROM ast_patch('append_edits', 'test/data/python/macros/patch_demo.py');
 ----
 1
@@ -204,8 +204,8 @@ SELECT * FROM (
 query I
 SELECT list_sort(list_transform(
            list_filter(parse_ast_list(patched_source, 'python'),
-                       x -> x.type = 'function_definition'),
-           x -> x.name))
+                       lambda x: x.type = 'function_definition'),
+           lambda x: x.name))
 FROM ast_patch('multi_edits', 'test/data/python/macros/patch_demo.py');
 ----
 [retired, salute]
@@ -393,8 +393,8 @@ SELECT * FROM ast_replace('test/data/python/macros/patch_demo.py',
 
 query II
 SELECT
-    len(list_filter(l, x -> x.type = 'function_definition' AND x.name = 'salute')),
-    len(list_filter(l, x -> x.type = 'function_definition' AND x.name = 'greet'))
+    len(list_filter(l, lambda x: x.type = 'function_definition' AND x.name = 'salute')),
+    len(list_filter(l, lambda x: x.type = 'function_definition' AND x.name = 'greet'))
 FROM (SELECT parse_ast_list(patched_source, 'python') AS l FROM renamed);
 ----
 1	0
@@ -402,7 +402,7 @@ FROM (SELECT parse_ast_list(patched_source, 'python') AS l FROM renamed);
 # Multi-match replacement: every integer literal in the file becomes 9
 query I
 SELECT len(list_filter(parse_ast_list(patched_source, 'python'),
-                       x -> x.type = 'integer' AND x.peek != '9'))
+                       lambda x: x.type = 'integer' AND x.peek != '9'))
 FROM ast_replace('test/data/python/macros/patch_demo.py', 'integer', '9');
 ----
 0
