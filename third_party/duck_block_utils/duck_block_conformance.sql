@@ -215,6 +215,14 @@ CREATE OR REPLACE MACRO duck_blocks_warnings(blocks) AS TABLE (
     FROM e WHERE el.element_type = 'table'
       AND coalesce(el.content, '') <> '' AND position('"headers"' IN el.content) = 0
     UNION ALL
+    -- A `list` carrying content is the pre-structural shape: items in a JSON array
+    -- instead of `list_item` children. The list case is more damaging than the table
+    -- one -- a nested list comes back as one run-together string that a consumer
+    -- cannot tell from real text.
+    SELECT el.element_order, 'list_not_structural',
+           'list carries content; its items belong in list_item children at level + 1'
+    FROM e WHERE el.element_type = 'list' AND coalesce(el.content, '') <> ''
+    UNION ALL
     SELECT el.element_order, 'deflist_superseded',
            'deflist is superseded by list with list_type=''definition'''
     FROM e WHERE el.element_type = 'deflist'
@@ -223,6 +231,23 @@ CREATE OR REPLACE MACRO duck_blocks_warnings(blocks) AS TABLE (
            'heading without attributes[''heading_level'']: do NOT fall back to level'
     FROM e WHERE el.element_type = 'heading'
       AND coalesce(el.attributes['heading_level'], '') = ''
+    UNION ALL
+    -- POSITION. Metadata keeps its SOURCE position: front matter at the front,
+    -- everything the source did not position at the end. The role is authoritative and
+    -- the position corroborates it, so a role that contradicts the position means one
+    -- of the two is lying and a consumer cannot tell which.
+    SELECT el.element_order, 'frontmatter_not_first',
+           'metadata with role=''frontmatter'' has body blocks before it; front matter '
+           'is at the front, or the role is wrong'
+    FROM e WHERE el.element_type = 'metadata' AND el.attributes['role'] = 'frontmatter'
+      AND EXISTS (SELECT 1 FROM e b WHERE b.el.kind = 'block' AND b.el.level = 1
+                  AND b.el.element_type <> 'metadata' AND b.el.element_order < e.el.element_order)
+    UNION ALL
+    SELECT el.element_order, 'body_after_metadata',
+           'a top-level block follows kind=''value'' metadata; values are appended '
+           'after the body, so nothing may come after them'
+    FROM e WHERE el.kind = 'block' AND el.level = 1
+      AND EXISTS (SELECT 1 FROM e v WHERE v.el.kind = 'value' AND v.el.element_order < e.el.element_order)
     UNION ALL
     SELECT el.element_order, 'undeclared_element_type',
            'element_type ' || el.element_type || ' is not in the vocabulary'
