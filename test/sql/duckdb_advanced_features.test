@@ -14,7 +14,7 @@ query III
 SELECT type, name, peek
 FROM parse_ast('
 SELECT 
-    list_transform([1,2,3], x -> x * 2) as doubled,
+    list_transform([1,2,3], lambda x: x * 2) as doubled,
     struct_pack(name := ''John'', age := 30) as person,
     map {''key1'': ''value1'', ''key2'': ''value2''} as my_map
 ', 'duckdb')
@@ -132,9 +132,12 @@ table_reference	NAME_QUALIFIED	4
 
 # Test 7: Query optimization hints and pragmas
 # ============================================
+# replace('"') normalizes an upstream deparse difference: DuckDB v2.0 quotes the
+# identifier in a deparsed PRAGMA->SET (SET "profiling_output") where v1.5 did not.
+# The node type + reconstructed statement are what this asserts, not the quoting.
 
 query II
-SELECT type, peek
+SELECT type, replace(peek, '"', '')
 FROM parse_ast('
 PRAGMA enable_profiling;
 PRAGMA profiling_output = ''/tmp/profile.json'';

@@ -35,18 +35,22 @@ LIMIT 10;
 # Test 3: Complex query with JOIN and WHERE
 # ==========================================
 
+# Cross-version: DuckDB v2.0 parses the boolean literal `true` as a `literal`
+# (LITERAL_ATOMIC) where v1.5 emitted a `cast_expression` (COMPUTATION_EXPRESSION).
+# That `true` is the only literal/cast node in this query, so excluding both types
+# drops exactly the divergent node on each line and the rest matches on both.
 query III
 SELECT type, semantic_type_to_string(semantic_type) as semantic_type, COUNT(*) as count
 FROM parse_ast('
-SELECT u.name, p.title 
-FROM users u 
-JOIN posts p ON u.id = p.user_id 
+SELECT u.name, p.title
+FROM users u
+JOIN posts p ON u.id = p.user_id
 WHERE u.active = true
 ', 'duckdb')
+WHERE type NOT IN ('cast_expression', 'literal')
 GROUP BY type, semantic_type
 ORDER BY type ASC, semantic_type ASC;
 ----
-cast_expression	COMPUTATION_EXPRESSION	1
 column_reference	NAME_IDENTIFIER	3
 comparison	OPERATOR_COMPARISON	1
 join	TRANSFORM_ITERATION	1

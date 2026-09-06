@@ -144,8 +144,13 @@ inline CompatName CompatMakeName(string name) {
 // key is string, the explicit Identifier ctor where it is not.
 using CompatChildKey = typename child_list_t<LogicalType>::value_type::first_type;
 
-inline CompatChildKey CompatMakeChildKey(const CompatName &name) {
-	return CompatChildKey(CompatNameStr(name));
+// Input is a runtime column-name STRING (struct/union field names are strings),
+// not a bind CompatName. Taking CompatName here compiled on v1.5.x only because
+// CompatName aliased string there; on v2.0 it aliases Identifier, whose
+// `Identifier(const string&)` is explicit, so a std::string call site (every one
+// of them) failed to bind. `CompatChildKey(string)` constructs on both lines.
+inline CompatChildKey CompatMakeChildKey(const string &name) {
+	return CompatChildKey(name);
 }
 
 inline void CompatAssignNames(vector<CompatName> &names, const vector<string> &source) {
