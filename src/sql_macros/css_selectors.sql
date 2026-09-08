@@ -18,10 +18,13 @@
 --   [name=value]                  - Attribute filter. Supported attributes:
 --                                     name, type, language, semantic, peek,
 --                                     qualified, signature, params, modifier,
---                                     annotation.
---                                     Operators = *= ^= $= are supported for
---                                     name, annotation, qualified, signature,
---                                     peek. type/language/semantic/params take
+--                                     annotation, receiver.
+--                                     receiver is the object a method is invoked
+--                                     on: .call[receiver=con] matches con.execute();
+--                                     NULL (no match) on bare calls and ambiguous
+--                                     chained receivers. Operators = *= ^= $= are
+--                                     supported for name, annotation, qualified,
+--                                     signature, receiver, peek. type/language/semantic/params take
 --                                     = only; modifier takes = or *= (both mean
 --                                     "has this modifier"). Unknown attributes
 --                                     and unsupported operator combinations
@@ -723,7 +726,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         known_attribute_names(name) AS (
             VALUES ('name'), ('type'), ('language'), ('semantic'),
                    ('modifier'), ('annotation'), ('qualified'), ('signature'),
-                   ('params'), ('peek')
+                   ('params'), ('peek'), ('receiver')
         ),
         attr_filter_validation AS (
             SELECT CASE
@@ -734,7 +737,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 ) THEN error(format(
                     'ast_select: unknown attribute "[{}...]". Supported attributes: '
                     'name, type, language, semantic, modifier, annotation, qualified, '
-                    'signature, params, peek.',
+                    'signature, params, peek, receiver.',
                     (SELECT ac.attr_name FROM attr_conditions ac
                      WHERE ac.attr_name IS NOT NULL
                        AND ac.attr_name NOT IN (SELECT name FROM known_attribute_names)
@@ -1133,6 +1136,16 @@ CREATE OR REPLACE MACRO ast_select_from(
                                 WHEN '^=' THEN a.signature_type LIKE ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '$=' THEN a.signature_type LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.signature_type = ac.attr_value END
+
+            -- Native extraction: call receiver (the object a method is invoked on; #86).
+            -- e.g. `con.execute(q)` -> receiver 'con'; `self.db.execute()` -> 'db'.
+            -- NULL on bare calls / non-calls / ambiguous chained receivers, so (being
+            -- NULL-definite via the enclosing COALESCE) those never match.
+            WHEN ac.attr_name = 'receiver' THEN
+                CASE ac.attr_op WHEN '*=' THEN a.receiver LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '^=' THEN a.receiver LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '$=' THEN a.receiver LIKE '%' || ac.attr_value_esc ESCAPE '\'
+                                ELSE a.receiver = ac.attr_value END
 
             -- Native extraction: parameter count
             WHEN ac.attr_name = 'params' THEN

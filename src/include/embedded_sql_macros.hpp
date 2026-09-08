@@ -2438,10 +2438,13 @@ CREATE OR REPLACE MACRO parse_ast_list_table(code, language) AS TABLE
 --   [name=value]                  - Attribute filter. Supported attributes:
 --                                     name, type, language, semantic, peek,
 --                                     qualified, signature, params, modifier,
---                                     annotation.
---                                     Operators = *= ^= $= are supported for
---                                     name, annotation, qualified, signature,
---                                     peek. type/language/semantic/params take
+--                                     annotation, receiver.
+--                                     receiver is the object a method is invoked
+--                                     on: .call[receiver=con] matches con.execute();
+--                                     NULL (no match) on bare calls and ambiguous
+--                                     chained receivers. Operators = *= ^= $= are
+--                                     supported for name, annotation, qualified,
+--                                     signature, receiver, peek. type/language/semantic/params take
 --                                     = only; modifier takes = or *= (both mean
 --                                     "has this modifier"). Unknown attributes
 --                                     and unsupported operator combinations
@@ -2676,13 +2679,13 @@ CREATE OR REPLACE MACRO ast_select_from(
             SELECT type FROM sel_root
         ),
 
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- For combinators (descendant, child, sibling): extract left and right types.
         -- Left = first tag_name child of sel_root, Right = last tag_name child.
         -- Refactored to use sel_tag_names + a single window pass instead of two
         -- correlated LIMIT 1 scalar subqueries on sel.
-
-)SQLMACRO"
-        R"SQLMACRO(
         combinator_parts AS (
             SELECT
                 MAX(name) FILTER (WHERE first_rn = 1) AS left_type,
@@ -2967,15 +2970,15 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- [name^=_] means "starts with underscore", not "any char"). Computed in an
             -- outer SELECT because a sibling alias (attr_value) isn't visible in the same one.
             SELECT attr_name, attr_value, attr_op,
+
+)SQLMACRO"
+        R"SQLMACRO(
                    replace(replace(replace(attr_value, '\', '\\'), '%', '\%'), '_', '\_')
                        AS attr_value_esc
             FROM (
                 SELECT fname.name AS attr_name,
                        COALESCE(fplain.name, fstr.name, fint.name) AS attr_value,
                        CASE
-
-)SQLMACRO"
-        R"SQLMACRO(
                            WHEN starswith.attr_id IS NOT NULL THEN '*='
                            WHEN caret.attr_id    IS NOT NULL THEN '^='
                            WHEN dollar.attr_id   IS NOT NULL THEN '$='
@@ -3149,7 +3152,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         known_attribute_names(name) AS (
             VALUES ('name'), ('type'), ('language'), ('semantic'),
                    ('modifier'), ('annotation'), ('qualified'), ('signature'),
-                   ('params'), ('peek')
+                   ('params'), ('peek'), ('receiver')
         ),
         attr_filter_validation AS (
             SELECT CASE
@@ -3160,7 +3163,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 ) THEN error(format(
                     'ast_select: unknown attribute "[{}...]". Supported attributes: '
                     'name, type, language, semantic, modifier, annotation, qualified, '
-                    'signature, params, peek.',
+                    'signature, params, peek, receiver.',
                     (SELECT ac.attr_name FROM attr_conditions ac
                      WHERE ac.attr_name IS NOT NULL
                        AND ac.attr_name NOT IN (SELECT name FROM known_attribute_names)
@@ -3215,14 +3218,14 @@ CREATE OR REPLACE MACRO ast_select_from(
                                WHERE h.has_name IS NOT NULL
                                  AND UPPER(h.has_class) IN ('CALL', 'INVOKE', 'COMPUTATION_CALL'))
                     OR EXISTS (SELECT 1 FROM not_has_conditions nh
+
+)SQLMACRO"
+        R"SQLMACRO(
                                WHERE nh.not_has_name IS NOT NULL
                                  AND UPPER(nh.not_has_class) IN ('CALL', 'INVOKE', 'COMPUTATION_CALL'))
                 )
                 AND EXISTS (SELECT 1 FROM ast WHERE is_semantic_type(semantic_type, 'CALL'))
                 AND NOT EXISTS (SELECT 1 FROM ast
-
-)SQLMACRO"
-        R"SQLMACRO(
                                 WHERE is_semantic_type(semantic_type, 'CALL')
                                   AND name IS NOT NULL AND name != '')
                 THEN error(
@@ -3502,15 +3505,15 @@ CREATE OR REPLACE MACRO ast_select_from(
     AND NOT EXISTS (
         SELECT 1 FROM not_has_conditions nh
         WHERE EXISTS (
+
+)SQLMACRO"
+        R"SQLMACRO(
             SELECT 1 FROM ast d
             WHERE d.file_path = a.file_path
               AND d.node_id > a.node_id
               AND d.node_id <= a.node_id + a.descendant_count
               AND (nh.not_has_type IS NULL OR d.type = nh.not_has_type)
               AND (nh.not_has_name IS NULL OR d.name = nh.not_has_name)
-
-)SQLMACRO"
-        R"SQLMACRO(
               AND (nh.not_has_class IS NULL
                    OR is_semantic_type(d.semantic_type, UPPER(nh.not_has_class)))
         )
@@ -3565,6 +3568,16 @@ CREATE OR REPLACE MACRO ast_select_from(
                                 WHEN '^=' THEN a.signature_type LIKE ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '$=' THEN a.signature_type LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.signature_type = ac.attr_value END
+
+            -- Native extraction: call receiver (the object a method is invoked on; #86).
+            -- e.g. `con.execute(q)` -> receiver 'con'; `self.db.execute()` -> 'db'.
+            -- NULL on bare calls / non-calls / ambiguous chained receivers, so (being
+            -- NULL-definite via the enclosing COALESCE) those never match.
+            WHEN ac.attr_name = 'receiver' THEN
+                CASE ac.attr_op WHEN '*=' THEN a.receiver LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '^=' THEN a.receiver LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '$=' THEN a.receiver LIKE '%' || ac.attr_value_esc ESCAPE '\'
+                                ELSE a.receiver = ac.attr_value END
 
             -- Native extraction: parameter count
             WHEN ac.attr_name = 'params' THEN
@@ -3736,6 +3749,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                     -- Bare :scope — node is a scope boundary
                     THEN is_scope(a.flags)
                     -- :scope(type) — node is within the nearest ancestor of that type,
+
+)SQLMACRO"
+        R"SQLMACRO(
                     -- excluding subtrees of nested nodes of the same type
                     ELSE EXISTS (
                         SELECT 1 FROM ast scope_anc
@@ -3753,9 +3769,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                                 AND a.node_id <= nested.node_id + nested.descendant_count
                                 AND (nested.type = pc.pseudo_arg
                                      OR nested.type LIKE pc.pseudo_arg || '_%')
-
-)SQLMACRO"
-        R"SQLMACRO(
                           )
                     )
                 END

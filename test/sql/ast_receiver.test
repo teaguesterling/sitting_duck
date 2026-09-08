@@ -1,0 +1,202 @@
+# name: test/sql/ast_receiver.test
+# description: #86 — native `receiver` field (call target object) + [receiver=X] selector filter
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# ============================================================================
+# Receiver EXTRACTION (fast: plain parse_ast, no selector-engine cost).
+# receiver = the object a method is invoked on; NULL (shown BARE) for bare calls,
+# non-calls, `::` scope-resolution (free/static/qualified calls have no object),
+# and ambiguous chained/computed receivers. self/this/cls DO match. Nested
+# objects surface their trailing name (self.db -> db, a.b.c -> c).
+# Row-pinned and ordered by (start_line, name, receiver) so a wrong-row or
+# wrong-value regression cannot pass, and ties are deterministic.
+# ============================================================================
+
+# --- Python ---
+query II
+SELECT name, COALESCE(receiver, 'BARE')
+FROM parse_ast('
+con.execute(q)
+print(x)
+self.method(a)
+self.db.execute(q)
+df.groupby(''x'').agg(''y'')
+logger.info(m)
+', 'python')
+WHERE type = 'call'
+ORDER BY start_line, name, 2;
+----
+execute	con
+print	BARE
+method	self
+execute	db
+agg	BARE
+groupby	df
+info	logger
+
+# --- JavaScript: member, optional-chain, subscript (declines), chain, this ---
+query II
+SELECT name, COALESCE(receiver, 'BARE')
+FROM parse_ast('obj.method(a); foo(b); this.render(); a.b.c.run(x); o?.chain(y); arr[i].push(z);', 'javascript')
+WHERE type = 'call_expression'
+ORDER BY start_line, name, 2;
+----
+chain	o
+foo	BARE
+method	obj
+push	BARE
+render	this
+run	c
+
+# --- Rust: member calls + `::` scope resolution must decline (no namespace leak) ---
+query II
+SELECT name, COALESCE(receiver, 'BARE')
+FROM parse_ast('fn f(){ obj.method(a); bare(b); std::mem::swap(c,d); self.db.run(e); }', 'rust')
+WHERE type IN ('call_expression', 'method_call_expression')
+ORDER BY start_line, name, 2;
+----
+bare	BARE
+method	obj
+run	db
+swap	BARE
+
+# --- Java (flat method_invocation shape; `this`, multi-level, qualifier-by-`.`) ---
+query II
+SELECT name, COALESCE(receiver, 'BARE')
+FROM parse_ast('class C { void m() { this.go(); a.method(x); a.b.c.method(y); System.out.println(z); } }', 'java')
+WHERE type = 'method_invocation'
+ORDER BY start_line, name, 2;
+----
+go	this
+method	a
+method	c
+println	out
+
+# --- C# (wired by config only; the general operator rule resolves receivers) ---
+query II
+SELECT name, COALESCE(receiver, 'BARE')
+FROM parse_ast('class C { void M(){ obj.Run(a); this.Go(); a.b.c.Do(x); Bare(y); } }', 'csharp')
+WHERE type = 'invocation_expression'
+ORDER BY start_line, name, 2;
+----
+Bare	BARE
+Do	c
+Go	this
+Run	obj
+
+# --- C++: `.` and `->` member calls, `::` scope calls decline (no namespace leak) ---
+query II
+SELECT name, COALESCE(receiver, 'BARE')
+FROM parse_ast('void f(){ ptr->method(a); obj.run(b); bare(c); ns::func(d); std::swap(e,g); }', 'cpp')
+WHERE type = 'call_expression'
+ORDER BY start_line, name, 2;
+----
+bare	BARE
+func	BARE
+method	ptr
+run	obj
+swap	BARE
+
+# --- PHP: single- and multi-level member calls (regression: must NOT drop the last hop) ---
+query II
+SELECT name, COALESCE(receiver, 'BARE')
+FROM parse_ast('<?php $obj->method($a); $this->db->execute(); $a->b->c->method(); Cls::stat();', 'php')
+WHERE semantic_type_to_string(semantic_type) = 'COMPUTATION_CALL'
+ORDER BY start_line, name, 2;
+----
+execute	db
+method	c
+method	obj
+stat	BARE
+
+# --- Fix regression guard: parse_ast_list (scalar LIST<STRUCT>) must populate receiver ---
+query II
+WITH u AS (SELECT unnest(parse_ast_list('con.execute(q)', 'python')) AS n)
+SELECT n.name, COALESCE(n.receiver, 'BARE') FROM u WHERE n.type = 'call';
+----
+execute	con
+
+# ============================================================================
+# [receiver=X] SELECTOR filter (ast_select_from; row-pinned). Kept to a modest
+# number of calls because each selector call is expensive to plan (tracker/bugs/040).
+# ============================================================================
+
+statement ok
+CREATE TABLE t AS SELECT * FROM parse_ast('
+con.execute(a)
+con.commit()
+other.execute(b)
+console.log(c)
+print(x)
+', 'python');
+
+# exact match: only the two con.* calls, never other.execute / console.log / bare print
+query II
+SELECT start_line, name FROM ast_select_from('t', '[receiver=con]') ORDER BY start_line, name;
+----
+2	execute
+3	commit
+
+# quoted value form parses identically to the bare form
+query II
+SELECT start_line, name FROM ast_select_from('t', '[receiver="con"]') ORDER BY start_line, name;
+----
+2	execute
+3	commit
+
+# prefix ^= : con.* AND console.* (both start with "con"), never other/print
+query II
+SELECT start_line, name FROM ast_select_from('t', '[receiver^=con]') ORDER BY start_line, name;
+----
+2	execute
+3	commit
+5	log
+
+# suffix $= : only "console" ends with "le"
+query II
+SELECT start_line, name FROM ast_select_from('t', '[receiver$=le]') ORDER BY start_line, name;
+----
+5	log
+
+# substring *= : con, con, console all contain "on"
+query II
+SELECT start_line, name FROM ast_select_from('t', '[receiver*=on]') ORDER BY start_line, name;
+----
+2	execute
+3	commit
+5	log
+
+# compound type + attribute
+query II
+SELECT start_line, name FROM ast_select_from('t', '.call[receiver=other]') ORDER BY start_line, name;
+----
+4	execute
+
+# LIKE-metacharacter escaping: `_` in the value must match a literal underscore,
+# not any-char. [receiver*=db_conn] matches db_conn but NOT dbxconn.
+statement ok
+CREATE TABLE t2 AS SELECT * FROM parse_ast('
+db_conn.query(a)
+dbxconn.query(b)
+', 'python');
+
+query II
+SELECT start_line, name FROM ast_select_from('t2', '[receiver*=db_conn]') ORDER BY start_line, name;
+----
+2	query
+
+# NULL-definite (#81): a table whose receiver column is entirely NULL must match
+# NOTHING, not everything.
+statement ok
+CREATE TABLE tnull AS SELECT * REPLACE (NULL::VARCHAR AS receiver)
+FROM parse_ast('con.execute(a)', 'python');
+
+query I
+SELECT count(*) FROM ast_select_from('tnull', '[receiver=con]');
+----
+0
