@@ -68,7 +68,7 @@
 | `descendant_count` | UINTEGER | Total descendants (complexity metric) |
 | `peek` | VARCHAR | Source code snippet for this node |
 | `semantic_type` | UTINYINT | Universal semantic category (0-255) |
-| `flags` | UTINYINT | Universal semantic flags (IS_CONSTRUCT, IS_EMBODIED) |
+| `flags` | UTINYINT | Universal semantic flags (IS_SYNTAX_ONLY, NAME_ROLE, IS_SCOPE, IS_EXPORTED) — see [Universal Flags](#universal-flags) |
 | `arity_bin` | UTINYINT | Binned arity for analysis |
 
 > **Column availability.** The default projection is 21 columns. Passing
@@ -446,11 +446,23 @@ In addition to semantic types, each node has a `flags` field that captures **ort
 
 #### Flag Values
 
-| Flag | Bit | Value | Description | Examples |
-|------|-----|-------|-------------|----------|
-| **IS_CONSTRUCT** | 0 | 0x01 | Semantic language construct (not just punctuation/token) | `def`, `class`, `if`, keywords, comments |
-| **IS_EMBODIED** | 1 | 0x02 | Has body/implementation (definition vs declaration) | `function_definition` vs `function_declarator` |
-| **RESERVED** | 2-7 | 0x04-0x80 | Reserved for future use | (Available for new orthogonal properties) |
+The `flags` byte packs one single-bit property, one 2-bit field, and two more
+single-bit properties. The authoritative definition is `src/include/node_config.hpp`.
+
+| Bit(s) | Field | Mask | Meaning | Predicate(s) |
+|--------|-------|------|---------|--------------|
+| 0 | `IS_SYNTAX_ONLY` | `0x01` | **Set** = pure syntax token (keyword, punctuation, operator). **Clear** = semantic construct. | `is_syntax_only(flags)` (bit set); `is_construct(flags)` is its **inverse** — true when the bit is **clear** |
+| 1–2 | `NAME_ROLE` | `0x06` | Mutually-exclusive name-binding role: `0x00` none · `0x02` reference · `0x04` declaration (no body) · `0x06` definition (with body) | `is_name_reference` (`0x02`), `is_name_declaration` (`0x04`), `is_name_definition` (`0x06`); `is_embodied` / `has_body` = definition (`0x06`) |
+| 3 | `IS_SCOPE` | `0x08` | Node creates a scope boundary | `is_scope(flags)` |
+| 4 | `IS_EXPORTED` | `0x10` | Visible outside its file/module | `is_exported(flags)` |
+| 5–7 | (reserved) | `0x20`–`0x80` | Reserved for future use | — |
+
+> **⚠️ Bit 0 is `IS_SYNTAX_ONLY`, not "`IS_CONSTRUCT`".** The construct property is stored
+> *inverted*: the bit is **set** on syntax-only tokens, and `is_construct(flags)` returns the
+> **inverse** of the bit. A definition such as `function_item` (`flags = 30`, i.e. bits 1–4)
+> has bit 0 **clear** and *is* a construct; the bare `fn` keyword (`flags = 1`) has bit 0
+> **set** and is syntax-only. To list definitions, filter with `is_construct(flags)` — never
+> with `flags & 0x01`, which selects the opposite set.
 
 #### Flag Helper Functions
 
