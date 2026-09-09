@@ -114,3 +114,53 @@ FROM parse_ast('void f([int aa = DFLT]){}', 'dart')
 WHERE type = 'identifier' AND name = 'DFLT';
 ----
 REF
+
+# TypeScript / C# / R — the default value shares the wrapper node with the name, so the
+# rule keys on the tree-sitter name/pattern field. Params -> DEF; defaults stay REF.
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('function f(aa: number, bb: string){}', 'typescript')
+WHERE type = 'identifier' AND name IN ('aa','bb') ORDER BY name;
+----
+aa	DEF
+bb	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('function f(aa: number = DFLT){}', 'typescript')
+WHERE type = 'identifier' AND name IN ('aa','DFLT') ORDER BY name;
+----
+DFLT	REF
+aa	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('class C{void M(int aa, int bb){}}', 'csharp')
+WHERE type = 'identifier' AND name IN ('aa','bb') ORDER BY name;
+----
+aa	DEF
+bb	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('class C{void M(int aa = DFLT){}}', 'csharp')
+WHERE type = 'identifier' AND name IN ('aa','DFLT') ORDER BY name;
+----
+DFLT	REF
+aa	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('f <- function(aa, bb) {}', 'r')
+WHERE type = 'identifier' AND name IN ('aa','bb') ORDER BY name;
+----
+aa	DEF
+bb	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('f <- function(aa = DFLT) {}', 'r')
+WHERE type = 'identifier' AND name IN ('aa','DFLT') ORDER BY name;
+----
+DFLT	REF
+aa	DEF

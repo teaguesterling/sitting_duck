@@ -559,10 +559,15 @@ void PopulateSemanticFieldsTemplated(ASTNode &node, const AdapterType *adapter, 
 		// per-adapter rule. Only touches nodes the .def left as NAME_REFERENCE.
 		if ((node.universal_flags & ASTNodeFlags::NAME_ROLE_MASK) == ASTNodeFlags::NAME_REFERENCE) {
 			TSNode name_parent = ts_node_parent(ts_node);
-			if (!ts_node_is_null(name_parent) &&
-			    IsBareNameDefinitionParent<AdapterType>(ts_node_type(name_parent))) {
-				node.universal_flags =
-				    (node.universal_flags & ~ASTNodeFlags::NAME_ROLE_MASK) | ASTNodeFlags::NAME_DEFINITION;
+			if (!ts_node_is_null(name_parent)) {
+				const char *name_parent_type = ts_node_type(name_parent);
+				// Parent-type rule (most languages) OR field-precise rule (TS/C#/R, where a
+				// defaulted param's value shares the wrapper node with the name).
+				if (IsBareNameDefinitionParent<AdapterType>(name_parent_type) ||
+				    IsBareNameDefinitionField<AdapterType>(ts_node, name_parent, name_parent_type)) {
+					node.universal_flags =
+					    (node.universal_flags & ~ASTNodeFlags::NAME_ROLE_MASK) | ASTNodeFlags::NAME_DEFINITION;
+				}
 			}
 		}
 
