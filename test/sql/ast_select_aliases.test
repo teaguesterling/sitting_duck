@@ -221,10 +221,14 @@ WHERE binds_name(flags) AND type = 'function_definition';
 ----
 10
 
-# name_role returns correct values
+# name_role returns correct values. references = 1, definitions = 3.
+# (#64: parameters are now definitions, so identifiers carry BOTH roles — assert the full
+# deterministic set. The previous `LIMIT 1` with no ORDER BY was non-deterministic once
+# more than one distinct role appears.)
 query I
 SELECT DISTINCT name_role(flags) FROM read_ast('test/data/python/macros/recursive_match.py')
 WHERE type = 'identifier'
-LIMIT 1;
+ORDER BY 1;
 ----
 1
+3
