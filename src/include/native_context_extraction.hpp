@@ -106,6 +106,7 @@ class SQLAdapter;
 class CSSAdapter;
 class HTMLAdapter;
 class DartAdapter;
+class LuaAdapter;
 
 // #64: per-adapter "bare name-binding" contexts. A plain identifier is generically a
 // NAME_REFERENCE, but in some parent contexts (e.g. a bare parameter — an identifier
@@ -123,6 +124,60 @@ inline bool IsBareNameDefinitionParent(const char *parent_type) {
 template <>
 inline bool IsBareNameDefinitionParent<PythonAdapter>(const char *parent_type) {
 	return std::strcmp(parent_type, "parameters") == 0 || std::strcmp(parent_type, "lambda_parameters") == 0;
+}
+// #64 Phase 3 — other list-based languages (bare identifier directly in the param list;
+// typed/defaulted params live in their own wrapper nodes, verified not directly in the list).
+// JavaScript: formal_parameters. Ruby: method_parameters. Lua: parameters.
+template <>
+inline bool IsBareNameDefinitionParent<JavaScriptAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "formal_parameters") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<RubyAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "method_parameters") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<LuaAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameters") == 0;
+}
+// #64 Phase 3 — wrapper-based languages: the param NAME identifier's direct parent is
+// the per-param wrapper node. Safe (verified) because the type is a non-identifier node
+// and any default VALUE lives under a different node (optional_parameter_declaration,
+// the param list, the function decl, optional_formal_parameters), so it is not flagged.
+// typescript/c#/r are deliberately EXCLUDED here: their default value shares the wrapper
+// node with the name, so the plain rule would mis-flag it — those need first-child/field
+// precision (deferred, tracker/039).
+template <>
+inline bool IsBareNameDefinitionParent<CPPAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameter_declaration") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<CAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameter_declaration") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<GoAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameter_declaration") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<RustAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameter") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<JavaAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "formal_parameter") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<KotlinAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameter") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<SwiftAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameter") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<DartAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "formal_parameter") == 0;
 }
 
 // Specializations for each language adapter

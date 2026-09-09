@@ -1,0 +1,116 @@
+# name: test/sql/name_role_params_multilang.test
+# description: #64 Phase 3 — function parameters are NAME_DEFINITION across languages
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Each language: bare parameters aa, bb are NAME_DEFINITION (was NAME_REFERENCE).
+# Snippets contain params only, so aa/bb appear once each. Row-pinned by name.
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('function f(aa, bb){}', 'javascript')
+WHERE type = 'identifier' AND name IN ('aa','bb') ORDER BY name;
+----
+aa	DEF
+bb	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('def f(aa, bb); end', 'ruby')
+WHERE type = 'identifier' AND name IN ('aa','bb') ORDER BY name;
+----
+aa	DEF
+bb	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('function f(aa, bb) end', 'lua')
+WHERE type = 'identifier' AND name IN ('aa','bb') ORDER BY name;
+----
+aa	DEF
+bb	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('class C{void m(int aa, String bb){}}', 'java')
+WHERE type = 'identifier' AND name IN ('aa','bb') ORDER BY name;
+----
+aa	DEF
+bb	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('void f(int aa, int bb){}', 'cpp')
+WHERE type = 'identifier' AND name IN ('aa','bb') ORDER BY name;
+----
+aa	DEF
+bb	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('void f(int aa, int bb){}', 'c')
+WHERE type = 'identifier' AND name IN ('aa','bb') ORDER BY name;
+----
+aa	DEF
+bb	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('func f(aa int, bb int){}', 'go')
+WHERE type = 'identifier' AND name IN ('aa','bb') ORDER BY name;
+----
+aa	DEF
+bb	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('fn f(aa: i32, bb: i32){}', 'rust')
+WHERE type = 'identifier' AND name IN ('aa','bb') ORDER BY name;
+----
+aa	DEF
+bb	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('fun f(aa: Int, bb: Int){}', 'kotlin')
+WHERE type = 'simple_identifier' AND name IN ('aa','bb') ORDER BY name;
+----
+aa	DEF
+bb	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('func f(aa: Int, bb: Int){}', 'swift')
+WHERE type = 'simple_identifier' AND name IN ('aa','bb') ORDER BY name;
+----
+aa	DEF
+bb	DEF
+
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('void f(int aa, int bb){}', 'dart')
+WHERE type = 'identifier' AND name IN ('aa','bb') ORDER BY name;
+----
+aa	DEF
+bb	DEF
+
+# Safety: a default VALUE must stay NAME_REFERENCE (not mis-flagged as a definition).
+# kotlin/dart resolve the defaulted param name to DEF while the value stays REF.
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('fun f(aa: Int = DFLT){}', 'kotlin')
+WHERE type = 'simple_identifier' AND name IN ('aa','DFLT') ORDER BY name;
+----
+DFLT	REF
+aa	DEF
+
+query I
+SELECT CASE WHEN is_name_reference(flags) THEN 'REF' ELSE 'other' END
+FROM parse_ast('void f([int aa = DFLT]){}', 'dart')
+WHERE type = 'identifier' AND name = 'DFLT';
+----
+REF
