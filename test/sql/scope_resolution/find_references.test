@@ -44,14 +44,15 @@ call	call	24	main
 # Section 3: Python — variable references with shadowing
 # =============================================================================
 
-# 'x' has definitions at module level and inside transform
+# 'x' is defined at module level, as process's parameter (#64: bare params are now
+# NAME_DEFINITION, so the param shadow at line 3 is correctly a definition), and in transform
 query IIII
 SELECT ref_kind, node_type, start_line, scope_name
 FROM ast_find_references('test/data/find_references/refs.py', 'x')
 ORDER BY start_line;
 ----
 definition	assignment	1	<module>
-reference	identifier	3	process
+definition	identifier	3	process
 reference	identifier	4	process
 definition	assignment	8	transform
 reference	identifier	9	transform
@@ -142,13 +143,14 @@ WHERE ref_kind = 'call';
 9	transform
 21	run
 
-# Only definitions
+# Only definitions (#64: process's parameter `x` at line 3 is now a definition too)
 query II
 SELECT start_line, scope_name
 FROM ast_find_references('test/data/find_references/refs.py', 'x')
 WHERE ref_kind = 'definition';
 ----
 1	<module>
+3	process
 8	transform
 
 # Count references per symbol

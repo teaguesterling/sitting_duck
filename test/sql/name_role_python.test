@@ -1,0 +1,66 @@
+# name: test/sql/name_role_python.test
+# description: #64 — Python NAME_ROLE: name-binding sites are NAME_DEFINITION, uses stay NAME_REFERENCE
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# Distinct binding-wrapper node types are NAME_DEFINITION (Phase 1: .def flags).
+# import alias, *args/**kw splat patterns, with/except `as` targets.
+query II
+SELECT type, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'notDEF' END
+FROM parse_ast('
+import os as osmod
+def f(*args, **kw): pass
+with x() as h: pass
+try: pass
+except E as e: pass
+', 'python')
+WHERE type IN ('aliased_import', 'list_splat_pattern', 'dictionary_splat_pattern', 'as_pattern_target')
+ORDER BY start_line, type;
+----
+aliased_import	DEF
+dictionary_splat_pattern	DEF
+list_splat_pattern	DEF
+as_pattern_target	DEF
+as_pattern_target	DEF
+
+# Bare parameters are NAME_DEFINITION (Phase 2: context-aware, identifier directly in a
+# parameter list); a use of the same name elsewhere stays NAME_REFERENCE.
+query III
+SELECT name, start_line,
+       CASE WHEN is_name_definition(flags) THEN 'DEF'
+            WHEN is_name_reference(flags) THEN 'REF' ELSE '-' END
+FROM parse_ast('
+def greet(self, user_id):
+    return greet(user_id)
+', 'python')
+WHERE type = 'identifier' AND name IN ('self', 'user_id')
+ORDER BY start_line, name;
+----
+self	2	DEF
+user_id	2	DEF
+user_id	3	REF
+
+# lambda parameter is a definition; the same name in the body is a reference.
+query III
+SELECT name, start_line,
+       CASE WHEN is_name_definition(flags) THEN 'DEF'
+            WHEN is_name_reference(flags) THEN 'REF' ELSE '-' END
+FROM parse_ast('g = lambda p: p + 1', 'python')
+WHERE type = 'identifier' AND name = 'p'
+ORDER BY start_line, 3;
+----
+p	1	DEF
+p	1	REF
+
+# A call argument (identifier directly in an argument list) is NOT a definition —
+# guards against the parameter rule over-reaching to use sites.
+query I
+SELECT DISTINCT CASE WHEN is_name_reference(flags) THEN 'REF' ELSE 'other' END
+FROM parse_ast('foo(bar)', 'python')
+WHERE type = 'identifier' AND name = 'bar';
+----
+REF
