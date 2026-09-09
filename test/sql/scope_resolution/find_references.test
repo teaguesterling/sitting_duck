@@ -153,15 +153,16 @@ WHERE ref_kind = 'definition';
 3	process
 8	transform
 
-# Count references per symbol
+# Count references per symbol (#64: process's parameter `x` is now a definition,
+# shifting one row from reference to definition — totals unchanged)
 query II
 SELECT ref_kind, COUNT(*)
 FROM ast_find_references('test/data/find_references/refs.py', 'x')
 GROUP BY ref_kind
 ORDER BY ref_kind;
 ----
-definition	2
-reference	3
+definition	3
+reference	2
 
 # =============================================================================
 # Section 7: No references found
@@ -178,7 +179,8 @@ FROM ast_find_references('test/data/find_references/refs.py', 'nonexistent');
 # Section 8: def_node_id output — for disambiguating same-name definitions
 # =============================================================================
 
-# Both 'x' definitions have different def_node_ids
+# The 'x' definitions have distinct def_node_ids (#64: process's parameter at line 3,
+# def_node_id 11, is now a definition alongside the module (2) and transform (36) ones)
 query II
 SELECT DISTINCT def_node_id, start_line
 FROM ast_find_references('test/data/find_references/refs.py', 'x')
@@ -186,6 +188,7 @@ WHERE ref_kind = 'definition'
 ORDER BY start_line;
 ----
 2	1
+11	3
 36	8
 
 # =============================================================================
