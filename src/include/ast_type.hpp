@@ -147,6 +147,8 @@ struct NativeContext {
 	vector<string> modifiers;         // ['async', 'public', 'static'] - cross-language standard
 	string qualified_name;            // 'MyClass.my_method' (if determinable from AST)
 	string annotations;               // JSON for language-specific metadata, decorators, etc.
+	string receiver;                  // Call receiver: the object a method is invoked on (#86).
+	                                  // e.g. `con.execute(q)` -> 'con'; empty for bare calls / non-calls.
 
 	// Default constructor
 	NativeContext() = default;

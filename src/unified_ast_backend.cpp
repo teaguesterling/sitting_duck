@@ -610,6 +610,7 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
 			    LogicalType::STRUCT({{"name", LogicalType::VARCHAR}, {"type", LogicalType::VARCHAR}})));
 			schema.push_back(LogicalType::LIST(LogicalType::VARCHAR)); // modifiers (array of strings)
 			schema.push_back(LogicalType::VARCHAR);                    // annotations
+			schema.push_back(LogicalType::VARCHAR);                    // receiver (#86)
 		}
 	}
 
@@ -675,6 +676,7 @@ vector<string> UnifiedASTBackend::GetFlatDynamicTableColumnNames(const Extractio
 			names.push_back("parameters");
 			names.push_back("modifiers");
 			names.push_back("annotations");
+			names.push_back("receiver"); // #86
 		}
 	}
 
@@ -955,21 +957,26 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 	}
 
 	// Native context columns based on schema_config.context
-	idx_t signature_type_col = 0, parameters_col = 0, modifiers_col = 0, annotations_col = 0;
+	idx_t signature_type_col = 0, parameters_col = 0, modifiers_col = 0, annotations_col = 0, receiver_col = 0;
 	string_t *signature_type_vec = nullptr;
 	string_t *annotations_vec = nullptr;
+	string_t *receiver_vec = nullptr;
 	ValidityMask *signature_type_validity = nullptr;
 	ValidityMask *annotations_validity = nullptr;
+	ValidityMask *receiver_validity = nullptr;
 
 	if (schema_config.context >= ContextLevel::NATIVE) {
 		signature_type_col = col_idx++;
 		parameters_col = col_idx++;
 		modifiers_col = col_idx++;
 		annotations_col = col_idx++;
+		receiver_col = col_idx++; // #86 — must match GetFlatDynamicTableSchema/ColumnNames order
 		signature_type_vec = CompatFlatDataMutable<string_t>(output.data[signature_type_col]);
 		annotations_vec = CompatFlatDataMutable<string_t>(output.data[annotations_col]);
+		receiver_vec = CompatFlatDataMutable<string_t>(output.data[receiver_col]);
 		signature_type_validity = &CompatFlatValidityMutable<>(output.data[signature_type_col]);
 		annotations_validity = &CompatFlatValidityMutable<>(output.data[annotations_col]);
+		receiver_validity = &CompatFlatValidityMutable<>(output.data[receiver_col]);
 		// Note: parameters and modifiers columns are LIST types, handled separately
 	}
 
@@ -1137,10 +1144,19 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 						} else {
 							annotations_validity->SetInvalid(count);
 						}
+
+						// receiver (#86): set NULL if empty, otherwise set value
+						if (!node.native.receiver.empty()) {
+							receiver_vec[count] =
+							    StringVector::AddString(output.data[receiver_col], node.native.receiver);
+						} else {
+							receiver_validity->SetInvalid(count);
+						}
 					} else {
 						// No native extraction attempted - set all native fields to NULL
 						signature_type_validity->SetInvalid(count);
 						annotations_validity->SetInvalid(count);
+						receiver_validity->SetInvalid(count); // #86
 
 						// For LIST types, create empty lists with proper indexing
 						auto list_data = CompatFlatDataMutable<list_entry_t>(output.data[parameters_col]);
@@ -1157,6 +1173,7 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 					// +schema: native columns exist but data wasn't computed — NULL
 					signature_type_validity->SetInvalid(count);
 					annotations_validity->SetInvalid(count);
+					receiver_validity->SetInvalid(count); // #86
 
 					// For LIST types, create empty lists with proper indexing
 					auto list_data = CompatFlatDataMutable<list_entry_t>(output.data[parameters_col]);

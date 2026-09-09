@@ -127,6 +127,12 @@ static Value ConvertASTResultToList(const ASTResult &result, const ExtractionCon
 				// annotations
 				fields.push_back(make_pair("annotations",
 				                           node.native.annotations.empty() ? Value() : Value(node.native.annotations)));
+
+				// receiver (#86) — must be populated here too, else parse_ast_list /
+				// parse_ast_list_table declare the column (from the flat schema) but
+				// return NULL for every node (silent wrong answer on call nodes).
+				fields.push_back(make_pair("receiver",
+				                           node.native.receiver.empty() ? Value() : Value(node.native.receiver)));
 			}
 		}
 

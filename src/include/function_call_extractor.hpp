@@ -3,6 +3,7 @@
 #include "native_context_extraction.hpp"
 #include <tree_sitter/api.h>
 #include <unordered_map>
+#include <cctype>
 
 namespace duckdb {
 
@@ -126,7 +127,7 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          nullptr,
          "arguments",
          "field_initializer_list",
-         {"identifier", "scoped_identifier", "field_identifier"},
+         {"identifier", "scoped_identifier", "field_identifier", "field_expression"},
          {",", "(", ")", ";", "{", "}", "!"},
          {"method_call_expression", "macro_invocation"}, // Additional call types for Rust
          {}                                              // No named parameter types for Rust (uses struct syntax)
@@ -138,10 +139,22 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          nullptr,
          "argument_list",
          "argument_list",
-         {"identifier", "scoped_identifier", "field_access"},
+         {"identifier", "scoped_identifier", "field_access", "this"},
          {",", "(", ")", ";"},
          {}, // No additional call types for Java
          {}  // No named parameter types for Java
+     }},
+    {"csharp",
+     {
+         "invocation_expression",     // C# call node (routed to FUNCTION_CALL in csharp_types.def)
+         "object_creation_expression", // new T(...)
+         nullptr,
+         "argument_list",
+         "argument_list",
+         {"identifier", "member_access_expression"}, // member access `.` resolves receiver via the general rule
+         {",", "(", ")", ";"},
+         {}, // No additional call types for C#
+         {}  // Named args handled elsewhere
      }},
     {"php",
      {
@@ -254,6 +267,72 @@ public:
 	}
 
 private:
+	// #86: receiver-name resolution. The general invariant is the SEPARATOR operator
+	// between the object and the method, matched by its source TEXT (grammar-agnostic,
+	// not by per-language node names):
+	//   member access  ".", "->", "?.", "?->"  -> the call HAS a receiver object
+	//   scope resolution "::"                    -> NO receiver (qualified / free / static
+	//                                               call — there is no runtime object)
+	//   none (bare id / subscript / call-result) -> no simple receiver
+	static bool IsMemberSep(const string &t) {
+		return t == "." || t == "->" || t == "?." || t == "?->";
+	}
+	static bool IsScopeSep(const string &t) {
+		return t == "::";
+	}
+	static bool IsIdentLike(const string &t) {
+		return !t.empty() && (std::isalpha(static_cast<unsigned char>(t[0])) || t[0] == '_');
+	}
+	// Trailing simple name of an object expression: a bare identifier returns its own
+	// text (con, self, this); a member access returns its last child's name
+	// (self.db -> db, a.b.c -> c, $this->db -> db). A trailing token that is
+	// punctuation/brackets/parens (subscript arr[i], call result foo()) or a sigil ($)
+	// is not identifier-like and declines. One hop only — never a deep guess.
+	//
+	// A call-result object is rejected UP FRONT by node type (`types.call_expression`
+	// and additional call types), not merely because a parenthesized call ends in `)`.
+	// This keeps the "chained call-result declines" invariant self-enforcing: e.g. a
+	// paren-less getter chain (Ruby `a.b.c`) is a nested call node whose last child is
+	// an identifier, so without this guard it would wrongly yield `c` if that call node
+	// type were ever added to a language's function_name_types. Do not rely on config
+	// omission for correctness here.
+	static string TrailingSimpleName(TSNode obj, const string &content, const FunctionCallNodeTypes &types) {
+		if (ts_node_is_null(obj)) {
+			return "";
+		}
+		const char *obj_type = ts_node_type(obj);
+		if (types.call_expression && strcmp(obj_type, types.call_expression) == 0) {
+			return ""; // object is itself a call result -> ambiguous, decline
+		}
+		for (const char *ct : types.additional_call_types) {
+			if (strcmp(obj_type, ct) == 0) {
+				return "";
+			}
+		}
+		if (ts_node_child_count(obj) == 0) {
+			string t = ExtractNodeText(obj, content);
+			return IsIdentLike(t) ? t : "";
+		}
+		TSNode last = ts_node_child(obj, ts_node_child_count(obj) - 1);
+		if (ts_node_child_count(last) == 0) {
+			string t = ExtractNodeText(last, content);
+			return IsIdentLike(t) ? t : "";
+		}
+		return "";
+	}
+	// First member/scope separator token (by text) among a node's direct children,
+	// or "" if none. Classifies a call as member-access vs scope vs bare.
+	static string FindSeparator(TSNode container, const string &content) {
+		uint32_t n = ts_node_child_count(container);
+		for (uint32_t i = 0; i < n; i++) {
+			string t = ExtractNodeText(ts_node_child(container, i), content);
+			if (IsMemberSep(t) || IsScopeSep(t)) {
+				return t;
+			}
+		}
+		return "";
+	}
+
 	static NativeContext ExtractCallExpression(TSNode node, const string &content, const FunctionCallNodeTypes &types) {
 		NativeContext context;
 		// Note: signature_type is left empty for calls - we don't know return types without static analysis
@@ -262,6 +341,8 @@ private:
 		uint32_t child_count = ts_node_child_count(node);
 		string object_part;
 		string method_name;
+		TSNode object_node = {};
+		bool have_object_node = false;
 
 		for (uint32_t i = 0; i < child_count; i++) {
 			TSNode child = ts_node_child(node, i);
@@ -273,6 +354,8 @@ private:
 					if (strcmp(child_type, name_type) == 0) {
 						object_part = ExtractNodeText(child, content);
 						context.qualified_name = object_part;
+						object_node = child; // #86: remember for receiver resolution below
+						have_object_node = true;
 						break;
 					}
 				}
@@ -289,6 +372,39 @@ private:
 			if (strcmp(child_type, types.arguments) == 0 || strcmp(child_type, types.argument_list) == 0) {
 				context.parameters = ExtractCallArguments(child, content, types);
 			}
+		}
+
+		// #86: derive the receiver from the SEPARATOR operator (grammar-agnostic).
+		// Two grammar shapes for `object <sep> method(args)`:
+		//  - FLAT  (Java method_invocation, PHP member_call_expression): the call node
+		//    holds [object, sep, method, args] — object_node (child 0) is the object and
+		//    the separator is its sibling in the call.
+		//  - NESTED (Python attribute, JS member_expression, Rust/C++ field_expression,
+		//    C++/Rust qualified/scoped_identifier): object_node is itself the access node
+		//    [object, sep, property].
+		// A member separator yields the object's trailing name; a `::` scope separator
+		// yields NO receiver (a free/static/qualified call has no runtime object).
+		if (have_object_node) {
+			string sep;
+			TSNode receiver_obj = object_node;
+			// FLAT? the child immediately after the object (index 0) is a separator token.
+			if (child_count > 1) {
+				string after = ExtractNodeText(ts_node_child(node, 1), content);
+				if (IsMemberSep(after) || IsScopeSep(after)) {
+					sep = after; // object_node is the receiver object directly
+				}
+			}
+			if (sep.empty()) {
+				// NESTED: the separator lives inside object_node; the object is child 0.
+				sep = FindSeparator(object_node, content);
+				if (ts_node_child_count(object_node) > 0) {
+					receiver_obj = ts_node_child(object_node, 0);
+				}
+			}
+			if (IsMemberSep(sep)) {
+				context.receiver = TrailingSimpleName(receiver_obj, content, types);
+			}
+			// scope "::" or no separator -> no receiver (leave empty)
 		}
 
 		return context;
