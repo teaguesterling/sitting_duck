@@ -180,6 +180,38 @@ inline bool IsBareNameDefinitionParent<DartAdapter>(const char *parent_type) {
 	return std::strcmp(parent_type, "formal_parameter") == 0;
 }
 
+// #64 Phase 3 — FIELD-precise binding contexts. For languages where a defaulted param's
+// VALUE shares the wrapper node with the NAME (so a plain parent-type rule would mis-flag
+// the value), key on the tree-sitter FIELD: flag the node only when it is the wrapper's
+// name/pattern field. Consulted in addition to IsBareNameDefinitionParent; default no-op
+// (only TypeScript/C#/R specialize it — everything else pays nothing).
+// ts_node_child_by_field_name returns a null node for an absent field, and
+// ts_node_eq(self, null) is false, so this is safe when a param has no default/name field.
+template <class AdapterType>
+inline bool IsBareNameDefinitionField(TSNode /*self*/, TSNode /*parent*/, const char * /*parent_type*/) {
+	return false;
+}
+// TypeScript: required_parameter/optional_parameter — name is field `pattern` (identifier
+// binding) or `name`; the default is field `value` (excluded).
+template <>
+inline bool IsBareNameDefinitionField<TypeScriptAdapter>(TSNode self, TSNode parent, const char *parent_type) {
+	if (std::strcmp(parent_type, "required_parameter") != 0 && std::strcmp(parent_type, "optional_parameter") != 0) {
+		return false;
+	}
+	return ts_node_eq(self, ts_node_child_by_field_name(parent, "pattern", 7)) ||
+	       ts_node_eq(self, ts_node_child_by_field_name(parent, "name", 4));
+}
+// C#: parameter — name is field `name` (the default value is not that field).
+template <>
+inline bool IsBareNameDefinitionField<CSharpAdapter>(TSNode self, TSNode parent, const char *parent_type) {
+	return std::strcmp(parent_type, "parameter") == 0 && ts_node_eq(self, ts_node_child_by_field_name(parent, "name", 4));
+}
+// R: parameter — name is field `name`; the default is field `default` (excluded).
+template <>
+inline bool IsBareNameDefinitionField<RAdapter>(TSNode self, TSNode parent, const char *parent_type) {
+	return std::strcmp(parent_type, "parameter") == 0 && ts_node_eq(self, ts_node_child_by_field_name(parent, "name", 4));
+}
+
 // Specializations for each language adapter
 template <>
 struct NativeExtractionTraits<PythonAdapter> {
