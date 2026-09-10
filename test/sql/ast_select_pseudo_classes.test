@@ -125,13 +125,13 @@ true
 # =============================================================================
 
 # :named:definition — named definitions only
-# #64: bare parameters are now NAME_DEFINITION (8 params here), added to the 10
-# named function definitions.
+# #64: named definitions = 10 function definitions + 8 bare parameters + 1 for-loop
+# target (the `i` at line 12) — all NAME_DEFINITION now.
 query I
 SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py',
     ':named:definition');
 ----
-18
+19
 
 # function_definition:first-child:has(return_statement) — first-child functions with returns
 # The inner functions are first-child and have no returns themselves
