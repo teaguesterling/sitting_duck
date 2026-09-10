@@ -212,6 +212,32 @@ inline bool IsBareNameDefinitionField<RAdapter>(TSNode self, TSNode parent, cons
 	return std::strcmp(parent_type, "parameter") == 0 && ts_node_eq(self, ts_node_child_by_field_name(parent, "name", 4));
 }
 
+// #64 for-loop targets — the loop variable binds a name; it is a specific field of the
+// for/range node (the iterable is a different field, so it stays a reference). Only the
+// simple-identifier target is caught; tuple/destructured targets (for a,b in ...) under-
+// match. These are the UNAMBIGUOUS binding forms (the target is always a fresh binding).
+// Go is intentionally omitted: its range_clause `left` is a definition with `:=` but a
+// reassignment with `=`, and the field doesn't distinguish them (would risk a false DEF).
+// (These languages also specialize IsBareNameDefinitionParent for parameters; the walker
+// consults both, so a language can define parameter and for-target rules independently.)
+template <>
+inline bool IsBareNameDefinitionField<PythonAdapter>(TSNode self, TSNode parent, const char *parent_type) {
+	if (std::strcmp(parent_type, "for_statement") != 0 && std::strcmp(parent_type, "for_in_clause") != 0) {
+		return false;
+	}
+	return ts_node_eq(self, ts_node_child_by_field_name(parent, "left", 4));
+}
+template <>
+inline bool IsBareNameDefinitionField<RustAdapter>(TSNode self, TSNode parent, const char *parent_type) {
+	return std::strcmp(parent_type, "for_expression") == 0 &&
+	       ts_node_eq(self, ts_node_child_by_field_name(parent, "pattern", 7));
+}
+template <>
+inline bool IsBareNameDefinitionField<JavaAdapter>(TSNode self, TSNode parent, const char *parent_type) {
+	return std::strcmp(parent_type, "enhanced_for_statement") == 0 &&
+	       ts_node_eq(self, ts_node_child_by_field_name(parent, "name", 4));
+}
+
 // Specializations for each language adapter
 template <>
 struct NativeExtractionTraits<PythonAdapter> {

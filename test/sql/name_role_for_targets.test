@@ -1,0 +1,47 @@
+# name: test/sql/name_role_for_targets.test
+# description: #64 — for-loop targets are NAME_DEFINITION (python/rust/java); the iterable stays REF
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# python: `for xx in items` — xx binds (definition), items is a reference
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF'
+                  WHEN is_name_reference(flags) THEN 'REF' ELSE '-' END
+FROM parse_ast('for xx in items: pass', 'python')
+WHERE type = 'identifier' AND name IN ('xx','items') ORDER BY name;
+----
+items	REF
+xx	DEF
+
+# python comprehension: the for-clause target `cc` is a definition. `cc` appears twice
+# (the binding in `for cc`, and its use in the output expression) — exactly one is a def.
+query I
+SELECT COUNT(*) FILTER (WHERE is_name_definition(flags))
+FROM parse_ast('y = [cc for cc in data]', 'python')
+WHERE type = 'identifier' AND name = 'cc';
+----
+1
+
+# rust: `for xx in items`
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF'
+                  WHEN is_name_reference(flags) THEN 'REF' ELSE '-' END
+FROM parse_ast('fn f(){ for xx in items { } }', 'rust')
+WHERE type = 'identifier' AND name IN ('xx','items') ORDER BY name;
+----
+items	REF
+xx	DEF
+
+# java: enhanced for-each `for (int xx : items)`
+query II
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF'
+                  WHEN is_name_reference(flags) THEN 'REF' ELSE '-' END
+FROM parse_ast('class C{void m(){ for(int xx : items){} }}', 'java')
+WHERE type = 'identifier' AND name IN ('xx','items') ORDER BY name;
+----
+items	REF
+xx	DEF
