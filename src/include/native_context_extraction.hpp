@@ -130,15 +130,29 @@ inline bool IsBareNameDefinitionParent<PythonAdapter>(const char *parent_type) {
 // JavaScript: formal_parameters. Ruby: method_parameters. Lua: parameters.
 template <>
 inline bool IsBareNameDefinitionParent<JavaScriptAdapter>(const char *parent_type) {
-	return std::strcmp(parent_type, "formal_parameters") == 0;
+	// params (formal_parameters) + exception variable (`catch (ex)` — ex is a direct
+	// identifier child of catch_clause; the body is a nested block, so no over-match).
+	return std::strcmp(parent_type, "formal_parameters") == 0 || std::strcmp(parent_type, "catch_clause") == 0;
 }
 template <>
 inline bool IsBareNameDefinitionParent<RubyAdapter>(const char *parent_type) {
-	return std::strcmp(parent_type, "method_parameters") == 0;
+	// params + rescue exception variable (`rescue => ex`, wrapped in exception_variable).
+	return std::strcmp(parent_type, "method_parameters") == 0 || std::strcmp(parent_type, "exception_variable") == 0;
 }
 template <>
 inline bool IsBareNameDefinitionParent<LuaAdapter>(const char *parent_type) {
 	return std::strcmp(parent_type, "parameters") == 0;
+}
+// TypeScript/C# handle params via the field hook; their exception variable is a plain
+// identifier under catch_clause / catch_declaration (the exception TYPE is a non-identifier
+// node, and the body is nested), so a parent-type rule is safe and precise here.
+template <>
+inline bool IsBareNameDefinitionParent<TypeScriptAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "catch_clause") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<CSharpAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "catch_declaration") == 0;
 }
 // #64 Phase 3 — wrapper-based languages: the param NAME identifier's direct parent is
 // the per-param wrapper node. Safe (verified) because the type is a non-identifier node
@@ -165,7 +179,10 @@ inline bool IsBareNameDefinitionParent<RustAdapter>(const char *parent_type) {
 }
 template <>
 inline bool IsBareNameDefinitionParent<JavaAdapter>(const char *parent_type) {
-	return std::strcmp(parent_type, "formal_parameter") == 0;
+	// params (formal_parameter) + exception variable (catch_formal_parameter) — both
+	// wrap a single name identifier (the type is a non-identifier node).
+	return std::strcmp(parent_type, "formal_parameter") == 0 ||
+	       std::strcmp(parent_type, "catch_formal_parameter") == 0;
 }
 template <>
 inline bool IsBareNameDefinitionParent<KotlinAdapter>(const char *parent_type) {

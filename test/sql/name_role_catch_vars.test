@@ -1,0 +1,53 @@
+# name: test/sql/name_role_catch_vars.test
+# description: #64 — exception-handler variables are NAME_DEFINITION across languages
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# The caught exception variable `ex` binds a name -> NAME_DEFINITION. The exception TYPE
+# is a non-identifier node and the handler body is nested, so `ex` is unambiguous.
+
+query I
+SELECT CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('try { x() } catch (ex) { }', 'javascript')
+WHERE type = 'identifier' AND name = 'ex';
+----
+DEF
+
+query I
+SELECT CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('try { x() } catch (ex) { }', 'typescript')
+WHERE type = 'identifier' AND name = 'ex';
+----
+DEF
+
+query I
+SELECT CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('class C{void M(){ try{} catch(Exception ex){} }}', 'csharp')
+WHERE type = 'identifier' AND name = 'ex';
+----
+DEF
+
+query I
+SELECT CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('begin; rescue => ex; end', 'ruby')
+WHERE type = 'identifier' AND name = 'ex';
+----
+DEF
+
+query I
+SELECT CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('class C{void m(){ try{} catch(Exception ex){} }}', 'java')
+WHERE type = 'identifier' AND name = 'ex';
+----
+DEF
+
+query I
+SELECT CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('void f(){ try{} catch(int ex){} }', 'cpp')
+WHERE type = 'identifier' AND name = 'ex';
+----
+DEF
