@@ -552,6 +552,20 @@ void PopulateSemanticFieldsTemplated(ASTNode &node, const AdapterType *adapter, 
 		// NAME_ROLE (definition vs declaration vs reference) is set
 		// explicitly in each language's .def file via the flags column.
 
+		// #64: bare name-binding contexts. A plain identifier is generically a
+		// NAME_REFERENCE, but a bare parameter (an identifier directly in a parameter
+		// list) introduces a name. Those positions have no distinct wrapper node whose
+		// .def flags could carry NAME_DEFINITION, so upgrade the role here from the
+		// per-adapter rule. Only touches nodes the .def left as NAME_REFERENCE.
+		if ((node.universal_flags & ASTNodeFlags::NAME_ROLE_MASK) == ASTNodeFlags::NAME_REFERENCE) {
+			TSNode name_parent = ts_node_parent(ts_node);
+			if (!ts_node_is_null(name_parent) &&
+			    IsBareNameDefinitionParent<AdapterType>(ts_node_type(name_parent))) {
+				node.universal_flags =
+				    (node.universal_flags & ~ASTNodeFlags::NAME_ROLE_MASK) | ASTNodeFlags::NAME_DEFINITION;
+			}
+		}
+
 		// NATIVE CONTEXT EXTRACTION: Use template specialization for zero-virtual-call performance
 		// Only extract native context if the config level allows it
 		if (config.context >= ContextLevel::NATIVE && node_config->native_strategy != NativeExtractionStrategy::NONE) {

@@ -6,6 +6,7 @@
 #include <tree_sitter/api.h>
 #include <vector>
 #include <type_traits>
+#include <cstring>
 
 // Language-specific extractors will be included at the END to avoid circular dependencies
 
@@ -105,6 +106,24 @@ class SQLAdapter;
 class CSSAdapter;
 class HTMLAdapter;
 class DartAdapter;
+
+// #64: per-adapter "bare name-binding" contexts. A plain identifier is generically a
+// NAME_REFERENCE, but in some parent contexts (e.g. a bare parameter — an identifier
+// directly in a parameter list) it introduces a name and should be NAME_DEFINITION.
+// Such positions have no distinct wrapper node, so the flag cannot come from the .def
+// file; the walker consults this per-grammar rule after applying the .def flags.
+// Default: the language declares no bare binding contexts.
+template <class AdapterType>
+inline bool IsBareNameDefinitionParent(const char *parent_type) {
+	return false;
+}
+// Python: an identifier directly inside a parameter list is a parameter definition.
+// Typed/default parameters live in their own already-NAME_DEFINITION wrapper nodes, so
+// they are unaffected; this only upgrades the bare `def f(self, x)` / `lambda p:` names.
+template <>
+inline bool IsBareNameDefinitionParent<PythonAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameters") == 0 || std::strcmp(parent_type, "lambda_parameters") == 0;
+}
 
 // Specializations for each language adapter
 template <>

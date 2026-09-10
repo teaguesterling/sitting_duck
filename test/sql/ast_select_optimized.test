@@ -40,9 +40,11 @@ LIMIT 1;
 identifier
 
 # Test 5: Pseudo-classes referencing native fields work (via +schema NULLs)
+# #64: bare parameters (self, x, y) are now NAME_DEFINITION, so :definition counts
+# them alongside the function/class/assignment definitions (was 6, missing 4 params).
 query I
 SELECT COUNT(*)
 FROM ast_select('test/data/python/simple.py', ':definition')
 WHERE name IS NOT NULL AND name != '';
 ----
-6
+10
