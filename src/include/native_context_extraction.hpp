@@ -106,6 +106,7 @@ class SQLAdapter;
 class CSSAdapter;
 class HTMLAdapter;
 class DartAdapter;
+class LuaAdapter;
 
 // #64: per-adapter "bare name-binding" contexts. A plain identifier is generically a
 // NAME_REFERENCE, but in some parent contexts (e.g. a bare parameter — an identifier
@@ -123,6 +124,92 @@ inline bool IsBareNameDefinitionParent(const char *parent_type) {
 template <>
 inline bool IsBareNameDefinitionParent<PythonAdapter>(const char *parent_type) {
 	return std::strcmp(parent_type, "parameters") == 0 || std::strcmp(parent_type, "lambda_parameters") == 0;
+}
+// #64 Phase 3 — other list-based languages (bare identifier directly in the param list;
+// typed/defaulted params live in their own wrapper nodes, verified not directly in the list).
+// JavaScript: formal_parameters. Ruby: method_parameters. Lua: parameters.
+template <>
+inline bool IsBareNameDefinitionParent<JavaScriptAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "formal_parameters") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<RubyAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "method_parameters") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<LuaAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameters") == 0;
+}
+// #64 Phase 3 — wrapper-based languages: the param NAME identifier's direct parent is
+// the per-param wrapper node. Safe (verified) because the type is a non-identifier node
+// and any default VALUE lives under a different node (optional_parameter_declaration,
+// the param list, the function decl, optional_formal_parameters), so it is not flagged.
+// typescript/c#/r are deliberately EXCLUDED here: their default value shares the wrapper
+// node with the name, so the plain rule would mis-flag it — those need first-child/field
+// precision (deferred, tracker/039).
+template <>
+inline bool IsBareNameDefinitionParent<CPPAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameter_declaration") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<CAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameter_declaration") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<GoAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameter_declaration") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<RustAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameter") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<JavaAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "formal_parameter") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<KotlinAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameter") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<SwiftAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "parameter") == 0;
+}
+template <>
+inline bool IsBareNameDefinitionParent<DartAdapter>(const char *parent_type) {
+	return std::strcmp(parent_type, "formal_parameter") == 0;
+}
+
+// #64 Phase 3 — FIELD-precise binding contexts. For languages where a defaulted param's
+// VALUE shares the wrapper node with the NAME (so a plain parent-type rule would mis-flag
+// the value), key on the tree-sitter FIELD: flag the node only when it is the wrapper's
+// name/pattern field. Consulted in addition to IsBareNameDefinitionParent; default no-op
+// (only TypeScript/C#/R specialize it — everything else pays nothing).
+// ts_node_child_by_field_name returns a null node for an absent field, and
+// ts_node_eq(self, null) is false, so this is safe when a param has no default/name field.
+template <class AdapterType>
+inline bool IsBareNameDefinitionField(TSNode /*self*/, TSNode /*parent*/, const char * /*parent_type*/) {
+	return false;
+}
+// TypeScript: required_parameter/optional_parameter — name is field `pattern` (identifier
+// binding) or `name`; the default is field `value` (excluded).
+template <>
+inline bool IsBareNameDefinitionField<TypeScriptAdapter>(TSNode self, TSNode parent, const char *parent_type) {
+	if (std::strcmp(parent_type, "required_parameter") != 0 && std::strcmp(parent_type, "optional_parameter") != 0) {
+		return false;
+	}
+	return ts_node_eq(self, ts_node_child_by_field_name(parent, "pattern", 7)) ||
+	       ts_node_eq(self, ts_node_child_by_field_name(parent, "name", 4));
+}
+// C#: parameter — name is field `name` (the default value is not that field).
+template <>
+inline bool IsBareNameDefinitionField<CSharpAdapter>(TSNode self, TSNode parent, const char *parent_type) {
+	return std::strcmp(parent_type, "parameter") == 0 && ts_node_eq(self, ts_node_child_by_field_name(parent, "name", 4));
+}
+// R: parameter — name is field `name`; the default is field `default` (excluded).
+template <>
+inline bool IsBareNameDefinitionField<RAdapter>(TSNode self, TSNode parent, const char *parent_type) {
+	return std::strcmp(parent_type, "parameter") == 0 && ts_node_eq(self, ts_node_child_by_field_name(parent, "name", 4));
 }
 
 // Specializations for each language adapter
