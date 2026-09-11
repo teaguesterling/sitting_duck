@@ -151,6 +151,23 @@ CREATE OR REPLACE MACRO duck_blocks_errors(blocks) AS TABLE (
              || '; see duck_block_kind_names()' AS message
       FROM e WHERE NOT list_contains(duck_block_declared_kinds(), el.kind)
     UNION ALL
+    -- Rules over the LIST (field = 'list'): the two expressible without an ancestor
+    -- stack. L1: element_order dense from 0 in LIST POSITION order (not sorted by
+    -- order -- a list whose orders are out of sequence is the thing being caught).
+    SELECT el.element_order, 'list',
+           'element_order starts at ' || el.element_order || '; must start at 0'
+      FROM e WHERE pos = 1 AND el.element_order <> 0
+    UNION ALL
+    SELECT ord, 'list', 'element_order gap after ' || prev
+      FROM (SELECT el.element_order AS ord, lag(el.element_order) OVER (ORDER BY pos) AS prev FROM e)
+     WHERE prev IS NOT NULL AND ord <> prev + 1
+    UNION ALL
+    -- L2: the shallowest element is at level 1. L4/L5 (required ancestors) need a
+    -- stack and are reported by duck_blocks_validate() only.
+    SELECT (SELECT el.element_order FROM e ORDER BY el.level, pos LIMIT 1), 'list',
+           'shallowest element is at level ' || min(el.level) || '; top level is 1'
+      FROM e HAVING min(el.level) > 1
+    UNION ALL
     SELECT el.element_order, 'element_type', 'element_type is NULL'
       FROM e WHERE el.element_type IS NULL
     UNION ALL
