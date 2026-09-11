@@ -3,10 +3,10 @@
 # group: [sql]
 #
 # Runs the duck_block_utils conformance validator over real ast_to_blocks output,
-# so producer/spec drift is caught (tracker/bugs/014). The three macros below are
-# copied VERBATIM from third_party/duck_block_utils/duck_block_conformance.sql
-# (SPEC_VERSION 6.5, upstream 5017b86) — resync BOTH together when the vendored
-# copy is bumped. See third_party/duck_block_utils/PROVENANCE.md.
+# so producer/spec drift is caught (tracker/bugs/014). The macros below are copied
+# VERBATIM from third_party/duck_block_utils/duck_block_conformance.sql
+# (SPEC_VERSION 1.2, upstream 1c5f2a6) — resync BOTH together when the vendored copy
+# is bumped. See third_party/duck_block_utils/PROVENANCE.md.
 
 require sitting_duck
 
@@ -34,8 +34,58 @@ CREATE OR REPLACE MACRO duck_block_is_valid(elem) AS (
     AND elem.element_order >= 0
 );
 
+# 1.2 list-level validator (field='list' rules L1-L3 expressible without an ancestor
+# stack: dense element_order from 0, shallowest level 1, no level jump > 1), plus the
+# per-element rules. Verbatim from the vendored duck_blocks_errors.
+statement ok
+CREATE OR REPLACE MACRO duck_blocks_errors(blocks) AS TABLE (
+    WITH e AS (SELECT unnest(blocks) AS el, generate_subscripts(blocks, 1) AS pos),
+    lv AS (SELECT el, pos, el.level AS lvl, lag(el.level) OVER (ORDER BY pos) AS prev FROM e),
+    dup AS (SELECT el.element_order AS ord FROM e GROUP BY 1 HAVING count(*) > 1)
+    SELECT el.element_order AS element_order, 'kind' AS field,
+           'Invalid kind ' || chr(39) || coalesce(el.kind, 'NULL') || chr(39)
+             || '; see duck_block_kind_names()' AS message
+      FROM e WHERE NOT list_contains(duck_block_declared_kinds(), el.kind)
+    UNION ALL
+    SELECT el.element_order, 'list',
+           'element_order starts at ' || el.element_order || '; must start at 0'
+      FROM e WHERE pos = 1 AND el.element_order <> 0
+    UNION ALL
+    SELECT ord, 'list', 'element_order gap after ' || prev
+      FROM (SELECT el.element_order AS ord, lag(el.element_order) OVER (ORDER BY pos) AS prev FROM e)
+     WHERE prev IS NOT NULL AND ord <> prev + 1
+    UNION ALL
+    SELECT (SELECT el.element_order FROM e ORDER BY el.level, pos LIMIT 1), 'list',
+           'shallowest element is at level ' || min(el.level) || '; top level is 1'
+      FROM e HAVING min(el.level) > 1
+    UNION ALL
+    SELECT el.element_order, 'element_type', 'element_type is NULL'
+      FROM e WHERE el.element_type IS NULL
+    UNION ALL
+    SELECT el.element_order, 'encoding',
+           'Invalid encoding ' || chr(39) || el.encoding || chr(39)
+      FROM e WHERE el.encoding IS NOT NULL
+        AND NOT list_contains(duck_block_declared_encodings(), el.encoding)
+    UNION ALL
+    SELECT el.element_order, 'level',
+           CASE WHEN el.level IS NULL
+                THEN 'level is NULL; every element carries an explicit depth, top level is 1'
+                ELSE 'level ' || el.level || ' is below 1; top level is 1' END
+      FROM e WHERE el.level IS NULL OR el.level < 1
+    UNION ALL
+    SELECT el.element_order, 'level',
+           'level jumps from ' || prev || ' to ' || lvl
+             || '; depth-first ordering descends one at a time, so this element''s parent is missing'
+      FROM lv WHERE prev IS NOT NULL AND lvl > prev + 1
+    UNION ALL
+    SELECT el.element_order, 'element_order', 'element_order must be non-negative'
+      FROM e WHERE el.element_order IS NULL OR el.element_order < 0
+    UNION ALL
+    SELECT ord, 'element_order', 'Duplicate element_order value' FROM dup
+);
+
 # =============================================================================
-# Every emitted block is conformant (level >= 1, valid kind/encoding, order >= 0)
+# Per-element: every emitted block is conformant (level >= 1, valid kind/encoding, order >= 0)
 # =============================================================================
 
 # Python (classes + nested defs + module metadata)
@@ -77,5 +127,28 @@ WHERE NOT duck_block_is_valid(block);
 query I
 SELECT count(*) FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')
 WHERE block.level IS NULL OR block.level < 1;
+----
+0
+
+# =============================================================================
+# 1.2 list-level conformance: ast_to_blocks output has ZERO validator errors
+# (dense element_order from 0, shallowest level 1, no level jumps, valid kinds/encodings)
+# =============================================================================
+
+query I
+SELECT count(*) FROM duck_blocks_errors(
+    (SELECT list(block) FROM ast_to_blocks('test/data/python/macros/blocks_demo.py')));
+----
+0
+
+query I
+SELECT count(*) FROM duck_blocks_errors(
+    (SELECT list(block) FROM ast_to_blocks('test/data/go/simple.go', 'go')));
+----
+0
+
+query I
+SELECT count(*) FROM duck_blocks_errors(
+    (SELECT list(block) FROM ast_to_blocks('test/data/python/macros/blocks_demo.py', style := 'flat')));
 ----
 0
