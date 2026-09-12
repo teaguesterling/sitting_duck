@@ -4681,7 +4681,7 @@ CREATE OR REPLACE MACRO ast_find_references(
 --
 -- ast_to_blocks converts parsed ASTs into duck_blocks — the document-element
 -- STRUCT spec shared by the markdown / webbed / duck_block_utils extensions
--- (duck_block_utils SPEC_VERSION 6.2; vendored vocabulary + conformance macros
+-- (duck_block_utils SPEC_VERSION 1.2; vendored vocabulary + conformance macros
 -- in third_party/duck_block_utils/, validated by test/sql/duck_blocks_conformance.test).
 --
 -- duck_blocks is a SPEC, not a dependency: these macros emit conforming
@@ -4692,7 +4692,7 @@ CREATE OR REPLACE MACRO ast_find_references(
 --   PRAGMA duck_block_render;
 --   SELECT db_render_blocks(blocks) FROM ast_to_blocks_list('src/main.py');
 --
--- Element shape (SPEC_VERSION 6.2):
+-- Element shape (SPEC_VERSION 1.2):
 --   STRUCT(kind VARCHAR, element_type VARCHAR, content VARCHAR, level INTEGER,
 --          encoding VARCHAR, attributes MAP(VARCHAR, VARCHAR),
 --          element_order INTEGER)
@@ -4701,7 +4701,7 @@ CREATE OR REPLACE MACRO ast_find_references(
 --   * kind is always 'block' (we emit no inlines).
 --   * A heading's semantic level lives in attributes['heading_level'] as a
 --     STRING ('1'..'6'), NOT in the `level` field. `level` is structural
---     nesting depth: SPEC_VERSION 3.0+ requires it >= 1 for every element
+--     nesting depth: required >= 1 for every element since internal 3.0
 --     (no NULLs, never semantic). This outline is flat — no section/div
 --     containers — so every block we emit is a top-level sibling at level 1.
 --   * code blocks carry attributes['language']; metadata uses encoding 'yaml'.
