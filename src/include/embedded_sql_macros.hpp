@@ -449,6 +449,48 @@ CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
       AND a.name IS NOT NULL AND a.name != ''
     ORDER BY a.file_path, a.start_line;
 
+-- #99: durable citation resolution. Given a FILE and an entity NAME, return the entity's
+-- CURRENT line range language-agnostically -- callers need not pin tree-sitter node-type
+-- strings (`function_definition` etc. vary by grammar); the filter is semantic
+-- (is_definition + is_construct, the same chain as ast_definitions).
+--
+-- Also returns `qualified_name` (name + enclosing scope, e.g. `C[User] F[__init__]`) as a
+-- STABLE IDENTITY: when a name occurs more than once, it disambiguates which entity a
+-- citation meant, and it re-resolves across edits. A citation stores (path, name[,
+-- qualified_name]) and re-resolves here; comparing the returned lines to a recorded range
+-- makes drift visible instead of silent. (The content anchor — a git blob / read_lines
+-- hash — composes at the filesystem layer; sitting_duck supplies the *semantic* selector.)
+--
+-- Optional `kind` filters to 'function'|'class'|'variable'|'module'|'type'|'other'.
+-- Usage: SELECT * FROM ast_resolve_entity('src/xml_utils.cpp', 'SecureNoExternalEntityLoader');
+--        SELECT * FROM ast_resolve_entity('src/app.py', 'run', kind := 'function');
+CREATE OR REPLACE MACRO ast_resolve_entity(path, entity_name, kind := NULL, language := NULL) AS TABLE
+    WITH defs AS (
+        SELECT
+            a.name,
+            CASE
+                WHEN is_function_definition(a.semantic_type) THEN 'function'
+                WHEN is_class_definition(a.semantic_type) THEN 'class'
+                WHEN is_variable_definition(a.semantic_type) THEN 'variable'
+                WHEN is_module_definition(a.semantic_type) THEN 'module'
+                WHEN is_type_definition(a.semantic_type) THEN 'type'
+                ELSE 'other'
+            END AS entity_kind,
+            a.start_line,
+            a.end_line,
+            ast_qualified_name_as_string(a.qualified_name) AS qualified_name,
+            a.language,
+            a.file_path
+        FROM read_ast(path, language) a
+        WHERE a.name = entity_name
+          AND is_definition(a.semantic_type)
+          AND is_construct(a.flags)
+    )
+    SELECT name, entity_kind, start_line, end_line, qualified_name, language, file_path
+    FROM defs
+    WHERE kind IS NULL OR entity_kind = kind
+    ORDER BY file_path, start_line;
+
 -- Get all descendants of a node (entire subtree)
 -- Uses descendant_count for O(1) range-based lookup (nodes are in DFS pre-order)
 -- Usage: SELECT * FROM ast_descendants(my_ast_table, ancestor_node_id)
@@ -652,6 +694,9 @@ CREATE OR REPLACE MACRO ast_function_metrics(source, language := NULL) AS TABLE
                 -- (if_statement, elif_clause, switch_statement, match_arm, etc.)
                 COUNT(CASE
                     WHEN is_conditional(n.semantic_type)
+
+)SQLMACRO"
+        R"SQLMACRO(
                      AND (n.type LIKE '%_statement' OR n.type LIKE '%_clause'
                           OR n.type LIKE '%_expression' OR n.type LIKE '%_arm'
                           OR n.type LIKE '%_case' OR n.type LIKE '%_branch')
@@ -704,9 +749,6 @@ CREATE OR REPLACE MACRO ast_function_metrics(source, language := NULL) AS TABLE
 -- Usage: SELECT * FROM ast_functions_containing('src/**/*.py', 'call') WHERE match_name = 'eval'
 CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language := NULL) AS TABLE
     WITH
-
-)SQLMACRO"
-        R"SQLMACRO(
         ast AS (
             SELECT * FROM read_ast(source, language)
         ),
@@ -977,6 +1019,9 @@ CREATE OR REPLACE MACRO ast_security_audit(source, language := NULL) AS TABLE
 -- Resolve nearest definition ancestor for each definition node
 -- Walks up parent_id, skipping organizational/structural nodes (e.g., blocks),
 -- until it finds an ancestor that is itself a definition.
+
+)SQLMACRO"
+        R"SQLMACRO(
 -- Returns (node_id, def_name, kind, parent_def_name, parent_def_kind, parent_def_node_id)
 -- Usage: SELECT * FROM ast_definition_parent('my_ast_table')
 CREATE OR REPLACE MACRO ast_definition_parent(ast_table) AS TABLE
@@ -1040,9 +1085,6 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
                 a.type,
                 'function' AS definition_type
             FROM ast a
-
-)SQLMACRO"
-        R"SQLMACRO(
             WHERE is_function_definition(a.semantic_type)
               AND a.name IS NOT NULL AND a.name != ''
               -- Exclude special methods (constructors, dunder methods, etc.)
