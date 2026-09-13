@@ -1,0 +1,87 @@
+# name: test/sql/ast_resolve_entity.test
+# description: ast_resolve_entity — durable citation resolution (#99): name -> current line range + qualified_name identity
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Disambiguation by qualified_name: three __init__ methods, one per class scope.
+# A citation stored as (path, name, qualified_name) re-resolves to exactly one row;
+# the returned line range is the CURRENT location, so drift is visible on compare.
+# =============================================================================
+
+query IIIII
+SELECT name, entity_kind, start_line, end_line, qualified_name
+FROM ast_resolve_entity('test/data/python/qualified_names.py', '__init__')
+ORDER BY start_line;
+----
+__init__	function	5	6	C[User] F[__init__]
+__init__	function	13	14	C[Account] F[__init__]
+__init__	function	17	18	C[Account] C[Settings] F[__init__]
+
+# =============================================================================
+# Language-agnostic entity kinds: class, function (nested), variable — all via
+# semantic types, no grammar node-type strings pinned by the caller.
+# =============================================================================
+
+query IIIII
+SELECT name, entity_kind, start_line, end_line, qualified_name
+FROM ast_resolve_entity('test/data/python/qualified_names.py', 'User');
+----
+User	class	4	9	C[User]
+
+query IIIII
+SELECT name, entity_kind, start_line, end_line, qualified_name
+FROM ast_resolve_entity('test/data/python/qualified_names.py', 'validate');
+----
+validate	function	8	9	C[User] F[validate]
+
+# nested function carries its enclosing function in the qualified_name
+query IIIII
+SELECT name, entity_kind, start_line, end_line, qualified_name
+FROM ast_resolve_entity('test/data/python/qualified_names.py', 'nested_helper');
+----
+nested_helper	function	22	23	F[top_level_function] F[nested_helper]
+
+# module-level assignment resolves as a variable definition
+query IIII
+SELECT name, entity_kind, start_line, qualified_name
+FROM ast_resolve_entity('test/data/python/qualified_names.py', 'MY_CONST');
+----
+MY_CONST	variable	1	V[MY_CONST]
+
+# =============================================================================
+# kind filter narrows the result set
+# =============================================================================
+
+# kind := 'function' keeps all three __init__ methods
+query I
+SELECT count(*) FROM ast_resolve_entity('test/data/python/qualified_names.py', '__init__', kind := 'function');
+----
+3
+
+# kind := 'class' excludes them (they are functions, not classes)
+query I
+SELECT count(*) FROM ast_resolve_entity('test/data/python/qualified_names.py', '__init__', kind := 'class');
+----
+0
+
+# a name that does not exist resolves to nothing (empty, not an error)
+query I
+SELECT count(*) FROM ast_resolve_entity('test/data/python/qualified_names.py', 'does_not_exist');
+----
+0
+
+# =============================================================================
+# The filter chain excludes keyword tokens: 'def'/'class' keywords share the
+# semantic type of their parent construct but are NOT constructs (is_construct=false),
+# so a definition name never returns a duplicate keyword row.
+# =============================================================================
+
+query I
+SELECT count(*) FROM ast_resolve_entity('test/data/python/qualified_names.py', 'Account');
+----
+1
