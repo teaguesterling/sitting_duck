@@ -5,8 +5,13 @@
 # Runs the duck_block_utils conformance validator over real ast_to_blocks output,
 # so producer/spec drift is caught (tracker/bugs/014). The macros below are copied
 # VERBATIM from third_party/duck_block_utils/duck_block_conformance.sql
-# (SPEC_VERSION 1.2, upstream 1c5f2a6) — resync BOTH together when the vendored copy
+# (SPEC_VERSION 1.3, upstream 079123d) — resync BOTH together when the vendored copy
 # is bumped. See third_party/duck_block_utils/PROVENANCE.md.
+#
+# 1.3 is additive and validator-unchanged: it adds the IsBody(kind, element_type)
+# predicate (a CONSUMER concern — metadata is never body). ast_to_blocks is a
+# producer, so its output and these list-level rules are unaffected; this test still
+# asserts ZERO validator errors, which is the producer-side contract that matters here.
 
 require sitting_duck
 
