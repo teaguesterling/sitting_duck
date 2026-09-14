@@ -1,0 +1,178 @@
+# name: test/sql/semantic_type_alias_coverage.test
+# description: Exhaustive coverage of is_semantic_type() selector-alias classes (.fn/.func/.call/.access/...)
+# group: [sql]
+#
+# WHY THIS EXISTS
+# ---------------
+# `.func`, `.call`, `.access`, `.loop`, ... resolve through the is_semantic_type()
+# alias cascade in src/semantic_type_functions.cpp. That cascade is ~100 aliases of
+# hand-written `pattern == "X" -> bitmask` branches; a wrong constant makes an alias
+# select the wrong node set SILENTLY (it still returns rows, just the wrong ones).
+# Peers hit exactly that: `.access` matched arithmetic/logical operators instead of
+# member-access nodes because it used COMPUTATION (0xC0) where it meant
+# COMPUTATION_NODE (0xD0).
+#
+# THE ORACLE (independent of the cascade)
+# ---------------------------------------
+# Node names come from GetSemanticTypeName() (src/semantic_types.cpp) — a DIFFERENT
+# code path than the cascade. The canonical names encode the taxonomy: the
+# COMPUTATION_NODE kind is exactly {COMPUTATION_CALL, COMPUTATION_ACCESS,
+# COMPUTATION_EXPRESSION, COMPUTATION_CLOSURE} (all `COMPUTATION_*`), OPERATORs are
+# `OPERATOR_*`, and so on. So for every base code we can derive what each alias SHOULD
+# match from the name, and compare against what the cascade actually returns. A wrong
+# constant in the cascade diverges from the name-derived expectation and fails here.
+#
+# When you ADD an alias to the cascade, add its row to `aliases` below. If an alias's
+# intended family changes, change it in one place. This asserts ZERO divergences.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Exhaustive: every alias agrees with the canonical-name oracle over the whole
+# base-type code space (0..252 step 4; low 2 bits are refinement, masked by the
+# cascade). match: 'exact' = node name equals fam; 'prefix' = name starts with fam
+# (kind-level alias); 'quad' = top-level COMPUTATION quadrant.
+# =============================================================================
+
+query I
+WITH codes AS (
+  SELECT c::UTINYINT AS code, semantic_type_to_string(c::UTINYINT) AS name
+  FROM range(0,256,4) t(c)
+),
+aliases(alias, match, fam) AS (VALUES
+  ('FUNCTION','exact','DEFINITION_FUNCTION'),('FUNC','exact','DEFINITION_FUNCTION'),
+  ('FN','exact','DEFINITION_FUNCTION'),('METHOD','exact','DEFINITION_FUNCTION'),
+  ('CALL','exact','COMPUTATION_CALL'),('INVOKE','exact','COMPUTATION_CALL'),
+  ('CLASS','exact','DEFINITION_CLASS'),('CLS','exact','DEFINITION_CLASS'),
+  ('STRUCT','exact','DEFINITION_CLASS'),('TRAIT','exact','DEFINITION_CLASS'),('INTERFACE','exact','DEFINITION_CLASS'),
+  ('IDENTIFIER','exact','NAME_IDENTIFIER'),('ID','exact','NAME_IDENTIFIER'),('IDENT','exact','NAME_IDENTIFIER'),
+  ('MODULE','exact','DEFINITION_MODULE'),('MOD','exact','DEFINITION_MODULE'),('PACKAGE','exact','DEFINITION_MODULE'),
+  ('NAMESPACE','exact','DEFINITION_MODULE'),('NS','exact','DEFINITION_MODULE'),
+  ('VARIABLE','exact','DEFINITION_VARIABLE'),('VAR','exact','DEFINITION_VARIABLE'),
+  ('LET','exact','DEFINITION_VARIABLE'),('CONST','exact','DEFINITION_VARIABLE'),
+  ('CONDITIONAL','exact','FLOW_CONDITIONAL'),('COND','exact','FLOW_CONDITIONAL'),('IF','exact','FLOW_CONDITIONAL'),
+  ('LOOP','exact','FLOW_LOOP'),('FOR','exact','FLOW_LOOP'),('WHILE','exact','FLOW_LOOP'),
+  ('JUMP','exact','FLOW_JUMP'),('RETURN','exact','FLOW_JUMP'),('BREAK','exact','FLOW_JUMP'),
+  ('CONTINUE','exact','FLOW_JUMP'),('YIELD','exact','FLOW_JUMP'),
+  ('DEFINITION','prefix','DEFINITION_'),('DEF','prefix','DEFINITION_'),
+  ('LITERAL','prefix','LITERAL_'),('LIT','prefix','LITERAL_'),('VALUE','prefix','LITERAL_'),
+  ('NAME','prefix','NAME_'),
+  ('FLOW','prefix','FLOW_'),('CONTROL','prefix','FLOW_'),
+  ('EXTERNAL','prefix','EXTERNAL_'),('EXT','prefix','EXTERNAL_'),
+  ('MEMBER','exact','COMPUTATION_ACCESS'),('ATTR','exact','COMPUTATION_ACCESS'),
+  ('FIELD','exact','COMPUTATION_ACCESS'),('PROP','exact','COMPUTATION_ACCESS'),
+  ('IMPORT','exact','EXTERNAL_IMPORT'),('REQUIRE','exact','EXTERNAL_IMPORT'),('USE','exact','EXTERNAL_IMPORT'),
+  ('EXPORT','exact','EXTERNAL_EXPORT'),('PUB','exact','EXTERNAL_EXPORT'),
+  ('TRY','exact','ERROR_TRY'),
+  ('CATCH','exact','ERROR_CATCH'),('EXCEPT','exact','ERROR_CATCH'),('RESCUE','exact','ERROR_CATCH'),
+  ('THROW','exact','ERROR_THROW'),('RAISE','exact','ERROR_THROW'),
+  ('FINALLY','exact','ERROR_FINALLY'),('ENSURE','exact','ERROR_FINALLY'),('DEFER','exact','ERROR_FINALLY'),
+  ('STR','exact','LITERAL_STRING'),('STRING','exact','LITERAL_STRING'),
+  ('NUM','exact','LITERAL_NUMBER'),('NUMBER','exact','LITERAL_NUMBER'),
+  ('BOOL','exact','LITERAL_ATOMIC'),('BOOLEAN','exact','LITERAL_ATOMIC'),
+  ('COLL','exact','LITERAL_STRUCTURED'),('LIST','exact','LITERAL_STRUCTURED'),('DICT','exact','LITERAL_STRUCTURED'),
+  ('ARRAY','exact','LITERAL_STRUCTURED'),('MAP','exact','LITERAL_STRUCTURED'),('SET','exact','LITERAL_STRUCTURED'),
+  ('TUPLE','exact','LITERAL_STRUCTURED'),
+  ('QUALIFIED','exact','NAME_QUALIFIED'),('DOTTED','exact','NAME_QUALIFIED'),
+  ('SELF','exact','NAME_SCOPED'),('THIS','exact','NAME_SCOPED'),
+  ('LABEL','exact','NAME_ATTRIBUTE'),
+  ('ARITH','exact','OPERATOR_ARITHMETIC'),('MATH','exact','OPERATOR_ARITHMETIC'),
+  ('CMP','exact','OPERATOR_COMPARISON'),('COMPARISON','exact','OPERATOR_COMPARISON'),
+  ('LOGIC','exact','OPERATOR_LOGICAL'),('LOGICAL','exact','OPERATOR_LOGICAL'),
+  ('COMP','exact','TRANSFORM_QUERY'),('COMPREHENSION','exact','TRANSFORM_QUERY'),
+  ('COMPUTATION','quad','COMPUTATION_QUADRANT'),
+  ('ERROR','prefix','ERROR_'),('ERR','prefix','ERROR_'),
+  ('OPERATOR','prefix','OPERATOR_'),('OP','prefix','OPERATOR_'),
+  ('TYPEDEF','prefix','TYPE_'),('TYPE','prefix','TYPE_'),
+  ('PATTERN','prefix','PATTERN_'),('PAT','prefix','PATTERN_'),
+  ('BLOCK','prefix','ORGANIZATION_'),
+  ('STATEMENT','prefix','EXECUTION_'),('STMT','prefix','EXECUTION_'),
+  ('SYNTAX','prefix','PARSER_'),('SYN','prefix','PARSER_'),
+  ('TRANSFORM','prefix','TRANSFORM_'),('XFORM','prefix','TRANSFORM_'),
+  ('COMMENT','prefix','METADATA_'),
+  ('ACCESS','prefix','COMPUTATION_')
+)
+SELECT count(*)
+FROM aliases a CROSS JOIN codes c
+WHERE is_semantic_type(c.code, a.alias) <>
+      CASE a.match
+        WHEN 'exact'  THEN c.name = a.fam
+        WHEN 'prefix' THEN starts_with(c.name, a.fam)
+        WHEN 'quad'   THEN starts_with(c.name,'OPERATOR_') OR starts_with(c.name,'COMPUTATION_')
+                           OR starts_with(c.name,'TRANSFORM_') OR starts_with(c.name,'DEFINITION_')
+      END;
+----
+0
+
+# =============================================================================
+# Regression guard for the .access bug (COMPUTATION 0xC0 -> COMPUTATION_NODE 0xD0):
+# .access must match the call/access/expression/closure kind, and must NOT match
+# operators. Pinned to codes so a future constant slip is unmistakable.
+# =============================================================================
+
+# .access matches every COMPUTATION_NODE member
+query I
+SELECT count(*) FROM range(0,256,4) t(c)
+WHERE is_semantic_type(c::UTINYINT,'ACCESS')
+  AND NOT starts_with(semantic_type_to_string(c::UTINYINT),'COMPUTATION_');
+----
+0
+
+# .access matches ONLY COMPUTATION_NODE members (4 of them: call/access/expr/closure)
+query I
+SELECT count(*) FROM range(0,256,4) t(c) WHERE is_semantic_type(c::UTINYINT,'ACCESS');
+----
+4
+
+# .access must NOT match operators (the pre-fix behavior)
+query I
+SELECT count(*) FROM range(0,256,4) t(c)
+WHERE is_semantic_type(c::UTINYINT,'ACCESS')
+  AND starts_with(semantic_type_to_string(c::UTINYINT),'OPERATOR_');
+----
+0
+
+# .member stays the specific COMPUTATION_ACCESS super-type (not widened by the fix)
+query I
+SELECT count(*) FROM range(0,256,4) t(c) WHERE is_semantic_type(c::UTINYINT,'MEMBER');
+----
+1
+
+# =============================================================================
+# End-to-end plumbing: the CSS `.class` path (parse '.alias' -> UPPER -> is_semantic_type)
+# must route to the SAME alias the scalar function resolves. Catches a selector-engine
+# regression (wrong alias->type wiring) that a scalar-only test would miss.
+#
+# Asserted as SUBSET + non-empty, NOT set-equality: ast_select returns only construct
+# nodes, while the raw is_semantic_type filter also matches syntax-only keyword tokens
+# that share their parent construct's semantic type (the `def`/`for` keyword carries
+# DEFINITION_FUNCTION / FLOW_LOOP too). So `sel` is a strict subset of `direct` for
+# those aliases by design. What a plumbing bug WOULD produce is a node in `sel` whose
+# semantic type is NOT the alias (only_in_sel > 0), or an empty result for an alias the
+# fixture clearly contains. Both are caught here; the benign syntax-token gap is not.
+# =============================================================================
+
+# Kept deliberately small (each ast_select carries macro-planning cost, tracker #040);
+# the alias->type resolution itself is fully covered by the exhaustive oracle above,
+# and broad selector-path coverage lives in ast_select_aliases.test. ACCESS is here so
+# the fixed bug is guarded end-to-end, not only at the scalar layer.
+foreach alias FUNC ACCESS CALL
+
+query I
+WITH sel AS (
+    SELECT node_id FROM ast_select('test/data/python/sample_app.py', '.${alias}')
+),
+direct AS (
+    SELECT node_id FROM read_ast('test/data/python/sample_app.py')
+    WHERE is_semantic_type(semantic_type, '${alias}')
+)
+-- 0 iff every ast_select match is genuinely of type ${alias} AND the set is non-empty
+SELECT (SELECT count(*) FROM sel WHERE node_id NOT IN (SELECT node_id FROM direct))
+     + (CASE WHEN (SELECT count(*) FROM sel) = 0 THEN 1 ELSE 0 END);
+----
+0
+
+endloop

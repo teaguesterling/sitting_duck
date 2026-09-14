@@ -202,7 +202,13 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		    } else if (pattern == "COMMENT") {
 			    return (base_type & 0xF0) == SemanticTypes::METADATA;
 		    } else if (pattern == "ACCESS") {
-			    return (base_type & 0xF0) == SemanticTypes::COMPUTATION;
+			    // The COMPUTATION_NODE kind (0xD0): calls/access/expression/closure.
+			    // Was `== COMPUTATION` (0xC0) — the top-level quadrant constant, whose
+			    // `& 0xF0` lands on the OPERATOR kind, so `.access` matched arithmetic/
+			    // logical/comparison/assignment operators and MISSED the actual
+			    // call/access nodes. Kind-level alias, parallel to the other Tier-8
+			    // `& 0xF0` entries. (COMPUTATION_ACCESS specifically stays .member/.attr.)
+			    return (base_type & 0xF0) == SemanticTypes::COMPUTATION_NODE;
 		    }
 
 		    // Default: exact string match with full semantic type name
