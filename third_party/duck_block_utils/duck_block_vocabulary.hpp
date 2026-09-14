@@ -1,4 +1,9 @@
 #pragma once
+// VENDORED from duckdb_duck_block_utils@079123d (main, SPEC_VERSION 1.3), synced 2026-09-12.
+// Taken from a pinned git object (`git show <sha>:<path>`), not a branch URL, and
+// verified byte-identical to it. Replace this line on every re-vendor: provenance has
+// to travel WITH the file, because a fork, a copy or a squash sees this header and not
+// the commit that introduced it. (Restored here -- the 1.2 sync dropped it.)
 
 // ============================================================================
 // The duck_block vocabulary -- PUBLISHED INTERFACE.

@@ -4723,7 +4723,7 @@ CREATE OR REPLACE MACRO ast_find_references(
 --
 -- ast_to_blocks converts parsed ASTs into duck_blocks — the document-element
 -- STRUCT spec shared by the markdown / webbed / duck_block_utils extensions
--- (duck_block_utils SPEC_VERSION 1.2; vendored vocabulary + conformance macros
+-- (duck_block_utils SPEC_VERSION 1.3; vendored vocabulary + conformance macros
 -- in third_party/duck_block_utils/, validated by test/sql/duck_blocks_conformance.test).
 --
 -- duck_blocks is a SPEC, not a dependency: these macros emit conforming
@@ -4734,7 +4734,7 @@ CREATE OR REPLACE MACRO ast_find_references(
 --   PRAGMA duck_block_render;
 --   SELECT db_render_blocks(blocks) FROM ast_to_blocks_list('src/main.py');
 --
--- Element shape (SPEC_VERSION 1.2):
+-- Element shape (SPEC_VERSION 1.3):
 --   STRUCT(kind VARCHAR, element_type VARCHAR, content VARCHAR, level INTEGER,
 --          encoding VARCHAR, attributes MAP(VARCHAR, VARCHAR),
 --          element_order INTEGER)
