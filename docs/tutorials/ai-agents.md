@@ -97,7 +97,7 @@ The extension provides several utility functions to work with semantic types mor
 - `is_class_definition(st)` - Class/struct/interface definitions
 - `is_variable_definition(st)` - Variable declarations
 - `is_module_definition(st)` - Module/namespace definitions
-- `is_type_definition(st)` - Type aliases/typedefs
+- `is_type_definition(st)` - ⚠️ reserved, always false today (no `DEFINITION_TYPE` yet); type aliases/typedefs classify as `DEFINITION_CLASS` — use `is_class_definition(st)`
 
 *Control flow predicates:*
 - `is_conditional(st)` - If/switch/match statements
