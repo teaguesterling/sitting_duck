@@ -1,0 +1,167 @@
+# name: test/sql/ast_select_combinator_steps.test
+# description: Combinator steps honor type, .class alias and #id; subject
+#   modifiers apply to the last step; unsupported shapes raise instead of
+#   silently matching nothing (issue #127).
+#
+#   Fixture: test/data/python/combinator_steps.py -- classes Base and Widget
+#   (Widget has __init__, test_render, undocumented); module functions main,
+#   test_helper, calls_nothing. Counts below were derived by reading it.
+# group: [sitting_duck]
+
+require sitting_duck
+
+# ---------------------------------------------------------------------------
+# Controls: each alias alone matches its exact type, so any failure further
+# down is isolated to the combinator path, not the alias mapping.
+# ---------------------------------------------------------------------------
+
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.class'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition'));
+----
+true
+
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.func'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'function_definition'));
+----
+true
+
+# Guards: exact-type spellings are non-empty, so the equalities below cannot
+# pass as 0 = 0.
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition function_definition');
+----
+3
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'for_statement call');
+----
+2
+
+# ---------------------------------------------------------------------------
+# Aliases as combinator steps (the original defect)
+# ---------------------------------------------------------------------------
+
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.class .func'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition function_definition'));
+----
+true
+
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.loop .call'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'for_statement call'));
+----
+true
+
+# mixed spellings
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition .func'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition function_definition'));
+----
+true
+
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.class function_definition'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition function_definition'));
+----
+true
+
+# every combinator kind with an alias step
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.class > block');
+----
+2
+
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.import ~ .class'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'import_statement ~ class_definition'));
+----
+true
+
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.class + .class'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition + class_definition'));
+----
+true
+
+# universal step
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '* > function_definition'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'function_definition'));
+----
+true
+
+# ---------------------------------------------------------------------------
+# #id on the left step (the advertised '.class#UserService .func' shape)
+# ---------------------------------------------------------------------------
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition#Widget function_definition');
+----
+3
+
+# legitimately empty -- the positive twin is the query above
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition#Base function_definition');
+----
+0
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.class#Widget .func');
+----
+3
+
+# ---------------------------------------------------------------------------
+# Modifiers after the last step wrap the whole combinator and constrain the subject
+# ---------------------------------------------------------------------------
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition function_definition#__init__');
+----
+1
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.class .func#__init__');
+----
+1
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition function_definition[name^="test_"]');
+----
+1
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition function_definition:has(call)');
+----
+1
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'function_definition call#print');
+----
+1
+
+# ---------------------------------------------------------------------------
+# Unsupported shapes raise instead of returning 0 rows (#89)
+# ---------------------------------------------------------------------------
+
+statement error
+SELECT * FROM ast_select('test/data/python/combinator_steps.py', 'class_definition > block > function_definition');
+----
+more than two steps
+
+statement error
+SELECT * FROM ast_select('test/data/python/combinator_steps.py', '.class .func .call');
+----
+more than two steps
+
+statement error
+SELECT * FROM ast_select('test/data/python/combinator_steps.py', 'class_definition[name="Widget"] function_definition');
+----
+only supported on the last step
+
+statement error
+SELECT * FROM ast_select('test/data/python/combinator_steps.py', 'class_definition:has(call) function_definition');
+----
+only supported on the last step
