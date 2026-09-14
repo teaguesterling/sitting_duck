@@ -1167,7 +1167,12 @@ CREATE OR REPLACE MACRO ast_select_from(
           AND (sp.right_id IS NULL OR a.name = sp.right_id)
           AND EXISTS (
               SELECT 1 FROM ast par
-              WHERE par.node_id = a.parent_id
+              -- node_id is only unique within a file. Without the file_path
+              -- guard, over a multi-file source a node's parent_id matched
+              -- another file's node of the same id -- a method under a block
+              -- in one file "was a direct child" of a class in another.
+              WHERE par.file_path = a.file_path
+                AND par.node_id = a.parent_id
                 AND (sp.left_type IS NULL OR par.type = sp.left_type OR par.type LIKE sp.left_type_like)
                 AND (sp.left_class IS NULL
                      OR (is_semantic_type(par.semantic_type, UPPER(sp.left_class))

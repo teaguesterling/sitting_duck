@@ -165,3 +165,45 @@ statement error
 SELECT * FROM ast_select('test/data/python/combinator_steps.py', 'class_definition:has(call) function_definition');
 ----
 only supported on the last step
+
+# ---------------------------------------------------------------------------
+# Child combinator over a multi-file source. The parent lookup joined on
+# node_id alone, and node_id is only unique within a file, so a node's
+# parent_id could land on ANOTHER file's node with the same id: over
+# test/data/python/*.py, an __init__ whose parent is a block in
+# qualified_names.py "was a direct child" of class Dog (node 57) in
+# css_selectors_test.py. Ground truth is computed from read_ast joined on
+# (file_path, node_id), so these hold whatever the test data contains.
+# ---------------------------------------------------------------------------
+
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/*.py', 'class_definition > function_definition'))
+     = (SELECT count(*) FROM read_ast('test/data/python/*.py') c
+        JOIN read_ast('test/data/python/*.py') p ON p.file_path = c.file_path AND p.node_id = c.parent_id
+        WHERE c.type = 'function_definition' AND p.type = 'class_definition');
+----
+true
+
+# positive twin: class bodies ARE direct children, in their own file
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/*.py', 'class_definition > block'))
+     = (SELECT count(*) FROM read_ast('test/data/python/*.py') c
+        JOIN read_ast('test/data/python/*.py') p ON p.file_path = c.file_path AND p.node_id = c.parent_id
+        WHERE c.type = 'block' AND p.type = 'class_definition');
+----
+true
+
+# guard: the positive twin is non-empty
+query I
+SELECT count(*) > 0 FROM read_ast('test/data/python/*.py') c
+JOIN read_ast('test/data/python/*.py') p ON p.file_path = c.file_path AND p.node_id = c.parent_id
+WHERE c.type = 'block' AND p.type = 'class_definition';
+----
+true
+
+# alias steps take the same path
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/*.py', '.class > block'))
+     = (SELECT count(*) FROM ast_select('test/data/python/*.py', 'class_definition > block'));
+----
+true
