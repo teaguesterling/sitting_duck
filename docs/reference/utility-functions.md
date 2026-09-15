@@ -111,7 +111,7 @@ Fine-grained predicates for filtering by specific semantic types.
 | `is_class_definition(st)` | `DEFINITION_CLASS` | Class/struct/interface definitions |
 | `is_variable_definition(st)` | `DEFINITION_VARIABLE` | Variable declarations |
 | `is_module_definition(st)` | `DEFINITION_MODULE` | Module/namespace definitions |
-| `is_type_definition(st)` | `DEFINITION_TYPE` | Type alias definitions |
+| `is_type_definition(st)` | `DEFINITION_TYPE` | ⚠️ Reserved — always `false` today. `DEFINITION_TYPE` does not exist yet; type aliases/typedefs currently classify as `DEFINITION_CLASS`, so use `is_class_definition(st)`. See issue #136. |
 
 ```sql
 -- Find all function definitions

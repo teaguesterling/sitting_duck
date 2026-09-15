@@ -227,7 +227,7 @@ DEF_TYPE("offset_date_time", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
  */
 
 /// @brief Escape sequence - `\n`, `\t`, etc.
-DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @} */ // end toml_string_content
 

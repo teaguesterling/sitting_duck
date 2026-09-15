@@ -183,11 +183,14 @@ SELECT * FROM ast_select('test/data/call_extraction/calls.sh', 'program:not(:has
 ----
 no call node in this source carries a callee name
 
-# .call WITHOUT a name filter over the same source is answerable and stays quiet
+# .call WITHOUT a name filter over the same source is answerable and stays quiet.
+# bash `command` is now COMPUTATION_CALL (#139), so this counts the two commands
+# (date, echo) plus the command_substitution — all call-semantic but unnamed
+# (correct command-name binding is tracked in #140).
 query I
 SELECT COUNT(*) FROM ast_select('test/data/call_extraction/calls.sh', '.call');
 ----
-1
+3
 
 # Unknown attribute names error instead of falling through to `ELSE false`
 # (which silently matched nothing)

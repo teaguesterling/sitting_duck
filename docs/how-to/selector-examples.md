@@ -117,8 +117,12 @@ FROM ast_select('src/**/*.py',
 ```sql
 SELECT name, start_line, file_path
 FROM ast_select('src/**/*.py',
-    '.class .func:not(:has(.self)):named');
+    '.class .func:not(:has(#self)):named');
 ```
+
+> Match `self` by **name** (`#self`), not by a `.self` class: in Python `self`
+> is an ordinary identifier (`NAME_IDENTIFIER`), not a scoped-name keyword, so a
+> `.self` class filter matches nothing (#139).
 
 ### Find string literals that should be constants
 

@@ -152,10 +152,10 @@ DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
  */
 
 /// @brief String content - text inside quotes
-DEF_TYPE("string_content", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("string_content", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /// @brief Escape sequence - `\n`, `\uXXXX`, etc.
-DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @} */ // end json_string_content
 

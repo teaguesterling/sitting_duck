@@ -435,7 +435,7 @@ DEF_TYPE("float", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NODE_TEXT
 DEF_TYPE("string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 
 /// @brief String content
-DEF_TYPE("string_content", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("string_content", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /// @brief Multiline string - `\\string\\`
 DEF_TYPE("multiline_string", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)

@@ -200,9 +200,23 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		    } else if (pattern == "TRANSFORM" || pattern == "XFORM") {
 			    return (base_type & 0xF0) == SemanticTypes::TRANSFORM;
 		    } else if (pattern == "COMMENT") {
+			    // Narrowed from the kind-level METADATA mask to the COMMENT super-type
+			    // only (issue #134). METADATA also covers ANNOTATION (decorators/
+			    // attributes), DIRECTIVE, and DEBUG, so the old `& 0xF0` made `.comment`
+			    // match decorators — a false positive peers hit. Use METADATA/META
+			    // (below) for the whole kind. Parallel to the .access fix (#135).
+			    return base_type == SemanticTypes::METADATA_COMMENT;
+		    } else if (pattern == "METADATA" || pattern == "META") {
+			    // Kind-level umbrella: comments, annotations, directives, debug info.
 			    return (base_type & 0xF0) == SemanticTypes::METADATA;
 		    } else if (pattern == "ACCESS") {
-			    return (base_type & 0xF0) == SemanticTypes::COMPUTATION;
+			    // The COMPUTATION_NODE kind (0xD0): calls/access/expression/closure.
+			    // Was `== COMPUTATION` (0xC0) — the top-level quadrant constant, whose
+			    // `& 0xF0` lands on the OPERATOR kind, so `.access` matched arithmetic/
+			    // logical/comparison/assignment operators and MISSED the actual
+			    // call/access nodes. Kind-level alias, parallel to the other Tier-8
+			    // `& 0xF0` entries. (COMPUTATION_ACCESS specifically stays .member/.attr.)
+			    return (base_type & 0xF0) == SemanticTypes::COMPUTATION_NODE;
 		    }
 
 		    // Default: exact string match with full semantic type name
@@ -422,6 +436,18 @@ static void IsExportedFunction(DataChunk &args, ExpressionState &state, Vector &
 	auto count = args.size();
 	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count,
 	                                      [&](uint8_t flags) { return (flags & ASTNodeFlags::IS_EXPORTED) != 0; });
+}
+
+// Check if node is a constituent — a meaningful sub-part of a larger construct
+// that already represents the whole (string content, a function declarator, an
+// import specifier). Distinct from is_syntax_only: a constituent carries payload
+// but is subordinate; class selectors skip it in favour of the enclosing construct.
+static void IsConstituentFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	D_ASSERT(args.ColumnCount() == 1);
+	auto &flags_vector = args.data[0];
+	auto count = args.size();
+	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count,
+	                                      [&](uint8_t flags) { return (flags & ASTNodeFlags::IS_CONSTITUENT) != 0; });
 }
 
 // Get the name role as an integer (0=none, 1=reference, 2=declaration, 3=definition)
@@ -736,6 +762,11 @@ void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
 	// IS_EXPORTED flag function (bit 4)
 	ScalarFunction is_exported_func("is_exported", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsExportedFunction);
 	loader.RegisterFunction(is_exported_func);
+
+	// IS_CONSTITUENT flag function (bit 5)
+	ScalarFunction is_constituent_func("is_constituent", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
+	                                    IsConstituentFunction);
+	loader.RegisterFunction(is_constituent_func);
 
 	// DEPRECATED: backward compatibility wrappers
 	ScalarFunction is_declaration_only_func("is_declaration_only", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,

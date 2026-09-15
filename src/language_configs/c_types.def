@@ -528,12 +528,12 @@ DEF_TYPE("concatenated_string", LITERAL_STRING | SemanticRefinements::String::LI
 /**
  * @brief String content (inside quotes)
  */
-DEF_TYPE("string_content", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("string_content", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /**
  * @brief Escape sequence in string: \n, \t, etc.
  */
-DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /**
  * @brief Character content
@@ -727,7 +727,7 @@ DEF_TYPE("declaration_list", ORGANIZATION_LIST, NONE, NONE, 0)
 /**
  * @brief System library string: `<header.h>`
  */
-DEF_TYPE("system_lib_string", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
+DEF_TYPE("system_lib_string", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @} */ // end c_structural
 
