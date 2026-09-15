@@ -2475,6 +2475,11 @@ CREATE OR REPLACE MACRO parse_ast_list_table(code, language) AS TABLE
 --   A > B                         - B is a direct child of A
 --   A ~ B                         - B is a general sibling after A
 --   A + B                         - B immediately follows A
+--                                   Combinators take exactly TWO steps. Each step
+--                                   may carry a type, a .class alias and a #id;
+--                                   [attr] and :pseudo apply to the last step only.
+--                                   Longer chains, and [attr] / :pseudo on an
+--                                   earlier step, raise an error (issue #127).
 --   :has(selector)                - Contains a descendant matching selector
 --   :not(:has(selector))          - Does NOT contain a descendant matching selector
 --   [name=value]                  - Attribute filter. Supported attributes:
@@ -2595,6 +2600,16 @@ CREATE OR REPLACE MACRO ast_select_from(
             SELECT node_id, parent_id, name
             FROM sel WHERE type = 'plain_value'
         ),
+        -- Every node type that can BE a step of a combinator (#127), so the
+        -- combinator CTEs read sel_root's children through a typed view.
+        sel_step_candidates AS (
+            SELECT node_id, parent_id, type, descendant_count, sibling_index
+            FROM sel WHERE type IN ('tag_name', 'class_selector', 'id_selector',
+                                    'attribute_selector', 'pseudo_class_selector',
+                                    'universal_selector', 'child_selector',
+                                    'descendant_selector', 'sibling_selector',
+                                    'adjacent_sibling_selector')
+        ),
         sel_attr_op_starswith AS (  -- *=
             SELECT node_id, parent_id FROM sel WHERE type = '*='
         ),
@@ -2672,6 +2687,10 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- When sel_root_raw isn't a pseudo_class_selector, or when the pcs
         -- has no combinator in its base chain (e.g., plain type:has(...)),
         -- this CTE is empty and sel_root stays as-is.
+        -- The same re-rooting applies to #id, [attr] and .class wrappers (#127):
+        -- a modifier written after the LAST step of a combinator wraps the whole
+        -- combinator -- "A B#x" parses as id_selector(descendant_selector(A, B), #x)
+        -- -- and in CSS it constrains that last step, not the pair.
         sel_pseudo_class_unwrap AS (
             SELECT c.node_id
             FROM sel c
@@ -2682,9 +2701,14 @@ CREATE OR REPLACE MACRO ast_select_from(
                              'sibling_selector', 'adjacent_sibling_selector')
               AND a.node_id IS NULL
               AND c.node_id > (SELECT node_id FROM sel_root_raw
-                               WHERE type = 'pseudo_class_selector')
+                               WHERE type IN ('pseudo_class_selector', 'id_selector',
+                                             'attribute_selector', 'class_selector'))
               AND c.node_id <= (SELECT node_id + descendant_count FROM sel_root_raw
-                                WHERE type = 'pseudo_class_selector')
+                                WHERE type IN ('pseudo_class_selector', 'id_selector',
+                                             'attribute_selector', 'class_selector'))
+
+)SQLMACRO"
+        R"SQLMACRO(
             QUALIFY row_number() OVER (ORDER BY c.depth ASC, c.node_id ASC) = 1
         ),
         -- Resolve the chosen_id for each raw root: a combinator descendant of
@@ -2721,24 +2745,133 @@ CREATE OR REPLACE MACRO ast_select_from(
             SELECT type FROM sel_root
         ),
 
-
-)SQLMACRO"
-        R"SQLMACRO(
-        -- For combinators (descendant, child, sibling): extract left and right types.
-        -- Left = first tag_name child of sel_root, Right = last tag_name child.
-        -- Refactored to use sel_tag_names + a single window pass instead of two
-        -- correlated LIMIT 1 scalar subqueries on sel.
+        -- Combinators (#127). A combinator has exactly two step children, and
+        -- tree-sitter-css nests longer chains left-associatively: "A > B > C" is
+        -- child_selector(child_selector(A, B), C). A step may be compound --
+        -- id_selector(tag_name, #id), attribute_selector(tag_name, [...]),
+        -- pseudo_class_selector(tag_name, :has(...)) -- or a bare .class, which
+        -- has no tag_name at all.
+        --
+        -- The previous version took left/right as the first/last *tag_name*
+        -- child of sel_root. A .class step has none, a compound step's tag_name is
+        -- not a direct child, and a nested chain leaves only one -- so all three
+        -- collapsed to "X X" and silently matched nothing.
+        --
+        -- Constraints are split by side. 'left' is everything inside the left
+        -- step. 'right' is everything else outside any arguments block: the right
+        -- step AND any wrapper around the whole combinator, which constrains the
+        -- subject.
+        combinator_steps AS (
+            SELECT c.node_id, c.type, c.descendant_count,
+                   row_number() OVER (ORDER BY c.sibling_index ASC)  AS first_rn,
+                   row_number() OVER (ORDER BY c.sibling_index DESC) AS last_rn
+            FROM sel_step_candidates c
+            WHERE c.parent_id = (SELECT node_id FROM sel_root)
+              AND (SELECT type FROM sel_root) IN ('child_selector', 'descendant_selector',
+                                                  'sibling_selector', 'adjacent_sibling_selector')
+        ),
+        combinator_left AS (
+            SELECT node_id, type, node_id + descendant_count AS last_id
+            FROM combinator_steps WHERE first_rn = 1
+        ),
+        combinator_right AS (
+            SELECT node_id, type FROM combinator_steps WHERE last_rn = 1
+        ),
+        combinator_tags AS (
+            SELECT CASE WHEN t.node_id BETWEEN (SELECT node_id FROM combinator_left)
+                                           AND (SELECT last_id FROM combinator_left)
+                        THEN 'left' ELSE 'right' END AS side,
+                   t.node_id, t.name
+            FROM sel_tag_names t
+            LEFT JOIN sel_arg_blocks a
+              ON t.node_id > a.node_id
+             AND t.node_id <= a.node_id + a.descendant_count
+            WHERE a.node_id IS NULL
+              AND EXISTS (SELECT 1 FROM combinator_left)
+        ),
+        combinator_classes AS (
+            SELECT CASE WHEN cs.node_id BETWEEN (SELECT node_id FROM combinator_left)
+                                            AND (SELECT last_id FROM combinator_left)
+                        THEN 'left' ELSE 'right' END AS side,
+                   cn.node_id, cn.name
+            FROM sel_class_names cn
+            INNER JOIN sel_class_selectors cs ON cs.node_id = cn.parent_id
+            LEFT JOIN sel_arg_blocks a
+              ON cs.node_id > a.node_id
+             AND cs.node_id <= a.node_id + a.descendant_count
+            WHERE a.node_id IS NULL
+              AND EXISTS (SELECT 1 FROM combinator_left)
+        ),
+        combinator_ids AS (
+            SELECT CASE WHEN i.node_id BETWEEN (SELECT node_id FROM combinator_left)
+                                           AND (SELECT last_id FROM combinator_left)
+                        THEN 'left' ELSE 'right' END AS side,
+                   i.node_id, i.name
+            FROM sel_id_names i
+            LEFT JOIN sel_arg_blocks a
+              ON i.node_id > a.node_id
+             AND i.node_id <= a.node_id + a.descendant_count
+            WHERE a.node_id IS NULL
+              AND EXISTS (SELECT 1 FROM combinator_left)
+        ),
         combinator_parts AS (
             SELECT
-                MAX(name) FILTER (WHERE first_rn = 1) AS left_type,
-                MAX(name) FILTER (WHERE last_rn = 1) AS right_type
-            FROM (
-                SELECT t.name,
-                       row_number() OVER (ORDER BY t.sibling_index ASC) AS first_rn,
-                       row_number() OVER (ORDER BY t.sibling_index DESC) AS last_rn
-                FROM sel_tag_names t
-                WHERE t.parent_id = (SELECT node_id FROM sel_root)
-            )
+                (SELECT arg_min(name, node_id) FROM combinator_tags    WHERE side = 'left')  AS left_type,
+                (SELECT arg_min(name, node_id) FROM combinator_tags    WHERE side = 'right') AS right_type,
+                (SELECT arg_min(name, node_id) FROM combinator_classes WHERE side = 'left')  AS left_class,
+                (SELECT arg_min(name, node_id) FROM combinator_classes WHERE side = 'right') AS right_class,
+                (SELECT arg_min(name, node_id) FROM combinator_ids     WHERE side = 'left')  AS left_id,
+                (SELECT arg_min(name, node_id) FROM combinator_ids     WHERE side = 'right') AS right_id
+        ),
+        -- Refuse what the two-step matcher cannot honor, rather than returning 0
+        -- rows that mean "can't answer" (#89).
+        combinator_validation AS (
+            SELECT CASE
+                WHEN NOT EXISTS (SELECT 1 FROM combinator_left) THEN true
+                WHEN (SELECT type FROM combinator_left) IN ('child_selector', 'descendant_selector',
+                                                            'sibling_selector', 'adjacent_sibling_selector')
+                  OR (SELECT type FROM combinator_right) IN ('child_selector', 'descendant_selector',
+                                                             'sibling_selector', 'adjacent_sibling_selector')
+                THEN error(
+                    'ast_select: combinator chains of more than two steps (e.g. "A B C" or '
+                    '"A > B > C") are not supported yet and would match nothing (issue #127). '
+                    'Split the chain across ast_select calls, or express the inner step with :has().'
+                )
+                WHEN EXISTS (
+                        SELECT 1 FROM sel_attribute_selectors s
+                        LEFT JOIN sel_arg_blocks a
+                          ON s.node_id > a.node_id
+                         AND s.node_id <= a.node_id + a.descendant_count
+                        WHERE a.node_id IS NULL
+                          AND s.node_id BETWEEN (SELECT node_id FROM combinator_left)
+                                            AND (SELECT last_id FROM combinator_left))
+                  OR EXISTS (
+                        SELECT 1 FROM sel_pseudo_classes s
+                        LEFT JOIN sel_arg_blocks a
+                          ON s.node_id > a.node_id
+                         AND s.node_id <= a.node_id + a.descendant_count
+                        WHERE a.node_id IS NULL
+                          AND s.node_id BETWEEN (SELECT node_id FROM combinator_left)
+                                            AND (SELECT last_id FROM combinator_left))
+                THEN error(
+                    'ast_select: attribute and pseudo-class filters are only supported on the last '
+                    'step of a combinator ("A B[name=x]", "A B:has(C)"), not on an earlier step '
+                    '("A[name=x] B") (issue #127).'
+                )
+                WHEN ((SELECT type FROM combinator_left) <> 'universal_selector'
+                      AND (SELECT left_type FROM combinator_parts) IS NULL
+                      AND (SELECT left_class FROM combinator_parts) IS NULL
+                      AND (SELECT left_id FROM combinator_parts) IS NULL)
+                  OR ((SELECT type FROM combinator_right) <> 'universal_selector'
+                      AND (SELECT right_type FROM combinator_parts) IS NULL
+                      AND (SELECT right_class FROM combinator_parts) IS NULL
+                      AND (SELECT right_id FROM combinator_parts) IS NULL)
+                THEN error(
+                    'ast_select: could not resolve a type, .class or #id for a combinator step; '
+                    'refusing to match every node (issue #127).'
+                )
+                ELSE true
+            END AS ok
         ),
 
         -- For simple/compound selectors: extract type, #name, .class filters.
@@ -2834,6 +2967,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                        row_number() OVER (PARTITION BY pa.pcs_id ORDER BY t.node_id) AS rn
                 FROM sel_pcs_to_args pa
                 JOIN sel_tag_names t
+
+)SQLMACRO"
+        R"SQLMACRO(
                   ON t.node_id > pa.args_id
                  AND t.node_id <= pa.args_id + pa.args_descendants
             ) WHERE rn = 1
@@ -3012,9 +3148,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- [name^=_] means "starts with underscore", not "any char"). Computed in an
             -- outer SELECT because a sibling alias (attr_value) isn't visible in the same one.
             SELECT attr_name, attr_value, attr_op,
-
-)SQLMACRO"
-        R"SQLMACRO(
                    replace(replace(replace(attr_value, '\', '\\'), '%', '\%'), '_', '\_')
                        AS attr_value_esc
             FROM (
@@ -3120,6 +3253,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 ) THEN error(
                     CASE WHEN NOT (SELECT available FROM has_func_apply)
                     THEN format(
+
+)SQLMACRO"
+        R"SQLMACRO(
                         'ast_select: unknown pseudo-class ":{}". '
                         'For dynamic custom predicates: '
                         'INSTALL func_apply FROM community; then PRAGMA sitting_duck_enable_dynamic_predicates; '
@@ -3260,9 +3396,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                                WHERE h.has_name IS NOT NULL
                                  AND UPPER(h.has_class) IN ('CALL', 'INVOKE', 'COMPUTATION_CALL'))
                     OR EXISTS (SELECT 1 FROM not_has_conditions nh
-
-)SQLMACRO"
-        R"SQLMACRO(
                                WHERE nh.not_has_name IS NOT NULL
                                  AND UPPER(nh.not_has_class) IN ('CALL', 'INVOKE', 'COMPUTATION_CALL'))
                 )
@@ -3370,6 +3503,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         ),
 
         -- :match("code") / :contains("code") — structural code pattern.
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- The quoted argument is parsed as real code and checked against the target:
         --   :match("code")    — the current node IS the pattern root (exact)
         --   :contains("code") — some descendant IS the pattern root (any depth)
@@ -3429,12 +3565,17 @@ CREATE OR REPLACE MACRO ast_select_from(
                 (SELECT left_type || '_%' FROM combinator_parts) as left_type_like,
                 (SELECT right_type FROM combinator_parts) as right_type,
                 (SELECT right_type || '_%' FROM combinator_parts) as right_type_like,
+                (SELECT left_class FROM combinator_parts) as left_class,
+                (SELECT left_id FROM combinator_parts) as left_id,
+                (SELECT right_class FROM combinator_parts) as right_class,
+                (SELECT right_id FROM combinator_parts) as right_id,
                 ((SELECT ok FROM pseudo_class_validation)
                  AND (SELECT ok FROM peek_filter_validation)
                  AND (SELECT ok FROM attr_filter_validation)
                  AND (SELECT ok FROM call_name_binding_validation)
                  AND (SELECT ok FROM pseudo_element_validation)
-                 AND (SELECT ok FROM has_args_validation)) as validations_ok
+                 AND (SELECT ok FROM has_args_validation)
+                 AND (SELECT ok FROM combinator_validation)) as validations_ok
         ),
 
     -- Dispatch by sel_type using UNION ALL instead of a single CASE.
@@ -3473,13 +3614,21 @@ CREATE OR REPLACE MACRO ast_select_from(
         FROM ast a, sel_props sp
         WHERE sp.validations_ok
           AND sp.sel_type = 'descendant_selector'
-          AND (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND (sp.right_type IS NULL OR a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND (sp.right_class IS NULL
+               OR (is_semantic_type(a.semantic_type, UPPER(sp.right_class))
+                   AND NOT is_syntax_only(a.flags)))
+          AND (sp.right_id IS NULL OR a.name = sp.right_id)
           AND EXISTS (
               SELECT 1 FROM ast anc
               WHERE anc.file_path = a.file_path
                 AND a.node_id > anc.node_id
                 AND a.node_id <= anc.node_id + anc.descendant_count
-                AND (anc.type = sp.left_type OR anc.type LIKE sp.left_type_like)
+                AND (sp.left_type IS NULL OR anc.type = sp.left_type OR anc.type LIKE sp.left_type_like)
+                AND (sp.left_class IS NULL
+                     OR (is_semantic_type(anc.semantic_type, UPPER(sp.left_class))
+                         AND NOT is_syntax_only(anc.flags)))
+                AND (sp.left_id IS NULL OR anc.name = sp.left_id)
           )
 
         UNION ALL
@@ -3489,11 +3638,24 @@ CREATE OR REPLACE MACRO ast_select_from(
         FROM ast a, sel_props sp
         WHERE sp.validations_ok
           AND sp.sel_type = 'child_selector'
-          AND (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND (sp.right_type IS NULL OR a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND (sp.right_class IS NULL
+               OR (is_semantic_type(a.semantic_type, UPPER(sp.right_class))
+                   AND NOT is_syntax_only(a.flags)))
+          AND (sp.right_id IS NULL OR a.name = sp.right_id)
           AND EXISTS (
               SELECT 1 FROM ast par
-              WHERE par.node_id = a.parent_id
-                AND (par.type = sp.left_type OR par.type LIKE sp.left_type_like)
+              -- node_id is only unique within a file. Without the file_path
+              -- guard, over a multi-file source a node's parent_id matched
+              -- another file's node of the same id -- a method under a block
+              -- in one file "was a direct child" of a class in another.
+              WHERE par.file_path = a.file_path
+                AND par.node_id = a.parent_id
+                AND (sp.left_type IS NULL OR par.type = sp.left_type OR par.type LIKE sp.left_type_like)
+                AND (sp.left_class IS NULL
+                     OR (is_semantic_type(par.semantic_type, UPPER(sp.left_class))
+                         AND NOT is_syntax_only(par.flags)))
+                AND (sp.left_id IS NULL OR par.name = sp.left_id)
           )
 
         UNION ALL
@@ -3503,13 +3665,21 @@ CREATE OR REPLACE MACRO ast_select_from(
         FROM ast a, sel_props sp
         WHERE sp.validations_ok
           AND sp.sel_type = 'sibling_selector'
-          AND (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND (sp.right_type IS NULL OR a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND (sp.right_class IS NULL
+               OR (is_semantic_type(a.semantic_type, UPPER(sp.right_class))
+                   AND NOT is_syntax_only(a.flags)))
+          AND (sp.right_id IS NULL OR a.name = sp.right_id)
           AND EXISTS (
               SELECT 1 FROM ast sib
               WHERE sib.file_path = a.file_path
                 AND sib.parent_id = a.parent_id
                 AND sib.sibling_index < a.sibling_index
-                AND (sib.type = sp.left_type OR sib.type LIKE sp.left_type_like)
+                AND (sp.left_type IS NULL OR sib.type = sp.left_type OR sib.type LIKE sp.left_type_like)
+                AND (sp.left_class IS NULL
+                     OR (is_semantic_type(sib.semantic_type, UPPER(sp.left_class))
+                         AND NOT is_syntax_only(sib.flags)))
+                AND (sp.left_id IS NULL OR sib.name = sp.left_id)
           )
 
         UNION ALL
@@ -3519,13 +3689,21 @@ CREATE OR REPLACE MACRO ast_select_from(
         FROM ast a, sel_props sp
         WHERE sp.validations_ok
           AND sp.sel_type = 'adjacent_sibling_selector'
-          AND (a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND (sp.right_type IS NULL OR a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND (sp.right_class IS NULL
+               OR (is_semantic_type(a.semantic_type, UPPER(sp.right_class))
+                   AND NOT is_syntax_only(a.flags)))
+          AND (sp.right_id IS NULL OR a.name = sp.right_id)
           AND EXISTS (
               SELECT 1 FROM ast adj
               WHERE adj.file_path = a.file_path
                 AND adj.parent_id = a.parent_id
                 AND adj.sibling_index = a.sibling_index - 1
-                AND (adj.type = sp.left_type OR adj.type LIKE sp.left_type_like)
+                AND (sp.left_type IS NULL OR adj.type = sp.left_type OR adj.type LIKE sp.left_type_like)
+                AND (sp.left_class IS NULL
+                     OR (is_semantic_type(adj.semantic_type, UPPER(sp.left_class))
+                         AND NOT is_syntax_only(adj.flags)))
+                AND (sp.left_id IS NULL OR adj.name = sp.left_id)
           )
     ),
 
@@ -3542,9 +3720,6 @@ CREATE OR REPLACE MACRO ast_select_from(
               AND d.node_id > a.node_id
               AND d.node_id <= a.node_id + a.descendant_count
               AND (h.has_type IS NULL OR d.type = h.has_type)
-
-)SQLMACRO"
-        R"SQLMACRO(
               AND (h.has_name IS NULL OR d.name = h.has_name)
               AND (h.has_class IS NULL
                    OR is_semantic_type(d.semantic_type, UPPER(h.has_class)))
@@ -3595,6 +3770,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                                 WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.annotations = ac.attr_value END
 
+
+)SQLMACRO"
+        R"SQLMACRO(
             -- Native extraction: qualified_name. The column is a LIST<STRUCT>,
             -- so we render it to the legacy bracket string via
             -- ast_qualified_name_as_string() before applying text comparisons.
@@ -3790,9 +3968,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             )
 
             -- :scope — either bare (is a scope node) or with arg (within scope of type)
-
-)SQLMACRO"
-        R"SQLMACRO(
             WHEN 'scope' THEN
                 CASE WHEN pc.pseudo_arg IS NULL
                     -- Bare :scope — node is a scope boundary
@@ -3848,6 +4023,9 @@ CREATE OR REPLACE MACRO ast_select_from(
     )),
 
     -- =====================================================================
+
+)SQLMACRO"
+        R"SQLMACRO(
     -- Pseudo-element dispatch: navigate FROM matched nodes to related nodes
     -- =====================================================================
 
