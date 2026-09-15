@@ -396,7 +396,7 @@ DEF_TYPE("import_type_clause", EXTERNAL_IMPORT, NONE, NONE, 0)
 DEF_TYPE("export_type_clause", EXTERNAL_EXPORT, NONE, NONE, 0)
 
 /** @brief Import specifier: individual import binding */
-DEF_TYPE("import_specifier", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("import_specifier", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @brief Export specifier: individual export binding */
 DEF_TYPE("export_specifier", EXTERNAL_EXPORT, FIND_IDENTIFIER, NONE, 0)
@@ -408,7 +408,7 @@ DEF_TYPE("import_require_clause", EXTERNAL_IMPORT, NONE, NONE, 0)
 DEF_TYPE("external_module_reference", EXTERNAL_IMPORT, NONE, NONE, 0)
 
 /** @brief Named imports: `{ a, b, c }` */
-DEF_TYPE("named_imports", EXTERNAL_IMPORT | SemanticRefinements::Import::SELECTIVE, NONE, NONE, 0)
+DEF_TYPE("named_imports", EXTERNAL_IMPORT | SemanticRefinements::Import::SELECTIVE, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @brief From keyword in imports */
 DEF_TYPE("from", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -751,7 +751,7 @@ DEF_TYPE("meta", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("template_literal_type_span", LITERAL_STRING, NONE, NONE, 0)
 
 /** @brief Template substitution: `${expr}` */
-DEF_TYPE("template_substitution", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("template_substitution", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @brief Regular expression literal */
 DEF_TYPE("regex", LITERAL_STRING, NODE_TEXT, NONE, 0)
@@ -763,7 +763,7 @@ DEF_TYPE("regex_pattern", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("regex_flags", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
 /** @brief Escape sequence in strings */
-DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @brief Property assignment in object literal */
 DEF_TYPE("property_assignment", LITERAL_STRUCTURED, FIND_IDENTIFIER, NONE, 0)

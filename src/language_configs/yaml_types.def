@@ -267,7 +267,7 @@ DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 DEF_TYPE("string_scalar", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
 /// @brief Escape sequence - `\n`, `\x00`, etc.
-DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @} */ // end yaml_string_content
 

@@ -66,7 +66,16 @@ struct NodeConfig {
 //            11 = DEFINITION (0x06) — introduces name with implementation
 //   Bit 3:   IS_SCOPE        (0x08) — creates scope boundary
 //   Bit 4:   IS_EXPORTED     (0x10) — visible outside file/module
-//   Bit 5-7: reserved
+//   Bit 5:   IS_CONSTITUENT  (0x20) — a meaningful sub-part of a larger construct
+//                                     that already represents the whole (e.g. a
+//                                     string's content, a function's declarator,
+//                                     one specifier inside an import). Distinct
+//                                     from IS_SYNTAX_ONLY: a constituent carries
+//                                     real payload (a name, value, sub-structure);
+//                                     it is simply subordinate. Class selectors
+//                                     (.str/.import/.fn ...) return the enclosing
+//                                     whole and skip its constituents.
+//   Bit 6-7: reserved
 //
 // Useful bitmask checks:
 //   flags & 0x06          — involved in naming at all
@@ -74,6 +83,7 @@ struct NodeConfig {
 //   (flags & 0x06) == 0x06 — is a DEFINITION
 //   (flags & 0x06) == 0x02 — is a REFERENCE
 //   flags & 0x08          — is a scope boundary
+//   flags & 0x20          — is a constituent (sub-part) of a larger construct
 namespace ASTNodeFlags {
 // Bit 0: syntax token
 constexpr uint8_t IS_SYNTAX_ONLY = 0x01;
@@ -90,6 +100,13 @@ constexpr uint8_t IS_SCOPE = 0x08;
 
 // Bit 4: exported / publicly visible outside file/module
 constexpr uint8_t IS_EXPORTED = 0x10;
+
+// Bit 5: constituent — a meaningful sub-part of a larger construct that already
+// represents the whole (string content/fragment/escape, a function declarator,
+// an import specifier/clause). Unlike IS_SYNTAX_ONLY (a valueless grammar token),
+// a constituent has payload but is subordinate; class selectors skip it and
+// return the enclosing construct instead.
+constexpr uint8_t IS_CONSTITUENT = 0x20;
 
 // Convenience: single-bit check for "binds a name" (definition OR declaration)
 constexpr uint8_t BINDS_NAME = 0x04;

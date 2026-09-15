@@ -3460,7 +3460,11 @@ CREATE OR REPLACE MACRO ast_select_from(
           AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
           AND (sp.class_filter IS NULL
                OR (is_semantic_type(a.semantic_type, UPPER(sp.class_filter))
-                   AND NOT is_syntax_only(a.flags)))
+                   AND NOT is_syntax_only(a.flags)
+                   -- Skip constituents (a string's content, an import's specifier,
+                   -- a function's declarator): the enclosing construct is matched
+                   -- instead, so a class selects each construct once (#139).
+                   AND NOT is_constituent(a.flags)))
 
         UNION ALL
 
@@ -3538,6 +3542,9 @@ CREATE OR REPLACE MACRO ast_select_from(
               AND d.node_id > a.node_id
               AND d.node_id <= a.node_id + a.descendant_count
               AND (h.has_type IS NULL OR d.type = h.has_type)
+
+)SQLMACRO"
+        R"SQLMACRO(
               AND (h.has_name IS NULL OR d.name = h.has_name)
               AND (h.has_class IS NULL
                    OR is_semantic_type(d.semantic_type, UPPER(h.has_class)))
@@ -3547,9 +3554,6 @@ CREATE OR REPLACE MACRO ast_select_from(
     AND NOT EXISTS (
         SELECT 1 FROM not_has_conditions nh
         WHERE EXISTS (
-
-)SQLMACRO"
-        R"SQLMACRO(
             SELECT 1 FROM ast d
             WHERE d.file_path = a.file_path
               AND d.node_id > a.node_id
@@ -3786,14 +3790,14 @@ CREATE OR REPLACE MACRO ast_select_from(
             )
 
             -- :scope — either bare (is a scope node) or with arg (within scope of type)
+
+)SQLMACRO"
+        R"SQLMACRO(
             WHEN 'scope' THEN
                 CASE WHEN pc.pseudo_arg IS NULL
                     -- Bare :scope — node is a scope boundary
                     THEN is_scope(a.flags)
                     -- :scope(type) — node is within the nearest ancestor of that type,
-
-)SQLMACRO"
-        R"SQLMACRO(
                     -- excluding subtrees of nested nodes of the same type
                     ELSE EXISTS (
                         SELECT 1 FROM ast scope_anc

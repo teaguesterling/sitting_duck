@@ -76,6 +76,7 @@ const unordered_map<string, uint8_t> &FlagNameTable() {
 	    {"NAME_DEFINITION", ASTNodeFlags::NAME_DEFINITION},
 	    {"IS_SCOPE", ASTNodeFlags::IS_SCOPE},
 	    {"IS_EXPORTED", ASTNodeFlags::IS_EXPORTED},
+	    {"IS_CONSTITUENT", ASTNodeFlags::IS_CONSTITUENT},
 	};
 	return flag_names;
 }

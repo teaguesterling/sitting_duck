@@ -139,7 +139,7 @@ DEF_TYPE("unset_command", DEFINITION_VARIABLE | SemanticRefinements::Variable::M
  */
 
 /// @brief Generic command - wrapper for command structures
-DEF_TYPE("command", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
+DEF_TYPE("command", COMPUTATION_CALL, NONE, NONE, 0)
 
 /// @brief Simple command - direct command invocation with arguments
 DEF_TYPE("simple_command", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)

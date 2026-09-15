@@ -67,11 +67,11 @@ WHERE type = 'call';
 ----
 7
 
-# .str = string literals
+# .str = string literals (not their constituents: string_content/interpolation, #139)
 query I
 SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py', '.str');
 ----
-10
+5
 
 # Case insensitive: .FUNC same as .func
 query I

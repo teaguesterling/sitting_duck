@@ -280,7 +280,7 @@ DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
 // String and character literals
 DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
-DEF_TYPE("string_fragment", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("string_fragment", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 DEF_TYPE("character_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 /** @} */
 
@@ -345,7 +345,7 @@ DEF_TYPE("yield_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE,
 DEF_TYPE("try_statement", ERROR_TRY, NONE, NONE, 0)
 DEF_TYPE("try_with_resources_statement", ERROR_TRY, NONE, NONE, 0)
 DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
-DEF_TYPE("catch_type", ERROR_CATCH, NONE, NONE, 0)
+DEF_TYPE("catch_type", ERROR_CATCH, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
 DEF_TYPE("finally_clause", ERROR_FINALLY, NONE, NONE, 0)
 DEF_TYPE("throw_statement", ERROR_THROW, NONE, NONE, 0)
 /** @} */

@@ -800,7 +800,7 @@ DEF_TYPE("||=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
  */
 
 /// @brief String content - text inside string literal
-DEF_TYPE("string_content", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("string_content", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /// @brief Body statement - method/class body
 DEF_TYPE("body_statement", EXECUTION_STATEMENT, NONE, NONE, 0)
@@ -872,10 +872,10 @@ DEF_TYPE("hash_splat_argument", PATTERN_COLLECT, NONE, NONE, 0)
 DEF_TYPE("keyword_splat", PATTERN_COLLECT, NONE, NONE, 0)
 
 /// @brief String interpolation - `#{expr}`
-DEF_TYPE("interpolation", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("interpolation", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /// @brief Escape sequence in string
-DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /// @brief Heredoc start marker
 DEF_TYPE("heredoc_beginning", LITERAL_STRING, NODE_TEXT, NONE, 0)

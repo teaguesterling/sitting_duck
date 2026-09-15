@@ -455,7 +455,8 @@ single-bit properties. The authoritative definition is `src/include/node_config.
 | 1–2 | `NAME_ROLE` | `0x06` | Mutually-exclusive name-binding role: `0x00` none · `0x02` reference · `0x04` declaration (no body) · `0x06` definition (with body) | `is_name_reference` (`0x02`), `is_name_declaration` (`0x04`), `is_name_definition` (`0x06`); `is_embodied` / `has_body` = definition (`0x06`) |
 | 3 | `IS_SCOPE` | `0x08` | Node creates a scope boundary | `is_scope(flags)` |
 | 4 | `IS_EXPORTED` | `0x10` | Visible outside its file/module | `is_exported(flags)` |
-| 5–7 | (reserved) | `0x20`–`0x80` | Reserved for future use | — |
+| 5 | `IS_CONSTITUENT` | `0x20` | A meaningful sub-part of a larger construct that already represents the whole (a string's content, an import's specifier, a function's declarator). Carries payload but is subordinate — unlike `IS_SYNTAX_ONLY`, which is a valueless grammar token. Class selectors (`.str`/`.import`/`.fn` …) skip it and return the enclosing construct. | `is_constituent(flags)` |
+| 6–7 | (reserved) | `0x40`–`0x80` | Reserved for future use | — |
 
 > **⚠️ Bit 0 is `IS_SYNTAX_ONLY`, not "`IS_CONSTRUCT`".** The construct property is stored
 > *inverted*: the bit is **set** on syntax-only tokens, and `is_construct(flags)` returns the
@@ -702,7 +703,7 @@ Each entry under `node_types` accepts these keys:
 | `refinement` | No | Integer `0`-`3`, OR'd into the low bits of the semantic type. |
 | `name_strategy` | No | How to extract the node's name. One of `NONE` (default), `NODE_TEXT`, `FIRST_CHILD`, `FIND_IDENTIFIER`, `FIND_PROPERTY`, `FIND_ASSIGNMENT_TARGET`, `FIND_QUALIFIED_IDENTIFIER`, `FIND_IN_DECLARATOR`, `FIND_CALL_TARGET`. Names are case-insensitive, so the lowercase forms shown by `ast_type_map()` also work. `CUSTOM` is rejected because it needs native code. |
 | `native_strategy` | No | Rejected. Native context extraction requires compiled-in language support and never runs for runtime-registered languages. |
-| `flags` | No | Array of flag names: `IS_SYNTAX_ONLY`, `NAME_REFERENCE`, `NAME_DECLARATION`, `NAME_DEFINITION`, `IS_SCOPE`, `IS_EXPORTED`. |
+| `flags` | No | Array of flag names: `IS_SYNTAX_ONLY`, `NAME_REFERENCE`, `NAME_DECLARATION`, `NAME_DEFINITION`, `IS_SCOPE`, `IS_EXPORTED`, `IS_CONSTITUENT`. |
 
 Any unknown key, unknown value name, or out-of-range refinement is rejected with an error naming the offending node type.
 

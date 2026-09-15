@@ -430,6 +430,18 @@ static void IsExportedFunction(DataChunk &args, ExpressionState &state, Vector &
 	                                      [&](uint8_t flags) { return (flags & ASTNodeFlags::IS_EXPORTED) != 0; });
 }
 
+// Check if node is a constituent — a meaningful sub-part of a larger construct
+// that already represents the whole (string content, a function declarator, an
+// import specifier). Distinct from is_syntax_only: a constituent carries payload
+// but is subordinate; class selectors skip it in favour of the enclosing construct.
+static void IsConstituentFunction(DataChunk &args, ExpressionState &state, Vector &result) {
+	D_ASSERT(args.ColumnCount() == 1);
+	auto &flags_vector = args.data[0];
+	auto count = args.size();
+	UnaryExecutor::Execute<uint8_t, bool>(flags_vector, result, count,
+	                                      [&](uint8_t flags) { return (flags & ASTNodeFlags::IS_CONSTITUENT) != 0; });
+}
+
 // Get the name role as an integer (0=none, 1=reference, 2=declaration, 3=definition)
 static void NameRoleFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	D_ASSERT(args.ColumnCount() == 1);
@@ -742,6 +754,11 @@ void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
 	// IS_EXPORTED flag function (bit 4)
 	ScalarFunction is_exported_func("is_exported", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsExportedFunction);
 	loader.RegisterFunction(is_exported_func);
+
+	// IS_CONSTITUENT flag function (bit 5)
+	ScalarFunction is_constituent_func("is_constituent", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
+	                                    IsConstituentFunction);
+	loader.RegisterFunction(is_constituent_func);
 
 	// DEPRECATED: backward compatibility wrappers
 	ScalarFunction is_declaration_only_func("is_declaration_only", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,

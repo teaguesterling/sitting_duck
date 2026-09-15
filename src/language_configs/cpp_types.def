@@ -553,12 +553,12 @@ DEF_TYPE("compound_literal_expression", LITERAL_STRUCTURED, NONE, NONE, 0)
 /**
  * @brief String content (inside quotes)
  */
-DEF_TYPE("string_content", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("string_content", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /**
  * @brief Escape sequence: `\n`, `\t`, etc.
  */
-DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /**
  * @brief Character content
@@ -578,7 +578,7 @@ DEF_TYPE("raw_string_delimiter", LITERAL_STRING, NODE_TEXT, NONE, 0)
 /**
  * @brief Raw string content
  */
-DEF_TYPE("raw_string_content", LITERAL_STRING, NODE_TEXT, NONE, 0)
+DEF_TYPE("raw_string_content", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @} */ // end cpp_literals
 
@@ -857,7 +857,7 @@ DEF_TYPE("using_declaration", EXTERNAL_IMPORT, NONE, NONE, 0)
 /**
  * @brief System library string: `<header>`
  */
-DEF_TYPE("system_lib_string", EXTERNAL_IMPORT, NODE_TEXT, NONE, 0)
+DEF_TYPE("system_lib_string", EXTERNAL_IMPORT, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @} */ // end cpp_imports
 
