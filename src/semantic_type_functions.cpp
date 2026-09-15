@@ -200,6 +200,14 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		    } else if (pattern == "TRANSFORM" || pattern == "XFORM") {
 			    return (base_type & 0xF0) == SemanticTypes::TRANSFORM;
 		    } else if (pattern == "COMMENT") {
+			    // Narrowed from the kind-level METADATA mask to the COMMENT super-type
+			    // only (issue #134). METADATA also covers ANNOTATION (decorators/
+			    // attributes), DIRECTIVE, and DEBUG, so the old `& 0xF0` made `.comment`
+			    // match decorators — a false positive peers hit. Use METADATA/META
+			    // (below) for the whole kind. Parallel to the .access fix (#135).
+			    return base_type == SemanticTypes::METADATA_COMMENT;
+		    } else if (pattern == "METADATA" || pattern == "META") {
+			    // Kind-level umbrella: comments, annotations, directives, debug info.
 			    return (base_type & 0xF0) == SemanticTypes::METADATA;
 		    } else if (pattern == "ACCESS") {
 			    // The COMPUTATION_NODE kind (0xD0): calls/access/expression/closure.
