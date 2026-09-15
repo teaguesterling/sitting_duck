@@ -12,8 +12,8 @@ Use `[attr operator value]` syntax to query AST nodes by their metadata fields. 
 | `$=` | Ends with | `[name$=_handler]` |
 
 Not every operator applies to every attribute: the text attributes (`name`,
-`annotation`, `qualified`, `signature`, `peek`) support all four;
-`type`/`language`/`semantic`/`params` support `=` only; `modifier` supports
+`annotation`, `qualified`, `signature`, `receiver`, `peek`, `file`) support all four;
+`type`/`language`/`semantic`/`params`/`line` support `=` only; `modifier` supports
 `=` and `*=` (both mean "has this modifier" — modifiers is a list). An
 unsupported combination (or an unknown attribute name) raises an error rather
 than silently returning wrong or empty results (issue #89).
@@ -123,6 +123,34 @@ SELECT name, peek FROM ast_select('src/*.py', 'string[peek*=SELECT]');
 SELECT peek FROM ast_select('src/*.py', 'comment[peek*=TODO]');
 ```
 
+## Location Attributes
+
+Where a node is. Together with `#name` they address a single node exactly, which is
+what you need to turn a node back into a selector.
+
+### `[file]` — Source File
+
+`file` is the node's `file_path` exactly as `read_ast()` stored it: relative or
+absolute, whichever form the glob produced. The suffix operator is therefore the
+portable way to name a file.
+
+```sql
+-- Calls in one file, however the path was given
+SELECT name, start_line FROM ast_select('src/**/*.py', '.call[file$="app.py"]');
+
+-- Functions under a directory
+SELECT name FROM ast_select('src/**/*.py', '.func[file*="/handlers/"]');
+```
+
+### `[line]` — Start Line
+
+```sql
+-- The call that starts on line 42 of app.py
+SELECT name FROM ast_select('src/**/*.py', '.call#execute[file$="app.py"][line=42]');
+```
+
+`line` compares against `start_line` and supports `=` only.
+
 ## Quick Reference
 
 | Attribute | Meaning | Example |
@@ -139,6 +167,8 @@ SELECT peek FROM ast_select('src/*.py', 'comment[peek*=TODO]');
 | `[peek*=x]` | Source text contains | `[peek*=SELECT]` |
 | `[language=x]` | Language filter | `[language=python]` |
 | `[semantic=x]` | Semantic type | `[semantic=FUNCTION]` |
+| `[file$=x]` | Source file path ends with | `[file$="app.py"]` |
+| `[line=n]` | Start line | `[line=42]` |
 
 ---
 

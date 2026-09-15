@@ -23,13 +23,19 @@
 --   [name=value]                  - Attribute filter. Supported attributes:
 --                                     name, type, language, semantic, peek,
 --                                     qualified, signature, params, modifier,
---                                     annotation, receiver.
+--                                     annotation, receiver, file, line.
 --                                     receiver is the object a method is invoked
 --                                     on: .call[receiver=con] matches con.execute();
 --                                     NULL (no match) on bare calls and ambiguous
---                                     chained receivers. Operators = *= ^= $= are
+--                                     chained receivers.
+--                                     file is the node's file_path as read_ast
+--                                     stored it (so [file$="app.py"] is the
+--                                     portable form); line is its start_line.
+--                                     Together they address one node exactly:
+--                                     .call#execute[file$="app.py"][line=42].
+--                                     Operators = *= ^= $= are
 --                                     supported for name, annotation, qualified,
---                                     signature, receiver, peek. type/language/semantic/params take
+--                                     signature, receiver, peek, file. type/language/semantic/params/line take
 --                                     = only; modifier takes = or *= (both mean
 --                                     "has this modifier"). Unknown attributes
 --                                     and unsupported operator combinations
@@ -859,7 +865,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         known_attribute_names(name) AS (
             VALUES ('name'), ('type'), ('language'), ('semantic'),
                    ('modifier'), ('annotation'), ('qualified'), ('signature'),
-                   ('params'), ('peek'), ('receiver')
+                   ('params'), ('peek'), ('receiver'), ('file'), ('line')
         ),
         attr_filter_validation AS (
             SELECT CASE
@@ -870,7 +876,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 ) THEN error(format(
                     'ast_select: unknown attribute "[{}...]". Supported attributes: '
                     'name, type, language, semantic, modifier, annotation, qualified, '
-                    'signature, params, peek, receiver.',
+                    'signature, params, peek, receiver, file, line.',
                     (SELECT ac.attr_name FROM attr_conditions ac
                      WHERE ac.attr_name IS NOT NULL
                        AND ac.attr_name NOT IN (SELECT name FROM known_attribute_names)
@@ -878,17 +884,17 @@ CREATE OR REPLACE MACRO ast_select_from(
                 ))
                 WHEN EXISTS (
                     SELECT 1 FROM attr_conditions ac
-                    WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params')
+                    WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params', 'line')
                 ) THEN error(format(
                     'ast_select: attribute "{}" only supports exact match (=), not "{}". '
                     'For prefix/suffix/substring matching on node types use a bare type '
                     'selector (e.g. `call` matches call_expression), or filter the '
                     'result rows in SQL.',
                     (SELECT ac.attr_name FROM attr_conditions ac
-                     WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params')
+                     WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params', 'line')
                      LIMIT 1),
                     (SELECT ac.attr_op FROM attr_conditions ac
-                     WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params')
+                     WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params', 'line')
                      LIMIT 1)
                 ))
                 WHEN EXISTS (
@@ -1354,6 +1360,18 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- Native extraction: parameter count
             WHEN ac.attr_name = 'params' THEN
                 len(a.parameters) = CAST(ac.attr_value AS INTEGER)
+
+            -- Location: the file the node was read from (file_path as read_ast stored
+            -- it -- relative or absolute as given, so $= is the portable form) and its
+            -- start line. With #name they address a single node exactly, e.g. to turn
+            -- a node back into a selector (ast_selector_for).
+            WHEN ac.attr_name = 'file' THEN
+                CASE ac.attr_op WHEN '*=' THEN a.file_path LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '^=' THEN a.file_path LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '$=' THEN a.file_path LIKE '%' || ac.attr_value_esc ESCAPE '\'
+                                ELSE a.file_path = ac.attr_value END
+            WHEN ac.attr_name = 'line' THEN
+                a.start_line = CAST(ac.attr_value AS INTEGER)
 
             -- Peek (source text) content search
             WHEN ac.attr_name = 'peek' THEN
