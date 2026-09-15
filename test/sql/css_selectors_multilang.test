@@ -812,27 +812,47 @@ speak
 # =============================================================================
 # 14. BARE TYPE PREFIX MATCHING
 # =============================================================================
-# Bare `if` matches if_statement, if_clause, etc. via LIKE prefix.
+# Bare types are EXACT node-type matches (#151). Prefix matching is [type^=X].
 
-# Python: bare `if` matches keyword token and if_statement
+# Python: bare `if` matches ONLY the `if` node type (not if_statement)
 query I
 SELECT DISTINCT type FROM ast_select('test/data/python/css_selectors_test.py', 'if')
 ORDER BY type;
 ----
 if
+
+# Python: [type^=if] is the prefix path — if + if_statement
+query I
+SELECT DISTINCT type FROM ast_select('test/data/python/css_selectors_test.py', '[type^=if]')
+ORDER BY type;
+----
+if
 if_statement
 
-# Python: bare `return` matches keyword and return_statement
+# Python: bare `return` is exact
 query I
 SELECT DISTINCT type FROM ast_select('test/data/python/css_selectors_test.py', 'return')
 ORDER BY type;
 ----
 return
+
+# Python: [type^=return] prefix — return + return_statement
+query I
+SELECT DISTINCT type FROM ast_select('test/data/python/css_selectors_test.py', '[type^=return]')
+ORDER BY type;
+----
+return
 return_statement
 
-# JavaScript: bare `if` matches keyword and if_statement
+# JavaScript: bare `if` is exact; [type^=if] prefixes
 query I
 SELECT DISTINCT type FROM ast_select('test/data/javascript/css_selectors_test.js', 'if')
+ORDER BY type;
+----
+if
+
+query I
+SELECT DISTINCT type FROM ast_select('test/data/javascript/css_selectors_test.js', '[type^=if]')
 ORDER BY type;
 ----
 if
