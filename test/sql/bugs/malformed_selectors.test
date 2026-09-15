@@ -1,0 +1,78 @@
+# name: test/sql/bugs/malformed_selectors.test
+# description: #128 — malformed selectors raise instead of silently over-/under-matching
+# group: [bugs]
+#
+# A bare selector always parses under one top-level ERROR wrapper (expected). Malformed
+# input instead leaves an ERROR/MISSING past that wrapper, or stray tokens outside the
+# recognized selector's subtree. The parse-completeness guard raises on those; well-formed
+# selectors (including combinators, compounds, :has, and pseudo-elements) are unaffected.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Malformed -> error (previously: silently returned 6 / 0)
+# =============================================================================
+
+# unclosed attribute bracket
+statement error
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.fn[name="main"');
+----
+malformed selector
+
+# dangling pseudo-class paren
+statement error
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.fn:nonsense(');
+----
+malformed selector
+
+# SQL injected into an attribute filter
+statement error
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.fn[WHERE name = "nope"]');
+----
+malformed selector
+
+# trailing junk after a valid prefix
+statement error
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.fn#main extra junk!!');
+----
+malformed selector
+
+# 3+-step combinator chain is still caught by the combinator guard (#127), not this one
+statement error
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.fn >> .call');
+----
+
+# =============================================================================
+# Well-formed selectors must NOT be flagged (no false positives). These are the
+# shapes the coverage guard could wrongly reject: combinators, compounds, :has,
+# and — the one that needed a carve-out — pseudo-elements.
+# =============================================================================
+
+statement ok
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.fn#main[name=main]');
+
+statement ok
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.class .fn');
+
+statement ok
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.fn:not(:has(.call))');
+
+# pseudo-elements sit outside sel_root by design and must not count as stray tokens
+statement ok
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.func#main::callers');
+
+statement ok
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.func#main::parent-definition');
+
+# Combinator with a trailing modifier: the modifier wraps the whole combinator
+# ("A B#name" parses as id_selector(descendant_selector(A,B), #name)), so it lives
+# OUTSIDE the re-rooted sel_root. Coverage is measured against sel_root_raw (the
+# outermost node), so these must NOT be flagged malformed. (Regression: they were.)
+statement ok
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', 'class_definition function_definition#__init__');
+
+statement ok
+SELECT count(*) FROM ast_select('test/data/python/css_selectors_test.py', 'class_definition ~ class_definition:has(function_definition#speak)');

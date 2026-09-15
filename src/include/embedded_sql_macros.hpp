@@ -3551,6 +3551,54 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- Apply selector: single scan with CASE dispatch (no UNION ALL)
         -- =====================================================================
 
+        -- Parse-completeness guard (#128): a malformed selector must raise, not
+        -- silently over-/under-match. A bare selector always parses under ONE
+        -- top-level ERROR wrapper (an ANCESTOR of the selector) — that is expected
+        -- and must not be flagged. Malformed input instead leaves EITHER an
+        -- ERROR/MISSING node past that wrapper OR stray tokens outside the recognized
+        -- selector (an unclosed `[`, a dangling `:pseudo(`, trailing junk).
+        --
+        -- Coverage is measured against sel_root_RAW — the OUTERMOST recognized node
+        -- (min-depth), NOT the re-rooted sel_root. sel_root is deliberately narrowed
+        -- to the inner combinator for dispatch, so for "A B#name" / "A ~ B:has(X)" /
+        -- "A B[attr]" the trailing modifier wraps the combinator and lives OUTSIDE
+        -- sel_root — using sel_root here false-flagged those legitimate selectors.
+        -- sel_root_raw covers the whole selector, so only genuine leftover tokens are
+        -- outside it. References `sel` once (as n) per the planner-bug workaround.
+        sel_uncovered AS (
+            SELECT n.node_id, n.peek
+            FROM sel n, sel_root_raw r
+            WHERE (
+                -- an ERROR/MISSING that is not the outer wrapper (wrapper node_id < r.node_id)
+                (n.type IN ('ERROR', 'MISSING') AND n.node_id > r.node_id)
+                -- or a stray node: not within sel_root_raw's subtree AND not an ancestor of it
+                OR (NOT (n.node_id >= r.node_id
+                         AND n.node_id <= r.node_id + r.descendant_count)
+                    AND NOT (n.node_id < r.node_id
+                             AND n.node_id + n.descendant_count >= r.node_id + r.descendant_count))
+              )
+              -- Pseudo-elements (::callers, ::parent-definition, ...) are legitimate
+              -- post-match transforms; keep them out of the stray check even if a
+              -- future parse shape puts them beside sel_root_raw.
+              AND NOT EXISTS (
+                  SELECT 1 FROM sel_pseudo_elements pe
+                  WHERE n.node_id >= pe.node_id
+                    AND n.node_id <= pe.node_id + pe.descendant_count
+              )
+        ),
+        parse_completeness_validation AS (
+            SELECT CASE
+                WHEN EXISTS (SELECT 1 FROM sel_uncovered)
+                THEN error(format(
+                    'ast_select: malformed selector — the parse does not cover the '
+                    'whole selector text (unclosed bracket, stray token, or unknown '
+                    'construct) near "{}". Check brackets, quotes, and pseudo-class '
+                    'syntax.',
+                    (SELECT peek FROM sel_uncovered ORDER BY node_id LIMIT 1)))
+                ELSE true
+            END AS ok
+        ),
+
         -- Precompute selector properties as scalars.
         -- validations_ok folds ALL "can't answer" guards (#89) into the one-row
         -- CTE that every matched_base branch cross-joins. This is deliberate:
@@ -3581,7 +3629,8 @@ CREATE OR REPLACE MACRO ast_select_from(
                  AND (SELECT ok FROM call_name_binding_validation)
                  AND (SELECT ok FROM pseudo_element_validation)
                  AND (SELECT ok FROM has_args_validation)
-                 AND (SELECT ok FROM combinator_validation)) as validations_ok
+                 AND (SELECT ok FROM combinator_validation)
+                 AND (SELECT ok FROM parse_completeness_validation)) as validations_ok
         ),
 
     -- Dispatch by sel_type using UNION ALL instead of a single CASE.
@@ -3708,6 +3757,9 @@ CREATE OR REPLACE MACRO ast_select_from(
               WHERE adj.file_path = a.file_path
                 AND adj.parent_id = a.parent_id
                 AND adj.sibling_index < a.sibling_index
+
+)SQLMACRO"
+        R"SQLMACRO(
                 AND NOT is_syntax_only(adj.flags)
                 AND NOT is_constituent(adj.flags)
                 -- the nearest meaningful sibling before `a`
@@ -3774,9 +3826,6 @@ CREATE OR REPLACE MACRO ast_select_from(
     -- The CASE is wrapped in COALESCE(..., false): when the attribute column is
     -- NULL (e.g. peek on a table parsed with peek := 'none', or a NULL
     -- signature_type) the comparison yields NULL, and without the COALESCE the
-
-)SQLMACRO"
-        R"SQLMACRO(
     -- NOT EXISTS would treat that as "condition satisfied" — making the filter
     -- match EVERYTHING (issue #81). NULL attribute values must match NOTHING.
     AND NOT EXISTS (
@@ -3797,9 +3846,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                 CASE ac.attr_op WHEN '*=' THEN list_contains(a.modifiers, ac.attr_value)
                                 ELSE list_contains(a.modifiers, ac.attr_value) END
 
-
-)SQLMACRO"
-        R"SQLMACRO(
             -- Native extraction: annotations string
             WHEN ac.attr_name = 'annotation' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.annotations LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
@@ -3955,6 +4001,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 is_name_definition(a.flags) AND a.name IS NOT NULL AND a.name != ''
                 AND EXISTS (
                     SELECT 1 FROM ast ref
+
+)SQLMACRO"
+        R"SQLMACRO(
                     WHERE ref.file_path = a.file_path
                       AND ref.semantic_type = 'COMPUTATION_CALL'
                       AND ref.name = a.name
@@ -4032,18 +4081,12 @@ CREATE OR REPLACE MACRO ast_select_from(
                               SELECT 1 FROM ast nested
                               WHERE nested.file_path = a.file_path
                                 AND nested.node_id > scope_anc.node_id
-
-)SQLMACRO"
-        R"SQLMACRO(
                                 AND nested.node_id < a.node_id
                                 AND a.node_id <= nested.node_id + nested.descendant_count
                                 AND (nested.type = pc.pseudo_arg
                                      OR nested.type LIKE pc.pseudo_arg || '_%')
                           )
                     )
-
-)SQLMACRO"
-        R"SQLMACRO(
                 END
 
             -- :precedes(type) — this node comes before a sibling of the given type
