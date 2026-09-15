@@ -1,0 +1,131 @@
+# name: test/sql/ast_selector_for.test
+# description: ast_selector_for -- node to selector ("copy selector"); every returned selector selects what it claims
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+statement ok
+CREATE TABLE t AS SELECT * FROM read_ast('test/data/python/sample_app.py');
+
+# Targets chosen by type, name and line rather than node_id.
+statement ok
+SET VARIABLE get_user_def = (SELECT node_id FROM t WHERE type = 'function_definition' AND name = 'get_user' AND start_line = 56);
+
+statement ok
+SET VARIABLE execute_call = (SELECT node_id FROM t WHERE type = 'call' AND name = 'execute' AND start_line = 42);
+
+statement ok
+SET VARIABLE user_service = (SELECT node_id FROM t WHERE type = 'class_definition' AND name = 'UserService');
+
+statement ok
+SET VARIABLE user_service_init = (SELECT node_id FROM t WHERE type = 'function_definition' AND name = '__init__' AND start_line = 53);
+
+# ============================================================================
+# Ranked candidates: exactly-one-match first, then fewest matches, then shortest.
+# ============================================================================
+
+query IITIT
+SELECT rank, selector, strategy, matches, is_unique
+FROM ast_selector_for('t', 'test/data/python/sample_app.py', getvariable('get_user_def'));
+----
+1	.fn#get_user	class_name	1	true
+2	function_definition#get_user	type_name	1	true
+3	.class#UserService .fn#get_user	in_class	1	true
+4	function_definition#get_user[file$="sample_app.py"][line=56]	location	1	true
+
+# a call: the name repeats (4 execute calls), so the scoped, receiver and location forms win
+query IITIT
+SELECT rank, selector, strategy, matches, is_unique
+FROM ast_selector_for('t', 'test/data/python/sample_app.py', getvariable('execute_call'));
+----
+1	.fn#fetch_all .call#execute	in_function	1	true
+2	.call#execute[receiver="self"]	receiver	1	true
+3	call#execute[file$="sample_app.py"][line=42]	location	1	true
+4	.class#DatabaseConnection .call#execute	in_class	2	false
+5	call#execute	type_name	4	false
+6	.call#execute	class_name	4	false
+
+query IITIT
+SELECT rank, selector, strategy, matches, is_unique
+FROM ast_selector_for('t', 'test/data/python/sample_app.py', getvariable('user_service'));
+----
+1	.class#UserService	class_name	1	true
+2	class_definition#UserService	type_name	1	true
+3	class_definition#UserService[file$="sample_app.py"][line=51]	location	1	true
+
+# __init__ is defined three times: only the class scope or the location is unique
+query IITIT
+SELECT rank, selector, strategy, matches, is_unique
+FROM ast_selector_for('t', 'test/data/python/sample_app.py', getvariable('user_service_init'));
+----
+1	.class#UserService .fn#__init__	in_class	1	true
+2	function_definition#__init__[file$="sample_app.py"][line=53]	location	1	true
+3	.fn#__init__	class_name	3	false
+4	function_definition#__init__	type_name	3	false
+
+# ============================================================================
+# Agreement: the counts above are computed in SQL next to the selector engine, so
+# every returned selector is run through ast_select_from and must select exactly
+# `matches` nodes. If css_selectors.sql changes what a selector shape matches, this
+# fails here instead of ast_selector_for silently reporting stale counts.
+# ============================================================================
+
+query I
+SELECT count(*) FROM ast_select_from('t', '.class#UserService .fn#get_user');
+----
+1
+
+query I
+SELECT count(*) FROM ast_select_from('t', 'function_definition#get_user[file$="sample_app.py"][line=56]');
+----
+1
+
+query I
+SELECT count(*) FROM ast_select_from('t', '.fn#fetch_all .call#execute');
+----
+1
+
+query I
+SELECT count(*) FROM ast_select_from('t', '.call#execute[receiver="self"]');
+----
+1
+
+query I
+SELECT count(*) FROM ast_select_from('t', '.class#DatabaseConnection .call#execute');
+----
+2
+
+query I
+SELECT count(*) FROM ast_select_from('t', 'call#execute');
+----
+4
+
+query I
+SELECT count(*) FROM ast_select_from('t', '.call#execute');
+----
+4
+
+query I
+SELECT count(*) FROM ast_select_from('t', '.class#UserService .fn#__init__');
+----
+1
+
+query I
+SELECT count(*) FROM ast_select_from('t', '.fn#__init__');
+----
+3
+
+# the unique selector selects the target itself, not just one node
+query I
+SELECT count(*) FROM ast_select_from('t', '.fn#fetch_all .call#execute') WHERE node_id = getvariable('execute_call');
+----
+1
+
+# a node that is not in the table is an error, not an empty result
+statement error
+SELECT * FROM ast_selector_for('t', 'test/data/python/sample_app.py', 999999);
+----
+is not in the source table

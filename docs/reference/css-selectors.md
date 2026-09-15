@@ -231,6 +231,36 @@ ast_select_from(source, selector)
 
 Same output, same selector syntax. The only difference is the `source` parameter is a table name rather than a file path. On large codebases, this amortizes the parse cost across queries — each subsequent `ast_select_from` call runs in ~1s instead of re-parsing from disk.
 
+### `ast_selector_for` — Node to Selector
+
+The reverse direction, like a browser's "Copy selector": given one node of a pre-parsed table, return selectors that select it, best first.
+
+```sql
+CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+
+SELECT rank, selector, matches, is_unique
+FROM ast_selector_for('my_ast', 'src/app.py', 309);
+-- 1  .fn#fetch_all .call#execute                    1  true
+-- 2  .call#execute[receiver="self"]                 1  true
+-- 3  call#execute[file$="app.py"][line=42]          1  true
+-- 4  .class#DatabaseConnection .call#execute        2  false
+-- 5  call#execute                                   4  false
+```
+
+```sql
+ast_selector_for(source, target_file, target_node_id)
+```
+
+| Column | Description |
+|--------|-------------|
+| `rank` | Exactly-one-match first, then fewest matches, then shortest |
+| `selector` | A selector `ast_select_from` accepts |
+| `strategy` | `class_name`, `type_name`, `receiver`, `in_function`, `in_class` or `location` |
+| `matches` | How many nodes the selector selects in the same table |
+| `is_unique` | `matches = 1` |
+
+Candidates use the node's semantic class or type with its name, the call receiver, the nearest named enclosing function or class, and as a fallback its location (`[file$=…][line=…]`). Names that are not plain identifiers cannot be written as `#name` and are left out. A node that is not in the table raises an error.
+
 ### Multi-Rule Dispatch (v1.7.0+, currently WIP)
 
 For queries that contain **multiple CSS rules** — each with its own selector and declaration block — sitting_duck provides two macros that dispatch `ast_select` once per rule and tag the matches with per-rule metadata.
