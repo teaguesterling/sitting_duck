@@ -10,9 +10,10 @@ LOAD sitting_duck;
 # ============================================================================
 # Three files. file_path is set explicitly so the expectations do not depend on
 # where the test runs; the lib/ pair differs only by `_` vs `x`, to prove LIKE
-# metacharacters in [file*=...] match literally.
-#   src/app.py        1 import os / 3 def main / 4 con.execute(a) / 5 helper()
-#                     7 def helper / 8 con.execute(b)
+# metacharacters in [file*=...] match literally. (No blank lines inside the
+# sources: sqllogictest ends a statement at a blank line.)
+#   src/app.py        1 import os / 2 def main / 3 con.execute(a) / 4 helper()
+#                     5 def helper / 6 con.execute(b)
 #   lib/my_util.py    1 def util  / 2 con.execute(c)
 #   lib/myxutil.py    1 def other / 2 con.execute(d)
 # Each selector call is expensive to plan (tracker/bugs/040): kept to a few.
@@ -21,11 +22,9 @@ LOAD sitting_duck;
 statement ok
 CREATE TABLE t AS
 SELECT * REPLACE ('src/app.py' AS file_path) FROM parse_ast('import os
-
 def main():
     con.execute(a)
     helper()
-
 def helper():
     con.execute(b)
 ', 'python')
@@ -42,9 +41,9 @@ SELECT * REPLACE ('lib/myxutil.py' AS file_path) FROM parse_ast('def other():
 query III
 SELECT file_path, start_line, name FROM ast_select_from('t', '.call[file="src/app.py"]') ORDER BY file_path, start_line, name;
 ----
-src/app.py	4	execute
-src/app.py	5	helper
-src/app.py	8	execute
+src/app.py	3	execute
+src/app.py	4	helper
+src/app.py	6	execute
 
 # suffix: the portable form (both lib files end with util.py)
 query III
@@ -75,15 +74,15 @@ lib/myxutil.py	2	execute
 
 # name + file + line address exactly one node
 query III
-SELECT file_path, start_line, name FROM ast_select_from('t', '.call#execute[file$="app.py"][line=8]') ORDER BY file_path, start_line, name;
+SELECT file_path, start_line, name FROM ast_select_from('t', '.call#execute[file$="app.py"][line=6]') ORDER BY file_path, start_line, name;
 ----
-src/app.py	8	execute
+src/app.py	6	execute
 
 # on the last step of a combinator
 query III
-SELECT file_path, start_line, name FROM ast_select_from('t', '.fn .call[line=4]') ORDER BY file_path, start_line, name;
+SELECT file_path, start_line, name FROM ast_select_from('t', '.fn .call[line=3]') ORDER BY file_path, start_line, name;
 ----
-src/app.py	4	execute
+src/app.py	3	execute
 
 # line supports = only (#89: refuse, never silently ignore the operator)
 statement error
@@ -93,7 +92,7 @@ only supports exact match
 
 # like every attribute, not on an earlier combinator step (#127)
 statement error
-SELECT * FROM ast_select_from('t', '.fn[line=3] .call');
+SELECT * FROM ast_select_from('t', '.fn[line=2] .call');
 ----
 only supported on the last
 
