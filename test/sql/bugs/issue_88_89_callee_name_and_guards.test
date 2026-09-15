@@ -199,13 +199,14 @@ SELECT * FROM ast_select('test/data/call_extraction/calls.c', '.call[frobnicate=
 ----
 unknown attribute "[frobnicate...]"
 
-# Documented-looking operators the dispatch silently ignored now error:
-# type/language/semantic/params implement exact match only
-statement error
-SELECT * FROM ast_select('test/data/call_extraction/calls.c', '[type^=call]');
+# [type] now supports prefix/suffix/substring operators (#151): a bare type is exact,
+# and [type^=call] matches call_expression, call, call_*, etc.
+query I
+SELECT COUNT(*) FROM ast_select('test/data/call_extraction/calls.c', '[type^=call]');
 ----
-attribute "type" only supports exact match
+8
 
+# language/semantic/params still implement exact match only — non-'=' ops error
 statement error
 SELECT * FROM ast_select('test/data/call_extraction/calls.c', '[semantic$=CALL]');
 ----

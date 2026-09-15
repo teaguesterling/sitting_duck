@@ -45,22 +45,19 @@ SELECT COUNT(*) >= 0 FROM ast_select('test/data/python/simple.py', '.func[signat
 ----
 true
 
-# [peek*=X] — source text content search. Row-pinned: `string` prefix-matches
-# string + string_content, and recursive_match.py has "SELECT 1" literals at
-# exactly these lines — a wrong-row regression cannot ship green on COUNT alone.
+# [peek*=X] — source text content search. Row-pinned: bare `string` is an EXACT
+# type match (#151), so only `string` nodes (not string_content); recursive_match.py
+# has "SELECT 1" literals at exactly these lines — a wrong-row regression cannot ship
+# green on COUNT alone.
 query II
-SELECT type, start_line FROM ast_select('test/data/python/macros/recursive_match.py', 'string[peek*=SELECT]');
+SELECT type, start_line FROM ast_select('test/data/python/macros/recursive_match.py', 'string[peek*=SELECT]')
+ORDER BY start_line;
 ----
 string	19
-string_content	19
 string	24
-string_content	24
 string	29
-string_content	29
 string	34
-string_content	34
 string	39
-string_content	39
 
 # [peek*=X] must not match everything: a peek filter that matches nothing in the
 # file returns 0 rows, not all rows (issue #81 — NULL peek was NULL-permissive).
