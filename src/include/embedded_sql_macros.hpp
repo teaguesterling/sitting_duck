@@ -3759,6 +3759,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                     SELECT max(s2.sibling_index) FROM ast s2
                     WHERE s2.file_path = a.file_path
                       AND s2.parent_id = a.parent_id
+
+)SQLMACRO"
+        R"SQLMACRO(
                       AND s2.sibling_index < a.sibling_index
                       AND NOT is_syntax_only(s2.flags)
                       AND NOT is_constituent(s2.flags))
@@ -3766,9 +3769,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                 AND (sp.left_class IS NULL
                      OR (is_semantic_type(adj.semantic_type, UPPER(sp.left_class))
                          AND NOT is_syntax_only(adj.flags)))
-
-)SQLMACRO"
-        R"SQLMACRO(
                 AND (sp.left_id IS NULL OR adj.name = sp.left_id)
           )
     ),
@@ -3841,9 +3841,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                 CASE ac.attr_op WHEN '*=' THEN list_contains(a.modifiers, ac.attr_value)
                                 ELSE list_contains(a.modifiers, ac.attr_value) END
 
-
-)SQLMACRO"
-        R"SQLMACRO(
             -- Native extraction: annotations string
             WHEN ac.attr_name = 'annotation' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.annotations LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
@@ -4007,6 +4004,9 @@ CREATE OR REPLACE MACRO ast_select_from(
 
             -- :is-referenced — this definition is referenced somewhere
             WHEN 'is-referenced' THEN
+
+)SQLMACRO"
+        R"SQLMACRO(
                 is_name_definition(a.flags) AND a.name IS NOT NULL AND a.name != ''
                 AND EXISTS (
                     SELECT 1 FROM ast ref
@@ -4032,9 +4032,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                                AND t2.file_path = a.file_path
                     WHERE t2.type != mp.pat_type
                        OR (mp.pat_name IS NOT NULL AND mp.pat_name != ''
-
-)SQLMACRO"
-        R"SQLMACRO(
                            AND mp.pat_name != '___' AND t2.name != mp.pat_name)
                 )
 
@@ -4085,9 +4082,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                                      OR nested.type LIKE pc.pseudo_arg || '_%')
                           )
                     )
-
-)SQLMACRO"
-        R"SQLMACRO(
                 END
 
             -- :precedes(type) — this node comes before a sibling of the given type
