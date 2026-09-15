@@ -93,6 +93,15 @@ A `.semantic` selector matches at the super-type level by default. Kind-level al
 | `.comp` | `.comprehension` | Comprehensions / query-style transforms |
 | `.transform` | `.xform` | All transforms (kind level) |
 
+## Metadata
+
+| Alias | Alternatives | Matches |
+|-------|-------------|---------|
+| `.comment` | | Comments and documentation only (`METADATA_COMMENT`) |
+| `.metadata` | `.meta` | All metadata: comments, annotations/decorators, directives, debug (kind level) |
+
+> `.comment` matches **only** comments. Decorators and attributes are `METADATA_ANNOTATION`; use `.metadata`/`.meta` for the whole kind. (Before [#134](https://github.com/teaguesterling/sitting_duck/issues/134), `.comment` matched the entire metadata kind and picked up decorators.)
+
 ## Other Kind-Level Aliases
 
 These match entire kinds when you want the broadest possible filter:

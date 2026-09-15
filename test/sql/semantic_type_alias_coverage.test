@@ -92,7 +92,8 @@ aliases(alias, match, fam) AS (VALUES
   ('STATEMENT','prefix','EXECUTION_'),('STMT','prefix','EXECUTION_'),
   ('SYNTAX','prefix','PARSER_'),('SYN','prefix','PARSER_'),
   ('TRANSFORM','prefix','TRANSFORM_'),('XFORM','prefix','TRANSFORM_'),
-  ('COMMENT','prefix','METADATA_'),
+  ('COMMENT','exact','METADATA_COMMENT'),
+  ('METADATA','prefix','METADATA_'),('META','prefix','METADATA_'),
   ('ACCESS','prefix','COMPUTATION_')
 )
 SELECT count(*)
@@ -140,6 +141,41 @@ query I
 SELECT count(*) FROM range(0,256,4) t(c) WHERE is_semantic_type(c::UTINYINT,'MEMBER');
 ----
 1
+
+# =============================================================================
+# Regression guard for the .comment narrowing (METADATA kind -> METADATA_COMMENT
+# super-type, issue #134): .comment must match ONLY comments, never the decorator/
+# attribute (ANNOTATION), directive, or debug super-types that share the kind.
+# METADATA/META remain the kind-level umbrella. Pinned to codes.
+# =============================================================================
+
+# .comment matches exactly one super-type (METADATA_COMMENT)
+query I
+SELECT count(*) FROM range(0,256,4) t(c) WHERE is_semantic_type(c::UTINYINT,'COMMENT');
+----
+1
+
+# .comment must NOT match the ANNOTATION super-type (decorators/attributes)
+query I
+SELECT count(*) FROM range(0,256,4) t(c)
+WHERE is_semantic_type(c::UTINYINT,'COMMENT')
+  AND semantic_type_to_string(c::UTINYINT) = 'METADATA_ANNOTATION';
+----
+0
+
+# METADATA/META stay kind-level: all four METADATA super-types
+query I
+SELECT count(*) FROM range(0,256,4) t(c) WHERE is_semantic_type(c::UTINYINT,'METADATA');
+----
+4
+
+# .comment is a strict subset of the METADATA kind
+query I
+SELECT count(*) FROM range(0,256,4) t(c)
+WHERE is_semantic_type(c::UTINYINT,'COMMENT')
+  AND NOT is_semantic_type(c::UTINYINT,'METADATA');
+----
+0
 
 # =============================================================================
 # End-to-end plumbing: the CSS `.class` path (parse '.alias' -> UPPER -> is_semantic_type)
