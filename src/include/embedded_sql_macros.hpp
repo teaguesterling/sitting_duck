@@ -2485,13 +2485,19 @@ CREATE OR REPLACE MACRO parse_ast_list_table(code, language) AS TABLE
 --   [name=value]                  - Attribute filter. Supported attributes:
 --                                     name, type, language, semantic, peek,
 --                                     qualified, signature, params, modifier,
---                                     annotation, receiver.
+--                                     annotation, receiver, file, line.
 --                                     receiver is the object a method is invoked
 --                                     on: .call[receiver=con] matches con.execute();
 --                                     NULL (no match) on bare calls and ambiguous
---                                     chained receivers. Operators = *= ^= $= are
+--                                     chained receivers.
+--                                     file is the node's file_path as read_ast
+--                                     stored it (so [file$="app.py"] is the
+--                                     portable form); line is its start_line.
+--                                     Together they address one node exactly:
+--                                     .call#execute[file$="app.py"][line=42].
+--                                     Operators = *= ^= $= are
 --                                     supported for name, annotation, qualified,
---                                     signature, receiver, peek. type/language/semantic/params take
+--                                     signature, receiver, peek, file. type/language/semantic/params/line take
 --                                     = only; modifier takes = or *= (both mean
 --                                     "has this modifier"). Unknown attributes
 --                                     and unsupported operator combinations
@@ -2701,14 +2707,14 @@ CREATE OR REPLACE MACRO ast_select_from(
                              'sibling_selector', 'adjacent_sibling_selector')
               AND a.node_id IS NULL
               AND c.node_id > (SELECT node_id FROM sel_root_raw
+
+)SQLMACRO"
+        R"SQLMACRO(
                                WHERE type IN ('pseudo_class_selector', 'id_selector',
                                              'attribute_selector', 'class_selector'))
               AND c.node_id <= (SELECT node_id + descendant_count FROM sel_root_raw
                                 WHERE type IN ('pseudo_class_selector', 'id_selector',
                                              'attribute_selector', 'class_selector'))
-
-)SQLMACRO"
-        R"SQLMACRO(
             QUALIFY row_number() OVER (ORDER BY c.depth ASC, c.node_id ASC) = 1
         ),
         -- Resolve the chosen_id for each raw root: a combinator descendant of
@@ -2957,6 +2963,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                    a.node_id AS args_id,
                    a.descendant_count AS args_descendants
             FROM sel_pseudo_classes pcs
+
+)SQLMACRO"
+        R"SQLMACRO(
             JOIN sel_arg_blocks a ON a.parent_id = pcs.node_id
         ),
 
@@ -2967,9 +2976,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                        row_number() OVER (PARTITION BY pa.pcs_id ORDER BY t.node_id) AS rn
                 FROM sel_pcs_to_args pa
                 JOIN sel_tag_names t
-
-)SQLMACRO"
-        R"SQLMACRO(
                   ON t.node_id > pa.args_id
                  AND t.node_id <= pa.args_id + pa.args_descendants
             ) WHERE rn = 1
@@ -3245,6 +3251,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             SELECT CASE
                 WHEN EXISTS (
                     SELECT 1 FROM pseudo_classes pc
+
+)SQLMACRO"
+        R"SQLMACRO(
                     WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
                       AND NOT EXISTS (
                           SELECT 1 FROM duckdb_functions()
@@ -3253,9 +3262,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                 ) THEN error(
                     CASE WHEN NOT (SELECT available FROM has_func_apply)
                     THEN format(
-
-)SQLMACRO"
-        R"SQLMACRO(
                         'ast_select: unknown pseudo-class ":{}". '
                         'For dynamic custom predicates: '
                         'INSTALL func_apply FROM community; then PRAGMA sitting_duck_enable_dynamic_predicates; '
@@ -3330,7 +3336,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         known_attribute_names(name) AS (
             VALUES ('name'), ('type'), ('language'), ('semantic'),
                    ('modifier'), ('annotation'), ('qualified'), ('signature'),
-                   ('params'), ('peek'), ('receiver')
+                   ('params'), ('peek'), ('receiver'), ('file'), ('line')
         ),
         attr_filter_validation AS (
             SELECT CASE
@@ -3341,7 +3347,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 ) THEN error(format(
                     'ast_select: unknown attribute "[{}...]". Supported attributes: '
                     'name, type, language, semantic, modifier, annotation, qualified, '
-                    'signature, params, peek, receiver.',
+                    'signature, params, peek, receiver, file, line.',
                     (SELECT ac.attr_name FROM attr_conditions ac
                      WHERE ac.attr_name IS NOT NULL
                        AND ac.attr_name NOT IN (SELECT name FROM known_attribute_names)
@@ -3349,17 +3355,17 @@ CREATE OR REPLACE MACRO ast_select_from(
                 ))
                 WHEN EXISTS (
                     SELECT 1 FROM attr_conditions ac
-                    WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params')
+                    WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params', 'line')
                 ) THEN error(format(
                     'ast_select: attribute "{}" only supports exact match (=), not "{}". '
                     'For prefix/suffix/substring matching on node types use a bare type '
                     'selector (e.g. `call` matches call_expression), or filter the '
                     'result rows in SQL.',
                     (SELECT ac.attr_name FROM attr_conditions ac
-                     WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params')
+                     WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params', 'line')
                      LIMIT 1),
                     (SELECT ac.attr_op FROM attr_conditions ac
-                     WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params')
+                     WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params', 'line')
                      LIMIT 1)
                 ))
                 WHEN EXISTS (
@@ -3492,6 +3498,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                       ON c.node_id > hb.args_id
                      AND c.node_id <= hb.args_id + hb.args_descendants
                     WHERE c.type IN ('child_selector', 'descendant_selector',
+
+)SQLMACRO"
+        R"SQLMACRO(
                                      'sibling_selector', 'adjacent_sibling_selector')
                 ) THEN error(
                     'ast_select: combinators inside :has(...) are not supported '
@@ -3503,9 +3512,6 @@ CREATE OR REPLACE MACRO ast_select_from(
         ),
 
         -- :match("code") / :contains("code") — structural code pattern.
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- The quoted argument is parsed as real code and checked against the target:
         --   :match("code")    — the current node IS the pattern root (exact)
         --   :contains("code") — some descendant IS the pattern root (any depth)
@@ -3763,6 +3769,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 CASE ac.attr_op WHEN '*=' THEN list_contains(a.modifiers, ac.attr_value)
                                 ELSE list_contains(a.modifiers, ac.attr_value) END
 
+
+)SQLMACRO"
+        R"SQLMACRO(
             -- Native extraction: annotations string
             WHEN ac.attr_name = 'annotation' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.annotations LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
@@ -3770,9 +3779,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                                 WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.annotations = ac.attr_value END
 
-
-)SQLMACRO"
-        R"SQLMACRO(
             -- Native extraction: qualified_name. The column is a LIST<STRUCT>,
             -- so we render it to the legacy bracket string via
             -- ast_qualified_name_as_string() before applying text comparisons.
@@ -3806,6 +3812,18 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- Native extraction: parameter count
             WHEN ac.attr_name = 'params' THEN
                 len(a.parameters) = CAST(ac.attr_value AS INTEGER)
+
+            -- Location: the file the node was read from (file_path as read_ast stored
+            -- it -- relative or absolute as given, so $= is the portable form) and its
+            -- start line. With #name they address a single node exactly, e.g. to turn
+            -- a node back into a selector (ast_selector_for).
+            WHEN ac.attr_name = 'file' THEN
+                CASE ac.attr_op WHEN '*=' THEN a.file_path LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '^=' THEN a.file_path LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '$=' THEN a.file_path LIKE '%' || ac.attr_value_esc ESCAPE '\'
+                                ELSE a.file_path = ac.attr_value END
+            WHEN ac.attr_name = 'line' THEN
+                a.start_line = CAST(ac.attr_value AS INTEGER)
 
             -- Peek (source text) content search
             WHEN ac.attr_name = 'peek' THEN
@@ -3992,6 +4010,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                                      OR nested.type LIKE pc.pseudo_arg || '_%')
                           )
                     )
+
+)SQLMACRO"
+        R"SQLMACRO(
                 END
 
             -- :precedes(type) — this node comes before a sibling of the given type
@@ -4023,9 +4044,6 @@ CREATE OR REPLACE MACRO ast_select_from(
     )),
 
     -- =====================================================================
-
-)SQLMACRO"
-        R"SQLMACRO(
     -- Pseudo-element dispatch: navigate FROM matched nodes to related nodes
     -- =====================================================================
 
