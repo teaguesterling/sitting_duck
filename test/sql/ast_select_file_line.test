@@ -1,0 +1,104 @@
+# name: test/sql/ast_select_file_line.test
+# description: [file] and [line] location attributes -- address a node by where it is
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# ============================================================================
+# Three files. file_path is set explicitly so the expectations do not depend on
+# where the test runs; the lib/ pair differs only by `_` vs `x`, to prove LIKE
+# metacharacters in [file*=...] match literally.
+#   src/app.py        1 import os / 3 def main / 4 con.execute(a) / 5 helper()
+#                     7 def helper / 8 con.execute(b)
+#   lib/my_util.py    1 def util  / 2 con.execute(c)
+#   lib/myxutil.py    1 def other / 2 con.execute(d)
+# Each selector call is expensive to plan (tracker/bugs/040): kept to a few.
+# ============================================================================
+
+statement ok
+CREATE TABLE t AS
+SELECT * REPLACE ('src/app.py' AS file_path) FROM parse_ast('import os
+
+def main():
+    con.execute(a)
+    helper()
+
+def helper():
+    con.execute(b)
+', 'python')
+UNION ALL
+SELECT * REPLACE ('lib/my_util.py' AS file_path) FROM parse_ast('def util():
+    con.execute(c)
+', 'python')
+UNION ALL
+SELECT * REPLACE ('lib/myxutil.py' AS file_path) FROM parse_ast('def other():
+    con.execute(d)
+', 'python');
+
+# exact file
+query III
+SELECT file_path, start_line, name FROM ast_select_from('t', '.call[file="src/app.py"]') ORDER BY file_path, start_line, name;
+----
+src/app.py	4	execute
+src/app.py	5	helper
+src/app.py	8	execute
+
+# suffix: the portable form (both lib files end with util.py)
+query III
+SELECT file_path, start_line, name FROM ast_select_from('t', '.call[file$="util.py"]') ORDER BY file_path, start_line, name;
+----
+lib/my_util.py	2	execute
+lib/myxutil.py	2	execute
+
+# prefix
+query III
+SELECT file_path, start_line, name FROM ast_select_from('t', '.call[file^="lib/"]') ORDER BY file_path, start_line, name;
+----
+lib/my_util.py	2	execute
+lib/myxutil.py	2	execute
+
+# substring with `_`: my_util only, never myxutil
+query III
+SELECT file_path, start_line, name FROM ast_select_from('t', '.call[file*="my_util"]') ORDER BY file_path, start_line, name;
+----
+lib/my_util.py	2	execute
+
+# line, across files
+query III
+SELECT file_path, start_line, name FROM ast_select_from('t', '.call[line=2]') ORDER BY file_path, start_line, name;
+----
+lib/my_util.py	2	execute
+lib/myxutil.py	2	execute
+
+# name + file + line address exactly one node
+query III
+SELECT file_path, start_line, name FROM ast_select_from('t', '.call#execute[file$="app.py"][line=8]') ORDER BY file_path, start_line, name;
+----
+src/app.py	8	execute
+
+# on the last step of a combinator
+query III
+SELECT file_path, start_line, name FROM ast_select_from('t', '.fn .call[line=4]') ORDER BY file_path, start_line, name;
+----
+src/app.py	4	execute
+
+# line supports = only (#89: refuse, never silently ignore the operator)
+statement error
+SELECT * FROM ast_select_from('t', '.call[line^=4]');
+----
+only supports exact match
+
+# like every attribute, not on an earlier combinator step (#127)
+statement error
+SELECT * FROM ast_select_from('t', '.fn[line=3] .call');
+----
+only supported on the last
+
+# a non-integer line is an error, not an empty result
+statement error
+SELECT * FROM ast_select_from('t', '.call[line=abc]');
+----
+Could not convert
