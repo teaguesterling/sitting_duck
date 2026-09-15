@@ -3684,7 +3684,10 @@ CREATE OR REPLACE MACRO ast_select_from(
 
         UNION ALL
 
-        -- Adjacent sibling: A + B
+        -- Adjacent sibling: A + B — B's nearest MEANINGFUL preceding sibling matches A.
+        -- "Meaningful" skips syntax-only tokens (commas, semicolons, brackets) and
+        -- constituents, so `identifier + identifier` over `a, b, c` matches instead of
+        -- seeing the comma as the adjacent node (#141). Raw sibling_index-1 was the bug.
         SELECT a.*
         FROM ast a, sel_props sp
         WHERE sp.validations_ok
@@ -3698,7 +3701,17 @@ CREATE OR REPLACE MACRO ast_select_from(
               SELECT 1 FROM ast adj
               WHERE adj.file_path = a.file_path
                 AND adj.parent_id = a.parent_id
-                AND adj.sibling_index = a.sibling_index - 1
+                AND adj.sibling_index < a.sibling_index
+                AND NOT is_syntax_only(adj.flags)
+                AND NOT is_constituent(adj.flags)
+                -- the nearest meaningful sibling before `a`
+                AND adj.sibling_index = (
+                    SELECT max(s2.sibling_index) FROM ast s2
+                    WHERE s2.file_path = a.file_path
+                      AND s2.parent_id = a.parent_id
+                      AND s2.sibling_index < a.sibling_index
+                      AND NOT is_syntax_only(s2.flags)
+                      AND NOT is_constituent(s2.flags))
                 AND (sp.left_type IS NULL OR adj.type = sp.left_type OR adj.type LIKE sp.left_type_like)
                 AND (sp.left_class IS NULL
                      OR (is_semantic_type(adj.semantic_type, UPPER(sp.left_class))
@@ -3721,8 +3734,15 @@ CREATE OR REPLACE MACRO ast_select_from(
               AND d.node_id <= a.node_id + a.descendant_count
               AND (h.has_type IS NULL OR d.type = h.has_type)
               AND (h.has_name IS NULL OR d.name = h.has_name)
+              -- A .class has-target means a CONSTRUCT, so skip syntax-only tokens
+              -- (the `def` keyword shares DEFINITION_FUNCTION) and constituents
+              -- (string content, import specifiers) — same as the standalone
+              -- .class arm. Explicit :has(type)/:has(#name) are NOT filtered, so
+              -- :has(def) or :has(string_content) still work. (#133)
               AND (h.has_class IS NULL
-                   OR is_semantic_type(d.semantic_type, UPPER(h.has_class)))
+                   OR (is_semantic_type(d.semantic_type, UPPER(h.has_class))
+                       AND NOT is_syntax_only(d.flags)
+                       AND NOT is_constituent(d.flags)))
         )
     )
     -- :not(:has()) filters
@@ -3735,14 +3755,22 @@ CREATE OR REPLACE MACRO ast_select_from(
               AND d.node_id <= a.node_id + a.descendant_count
               AND (nh.not_has_type IS NULL OR d.type = nh.not_has_type)
               AND (nh.not_has_name IS NULL OR d.name = nh.not_has_name)
+              -- Same construct-only rule as :has (#133): a .class not-has-target
+              -- ignores syntax-only tokens and constituents, so
+              -- .fn:not(:has(.fn)) is "no NESTED function", not "no def token".
               AND (nh.not_has_class IS NULL
-                   OR is_semantic_type(d.semantic_type, UPPER(nh.not_has_class)))
+                   OR (is_semantic_type(d.semantic_type, UPPER(nh.not_has_class))
+                       AND NOT is_syntax_only(d.flags)
+                       AND NOT is_constituent(d.flags)))
         )
     )
     -- [attr op value] filters — supports native extraction columns and CSS operators
     -- The CASE is wrapped in COALESCE(..., false): when the attribute column is
     -- NULL (e.g. peek on a table parsed with peek := 'none', or a NULL
     -- signature_type) the comparison yields NULL, and without the COALESCE the
+
+)SQLMACRO"
+        R"SQLMACRO(
     -- NOT EXISTS would treat that as "condition satisfied" — making the filter
     -- match EVERYTHING (issue #81). NULL attribute values must match NOTHING.
     AND NOT EXISTS (
@@ -3770,9 +3798,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                                 WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.annotations = ac.attr_value END
 
-
-)SQLMACRO"
-        R"SQLMACRO(
             -- Native extraction: qualified_name. The column is a LIST<STRUCT>,
             -- so we render it to the legacy bracket string via
             -- ast_qualified_name_as_string() before applying text comparisons.
@@ -3986,6 +4011,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                               SELECT 1 FROM ast nested
                               WHERE nested.file_path = a.file_path
                                 AND nested.node_id > scope_anc.node_id
+
+)SQLMACRO"
+        R"SQLMACRO(
                                 AND nested.node_id < a.node_id
                                 AND a.node_id <= nested.node_id + nested.descendant_count
                                 AND (nested.type = pc.pseudo_arg
@@ -4023,9 +4051,6 @@ CREATE OR REPLACE MACRO ast_select_from(
     )),
 
     -- =====================================================================
-
-)SQLMACRO"
-        R"SQLMACRO(
     -- Pseudo-element dispatch: navigate FROM matched nodes to related nodes
     -- =====================================================================
 
