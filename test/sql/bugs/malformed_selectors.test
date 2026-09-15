@@ -66,3 +66,13 @@ SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.func#main::c
 
 statement ok
 SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.func#main::parent-definition');
+
+# Combinator with a trailing modifier: the modifier wraps the whole combinator
+# ("A B#name" parses as id_selector(descendant_selector(A,B), #name)), so it lives
+# OUTSIDE the re-rooted sel_root. Coverage is measured against sel_root_raw (the
+# outermost node), so these must NOT be flagged malformed. (Regression: they were.)
+statement ok
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', 'class_definition function_definition#__init__');
+
+statement ok
+SELECT count(*) FROM ast_select('test/data/python/css_selectors_test.py', 'class_definition ~ class_definition:has(function_definition#speak)');

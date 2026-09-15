@@ -3553,28 +3553,33 @@ CREATE OR REPLACE MACRO ast_select_from(
 
         -- Parse-completeness guard (#128): a malformed selector must raise, not
         -- silently over-/under-match. A bare selector always parses under ONE
-        -- top-level ERROR wrapper (an ANCESTOR of sel_root) — that is expected and
-        -- must not be flagged. Malformed input instead leaves EITHER an ERROR/MISSING
-        -- node past that wrapper OR stray tokens outside the recognized selector's
-        -- subtree (an unclosed `[`, a dangling `:pseudo(`, trailing junk). Every node
-        -- must be inside sel_root's subtree or an ancestor of it. References `sel`
-        -- exactly once (as n) per the planner-bug workaround above.
+        -- top-level ERROR wrapper (an ANCESTOR of the selector) — that is expected
+        -- and must not be flagged. Malformed input instead leaves EITHER an
+        -- ERROR/MISSING node past that wrapper OR stray tokens outside the recognized
+        -- selector (an unclosed `[`, a dangling `:pseudo(`, trailing junk).
+        --
+        -- Coverage is measured against sel_root_RAW — the OUTERMOST recognized node
+        -- (min-depth), NOT the re-rooted sel_root. sel_root is deliberately narrowed
+        -- to the inner combinator for dispatch, so for "A B#name" / "A ~ B:has(X)" /
+        -- "A B[attr]" the trailing modifier wraps the combinator and lives OUTSIDE
+        -- sel_root — using sel_root here false-flagged those legitimate selectors.
+        -- sel_root_raw covers the whole selector, so only genuine leftover tokens are
+        -- outside it. References `sel` once (as n) per the planner-bug workaround.
         sel_uncovered AS (
             SELECT n.node_id, n.peek
-            FROM sel n, sel_root r
+            FROM sel n, sel_root_raw r
             WHERE (
                 -- an ERROR/MISSING that is not the outer wrapper (wrapper node_id < r.node_id)
                 (n.type IN ('ERROR', 'MISSING') AND n.node_id > r.node_id)
-                -- or a stray node: not within sel_root's subtree AND not an ancestor of it
+                -- or a stray node: not within sel_root_raw's subtree AND not an ancestor of it
                 OR (NOT (n.node_id >= r.node_id
                          AND n.node_id <= r.node_id + r.descendant_count)
                     AND NOT (n.node_id < r.node_id
                              AND n.node_id + n.descendant_count >= r.node_id + r.descendant_count))
               )
-              -- Pseudo-elements (::callers, ::callees, ::parent-definition, ...) are
-              -- legitimate post-match transforms; sel_root resolution deliberately
-              -- excludes them, so they sit outside sel_root by design. Don't count a
-              -- pseudo_element_selector (or its subtree) as a stray token.
+              -- Pseudo-elements (::callers, ::parent-definition, ...) are legitimate
+              -- post-match transforms; keep them out of the stray check even if a
+              -- future parse shape puts them beside sel_root_raw.
               AND NOT EXISTS (
                   SELECT 1 FROM sel_pseudo_elements pe
                   WHERE n.node_id >= pe.node_id
@@ -3752,6 +3757,9 @@ CREATE OR REPLACE MACRO ast_select_from(
               WHERE adj.file_path = a.file_path
                 AND adj.parent_id = a.parent_id
                 AND adj.sibling_index < a.sibling_index
+
+)SQLMACRO"
+        R"SQLMACRO(
                 AND NOT is_syntax_only(adj.flags)
                 AND NOT is_constituent(adj.flags)
                 -- the nearest meaningful sibling before `a`
@@ -3759,9 +3767,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                     SELECT max(s2.sibling_index) FROM ast s2
                     WHERE s2.file_path = a.file_path
                       AND s2.parent_id = a.parent_id
-
-)SQLMACRO"
-        R"SQLMACRO(
                       AND s2.sibling_index < a.sibling_index
                       AND NOT is_syntax_only(s2.flags)
                       AND NOT is_constituent(s2.flags))
@@ -3996,6 +4001,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 is_name_definition(a.flags) AND a.name IS NOT NULL AND a.name != ''
                 AND EXISTS (
                     SELECT 1 FROM ast ref
+
+)SQLMACRO"
+        R"SQLMACRO(
                     WHERE ref.file_path = a.file_path
                       AND ref.semantic_type = 'COMPUTATION_CALL'
                       AND ref.name = a.name
@@ -4004,9 +4012,6 @@ CREATE OR REPLACE MACRO ast_select_from(
 
             -- :is-referenced — this definition is referenced somewhere
             WHEN 'is-referenced' THEN
-
-)SQLMACRO"
-        R"SQLMACRO(
                 is_name_definition(a.flags) AND a.name IS NOT NULL AND a.name != ''
                 AND EXISTS (
                     SELECT 1 FROM ast ref
