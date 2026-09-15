@@ -51,6 +51,7 @@ def generate_header(sql_dir, output_file):
         'relational_operators.sql',
         'parse_ast_list_table.sql',
         'css_selectors.sql',
+        'selector_for.sql',
         'ast_select_rules.sql',
         'scope_resolution.sql',
         'duck_blocks.sql',
