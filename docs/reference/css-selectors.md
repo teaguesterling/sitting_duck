@@ -34,6 +34,21 @@ SELECT * FROM ast_select('src/*.py', '.func:has(.call#execute)');
 
 ## Combinators
 
+Each side of a combinator is one **step**, and a step can combine a node type, a
+semantic alias and a `#name`:
+
+```sql
+-- Methods of the UserService class: alias steps, #name on the outer step
+SELECT name FROM ast_select('src/**/*.py', '.class#UserService .func');
+```
+
+Modifiers written after the last step (`#name`, `[attr]`, `:has(...)`) constrain
+that last step: `class_definition function_definition#__init__` selects the
+`__init__` methods.
+
+> **Two steps.** Combinators currently take exactly two steps. Chains such as `A B C` or `A > B > C`, and `[attr]` or `:pseudo` filters on the *first* step (`A[name=x] B`), raise an error instead of silently matching nothing ([#127](https://github.com/teaguesterling/sitting_duck/issues/127)). Express deeper structure with `:has()`, or chain `ast_select` calls.
+
+
 ### `A B` — Descendant
 
 B is anywhere inside A (any depth):

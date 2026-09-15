@@ -63,11 +63,13 @@ EXTERNAL_IMPORT	true
 # Absolute counts pinned to fixtures; the point is construct == whole, not part.
 # =============================================================================
 
-# .str: only the `string` literals, not their contents/interpolations
+# .str: only the `string` literals, not their contents/interpolations.
+# (80 = every string literal in the fixture; the combinator/standalone-arm
+# rewrite in #127 no longer silently drops any — see the invariant below.)
 query I
 SELECT COUNT(*) FROM ast_select('test/data/python/*.py', '.str');
 ----
-78
+80
 
 # every .str match is a non-constituent string literal (invariant, drift-proof)
 query I
