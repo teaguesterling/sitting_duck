@@ -40,9 +40,16 @@ SELECT name FROM ast_select('src/*.py', 'function_definition[name*=auth]');
 
 ### `[type]` — Node Type
 
+Supports exact match and the prefix/suffix/substring operators (a bare type
+selector like `function_definition` is an exact match, #151):
+
 ```sql
--- Filter by exact tree-sitter type
+-- Exact tree-sitter type (same as the bare selector `function_definition`)
 SELECT * FROM ast_select('src/*.py', '[type=function_definition]');
+-- Prefix / suffix / substring on the type name
+SELECT * FROM ast_select('src/*.py', '[type^=if]');          -- if, if_statement, if_clause, ...
+SELECT * FROM ast_select('src/*.py', '[type$=_statement]');  -- *_statement
+SELECT * FROM ast_select('src/*.py', '[type*=expr]');        -- *expr*
 ```
 
 ### `[language]` — Language

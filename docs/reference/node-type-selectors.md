@@ -7,8 +7,9 @@ Sitting Duck offers three levels of type specificity for matching AST nodes. Cho
 ```sql
 -- These are different:
 .if                -- ALL conditionals (if + elif + else + switch + case + match)
-if                 -- just if and if_* variants
-if_statement       -- exactly if_statement (most specific)
+if                 -- EXACTLY the `if` node type (the keyword token), nothing else
+if_statement       -- exactly if_statement
+[type^=if]         -- PREFIX: if + if_statement + if_clause + ... (attribute operator)
 ```
 
 ### Dotted selectors (`.semantic`) — Cross-language, broadest
@@ -27,15 +28,25 @@ Match by semantic category. Works identically across all 27 languages:
 
 See [Semantic Type Aliases](semantic-aliases.md) for the full alias table (~80 aliases).
 
-### Bare keywords — Language-specific, medium
+### Bare node types — Language-specific, exact
 
-Match by tree-sitter node type prefix. `if` matches `if` (the keyword token) AND `if_statement`, `if_clause`, etc.:
+Match a tree-sitter node type **exactly** (#151). `if` matches only the `if` node
+type (the keyword token), never `if_statement`/`if_clause`:
 
 ```sql
-if                 -- if keyword + if_statement + if_clause
-return             -- return keyword + return_statement
-for                -- for keyword + for_statement + for_in_clause
-class              -- class keyword + class_definition
+if                 -- exactly the `if` node type
+return             -- exactly the `return` node type
+for                -- exactly the `for` node type
+class_definition   -- exactly class_definition
+```
+
+For **prefix/suffix/substring** matching on node types, use the `[type]` attribute
+operators — a bare type is no longer a prefix match:
+
+```sql
+[type^=if]         -- prefix: if + if_statement + if_clause + ...
+[type$=_statement] -- suffix: if_statement + for_statement + return_statement + ...
+[type*=expr]       -- substring: expression + binary_expression + ...
 ```
 
 Bare keywords are narrower than dotted selectors but broader than exact types.

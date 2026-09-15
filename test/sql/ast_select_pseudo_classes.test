@@ -94,11 +94,12 @@ SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py',
 # :scope(type) — within nearest ancestor scope
 # =============================================================================
 
-# return_statement:scope(function) — returns within their DIRECT function
+# return_statement:scope(function_definition) — returns within their DIRECT function
+# (bare types are exact now, #151: use function_definition, not `function`)
 # Should NOT count returns in nested functions as belonging to the outer function
 query I
 SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py',
-    'return_statement:scope(function)');
+    'return_statement:scope(function_definition)');
 ----
 5
 

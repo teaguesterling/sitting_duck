@@ -884,17 +884,18 @@ CREATE OR REPLACE MACRO ast_select_from(
                 ))
                 WHEN EXISTS (
                     SELECT 1 FROM attr_conditions ac
-                    WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params', 'line')
+                    WHERE ac.attr_op != '=' AND ac.attr_name IN ('language', 'semantic', 'params', 'line')
                 ) THEN error(format(
                     'ast_select: attribute "{}" only supports exact match (=), not "{}". '
-                    'For prefix/suffix/substring matching on node types use a bare type '
-                    'selector (e.g. `call` matches call_expression), or filter the '
-                    'result rows in SQL.',
+                    'For prefix/suffix/substring matching on node types use the type '
+                    'attribute operators — [type^=call], [type$=_statement], [type*=expr] '
+                    '(a bare type selector like `call` is now an EXACT match), or filter '
+                    'the result rows in SQL.',
                     (SELECT ac.attr_name FROM attr_conditions ac
-                     WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params', 'line')
+                     WHERE ac.attr_op != '=' AND ac.attr_name IN ('language', 'semantic', 'params', 'line')
                      LIMIT 1),
                     (SELECT ac.attr_op FROM attr_conditions ac
-                     WHERE ac.attr_op != '=' AND ac.attr_name IN ('type', 'language', 'semantic', 'params', 'line')
+                     WHERE ac.attr_op != '=' AND ac.attr_name IN ('language', 'semantic', 'params', 'line')
                      LIMIT 1)
                 ))
                 WHEN EXISTS (
@@ -1178,7 +1179,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         WHERE sp.validations_ok
           AND sp.sel_type IN ('tag_name', 'id_selector', 'class_selector',
                               'attribute_selector', 'pseudo_class_selector')
-          AND (sp.type_filter IS NULL OR a.type = sp.type_filter OR a.type LIKE sp.type_filter_like)
+          AND (sp.type_filter IS NULL OR a.type = sp.type_filter)
           AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
           AND (sp.class_filter IS NULL
                OR (is_semantic_type(a.semantic_type, UPPER(sp.class_filter))
@@ -1195,7 +1196,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         FROM ast a, sel_props sp
         WHERE sp.validations_ok
           AND sp.sel_type = 'descendant_selector'
-          AND (sp.right_type IS NULL OR a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND (sp.right_type IS NULL OR a.type = sp.right_type)
           AND (sp.right_class IS NULL
                OR (is_semantic_type(a.semantic_type, UPPER(sp.right_class))
                    AND NOT is_syntax_only(a.flags)))
@@ -1205,7 +1206,7 @@ CREATE OR REPLACE MACRO ast_select_from(
               WHERE anc.file_path = a.file_path
                 AND a.node_id > anc.node_id
                 AND a.node_id <= anc.node_id + anc.descendant_count
-                AND (sp.left_type IS NULL OR anc.type = sp.left_type OR anc.type LIKE sp.left_type_like)
+                AND (sp.left_type IS NULL OR anc.type = sp.left_type)
                 AND (sp.left_class IS NULL
                      OR (is_semantic_type(anc.semantic_type, UPPER(sp.left_class))
                          AND NOT is_syntax_only(anc.flags)))
@@ -1219,7 +1220,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         FROM ast a, sel_props sp
         WHERE sp.validations_ok
           AND sp.sel_type = 'child_selector'
-          AND (sp.right_type IS NULL OR a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND (sp.right_type IS NULL OR a.type = sp.right_type)
           AND (sp.right_class IS NULL
                OR (is_semantic_type(a.semantic_type, UPPER(sp.right_class))
                    AND NOT is_syntax_only(a.flags)))
@@ -1232,7 +1233,7 @@ CREATE OR REPLACE MACRO ast_select_from(
               -- in one file "was a direct child" of a class in another.
               WHERE par.file_path = a.file_path
                 AND par.node_id = a.parent_id
-                AND (sp.left_type IS NULL OR par.type = sp.left_type OR par.type LIKE sp.left_type_like)
+                AND (sp.left_type IS NULL OR par.type = sp.left_type)
                 AND (sp.left_class IS NULL
                      OR (is_semantic_type(par.semantic_type, UPPER(sp.left_class))
                          AND NOT is_syntax_only(par.flags)))
@@ -1246,7 +1247,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         FROM ast a, sel_props sp
         WHERE sp.validations_ok
           AND sp.sel_type = 'sibling_selector'
-          AND (sp.right_type IS NULL OR a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND (sp.right_type IS NULL OR a.type = sp.right_type)
           AND (sp.right_class IS NULL
                OR (is_semantic_type(a.semantic_type, UPPER(sp.right_class))
                    AND NOT is_syntax_only(a.flags)))
@@ -1256,7 +1257,7 @@ CREATE OR REPLACE MACRO ast_select_from(
               WHERE sib.file_path = a.file_path
                 AND sib.parent_id = a.parent_id
                 AND sib.sibling_index < a.sibling_index
-                AND (sp.left_type IS NULL OR sib.type = sp.left_type OR sib.type LIKE sp.left_type_like)
+                AND (sp.left_type IS NULL OR sib.type = sp.left_type)
                 AND (sp.left_class IS NULL
                      OR (is_semantic_type(sib.semantic_type, UPPER(sp.left_class))
                          AND NOT is_syntax_only(sib.flags)))
@@ -1273,7 +1274,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         FROM ast a, sel_props sp
         WHERE sp.validations_ok
           AND sp.sel_type = 'adjacent_sibling_selector'
-          AND (sp.right_type IS NULL OR a.type = sp.right_type OR a.type LIKE sp.right_type_like)
+          AND (sp.right_type IS NULL OR a.type = sp.right_type)
           AND (sp.right_class IS NULL
                OR (is_semantic_type(a.semantic_type, UPPER(sp.right_class))
                    AND NOT is_syntax_only(a.flags)))
@@ -1293,7 +1294,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                       AND s2.sibling_index < a.sibling_index
                       AND NOT is_syntax_only(s2.flags)
                       AND NOT is_constituent(s2.flags))
-                AND (sp.left_type IS NULL OR adj.type = sp.left_type OR adj.type LIKE sp.left_type_like)
+                AND (sp.left_type IS NULL OR adj.type = sp.left_type)
                 AND (sp.left_class IS NULL
                      OR (is_semantic_type(adj.semantic_type, UPPER(sp.left_class))
                          AND NOT is_syntax_only(adj.flags)))
@@ -1360,7 +1361,11 @@ CREATE OR REPLACE MACRO ast_select_from(
                                 WHEN '^=' THEN a.name LIKE ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '$=' THEN a.name LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.name = ac.attr_value END
-            WHEN ac.attr_name = 'type' THEN a.type = ac.attr_value
+            WHEN ac.attr_name = 'type' THEN
+                CASE ac.attr_op WHEN '*=' THEN a.type LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '^=' THEN a.type LIKE ac.attr_value_esc || '%' ESCAPE '\'
+                                WHEN '$=' THEN a.type LIKE '%' || ac.attr_value_esc ESCAPE '\'
+                                ELSE a.type = ac.attr_value END
             WHEN ac.attr_name = 'language' THEN a.language = ac.attr_value
             WHEN ac.attr_name = 'semantic' THEN is_semantic_type(a.semantic_type, UPPER(ac.attr_value))
 
@@ -1594,8 +1599,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                         WHERE scope_anc.file_path = a.file_path
                           AND a.node_id > scope_anc.node_id
                           AND a.node_id <= scope_anc.node_id + scope_anc.descendant_count
-                          AND (scope_anc.type = pc.pseudo_arg
-                               OR scope_anc.type LIKE pc.pseudo_arg || '_%')
+                          AND (scope_anc.type = pc.pseudo_arg)
                           -- Exclude if there's a CLOSER ancestor of the same type between us
                           AND NOT EXISTS (
                               SELECT 1 FROM ast nested
@@ -1603,8 +1607,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                                 AND nested.node_id > scope_anc.node_id
                                 AND nested.node_id < a.node_id
                                 AND a.node_id <= nested.node_id + nested.descendant_count
-                                AND (nested.type = pc.pseudo_arg
-                                     OR nested.type LIKE pc.pseudo_arg || '_%')
+                                AND (nested.type = pc.pseudo_arg)
                           )
                     )
                 END
@@ -1615,8 +1618,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 WHERE after_sib.file_path = a.file_path
                   AND after_sib.parent_id = a.parent_id
                   AND after_sib.sibling_index > a.sibling_index
-                  AND (after_sib.type = pc.pseudo_arg
-                       OR after_sib.type LIKE pc.pseudo_arg || '_%')
+                  AND (after_sib.type = pc.pseudo_arg)
             )
 
             -- :follows(type) — this node comes after a sibling of the given type
@@ -1625,8 +1627,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 WHERE before_sib.file_path = a.file_path
                   AND before_sib.parent_id = a.parent_id
                   AND before_sib.sibling_index < a.sibling_index
-                  AND (before_sib.type = pc.pseudo_arg
-                       OR before_sib.type LIKE pc.pseudo_arg || '_%')
+                  AND (before_sib.type = pc.pseudo_arg)
             )
 
             ELSE ast_dispatch_predicate(
