@@ -215,7 +215,7 @@ DEF_TYPE("interpreted_string_literal", LITERAL_STRING | SemanticRefinements::Str
 DEF_TYPE("raw_string_literal", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
 DEF_TYPE("rune_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 DEF_TYPE("interpreted_string_literal_content", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 // Atomic literals
 DEF_TYPE("nil", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)

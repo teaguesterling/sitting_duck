@@ -438,10 +438,10 @@ DEF_TYPE("argument", ORGANIZATION_LIST, FIND_IDENTIFIER, NONE, 0)
  */
 
 /// @brief String content - text inside string
-DEF_TYPE("string_content", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("string_content", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /// @brief Escape sequence - `\n`, `\t`, etc.
-DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @} */ // end r_string_components
 

@@ -1,0 +1,100 @@
+# name: test/sql/bugs/constituent_nodes.test
+# description: #139 — class selectors return each construct once, not its constituents
+# group: [bugs]
+#
+# A "constituent" is a meaningful sub-part of a larger construct that already
+# represents the whole: a string's content/fragment/escape, an import's clause/
+# specifier, a catch's exception type. These carry payload (so they are NOT
+# is_syntax_only) but are subordinate, so they get the IS_CONSTITUENT flag (bit 5)
+# and class selectors (.str/.import/.catch ...) skip them in favour of the
+# enclosing node. Distinct from is_syntax_only, which marks valueless grammar
+# tokens. See src/include/node_config.hpp and #139.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# is_constituent() predicate: reads flag bit 5 (0x20), independent of other bits
+# =============================================================================
+
+query IIII
+SELECT is_constituent(0::UTINYINT)        AS none,
+       is_constituent(32::UTINYINT)       AS just_constituent,   -- 0x20
+       is_constituent(33::UTINYINT)       AS constituent_and_syntax, -- 0x20|0x01
+       is_constituent(1::UTINYINT)        AS just_syntax;         -- 0x01
+----
+false	true	true	false
+
+query I
+SELECT is_constituent(NULL) IS NULL;
+----
+true
+
+# =============================================================================
+# The flag is orthogonal to semantic_type: constituents KEEP their type, so the
+# language refinement contract (string_content -> LITERAL_STRING, etc.) is intact.
+# =============================================================================
+
+# string_content is still LITERAL_STRING, now flagged constituent
+query TTI
+SELECT DISTINCT semantic_type, is_constituent(flags), is_syntax_only(flags)
+FROM read_ast('test/data/python/simple.py') WHERE type = 'string_content';
+----
+LITERAL_STRING	true	false
+
+# the enclosing `string` node is NOT a constituent (it is the whole)
+query I
+SELECT DISTINCT is_constituent(flags)
+FROM read_ast('test/data/python/simple.py') WHERE type = 'string';
+----
+false
+
+# import specifiers keep EXTERNAL_IMPORT but are flagged constituent (JS)
+query TI
+SELECT DISTINCT semantic_type, is_constituent(flags)
+FROM read_ast('test/data/javascript/import_forms.js') WHERE type = 'import_specifier';
+----
+EXTERNAL_IMPORT	true
+
+# =============================================================================
+# Class selectors return each construct once (constituents excluded).
+# Absolute counts pinned to fixtures; the point is construct == whole, not part.
+# =============================================================================
+
+# .str: only the `string` literals, not their contents/interpolations
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/*.py', '.str');
+----
+78
+
+# every .str match is a non-constituent string literal (invariant, drift-proof)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/*.py', '.str') WHERE type <> 'string';
+----
+0
+
+# .import: the import statements, not their clauses/specifiers (JS)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/javascript/**/*.js', '.import');
+----
+9
+
+# .catch: the catch clauses, not their exception types (Java)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/rosetta/**/*.java', '.catch') WHERE type = 'catch_type';
+----
+0
+
+# =============================================================================
+# Bash `command` is a call (retyped EXECUTION_STATEMENT -> COMPUTATION_CALL, #139):
+# .call now matches ordinary shell commands, not only command_substitution.
+# =============================================================================
+
+query I
+SELECT (SELECT COUNT(*) FROM ast_select('test/data/bash/**/*.sh', '.call'))
+     = (SELECT COUNT(*) FROM read_ast('test/data/bash/**/*.sh')
+        WHERE type IN ('command', 'command_substitution'));
+----
+true

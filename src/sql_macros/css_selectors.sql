@@ -989,7 +989,11 @@ CREATE OR REPLACE MACRO ast_select_from(
           AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
           AND (sp.class_filter IS NULL
                OR (is_semantic_type(a.semantic_type, UPPER(sp.class_filter))
-                   AND NOT is_syntax_only(a.flags)))
+                   AND NOT is_syntax_only(a.flags)
+                   -- Skip constituents (a string's content, an import's specifier,
+                   -- a function's declarator): the enclosing construct is matched
+                   -- instead, so a class selects each construct once (#139).
+                   AND NOT is_constituent(a.flags)))
 
         UNION ALL
 

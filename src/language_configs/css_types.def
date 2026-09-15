@@ -450,7 +450,7 @@ DEF_TYPE("'", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE("class_name", NAME_IDENTIFIER, NODE_TEXT, VARIABLE_WITH_TYPE, 0)
 
 /// @brief String content - text inside quotes
-DEF_TYPE("string_content", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("string_content", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @} */ // end css_names
 
@@ -614,7 +614,7 @@ DEF_TYPE("hsla", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
  */
 
 /// @brief Escape sequence - `\n`, `\u0041`
-DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @} */ // end css_strings
 

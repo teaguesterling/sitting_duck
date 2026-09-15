@@ -846,10 +846,10 @@ DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL
 DEF_TYPE("symbol_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 
 /// @brief Escape sequence - `\n`, `\t`, etc.
-DEF_TYPE("escape_sequence", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("escape_sequence", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /// @brief Template substitution - `${expr}` in string
-DEF_TYPE("template_substitution", LITERAL_STRING | SemanticRefinements::String::TEMPLATE, NONE, NONE, 0)
+DEF_TYPE("template_substitution", LITERAL_STRING | SemanticRefinements::String::TEMPLATE, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @} */ // end dart_literals
 
