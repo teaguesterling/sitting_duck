@@ -1,0 +1,69 @@
+# name: test/sql/bugs/has_adjacency.test
+# description: #133 (:has/:not filter syntax-only + constituent has-targets) and
+#             #141 (adjacent-sibling A + B skips punctuation/syntax-only siblings)
+# group: [bugs]
+#
+# #133: a `.class` has-target means a CONSTRUCT. The syntax-only `def` keyword shares
+#       DEFINITION_FUNCTION with its function, so `.fn:has(.fn)` used to match EVERY
+#       function (each "has" its own def token). It must match only functions with a
+#       real NESTED function. Explicit :has(type)/:has(#name) are unaffected.
+# #141: `A + B` used raw sibling_index-1, so `identifier + identifier` over `a, b, c`
+#       saw the comma as the adjacent node and never matched. Adjacency now targets the
+#       nearest MEANINGFUL preceding sibling (skips syntax-only tokens + constituents).
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# #133 — :has / :not(:has) with a .class target select constructs, not tokens
+# Controlled fixture: `outer` contains nested `inner`; nothing else nests.
+# =============================================================================
+
+# .fn:has(.fn) is ONLY the outer function (was: every function, via the def token)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/selectors/adjacency.py', '.fn:has(.fn)');
+----
+1
+
+# its complement is the inner function — together they partition .fn (2 total)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/selectors/adjacency.py', '.fn:not(:has(.fn))');
+----
+1
+
+# Regression pin: sample_app.py has NO nested functions, so .fn:has(.fn) is empty
+# (this returned 20 == every function before the fix).
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/sample_app.py', '.fn:has(.fn)');
+----
+0
+
+# Invariant (drift-proof): every .fn:has(.fn) match is a strict subset of .fn, and
+# .fn:has(.fn) + .fn:not(:has(.fn)) == .fn total.
+query I
+SELECT
+  (SELECT COUNT(*) FROM ast_select('test/data/selectors/adjacency.py', '.fn:has(.fn)'))
++ (SELECT COUNT(*) FROM ast_select('test/data/selectors/adjacency.py', '.fn:not(:has(.fn))'))
+= (SELECT COUNT(*) FROM ast_select('test/data/selectors/adjacency.py', '.fn'));
+----
+true
+
+# Explicit type has-targets are NOT construct-filtered: :has(a bare type) still works
+# even when that type is syntax-only or a constituent (here: the `def` keyword token).
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/selectors/adjacency.py', '.fn:has(def)');
+----
+true
+
+# =============================================================================
+# #141 — adjacent sibling A + B skips punctuation between elements
+# `row = [a, b, c]`: identifiers a,b,c are comma-separated.
+# =============================================================================
+
+# a + b and b + c both match across the commas (was 0 pre-fix)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/selectors/adjacency.py', '.id + .id');
+----
+2
