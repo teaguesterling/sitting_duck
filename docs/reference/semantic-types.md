@@ -194,8 +194,10 @@ SELECT * FROM read_ast('file.py') WHERE is_variable_definition(semantic_type);
 -- Check for module definitions
 SELECT * FROM read_ast('file.py') WHERE is_module_definition(semantic_type);
 
--- Check for type definitions (typedef, type alias)
-SELECT * FROM read_ast('file.py') WHERE is_type_definition(semantic_type);
+-- Type definitions (typedef, type alias): NOT is_type_definition(), which is a
+-- reserved stub that always returns false today (no DEFINITION_TYPE type exists yet,
+-- see issue #136). Type aliases/typedefs currently classify as DEFINITION_CLASS:
+SELECT * FROM read_ast('file.cpp') WHERE is_class_definition(semantic_type);
 ```
 
 ### Computation Predicates
