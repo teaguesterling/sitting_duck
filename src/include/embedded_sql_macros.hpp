@@ -3817,9 +3817,6 @@ CREATE OR REPLACE MACRO ast_select_from(
               -- ignores syntax-only tokens and constituents, so
               -- .fn:not(:has(.fn)) is "no NESTED function", not "no def token".
               AND (nh.not_has_class IS NULL
-
-)SQLMACRO"
-        R"SQLMACRO(
                    OR (is_semantic_type(d.semantic_type, UPPER(nh.not_has_class))
                        AND NOT is_syntax_only(d.flags)
                        AND NOT is_constituent(d.flags)))
@@ -4059,9 +4056,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                                  AND t2.file_path = a.file_path
                       WHERE t2.type != mp.pat_type
                          OR (mp.pat_name IS NOT NULL AND mp.pat_name != ''
-
-)SQLMACRO"
-        R"SQLMACRO(
                              AND mp.pat_name != '___' AND t2.name != mp.pat_name)
                   )
                   AND t.node_id + (SELECT len FROM ast_pattern_len) - 1
