@@ -4458,10 +4458,13 @@ CREATE OR REPLACE MACRO ast_select(
 -- nodes it selects in the same table. The counts are computed here, in SQL, with the
 -- predicates css_selectors.sql applies to that selector shape -- a table function takes
 -- literal arguments, so the candidates cannot be run through ast_select_from row by
--- row. In particular: a bare type step is a prefix match (#151); the standalone .class
--- arm skips syntax-only tokens and constituents, the combinator arms only syntax-only
--- tokens. test/sql/ast_selector_for.test runs the returned selectors through
--- ast_select_from and requires the same counts, so the two stay in step.
+-- row. css_selectors.sql is the SOURCE OF TRUTH: this file mirrors its matching, so
+-- every selector-semantics change there (#139 constituents, #133/#141 combinators,
+-- #151 exact bare types) must be reflected here. In particular: a bare type step is an
+-- EXACT match (#151, was prefix); the standalone .class arm skips syntax-only tokens and
+-- constituents, the combinator arms only syntax-only tokens.
+-- test/sql/ast_selector_for.test runs the returned selectors through ast_select_from and
+-- requires the same counts, so the two stay in step.
 --
 -- A name that is not a plain identifier cannot be written as #name, and a file name
 -- containing a double quote cannot be written in [file$="..."]; candidates that would
@@ -4541,12 +4544,12 @@ CREATE OR REPLACE MACRO ast_selector_for(
 
             UNION ALL
 
-            -- type#name: the standalone type arm (bare type = prefix match, #151)
+            -- type#name: the standalone type arm (bare type = exact match, #151)
             SELECT 'type_name',
                    t.type || '#' || t.name,
                    (SELECT count(*) FROM ast a
                     WHERE a.name = t.name
-                      AND (a.type = t.type OR a.type LIKE t.type || '_%'))
+                      AND (a.type = t.type))
             FROM t
             WHERE t.type_ok AND t.name_ok
 
@@ -4613,7 +4616,7 @@ CREATE OR REPLACE MACRO ast_selector_for(
                    t.type || CASE WHEN t.name_ok THEN '#' || t.name ELSE '' END
                           || '[file$="' || t.base_name || '"][line=' || t.start_line || ']',
                    (SELECT count(*) FROM ast a
-                    WHERE (a.type = t.type OR a.type LIKE t.type || '_%')
+                    WHERE (a.type = t.type)
                       AND (NOT t.name_ok OR a.name = t.name)
                       AND a.file_path LIKE '%' || t.base_esc ESCAPE '\'
                       AND a.start_line = t.start_line)
