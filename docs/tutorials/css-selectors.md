@@ -107,16 +107,16 @@ FROM ast_select('test/data/python/sample_app.py',
     '.func:has(.str[peek*=SELECT]):has(.str[peek*=%])');
 ```
 
-## Step 6: Use `:scope()` for Precision
+## Step 6: Use `:in-scope()` for Precision
 
-The sample app has methods inside classes and standalone functions at module level. `:scope()` lets you distinguish them.
+The sample app has methods inside classes and standalone functions at module level. `:in-scope()` matches nodes **contained within** a scope, letting you distinguish them. (Its complement, bare `:scope`, matches the scope boundaries themselves.)
 
 Find return statements scoped to their direct enclosing function (not returns from nested functions):
 
 ```sql
 SELECT peek, start_line
 FROM ast_select('test/data/python/sample_app.py',
-    'return_statement:scope(function)');
+    'return_statement:in-scope(function_definition)');
 ```
 
 Find calls scoped to the `UserService` class (not calls in other classes):
@@ -124,7 +124,7 @@ Find calls scoped to the `UserService` class (not calls in other classes):
 ```sql
 SELECT name, start_line
 FROM ast_select('test/data/python/sample_app.py',
-    '.call:scope(.class#UserService)');
+    '.call:in-scope(.class#UserService)');
 ```
 
 ## Step 7: Use `:match()` and `:contains()` for Structural Patterns
