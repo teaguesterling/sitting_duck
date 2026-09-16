@@ -117,7 +117,7 @@ ORDER BY language;
 cpp	534	2
 go	515	4
 javascript	877	5
-python	3424	18
+python	3474	19
 
 # Test 13: Consistent ordering (DuckDB convention)
 # ===============================================
