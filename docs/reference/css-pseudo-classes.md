@@ -103,16 +103,33 @@ SELECT name FROM ast_select('src/*.cpp', ':declaration');
 
 ## Scope
 
-### `:scope` (bare) — Is a Scope Boundary
+`:scope` and `:in-scope` are complementary, mirroring CSS where `:scope` is the
+reference element **itself**, never its descendants:
+
+- **`:scope`** — the node **is** a scope boundary.
+- **`:in-scope(...)`** — the node is **contained within** a scope.
+
+Both take the same argument: a `function` / `class` / `module` keyword, a semantic
+class (`.fn`, `.cls`, `.mod`, and their aliases), or a bare tree-sitter node type;
+the `.class` form also accepts a `#name` filter.
+
+### `:scope` — Is a Scope Boundary
 
 ```sql
--- All scope-creating nodes (functions, classes, loops, module)
+-- All scope-creating nodes (functions, classes, module, …)
 SELECT type, name FROM ast_select('src/*.py', ':scope');
+
+-- Only class scopes; only the scope named Config
+SELECT name FROM ast_select('src/*.py', ':scope(class)');
+SELECT name FROM ast_select('src/*.py', ':scope(.class#Config)');
 ```
 
-### `:scope(type)` — Within Nearest Ancestor Scope
+### `:in-scope(type)` — Contained Within Nearest Scope
 
-The most powerful pseudo-class. Matches nodes within the nearest ancestor of the given type, **excluding subtrees of nested ancestors of the same type**.
+The most powerful pseudo-class. Matches nodes contained within the nearest scope of
+the given kind. For `function` / `class` / `module` it reads the precomputed
+`scope.*` struct; for a bare tree-sitter type it walks to the nearest ancestor of
+that type, **excluding subtrees of nested ancestors of the same type**.
 
 This solves the nested function problem:
 
@@ -120,13 +137,20 @@ This solves the nested function problem:
 -- Return statements within their DIRECT enclosing function
 -- (not returns in nested inner functions)
 SELECT peek, start_line
-FROM ast_select('src/*.py', 'return_statement:scope(function)');
+FROM ast_select('src/*.py', 'return_statement:in-scope(function_definition)');
 
--- Calls within the nearest class (not from nested classes)
-SELECT name FROM ast_select('src/*.py', '.call:scope(class)');
+-- Variables inside the function named `load`  (the workhorse form)
+SELECT name FROM ast_select('src/*.py', '.var:in-scope(.fn#load)');
 ```
 
-Without `:scope()`, `ast_has` reports `outer_function` as containing `execute()` even when the call is inside a nested `inner_function`. With `:scope(function)`, only the direct enclosing function matches.
+Without `:in-scope()`, `ast_has` reports `outer_function` as containing `execute()`
+even when the call is inside a nested `inner_function`. With `:in-scope(function)`,
+only the direct enclosing function matches.
+
+> **Note:** a `#name` filter must use the semantic-class form — `:in-scope(.fn#load)`,
+> not `:in-scope(function#load)`. The CSS grammar lumps `function#load` into a single
+> token it cannot split, so that form is rejected with an error. Arbitrary semantic
+> scopes (e.g. `:in-scope(.loop)`) and full nested selectors are deferred to #145.
 
 ### Scope Columns
 
@@ -571,8 +595,8 @@ This is useful in environments where you can't install community extensions, or 
 | `:reference` | Uses a name |
 | `:declaration` | Introduces a name without implementation |
 | **Scope** | |
-| `:scope` | Is a scope boundary |
-| `:scope(type)` | Within nearest ancestor of type (scope-aware) |
+| `:scope` | Is a scope boundary (optionally of a kind/name) |
+| `:in-scope(type)` | Contained within nearest scope of type (scope-aware) |
 | **Call Graph** | |
 | `:calls(name)` | Scope contains a call to name |
 | `:called-by(name)` | This call is inside function name |

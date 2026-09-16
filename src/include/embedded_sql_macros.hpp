@@ -3034,6 +3034,21 @@ CREATE OR REPLACE MACRO ast_select_from(
             ) WHERE rn = 1
         ),
 
+        -- First plain_value in each pcs's args. The tree-sitter-css grammar lumps an
+        -- unquoted compound like `function#foo` into a single plain_value (it only
+        -- splits the `.class#id` form), so this is how :scope/:in-scope detect and
+        -- reject a #name filter written on the keyword/type form (scope_arg_validation).
+        sel_pcs_first_plain_value AS (
+            SELECT pcs_id, name FROM (
+                SELECT pa.pcs_id, pv.name,
+                       row_number() OVER (PARTITION BY pa.pcs_id ORDER BY pv.node_id) AS rn
+                FROM sel_pcs_to_args pa
+                JOIN sel_plain_values pv
+                  ON pv.node_id > pa.args_id
+                 AND pv.node_id <= pa.args_id + pa.args_descendants
+            ) WHERE rn = 1
+        ),
+
         -- :not() argument blocks (the args block of any pseudo_class_selector named 'not')
         sel_not_arg_blocks AS (
             SELECT a.node_id, a.descendant_count
@@ -3198,12 +3213,18 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- Top-level pseudo-classes (not negated)
             SELECT cn.name as pseudo_name,
                    COALESCE(ftoi.name, fstr.name) AS pseudo_arg,
+                   fcn.name AS pseudo_arg_class,   -- a `.class` inside the args (e.g. :scope(.fn))
+                   fin.name AS pseudo_arg_name,    -- a `#name` inside the args (e.g. :scope(.fn#foo))
+                   fpv.name AS pseudo_arg_plain,   -- an unquoted plain_value (e.g. the `function#foo` footgun)
                    false as negated
             FROM sel_pseudo_classes pcs
             JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
             JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_tag_or_int ftoi ON ftoi.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_string     fstr ON fstr.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_first_class_name fcn  ON fcn.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_first_id_name    fin  ON fin.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_first_plain_value fpv ON fpv.pcs_id = pcs.node_id
             WHERE cn.name NOT IN ('has', 'not')
 
             UNION ALL
@@ -3212,6 +3233,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- :not(:has(...)) is still handled by not_has_conditions, so exclude :has here.
             SELECT cn.name as pseudo_name,
                    COALESCE(ftoi.name, fstr.name) AS pseudo_arg,
+                   fcn.name AS pseudo_arg_class,
+                   fin.name AS pseudo_arg_name,
+                   fpv.name AS pseudo_arg_plain,
                    true as negated
             FROM sel_pseudo_classes pcs
             JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
@@ -3221,8 +3245,14 @@ CREATE OR REPLACE MACRO ast_select_from(
             JOIN sel_class_names not_cn ON not_cn.parent_id = not_pcs.node_id AND not_cn.name = 'not'
             -- The enclosing :not() must be top-level
             JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = not_pcs.node_id
+
+)SQLMACRO"
+        R"SQLMACRO(
             LEFT JOIN sel_pcs_first_tag_or_int ftoi ON ftoi.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_string     fstr ON fstr.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_first_class_name fcn  ON fcn.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_first_id_name    fin  ON fin.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_first_plain_value fpv ON fpv.pcs_id = pcs.node_id
             WHERE cn.name != 'has'
         ),
 
@@ -3245,15 +3275,12 @@ CREATE OR REPLACE MACRO ast_select_from(
                    ('decorated'), ('typed'), ('void'), ('variadic'),
                    ('calls'), ('called-by'), ('is-called'), ('is-referenced'), ('exported'),
                    ('match'), ('contains'),
-                   ('scope'), ('precedes'), ('follows')
+                   ('scope'), ('in-scope'), ('precedes'), ('follows')
         ),
         pseudo_class_validation AS (
             SELECT CASE
                 WHEN EXISTS (
                     SELECT 1 FROM pseudo_classes pc
-
-)SQLMACRO"
-        R"SQLMACRO(
                     WHERE pc.pseudo_name NOT IN (SELECT name FROM known_pseudo_class_names)
                       AND NOT EXISTS (
                           SELECT 1 FROM duckdb_functions()
@@ -3298,6 +3325,84 @@ CREATE OR REPLACE MACRO ast_select_from(
                     'ast_select: only one :match or :contains pattern per selector. '
                     'To combine multiple patterns, chain ast_select calls via CTE.'
                 )
+                ELSE true
+            END as ok
+        ),
+
+        -- :scope / :in-scope argument guards (#145). Both take the same grammar
+        -- (keyword function|class|module | .class alias | bare tree-sitter type |
+        -- optional #name on the .class form). Three shapes are rejected loudly
+        -- rather than returning a silently-wrong result (the #127–#160 failure
+        -- class): a .class that isn't function/class/module (Tier 2), a #name on
+        -- the keyword/type form (the CSS grammar lumps `function#foo` into one
+        -- token it can't split — only `.fn#foo` works), and a bare :in-scope with
+        -- no argument (meaningless — use :scope for scope boundaries).
+        scope_arg_validation AS (
+            SELECT CASE
+                -- (a) #name on the keyword/type form: the grammar captures `function#foo`
+                --     as one plain_value it cannot split. Check this BEFORE the bare
+                --     :in-scope guard, since such an arg leaves pseudo_arg/pseudo_arg_class
+                --     NULL and would otherwise look argument-less.
+                WHEN EXISTS (
+                    SELECT 1 FROM pseudo_classes pc
+                    WHERE pc.pseudo_name IN ('scope', 'in-scope')
+                      AND pc.pseudo_arg_plain LIKE '%#%'
+                ) THEN error(format(
+                    'ast_select: :{}({}) — a #name filter is only supported on the '
+                    'semantic-class form. Write :{}(.fn#foo), not :{}(function#foo).',
+                    (SELECT pc.pseudo_name FROM pseudo_classes pc
+                     WHERE pc.pseudo_name IN ('scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
+                    (SELECT pc.pseudo_arg_plain FROM pseudo_classes pc
+                     WHERE pc.pseudo_name IN ('scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
+                    (SELECT pc.pseudo_name FROM pseudo_classes pc
+                     WHERE pc.pseudo_name IN ('scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
+                    (SELECT pc.pseudo_name FROM pseudo_classes pc
+                     WHERE pc.pseudo_name IN ('scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1)
+                ))
+                -- (b) bare :in-scope with no argument is meaningless (use :scope).
+                WHEN EXISTS (
+                    SELECT 1 FROM pseudo_classes pc
+                    WHERE pc.pseudo_name = 'in-scope'
+                      AND pc.pseudo_arg IS NULL AND pc.pseudo_arg_class IS NULL
+                      AND pc.pseudo_arg_plain IS NULL
+                ) THEN error(
+                    'ast_select: :in-scope requires an argument — a scope kind '
+                    '(:in-scope(function)), a named scope (:in-scope(.fn#foo)), or a '
+                    'node type (:in-scope(function_definition)). Use bare :scope to '
+                    'select scope boundaries themselves.'
+                )
+                -- (c) a .class arg that isn't function/class/module is Tier 2 (#145).
+                WHEN EXISTS (
+                    SELECT 1 FROM pseudo_classes pc
+                    WHERE pc.pseudo_name IN ('scope', 'in-scope')
+                      AND pc.pseudo_arg_class IS NOT NULL
+                      AND NOT (
+                          is_semantic_type(semantic_type_code('DEFINITION_FUNCTION'), UPPER(pc.pseudo_arg_class))
+                          OR is_semantic_type(semantic_type_code('DEFINITION_CLASS'), UPPER(pc.pseudo_arg_class))
+                          OR is_semantic_type(semantic_type_code('DEFINITION_MODULE'), UPPER(pc.pseudo_arg_class))
+                      )
+                ) THEN error(format(
+                    'ast_select: :{}(.{}) is not supported. The semantic-class form of '
+                    ':scope / :in-scope currently accepts only function, class, or module '
+                    '(e.g. :scope(.fn), :in-scope(.class#Foo), :scope(.mod)). Arbitrary '
+                    'semantic scopes and full selectors are deferred to issue #145.',
+                    (SELECT pc.pseudo_name FROM pseudo_classes pc
+                     WHERE pc.pseudo_name IN ('scope','in-scope') AND pc.pseudo_arg_class IS NOT NULL
+                       AND NOT (
+                           is_semantic_type(semantic_type_code('DEFINITION_FUNCTION'), UPPER(pc.pseudo_arg_class))
+                           OR is_semantic_type(semantic_type_code('DEFINITION_CLASS'), UPPER(pc.pseudo_arg_class))
+                           OR is_semantic_type(semantic_type_code('DEFINITION_MODULE'), UPPER(pc.pseudo_arg_class))
+                       )
+                     LIMIT 1),
+                    (SELECT pc.pseudo_arg_class FROM pseudo_classes pc
+                     WHERE pc.pseudo_name IN ('scope','in-scope') AND pc.pseudo_arg_class IS NOT NULL
+                       AND NOT (
+                           is_semantic_type(semantic_type_code('DEFINITION_FUNCTION'), UPPER(pc.pseudo_arg_class))
+                           OR is_semantic_type(semantic_type_code('DEFINITION_CLASS'), UPPER(pc.pseudo_arg_class))
+                           OR is_semantic_type(semantic_type_code('DEFINITION_MODULE'), UPPER(pc.pseudo_arg_class))
+                       )
+                     LIMIT 1)
+                ))
                 ELSE true
             END as ok
         ),
@@ -3372,6 +3477,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 WHEN EXISTS (
                     SELECT 1 FROM attr_conditions ac
                     WHERE ac.attr_op IN ('^=', '$=') AND ac.attr_name = 'modifier'
+
+)SQLMACRO"
+        R"SQLMACRO(
                 ) THEN error(
                     'ast_select: attribute "modifier" supports = and *= (both meaning '
                     '"has this modifier" — modifiers is a list), not ^= or $=.'
@@ -3498,9 +3606,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                     JOIN sel_has_arg_blocks hb
                       ON c.node_id > hb.args_id
                      AND c.node_id <= hb.args_id + hb.args_descendants
-
-)SQLMACRO"
-        R"SQLMACRO(
                     WHERE c.type IN ('child_selector', 'descendant_selector',
                                      'sibling_selector', 'adjacent_sibling_selector')
                 ) THEN error(
@@ -3622,9 +3727,13 @@ CREATE OR REPLACE MACRO ast_select_from(
                 (SELECT right_type || '_%' FROM combinator_parts) as right_type_like,
                 (SELECT left_class FROM combinator_parts) as left_class,
                 (SELECT left_id FROM combinator_parts) as left_id,
+
+)SQLMACRO"
+        R"SQLMACRO(
                 (SELECT right_class FROM combinator_parts) as right_class,
                 (SELECT right_id FROM combinator_parts) as right_id,
                 ((SELECT ok FROM pseudo_class_validation)
+                 AND (SELECT ok FROM scope_arg_validation)
                  AND (SELECT ok FROM peek_filter_validation)
                  AND (SELECT ok FROM attr_filter_validation)
                  AND (SELECT ok FROM call_name_binding_validation)
@@ -3762,9 +3871,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                 AND NOT is_constituent(adj.flags)
                 -- the nearest meaningful sibling before `a`
                 AND adj.sibling_index = (
-
-)SQLMACRO"
-        R"SQLMACRO(
                     SELECT max(s2.sibling_index) FROM ast s2
                     WHERE s2.file_path = a.file_path
                       AND s2.parent_id = a.parent_id
@@ -3883,6 +3989,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- NULL on bare calls / non-calls / ambiguous chained receivers, so (being
             -- NULL-definite via the enclosing COALESCE) those never match.
             WHEN ac.attr_name = 'receiver' THEN
+
+)SQLMACRO"
+        R"SQLMACRO(
                 CASE ac.attr_op WHEN '*=' THEN a.receiver LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '^=' THEN a.receiver LIKE ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '$=' THEN a.receiver LIKE '%' || ac.attr_value_esc ESCAPE '\'
@@ -4004,9 +4113,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- :is-called — this function definition is called somewhere in the file
             WHEN 'is-called' THEN
                 is_name_definition(a.flags) AND a.name IS NOT NULL AND a.name != ''
-
-)SQLMACRO"
-        R"SQLMACRO(
                 AND EXISTS (
                     SELECT 1 FROM ast ref
                     WHERE ref.file_path = a.file_path
@@ -4068,19 +4174,82 @@ CREATE OR REPLACE MACRO ast_select_from(
             )
 
             -- :scope — either bare (is a scope node) or with arg (within scope of type)
+            -- :scope — the node IS a scope boundary. Mirrors CSS, where :scope is
+            -- the reference element itself, never its descendants. Containment
+            -- ("things inside a scope") is :in-scope, below. Same arg grammar:
+            --   :scope                        any scope boundary
+            --   :scope(function|class|module) a scope of that semantic kind
+            --   :scope(.fn|.cls|.mod ...)     same, via any semantic-class alias
+            --   :scope(<tree-sitter type>)    a scope of that exact node type
+            --   :scope(.fn#foo)               the scope boundary named foo
+            -- Alias -> kind resolution reuses is_semantic_type (so .func/.method,
+            -- .struct/.trait, .namespace/.package all resolve). A .class that isn't
+            -- function/class/module, and #name on the keyword form, are rejected in
+            -- scope_arg_validation (Tier 2 / #145).
             WHEN 'scope' THEN
-                CASE WHEN pc.pseudo_arg IS NULL
-                    -- Bare :scope — node is a scope boundary
-                    THEN is_scope(a.flags)
-                    -- :scope(type) — node is within the nearest ancestor of that type,
-                    -- excluding subtrees of nested nodes of the same type
+                is_scope(a.flags)
+                AND (
+                    (pc.pseudo_arg IS NULL AND pc.pseudo_arg_class IS NULL)
+                    OR (( pc.pseudo_arg = 'function'
+                          OR (pc.pseudo_arg_class IS NOT NULL
+                              AND is_semantic_type(semantic_type_code('DEFINITION_FUNCTION'), UPPER(pc.pseudo_arg_class))))
+                        AND is_semantic_type(a.semantic_type, 'FN'))
+                    OR (( pc.pseudo_arg = 'class'
+                          OR (pc.pseudo_arg_class IS NOT NULL
+                              AND is_semantic_type(semantic_type_code('DEFINITION_CLASS'), UPPER(pc.pseudo_arg_class))))
+                        AND is_semantic_type(a.semantic_type, 'CLASS'))
+                    OR (( pc.pseudo_arg = 'module'
+                          OR (pc.pseudo_arg_class IS NOT NULL
+                              AND is_semantic_type(semantic_type_code('DEFINITION_MODULE'), UPPER(pc.pseudo_arg_class))))
+                        AND is_semantic_type(a.semantic_type, 'MODULE'))
+                    -- bare tree-sitter type: a scope of exactly this node type
+                    OR (pc.pseudo_arg IS NOT NULL
+                        AND pc.pseudo_arg NOT IN ('function', 'class', 'module')
+                        AND a.type = pc.pseudo_arg)
+                )
+                AND (pc.pseudo_arg_name IS NULL OR a.name = pc.pseudo_arg_name)
+
+            -- :in-scope — the node is CONTAINED WITHIN a scope (complement of
+            -- :scope). function/class/module (and aliases) use the precomputed
+            -- scope.* struct with an optional #name; a bare tree-sitter type walks
+            -- to the nearest enclosing ancestor of that type.
+            --   :in-scope(function)   inside any function scope
+            --   :in-scope(.fn#foo)    inside the function named foo   (workhorse)
+            --   :in-scope(<type>)     inside the nearest ancestor of that type
+            WHEN 'in-scope' THEN
+                CASE
+                    WHEN pc.pseudo_arg = 'function'
+                         OR (pc.pseudo_arg_class IS NOT NULL
+                             AND is_semantic_type(semantic_type_code('DEFINITION_FUNCTION'), UPPER(pc.pseudo_arg_class)))
+                        THEN a.scope.function IS NOT NULL
+                             AND (pc.pseudo_arg_name IS NULL OR EXISTS (
+                                 SELECT 1 FROM ast s WHERE s.file_path = a.file_path
+                                   AND s.node_id = a.scope.function AND s.name = pc.pseudo_arg_name))
+                    WHEN pc.pseudo_arg = 'class'
+                         OR (pc.pseudo_arg_class IS NOT NULL
+                             AND is_semantic_type(semantic_type_code('DEFINITION_CLASS'), UPPER(pc.pseudo_arg_class)))
+
+)SQLMACRO"
+        R"SQLMACRO(
+                        THEN a.scope.class IS NOT NULL
+                             AND (pc.pseudo_arg_name IS NULL OR EXISTS (
+                                 SELECT 1 FROM ast s WHERE s.file_path = a.file_path
+                                   AND s.node_id = a.scope.class AND s.name = pc.pseudo_arg_name))
+                    WHEN pc.pseudo_arg = 'module'
+                         OR (pc.pseudo_arg_class IS NOT NULL
+                             AND is_semantic_type(semantic_type_code('DEFINITION_MODULE'), UPPER(pc.pseudo_arg_class)))
+                        THEN a.scope.module IS NOT NULL
+                             AND (pc.pseudo_arg_name IS NULL OR EXISTS (
+                                 SELECT 1 FROM ast s WHERE s.file_path = a.file_path
+                                   AND s.node_id = a.scope.module AND s.name = pc.pseudo_arg_name))
+                    -- bare tree-sitter type: nearest enclosing ancestor of that exact
+                    -- type, excluding subtrees of a closer same-type ancestor
                     ELSE EXISTS (
                         SELECT 1 FROM ast scope_anc
                         WHERE scope_anc.file_path = a.file_path
                           AND a.node_id > scope_anc.node_id
                           AND a.node_id <= scope_anc.node_id + scope_anc.descendant_count
                           AND (scope_anc.type = pc.pseudo_arg)
-                          -- Exclude if there's a CLOSER ancestor of the same type between us
                           AND NOT EXISTS (
                               SELECT 1 FROM ast nested
                               WHERE nested.file_path = a.file_path

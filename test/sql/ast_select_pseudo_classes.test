@@ -83,25 +83,146 @@ SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py'
 ----
 true
 
-# :scope (bare) — nodes that are scope boundaries
+# =============================================================================
+# :scope — the node IS a scope boundary (identity, CSS-consistent). Kind/name
+# filters narrow WHICH scope. Containment ("things inside a scope") is :in-scope.
+# =============================================================================
+
+# :scope (bare) — nodes that are themselves scope boundaries
 query I
 SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py',
     'function_definition:scope');
 ----
 10
 
+# :scope(function|class|module) — a scope OF that semantic kind (not its contents)
+query III
+SELECT
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(function)')),
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(class)')),
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(module)'));
+----
+6	3	1
+
+# Bare :scope = the three kinds together (function 6 + class 3 + module 1 = 10)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope');
+----
+10
+
+# :scope(<tree-sitter type>) — a scope of exactly that node type
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(function_definition)');
+----
+6
+
+# .class shape and its aliases resolve the same as the keyword
+query I
+SELECT
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.fn)'))
+      = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(function)'))
+AND (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.func)'))
+      = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.fn)'))
+AND (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.cls)'))
+      = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.class)'))
+AND (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.module)'))
+      = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.mod)'));
+----
+true
+
+# :scope(.fn#foo) — the ONE scope boundary named foo
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.fn#top_level_function)')
+WHERE name = 'top_level_function';
+----
+1
+
 # =============================================================================
-# :scope(type) — within nearest ancestor scope
+# :in-scope — the node is CONTAINED WITHIN a scope. function/class/module use
+# the precomputed scope.* struct; a bare tree-sitter type walks to the nearest
+# enclosing ancestor of that type.
 # =============================================================================
 
-# return_statement:scope(function_definition) — returns within their DIRECT function
-# (bare types are exact now, #151: use function_definition, not `function`)
-# Should NOT count returns in nested functions as belonging to the outer function
+# :in-scope(function|class|module) — everything contained in a scope of that kind
+query III
+SELECT
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(function)')),
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(class)')),
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(module)'));
+----
+107	99	132
+
+# The struct fast-path (:in-scope(function)) and the bare-type ancestor walk
+# (:in-scope(function_definition)) agree — function_definition is the only fn scope.
+query I
+SELECT
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(function)'))
+  = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(function_definition)'));
+----
+true
+
+# Bare-type ancestor walk excludes nested-function returns from the outer function
+# (was :scope(function_definition) before the :scope/:in-scope split).
 query I
 SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py',
-    'return_statement:scope(function_definition)');
+    'return_statement:in-scope(function_definition)');
 ----
 5
+
+# :in-scope(.fn#foo) — the workhorse: everything inside the named function's scope
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(.fn#top_level_function)');
+----
+15
+
+# keyword vs .class#name equivalence for containment
+query I
+SELECT
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(.func#top_level_function)'))
+  = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(.fn#top_level_function)'));
+----
+true
+
+# Self-exclusion: the scope NODE (the function_definition) is not "in the scope of"
+# itself. Its own name identifier and body ARE in scope — only the boundary is out.
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(.fn#top_level_function)')
+WHERE type = 'function_definition' AND name = 'top_level_function';
+----
+0
+
+# Compound: functions whose nearest enclosing class is User (__init__, validate)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', '.fn:in-scope(.class#User)');
+----
+2
+
+# =============================================================================
+# :scope / :in-scope argument guards — loud errors, never silent-wrong results
+# =============================================================================
+
+# An arbitrary semantic scope is Tier 2 (#145), not a silent empty result
+statement error
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.loop)');
+----
+issue #145
+
+# Bare :in-scope needs an argument
+statement error
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope');
+----
+requires an argument
+
+# #name on the keyword form is rejected (grammar can't split function#foo) — use .fn#foo
+statement error
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(function#top_level_function)');
+----
+semantic-class form
+
+statement error
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(function#top_level_function)');
+----
+semantic-class form
 
 # =============================================================================
 # :precedes(type) and :follows(type)

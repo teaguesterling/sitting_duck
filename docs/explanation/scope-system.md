@@ -160,7 +160,7 @@ The stack is a `LIST<STRUCT<id BIGINT, kind SEMANTIC_TYPE>>` — outermost scope
 
 The CSS selector engine uses scope fields internally:
 
-- **`:scope()`** pseudo-class — filters nodes by their enclosing scope type
+- **`:scope`** pseudo-class — matches scope boundaries themselves (optionally of a kind/name); **`:in-scope(...)`** — matches nodes by their enclosing scope kind/name (reads the `scope.*` fields)
 - **`::callers`** pseudo-element — finds all functions that call the matched function, using `scope.function` to group calls by their enclosing function
 - **`::callees`** pseudo-element — finds all functions called within the matched function, using the DFS range check scoped by `scope.function`
 - **`:called`** pseudo-class — tests whether any call site references the matched function's name
