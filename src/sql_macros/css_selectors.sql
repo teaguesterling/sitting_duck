@@ -1601,34 +1601,32 @@ CREATE OR REPLACE MACRO ast_select_from(
             WHEN 'void' THEN a.signature_type IS NULL OR a.signature_type = '' OR a.signature_type = 'void' OR a.signature_type = 'None'
             WHEN 'variadic' THEN a.parameters::VARCHAR LIKE '%*%' OR a.parameters::VARCHAR LIKE '%...%'
 
-            -- :calls(name) — this node's scope contains a call to name
+            -- :calls(name) — this node is a function whose body DIRECTLY calls name.
+            -- Direct/immediate (#146/#152): a call inside a nested lambda or function
+            -- belongs to THAT inner scope, not to a. Bounded equi-join on the callee's
+            -- precomputed scope.function — replaces the subtree range self-join that
+            -- decorrelated into a huge intermediate on large tables (#164).
             WHEN 'calls' THEN EXISTS (
                 SELECT 1 FROM ast callee
                 WHERE callee.file_path = a.file_path
-                  AND callee.node_id > a.node_id
-                  AND callee.node_id <= a.node_id + a.descendant_count
+                  AND callee.scope.function = a.node_id
                   AND callee.semantic_type = 'COMPUTATION_CALL'
                   AND (pc.pseudo_arg IS NULL OR callee.name = pc.pseudo_arg)
             )
 
-            -- :called-by(name) — this call site is inside a function named name
-            WHEN 'called-by' THEN EXISTS (
-                SELECT 1 FROM ast caller_fn
-                WHERE caller_fn.file_path = a.file_path
-                  AND a.node_id > caller_fn.node_id
-                  AND a.node_id <= caller_fn.node_id + caller_fn.descendant_count
-                  AND caller_fn.semantic_type = 'DEFINITION_FUNCTION'
-                  AND (pc.pseudo_arg IS NULL OR caller_fn.name = pc.pseudo_arg)
-                  -- Nearest function (deepest)
-                  AND NOT EXISTS (
-                      SELECT 1 FROM ast closer
-                      WHERE closer.file_path = a.file_path
-                        AND a.node_id > closer.node_id
-                        AND a.node_id <= closer.node_id + closer.descendant_count
-                        AND closer.semantic_type = 'DEFINITION_FUNCTION'
-                        AND closer.depth > caller_fn.depth
-                  )
-            )
+            -- :called-by(name) — this node's IMMEDIATE enclosing function is named name.
+            -- Direct/immediate (#152, Teague's ruling 2026-09-16): a call inside a lambda
+            -- inside F is called-by the LAMBDA, not F. Bounded equi-join on the node's
+            -- precomputed scope.function — replaces the doubly-nested range subquery that
+            -- blew up to a ~17.8M-row intermediate / OOM on a 78k-node table (#164).
+            WHEN 'called-by' THEN
+                a.scope.function IS NOT NULL
+                AND EXISTS (
+                    SELECT 1 FROM ast caller_fn
+                    WHERE caller_fn.file_path = a.file_path
+                      AND caller_fn.node_id = a.scope.function
+                      AND (pc.pseudo_arg IS NULL OR caller_fn.name = pc.pseudo_arg)
+                )
 
             -- :is-called — this function definition is called somewhere in the file
             WHEN 'is-called' THEN

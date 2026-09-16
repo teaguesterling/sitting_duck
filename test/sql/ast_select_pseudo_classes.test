@@ -311,6 +311,52 @@ SELECT COUNT(*) >= 0 FROM ast_select('test/data/python/sample_app.py',
 ----
 true
 
+# =============================================================================
+# :called-by / :calls — DIRECT (immediate scope.function), lambda-aware
+# (#146/#152/#164). A call inside a lambda or nested function belongs to that
+# inner scope, not the outer function. Bounded via the precomputed scope.function
+# equi-join (replaces the range self-join that OOM'd on large tables, #164).
+# Fixture: outer() calls helper(); a lambda `inner` calls helper2(); nested()
+# calls helper3().
+# =============================================================================
+
+# :called-by(outer) matches ONLY helper — NOT helper2 (that call's immediate
+# scope is the lambda, not outer). This is the #152 lambda ruling.
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/callgraph_direct.py', '.call:called-by(outer)');
+----
+1
+
+# The lambda `inner` is helper2's immediate scope, so :called-by(inner) matches it
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/callgraph_direct.py', '.call:called-by(inner)');
+----
+1
+
+# Bare :called-by — every call is inside some function scope (3 calls)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/callgraph_direct.py', '.call:called-by');
+----
+3
+
+# :calls is direct too: outer directly calls helper …
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/callgraph_direct.py', 'function_definition#outer:calls(helper)');
+----
+1
+
+# … but NOT helper2 — that call belongs to the lambda, not outer
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/callgraph_direct.py', 'function_definition#outer:calls(helper2)');
+----
+0
+
+# nested() directly calls helper3
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/callgraph_direct.py', 'function_definition#nested:calls(helper3)');
+----
+1
+
 # :not() should compose with other pseudo-classes on the same node
 # .func:named:not(:is-called) — named functions that are never called
 query I

@@ -229,29 +229,28 @@ JOIN ast_exports('src/**/*.py') ex
 
 ## Call Graph
 
-### `:calls(name)` — Scope Contains a Call
+### `:calls(name)` — Function Directly Calls a Name
 
-Matches nodes whose scope contains a call to `name`. Unlike `:has(.call#name)`, this uses scope resolution to avoid matching calls in nested functions.
+Matches a **function** whose own body directly calls `name`. This is **direct** (immediate scope): a call inside a nested function or lambda belongs to *that* inner scope, not to the outer function, so it does not match here. Resolved through the precomputed `scope.function` edge (bounded — see note below), unlike `:has(.call#name)`, which is a subtree match that would include nested calls.
 
 ```sql
--- Functions that call execute (direct scope only)
+-- Functions that directly call execute (calls inside nested lambdas excluded)
 SELECT name FROM ast_select('src/**/*.py', '.func:calls(execute)');
-
--- Classes that call validate
-SELECT name FROM ast_select('src/**/*.py', '.class:calls(validate)');
 ```
 
-### `:called-by(name)` — Call Inside Function
+### `:called-by(name)` — Immediate Enclosing Function Is `name`
 
-Matches call nodes that are inside the function `name`:
+Matches nodes (typically calls) whose **immediate** enclosing function is named `name`. **Direct/lambda-aware**: a call inside a lambda inside `F` is called-by the *lambda*, not `F` — the call belongs to the nearest function scope, which a lambda is.
 
 ```sql
--- All calls made by main()
+-- Calls whose immediate enclosing function is main() (not calls nested in a lambda inside main)
 SELECT name, start_line FROM ast_select('src/**/*.py', '.call:called-by(main)');
 
--- Database calls inside process_request
+-- Database calls immediately inside process_request
 SELECT name FROM ast_select('src/**/*.py', '.call:called-by(process_request)');
 ```
+
+> **Note (name-matched, not resolved).** `:calls`/`:called-by` match on the call's *name*, not a resolved call target — same-named functions across files are not disambiguated (that is the resolver's job). Both are evaluated through the bounded `scope.function` equi-join, which is what keeps them from exhausting memory on large tables.
 
 ### `:is-called` — Function Is Called
 
@@ -598,8 +597,8 @@ This is useful in environments where you can't install community extensions, or 
 | `:scope` | Is a scope boundary (optionally of a kind/name) |
 | `:in-scope(type)` | Contained within nearest scope of type (scope-aware) |
 | **Call Graph** | |
-| `:calls(name)` | Scope contains a call to name |
-| `:called-by(name)` | This call is inside function name |
+| `:calls(name)` | Function directly calls name (immediate scope; nested lambdas excluded) |
+| `:called-by(name)` | Immediate enclosing function is name (a lambda counts as the function) |
 | `:is-called` | Function is called somewhere |
 | `:is-referenced` | Definition is referenced somewhere |
 | `:exported` | Module-level public definition |
