@@ -340,18 +340,18 @@ SELECT name FROM ast_select('src/*.py', '.func#main::callees');
 -- Comments that appear before function definitions
 SELECT peek FROM ast_select('src/*.py', 'comment:precedes(function_definition)');
 
--- Import statements before class definitions
-SELECT name FROM ast_select('src/*.py', 'import:precedes(class)');
+-- Import statements before class definitions (:precedes arg is an EXACT type)
+SELECT name FROM ast_select('src/*.py', 'import_statement:precedes(class_definition)');
 ```
 
 ### `:follows(type)` — After a Sibling
 
 ```sql
--- Functions defined after the last class
-SELECT name FROM ast_select('src/*.py', 'function_definition:follows(class)');
+-- Functions defined after a class (:follows arg is an EXACT type)
+SELECT name FROM ast_select('src/*.py', 'function_definition:follows(class_definition)');
 
 -- Statements after imports (module-level constants, etc.)
-SELECT peek FROM ast_select('src/*.py', 'expression_statement:follows(import)');
+SELECT peek FROM ast_select('src/*.py', 'expression_statement:follows(import_statement)');
 ```
 
 These provide the reverse direction that CSS combinators (`~`, `+`) can't express. `A ~ B` returns B; `:precedes(B)` returns the A nodes.

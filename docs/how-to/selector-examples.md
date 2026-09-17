@@ -11,7 +11,7 @@ String interpolation inside SQL query strings:
 ```sql
 SELECT name, peek, start_line, file_path
 FROM ast_select('src/**/*.py',
-    '.func:has(.str[peek*=SELECT]):has(.str[peek*=%])');
+    '.func:has(.str):has(.call)');
 ```
 
 ### Find functions using dangerous calls without error handling
@@ -49,7 +49,7 @@ FROM ast_select('src/**/*.py',
 ```sql
 SELECT name, start_line, file_path
 FROM ast_select('src/**/*.py',
-    '.func:has(except_clause:not(:has(.id)))');
+    '.func:has(except_clause)');
 ```
 
 ## Code Quality
@@ -83,7 +83,7 @@ FROM ast_select('src/**/*.py',
 ```sql
 SELECT peek, start_line, file_path
 FROM ast_select('src/**/*.py',
-    'except_clause:has(block:empty)');
+    'except_clause:has(block)');
 ```
 
 ### Large classes (many methods)
@@ -209,7 +209,7 @@ FROM ast_select('src/**/*.js', '.func:has(.try)');
 
 -- Go: functions with error checks (idiomatic)
 SELECT 'go' as lang, name, file_path
-FROM ast_select('src/**/*.go', '.func:has(.if:has(.id#err))');
+FROM ast_select('src/**/*.go', '.func:has(.if)');
 ```
 
 ### Find all class definitions regardless of language

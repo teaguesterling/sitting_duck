@@ -138,14 +138,14 @@ SELECT * FROM ast_select('src/**/*.*', '.func');
 
 These use `SEMANTIC_TYPE` equality: `semantic_type = 'DEFINITION_FUNCTION'`. Cross-language, fast (single-byte comparison). ~80 aliases available — see [Semantic Aliases](../reference/semantic-aliases.md).
 
-### 2. Bare keywords (prefix match)
+### 2. Tree-sitter node types (exact match)
 
 ```sql
--- "function" matches function_definition, function_declaration, function_item, etc.
-SELECT * FROM ast_select('src/**/*.py', 'function');
+-- Exact tree-sitter type — matches `function_definition`, not a prefix
+SELECT * FROM ast_select('src/**/*.py', 'function_definition');
 ```
 
-Bare keywords match any tree-sitter `type` that starts with the keyword. Language-specific but more precise than semantic aliases.
+Bare types match the tree-sitter `type` **exactly** (`if` matches only the `if` node type, not `if_statement`). Use `[type^=X]` for prefix matching. Language-specific but more precise than semantic aliases.
 
 ### 3. Exact types
 

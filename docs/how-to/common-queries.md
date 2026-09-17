@@ -15,11 +15,11 @@ FROM read_ast('test/data/python/sample_app.py')
 WHERE semantic_type = 'DEFINITION_FUNCTION';
 ```
 
-The same query with `ast_select` -- CSS pseudo-classes map directly to semantic types.
+The same query with `ast_select` -- a semantic class plus `:definition`.
 
 ```sql
 SELECT name, start_line, end_line
-FROM ast_select('test/data/python/sample_app.py', ':definition:function');
+FROM ast_select('test/data/python/sample_app.py', '.func:definition');
 ```
 
 List class definitions, using `descendant_count` as a rough complexity metric.
@@ -154,7 +154,7 @@ The same with `ast_select`.
 
 ```sql
 SELECT file_path, name
-FROM ast_select('src/**/*.py', ':definition:class');
+FROM ast_select('src/**/*.py', '.class:definition');
 ```
 
 Count definitions per file to find the densest files in your codebase.
