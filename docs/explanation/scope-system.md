@@ -162,7 +162,7 @@ The CSS selector engine uses scope fields internally:
 
 - **`:scope`** pseudo-class — matches scope boundaries themselves (optionally of a kind/name); **`:in-scope(...)`** — matches nodes by their enclosing scope kind/name (reads the `scope.*` fields)
 - **`::callers`** pseudo-element — finds all functions that call the matched function, using `scope.function` to group calls by their enclosing function
-- **`::callees`** pseudo-element — finds all functions called within the matched function, using the DFS range check scoped by `scope.function`
+- **`::callees`** pseudo-element — finds the calls made **directly** inside the matched function, reading `scope.function` (immediate scope; a call inside a nested lambda or function belongs to that inner scope, matching `:calls`/`::callers`)
 - **`:called`** pseudo-class — tests whether any call site references the matched function's name
 
 ```sql
