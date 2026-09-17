@@ -330,7 +330,7 @@ SELECT name FROM ast_select('src/*.py', '.func#main::callees');
 | `::next-sibling` | Next sibling | 1 |
 | `::prev-sibling` | Previous sibling | 1 |
 | `::callers` | Functions that call this | N |
-| `::callees` | Functions this calls | N |
+| `::callees` | Calls made directly by this (immediate scope; nested lambdas excluded) | N |
 
 ## Ordering
 

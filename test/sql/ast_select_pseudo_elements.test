@@ -70,6 +70,18 @@ ORDER BY start_line;
 ----
 fetch_all
 
+# ::callees is DIRECT (immediate scope, #152/#164), matching :calls and ::callers:
+# a call inside a lambda or nested function belongs to that inner scope, not the
+# outer function. In callgraph_direct.py, outer() directly calls helper(); helper2()
+# is inside a lambda and helper3() inside nested() — so outer's direct callees are
+# just {helper}, NOT the transitive {helper, helper2, helper3}.
+query I
+SELECT name FROM ast_select('test/data/python/callgraph_direct.py',
+    'function_definition#outer::callees')
+ORDER BY name;
+----
+helper
+
 # =============================================================================
 # ::parent-definition — nearest enclosing definition
 # =============================================================================

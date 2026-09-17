@@ -4332,22 +4332,18 @@ CREATE OR REPLACE MACRO ast_select_from(
           ON caller_fn.node_id = call_node.scope.function
          AND caller_fn.file_path = call_node.file_path
     ),
-    -- ::callees — calls inside this function (transitive — includes calls
-    -- inside nested functions and lambdas).
-    --
-    -- Kept as a subtree range scan rather than rewriting to
-    -- `callee.scope.function = m.node_id` because that would change the
-    -- semantics: scope.function points to the IMMEDIATE enclosing function,
-    -- so a call inside a lambda/nested function would have scope.function
-    -- pointing to the inner function, not to m. With the range scan we
-    -- pick up everything textually inside m's body. The range scan is
-    -- already cheap for the common pseudo-element case where matched is
-    -- a single named function (descendant_count is small).
+    -- ::callees — calls DIRECTLY inside this function (immediate scope). Made
+    -- direct to match :calls and ::callers, which all resolve through
+    -- scope.function now (Teague's 2026-09-16 ruling, #152/#164): a call inside a
+    -- nested lambda or function belongs to THAT inner scope, not to m — its
+    -- scope.function points to the inner function. Previously this was a subtree
+    -- range scan (transitive, including nested calls), which left ::callees
+    -- inconsistent with :calls. Equi-join on the callee's precomputed
+    -- scope.function — also bounded, no per-node subtree scan.
     pe_callees AS (
         SELECT DISTINCT callee.* FROM matched m
         JOIN ast callee ON callee.file_path = m.file_path
-          AND callee.node_id > m.node_id
-          AND callee.node_id <= m.node_id + m.descendant_count
+          AND callee.scope.function = m.node_id
           AND callee.semantic_type = 'COMPUTATION_CALL'
           AND callee.name IS NOT NULL AND callee.name != ''
     ),
