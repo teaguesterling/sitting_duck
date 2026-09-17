@@ -256,7 +256,7 @@ The `read_ast()` function returns a table with one row per AST node. Column set 
 | `descendant_count` | UINTEGER | Total descendants (useful for complexity) |
 | `peek` | VARCHAR | Source code snippet for this node |
 
-See [Output Schema](docs/api/output-schema.md) for detailed column documentation.
+See [Output Schema](docs/reference/output-schema.md) for detailed column documentation.
 
 ### Context Extraction Levels
 
@@ -623,7 +623,7 @@ FROM ast_match('code',
 - `%__X<*>__%` - Named variadic: matches 0+ siblings
 - `%__<*>__%` - Anonymous variadic: matches 0+ siblings (no capture)
 
-See **[Pattern Matching Guide](docs/guide/pattern-matching.md)** for full documentation.
+See **[Pattern Matching Guide](docs/reference/pattern-matching.md)** for full documentation.
 
 ## Patching Source with AST Anchors
 

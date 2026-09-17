@@ -104,7 +104,7 @@ Combine type and attribute selectors to find the dangerous pattern — string li
 ```sql
 SELECT name, peek, start_line
 FROM ast_select('test/data/python/sample_app.py',
-    '.func:has(.str[peek*=SELECT]):has(.str[peek*=%])');
+    '.func:has(.str):has(.call)');
 ```
 
 ## Step 6: Use `:in-scope()` for Precision
@@ -177,7 +177,7 @@ Combine everything to answer a complex question: "Which methods in UserService c
 ```sql
 SELECT name, start_line, peek
 FROM ast_select('test/data/python/sample_app.py',
-    '.class#UserService .func:has(.call#execute):not(:has(.try)):has(.str[peek*=SELECT])');
+    '.class#UserService .func:has(.call#execute):not(:has(.try))');
 ```
 
 This single selector uses:
@@ -185,7 +185,6 @@ This single selector uses:
 - `.func` — match methods
 - `:has(.call#execute)` — that call execute
 - `:not(:has(.try))` — without error handling
-- `:has(.str[peek*=SELECT])` — containing SQL SELECT strings
 
 ## Step 8: Call Graph Queries
 

@@ -22,9 +22,9 @@ Query AST nodes the way you'd query a DOM — type selectors, combinators, pseud
 SELECT name FROM ast_select('src/**/*.js',
     'function_declaration:async:not(:has(await_expression))');
 
--- Class methods that follow another method (sibling combinator)
+-- Class methods that follow another method
 SELECT name FROM ast_select('src/**/*.py',
-    'class_definition function_definition ~ function_definition');
+    'class_definition function_definition:follows(function_definition)');
 
 -- Who calls this function? (pseudo-element navigation)
 SELECT name FROM ast_select('src/**/*.py', '.func#validate::callers');

@@ -13,7 +13,7 @@ FROM ast_select('src/**/*.py',
 
 `ast_select` parses your CSS selector using Sitting Duck's own tree-sitter CSS grammar, then translates the parsed selector AST into SQL conditions against your source code's AST. No string parsing — the CSS grammar does the heavy lifting.
 
-Type selectors come in three tiers of specificity — `.semantic` (cross-language), bare keywords (language-specific prefix match), and exact types (tree-sitter specific). See [Node Type Selectors](node-type-selectors.md) for details.
+Type selectors come in two forms — `.semantic` (cross-language aliases) and tree-sitter node types (language-specific, matched **exactly**; use `[type^=X]` for prefix matching). See [Node Type Selectors](node-type-selectors.md) for details.
 
 Semantic types provide ~80 aliases like `.func`, `.if`, `.loop` that work identically across all 27 languages. See [Semantic Type Aliases](semantic-aliases.md) for the full table.
 
@@ -57,8 +57,8 @@ B is anywhere inside A (any depth):
 -- Methods inside a class body
 SELECT name FROM ast_select('src/*.js', 'class_body method_definition');
 
--- Return statements inside functions (using bare keywords)
-SELECT name FROM ast_select('src/*.py', 'function return');
+-- Return statements inside functions
+SELECT name FROM ast_select('src/*.py', 'function_definition return_statement');
 ```
 
 ### `A > B` — Direct Child
