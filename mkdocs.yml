@@ -71,9 +71,11 @@ nav:
     - Context Extraction: how-to/extract-context.md
     - Structural Search: how-to/structural-search.md
     - Selector Examples: how-to/selector-examples.md
+    - Code Transformation & Unparsing: how-to/code-transformation-and-unparsing.md
     - Cookbook: how-to/cookbook.md
   - Reference:
     - Functions: reference/functions.md
+    - AST Unparsing: reference/unparse.md
     - Output Schema: reference/output-schema.md
     - Parameters: reference/parameters.md
     - Semantic Types: reference/semantic-types.md

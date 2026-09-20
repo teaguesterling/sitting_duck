@@ -90,6 +90,20 @@ WHERE semantic_type = 'DEFINITION_FUNCTION'
 GROUP BY language;
 ```
 
+### AST Unparsing & Code Generation
+
+Reconstruct formatted source code from AST tables with the `ast_unparse` engine:
+
+```sql
+-- Parse, modify, and unparse back to source code
+WITH ast AS (
+    SELECT * FROM parse_ast('def greet(name): print(f"Hello {name}")', 'python')
+)
+SELECT ast_unparse(ast) AS code;
+```
+
+[Unparse reference guide →](reference/unparse.md)
+
 ## Quick Start
 
 ```sql

@@ -227,18 +227,77 @@ SELECT COUNT(*) FROM read_ast([
 
 ### `ast_supported_languages()`
 
-**Language metadata** - Returns information about supported languages.
+**Language metadata** - Returns information about registered and built-in languages.
 
 **Returns:** Table with:
 - `language` (VARCHAR): Language identifier
-- `display_name` (VARCHAR): Human-readable name
-- `extensions` (VARCHAR[]): Supported file extensions
+- `extensions` (LIST(VARCHAR)): Supported file extensions
+- `parser_type` (VARCHAR): Parser engine (`'tree-sitter'` or `'native'`)
+- `node_type_count` (BIGINT): Total registered AST node types in grammar
 
 **Example:**
 ```sql
-SELECT language, display_name, extensions
+SELECT language, parser_type, extensions, node_type_count
 FROM ast_supported_languages()
 ORDER BY language;
+```
+
+### `ast_type_map([language])`
+
+**Grammar & taxonomy discovery** - Discover node type mappings, semantic classifications, and extraction strategies across all languages or for a specific language.
+
+**Parameters:**
+- `language` (VARCHAR, optional): Language filter (e.g. `'python'`, `'cpp'`)
+
+**Returns:** Table with:
+- `language` (VARCHAR): Programming language
+- `node_type` (VARCHAR): Tree-sitter AST node type
+- `semantic_type` (UTINYINT): Semantic code
+- `semantic_name` (VARCHAR): Semantic name
+- `selector` (VARCHAR): CSS selector alias
+- `strategy` (VARCHAR): Extraction strategy
+- `flags` (UTINYINT): Pre-configured node flags
+
+**Example:**
+```sql
+SELECT language, node_type, strategy
+FROM ast_type_map()
+WHERE selector = '.func';
+```
+
+### `ast_unparse(ast_table, [indent_size := 4, use_tabs := false, newline := '\n'])`
+
+**AST unparsing & code generation** - Reconstructs formatted source code from an AST table or query expression, satisfying $\text{parse}(\text{unparse}(\text{parse}(S))) \equiv \text{parse}(S)$.
+
+**Parameters:**
+- `ast_table` (TABLE / CTE): AST table relation
+- `indent_size` (INTEGER, optional): Number of spaces per indentation level (default: 4)
+- `use_tabs` (BOOLEAN, optional): Use tabs instead of spaces (default: false)
+- `newline` (VARCHAR, optional): Linebreak character (default: `'\n'`)
+
+**Returns:** VARCHAR (reconstructed source code)
+
+**Example:**
+```sql
+WITH ast AS (
+    SELECT * FROM parse_ast('def add(a, b): return a + b', 'python')
+)
+SELECT ast_unparse(ast) AS code;
+```
+
+### `ast_unparse_rules([language])`
+
+**Unparser rules discovery** - Return active whitespace, indentation, and linebreak formatting rules.
+
+**Parameters:**
+- `language` (VARCHAR, optional): Language filter (omitted = all languages)
+
+**Returns:** Table with `language`, `rule_kind`, `node_type`, `int_arg`, `str_arg`.
+
+**Example:**
+```sql
+SELECT rule_kind, node_type, int_arg
+FROM ast_unparse_rules('python');
 ```
 
 ### `detect_language(file_path)`

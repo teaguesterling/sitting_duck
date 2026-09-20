@@ -19,6 +19,9 @@ package-lock.json
 /.lq/
 /.mcp.json
 
+# Documentation build output
+/site/
+
 # Claude Code agent worktrees
 /.claude/
 /.bird/
