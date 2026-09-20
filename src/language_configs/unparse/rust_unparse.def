@@ -1,0 +1,11 @@
+/**
+ * @file rust_unparse.def
+ * @brief Rust Tier-3 unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("block", 1)
+DEF_UNPARSE_INDENT("declaration_list", 1)
+DEF_UNPARSE_LINES_BEFORE("function_item", 1)
+DEF_UNPARSE_LINES_BEFORE("struct_item", 1)
+DEF_UNPARSE_LINES_BEFORE("enum_item", 1)
+DEF_UNPARSE_LINES_BEFORE("impl_item", 1)

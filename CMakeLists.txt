@@ -312,6 +312,7 @@ set(EXTENSION_SOURCES
     src/ast_supported_languages_function.cpp
     src/ast_type_map_function.cpp
     src/native_context_extraction.cpp
+    src/unparse_rules.cpp
     # Parser source files for the enabled languages - from PARSER_SOURCE_DIR
     # (either generated_parsers/ or grammars/), see cmake/BuiltinLanguages.cmake
     ${SD_LANGUAGE_PARSER_SOURCES}

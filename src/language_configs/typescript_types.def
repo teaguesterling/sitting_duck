@@ -763,7 +763,7 @@ DEF_TYPE("regex_pattern", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("regex_flags", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
 /** @brief Escape sequence in strings */
-DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /** @brief Property assignment in object literal */
 DEF_TYPE("property_assignment", LITERAL_STRUCTURED, FIND_IDENTIFIER, NONE, 0)

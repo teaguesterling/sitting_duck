@@ -1,0 +1,20 @@
+/**
+ * @file universal_unparse.def
+ * @brief Tier-2 universal unparse rules applicable to all languages (*)
+ */
+
+DEF_UNPARSE_TIGHT_BEFORE(",")
+DEF_UNPARSE_TIGHT_BEFORE(";")
+DEF_UNPARSE_TIGHT_BEFORE(":")
+DEF_UNPARSE_TIGHT_BEFORE(")")
+DEF_UNPARSE_TIGHT_BEFORE("]")
+DEF_UNPARSE_TIGHT_BEFORE("}")
+DEF_UNPARSE_TIGHT_AFTER("(")
+DEF_UNPARSE_TIGHT_AFTER("[")
+DEF_UNPARSE_TIGHT_AFTER("{")
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_BEFORE, ".", 0, "")
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_AFTER, ".", 0, "")
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_BEFORE, "->", 0, "")
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_AFTER, "->", 0, "")
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_BEFORE, "::", 0, "")
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_AFTER, "::", 0, "")

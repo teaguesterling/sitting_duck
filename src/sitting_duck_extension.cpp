@@ -26,6 +26,7 @@ void RegisterASTSQLMacros(ExtensionLoader &loader);
 void RegisterASTSupportedLanguagesFunction(ExtensionLoader &loader);
 void RegisterASTTypeMapFunction(ExtensionLoader &loader);
 void RegisterLanguageRegistrationFunction(ExtensionLoader &loader);
+void RegisterUnparseRulesFunction(ExtensionLoader &loader);
 // Temporarily disabled:
 // void RegisterASTObjectsFunction(ExtensionLoader &loader);
 // void RegisterASTHelperFunctions(ExtensionLoader &loader);
@@ -93,6 +94,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	// Register register_language() for runtime-loaded tree-sitter grammars
 	RegisterLanguageRegistrationFunction(loader);
+
+	// Register ast_unparse_rules() table function (must be before RegisterASTSQLMacros)
+	RegisterUnparseRulesFunction(loader);
 
 	// Register SQL macros for natural AST querying (depends on functions above)
 	RegisterASTSQLMacros(loader);

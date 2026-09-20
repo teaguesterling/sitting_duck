@@ -1,0 +1,9 @@
+/**
+ * @file ruby_unparse.def
+ * @brief Ruby Tier-3 unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("body_statement", 1)
+DEF_UNPARSE_INDENT("do_block", 1)
+DEF_UNPARSE_LINES_BEFORE("class", 1)
+DEF_UNPARSE_LINES_BEFORE("method", 1)

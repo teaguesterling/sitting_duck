@@ -1,0 +1,11 @@
+/**
+ * @file go_unparse.def
+ * @brief Go Tier-3 unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("block", 1)
+DEF_UNPARSE_INDENT("literal_value", 1)
+DEF_UNPARSE_INDENT("field_declaration_list", 1)
+DEF_UNPARSE_LINES_BEFORE("function_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("method_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("type_declaration", 1)

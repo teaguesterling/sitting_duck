@@ -1,0 +1,251 @@
+# name: test/sql/ast_unparse.test
+# description: ast_unparse / ast_unparse_from / ast_unparse_rules — AST source reconstruction
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. ast_unparse_rules() table function introspection
+# =============================================================================
+
+# Universal rules exist
+query I
+SELECT count(*) > 0 FROM ast_unparse_rules() WHERE language = '*';
+----
+true
+
+# Universal tight punctuation includes comma
+query T
+SELECT rule FROM ast_unparse_rules() WHERE language = '*' AND target = ',';
+----
+TIGHT_BEFORE
+
+# Python rules include indent for 'block' and lines before 'class_definition'
+query T
+SELECT rule FROM ast_unparse_rules('python') WHERE language = 'python' AND target = 'block';
+----
+INDENT_BLOCK
+
+query I
+SELECT int_arg FROM ast_unparse_rules('python') WHERE language = 'python' AND target = 'class_definition';
+----
+2
+
+# C rules include indent for 'compound_statement'
+query T
+SELECT rule FROM ast_unparse_rules('c') WHERE language = 'c' AND target = 'compound_statement';
+----
+INDENT_BLOCK
+
+# =============================================================================
+# 2. Specific formatting nuance tests (exact string comparison with __NEWLINE__)
+# =============================================================================
+
+# Python function: tight punctuation, line breaks, 4-space indentation
+statement ok
+CREATE TABLE py_sample AS SELECT * FROM parse_ast(E'def add(a, b):\n    return a + b\n', 'python');
+
+query T
+SELECT replace(source, E'\n', '__NEWLINE__') FROM ast_unparse_from('py_sample');
+----
+def add(a, b):__NEWLINE__    return a + b
+
+# Python nested if: multi-level indentation
+statement ok
+CREATE TABLE py_nested AS SELECT * FROM parse_ast(E'def check(x):\n    if x > 0:\n        return True\n    return False\n', 'python');
+
+query T
+SELECT replace(source, E'\n', '__NEWLINE__') FROM ast_unparse_from('py_nested');
+----
+def check(x):__NEWLINE__    if x > 0:__NEWLINE__        return True__NEWLINE__    return False
+
+# C function: braces, semicolons, compound statement indent
+statement ok
+CREATE TABLE c_sample AS SELECT * FROM parse_ast(E'int main() {\n    return 0;\n}\n', 'c');
+
+query T
+SELECT replace(source, E'\n', '__NEWLINE__') FROM ast_unparse_from('c_sample');
+----
+int main() {__NEWLINE__    return 0;__NEWLINE__}
+
+# JavaScript function: statement block indent and semicolon
+statement ok
+CREATE TABLE js_sample AS SELECT * FROM parse_ast(E'function greet(name) {\n    return "hello " + name;\n}\n', 'javascript');
+
+query T
+SELECT replace(source, E'\n', '__NEWLINE__') FROM ast_unparse_from('js_sample');
+----
+function greet(name) {__NEWLINE__    return "hello " + name;__NEWLINE__}
+
+# Go function: block indent and syntax
+statement ok
+CREATE TABLE go_sample AS SELECT * FROM parse_ast(E'package main\n\nfunc add(a int, b int) int {\n    return a + b\n}\n', 'go');
+
+query T
+SELECT replace(source, E'\n', '__NEWLINE__') FROM ast_unparse_from('go_sample');
+----
+package main__NEWLINE____NEWLINE__func add(a int, b int) int {__NEWLINE__    return a + b__NEWLINE__}
+
+# =============================================================================
+# 3. Pseudo-Identity Law: parse(S) == parse(unparse(parse(S)))
+# =============================================================================
+
+# Pseudo-identity on Python inline snippet
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'def add(a, b):\n    return a + b\n', 'python')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'def add(a, b):\n    return a + b\n', 'python')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'python')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Pseudo-identity on Python nested block & trailing statement
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'def calculate(x, y):\n    if x > y:\n        z = x - y\n        return z\n    return x + y\n\nresult = calculate(10, 5)\n', 'python')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'def calculate(x, y):\n    if x > y:\n        z = x - y\n        return z\n    return x + y\n\nresult = calculate(10, 5)\n', 'python')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'python')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Pseudo-identity on JavaScript
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'function compute(a, b) {\n    if (a > b) {\n        return a;\n    }\n    return b;\n}\n', 'javascript')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'function compute(a, b) {\n    if (a > b) {\n        return a;\n    }\n    return b;\n}\n', 'javascript')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'javascript')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Pseudo-identity on C
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'int max(int a, int b) {\n    if (a > b) {\n        return a;\n    }\n    return b;\n}\n', 'c')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'int max(int a, int b) {\n    if (a > b) {\n        return a;\n    }\n    return b;\n}\n', 'c')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'c')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Pseudo-identity on Go
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'package main\n\nfunc max(a int, b int) int {\n    if a > b {\n        return a\n    }\n    return b\n}\n', 'go')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'package main\n\nfunc max(a int, b int) int {\n    if a > b {\n        return a\n    }\n    return b\n}\n', 'go')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'go')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# =============================================================================
+# 4. Pseudo-Identity on Real Test Fixture Files
+# =============================================================================
+
+# Fixture: test/data/call_extraction/calls.py
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM read_ast('test/data/call_extraction/calls.py')
+),
+unp AS (
+    SELECT source FROM ast_unparse('test/data/call_extraction/calls.py')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'python')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Fixture: test/data/call_extraction/calls.js
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM read_ast('test/data/call_extraction/calls.js')
+),
+unp AS (
+    SELECT source FROM ast_unparse('test/data/call_extraction/calls.js')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'javascript')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Fixture: test/data/call_extraction/calls.go
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM read_ast('test/data/call_extraction/calls.go')
+),
+unp AS (
+    SELECT source FROM ast_unparse('test/data/call_extraction/calls.go')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'go')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Fixture: test/data/call_extraction/calls.c
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM read_ast('test/data/call_extraction/calls.c')
+),
+unp AS (
+    SELECT source FROM ast_unparse('test/data/call_extraction/calls.c')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'c')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
