@@ -1,0 +1,13 @@
+/**
+ * @file python_unparse.def
+ * @brief Python Tier-3 unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("block", 1)
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_AFTER, "string_start", 0, "")
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_BEFORE, "string_end", 0, "")
+DEF_UNPARSE_LINES_BEFORE("class_definition", 2)
+DEF_UNPARSE_LINES_BEFORE("function_definition", 2)
+DEF_UNPARSE_LINES_BEFORE("async_function_definition", 2)
+DEF_UNPARSE_LINES_AFTER("import_statement", 2)
+DEF_UNPARSE_LINES_AFTER("import_from_statement", 2)

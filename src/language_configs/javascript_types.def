@@ -355,12 +355,12 @@ DEF_TYPE("template_substitution", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_C
 /**
  * @brief String fragment inside template
  */
-DEF_TYPE("string_fragment", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
+DEF_TYPE("string_fragment", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /**
  * @brief Escape sequence in string: `\n`, `\t`, etc.
  */
-DEF_TYPE("escape_sequence", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
+DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /**
  * @brief Number literal: integers and floats

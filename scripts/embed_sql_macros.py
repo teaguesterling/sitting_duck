@@ -56,6 +56,7 @@ def generate_header(sql_dir, output_file):
         'scope_resolution.sql',
         'duck_blocks.sql',
         'ast_patch.sql',
+        'ast_unparse.sql',
     ]
 
     header_content = """// Auto-generated file - DO NOT EDIT

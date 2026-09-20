@@ -21,3 +21,6 @@ package-lock.json
 
 # Claude Code agent worktrees
 /.claude/
+/.bird/
+/.cache/
+/trees/

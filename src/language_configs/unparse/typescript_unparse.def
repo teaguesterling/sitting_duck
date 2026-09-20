@@ -1,0 +1,13 @@
+/**
+ * @file typescript_unparse.def
+ * @brief TypeScript Tier-3 unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("statement_block", 1)
+DEF_UNPARSE_INDENT("object", 1)
+DEF_UNPARSE_INDENT("class_body", 1)
+DEF_UNPARSE_LINES_BEFORE("class_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("function_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("method_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("interface_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("type_alias_declaration", 1)

@@ -1,0 +1,9 @@
+/**
+ * @file c_unparse.def
+ * @brief C Tier-3 unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("compound_statement", 1)
+DEF_UNPARSE_INDENT("field_declaration_list", 1)
+DEF_UNPARSE_LINES_BEFORE("function_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("struct_specifier", 1)
