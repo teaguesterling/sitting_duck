@@ -798,20 +798,61 @@ Tree-sitter runtime and its language grammars (all MIT / Apache-2.0); see
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) and [NOTICE](NOTICE) for the
 bundled components and their copyright notices.
 
+## AST Unparsing & Code Generation
+
+Sitting Duck includes a rules-based AST unparser (`ast_unparse`) that reconstructs syntactically valid source code from AST tables, guaranteeing the pseudo-identity property:
+
+$$\text{parse}(S) \equiv \text{parse}(\text{unparse}(\text{parse}(S)))$$
+
+```sql
+-- Parse Python code, rename a symbol with SQL, and unparse back to source code
+WITH parsed AS (
+    SELECT * FROM parse_ast('def hello(): return "world"', 'python')
+),
+modified AS (
+    SELECT
+        node_id, parent_id, type,
+        CASE WHEN name = 'hello' THEN 'greet' ELSE name END AS name,
+        semantic_type, flags, file_path, language,
+        start_line, end_line, depth, sibling_index, children_count, descendant_count, peek
+    FROM parsed
+)
+SELECT ast_unparse(modified) AS generated_code;
+```
+
+Discover formatting and layout rules using `ast_unparse_rules()`:
+
+```sql
+SELECT rule_kind, node_type, int_arg
+FROM ast_unparse_rules('python');
+```
+
+## Function Discoverability
+
+All Sitting Duck functions register rich metadata with parameter names, descriptions, and examples visible in DuckDB's `duckdb_functions()`:
+
+```sql
+SELECT function_name, function_type, description, parameters, examples
+FROM duckdb_functions()
+WHERE list_contains(categories, 'sitting_duck');
+```
+
 ## Documentation
 
-### API Reference
-- **[Core Functions](docs/api/core-functions.md)** - `read_ast()`, `parse_ast()`, `ast_supported_languages()`
-- **[Utility Functions](docs/api/utility-functions.md)** - Predicates, file utilities, helper functions
-- **[Semantic Types](docs/api/semantic-types.md)** - Type system and semantic categories
-- **[Output Schema](docs/api/output-schema.md)** - Column definitions and data types
+### Reference
+- **[Functions Reference](docs/reference/functions.md)** - `read_ast()`, `parse_ast()`, `parse_ast_list()`, `ast_type_map()`, `register_language()`
+- **[AST Unparsing](docs/reference/unparse.md)** - `ast_unparse()`, `ast_unparse_rules()`, layout engine
+- **[Output Schema](docs/reference/output-schema.md)** - Column definitions, location modes, and scope struct
+- **[Semantic Types](docs/reference/semantic-types.md)** - Universal 8-bit taxonomy and flags
+- **[CSS Selectors Reference](docs/reference/css-selectors.md)** - AST CSS selectors and pseudo-classes
 
-### Guides
-- **[AI Agent Guide](AI_AGENT_GUIDE.md)** - Comprehensive guide for AI agents using semantic types
-- **[Pattern Matching](docs/guide/pattern-matching.md)** - Find code patterns with wildcards
-- **[Language Guide](docs/languages/overview.md)** - Supported languages with nuances and quality ratings
-- **[Native Extraction Semantics](docs/native_extraction_semantics.md)** - Field semantics across languages
-- **[Adding Languages](docs/development/adding-languages.md)** - How to add new language support
+### Guides & Tutorials
+- **[Your First Query](docs/tutorials/quickstart.md)** - Quickstart tutorial
+- **[Code Transformation & Unparsing](docs/how-to/code-transformation-and-unparsing.md)** - How to transform code with SQL
+- **[Cookbook](docs/how-to/cookbook.md)** - Real-world recipes and query patterns
+- **[Pattern Matching Guide](docs/tutorials/pattern-matching.md)** - Code templates and structural search
+- **[AI Agent Guide](AI_AGENT_GUIDE.md)** - Using Sitting Duck with Claude Code, Cursor, and AI agents
+- **[Architecture & Engine](docs/explanation/architecture.md)** - Technical design and execution model
 
 ---
 

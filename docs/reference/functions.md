@@ -255,7 +255,7 @@ WHERE type = 'class_selector';
 
 ## `ast_supported_languages()`
 
-List all supported languages.
+List all registered and built-in programming languages.
 
 ### Signature
 
@@ -267,16 +267,162 @@ ast_supported_languages() -> TABLE
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `language` | VARCHAR | Language identifier |
-| `display_name` | VARCHAR | Human-readable name |
-| `extensions` | VARCHAR[] | Supported file extensions |
+| `language` | VARCHAR | Language identifier (e.g. `'python'`, `'cpp'`, `'duckdb'`) |
+| `extensions` | LIST(VARCHAR) | Associated file extensions (e.g. `['py', 'pyi']`) |
+| `parser_type` | VARCHAR | Parser engine (`'tree-sitter'` or `'native'`) |
+| `node_type_count` | BIGINT | Number of registered AST node types in grammar |
 
 ### Example
 
 ```sql
-SELECT language, extensions
+SELECT language, parser_type, extensions, node_type_count
 FROM ast_supported_languages()
 ORDER BY language;
+```
+
+---
+
+## `ast_type_map()`
+
+Discover node type definitions, semantic type classifications, and extraction rules across all languages or for a specific language.
+
+### Signature
+
+```sql
+-- All languages
+ast_type_map() -> TABLE
+
+-- Specific language
+ast_type_map(language VARCHAR) -> TABLE
+```
+
+### Output Schema
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `language` | VARCHAR | Programming language identifier |
+| `node_type` | VARCHAR | Tree-sitter AST node type |
+| `semantic_type` | UTINYINT | Universal semantic type code |
+| `semantic_name` | VARCHAR | Semantic type name (e.g. `'DEFINITION_FUNCTION'`) |
+| `selector` | VARCHAR | CSS selector alias (e.g. `'.func'`, `'.class'`, `'.call'`) |
+| `strategy` | VARCHAR | Extraction strategy (e.g. `'NAME_FIELD'`, `'FIRST_CHILD'`) |
+| `flags` | UTINYINT | Pre-configured node property flags |
+
+### Examples
+
+```sql
+-- View all function node types across languages
+SELECT language, node_type, strategy
+FROM ast_type_map()
+WHERE selector = '.func';
+
+-- Reverse lookup for Python
+SELECT node_type, semantic_name, strategy
+FROM ast_type_map('python')
+WHERE node_type LIKE '%function%';
+```
+
+---
+
+## `register_language()`
+
+Dynamically load and register an external Tree-sitter grammar shared library (`.so`, `.dylib`, `.dll`) at runtime.
+
+### Prerequisites
+
+Dynamic grammar loading executes native code and is gated behind an extension configuration option:
+
+```sql
+SET sitting_duck_enable_runtime_grammars = true;
+```
+
+### Signature
+
+```sql
+register_language(
+    name VARCHAR,
+    grammar_path VARCHAR,
+    [config := NULL],
+    [extensions := []],
+    [aliases := []],
+    [symbol := NULL],
+    [overwrite := false]
+) -> TABLE
+```
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | VARCHAR | required | Name to register for the language |
+| `grammar_path` | VARCHAR | required | Path to the compiled tree-sitter shared library |
+| `config` | VARCHAR | `NULL` | Optional path or JSON string with node mapping configurations |
+| `extensions` | LIST(VARCHAR) | `[]` | File extensions to associate with the language |
+| `aliases` | LIST(VARCHAR) | `[]` | Alternative language names for detection |
+| `symbol` | VARCHAR | `NULL` | C symbol name (defaults to `tree_sitter_<name>`) |
+| `overwrite` | BOOLEAN | `false` | Whether to overwrite an existing language registration |
+
+### Example
+
+```sql
+SELECT * FROM register_language(
+    'my_dsl',
+    '/opt/grammars/libtree-sitter-my_dsl.so',
+    extensions := ['mydsl', 'dsl']
+);
+```
+
+---
+
+## `ast_unparse()`
+
+Reconstruct formatted source code from an AST table or CTE query.
+
+### Signature
+
+```sql
+ast_unparse(ast_table, [indent_size := 4, use_tabs := false, newline := '\n']) -> VARCHAR
+```
+
+### Example
+
+```sql
+WITH ast AS (
+    SELECT * FROM parse_ast('def add(a, b): return a + b', 'python')
+)
+SELECT ast_unparse(ast) AS code;
+```
+
+See the [AST Unparse Reference](unparse.md) for full formatting rules and guarantees.
+
+---
+
+## `ast_unparse_rules()`
+
+Return active whitespace, linebreak, and indentation rules used by the unparser engine.
+
+### Signature
+
+```sql
+-- All languages
+ast_unparse_rules() -> TABLE
+
+-- Specific language
+ast_unparse_rules(language VARCHAR) -> TABLE
+```
+
+---
+
+## Function Discoverability via `duckdb_functions()`
+
+All Sitting Duck functions are registered with full metadata and can be discovered dynamically using DuckDB's built-in `duckdb_functions()`:
+
+```sql
+-- List all Sitting Duck functions with descriptions and categories
+SELECT function_name, function_type, description, parameters, examples
+FROM duckdb_functions()
+WHERE list_contains(categories, 'sitting_duck')
+ORDER BY function_name;
 ```
 
 ---
@@ -318,6 +464,7 @@ WHERE type = 'ERROR';
 
 ## Next Steps
 
+- [AST Unparsing](unparse.md) - Reconstruct source code from AST tables
 - [Utility Functions](utility-functions.md) - Predicates, file utilities, and helper functions
 - [Parameters Reference](parameters.md) - Detailed parameter documentation
 - [Output Schema](output-schema.md) - Column details

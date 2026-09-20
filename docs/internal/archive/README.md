@@ -14,6 +14,6 @@ These documents describe proposed or historical designs that are no longer curre
 ## Current Documentation
 
 For current documentation, see:
-- [API Reference](../../api/core-functions.md) - Current function documentation
-- [Output Schema](../../api/output-schema.md) - Current output column documentation
-- [AI Agent Guide](../../ai-agent-guide.md) - Guide for AI agent integration
+- [API Reference](../../reference/functions.md) - Current function documentation
+- [Output Schema](../../reference/output-schema.md) - Current output column documentation
+- [AI Agent Guide](../../tutorials/ai-agents.md) - Guide for AI agent integration
