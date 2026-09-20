@@ -1,5 +1,6 @@
 #include "duckdb.hpp"
 #include "duckdb_compat.hpp"
+#include "function_doc_helper.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "include/language_adapter.hpp"
 #include "include/node_config.hpp"
@@ -220,15 +221,18 @@ static void TypeMapFunction(ClientContext &context, TableFunctionInput &data_p, 
 }
 
 void RegisterASTTypeMapFunction(ExtensionLoader &loader) {
-	// ast_type_map() — all languages
+	TableFunctionSet type_map_set("ast_type_map");
 	TableFunction type_map("ast_type_map", {}, TypeMapFunction, TypeMapBind, TypeMapInit);
-	type_map.name = "ast_type_map";
-	loader.RegisterFunction(type_map);
-
-	// ast_type_map('python') — filter by language
+	type_map_set.AddFunction(type_map);
 	TableFunction type_map_lang("ast_type_map", {LogicalType::VARCHAR}, TypeMapFunction, TypeMapBind, TypeMapInit);
-	type_map_lang.name = "ast_type_map";
-	loader.RegisterFunction(type_map_lang);
+	type_map_set.AddFunction(type_map_lang);
+
+	RegisterDocumentedTableFunctionSet(
+	    loader, type_map_set,
+	    "Return mapping of AST node types to semantic types and extraction strategies.",
+	    {{}, {"language"}},
+	    {"SELECT * FROM ast_type_map()", "SELECT * FROM ast_type_map('python')"},
+	    {"sitting_duck", "metadata"});
 }
 
 } // namespace duckdb

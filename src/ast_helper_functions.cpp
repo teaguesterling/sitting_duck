@@ -1,5 +1,6 @@
 #include "ast_helper_functions.hpp"
 #include "duckdb_compat.hpp"
+#include "function_doc_helper.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/types/value.hpp"
@@ -286,9 +287,24 @@ void ASTImportsFunction::Execute(ClientContext &context, TableFunctionInput &dat
 }
 
 void RegisterASTHelperFunctions(ExtensionLoader &loader) {
-	loader.RegisterFunction(ASTFunctionsFunction::GetFunction());
-	loader.RegisterFunction(ASTClassesFunction::GetFunction());
-	loader.RegisterFunction(ASTImportsFunction::GetFunction());
+	RegisterDocumentedTableFunction(
+	    loader, ASTFunctionsFunction::GetFunction(),
+	    "Extract all function and method definitions from an AST blob.",
+	    {"ast_blob"},
+	    {"SELECT * FROM ast_functions(ast_blob)"},
+	    {"sitting_duck", "ast"});
+	RegisterDocumentedTableFunction(
+	    loader, ASTClassesFunction::GetFunction(),
+	    "Extract all class, struct, and interface definitions from an AST blob.",
+	    {"ast_blob"},
+	    {"SELECT * FROM ast_classes(ast_blob)"},
+	    {"sitting_duck", "ast"});
+	RegisterDocumentedTableFunction(
+	    loader, ASTImportsFunction::GetFunction(),
+	    "Extract all import and include statements from an AST blob.",
+	    {"ast_blob"},
+	    {"SELECT * FROM ast_imports(ast_blob)"},
+	    {"sitting_duck", "ast"});
 }
 
 } // namespace duckdb

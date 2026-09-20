@@ -1,5 +1,6 @@
 #include "duckdb.hpp"
 #include "duckdb_compat.hpp"
+#include "function_doc_helper.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
@@ -1135,26 +1136,61 @@ static TableFunction GetReadASTFlatAliasFunctionTwoArg() {
 
 void RegisterReadASTFunction(ExtensionLoader &loader) {
 	// Register default read_ast functions (now using flat schema - production ready)
-	loader.RegisterFunction(GetReadASTFlatFunctionOneArg()); // ANY (auto-detect)
-	loader.RegisterFunction(GetReadASTFlatFunctionTwoArg()); // ANY, VARCHAR (explicit language)
+	TableFunctionSet read_ast_set("read_ast");
+	read_ast_set.AddFunction(GetReadASTFlatFunctionOneArg());
+	read_ast_set.AddFunction(GetReadASTFlatFunctionTwoArg());
+	RegisterDocumentedTableFunctionSet(
+	    loader, read_ast_set,
+	    "Parse source code from file(s) into an AST table representation.",
+	    {{"file_path"}, {"file_path", "language"}},
+	    {"SELECT * FROM read_ast('src/main.cpp')", "SELECT * FROM read_ast('src/main.cpp', 'cpp')"},
+	    {"sitting_duck", "ast"});
 
 	// Register read_ast_flat aliases (explicit access to flat schema)
-	loader.RegisterFunction(GetReadASTFlatAliasFunctionOneArg()); // ANY (auto-detect)
-	loader.RegisterFunction(GetReadASTFlatAliasFunctionTwoArg()); // ANY, VARCHAR (explicit language)
+	TableFunctionSet read_ast_flat_set("read_ast_flat");
+	read_ast_flat_set.AddFunction(GetReadASTFlatAliasFunctionOneArg());
+	read_ast_flat_set.AddFunction(GetReadASTFlatAliasFunctionTwoArg());
+	RegisterDocumentedTableFunctionSet(
+	    loader, read_ast_flat_set,
+	    "Parse source code from file(s) into flat AST table representation (alias of read_ast).",
+	    {{"file_path"}, {"file_path", "language"}},
+	    {"SELECT * FROM read_ast_flat('src/main.cpp')", "SELECT * FROM read_ast_flat('src/main.cpp', 'cpp')"},
+	    {"sitting_duck", "ast"});
 
 	// Register read_ast_hierarchical_new functions (hierarchical STRUCT schema with memory issues)
-	loader.RegisterFunction(GetReadASTFunctionOneArg()); // ANY (auto-detect)
-	loader.RegisterFunction(GetReadASTFunctionTwoArg()); // ANY, VARCHAR (explicit language)
+	TableFunctionSet read_ast_hn_set("read_ast_hierarchical_new");
+	read_ast_hn_set.AddFunction(GetReadASTFunctionOneArg());
+	read_ast_hn_set.AddFunction(GetReadASTFunctionTwoArg());
+	RegisterDocumentedTableFunctionSet(
+	    loader, read_ast_hn_set,
+	    "Parse source code from file(s) into hierarchical AST table representation.",
+	    {{"file_path"}, {"file_path", "language"}},
+	    {"SELECT * FROM read_ast_hierarchical_new('src/main.cpp')", "SELECT * FROM read_ast_hierarchical_new('src/main.cpp', 'cpp')"},
+	    {"sitting_duck", "ast"});
 
 	// Register read_ast_hierarchical functions for backward compatibility
-	loader.RegisterFunction(GetReadASTHierarchicalFunctionOneArg()); // ANY (auto-detect)
-	loader.RegisterFunction(GetReadASTHierarchicalFunctionTwoArg()); // ANY, VARCHAR (explicit language)
+	TableFunctionSet read_ast_h_set("read_ast_hierarchical");
+	read_ast_h_set.AddFunction(GetReadASTHierarchicalFunctionOneArg());
+	read_ast_h_set.AddFunction(GetReadASTHierarchicalFunctionTwoArg());
+	RegisterDocumentedTableFunctionSet(
+	    loader, read_ast_h_set,
+	    "Parse source code from file(s) into legacy hierarchical AST table representation.",
+	    {{"file_path"}, {"file_path", "language"}},
+	    {"SELECT * FROM read_ast_hierarchical('src/main.cpp')", "SELECT * FROM read_ast_hierarchical('src/main.cpp', 'cpp')"},
+	    {"sitting_duck", "ast"});
 }
 
 void RegisterReadASTStreamingFunction(ExtensionLoader &loader) {
 	// Register explicit streaming functions for comparison
-	loader.RegisterFunction(GetReadASTStreamingFunctionOneArg());
-	loader.RegisterFunction(GetReadASTStreamingFunctionTwoArg());
+	TableFunctionSet read_ast_s_set("read_ast_streaming");
+	read_ast_s_set.AddFunction(GetReadASTStreamingFunctionOneArg());
+	read_ast_s_set.AddFunction(GetReadASTStreamingFunctionTwoArg());
+	RegisterDocumentedTableFunctionSet(
+	    loader, read_ast_s_set,
+	    "Stream AST nodes from file(s).",
+	    {{"file_path"}, {"file_path", "language"}},
+	    {"SELECT * FROM read_ast_streaming('src/main.cpp')", "SELECT * FROM read_ast_streaming('src/main.cpp', 'cpp')"},
+	    {"sitting_duck", "ast"});
 }
 
 } // namespace duckdb

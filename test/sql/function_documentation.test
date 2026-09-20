@@ -1,0 +1,149 @@
+# name: test/sql/function_documentation.test
+# description: Test discoverability and documentation of sitting_duck functions via duckdb_functions()
+# group: [sql]
+
+require sitting_duck
+
+# Test 1: Check scalar functions have descriptions and examples in duckdb_functions()
+# =================================================================================
+
+query I
+SELECT COUNT(*) > 0
+FROM duckdb_functions()
+WHERE function_name = 'parse_ast_list'
+  AND description IS NOT NULL
+  AND description != ''
+  AND len(examples) > 0;
+----
+true
+
+query I
+SELECT COUNT(*) > 0
+FROM duckdb_functions()
+WHERE function_name = 'is_name_definition'
+  AND description IS NOT NULL
+  AND description != ''
+  AND len(examples) > 0;
+----
+true
+
+query I
+SELECT COUNT(*) > 0
+FROM duckdb_functions()
+WHERE function_name = 'is_syntax_only'
+  AND description IS NOT NULL
+  AND description != ''
+  AND len(examples) > 0;
+----
+true
+
+query I
+SELECT COUNT(*) > 0
+FROM duckdb_functions()
+WHERE function_name = 'detect_language'
+  AND description IS NOT NULL
+  AND description != ''
+  AND len(examples) > 0;
+----
+true
+
+# Test 2: Check table functions have descriptions and examples in duckdb_functions()
+# =================================================================================
+
+query I
+SELECT COUNT(*) > 0
+FROM duckdb_functions()
+WHERE function_name = 'read_ast'
+  AND description IS NOT NULL
+  AND description != ''
+  AND len(examples) > 0;
+----
+true
+
+query I
+SELECT COUNT(*) > 0
+FROM duckdb_functions()
+WHERE function_name = 'parse_ast'
+  AND description IS NOT NULL
+  AND description != ''
+  AND len(examples) > 0;
+----
+true
+
+query I
+SELECT COUNT(*) > 0
+FROM duckdb_functions()
+WHERE function_name = 'ast_supported_languages'
+  AND description IS NOT NULL
+  AND description != ''
+  AND len(examples) > 0;
+----
+true
+
+query I
+SELECT COUNT(*) > 0
+FROM duckdb_functions()
+WHERE function_name = 'ast_type_map'
+  AND description IS NOT NULL
+  AND description != ''
+  AND len(examples) > 0;
+----
+true
+
+query I
+SELECT COUNT(*) > 0
+FROM duckdb_functions()
+WHERE function_name = 'register_language'
+  AND description IS NOT NULL
+  AND description != ''
+  AND len(examples) > 0;
+----
+true
+
+query I
+SELECT COUNT(*) > 0
+FROM duckdb_functions()
+WHERE function_name = 'ast_unparse_rules'
+  AND description IS NOT NULL
+  AND description != ''
+  AND len(examples) > 0;
+----
+true
+
+# Test 3: Check parameter names are populated and not default dummy names
+# ========================================================================
+
+query I
+SELECT COUNT(*) > 0
+FROM duckdb_functions()
+WHERE function_name = 'parse_ast'
+  AND list_contains(parameters, 'code');
+----
+true
+
+query I
+SELECT COUNT(*) > 0
+FROM duckdb_functions()
+WHERE function_name = 'read_ast'
+  AND list_contains(parameters, 'file_path');
+----
+true
+
+query I
+SELECT COUNT(*) > 0
+FROM duckdb_functions()
+WHERE function_name = 'ast_unparse_rules'
+  AND list_contains(parameters, 'language');
+----
+true
+
+# Test 4: All sitting_duck tagged functions have non-empty description
+# ===================================================================
+
+query I
+SELECT COUNT(*) = 0
+FROM duckdb_functions()
+WHERE list_contains(categories, 'sitting_duck')
+  AND (description IS NULL OR description = '');
+----
+true

@@ -1,5 +1,6 @@
 #include "duckdb.hpp"
 #include "duckdb_compat.hpp"
+#include "function_doc_helper.hpp"
 #include "include/semantic_types.hpp"
 #include "include/node_config.hpp"
 #include "include/ast_file_utils.hpp"
@@ -661,158 +662,307 @@ void RegisterSemanticTypeFunctions(ExtensionLoader &loader) {
 	// Register semantic_type_to_string(semantic_type) -> VARCHAR
 	ScalarFunction semantic_type_to_string_func("semantic_type_to_string", {LogicalType::UTINYINT},
 	                                            LogicalType::VARCHAR, SemanticTypeToStringFunction);
-	loader.RegisterFunction(semantic_type_to_string_func);
+	RegisterDocumentedScalarFunction(
+	    loader, semantic_type_to_string_func,
+	    "Convert a numeric semantic type bitmask to its human-readable name string.",
+	    {"semantic_type"},
+	    {"semantic_type_to_string(1::UTINYINT)"},
+	    {"sitting_duck", "taxonomy"});
 
 	// Register get_super_kind(semantic_type) -> VARCHAR
 	ScalarFunction get_super_kind_func("get_super_kind", {LogicalType::UTINYINT}, LogicalType::VARCHAR,
 	                                   GetSuperKindFunction);
-	loader.RegisterFunction(get_super_kind_func);
+	RegisterDocumentedScalarFunction(
+	    loader, get_super_kind_func,
+	    "Get the super-kind category name (DEFINITION, EXECUTION, STRUCTURE, LITERAL, etc.) for a semantic type.",
+	    {"semantic_type"},
+	    {"get_super_kind(semantic_type)"},
+	    {"sitting_duck", "taxonomy"});
 
 	// Register get_kind(semantic_type) -> VARCHAR
 	ScalarFunction get_kind_func("get_kind", {LogicalType::UTINYINT}, LogicalType::VARCHAR, GetKindFunction);
-	loader.RegisterFunction(get_kind_func);
+	RegisterDocumentedScalarFunction(
+	    loader, get_kind_func,
+	    "Get the primary kind name (FUNCTION, CLASS, VARIABLE, etc.) for a semantic type.",
+	    {"semantic_type"},
+	    {"get_kind(semantic_type)"},
+	    {"sitting_duck", "taxonomy"});
 
 	// Register is_semantic_type(semantic_type, pattern) -> BOOLEAN
 	ScalarFunction is_semantic_type_func("is_semantic_type", {LogicalType::UTINYINT, LogicalType::VARCHAR},
 	                                     LogicalType::BOOLEAN, IsSemanticTypeFunction);
-	loader.RegisterFunction(is_semantic_type_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_semantic_type_func,
+	    "Check if a semantic type bitmask matches a taxonomy pattern string.",
+	    {"semantic_type", "pattern"},
+	    {"is_semantic_type(semantic_type, 'DEFINITION_%')"},
+	    {"sitting_duck", "taxonomy"});
 
 	// Register semantic_type_code(name) -> UTINYINT
 	ScalarFunction semantic_type_code_func("semantic_type_code", {LogicalType::VARCHAR}, LogicalType::UTINYINT,
 	                                       SemanticTypeCodeFunction);
-	loader.RegisterFunction(semantic_type_code_func);
+	RegisterDocumentedScalarFunction(
+	    loader, semantic_type_code_func,
+	    "Convert a semantic type name string to its numeric bitmask code.",
+	    {"name"},
+	    {"semantic_type_code('DEFINITION_FUNCTION')"},
+	    {"sitting_duck", "taxonomy"});
 
 	// Register predicate functions
 	ScalarFunction is_definition_func("is_definition", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
 	                                  IsDefinitionFunction);
-	loader.RegisterFunction(is_definition_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_definition_func,
+	    "Check if a semantic type represents a definition (function, class, variable, etc.).",
+	    {"semantic_type"},
+	    {"is_definition(semantic_type)"},
+	    {"sitting_duck", "taxonomy"});
 
 	ScalarFunction is_call_func("is_call", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsCallFunction);
-	loader.RegisterFunction(is_call_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_call_func,
+	    "Check if a semantic type represents a function/method call expression.",
+	    {"semantic_type"},
+	    {"is_call(semantic_type)"},
+	    {"sitting_duck", "taxonomy"});
 
 	ScalarFunction is_control_flow_func("is_control_flow", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
 	                                    IsControlFlowFunction);
-	loader.RegisterFunction(is_control_flow_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_control_flow_func,
+	    "Check if a semantic type represents a control flow construct (if, loop, switch, return, etc.).",
+	    {"semantic_type"},
+	    {"is_control_flow(semantic_type)"},
+	    {"sitting_duck", "taxonomy"});
 
 	ScalarFunction is_identifier_func("is_identifier", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
 	                                  IsIdentifierFunction);
-	loader.RegisterFunction(is_identifier_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_identifier_func,
+	    "Check if a semantic type represents an identifier (variable name, function name, etc.).",
+	    {"semantic_type"},
+	    {"is_identifier(semantic_type)"},
+	    {"sitting_duck", "taxonomy"});
 
 	ScalarFunction is_parser_specific_func("is_parser_specific", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
 	                                       IsParserSpecificFunction);
-	loader.RegisterFunction(is_parser_specific_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_parser_specific_func,
+	    "Check if a semantic type is parser-specific/unclassified in the universal taxonomy.",
+	    {"semantic_type"},
+	    {"is_parser_specific(semantic_type)"},
+	    {"sitting_duck", "taxonomy"});
 
 	ScalarFunction is_punctuation_func("is_punctuation", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
 	                                   IsPunctuationFunction);
-	loader.RegisterFunction(is_punctuation_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_punctuation_func,
+	    "Check if a semantic type represents punctuation or syntax delimiter.",
+	    {"semantic_type"},
+	    {"is_punctuation(semantic_type)"},
+	    {"sitting_duck", "taxonomy"});
 
 	// Register get_searchable_types() -> LIST<UTINYINT>
 	ScalarFunction get_searchable_types_func("get_searchable_types", {}, LogicalType::LIST(LogicalType::UTINYINT),
 	                                         GetSearchableTypesFunction);
-	loader.RegisterFunction(get_searchable_types_func);
+	RegisterDocumentedScalarFunction(
+	    loader, get_searchable_types_func,
+	    "Get list of all searchable semantic type codes.",
+	    {},
+	    {"get_searchable_types()"},
+	    {"sitting_duck", "taxonomy"});
 
 	// Register kind_code(name) -> UTINYINT
 	ScalarFunction kind_code_func("kind_code", {LogicalType::VARCHAR}, LogicalType::UTINYINT, KindCodeFunction);
-	loader.RegisterFunction(kind_code_func);
+	RegisterDocumentedScalarFunction(
+	    loader, kind_code_func,
+	    "Get the numeric code for a taxonomy kind name.",
+	    {"name"},
+	    {"kind_code('FUNCTION')"},
+	    {"sitting_duck", "taxonomy"});
 
 	// Register is_kind(semantic_type, kind_name) -> BOOLEAN
 	ScalarFunction is_kind_func("is_kind", {LogicalType::UTINYINT, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
 	                            IsKindFunction);
-	loader.RegisterFunction(is_kind_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_kind_func,
+	    "Check if a semantic type code belongs to the specified kind.",
+	    {"semantic_type", "kind_name"},
+	    {"is_kind(semantic_type, 'FUNCTION')"},
+	    {"sitting_duck", "taxonomy"});
 
 	// ========================================================================
 	// Flag Helper Functions
 	// ========================================================================
 
 	// Register is_syntax_only(flags) -> BOOLEAN
-	// Returns true if node is a pure syntax token (keyword, punctuation)
 	ScalarFunction is_syntax_only_func("is_syntax_only", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
 	                                   IsSyntaxOnlyFunction);
-	loader.RegisterFunction(is_syntax_only_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_syntax_only_func,
+	    "Returns true if node is a pure syntax token (keyword, punctuation) with no semantic payload.",
+	    {"flags"},
+	    {"is_syntax_only(flags)"},
+	    {"sitting_duck", "flags"});
 
 	// Register is_construct(flags) -> BOOLEAN
-	// Returns true if node is a semantic construct (NOT syntax-only)
 	ScalarFunction is_construct_func("is_construct", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
 	                                 IsConstructFunction);
-	loader.RegisterFunction(is_construct_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_construct_func,
+	    "Returns true if node is a meaningful semantic construct (inverse of is_syntax_only).",
+	    {"flags"},
+	    {"is_construct(flags)"},
+	    {"sitting_duck", "flags"});
 
 	// NAME_ROLE flag functions (bits 1-2 of flags byte)
 	ScalarFunction is_name_definition_func("is_name_definition", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
 	                                       IsDefinitionFlagFunction);
-	loader.RegisterFunction(is_name_definition_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_name_definition_func,
+	    "Returns true if node represents a name definition.",
+	    {"flags"},
+	    {"is_name_definition(flags)"},
+	    {"sitting_duck", "flags"});
 
 	ScalarFunction is_name_declaration_func("is_name_declaration", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
 	                                        IsDeclarationFlagFunction);
-	loader.RegisterFunction(is_name_declaration_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_name_declaration_func,
+	    "Returns true if node represents a name declaration.",
+	    {"flags"},
+	    {"is_name_declaration(flags)"},
+	    {"sitting_duck", "flags"});
 
 	ScalarFunction is_name_reference_func("is_name_reference", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
 	                                      IsReferenceFlagFunction);
-	loader.RegisterFunction(is_name_reference_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_name_reference_func,
+	    "Returns true if node represents a name reference.",
+	    {"flags"},
+	    {"is_name_reference(flags)"},
+	    {"sitting_duck", "flags"});
 
 	ScalarFunction binds_name_func("binds_name", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, BindsNameFunction);
-	loader.RegisterFunction(binds_name_func);
+	RegisterDocumentedScalarFunction(
+	    loader, binds_name_func,
+	    "Returns true if node binds a name in lexical scope (definition or declaration).",
+	    {"flags"},
+	    {"binds_name(flags)"},
+	    {"sitting_duck", "flags"});
 
 	ScalarFunction name_role_func("name_role", {LogicalType::UTINYINT}, LogicalType::UTINYINT, NameRoleFunction);
-	loader.RegisterFunction(name_role_func);
+	RegisterDocumentedScalarFunction(
+	    loader, name_role_func,
+	    "Get the numeric NameRole code (0=NONE, 1=DECLARATION, 2=DEFINITION, 3=REFERENCE) from flags.",
+	    {"flags"},
+	    {"name_role(flags)"},
+	    {"sitting_duck", "flags"});
 
 	// IS_SCOPE flag function (bit 3)
 	ScalarFunction is_scope_func("is_scope", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsScopeFunction);
-	loader.RegisterFunction(is_scope_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_scope_func,
+	    "Returns true if node establishes a lexical scope boundary (function, class, block, module).",
+	    {"flags"},
+	    {"is_scope(flags)"},
+	    {"sitting_duck", "flags"});
 
 	// IS_EXPORTED flag function (bit 4)
 	ScalarFunction is_exported_func("is_exported", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsExportedFunction);
-	loader.RegisterFunction(is_exported_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_exported_func,
+	    "Returns true if node is exported from its containing module/package.",
+	    {"flags"},
+	    {"is_exported(flags)"},
+	    {"sitting_duck", "flags"});
 
 	// IS_CONSTITUENT flag function (bit 5)
 	ScalarFunction is_constituent_func("is_constituent", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
 	                                    IsConstituentFunction);
-	loader.RegisterFunction(is_constituent_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_constituent_func,
+	    "Returns true if node is an internal constituent part of a compound construct.",
+	    {"flags"},
+	    {"is_constituent(flags)"},
+	    {"sitting_duck", "flags"});
 
 	// DEPRECATED: backward compatibility wrappers
 	ScalarFunction is_declaration_only_func("is_declaration_only", {LogicalType::UTINYINT}, LogicalType::BOOLEAN,
 	                                        IsDeclarationOnlyFunction);
-	loader.RegisterFunction(is_declaration_only_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_declaration_only_func,
+	    "Returns true if node is a declaration without an accompanying implementation body.",
+	    {"flags"},
+	    {"is_declaration_only(flags)"},
+	    {"sitting_duck", "flags"});
 
 	ScalarFunction has_body_func("has_body", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, HasBodyFunction);
-	loader.RegisterFunction(has_body_func);
+	RegisterDocumentedScalarFunction(
+	    loader, has_body_func,
+	    "Returns true if node has an embodied implementation body.",
+	    {"flags"},
+	    {"has_body(flags)"},
+	    {"sitting_duck", "flags"});
 
 	ScalarFunction is_embodied_func("is_embodied", {LogicalType::UTINYINT}, LogicalType::BOOLEAN, IsEmbodiedFunction);
-	loader.RegisterFunction(is_embodied_func);
+	RegisterDocumentedScalarFunction(
+	    loader, is_embodied_func,
+	    "Returns true if node is an embodied definition (has implementation body).",
+	    {"flags"},
+	    {"is_embodied(flags)"},
+	    {"sitting_duck", "flags"});
 
 	// ========================================================================
 	// String Utility Functions
 	// ========================================================================
 
 	// Register string_contains_any(str, patterns) -> BOOLEAN
-	// Case-sensitive substring search for any pattern in the list
 	ScalarFunction string_contains_any_func("string_contains_any",
 	                                        {LogicalType::VARCHAR, LogicalType::LIST(LogicalType::VARCHAR)},
 	                                        LogicalType::BOOLEAN, StringContainsAnyFunction);
-	loader.RegisterFunction(string_contains_any_func);
+	RegisterDocumentedScalarFunction(
+	    loader, string_contains_any_func,
+	    "Case-sensitive search checking if string contains any pattern in the list.",
+	    {"str", "patterns"},
+	    {"string_contains_any('hello world', ['world', 'foo'])"},
+	    {"sitting_duck", "utility"});
 
 	// Register string_contains_any_i(str, patterns) -> BOOLEAN
-	// Case-insensitive version
 	ScalarFunction string_contains_any_i_func("string_contains_any_i",
 	                                          {LogicalType::VARCHAR, LogicalType::LIST(LogicalType::VARCHAR)},
 	                                          LogicalType::BOOLEAN, StringContainsAnyIFunction);
-	loader.RegisterFunction(string_contains_any_i_func);
+	RegisterDocumentedScalarFunction(
+	    loader, string_contains_any_i_func,
+	    "Case-insensitive search checking if string contains any pattern in the list.",
+	    {"str", "patterns"},
+	    {"string_contains_any_i('Hello World', ['world', 'foo'])"},
+	    {"sitting_duck", "utility"});
 
 	// Register ast_peek_contains_any as alias for string_contains_any
-	// For use in AST queries where you're searching peek columns
 	ScalarFunction peek_contains_any_func("ast_peek_contains_any",
 	                                      {LogicalType::VARCHAR, LogicalType::LIST(LogicalType::VARCHAR)},
 	                                      LogicalType::BOOLEAN, StringContainsAnyFunction);
-	loader.RegisterFunction(peek_contains_any_func);
+	RegisterDocumentedScalarFunction(
+	    loader, peek_contains_any_func,
+	    "Case-sensitive search checking if peek string contains any pattern in the list (alias of string_contains_any).",
+	    {"peek_str", "patterns"},
+	    {"ast_peek_contains_any(peek, ['import', 'require'])"},
+	    {"sitting_duck", "utility"});
 
 	// ========================================================================
 	// Language Detection Functions
 	// ========================================================================
 
 	// Register detect_language(file_path) -> VARCHAR
-	// Returns language name or NULL if extension not recognized
 	ScalarFunction detect_language_func("detect_language", {LogicalType::VARCHAR}, LogicalType::VARCHAR,
 	                                    DetectLanguageFunction);
-	loader.RegisterFunction(detect_language_func);
+	RegisterDocumentedScalarFunction(
+	    loader, detect_language_func,
+	    "Detect tree-sitter language name from file extension, or return NULL if unknown.",
+	    {"file_path"},
+	    {"detect_language('src/main.rs')"},
+	    {"sitting_duck", "metadata"});
 }
 
 } // namespace duckdb

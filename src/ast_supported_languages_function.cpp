@@ -1,5 +1,6 @@
 #include "duckdb.hpp"
 #include "duckdb_compat.hpp"
+#include "function_doc_helper.hpp"
 #include "language_adapter.hpp"
 #include "include/ast_file_utils.hpp"
 
@@ -81,7 +82,12 @@ static void SupportedLanguagesFunction(ClientContext &context, TableFunctionInpu
 void RegisterASTSupportedLanguagesFunction(ExtensionLoader &loader) {
 	TableFunction function("ast_supported_languages", {}, SupportedLanguagesFunction, SupportedLanguagesBind,
 	                       SupportedLanguagesInit);
-	loader.RegisterFunction(function);
+	RegisterDocumentedTableFunction(
+	    loader, function,
+	    "Return list of supported programming and markup languages and their registered grammar metadata.",
+	    {},
+	    {"SELECT * FROM ast_supported_languages()"},
+	    {"sitting_duck", "metadata"});
 }
 
 } // namespace duckdb

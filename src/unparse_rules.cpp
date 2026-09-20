@@ -1,5 +1,6 @@
 #include "unparse_rules.hpp"
 #include "duckdb_compat.hpp"
+#include "function_doc_helper.hpp"
 #include <unordered_map>
 
 namespace duckdb {
@@ -211,13 +212,18 @@ static void UnparseRulesFunction(ClientContext &context, TableFunctionInput &dat
 }
 
 void RegisterUnparseRulesFunction(ExtensionLoader &loader) {
+	TableFunctionSet unparse_rules_set("ast_unparse_rules");
 	TableFunction unparse_rules_all("ast_unparse_rules", {}, UnparseRulesFunction, UnparseRulesBind, UnparseRulesInit);
-	unparse_rules_all.name = "ast_unparse_rules";
-	loader.RegisterFunction(unparse_rules_all);
-
+	unparse_rules_set.AddFunction(unparse_rules_all);
 	TableFunction unparse_rules_lang("ast_unparse_rules", {LogicalType::VARCHAR}, UnparseRulesFunction, UnparseRulesBind, UnparseRulesInit);
-	unparse_rules_lang.name = "ast_unparse_rules";
-	loader.RegisterFunction(unparse_rules_lang);
+	unparse_rules_set.AddFunction(unparse_rules_lang);
+
+	RegisterDocumentedTableFunctionSet(
+	    loader, unparse_rules_set,
+	    "Return active unparse layout and spacing rules.",
+	    {{}, {"language"}},
+	    {"SELECT * FROM ast_unparse_rules()", "SELECT * FROM ast_unparse_rules('python')"},
+	    {"sitting_duck", "unparse"});
 }
 
 } // namespace duckdb
