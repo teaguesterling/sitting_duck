@@ -1,6 +1,7 @@
 #include "parse_ast_list_function.hpp"
 #include "unified_ast_backend.hpp"
 #include "duckdb_compat.hpp"
+#include "function_doc_helper.hpp"
 #include "semantic_type_logical_type.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/function/scalar_function.hpp"
@@ -271,7 +272,12 @@ void RegisterParseASTListFunction(ExtensionLoader &loader) {
 	// is both simpler and honest about there being nothing to adapt.
 	func.SetFallible();
 
-	loader.RegisterFunction(func);
+	RegisterDocumentedScalarFunction(
+	    loader, func,
+	    "Parse source code string into a list of AST node structs (scalar function for column-valued inputs).",
+	    {"code", "language"},
+	    {"parse_ast_list('x = 1', 'python')"},
+	    {"sitting_duck", "ast"});
 }
 
 } // namespace duckdb

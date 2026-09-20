@@ -1,6 +1,7 @@
 #include "ast_file_utils.hpp"
 #include "duckdb.hpp"
 #include "duckdb_compat.hpp"
+#include "function_doc_helper.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
@@ -190,7 +191,12 @@ void RegisterLanguageRegistrationFunction(ExtensionLoader &loader) {
 	function.named_parameters["aliases"] = LogicalType::LIST(LogicalType::VARCHAR);
 	function.named_parameters["symbol"] = LogicalType::VARCHAR;
 	function.named_parameters["overwrite"] = LogicalType::BOOLEAN;
-	loader.RegisterFunction(function);
+	RegisterDocumentedTableFunction(
+	    loader, function,
+	    "Dynamically register a tree-sitter language grammar from a shared library.",
+	    {"name", "grammar_path"},
+	    {"SELECT * FROM register_language('mylang', '/path/to/libtree-sitter-mylang.so')"},
+	    {"sitting_duck", "metadata"});
 }
 
 } // namespace duckdb
