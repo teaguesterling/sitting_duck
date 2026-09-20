@@ -60,6 +60,11 @@
 #include "duckdb/common/identifier.hpp"
 #endif
 
+#if __has_include("duckdb/parser/literal.hpp")
+#define DUCKDB_HAS_LITERAL 1
+#include "duckdb/parser/literal.hpp"
+#endif
+
 #include "duckdb/function/table_function.hpp"
 #include <utility>
 
@@ -333,7 +338,7 @@ inline unique_ptr<FunctionData> &CompatBoundBindInfo(BoundFunctionExpression &ex
 // accessors; v1.5 has the public fields and (for most of these) no accessor, so
 // a shim is needed in both directions rather than a straight rename.
 //
-//   ConstantExpression::value       -> GetValue()
+//   ConstantExpression::value       -> GetLiteral().ToValue() (Literal in v2.0)
 //   FunctionExpression::function_name -> FunctionName()          (an Identifier)
 //   FunctionExpression::children    -> GetArguments()            (vector<FunctionArgument>,
 //                                                                 each wrapping an expression)
@@ -347,8 +352,12 @@ inline unique_ptr<FunctionData> &CompatBoundBindInfo(BoundFunctionExpression &ex
 
 #ifdef DUCKDB_HAS_NEW_VECTOR_HEADERS
 
-inline const Value &CompatConstantValue(const ConstantExpression &expr) {
-	return expr.GetValue();
+inline Value CompatConstantValue(const ConstantExpression &expr) {
+#ifdef DUCKDB_HAS_LITERAL
+	return expr.GetLiteral().ToValue();
+#else
+	return expr.value;
+#endif
 }
 inline string CompatFunctionName(const FunctionExpression &expr) {
 	return expr.FunctionName().GetIdentifierName();
@@ -376,7 +385,7 @@ inline vector<const ParsedExpression *> CompatConjunctionChildren(const Conjunct
 
 #else
 
-inline const Value &CompatConstantValue(const ConstantExpression &expr) {
+inline Value CompatConstantValue(const ConstantExpression &expr) {
 	return expr.value;
 }
 inline string CompatFunctionName(const FunctionExpression &expr) {

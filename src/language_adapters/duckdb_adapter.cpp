@@ -695,8 +695,8 @@ vector<ASTNode> DuckDBAdapter::HandleColumnReference(const ParsedExpression &exp
 
 vector<ASTNode> DuckDBAdapter::HandleConstant(const ParsedExpression &expr, uint32_t &node_counter) const {
 	const auto &const_expr = expr.Cast<ConstantExpression>();
-	// v2.0 made ConstantExpression::value private (GetValue()).
-	const auto &const_value = CompatConstantValue(const_expr);
+	// v2.0 replaced ConstantExpression::value with Literal (GetLiteral().ToValue()).
+	auto const_value = CompatConstantValue(const_expr);
 	string value = const_value.ToString();
 
 	// Determine appropriate semantic type based on value type
