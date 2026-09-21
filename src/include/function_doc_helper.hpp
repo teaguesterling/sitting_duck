@@ -3,6 +3,7 @@
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/parser/parsed_data/create_scalar_function_info.hpp"
 #include "duckdb/parser/parsed_data/create_table_function_info.hpp"
+#include <type_traits>
 
 namespace duckdb {
 
@@ -14,6 +15,11 @@ auto GetArguments(const T &fn, int) -> decltype(fn->arguments) {
 template <typename T>
 auto GetArguments(const T &fn, long) -> decltype(fn.arguments) {
 	return fn.arguments;
+}
+
+template <typename T>
+vector<LogicalType> GetArguments(const T &fn, ...) {
+	return {};
 }
 
 inline void RegisterDocumentedScalarFunction(ExtensionLoader &loader, ScalarFunction func, const string &description,
