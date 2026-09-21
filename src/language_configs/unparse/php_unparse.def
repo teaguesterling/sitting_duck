@@ -1,0 +1,15 @@
+/**
+ * @file php_unparse.def
+ * @brief PHP unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("compound_statement", 1)
+DEF_UNPARSE_INDENT("declaration_list", 1)
+DEF_UNPARSE_INDENT("switch_block", 1)
+DEF_UNPARSE_INDENT("enum_declaration_list", 1)
+DEF_UNPARSE_LINES_BEFORE("class_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("interface_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("trait_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("function_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("method_declaration", 1)
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_AFTER, "$", 0, "")

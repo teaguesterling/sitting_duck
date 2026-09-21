@@ -1,0 +1,16 @@
+/**
+ * @file graphql_unparse.def
+ * @brief GraphQL unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("selection_set", 1)
+DEF_UNPARSE_INDENT("fields_definition", 1)
+DEF_UNPARSE_INDENT("arguments_definition", 1)
+DEF_UNPARSE_INDENT("input_fields_definition", 1)
+DEF_UNPARSE_INDENT("enum_values_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("object_type_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("interface_type_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("union_type_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("enum_type_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("input_object_type_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("schema_definition", 1)

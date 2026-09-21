@@ -1140,8 +1140,7 @@ void RegisterReadASTFunction(ExtensionLoader &loader) {
 	read_ast_set.AddFunction(GetReadASTFlatFunctionOneArg());
 	read_ast_set.AddFunction(GetReadASTFlatFunctionTwoArg());
 	RegisterDocumentedTableFunctionSet(
-	    loader, read_ast_set,
-	    "Parse source code from file(s) into an AST table representation.",
+	    loader, read_ast_set, "Parse source code from file(s) into an AST table representation.",
 	    {{"file_path"}, {"file_path", "language"}},
 	    {"SELECT * FROM read_ast('src/main.cpp')", "SELECT * FROM read_ast('src/main.cpp', 'cpp')"},
 	    {"sitting_duck", "ast"});
@@ -1161,22 +1160,22 @@ void RegisterReadASTFunction(ExtensionLoader &loader) {
 	TableFunctionSet read_ast_hn_set("read_ast_hierarchical_new");
 	read_ast_hn_set.AddFunction(GetReadASTFunctionOneArg());
 	read_ast_hn_set.AddFunction(GetReadASTFunctionTwoArg());
-	RegisterDocumentedTableFunctionSet(
-	    loader, read_ast_hn_set,
-	    "Parse source code from file(s) into hierarchical AST table representation.",
-	    {{"file_path"}, {"file_path", "language"}},
-	    {"SELECT * FROM read_ast_hierarchical_new('src/main.cpp')", "SELECT * FROM read_ast_hierarchical_new('src/main.cpp', 'cpp')"},
-	    {"sitting_duck", "ast"});
+	RegisterDocumentedTableFunctionSet(loader, read_ast_hn_set,
+	                                   "Parse source code from file(s) into hierarchical AST table representation.",
+	                                   {{"file_path"}, {"file_path", "language"}},
+	                                   {"SELECT * FROM read_ast_hierarchical_new('src/main.cpp')",
+	                                    "SELECT * FROM read_ast_hierarchical_new('src/main.cpp', 'cpp')"},
+	                                   {"sitting_duck", "ast"});
 
 	// Register read_ast_hierarchical functions for backward compatibility
 	TableFunctionSet read_ast_h_set("read_ast_hierarchical");
 	read_ast_h_set.AddFunction(GetReadASTHierarchicalFunctionOneArg());
 	read_ast_h_set.AddFunction(GetReadASTHierarchicalFunctionTwoArg());
 	RegisterDocumentedTableFunctionSet(
-	    loader, read_ast_h_set,
-	    "Parse source code from file(s) into legacy hierarchical AST table representation.",
+	    loader, read_ast_h_set, "Parse source code from file(s) into legacy hierarchical AST table representation.",
 	    {{"file_path"}, {"file_path", "language"}},
-	    {"SELECT * FROM read_ast_hierarchical('src/main.cpp')", "SELECT * FROM read_ast_hierarchical('src/main.cpp', 'cpp')"},
+	    {"SELECT * FROM read_ast_hierarchical('src/main.cpp')",
+	     "SELECT * FROM read_ast_hierarchical('src/main.cpp', 'cpp')"},
 	    {"sitting_duck", "ast"});
 }
 
@@ -1186,9 +1185,7 @@ void RegisterReadASTStreamingFunction(ExtensionLoader &loader) {
 	read_ast_s_set.AddFunction(GetReadASTStreamingFunctionOneArg());
 	read_ast_s_set.AddFunction(GetReadASTStreamingFunctionTwoArg());
 	RegisterDocumentedTableFunctionSet(
-	    loader, read_ast_s_set,
-	    "Stream AST nodes from file(s).",
-	    {{"file_path"}, {"file_path", "language"}},
+	    loader, read_ast_s_set, "Stream AST nodes from file(s).", {{"file_path"}, {"file_path", "language"}},
 	    {"SELECT * FROM read_ast_streaming('src/main.cpp')", "SELECT * FROM read_ast_streaming('src/main.cpp', 'cpp')"},
 	    {"sitting_duck", "ast"});
 }

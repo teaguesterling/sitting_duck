@@ -1,0 +1,10 @@
+/**
+ * @file lua_unparse.def
+ * @brief Lua unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("block", 1)
+DEF_UNPARSE_INDENT("table_constructor", 1)
+DEF_UNPARSE_LINES_BEFORE("function_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("function_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("local_function_declaration", 1)

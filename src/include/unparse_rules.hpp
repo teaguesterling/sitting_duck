@@ -58,17 +58,28 @@ inline const char *UnparseRuleKindToString(UnparseRuleKind kind) {
 }
 
 inline UnparseRuleKind StringToUnparseRuleKind(const std::string &str) {
-	if (str == "TIGHT_BEFORE") return UnparseRuleKind::TIGHT_BEFORE;
-	if (str == "TIGHT_AFTER") return UnparseRuleKind::TIGHT_AFTER;
-	if (str == "SPACE_BEFORE") return UnparseRuleKind::SPACE_BEFORE;
-	if (str == "SPACE_AFTER") return UnparseRuleKind::SPACE_AFTER;
-	if (str == "KEYWORD_PARENS_SPACE") return UnparseRuleKind::KEYWORD_PARENS_SPACE;
-	if (str == "INDENT_BLOCK") return UnparseRuleKind::INDENT_BLOCK;
-	if (str == "INDENT_STRING") return UnparseRuleKind::INDENT_STRING;
-	if (str == "LINES_BEFORE") return UnparseRuleKind::LINES_BEFORE;
-	if (str == "LINES_AFTER") return UnparseRuleKind::LINES_AFTER;
-	if (str == "BREAK_BEFORE") return UnparseRuleKind::BREAK_BEFORE;
-	if (str == "BREAK_AFTER") return UnparseRuleKind::BREAK_AFTER;
+	if (str == "TIGHT_BEFORE")
+		return UnparseRuleKind::TIGHT_BEFORE;
+	if (str == "TIGHT_AFTER")
+		return UnparseRuleKind::TIGHT_AFTER;
+	if (str == "SPACE_BEFORE")
+		return UnparseRuleKind::SPACE_BEFORE;
+	if (str == "SPACE_AFTER")
+		return UnparseRuleKind::SPACE_AFTER;
+	if (str == "KEYWORD_PARENS_SPACE")
+		return UnparseRuleKind::KEYWORD_PARENS_SPACE;
+	if (str == "INDENT_BLOCK")
+		return UnparseRuleKind::INDENT_BLOCK;
+	if (str == "INDENT_STRING")
+		return UnparseRuleKind::INDENT_STRING;
+	if (str == "LINES_BEFORE")
+		return UnparseRuleKind::LINES_BEFORE;
+	if (str == "LINES_AFTER")
+		return UnparseRuleKind::LINES_AFTER;
+	if (str == "BREAK_BEFORE")
+		return UnparseRuleKind::BREAK_BEFORE;
+	if (str == "BREAK_AFTER")
+		return UnparseRuleKind::BREAK_AFTER;
 	return UnparseRuleKind::CUSTOM;
 }
 
@@ -87,26 +98,19 @@ struct UnparseRule {
 };
 
 // Convenience macros for .def files
-#define DEF_UNPARSE_INDENT(tag, level) \
-	DEF_UNPARSE_RULE(UnparseRuleKind::INDENT_BLOCK, tag, level, "")
+#define DEF_UNPARSE_INDENT(tag, level) DEF_UNPARSE_RULE(UnparseRuleKind::INDENT_BLOCK, tag, level, "")
 
-#define DEF_UNPARSE_LINES_BEFORE(tag, count) \
-	DEF_UNPARSE_RULE(UnparseRuleKind::LINES_BEFORE, tag, count, "")
+#define DEF_UNPARSE_LINES_BEFORE(tag, count) DEF_UNPARSE_RULE(UnparseRuleKind::LINES_BEFORE, tag, count, "")
 
-#define DEF_UNPARSE_LINES_AFTER(tag, count) \
-	DEF_UNPARSE_RULE(UnparseRuleKind::LINES_AFTER, tag, count, "")
+#define DEF_UNPARSE_LINES_AFTER(tag, count) DEF_UNPARSE_RULE(UnparseRuleKind::LINES_AFTER, tag, count, "")
 
-#define DEF_UNPARSE_TIGHT_BEFORE(tok) \
-	DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_BEFORE, tok, 0, "")
+#define DEF_UNPARSE_TIGHT_BEFORE(tok) DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_BEFORE, tok, 0, "")
 
-#define DEF_UNPARSE_TIGHT_AFTER(tok) \
-	DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_AFTER, tok, 0, "")
+#define DEF_UNPARSE_TIGHT_AFTER(tok) DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_AFTER, tok, 0, "")
 
-#define DEF_UNPARSE_BREAK_BEFORE(tag) \
-	DEF_UNPARSE_RULE(UnparseRuleKind::BREAK_BEFORE, tag, 0, "")
+#define DEF_UNPARSE_BREAK_BEFORE(tag) DEF_UNPARSE_RULE(UnparseRuleKind::BREAK_BEFORE, tag, 0, "")
 
-#define DEF_UNPARSE_BREAK_AFTER(tag) \
-	DEF_UNPARSE_RULE(UnparseRuleKind::BREAK_AFTER, tag, 0, "")
+#define DEF_UNPARSE_BREAK_AFTER(tag) DEF_UNPARSE_RULE(UnparseRuleKind::BREAK_AFTER, tag, 0, "")
 
 const std::vector<UnparseRule> &GetUniversalUnparseRules();
 std::vector<UnparseRule> GetLanguageUnparseRules(const std::string &language);

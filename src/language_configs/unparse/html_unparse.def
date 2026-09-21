@@ -1,0 +1,12 @@
+/**
+ * @file html_unparse.def
+ * @brief HTML unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("element", 1)
+DEF_UNPARSE_INDENT("script_element", 1)
+DEF_UNPARSE_INDENT("style_element", 1)
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_AFTER, "<", 0, "")
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_AFTER, "</", 0, "")
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_BEFORE, ">", 0, "")
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_BEFORE, "/>", 0, "")

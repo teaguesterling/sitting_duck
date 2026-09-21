@@ -361,10 +361,10 @@ DEF_TYPE("template_expr", LITERAL_STRING, NONE, NONE, 0)
 DEF_TYPE("quoted_template", LITERAL_STRING, NONE, NONE, 0)
 
 /// @brief Quoted template start - opening `"`
-DEF_TYPE("quoted_template_start", PARSER_DELIMITER, NONE, NONE, 0)
+DEF_TYPE("quoted_template_start", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 
 /// @brief Quoted template end - closing `"`
-DEF_TYPE("quoted_template_end", PARSER_DELIMITER, NONE, NONE, 0)
+DEF_TYPE("quoted_template_end", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 
 /// @brief Template literal - static text
 DEF_TYPE("template_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
@@ -373,10 +373,10 @@ DEF_TYPE("template_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("template_interpolation", COMPUTATION_CALL, NONE, NONE, 0)
 
 /// @brief Interpolation start - `${`
-DEF_TYPE("template_interpolation_start", PARSER_DELIMITER, NONE, NONE, 0)
+DEF_TYPE("template_interpolation_start", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 
 /// @brief Interpolation end - `}`
-DEF_TYPE("template_interpolation_end", PARSER_DELIMITER, NONE, NONE, 0)
+DEF_TYPE("template_interpolation_end", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 
 /** @} */ // end hcl_templates
 

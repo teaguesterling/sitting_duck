@@ -1,0 +1,7 @@
+/**
+ * @file r_unparse.def
+ * @brief R unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("braced_expression", 1)
+DEF_UNPARSE_LINES_BEFORE("function_definition", 1)

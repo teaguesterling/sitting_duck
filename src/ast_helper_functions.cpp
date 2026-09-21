@@ -287,24 +287,15 @@ void ASTImportsFunction::Execute(ClientContext &context, TableFunctionInput &dat
 }
 
 void RegisterASTHelperFunctions(ExtensionLoader &loader) {
-	RegisterDocumentedTableFunction(
-	    loader, ASTFunctionsFunction::GetFunction(),
-	    "Extract all function and method definitions from an AST blob.",
-	    {"ast_blob"},
-	    {"SELECT * FROM ast_functions(ast_blob)"},
-	    {"sitting_duck", "ast"});
-	RegisterDocumentedTableFunction(
-	    loader, ASTClassesFunction::GetFunction(),
-	    "Extract all class, struct, and interface definitions from an AST blob.",
-	    {"ast_blob"},
-	    {"SELECT * FROM ast_classes(ast_blob)"},
-	    {"sitting_duck", "ast"});
-	RegisterDocumentedTableFunction(
-	    loader, ASTImportsFunction::GetFunction(),
-	    "Extract all import and include statements from an AST blob.",
-	    {"ast_blob"},
-	    {"SELECT * FROM ast_imports(ast_blob)"},
-	    {"sitting_duck", "ast"});
+	RegisterDocumentedTableFunction(loader, ASTFunctionsFunction::GetFunction(),
+	                                "Extract all function and method definitions from an AST blob.", {"ast_blob"},
+	                                {"SELECT * FROM ast_functions(ast_blob)"}, {"sitting_duck", "ast"});
+	RegisterDocumentedTableFunction(loader, ASTClassesFunction::GetFunction(),
+	                                "Extract all class, struct, and interface definitions from an AST blob.",
+	                                {"ast_blob"}, {"SELECT * FROM ast_classes(ast_blob)"}, {"sitting_duck", "ast"});
+	RegisterDocumentedTableFunction(loader, ASTImportsFunction::GetFunction(),
+	                                "Extract all import and include statements from an AST blob.", {"ast_blob"},
+	                                {"SELECT * FROM ast_imports(ast_blob)"}, {"sitting_duck", "ast"});
 }
 
 } // namespace duckdb

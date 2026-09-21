@@ -132,8 +132,8 @@ static Value ConvertASTResultToList(const ASTResult &result, const ExtractionCon
 				// receiver (#86) — must be populated here too, else parse_ast_list /
 				// parse_ast_list_table declare the column (from the flat schema) but
 				// return NULL for every node (silent wrong answer on call nodes).
-				fields.push_back(make_pair("receiver",
-				                           node.native.receiver.empty() ? Value() : Value(node.native.receiver)));
+				fields.push_back(
+				    make_pair("receiver", node.native.receiver.empty() ? Value() : Value(node.native.receiver)));
 			}
 		}
 
@@ -275,9 +275,7 @@ void RegisterParseASTListFunction(ExtensionLoader &loader) {
 	RegisterDocumentedScalarFunction(
 	    loader, func,
 	    "Parse source code string into a list of AST node structs (scalar function for column-valued inputs).",
-	    {"code", "language"},
-	    {"parse_ast_list('x = 1', 'python')"},
-	    {"sitting_duck", "ast"});
+	    {"code", "language"}, {"parse_ast_list('x = 1', 'python')"}, {"sitting_duck", "ast"});
 }
 
 } // namespace duckdb

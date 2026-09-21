@@ -1,0 +1,17 @@
+/**
+ * @file swift_unparse.def
+ * @brief Swift unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("statements", 1)
+DEF_UNPARSE_INDENT("code_block", 1)
+DEF_UNPARSE_INDENT("class_body", 1)
+DEF_UNPARSE_INDENT("struct_body", 1)
+DEF_UNPARSE_INDENT("enum_body", 1)
+DEF_UNPARSE_INDENT("protocol_body", 1)
+DEF_UNPARSE_INDENT("closure_expression", 1)
+DEF_UNPARSE_LINES_BEFORE("class_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("struct_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("enum_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("protocol_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("function_declaration", 1)

@@ -504,14 +504,15 @@ inline void SetValueCasted(ClientContext &context, Vector &vec, idx_t idx, const
 
 template <class INPUT_TYPE, class RESULT_TYPE, class FUNC>
 inline void CompatUnaryExecuteWithNulls(Vector &input, Vector &result, idx_t count, FUNC fun) {
-	UnaryExecutor::Execute<INPUT_TYPE, RESULT_TYPE>(input, result, count, [fun](INPUT_TYPE in) -> std::optional<RESULT_TYPE> {
-		ValidityMask scratch; // default-constructed → all rows valid
-		RESULT_TYPE val = fun(in, scratch, idx_t(0));
-		if (!scratch.RowIsValid(0)) {
-			return std::nullopt;
-		}
-		return val;
-	});
+	UnaryExecutor::Execute<INPUT_TYPE, RESULT_TYPE>(input, result, count,
+	                                                [fun](INPUT_TYPE in) -> std::optional<RESULT_TYPE> {
+		                                                ValidityMask scratch; // default-constructed → all rows valid
+		                                                RESULT_TYPE val = fun(in, scratch, idx_t(0));
+		                                                if (!scratch.RowIsValid(0)) {
+			                                                return std::nullopt;
+		                                                }
+		                                                return val;
+	                                                });
 }
 
 template <class LEFT_TYPE, class RIGHT_TYPE, class RESULT_TYPE, class FUNC>

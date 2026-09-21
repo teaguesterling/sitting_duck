@@ -192,10 +192,8 @@ void RegisterLanguageRegistrationFunction(ExtensionLoader &loader) {
 	function.named_parameters["symbol"] = LogicalType::VARCHAR;
 	function.named_parameters["overwrite"] = LogicalType::BOOLEAN;
 	RegisterDocumentedTableFunction(
-	    loader, function,
-	    "Dynamically register a tree-sitter language grammar from a shared library.",
-	    {"name", "grammar_path"},
-	    {"SELECT * FROM register_language('mylang', '/path/to/libtree-sitter-mylang.so')"},
+	    loader, function, "Dynamically register a tree-sitter language grammar from a shared library.",
+	    {"name", "grammar_path"}, {"SELECT * FROM register_language('mylang', '/path/to/libtree-sitter-mylang.so')"},
 	    {"sitting_duck", "metadata"});
 }
 

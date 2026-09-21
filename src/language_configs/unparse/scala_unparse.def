@@ -1,0 +1,12 @@
+/**
+ * @file scala_unparse.def
+ * @brief Scala unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("template_body", 1)
+DEF_UNPARSE_INDENT("block", 1)
+DEF_UNPARSE_LINES_BEFORE("class_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("object_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("trait_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("function_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("package_clause", 1)

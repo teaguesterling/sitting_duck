@@ -146,7 +146,7 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
      }},
     {"csharp",
      {
-         "invocation_expression",     // C# call node (routed to FUNCTION_CALL in csharp_types.def)
+         "invocation_expression",      // C# call node (routed to FUNCTION_CALL in csharp_types.def)
          "object_creation_expression", // new T(...)
          nullptr,
          "argument_list",

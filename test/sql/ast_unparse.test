@@ -40,6 +40,12 @@ SELECT rule FROM ast_unparse_rules('c') WHERE language = 'c' AND target = 'compo
 ----
 INDENT_BLOCK
 
+# Language rule counts across all built-in languages
+query I
+SELECT count(DISTINCT language) >= 25 FROM ast_unparse_rules();
+----
+true
+
 # =============================================================================
 # 2. Specific formatting nuance tests (exact string comparison with __NEWLINE__)
 # =============================================================================
@@ -90,17 +96,18 @@ SELECT replace(source, E'\n', '__NEWLINE__') FROM ast_unparse_from('go_sample');
 package main__NEWLINE____NEWLINE__func add(a int, b int) int {__NEWLINE__    return a + b__NEWLINE__}
 
 # =============================================================================
-# 3. Pseudo-Identity Law: parse(S) == parse(unparse(parse(S)))
+# 3. Pseudo-Identity Law across 25+ Built-in Languages
+#    parse(S) == parse(unparse(parse(S)))
 # =============================================================================
 
-# Pseudo-identity on Python inline snippet
+# Python
 query I
 WITH orig AS (
     SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
-    FROM parse_ast(E'def add(a, b):\n    return a + b\n', 'python')
+    FROM parse_ast(E'def calculate(x, y):\n    if x > y:\n        z = x - y\n        return z\n    return x + y\n', 'python')
 ),
 unp AS (
-    SELECT source FROM ast_unparse_code(E'def add(a, b):\n    return a + b\n', 'python')
+    SELECT source FROM ast_unparse_code(E'def calculate(x, y):\n    if x > y:\n        z = x - y\n        return z\n    return x + y\n', 'python')
 ),
 reparsed AS (
     SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
@@ -110,24 +117,7 @@ SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
 ----
 true
 
-# Pseudo-identity on Python nested block & trailing statement
-query I
-WITH orig AS (
-    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
-    FROM parse_ast(E'def calculate(x, y):\n    if x > y:\n        z = x - y\n        return z\n    return x + y\n\nresult = calculate(10, 5)\n', 'python')
-),
-unp AS (
-    SELECT source FROM ast_unparse_code(E'def calculate(x, y):\n    if x > y:\n        z = x - y\n        return z\n    return x + y\n\nresult = calculate(10, 5)\n', 'python')
-),
-reparsed AS (
-    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
-    FROM parse_ast_list_table((SELECT source FROM unp), 'python')
-)
-SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
-----
-true
-
-# Pseudo-identity on JavaScript
+# JavaScript
 query I
 WITH orig AS (
     SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
@@ -144,7 +134,24 @@ SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
 ----
 true
 
-# Pseudo-identity on C
+# TypeScript
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'function add(a: number, b: number): number {\n    return a + b;\n}\n', 'typescript')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'function add(a: number, b: number): number {\n    return a + b;\n}\n', 'typescript')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'typescript')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# C
 query I
 WITH orig AS (
     SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
@@ -161,7 +168,41 @@ SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
 ----
 true
 
-# Pseudo-identity on Go
+# C++
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'int add(int a, int b) {\n    return a + b;\n}\n', 'cpp')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'int add(int a, int b) {\n    return a + b;\n}\n', 'cpp')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'cpp')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# C#
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'class App {\n    public int Add(int a, int b) {\n        return a + b;\n    }\n}\n', 'csharp')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'class App {\n    public int Add(int a, int b) {\n        return a + b;\n    }\n}\n', 'csharp')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'csharp')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Go
 query I
 WITH orig AS (
     SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
@@ -173,6 +214,312 @@ unp AS (
 reparsed AS (
     SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
     FROM parse_ast_list_table((SELECT source FROM unp), 'go')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Rust
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n', 'rust')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n', 'rust')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'rust')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Java
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'class App {\n    public int add(int a, int b) {\n        return a + b;\n    }\n}\n', 'java')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'class App {\n    public int add(int a, int b) {\n        return a + b;\n    }\n}\n', 'java')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'java')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Ruby
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'def add(a, b)\n    return a + b\nend\n', 'ruby')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'def add(a, b)\n    return a + b\nend\n', 'ruby')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'ruby')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Bash
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'add() {\n    echo "hello"\n}\n', 'bash')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'add() {\n    echo "hello"\n}\n', 'bash')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'bash')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# PHP
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'<?php\nfunction add($a, $b) {\n    return $a + $b;\n}\n', 'php')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'<?php\nfunction add($a, $b) {\n    return $a + $b;\n}\n', 'php')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'php')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Swift
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'func add(a: Int, b: Int) -> Int {\n    return a + b\n}\n', 'swift')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'func add(a: Int, b: Int) -> Int {\n    return a + b\n}\n', 'swift')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'swift')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Kotlin
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'fun add(a: Int, b: Int): Int {\n    return a + b\n}\n', 'kotlin')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'fun add(a: Int, b: Int): Int {\n    return a + b\n}\n', 'kotlin')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'kotlin')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Dart
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'int add(int a, int b) {\n    return a + b;\n}\n', 'dart')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'int add(int a, int b) {\n    return a + b;\n}\n', 'dart')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'dart')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Lua
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'function add(a, b)\n    return a + b\nend\n', 'lua')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'function add(a, b)\n    return a + b\nend\n', 'lua')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'lua')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# Zig
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'fn add(a: i32, b: i32) i32 {\n    return a + b;\n}\n', 'zig')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'fn add(a: i32, b: i32) i32 {\n    return a + b;\n}\n', 'zig')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'zig')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# R
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'add <- function(a, b) {\n    a + b\n}\n', 'r')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'add <- function(a, b) {\n    a + b\n}\n', 'r')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'r')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# HTML
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast('<div><span>hello</span></div>', 'html')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code('<div><span>hello</span></div>', 'html')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'html')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# CSS
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'body {\n    color: red;\n}\n', 'css')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'body {\n    color: red;\n}\n', 'css')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'css')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# JSON
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast('{"name": "duck", "count": 42}', 'json')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code('{"name": "duck", "count": 42}', 'json')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'json')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# TOML
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'title = "TOML Example"\n\n[owner]\nname = "Tom Preston-Werner"\n', 'toml')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'title = "TOML Example"\n\n[owner]\nname = "Tom Preston-Werner"\n', 'toml')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'toml')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# HCL
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'resource "aws_s3" "bucket" {\n    name = "mybucket"\n}\n', 'hcl')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'resource "aws_s3" "bucket" {\n    name = "mybucket"\n}\n', 'hcl')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'hcl')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# GraphQL
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast(E'query GetUser {\n    user {\n        name\n        id\n    }\n}\n', 'graphql')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code(E'query GetUser {\n    user {\n        name\n        id\n    }\n}\n', 'graphql')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'graphql')
+)
+SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
+----
+true
+
+# SQL
+query I
+WITH orig AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast('SELECT id, name FROM users WHERE active = true;', 'sql')
+),
+unp AS (
+    SELECT source FROM ast_unparse_code('SELECT id, name FROM users WHERE active = true;', 'sql')
+),
+reparsed AS (
+    SELECT string_agg(type, ' > ' ORDER BY node_id) AS sig
+    FROM parse_ast_list_table((SELECT source FROM unp), 'sql')
 )
 SELECT (SELECT sig FROM orig) = (SELECT sig FROM reparsed);
 ----

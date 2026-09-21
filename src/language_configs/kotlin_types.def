@@ -262,6 +262,9 @@ DEF_TYPE("character_literal", LITERAL_STRING | SemanticRefinements::String::LITE
 
 /// @brief String literal - `"string"` or `"""raw"""`
 DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("line_string_content", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
+DEF_TYPE("multi_line_string_content", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
+DEF_TYPE("character_escape_seq", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /// @brief Null literal
 DEF_TYPE("null_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)

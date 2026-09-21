@@ -15,6 +15,16 @@ CREATE OR REPLACE MACRO ast_unparse_from(ast_table) AS TABLE (
   rules AS (
     SELECT language, rule, target, int_arg, str_arg FROM ast_unparse_rules()
   ),
+  tight_rules AS (
+    SELECT
+      language,
+      target,
+      bool_or(rule = 'TIGHT_BEFORE') AS tight_before,
+      bool_or(rule = 'TIGHT_AFTER') AS tight_after
+    FROM rules
+    WHERE rule IN ('TIGHT_BEFORE', 'TIGHT_AFTER')
+    GROUP BY language, target
+  ),
   blk AS (
     SELECT a.file_path, a.node_id, a.descendant_count, r.int_arg AS indent_level
     FROM ast a
@@ -37,11 +47,11 @@ CREATE OR REPLACE MACRO ast_unparse_from(ast_table) AS TABLE (
   ),
   leaf_sp AS (
     SELECT l.*,
-      COALESCE((SELECT bool_or(r.rule = 'TIGHT_BEFORE') FROM rules r
-                WHERE (r.language = l.language OR r.language = '*') AND r.target = l.typ), false) AS tight_before,
-      COALESCE((SELECT bool_or(r.rule = 'TIGHT_AFTER')  FROM rules r
-                WHERE (r.language = l.language OR r.language = '*') AND r.target = l.typ), false) AS tight_after
+      COALESCE(tb_lang.tight_before, tb_star.tight_before, false) AS tight_before,
+      COALESCE(tb_lang.tight_after, tb_star.tight_after, false) AS tight_after
     FROM leaves l
+    LEFT JOIN tight_rules tb_lang ON tb_lang.language = l.language AND tb_lang.target = l.typ
+    LEFT JOIN tight_rules tb_star ON tb_star.language = '*' AND tb_star.target = l.typ
   ),
   seq AS (
     SELECT *,
@@ -82,6 +92,16 @@ CREATE OR REPLACE MACRO ast_unparse(path) AS TABLE (
   rules AS (
     SELECT language, rule, target, int_arg, str_arg FROM ast_unparse_rules()
   ),
+  tight_rules AS (
+    SELECT
+      language,
+      target,
+      bool_or(rule = 'TIGHT_BEFORE') AS tight_before,
+      bool_or(rule = 'TIGHT_AFTER') AS tight_after
+    FROM rules
+    WHERE rule IN ('TIGHT_BEFORE', 'TIGHT_AFTER')
+    GROUP BY language, target
+  ),
   blk AS (
     SELECT a.file_path, a.node_id, a.descendant_count, r.int_arg AS indent_level
     FROM ast a
@@ -104,11 +124,11 @@ CREATE OR REPLACE MACRO ast_unparse(path) AS TABLE (
   ),
   leaf_sp AS (
     SELECT l.*,
-      COALESCE((SELECT bool_or(r.rule = 'TIGHT_BEFORE') FROM rules r
-                WHERE (r.language = l.language OR r.language = '*') AND r.target = l.typ), false) AS tight_before,
-      COALESCE((SELECT bool_or(r.rule = 'TIGHT_AFTER')  FROM rules r
-                WHERE (r.language = l.language OR r.language = '*') AND r.target = l.typ), false) AS tight_after
+      COALESCE(tb_lang.tight_before, tb_star.tight_before, false) AS tight_before,
+      COALESCE(tb_lang.tight_after, tb_star.tight_after, false) AS tight_after
     FROM leaves l
+    LEFT JOIN tight_rules tb_lang ON tb_lang.language = l.language AND tb_lang.target = l.typ
+    LEFT JOIN tight_rules tb_star ON tb_star.language = '*' AND tb_star.target = l.typ
   ),
   seq AS (
     SELECT *,
@@ -149,6 +169,16 @@ CREATE OR REPLACE MACRO ast_unparse_code(source_code, lang) AS TABLE (
   rules AS (
     SELECT language, rule, target, int_arg, str_arg FROM ast_unparse_rules()
   ),
+  tight_rules AS (
+    SELECT
+      language,
+      target,
+      bool_or(rule = 'TIGHT_BEFORE') AS tight_before,
+      bool_or(rule = 'TIGHT_AFTER') AS tight_after
+    FROM rules
+    WHERE rule IN ('TIGHT_BEFORE', 'TIGHT_AFTER')
+    GROUP BY language, target
+  ),
   blk AS (
     SELECT a.file_path, a.node_id, a.descendant_count, r.int_arg AS indent_level
     FROM ast a
@@ -171,11 +201,11 @@ CREATE OR REPLACE MACRO ast_unparse_code(source_code, lang) AS TABLE (
   ),
   leaf_sp AS (
     SELECT l.*,
-      COALESCE((SELECT bool_or(r.rule = 'TIGHT_BEFORE') FROM rules r
-                WHERE (r.language = l.language OR r.language = '*') AND r.target = l.typ), false) AS tight_before,
-      COALESCE((SELECT bool_or(r.rule = 'TIGHT_AFTER')  FROM rules r
-                WHERE (r.language = l.language OR r.language = '*') AND r.target = l.typ), false) AS tight_after
+      COALESCE(tb_lang.tight_before, tb_star.tight_before, false) AS tight_before,
+      COALESCE(tb_lang.tight_after, tb_star.tight_after, false) AS tight_after
     FROM leaves l
+    LEFT JOIN tight_rules tb_lang ON tb_lang.language = l.language AND tb_lang.target = l.typ
+    LEFT JOIN tight_rules tb_star ON tb_star.language = '*' AND tb_star.target = l.typ
   ),
   seq AS (
     SELECT *,

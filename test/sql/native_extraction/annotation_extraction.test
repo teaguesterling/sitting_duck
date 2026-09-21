@@ -1,7 +1,8 @@
 # name: test/sql/native_extraction/annotation_extraction.test
 # description: Contract A — decorators/annotations land in the `annotations` column, not `modifiers`.
-#              `modifiers` stays keyword-only; `:decorated` (which reads `annotations`) starts matching.
 # group: [native_extraction]
+
+#              `modifiers` stays keyword-only; `:decorated` (which reads `annotations`) starts matching.
 
 require sitting_duck
 

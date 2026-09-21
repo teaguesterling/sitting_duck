@@ -1,6 +1,7 @@
 # name: test/sql/bugs/constituent_nodes.test
 # description: #139 — class selectors return each construct once, not its constituents
 # group: [bugs]
+
 #
 # A "constituent" is a meaningful sub-part of a larger construct that already
 # represents the whole: a string's content/fragment/escape, an import's clause/

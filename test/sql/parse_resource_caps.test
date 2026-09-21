@@ -1,6 +1,7 @@
 # name: test/sql/parse_resource_caps.test
 # description: Resource caps bound parse work (source size / timeout / node count) and surface clean errors
 # group: [sql]
+
 #
 # These are bounded reproductions: each over-limit input is a few KB with a
 # deliberately low cap, so the tests assert "clean DuckDB error at the

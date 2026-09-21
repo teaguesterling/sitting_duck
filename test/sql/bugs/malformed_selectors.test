@@ -1,6 +1,7 @@
 # name: test/sql/bugs/malformed_selectors.test
 # description: #128 — malformed selectors raise instead of silently over-/under-matching
 # group: [bugs]
+
 #
 # A bare selector always parses under one top-level ERROR wrapper (expected). Malformed
 # input instead leaves an ERROR/MISSING past that wrapper, or stray tokens outside the

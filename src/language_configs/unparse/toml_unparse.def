@@ -1,0 +1,10 @@
+/**
+ * @file toml_unparse.def
+ * @brief TOML unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("table", 1)
+DEF_UNPARSE_INDENT("array", 1)
+DEF_UNPARSE_INDENT("inline_table", 1)
+DEF_UNPARSE_LINES_BEFORE("table", 1)
+DEF_UNPARSE_LINES_BEFORE("table_array_element", 1)

@@ -25,6 +25,9 @@ require sitting_duck
 statement ok
 LOAD sitting_duck;
 
+statement ok
+SET max_memory = '4GB';
+
 # ==========================================================================
 # Baseline: plain cached table
 # ==========================================================================

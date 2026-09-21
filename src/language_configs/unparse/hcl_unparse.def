@@ -1,0 +1,10 @@
+/**
+ * @file hcl_unparse.def
+ * @brief HCL / Terraform unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("body", 1)
+DEF_UNPARSE_INDENT("object", 1)
+DEF_UNPARSE_INDENT("tuple", 1)
+DEF_UNPARSE_INDENT("block", 1)
+DEF_UNPARSE_LINES_BEFORE("block", 1)

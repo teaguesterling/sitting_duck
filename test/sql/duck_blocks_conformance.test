@@ -1,6 +1,7 @@
 # name: test/sql/duck_blocks_conformance.test
 # description: ast_to_blocks output validated against the vendored duck_blocks conformance macros
 # group: [sql]
+
 #
 # Runs the duck_block_utils conformance validator over real ast_to_blocks output,
 # so producer/spec drift is caught (tracker/bugs/014). The macros below are copied

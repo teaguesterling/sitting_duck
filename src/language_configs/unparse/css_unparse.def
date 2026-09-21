@@ -1,0 +1,12 @@
+/**
+ * @file css_unparse.def
+ * @brief CSS unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("block", 1)
+DEF_UNPARSE_INDENT("keyframe_block_list", 1)
+DEF_UNPARSE_INDENT("keyframe_block", 1)
+DEF_UNPARSE_LINES_BEFORE("rule_set", 1)
+DEF_UNPARSE_LINES_BEFORE("media_statement", 1)
+DEF_UNPARSE_LINES_BEFORE("keyframes_statement", 1)
+DEF_UNPARSE_LINES_BEFORE("supports_statement", 1)

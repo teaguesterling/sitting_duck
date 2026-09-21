@@ -181,8 +181,7 @@ template <>
 inline bool IsBareNameDefinitionParent<JavaAdapter>(const char *parent_type) {
 	// params (formal_parameter) + exception variable (catch_formal_parameter) — both
 	// wrap a single name identifier (the type is a non-identifier node).
-	return std::strcmp(parent_type, "formal_parameter") == 0 ||
-	       std::strcmp(parent_type, "catch_formal_parameter") == 0;
+	return std::strcmp(parent_type, "formal_parameter") == 0 || std::strcmp(parent_type, "catch_formal_parameter") == 0;
 }
 template <>
 inline bool IsBareNameDefinitionParent<KotlinAdapter>(const char *parent_type) {
@@ -221,12 +220,14 @@ inline bool IsBareNameDefinitionField<TypeScriptAdapter>(TSNode self, TSNode par
 // C#: parameter — name is field `name` (the default value is not that field).
 template <>
 inline bool IsBareNameDefinitionField<CSharpAdapter>(TSNode self, TSNode parent, const char *parent_type) {
-	return std::strcmp(parent_type, "parameter") == 0 && ts_node_eq(self, ts_node_child_by_field_name(parent, "name", 4));
+	return std::strcmp(parent_type, "parameter") == 0 &&
+	       ts_node_eq(self, ts_node_child_by_field_name(parent, "name", 4));
 }
 // R: parameter — name is field `name`; the default is field `default` (excluded).
 template <>
 inline bool IsBareNameDefinitionField<RAdapter>(TSNode self, TSNode parent, const char *parent_type) {
-	return std::strcmp(parent_type, "parameter") == 0 && ts_node_eq(self, ts_node_child_by_field_name(parent, "name", 4));
+	return std::strcmp(parent_type, "parameter") == 0 &&
+	       ts_node_eq(self, ts_node_child_by_field_name(parent, "name", 4));
 }
 
 // #64 for-loop targets — the loop variable binds a name; it is a specific field of the

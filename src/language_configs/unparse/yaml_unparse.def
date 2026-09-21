@@ -1,0 +1,10 @@
+/**
+ * @file yaml_unparse.def
+ * @brief YAML unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("block_mapping", 1)
+DEF_UNPARSE_INDENT("block_sequence", 1)
+DEF_UNPARSE_INDENT("flow_mapping", 1)
+DEF_UNPARSE_INDENT("flow_sequence", 1)
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_BEFORE, ":", 0, "")

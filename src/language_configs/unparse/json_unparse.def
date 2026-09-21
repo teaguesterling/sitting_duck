@@ -1,0 +1,9 @@
+/**
+ * @file json_unparse.def
+ * @brief JSON unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("object", 1)
+DEF_UNPARSE_INDENT("array", 1)
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_BEFORE, ":", 0, "")
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_BEFORE, ",", 0, "")

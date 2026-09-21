@@ -1,0 +1,13 @@
+/**
+ * @file bash_unparse.def
+ * @brief Bash shell unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("compound_statement", 1)
+DEF_UNPARSE_INDENT("do_group", 1)
+DEF_UNPARSE_INDENT("subshell", 1)
+DEF_UNPARSE_INDENT("case_statement", 1)
+DEF_UNPARSE_LINES_BEFORE("function_definition", 1)
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_AFTER, "$", 0, "")
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_AFTER, "${", 0, "")
+DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_BEFORE, "}", 0, "")

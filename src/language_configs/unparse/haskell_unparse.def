@@ -1,0 +1,13 @@
+/**
+ * @file haskell_unparse.def
+ * @brief Haskell unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("declarations", 1)
+DEF_UNPARSE_INDENT("do_expression", 1)
+DEF_UNPARSE_INDENT("where_clause", 1)
+DEF_UNPARSE_LINES_BEFORE("function", 1)
+DEF_UNPARSE_LINES_BEFORE("data_type", 1)
+DEF_UNPARSE_LINES_BEFORE("newtype", 1)
+DEF_UNPARSE_LINES_BEFORE("class", 1)
+DEF_UNPARSE_LINES_BEFORE("instance", 1)

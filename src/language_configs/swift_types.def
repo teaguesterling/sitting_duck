@@ -380,6 +380,8 @@ DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
 /// @brief String literal - `"text"`
 DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
+DEF_TYPE("line_str_text", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
+DEF_TYPE("multi_line_str_text", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 
 /// @brief Multiline string literal - `"""..."""`
 DEF_TYPE("multiline_string_literal", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)

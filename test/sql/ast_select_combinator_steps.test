@@ -1,12 +1,13 @@
 # name: test/sql/ast_select_combinator_steps.test
 # description: Combinator steps honor type, .class alias and #id; subject
+# group: [sql]
+
 #   modifiers apply to the last step; unsupported shapes raise instead of
 #   silently matching nothing (issue #127).
 #
 #   Fixture: test/data/python/combinator_steps.py -- classes Base and Widget
 #   (Widget has __init__, test_render, undocumented); module functions main,
 #   test_helper, calls_nothing. Counts below were derived by reading it.
-# group: [sitting_duck]
 
 require sitting_duck
 

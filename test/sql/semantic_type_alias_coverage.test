@@ -1,6 +1,7 @@
 # name: test/sql/semantic_type_alias_coverage.test
 # description: Exhaustive coverage of is_semantic_type() selector-alias classes (.fn/.func/.call/.access/...)
 # group: [sql]
+
 #
 # WHY THIS EXISTS
 # ---------------

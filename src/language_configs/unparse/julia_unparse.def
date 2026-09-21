@@ -1,0 +1,17 @@
+/**
+ * @file julia_unparse.def
+ * @brief Julia unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("module_definition", 1)
+DEF_UNPARSE_INDENT("function_definition", 1)
+DEF_UNPARSE_INDENT("struct_definition", 1)
+DEF_UNPARSE_INDENT("for_statement", 1)
+DEF_UNPARSE_INDENT("while_statement", 1)
+DEF_UNPARSE_INDENT("if_statement", 1)
+DEF_UNPARSE_INDENT("let_statement", 1)
+DEF_UNPARSE_INDENT("try_statement", 1)
+DEF_UNPARSE_INDENT("block", 1)
+DEF_UNPARSE_LINES_BEFORE("module_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("function_definition", 1)
+DEF_UNPARSE_LINES_BEFORE("struct_definition", 1)

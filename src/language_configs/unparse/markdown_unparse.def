@@ -1,0 +1,11 @@
+/**
+ * @file markdown_unparse.def
+ * @brief Markdown unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("block_quote", 1)
+DEF_UNPARSE_INDENT("list_item", 1)
+DEF_UNPARSE_LINES_BEFORE("section", 1)
+DEF_UNPARSE_LINES_BEFORE("atx_heading", 1)
+DEF_UNPARSE_LINES_BEFORE("setext_heading", 1)
+DEF_UNPARSE_LINES_BEFORE("paragraph", 1)

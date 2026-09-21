@@ -352,6 +352,9 @@ DEF_TYPE("await_expression", FLOW_SYNC, NONE, NONE, 0)
 /// @brief Identifier - name
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 
+/// @brief Predefined type - `int`, `string`, `void`, `bool`, etc.
+DEF_TYPE("predefined_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
+
 /// @brief Integer literal
 DEF_TYPE("integer_literal", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
 

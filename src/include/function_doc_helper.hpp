@@ -6,18 +6,25 @@
 
 namespace duckdb {
 
-inline void RegisterDocumentedScalarFunction(
-    ExtensionLoader &loader,
-    ScalarFunction func,
-    const string &description,
-    const vector<string> &parameter_names = {},
-    const vector<string> &examples = {},
-    const vector<string> &categories = {"sitting_duck"}) {
+template <typename T>
+auto GetArguments(const T &fn, int) -> decltype(fn->arguments) {
+	return fn->arguments;
+}
+
+template <typename T>
+auto GetArguments(const T &fn, long) -> decltype(fn.arguments) {
+	return fn.arguments;
+}
+
+inline void RegisterDocumentedScalarFunction(ExtensionLoader &loader, ScalarFunction func, const string &description,
+                                             const vector<string> &parameter_names = {},
+                                             const vector<string> &examples = {},
+                                             const vector<string> &categories = {"sitting_duck"}) {
 	CreateScalarFunctionInfo info(std::move(func));
 	info.on_conflict = OnCreateConflict::ALTER_ON_CONFLICT;
 	FunctionDescription desc;
 	desc.description = description;
-	desc.parameter_types = info.functions.functions[0].arguments;
+	desc.parameter_types = GetArguments(info.functions.functions[0], 0);
 	desc.parameter_names = parameter_names;
 	desc.examples = examples;
 	desc.categories = categories;
@@ -25,20 +32,18 @@ inline void RegisterDocumentedScalarFunction(
 	loader.RegisterFunction(std::move(info));
 }
 
-inline void RegisterDocumentedScalarFunctionSet(
-    ExtensionLoader &loader,
-    ScalarFunctionSet set,
-    const string &description,
-    const vector<vector<string>> &parameter_names_list = {{}},
-    const vector<string> &examples = {},
-    const vector<string> &categories = {"sitting_duck"}) {
+inline void RegisterDocumentedScalarFunctionSet(ExtensionLoader &loader, ScalarFunctionSet set,
+                                                const string &description,
+                                                const vector<vector<string>> &parameter_names_list = {{}},
+                                                const vector<string> &examples = {},
+                                                const vector<string> &categories = {"sitting_duck"}) {
 	CreateScalarFunctionInfo info(std::move(set));
 	info.on_conflict = OnCreateConflict::ALTER_ON_CONFLICT;
 	for (idx_t i = 0; i < info.functions.functions.size(); i++) {
 		const auto &func = info.functions.functions[i];
 		FunctionDescription desc;
 		desc.description = description;
-		desc.parameter_types = func.arguments;
+		desc.parameter_types = GetArguments(func, 0);
 		if (i < parameter_names_list.size()) {
 			desc.parameter_names = parameter_names_list[i];
 		} else if (!parameter_names_list.empty()) {
@@ -51,18 +56,15 @@ inline void RegisterDocumentedScalarFunctionSet(
 	loader.RegisterFunction(std::move(info));
 }
 
-inline void RegisterDocumentedTableFunction(
-    ExtensionLoader &loader,
-    TableFunction func,
-    const string &description,
-    const vector<string> &parameter_names = {},
-    const vector<string> &examples = {},
-    const vector<string> &categories = {"sitting_duck"}) {
+inline void RegisterDocumentedTableFunction(ExtensionLoader &loader, TableFunction func, const string &description,
+                                            const vector<string> &parameter_names = {},
+                                            const vector<string> &examples = {},
+                                            const vector<string> &categories = {"sitting_duck"}) {
 	CreateTableFunctionInfo info(std::move(func));
 	info.on_conflict = OnCreateConflict::ALTER_ON_CONFLICT;
 	FunctionDescription desc;
 	desc.description = description;
-	desc.parameter_types = info.functions.functions[0].arguments;
+	desc.parameter_types = GetArguments(info.functions.functions[0], 0);
 	desc.parameter_names = parameter_names;
 	desc.examples = examples;
 	desc.categories = categories;
@@ -70,20 +72,17 @@ inline void RegisterDocumentedTableFunction(
 	loader.RegisterFunction(std::move(info));
 }
 
-inline void RegisterDocumentedTableFunctionSet(
-    ExtensionLoader &loader,
-    TableFunctionSet set,
-    const string &description,
-    const vector<vector<string>> &parameter_names_list = {{}},
-    const vector<string> &examples = {},
-    const vector<string> &categories = {"sitting_duck"}) {
+inline void RegisterDocumentedTableFunctionSet(ExtensionLoader &loader, TableFunctionSet set, const string &description,
+                                               const vector<vector<string>> &parameter_names_list = {{}},
+                                               const vector<string> &examples = {},
+                                               const vector<string> &categories = {"sitting_duck"}) {
 	CreateTableFunctionInfo info(std::move(set));
 	info.on_conflict = OnCreateConflict::ALTER_ON_CONFLICT;
 	for (idx_t i = 0; i < info.functions.functions.size(); i++) {
 		const auto &func = info.functions.functions[i];
 		FunctionDescription desc;
 		desc.description = description;
-		desc.parameter_types = func.arguments;
+		desc.parameter_types = GetArguments(func, 0);
 		if (i < parameter_names_list.size()) {
 			desc.parameter_names = parameter_names_list[i];
 		} else if (!parameter_names_list.empty()) {

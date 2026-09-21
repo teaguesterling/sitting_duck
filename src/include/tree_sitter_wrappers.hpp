@@ -93,8 +93,8 @@ public:
 		}
 
 		if (timeout_ms <= 0) {
-			TSTree *tree =
-			    ts_parser_parse_string(parser_.get(), nullptr, content.c_str(), static_cast<uint32_t>(content.length()));
+			TSTree *tree = ts_parser_parse_string(parser_.get(), nullptr, content.c_str(),
+			                                      static_cast<uint32_t>(content.length()));
 			if (!tree) {
 				throw InternalException("Failed to parse content");
 			}

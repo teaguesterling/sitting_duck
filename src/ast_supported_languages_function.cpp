@@ -84,10 +84,8 @@ void RegisterASTSupportedLanguagesFunction(ExtensionLoader &loader) {
 	                       SupportedLanguagesInit);
 	RegisterDocumentedTableFunction(
 	    loader, function,
-	    "Return list of supported programming and markup languages and their registered grammar metadata.",
-	    {},
-	    {"SELECT * FROM ast_supported_languages()"},
-	    {"sitting_duck", "metadata"});
+	    "Return list of supported programming and markup languages and their registered grammar metadata.", {},
+	    {"SELECT * FROM ast_supported_languages()"}, {"sitting_duck", "metadata"});
 }
 
 } // namespace duckdb

@@ -1,0 +1,14 @@
+/**
+ * @file kotlin_unparse.def
+ * @brief Kotlin unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("class_body", 1)
+DEF_UNPARSE_INDENT("block", 1)
+DEF_UNPARSE_INDENT("lambda_literal", 1)
+DEF_UNPARSE_INDENT("function_body", 1)
+DEF_UNPARSE_INDENT("when_entry", 1)
+DEF_UNPARSE_INDENT("statements", 1)
+DEF_UNPARSE_LINES_BEFORE("class_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("function_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("object_declaration", 1)

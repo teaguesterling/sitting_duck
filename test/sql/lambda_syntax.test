@@ -1,8 +1,9 @@
 # name: test/sql/lambda_syntax.test
 # description: Macros must use the modern `lambda x:` syntax, not the deprecated `x ->`
+# group: [sql]
+
 #              arrow (removed in a future DuckDB release). Guards against regressions
 #              in embedded SQL macros like ast_qualified_name_as_string.
-# group: [sql]
 
 require sitting_duck
 

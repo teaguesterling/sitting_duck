@@ -196,11 +196,8 @@ void ParseASTFunction::Register(ExtensionLoader &loader) {
 	parse_ast_func.named_parameters["max_parse_nodes"] = LogicalType::BIGINT;
 
 	RegisterDocumentedTableFunction(
-	    loader, parse_ast_func,
-	    "Parse source code string into an AST table representation.",
-	    {"code", "language"},
-	    {"SELECT * FROM parse_ast('def add(a, b): return a + b', 'python')"},
-	    {"sitting_duck", "ast"});
+	    loader, parse_ast_func, "Parse source code string into an AST table representation.", {"code", "language"},
+	    {"SELECT * FROM parse_ast('def add(a, b): return a + b', 'python')"}, {"sitting_duck", "ast"});
 
 	// Register parse_ast_flat(code, language) -> TABLE with flat schema (alias)
 	TableFunction parse_ast_flat_func("parse_ast_flat", {LogicalType::VARCHAR, LogicalType::VARCHAR}, ParseASTExecute,
@@ -218,10 +215,8 @@ void ParseASTFunction::Register(ExtensionLoader &loader) {
 
 	RegisterDocumentedTableFunction(
 	    loader, parse_ast_flat_func,
-	    "Parse source code string into a flat AST table representation (alias of parse_ast).",
-	    {"code", "language"},
-	    {"SELECT * FROM parse_ast_flat('def add(a, b): return a + b', 'python')"},
-	    {"sitting_duck", "ast"});
+	    "Parse source code string into a flat AST table representation (alias of parse_ast).", {"code", "language"},
+	    {"SELECT * FROM parse_ast_flat('def add(a, b): return a + b', 'python')"}, {"sitting_duck", "ast"});
 
 	// Register parse_ast_hierarchical(code, language) -> TABLE with hierarchical schema (legacy)
 	TableFunction parse_ast_hierarchical_func("parse_ast_hierarchical", {LogicalType::VARCHAR, LogicalType::VARCHAR},
@@ -238,10 +233,8 @@ void ParseASTFunction::Register(ExtensionLoader &loader) {
 	parse_ast_hierarchical_func.named_parameters["max_parse_nodes"] = LogicalType::BIGINT;
 
 	RegisterDocumentedTableFunction(
-	    loader, parse_ast_hierarchical_func,
-	    "Parse source code string into a hierarchical AST table representation.",
-	    {"code", "language"},
-	    {"SELECT * FROM parse_ast_hierarchical('def add(a, b): return a + b', 'python')"},
+	    loader, parse_ast_hierarchical_func, "Parse source code string into a hierarchical AST table representation.",
+	    {"code", "language"}, {"SELECT * FROM parse_ast_hierarchical('def add(a, b): return a + b', 'python')"},
 	    {"sitting_duck", "ast"});
 }
 

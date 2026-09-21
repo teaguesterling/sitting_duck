@@ -228,10 +228,8 @@ void RegisterASTTypeMapFunction(ExtensionLoader &loader) {
 	type_map_set.AddFunction(type_map_lang);
 
 	RegisterDocumentedTableFunctionSet(
-	    loader, type_map_set,
-	    "Return mapping of AST node types to semantic types and extraction strategies.",
-	    {{}, {"language"}},
-	    {"SELECT * FROM ast_type_map()", "SELECT * FROM ast_type_map('python')"},
+	    loader, type_map_set, "Return mapping of AST node types to semantic types and extraction strategies.",
+	    {{}, {"language"}}, {"SELECT * FROM ast_type_map()", "SELECT * FROM ast_type_map('python')"},
 	    {"sitting_duck", "metadata"});
 }
 

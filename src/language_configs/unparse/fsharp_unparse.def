@@ -1,0 +1,12 @@
+/**
+ * @file fsharp_unparse.def
+ * @brief F# unparse formatting rules
+ */
+
+DEF_UNPARSE_INDENT("module_or_namespace_body", 1)
+DEF_UNPARSE_INDENT("computation_expression", 1)
+DEF_UNPARSE_INDENT("record_expression", 1)
+DEF_UNPARSE_INDENT("list_expression", 1)
+DEF_UNPARSE_LINES_BEFORE("module_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("function_declaration", 1)
+DEF_UNPARSE_LINES_BEFORE("type_declaration", 1)

@@ -1,7 +1,8 @@
 # name: test/sql/dynamic_languages/register_language_concurrency.test
 # description: Parallel glob scans over a dynamically registered grammar, across
-#              the overwrite/config registration lifecycle
 # group: [dynamic_languages]
+
+#              the overwrite/config registration lifecycle
 
 require sitting_duck
 

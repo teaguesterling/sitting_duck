@@ -1,7 +1,8 @@
 # name: test/sql/bugs/has_adjacency.test
 # description: #133 (:has/:not filter syntax-only + constituent has-targets) and
-#             #141 (adjacent-sibling A + B skips punctuation/syntax-only siblings)
 # group: [bugs]
+
+#             #141 (adjacent-sibling A + B skips punctuation/syntax-only siblings)
 #
 # #133: a `.class` has-target means a CONSTRUCT. The syntax-only `def` keyword shares
 #       DEFINITION_FUNCTION with its function, so `.fn:has(.fn)` used to match EVERY
