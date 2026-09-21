@@ -142,6 +142,9 @@ nav:
     - Contributing: development/contributing.md
     - Adding Languages: development/adding-languages.md
     - Updating: development/updating.md
+  - Planning:
+    - v2 Architecture: planning/v2-architecture.md
+    - Fluent AST Mutator RFC: planning/rfc-fluent-ast-mutator-and-microdsl.md
 
 extra:
   social:

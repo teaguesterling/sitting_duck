@@ -1,0 +1,175 @@
+# name: test/sql/ast_unparse_presets.test
+# description: Presets, dynamic indentation, custom rule tables, and synthetic AST unparsing
+# group: [sql]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. ast_unparse_rules() preset introspection
+# =============================================================================
+
+# Default 0-arg returns all rules
+query I
+SELECT count(*) > 50 FROM ast_unparse_rules();
+----
+true
+
+# 1-arg returns universal + specific language rules
+query I
+SELECT count(*) > 0 FROM ast_unparse_rules('python') WHERE language = 'python';
+----
+true
+
+# 2-arg: Python with 'black' preset returns INDENT_STRING and LINES_BEFORE
+query T
+SELECT str_arg FROM ast_unparse_rules('python', 'black') WHERE rule = 'INDENT_STRING';
+----
+    
+
+query I
+SELECT int_arg FROM ast_unparse_rules('python', 'pep8') WHERE rule = 'LINES_BEFORE' AND target = 'class_definition';
+----
+2
+
+# 2-arg: Go with 'gofmt' preset returns tab INDENT_STRING
+query T
+SELECT str_arg FROM ast_unparse_rules('go', 'gofmt') WHERE rule = 'INDENT_STRING';
+----
+	
+
+# 2-arg: JavaScript with 'prettier' preset returns 2 spaces
+query T
+SELECT str_arg FROM ast_unparse_rules('javascript', 'prettier') WHERE rule = 'INDENT_STRING';
+----
+  
+
+# 2-arg: Universal presets (tabs, 2spaces, 4spaces)
+query T
+SELECT DISTINCT str_arg FROM ast_unparse_rules('c', 'tabs') WHERE rule = 'INDENT_STRING';
+----
+	
+
+query T
+SELECT DISTINCT str_arg FROM ast_unparse_rules('rust', '2spaces') WHERE rule = 'INDENT_STRING';
+----
+  
+
+query T
+SELECT DISTINCT str_arg FROM ast_unparse_rules('cpp', '4spaces') WHERE rule = 'INDENT_STRING';
+----
+    
+
+# =============================================================================
+# 2. Unparsing with Presets
+# =============================================================================
+
+# Go code unparsed with 'gofmt' (tab indentation)
+statement ok
+CREATE TABLE go_src AS SELECT * FROM parse_ast(E'package main\n\nfunc add(a int, b int) int {\n    return a + b\n}\n', 'go');
+
+query T
+SELECT replace(replace(source, E'\n', '__NEWLINE__'), E'\t', '__TAB__') FROM ast_unparse_from('go_src', 'gofmt');
+----
+package main__NEWLINE____NEWLINE__func add(a int, b int) int {__NEWLINE____TAB__return a + b__NEWLINE__}
+
+# JavaScript code unparsed with 'prettier' (2 spaces indentation)
+statement ok
+CREATE TABLE js_src AS SELECT * FROM parse_ast(E'function test() {\n    return 42;\n}\n', 'javascript');
+
+query T
+SELECT replace(source, E'\n', '__NEWLINE__') FROM ast_unparse_from('js_src', 'prettier');
+----
+function test() {__NEWLINE__  return 42;__NEWLINE__}
+
+# C code unparsed with 'llvm' (2 spaces indentation)
+statement ok
+CREATE TABLE c_src AS SELECT * FROM parse_ast(E'int compute() {\n    return 100;\n}\n', 'c');
+
+query T
+SELECT replace(source, E'\n', '__NEWLINE__') FROM ast_unparse_from('c_src', 'llvm');
+----
+int compute() {__NEWLINE__  return 100;__NEWLINE__}
+
+# Python code with ast_unparse_code using '2spaces' preset
+query T
+SELECT replace(source, E'\n', '__NEWLINE__') FROM ast_unparse_code(E'def calc():\n    x = 1\n    return x\n', 'python', '2spaces');
+----
+def calc():__NEWLINE__  x = 1__NEWLINE__  return x
+
+# =============================================================================
+# 3. ast_unparse_custom() with User-Supplied Rule Tables
+# =============================================================================
+
+statement ok
+CREATE TABLE py_nested AS SELECT * FROM parse_ast(E'def check(x):\n    if x > 0:\n        return True\n    return False\n', 'python');
+
+statement ok
+CREATE TABLE custom_rules AS SELECT * FROM ast_unparse_rules('python');
+
+statement ok
+INSERT INTO custom_rules VALUES ('python', 'INDENT_STRING', '*', 0, '>>> ');
+
+query T
+SELECT replace(source, E'\n', '__NEWLINE__') FROM ast_unparse_custom('py_nested', 'custom_rules');
+----
+def check(x):__NEWLINE__>>> if x > 0:__NEWLINE__>>> >>> return True__NEWLINE__>>> return False
+
+# =============================================================================
+# 4. Synthetic Zero-Offset AST Reconstruction
+# =============================================================================
+
+# Construct a synthetic AST with start_line = 0 and end_line = 0 for C
+statement ok
+CREATE TABLE synthetic_c_ast AS
+SELECT
+  'synthetic.c' AS file_path,
+  0 AS node_id,
+  'translation_unit' AS type,
+  '' AS name,
+  0 AS start_line, 0 AS start_column, 0 AS end_line, 0 AS end_column,
+  0 AS start_byte, 0 AS end_byte,
+  1 AS children_count, 6 AS descendant_count,
+  0 AS flags, 'c' AS language
+UNION ALL
+SELECT
+  'synthetic.c', 1, 'function_definition', '',
+  0, 0, 0, 0, 0, 0,
+  3, 5, 0, 'c'
+UNION ALL
+SELECT
+  'synthetic.c', 2, 'primitive_type', 'int',
+  0, 0, 0, 0, 0, 0,
+  0, 0, 0, 'c'
+UNION ALL
+SELECT
+  'synthetic.c', 3, 'identifier', 'main',
+  0, 0, 0, 0, 0, 0,
+  0, 0, 0, 'c'
+UNION ALL
+SELECT
+  'synthetic.c', 4, 'compound_statement', '',
+  0, 0, 0, 0, 0, 0,
+  3, 3, 0, 'c'
+UNION ALL
+SELECT
+  'synthetic.c', 5, '{', '{',
+  0, 0, 0, 0, 0, 0,
+  0, 0, 0, 'c'
+UNION ALL
+SELECT
+  'synthetic.c', 6, 'return_statement', 'return 0;',
+  0, 0, 0, 0, 0, 0,
+  0, 0, 0, 'c'
+UNION ALL
+SELECT
+  'synthetic.c', 7, '}', '}',
+  0, 0, 0, 0, 0, 0,
+  0, 0, 0, 'c';
+
+query T
+SELECT replace(source, E'\n', '__NEWLINE__') FROM ast_unparse_from('synthetic_c_ast');
+----
+int main {__NEWLINE__    return 0;__NEWLINE__}

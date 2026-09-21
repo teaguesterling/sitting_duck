@@ -1,165 +1,147 @@
 # AST Unparsing (`ast_unparse`)
 
-The `ast_unparse` engine reconstructs formatted source code from Sitting Duck AST tables. It provides a pluggable, rules-based formatter that guarantees the **pseudo-identity property**:
+The `ast_unparse` suite reconstructs formatted source code from Sitting Duck AST tables. It provides a pluggable, rules-based formatter that guarantees the **pseudo-identity property**:
 
 $$\text{parse}(S) \equiv \text{parse}(\text{unparse}(\text{parse}(S)))$$
 
-Parsing the unparsed output of any valid AST yields a syntactically and semantically identical AST.
+Parsing the unparsed output of any valid AST yields a syntactically and semantically identical AST across all 27+ supported languages.
 
 ---
 
-## Functions
+## SQL Macros
 
 ### `ast_unparse()`
 
-Reconstructs source code string from an AST table or query expression.
-
-#### Signature
+Unparses a source code file on disk into formatted source code text.
 
 ```sql
-ast_unparse(ast_table, [indent_size := 4, use_tabs := false, newline := '\n']) -> VARCHAR
+ast_unparse(path VARCHAR, [preset := '']) -> TABLE(file_path VARCHAR, source VARCHAR)
 ```
 
-#### Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `ast_table` | TABLE / QUERY | required | AST relation (from `read_ast()`, `parse_ast()`, or a modified CTE) |
-| `indent_size` | INTEGER | `4` | Number of spaces per indentation level |
-| `use_tabs` | BOOLEAN | `false` | When `true`, indents using tab characters instead of spaces |
-| `newline` | VARCHAR | `'\n'` | Line separator character sequence |
-
-#### Basic Example
+#### Example
 
 ```sql
--- Parse Python code into AST, then reconstruct the source code
-WITH parsed AS (
-    SELECT * FROM parse_ast('def add(a, b): return a + b', 'python')
-)
-SELECT ast_unparse(parsed) AS reconstructed_code;
+SELECT source FROM ast_unparse('src/main.py', 'black');
 ```
 
 ---
 
-### `ast_unparse_rules()`
+### `ast_unparse_code()`
 
-Discovers active whitespace, indentation, and linebreak formatting rules for all or a specific language.
-
-#### Signature
+Parses a raw source string into an AST in-memory and unparses it back to formatted source code text.
 
 ```sql
--- All languages (including universal baseline rules)
-ast_unparse_rules() -> TABLE
-
--- Specific language
-ast_unparse_rules(language VARCHAR) -> TABLE
+ast_unparse_code(source_code VARCHAR, lang VARCHAR, [preset := '']) -> TABLE(file_path VARCHAR, source VARCHAR)
 ```
 
-#### Output Schema
+#### Example
+
+```sql
+SELECT source FROM ast_unparse_code(E'def calc():\n    return 42\n', 'python', 'black');
+```
+
+---
+
+### `ast_unparse_from()`
+
+Reconstructs formatted source code from an in-memory AST table, CTE, or view.
+
+```sql
+ast_unparse_from(ast_table VARCHAR, [preset := '']) -> TABLE(file_path VARCHAR, source VARCHAR)
+```
+
+#### Example
+
+```sql
+CREATE TABLE my_ast AS SELECT * FROM parse_ast(E'func add(a int, b int) int {\nreturn a + b\n}', 'go');
+SELECT source FROM ast_unparse_from('my_ast', 'gofmt');
+```
+
+---
+
+### `ast_unparse_custom()`
+
+Reconstructs formatted source code from an AST table using an arbitrary user-supplied SQL table of formatting rules.
+
+```sql
+ast_unparse_custom(ast_table VARCHAR, rules_table VARCHAR) -> TABLE(file_path VARCHAR, source VARCHAR)
+```
+
+#### Example
+
+```sql
+-- Derive a custom rule set from standard Python rules and override indentation
+CREATE TABLE my_rules AS SELECT * FROM ast_unparse_rules('python');
+INSERT INTO my_rules VALUES ('python', 'INDENT_STRING', '*', 0, '  ');
+
+SELECT source FROM ast_unparse_custom('my_ast', 'my_rules');
+```
+
+---
+
+## Introspection Table Function: `ast_unparse_rules()`
+
+Discovers active whitespace, indentation, and punctuation rules.
+
+### Signatures
+
+```sql
+-- All default rules across all 27+ languages and universal punctuation
+SELECT * FROM ast_unparse_rules();
+
+-- Rules for a specific language
+SELECT * FROM ast_unparse_rules(language VARCHAR);
+
+-- Rules for a specific language and style preset
+SELECT * FROM ast_unparse_rules(language VARCHAR, preset VARCHAR);
+```
+
+### Output Schema
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `language` | VARCHAR | Target language (`'universal'`, `'python'`, `'cpp'`, `'javascript'`, etc.) |
-| `rule_kind` | VARCHAR | Formatting rule kind name (e.g. `SPACE_AFTER`, `BREAK_BEFORE`, `INDENT_CHILDREN`) |
-| `node_type` | VARCHAR | AST node type or token target (e.g. `block`, `,`, `:`, `{`, `def`) |
-| `int_arg` | BIGINT | Integer parameter (e.g., number of empty lines for `EMPTY_LINES_BEFORE`) |
-| `str_arg` | VARCHAR | String parameter (reserved for custom delimiter prefixes/suffixes) |
+| `language` | VARCHAR | Language identifier (e.g. `'python'`, `'go'`, `'c'`, or `'*'`) |
+| `rule` | VARCHAR | Rule kind (`INDENT_BLOCK`, `INDENT_STRING`, `TIGHT_BEFORE`, `TIGHT_AFTER`, `SPACE_BEFORE`, `SPACE_AFTER`, `LINES_BEFORE`, `LINES_AFTER`, `BREAK_BEFORE`, `BREAK_AFTER`) |
+| `target` | VARCHAR | Node type, token literal, or wildcard `'*'` |
+| `int_arg` | BIGINT | Numeric argument (e.g. indentation level or line count) |
+| `str_arg` | VARCHAR | String argument (e.g. indent characters such as `'    '`, `'  '`, or `'\t'`) |
 
-#### Examples
+---
+
+## Formatter Presets Catalog
+
+| Language | Preset Name | Key Characteristics |
+| :--- | :--- | :--- |
+| **All / Universal** | `default` | Standard language profile defaults |
+| **All / Universal** | `tabs` | `INDENT_STRING = '\t'` |
+| **All / Universal** | `2spaces` | `INDENT_STRING = '  '` |
+| **All / Universal** | `4spaces` | `INDENT_STRING = '    '` |
+| **Python** | `pep8` / `black` | 4 spaces, 2 blank lines before top-level class/function definitions |
+| **Go** | `gofmt` | `INDENT_STRING = '\t'`, cuddle parens, tight brackets |
+| **JavaScript / TypeScript** | `prettier` | 2 spaces indentation (`'  '`) |
+| **C / C++** | `llvm` / `google` | 2 spaces indentation (`'  '`) |
+| **Rust** | `rustfmt` | 4 spaces indentation (`'    '`) |
+
+---
+
+## Code Modification & Unparsing Workflow
+
+Because `ast_unparse_from()` accepts any table matching Sitting Duck's AST schema, you can manipulate ASTs with standard SQL relational operations (`UPDATE`, `REPLACE`, `CASE`, window functions) and unparse the modified tree:
 
 ```sql
--- Inspect Python unparsing rules
-SELECT rule_kind, node_type, int_arg
-FROM ast_unparse_rules('python');
+-- Rename a function across an AST and unparse back to Python code
+CREATE TABLE original_ast AS
+SELECT * FROM parse_ast(E'def calculate_tax(subtotal):\n    rate = 0.08\n    return subtotal * rate\n', 'python');
 
--- Find all rules specifying linebreaks
-SELECT language, rule_kind, node_type
-FROM ast_unparse_rules()
-WHERE rule_kind LIKE '%BREAK%'
-ORDER BY language, node_type;
-```
+CREATE TABLE modified_ast AS
+SELECT
+  file_path, node_id, parent_id, type,
+  CASE WHEN name = 'calculate_tax' THEN 'compute_sales_tax' ELSE name END AS name,
+  semantic_type, flags, language, start_line, end_line, depth,
+  sibling_index, children_count, descendant_count, peek
+FROM original_ast;
 
----
-
-## How Unparsing Works
-
-The unparse engine traverses the AST tree using depth-first ordering, respecting hierarchical parent-child relationships and language-specific rules:
-
-1. **Leaf Token Text Extraction:**
-   - **Identifiers & Keywords:** Reconstructed from node `name` or punctuation node types.
-   - **Verbatim Text Nodes (`NODE_TEXT`):** Leaf nodes such as string fragments, escape sequences, comments, and regex literals reproduce their exact source representations without alteration.
-
-2. **Whitespace and Boundary Control:**
-   - Universal baseline rules handle standard punctuation (e.g. trailing space after `,` and `;`, tight bounds inside parentheses `()`, brackets `[]`, and braces `{}`).
-   - Language-specific rules configure language idioms (e.g., tight whitespace around `:` in slice expressions vs. trailing space in Python type annotations).
-
-3. **Block Indentation & Nesting:**
-   - Container and block constructs (`block`, `statement_block`, `compound_statement`, `class_body`) automatically track lexical nesting depth.
-   - `INDENT_CHILDREN` and `INDENT_PARENT_INCREMENT` maintain indentation alignment across multiline structures.
-
-4. **Linebreak & Spacing Policies:**
-   - `BREAK_BEFORE` / `BREAK_AFTER` insert newlines at statement and declaration boundaries.
-   - `EMPTY_LINES_BEFORE` preserves standard separation between top-level class and function definitions (e.g., 2 blank lines in Python PEP 8).
-
----
-
-## Formatting Rule Kinds
-
-| Rule Kind | Behavior |
-|-----------|----------|
-| `SPACE_BEFORE` | Ensures a single whitespace precedes the node |
-| `SPACE_AFTER` | Ensures a single whitespace follows the node |
-| `NO_SPACE_BEFORE` | Suppresses whitespace before the node (tight on left) |
-| `NO_SPACE_AFTER` | Suppresses whitespace after the node (tight on right) |
-| `SPACE_AROUND` | Ensures whitespace both before and after the node |
-| `TIGHT_INSIDE` | Suppresses inner whitespace for open/close delimiter pairs |
-| `BREAK_BEFORE` | Inserts a newline before the node |
-| `BREAK_AFTER` | Inserts a newline after the node |
-| `EMPTY_LINES_BEFORE` | Inserts N empty lines before the node |
-| `BREAK_BETWEEN_CHILDREN` | Inserts a newline between child statements of the node |
-| `INDENT_CHILDREN` | Increments indentation level for all child nodes |
-| `DEDENT` | Decrements indentation level |
-
----
-
-## Code Modification & Generation Workflow
-
-Because `ast_unparse()` accepts any table matching Sitting Duck's AST schema, you can manipulate ASTs with standard SQL relational operations (`UPDATE`, `REPLACE`, `CASE`, window functions) and unparse the modified tree:
-
-```sql
--- Rename all occurrences of a function in an AST and unparse back to Python code
-WITH original_ast AS (
-    SELECT * FROM parse_ast('
-def calculate_tax(subtotal):
-    rate = 0.08
-    return subtotal * rate
-
-total = calculate_tax(100)
-', 'python')
-),
-renamed_ast AS (
-    SELECT
-        node_id,
-        parent_id,
-        type,
-        CASE
-            WHEN name = 'calculate_tax' THEN 'compute_sales_tax'
-            ELSE name
-        END AS name,
-        semantic_type,
-        flags,
-        file_path,
-        language,
-        start_line,
-        end_line,
-        depth,
-        sibling_index,
-        children_count,
-        descendant_count,
-        peek
-    FROM original_ast
-)
-SELECT ast_unparse(renamed_ast) AS transformed_code;
+SELECT source FROM ast_unparse_from('modified_ast');
 ```
 
 ---
@@ -168,4 +150,3 @@ SELECT ast_unparse(renamed_ast) AS transformed_code;
 
 - [Core Functions](functions.md) - Main AST parsing and analysis functions
 - [Semantic Type System](semantic-types.md) - Universal taxonomy reference
-- [Code Transformation Guide](../how-to/code-transformation-and-unparsing.md) - Step-by-step code manipulation tutorial

@@ -326,17 +326,21 @@ std::vector<UnparseRule> GetLanguageUnparseRules(const std::string &language) {
 	return {};
 }
 
+static const std::vector<std::string> &GetCanonicalLanguages() {
+	static const std::vector<std::string> canonical_langs = {
+	    "bash",   "c",    "cpp",  "csharp",     "css",   "dart",  "fsharp", "go",         "graphql",  "haskell",
+	    "hcl",    "html", "java", "javascript", "json",  "julia", "kotlin", "lua",        "markdown", "php",
+	    "python", "r",    "ruby", "rust",       "scala", "swift", "toml",   "typescript", "yaml",     "zig"};
+	return canonical_langs;
+}
+
 std::vector<std::pair<std::string, UnparseRule>> GetAllUnparseRules() {
 	std::vector<std::pair<std::string, UnparseRule>> all;
 	for (const auto &rule : GetUniversalUnparseRules()) {
 		all.emplace_back("*", rule);
 	}
-	static const std::vector<std::string> canonical_langs = {
-	    "bash",   "c",    "cpp",  "csharp",     "css",   "dart",  "fsharp", "go",         "graphql",  "haskell",
-	    "hcl",    "html", "java", "javascript", "json",  "julia", "kotlin", "lua",        "markdown", "php",
-	    "python", "r",    "ruby", "rust",       "scala", "swift", "toml",   "typescript", "yaml",     "zig"};
 	static const auto lang_map = InitLanguageRules();
-	for (const auto &lang : canonical_langs) {
+	for (const auto &lang : GetCanonicalLanguages()) {
 		auto it = lang_map.find(lang);
 		if (it != lang_map.end()) {
 			for (const auto &rule : it->second) {
@@ -347,9 +351,53 @@ std::vector<std::pair<std::string, UnparseRule>> GetAllUnparseRules() {
 	return all;
 }
 
+static void SetOrAppendRule(std::vector<UnparseRule> &rules, UnparseRuleKind kind, const std::string &target,
+                            int64_t int_arg = 0, const std::string &str_arg = "") {
+	for (auto &r : rules) {
+		if (r.kind == kind && r.target == target) {
+			r.int_arg = int_arg;
+			r.str_arg = str_arg;
+			return;
+		}
+	}
+	rules.emplace_back(kind, target, int_arg, str_arg);
+}
+
+std::vector<UnparseRule> GetLanguagePresetUnparseRules(const std::string &language, const std::string &preset) {
+	std::vector<UnparseRule> rules = GetLanguageUnparseRules(language);
+	std::string p = StringUtil::Lower(preset);
+
+	if (p.empty() || p == "default" || p == "standard") {
+		return rules;
+	}
+
+	if (p == "2spaces" || p == "2-space" || p == "2space") {
+		SetOrAppendRule(rules, UnparseRuleKind::INDENT_STRING, "*", 0, "  ");
+	} else if (p == "4spaces" || p == "4-space" || p == "4space") {
+		SetOrAppendRule(rules, UnparseRuleKind::INDENT_STRING, "*", 0, "    ");
+	} else if (p == "tabs" || p == "tab") {
+		SetOrAppendRule(rules, UnparseRuleKind::INDENT_STRING, "*", 0, "\t");
+	} else if (p == "gofmt") {
+		SetOrAppendRule(rules, UnparseRuleKind::INDENT_STRING, "*", 0, "\t");
+	} else if (p == "pep8" || p == "black") {
+		SetOrAppendRule(rules, UnparseRuleKind::INDENT_STRING, "*", 0, "    ");
+		SetOrAppendRule(rules, UnparseRuleKind::LINES_BEFORE, "class_definition", 2);
+		SetOrAppendRule(rules, UnparseRuleKind::LINES_BEFORE, "function_definition", 2);
+	} else if (p == "prettier") {
+		SetOrAppendRule(rules, UnparseRuleKind::INDENT_STRING, "*", 0, "  ");
+	} else if (p == "rustfmt") {
+		SetOrAppendRule(rules, UnparseRuleKind::INDENT_STRING, "*", 0, "    ");
+	} else if (p == "llvm" || p == "google") {
+		SetOrAppendRule(rules, UnparseRuleKind::INDENT_STRING, "*", 0, "  ");
+	}
+
+	return rules;
+}
+
 // Table function Bind Data
 struct UnparseRulesBindData : public TableFunctionData {
 	string language_filter; // empty = all languages
+	string preset_filter;   // empty = default
 };
 
 // Table function Global State
@@ -376,8 +424,11 @@ static unique_ptr<FunctionData> UnparseRulesBind(ClientContext &context, TableFu
 	return_types.emplace_back(LogicalType::VARCHAR);
 
 	auto bind_data = make_uniq<UnparseRulesBindData>();
-	if (!input.inputs.empty() && !input.inputs[0].IsNull()) {
+	if (input.inputs.size() >= 1 && !input.inputs[0].IsNull()) {
 		bind_data->language_filter = StringValue::Get(input.inputs[0]);
+	}
+	if (input.inputs.size() >= 2 && !input.inputs[1].IsNull()) {
+		bind_data->preset_filter = StringValue::Get(input.inputs[1]);
 	}
 	return std::move(bind_data);
 }
@@ -390,8 +441,23 @@ static unique_ptr<GlobalTableFunctionState> UnparseRulesInit(ClientContext &cont
 		for (const auto &rule : GetUniversalUnparseRules()) {
 			result->rules.emplace_back("*", rule);
 		}
-		for (const auto &rule : GetLanguageUnparseRules(bind_data.language_filter)) {
-			result->rules.emplace_back(bind_data.language_filter, rule);
+		if (!bind_data.preset_filter.empty()) {
+			for (const auto &rule : GetLanguagePresetUnparseRules(bind_data.language_filter, bind_data.preset_filter)) {
+				result->rules.emplace_back(bind_data.language_filter, rule);
+			}
+		} else {
+			for (const auto &rule : GetLanguageUnparseRules(bind_data.language_filter)) {
+				result->rules.emplace_back(bind_data.language_filter, rule);
+			}
+		}
+	} else if (!bind_data.preset_filter.empty()) {
+		for (const auto &rule : GetUniversalUnparseRules()) {
+			result->rules.emplace_back("*", rule);
+		}
+		for (const auto &lang : GetCanonicalLanguages()) {
+			for (const auto &rule : GetLanguagePresetUnparseRules(lang, bind_data.preset_filter)) {
+				result->rules.emplace_back(lang, rule);
+			}
 		}
 	} else {
 		result->rules = GetAllUnparseRules();
@@ -426,10 +492,15 @@ void RegisterUnparseRulesFunction(ExtensionLoader &loader) {
 	TableFunction unparse_rules_lang("ast_unparse_rules", {LogicalType::VARCHAR}, UnparseRulesFunction,
 	                                 UnparseRulesBind, UnparseRulesInit);
 	unparse_rules_set.AddFunction(unparse_rules_lang);
+	TableFunction unparse_rules_preset("ast_unparse_rules", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                                   UnparseRulesFunction, UnparseRulesBind, UnparseRulesInit);
+	unparse_rules_set.AddFunction(unparse_rules_preset);
 
 	RegisterDocumentedTableFunctionSet(
-	    loader, unparse_rules_set, "Return active unparse layout and spacing rules.", {{}, {"language"}},
-	    {"SELECT * FROM ast_unparse_rules()", "SELECT * FROM ast_unparse_rules('python')"},
+	    loader, unparse_rules_set, "Return active unparse layout and spacing rules.",
+	    {{}, {"language"}, {"language", "preset"}},
+	    {"SELECT * FROM ast_unparse_rules()", "SELECT * FROM ast_unparse_rules('python')",
+	     "SELECT * FROM ast_unparse_rules('python', 'black')", "SELECT * FROM ast_unparse_rules('go', 'gofmt')"},
 	    {"sitting_duck", "unparse"});
 }
 

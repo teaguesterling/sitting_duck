@@ -100,6 +100,8 @@ struct UnparseRule {
 // Convenience macros for .def files
 #define DEF_UNPARSE_INDENT(tag, level) DEF_UNPARSE_RULE(UnparseRuleKind::INDENT_BLOCK, tag, level, "")
 
+#define DEF_UNPARSE_INDENT_STRING(str) DEF_UNPARSE_RULE(UnparseRuleKind::INDENT_STRING, "*", 0, str)
+
 #define DEF_UNPARSE_LINES_BEFORE(tag, count) DEF_UNPARSE_RULE(UnparseRuleKind::LINES_BEFORE, tag, count, "")
 
 #define DEF_UNPARSE_LINES_AFTER(tag, count) DEF_UNPARSE_RULE(UnparseRuleKind::LINES_AFTER, tag, count, "")
@@ -108,12 +110,17 @@ struct UnparseRule {
 
 #define DEF_UNPARSE_TIGHT_AFTER(tok) DEF_UNPARSE_RULE(UnparseRuleKind::TIGHT_AFTER, tok, 0, "")
 
+#define DEF_UNPARSE_SPACE_BEFORE(tok) DEF_UNPARSE_RULE(UnparseRuleKind::SPACE_BEFORE, tok, 0, "")
+
+#define DEF_UNPARSE_SPACE_AFTER(tok) DEF_UNPARSE_RULE(UnparseRuleKind::SPACE_AFTER, tok, 0, "")
+
 #define DEF_UNPARSE_BREAK_BEFORE(tag) DEF_UNPARSE_RULE(UnparseRuleKind::BREAK_BEFORE, tag, 0, "")
 
 #define DEF_UNPARSE_BREAK_AFTER(tag) DEF_UNPARSE_RULE(UnparseRuleKind::BREAK_AFTER, tag, 0, "")
 
 const std::vector<UnparseRule> &GetUniversalUnparseRules();
 std::vector<UnparseRule> GetLanguageUnparseRules(const std::string &language);
+std::vector<UnparseRule> GetLanguagePresetUnparseRules(const std::string &language, const std::string &preset);
 std::vector<std::pair<std::string, UnparseRule>> GetAllUnparseRules();
 
 void RegisterUnparseRulesFunction(ExtensionLoader &loader);
