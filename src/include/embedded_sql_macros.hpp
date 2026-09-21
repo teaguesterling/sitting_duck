@@ -696,7 +696,7 @@ CREATE OR REPLACE MACRO ast_function_metrics(source, language := NULL) AS TABLE
                     WHEN is_conditional(n.semantic_type)
 
 )SQLMACRO"
-                            R"SQLMACRO(
+        R"SQLMACRO(
                      AND (n.type LIKE '%_statement' OR n.type LIKE '%_clause'
                           OR n.type LIKE '%_expression' OR n.type LIKE '%_arm'
                           OR n.type LIKE '%_case' OR n.type LIKE '%_branch')
@@ -1021,7 +1021,7 @@ CREATE OR REPLACE MACRO ast_security_audit(source, language := NULL) AS TABLE
 -- until it finds an ancestor that is itself a definition.
 
 )SQLMACRO"
-                            R"SQLMACRO(
+        R"SQLMACRO(
 -- Returns (node_id, def_name, kind, parent_def_name, parent_def_kind, parent_def_node_id)
 -- Usage: SELECT * FROM ast_definition_parent('my_ast_table')
 CREATE OR REPLACE MACRO ast_definition_parent(ast_table) AS TABLE
@@ -1549,7 +1549,7 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
 --   language     - Language for parsing source and pattern (default: 'python')
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
 --   match_syntax - If true, punctuation must match exactly (default: false)
 --   match_by     - 'type' for tree-sitter types, 'semantic_type' for cross-language (default: 'type')
 --
@@ -1800,7 +1800,7 @@ CREATE OR REPLACE MACRO ast_match(
                          AND p.rel_depth >= (SELECT depth FROM recursive_threshold)
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
                     THEN (t.depth::INTEGER - mc.candidate_depth::INTEGER) >= p.rel_depth::INTEGER
                     ELSE ABS((t.depth::INTEGER - mc.candidate_depth::INTEGER) - p.rel_depth::INTEGER) <= depth_fuzz
                 END
@@ -2110,7 +2110,7 @@ CREATE OR REPLACE MACRO ast_match(
             SELECT candidate_file, candidate_root, capture_name, capture_list
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
             FROM captures_recursive_listed
             UNION ALL
             SELECT candidate_file, candidate_root, capture_name, capture_list
@@ -2709,7 +2709,7 @@ CREATE OR REPLACE MACRO ast_select_from(
               AND c.node_id > (SELECT node_id FROM sel_root_raw
 
 )SQLMACRO"
-                          R"SQLMACRO(
+        R"SQLMACRO(
                                WHERE type IN ('pseudo_class_selector', 'id_selector',
                                              'attribute_selector', 'class_selector'))
               AND c.node_id <= (SELECT node_id + descendant_count FROM sel_root_raw
@@ -2965,7 +2965,7 @@ CREATE OR REPLACE MACRO ast_select_from(
             FROM sel_pseudo_classes pcs
 
 )SQLMACRO"
-                          R"SQLMACRO(
+        R"SQLMACRO(
             JOIN sel_arg_blocks a ON a.parent_id = pcs.node_id
         ),
 
@@ -3247,7 +3247,7 @@ CREATE OR REPLACE MACRO ast_select_from(
             JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = not_pcs.node_id
 
 )SQLMACRO"
-                          R"SQLMACRO(
+        R"SQLMACRO(
             LEFT JOIN sel_pcs_first_tag_or_int ftoi ON ftoi.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_string     fstr ON fstr.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_class_name fcn  ON fcn.pcs_id = pcs.node_id
@@ -3479,7 +3479,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                     WHERE ac.attr_op IN ('^=', '$=') AND ac.attr_name = 'modifier'
 
 )SQLMACRO"
-                          R"SQLMACRO(
+        R"SQLMACRO(
                 ) THEN error(
                     'ast_select: attribute "modifier" supports = and *= (both meaning '
                     '"has this modifier" — modifiers is a list), not ^= or $=.'
@@ -3729,7 +3729,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 (SELECT left_id FROM combinator_parts) as left_id,
 
 )SQLMACRO"
-                          R"SQLMACRO(
+        R"SQLMACRO(
                 (SELECT right_class FROM combinator_parts) as right_class,
                 (SELECT right_id FROM combinator_parts) as right_id,
                 ((SELECT ok FROM pseudo_class_validation)
@@ -3991,7 +3991,7 @@ CREATE OR REPLACE MACRO ast_select_from(
             WHEN ac.attr_name = 'receiver' THEN
 
 )SQLMACRO"
-                          R"SQLMACRO(
+        R"SQLMACRO(
                 CASE ac.attr_op WHEN '*=' THEN a.receiver LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '^=' THEN a.receiver LIKE ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '$=' THEN a.receiver LIKE '%' || ac.attr_value_esc ESCAPE '\'
@@ -4227,7 +4227,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                          OR (pc.pseudo_arg_class IS NOT NULL
 
 )SQLMACRO"
-                          R"SQLMACRO(
+        R"SQLMACRO(
                              AND is_semantic_type(semantic_type_code('DEFINITION_CLASS'), UPPER(pc.pseudo_arg_class)))
                         THEN a.scope.class IS NOT NULL
                              AND (pc.pseudo_arg_name IS NULL OR EXISTS (
@@ -5132,7 +5132,7 @@ CREATE OR REPLACE MACRO ast_callees(
     -- simple hash join on scope.function. The range-join version this
 
 )SQLMACRO"
-                             R"SQLMACRO(
+        R"SQLMACRO(
     -- replaces took up to 20 seconds on DuckDB's own source tree; this
     -- runs in under a second.
     WITH ast AS (
@@ -5632,7 +5632,7 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
                 e.*,
 
 )SQLMACRO"
-                        R"SQLMACRO(
+        R"SQLMACRO(
                 CAST(row_number() OVER (
                     PARTITION BY e.file_path
                     ORDER BY e.sort_node, e.sort_part) - 1 AS INTEGER) AS element_order
@@ -5973,7 +5973,7 @@ CREATE OR REPLACE MACRO ast_patch(edits, files) AS TABLE
             LEFT JOIN line_starts ls
 
 )SQLMACRO"
-                      R"SQLMACRO(
+        R"SQLMACRO(
                    ON ls.file_path = e.file_path AND ls.line_number = e.start_line
             LEFT JOIN line_starts le
                    ON le.file_path = e.file_path AND le.line_number = e.end_line
@@ -6435,7 +6435,7 @@ CREATE OR REPLACE MACRO ast_unparse_code(source_code, lang, preset := '') AS TAB
         WHEN ptyp IN ('string_content', 'string_fragment', 'escape_sequence') AND tok = '${' THEN ''
 
 )SQLMACRO"
-                        R"SQLMACRO(
+        R"SQLMACRO(
         WHEN ptok = '}' AND typ IN ('string_content', 'string_fragment', 'escape_sequence') THEN ''
         WHEN tok IN ('(', '[') AND (ptyp IN ('identifier', 'type_identifier', 'field_identifier', 'primitive_type') OR ptok IN (')', ']')) THEN ''
         ELSE ' '
