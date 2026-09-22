@@ -1,0 +1,153 @@
+# name: test/sql/css_selectors_multilang_part09.test
+# (part 9 of 15 — split from css_selectors_multilang.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Comprehensive CSS selector tests across multiple languages.
+# Tests type selectors, ID selectors, class (semantic) selectors,
+# combinators (descendant, child, adjacent sibling, general sibling),
+# pseudo-classes (:has, :not, :first-child, :last-child, :named, :definition, :scope),
+# and ast_select_from (pre-parsed table queries).
+#
+# Test fixtures:
+#   test/data/python/css_selectors_test.py
+#   test/data/javascript/css_selectors_test.js
+#   test/data/rust/css_selectors_test.rs
+#   test/data/go/css_selectors_test.go
+#   test/data/rosetta/Lang/*/Factorial/*
+#   test/data/rosetta/Lang/*/Abstract-type/*
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. TYPE SELECTORS across languages
+# =============================================================================
+# Each language uses different AST node types for the same concepts.
+
+# Python: :first-child functions (first function_definition in each class body)
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition:first-child')
+ORDER BY name;
+----
+__init__
+speak
+speak
+
+# Python: :last-child functions in class bodies (depth > 1)
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition:last-child')
+WHERE depth > 1
+ORDER BY name;
+----
+fetch
+move
+purr
+
+# =============================================================================
+# 12. :named PSEUDO-CLASS across languages
+# =============================================================================
+
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition:named')
+ORDER BY name, start_line;
+----
+__init__
+fetch
+main
+make_animal
+move
+process_animals
+purr
+speak
+speak
+speak
+
+query I
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js', '.function:named')
+ORDER BY name, start_line;
+----
+add
+area
+area
+area
+constructor
+constructor
+constructor
+describe
+fetchShape
+greet
+perimeter
+processShapes
+
+query I
+SELECT name FROM ast_select('test/data/rust/css_selectors_test.rs', '.function:named')
+ORDER BY name, start_line;
+----
+area
+create_point
+distance
+draw
+draw
+helper
+is_origin
+new
+perimeter
+visible
+visible
+
+query I
+SELECT name FROM ast_select('test/data/go/css_selectors_test.go', '.function:named')
+ORDER BY name;
+----
+Area
+Area
+Distance
+Helper
+NewPoint
+Perimeter
+Perimeter
+ProcessShapes
+String
+
+# =============================================================================
+# 13. :definition AND :scope PSEUDO-CLASSES
+# =============================================================================
+
+# Python: all function_definitions are definition nodes
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition:definition')
+ORDER BY name, start_line;
+----
+__init__
+fetch
+main
+make_animal
+move
+process_animals
+purr
+speak
+speak
+speak
+
+# Python: all function_definitions are scope boundaries
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition:scope')
+ORDER BY name, start_line;
+----
+__init__
+fetch
+main
+make_animal
+move
+process_animals
+purr
+speak
+speak
+speak
+
+# =============================================================================
+# 14. BARE TYPE PREFIX MATCHING
+# =============================================================================
+# Bare types are EXACT node-type matches (#151). Prefix matching is [type^=X].

@@ -1,0 +1,45 @@
+# name: test/sql/ast_select_pseudo_classes_part19.test
+# (part 19 of 19 — split from ast_select_pseudo_classes.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Test ast_select pseudo-classes: positional, structural, scope, ordering
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Standard CSS positional pseudo-classes
+# =============================================================================
+
+# >>> replicated-setup start (created earlier in the original; each split file is an independent DB) >>>
+# Define test predicate macros (these register in duckdb_functions)
+statement ok
+CREATE OR REPLACE MACRO ast_selector_predicate_name_starts(node, prefix) AS (
+    node.name IS NOT NULL AND starts_with(node.name, prefix)
+);
+
+statement ok
+CREATE OR REPLACE MACRO ast_selector_predicate_is_deep(node, arg) AS (
+    node.depth >= 3
+);
+
+# Mock dispatcher: routes by function name to hardcoded predicate implementations
+statement ok
+CREATE OR REPLACE MACRO ast_dispatch_predicate(fn, node, arg) AS (
+    CASE fn
+        WHEN 'ast_selector_predicate_name_starts'
+            THEN node.name IS NOT NULL AND starts_with(node.name, arg)
+        WHEN 'ast_selector_predicate_is_deep'
+            THEN node.depth >= 3
+        ELSE false
+    END
+);
+# <<< replicated-setup end <<<
+
+# Error: unknown custom predicate (no matching macro registered)
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:no_such_predicate');
+----
+unknown pseudo-class

@@ -1,0 +1,107 @@
+# name: test/sql/css_selectors_multilang_part06.test
+# (part 6 of 15 — split from css_selectors_multilang.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Comprehensive CSS selector tests across multiple languages.
+# Tests type selectors, ID selectors, class (semantic) selectors,
+# combinators (descendant, child, adjacent sibling, general sibling),
+# pseudo-classes (:has, :not, :first-child, :last-child, :named, :definition, :scope),
+# and ast_select_from (pre-parsed table queries).
+#
+# Test fixtures:
+#   test/data/python/css_selectors_test.py
+#   test/data/javascript/css_selectors_test.js
+#   test/data/rust/css_selectors_test.rs
+#   test/data/go/css_selectors_test.go
+#   test/data/rosetta/Lang/*/Factorial/*
+#   test/data/rosetta/Lang/*/Abstract-type/*
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. TYPE SELECTORS across languages
+# =============================================================================
+# Each language uses different AST node types for the same concepts.
+
+# JavaScript: class_declaration immediately followed by class_declaration
+query I
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js', 'class_declaration + class_declaration')
+ORDER BY name;
+----
+Circle
+Square
+
+# Go: function_declaration + method_declaration (Distance follows NewPoint)
+query I
+SELECT name FROM ast_select('test/data/go/css_selectors_test.go', 'function_declaration + method_declaration')
+ORDER BY name;
+----
+Distance
+
+# =============================================================================
+# 7. GENERAL SIBLING COMBINATOR (A ~ B)
+# =============================================================================
+# B comes after A at the same parent level (not necessarily immediately).
+
+# Python: top-level functions after any class
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'class_definition ~ function_definition')
+WHERE depth = 1
+ORDER BY name;
+----
+main
+make_animal
+process_animals
+
+# Python: classes after another class (same result as adjacent since they're consecutive)
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'class_definition ~ class_definition')
+ORDER BY name;
+----
+Cat
+Dog
+
+# JavaScript: function_declarations after a class_declaration
+query I
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js', 'class_declaration ~ function_declaration')
+ORDER BY name;
+----
+fetchShape
+processShapes
+
+# JavaScript: all function_declarations after first function_declaration
+query I
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js', 'function_declaration ~ function_declaration')
+ORDER BY name;
+----
+add
+fetchShape
+processShapes
+
+# Go: method_declarations after function_declaration
+query I
+SELECT name FROM ast_select('test/data/go/css_selectors_test.go', 'function_declaration ~ method_declaration')
+ORDER BY name;
+----
+Area
+Distance
+Perimeter
+String
+
+# Rosetta Go: method_declaration ~ method_declaration (methods following other methods)
+query I
+SELECT name FROM ast_select('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', 'method_declaration ~ method_declaration')
+ORDER BY name, start_line;
+----
+Cry
+Cry
+Kind
+Name
+Name
+
+# =============================================================================
+# 8. :has() PSEUDO-CLASS
+# =============================================================================

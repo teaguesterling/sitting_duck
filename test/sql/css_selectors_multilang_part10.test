@@ -1,0 +1,114 @@
+# name: test/sql/css_selectors_multilang_part10.test
+# (part 10 of 15 — split from css_selectors_multilang.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Comprehensive CSS selector tests across multiple languages.
+# Tests type selectors, ID selectors, class (semantic) selectors,
+# combinators (descendant, child, adjacent sibling, general sibling),
+# pseudo-classes (:has, :not, :first-child, :last-child, :named, :definition, :scope),
+# and ast_select_from (pre-parsed table queries).
+#
+# Test fixtures:
+#   test/data/python/css_selectors_test.py
+#   test/data/javascript/css_selectors_test.js
+#   test/data/rust/css_selectors_test.rs
+#   test/data/go/css_selectors_test.go
+#   test/data/rosetta/Lang/*/Factorial/*
+#   test/data/rosetta/Lang/*/Abstract-type/*
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. TYPE SELECTORS across languages
+# =============================================================================
+# Each language uses different AST node types for the same concepts.
+
+# Python: bare `if` matches ONLY the `if` node type (not if_statement)
+query I
+SELECT DISTINCT type FROM ast_select('test/data/python/css_selectors_test.py', 'if')
+ORDER BY type;
+----
+if
+
+# Python: [type^=if] is the prefix path — if + if_statement
+query I
+SELECT DISTINCT type FROM ast_select('test/data/python/css_selectors_test.py', '[type^=if]')
+ORDER BY type;
+----
+if
+if_statement
+
+# Python: bare `return` is exact
+query I
+SELECT DISTINCT type FROM ast_select('test/data/python/css_selectors_test.py', 'return')
+ORDER BY type;
+----
+return
+
+# Python: [type^=return] prefix — return + return_statement
+query I
+SELECT DISTINCT type FROM ast_select('test/data/python/css_selectors_test.py', '[type^=return]')
+ORDER BY type;
+----
+return
+return_statement
+
+# JavaScript: bare `if` is exact; [type^=if] prefixes
+query I
+SELECT DISTINCT type FROM ast_select('test/data/javascript/css_selectors_test.js', 'if')
+ORDER BY type;
+----
+if
+
+query I
+SELECT DISTINCT type FROM ast_select('test/data/javascript/css_selectors_test.js', '[type^=if]')
+ORDER BY type;
+----
+if
+if_statement
+
+# Go: bare `if` matches keyword and if_statement
+query I
+SELECT DISTINCT type FROM read_ast('test/data/go/css_selectors_test.go')
+WHERE type = 'if' OR type LIKE 'if_%'
+ORDER BY type
+LIMIT 5;
+----
+if
+if_statement
+
+# Rust: bare `if` matches keyword and if_expression
+query I
+SELECT DISTINCT type FROM read_ast('test/data/rust/css_selectors_test.rs')
+WHERE type = 'if' OR type LIKE 'if_%'
+ORDER BY type
+LIMIT 5;
+----
+if
+if_expression
+
+# =============================================================================
+# 15. COMBINATOR + PSEUDO-CLASS COMBINATIONS
+# =============================================================================
+
+# Python: class methods that have return statements (depth > 1 filters to class methods)
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition:has(return_statement)')
+WHERE depth > 1
+ORDER BY name, start_line;
+----
+fetch
+move
+speak
+speak
+speak
+
+# JavaScript: method_definition:first-child returns empty because `{` is sibling 0 in class_body.
+# :nth-child(2) correctly finds first actual method in each class body.
+query I
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js', 'method_definition:first-child')
+ORDER BY name;
+----

@@ -1,0 +1,61 @@
+# name: test/sql/bugs/issue_88_89_callee_name_and_guards_part04.test
+# (part 4 of 4 — split from issue_88_89_callee_name_and_guards.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [bugs]
+
+# Issue #88: CSS #name on call nodes must bind the CALLEE name uniformly across
+# grammars. The FIND_CALL_TARGET extraction strategy self-names call nodes for
+# C-family (and most grammars), but Kotlin/Swift (simple_identifier +
+# navigation_expression), PHP (name / variable_name), C# member calls
+# (member_access_expression), and Lua method-call wrappers
+# (function_call > method_index_expression) fell through the strategy's type
+# lists and produced UNNAMED call nodes — so `.call#foo` silently returned
+# empty for those languages.
+#
+# Issue #89: where the engine cannot honor a selector's semantics it must say
+# so. Covered here: #name bound to call nodes over a source whose call nodes
+# carry no callee names (bash command_substitution), unknown attribute names,
+# and documented-but-unsupported attribute/operator combos — all raise errors
+# instead of returning silently-wrong/empty results.
+#
+# Row-pinned per the #83 convention: matched rows assert name + start_line,
+# not just COUNT(*).
+
+require sitting_duck
+
+# =============================================================================
+# Section 1: C ground truth — callee names on call_expression (issue #88 repro)
+# =============================================================================
+
+# >>> replicated-setup start (created earlier in the original; each split file is an independent DB) >>>
+statement ok
+CREATE TABLE zz_issue89_no_peek AS
+SELECT * FROM read_ast('test/data/call_extraction/calls.c', peek := 'none+schema');
+# <<< replicated-setup end <<<
+
+# The type filter matches nothing -> base is empty -> the peek guard must
+# STILL fire (before this fix it silently returned 0 rows).
+statement error
+SELECT * FROM ast_select_from('zz_issue89_no_peek', 'zz_no_such_type[peek*=x]');
+----
+no peek text
+
+statement ok
+DROP TABLE zz_issue89_no_peek;
+
+# =============================================================================
+# Section 6: ast_get_calls over C (was untested for C-family)
+# =============================================================================
+
+query III
+SELECT caller_name, called_name, start_line
+FROM ast_get_calls('test/data/call_extraction/calls.c')
+ORDER BY start_line, called_name;
+----
+read_block	check_offset	13
+read_block	fseeko	13
+read_block	ftello	16
+skip_block	fseeko	20
+skip_block	seek_fn	23
+main	read_block	28
+main	printf	29
+main	skip_block	30

@@ -1,0 +1,40 @@
+# name: test/sql/ast_select_pseudo_classes_part10.test
+# (part 10 of 19 — split from ast_select_pseudo_classes.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Test ast_select pseudo-classes: positional, structural, scope, ordering
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Standard CSS positional pseudo-classes
+# =============================================================================
+
+# keyword vs .class#name equivalence for containment
+query I
+SELECT
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(.func#top_level_function)'))
+  = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(.fn#top_level_function)'));
+----
+true
+
+# Self-exclusion: the scope NODE (the function_definition) is not "in the scope of"
+# itself. Its own name identifier and body ARE in scope — only the boundary is out.
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(.fn#top_level_function)')
+WHERE type = 'function_definition' AND name = 'top_level_function';
+----
+0
+
+# Compound: functions whose nearest enclosing class is User (__init__, validate)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', '.fn:in-scope(.class#User)');
+----
+2
+
+# =============================================================================
+# :scope / :in-scope argument guards — loud errors, never silent-wrong results
+# =============================================================================

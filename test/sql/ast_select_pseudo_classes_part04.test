@@ -1,0 +1,29 @@
+# name: test/sql/ast_select_pseudo_classes_part04.test
+# (part 4 of 19 — split from ast_select_pseudo_classes.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Test ast_select pseudo-classes: positional, structural, scope, ordering
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Standard CSS positional pseudo-classes
+# =============================================================================
+
+# :scope(function|class|module) — a scope OF that semantic kind (not its contents)
+query III
+SELECT
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(function)')),
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(class)')),
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(module)'));
+----
+6	3	1
+
+# Bare :scope = the three kinds together (function 6 + class 3 + module 1 = 10)
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope');
+----
+10

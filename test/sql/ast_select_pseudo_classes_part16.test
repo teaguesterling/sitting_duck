@@ -1,0 +1,45 @@
+# name: test/sql/ast_select_pseudo_classes_part16.test
+# (part 16 of 19 — split from ast_select_pseudo_classes.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Test ast_select pseudo-classes: positional, structural, scope, ordering
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Standard CSS positional pseudo-classes
+# =============================================================================
+
+# … but NOT helper2 — that call belongs to the lambda, not outer
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/callgraph_direct.py', 'function_definition#outer:calls(helper2)');
+----
+0
+
+# nested() directly calls helper3
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/callgraph_direct.py', 'function_definition#nested:calls(helper3)');
+----
+1
+
+# :not() should compose with other pseudo-classes on the same node
+# .func:named:not(:is-called) — named functions that are never called
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/sample_app.py',
+    '.func:named:not(:is-called)');
+----
+7
+
+# :not(:has()) must still work via the original not_has_conditions path
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/sample_app.py',
+    '.func:not(:has(return_statement))');
+----
+true
+
+# =============================================================================
+# Unknown pseudo-classes raise a clear error instead of silently matching
+# =============================================================================

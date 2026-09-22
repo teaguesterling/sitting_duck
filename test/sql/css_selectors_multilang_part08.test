@@ -1,0 +1,112 @@
+# name: test/sql/css_selectors_multilang_part08.test
+# (part 8 of 15 — split from css_selectors_multilang.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Comprehensive CSS selector tests across multiple languages.
+# Tests type selectors, ID selectors, class (semantic) selectors,
+# combinators (descendant, child, adjacent sibling, general sibling),
+# pseudo-classes (:has, :not, :first-child, :last-child, :named, :definition, :scope),
+# and ast_select_from (pre-parsed table queries).
+#
+# Test fixtures:
+#   test/data/python/css_selectors_test.py
+#   test/data/javascript/css_selectors_test.js
+#   test/data/rust/css_selectors_test.rs
+#   test/data/go/css_selectors_test.go
+#   test/data/rosetta/Lang/*/Factorial/*
+#   test/data/rosetta/Lang/*/Abstract-type/*
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. TYPE SELECTORS across languages
+# =============================================================================
+# Each language uses different AST node types for the same concepts.
+
+# Python: functions WITHOUT return_statement
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition:not(:has(return_statement))')
+ORDER BY name;
+----
+__init__
+main
+process_animals
+purr
+
+# Verify :has() and :not(:has()) partition the set correctly
+# has(return) = 6, not_has(return) = 4, total = 10
+
+# JavaScript: classes without a perimeter method
+query I
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js', 'class_declaration:not(:has(method_definition#perimeter))')
+ORDER BY name;
+----
+Circle
+Shape
+
+# Python: functions without if_statement (complement of :has(if_statement))
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition:not(:has(if_statement))')
+ORDER BY name, start_line;
+----
+__init__
+main
+move
+purr
+speak
+speak
+speak
+
+# JavaScript: functions without if_statement
+query I
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js', 'function_declaration:not(:has(if_statement))')
+ORDER BY name;
+----
+add
+fetchShape
+greet
+
+# Python: :not(:has(call)) using type-based (works)
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition:not(:has(call))')
+ORDER BY name, start_line;
+----
+__init__
+fetch
+move
+purr
+speak
+speak
+speak
+
+# =============================================================================
+# 10. COMPOUND SELECTORS (multiple conditions)
+# =============================================================================
+
+# Python: classes that have speak but NOT fetch
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'class_definition:has(function_definition#speak):not(:has(function_definition#fetch))')
+ORDER BY name;
+----
+Animal
+Cat
+
+# Python: type + id + :has compound
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'class_definition#Dog:has(function_definition#fetch)');
+----
+Dog
+
+# JavaScript: functions with try but NOT if
+query I
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js', 'function_declaration:has(try_statement):not(:has(if_statement))')
+ORDER BY name;
+----
+fetchShape
+
+# =============================================================================
+# 11. POSITIONAL PSEUDO-CLASSES
+# =============================================================================

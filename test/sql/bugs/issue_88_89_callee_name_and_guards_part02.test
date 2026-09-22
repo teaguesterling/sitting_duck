@@ -1,0 +1,82 @@
+# name: test/sql/bugs/issue_88_89_callee_name_and_guards_part02.test
+# (part 2 of 4 — split from issue_88_89_callee_name_and_guards.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [bugs]
+
+# Issue #88: CSS #name on call nodes must bind the CALLEE name uniformly across
+# grammars. The FIND_CALL_TARGET extraction strategy self-names call nodes for
+# C-family (and most grammars), but Kotlin/Swift (simple_identifier +
+# navigation_expression), PHP (name / variable_name), C# member calls
+# (member_access_expression), and Lua method-call wrappers
+# (function_call > method_index_expression) fell through the strategy's type
+# lists and produced UNNAMED call nodes — so `.call#foo` silently returned
+# empty for those languages.
+#
+# Issue #89: where the engine cannot honor a selector's semantics it must say
+# so. Covered here: #name bound to call nodes over a source whose call nodes
+# carry no callee names (bash command_substitution), unknown attribute names,
+# and documented-but-unsupported attribute/operator combos — all raise errors
+# instead of returning silently-wrong/empty results.
+#
+# Row-pinned per the #83 convention: matched rows assert name + start_line,
+# not just COUNT(*).
+
+require sitting_duck
+
+# =============================================================================
+# Section 1: C ground truth — callee names on call_expression (issue #88 repro)
+# =============================================================================
+
+# Bash command_substitution is CALL-semantic but carries no single callee name.
+# Binding a #name to call nodes over such a source is unanswerable: error.
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.sh', '.call#date');
+----
+no call node in this source carries a callee name
+
+# Same guard for the :has() composition...
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.sh', 'program:has(.call#date)');
+----
+no call node in this source carries a callee name
+
+# ...and for :not(:has()) — where the failure mode would be matching EVERYTHING
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.sh', 'program:not(:has(.call#date))');
+----
+no call node in this source carries a callee name
+
+# .call WITHOUT a name filter over the same source is answerable and stays quiet.
+# bash `command` is now COMPUTATION_CALL (#139), so this counts the two commands
+# (date, echo) plus the command_substitution — all call-semantic but unnamed
+# (correct command-name binding is tracked in #140).
+query I
+SELECT COUNT(*) FROM ast_select('test/data/call_extraction/calls.sh', '.call');
+----
+3
+
+# Unknown attribute names error instead of falling through to `ELSE false`
+# (which silently matched nothing)
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.c', '.call[frobnicate=x]');
+----
+unknown attribute "[frobnicate...]"
+
+# [type] now supports prefix/suffix/substring operators (#151): a bare type is exact,
+# and [type^=call] matches call_expression, call, call_*, etc.
+query I
+SELECT COUNT(*) FROM ast_select('test/data/call_extraction/calls.c', '[type^=call]');
+----
+8
+
+# language/semantic/params still implement exact match only — non-'=' ops error
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.c', '[semantic$=CALL]');
+----
+attribute "semantic" only supports exact match
+
+# modifier is a list: = and *= both mean "has this modifier"; ^=/$= are not
+# implementable and used to silently degrade to containment
+statement error
+SELECT * FROM ast_select('test/data/call_extraction/calls.c', '.func[modifier^=sta]');
+----
+attribute "modifier" supports = and *=

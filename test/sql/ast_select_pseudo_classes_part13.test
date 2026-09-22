@@ -1,0 +1,40 @@
+# name: test/sql/ast_select_pseudo_classes_part13.test
+# (part 13 of 19 — split from ast_select_pseudo_classes.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Test ast_select pseudo-classes: positional, structural, scope, ordering
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Standard CSS positional pseudo-classes
+# =============================================================================
+
+# The :is-called / :not(:is-called) pair should partition the set of functions
+# exactly: every function is either called or not, never both, never neither.
+query III
+WITH t AS (
+    SELECT COUNT(*) FILTER (WHERE true) AS total,
+           COUNT(*) FILTER (WHERE is_called) AS called,
+           COUNT(*) FILTER (WHERE NOT is_called) AS not_called
+    FROM (
+        SELECT name,
+               EXISTS (
+                   SELECT 1 FROM ast_select('test/data/python/sample_app.py', '.func:is-called') c
+                   WHERE c.node_id = f.node_id
+               ) AS is_called
+        FROM ast_select('test/data/python/sample_app.py', '.func') f
+    )
+)
+SELECT total, called, not_called FROM t;
+----
+20	13	7
+
+# :not(:is-called) should return exactly the functions that :is-called doesn't
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/sample_app.py', '.func:not(:is-called)');
+----
+7

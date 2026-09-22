@@ -1,0 +1,37 @@
+# name: test/sql/ast_select_pseudo_classes_part09.test
+# (part 9 of 19 — split from ast_select_pseudo_classes.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Test ast_select pseudo-classes: positional, structural, scope, ordering
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Standard CSS positional pseudo-classes
+# =============================================================================
+
+# The struct fast-path (:in-scope(function)) and the bare-type ancestor walk
+# (:in-scope(function_definition)) agree — function_definition is the only fn scope.
+query I
+SELECT
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(function)'))
+  = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(function_definition)'));
+----
+true
+
+# Bare-type ancestor walk excludes nested-function returns from the outer function
+# (was :scope(function_definition) before the :scope/:in-scope split).
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py',
+    'return_statement:in-scope(function_definition)');
+----
+5
+
+# :in-scope(.fn#foo) — the workhorse: everything inside the named function's scope
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(.fn#top_level_function)');
+----
+15

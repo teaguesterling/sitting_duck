@@ -1,0 +1,52 @@
+# name: test/sql/ast_select_combinator_steps_part03.test
+# (part 3 of 5 — split from ast_select_combinator_steps.test for the v2.0 CI per-file 600s timeout budget, #160)
+# description: Combinator steps honor type, .class alias and #id; subject
+# group: [sql]
+
+#   modifiers apply to the last step; unsupported shapes raise instead of
+#   silently matching nothing (issue #127).
+#
+#   Fixture: test/data/python/combinator_steps.py -- classes Base and Widget
+#   (Widget has __init__, test_render, undocumented); module functions main,
+#   test_helper, calls_nothing. Counts below were derived by reading it.
+
+require sitting_duck
+
+# ---------------------------------------------------------------------------
+# Controls: each alias alone matches its exact type, so any failure further
+# down is isolated to the combinator path, not the alias mapping.
+# ---------------------------------------------------------------------------
+
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.import ~ .class'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'import_statement ~ class_definition'));
+----
+true
+
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.class + .class'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition + class_definition'));
+----
+true
+
+# universal step
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '* > function_definition'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'function_definition'));
+----
+true
+
+# ---------------------------------------------------------------------------
+# #id on the left step (the advertised '.class#UserService .func' shape)
+# ---------------------------------------------------------------------------
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition#Widget function_definition');
+----
+3
+
+# legitimately empty -- the positive twin is the query above
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition#Base function_definition');
+----
+0

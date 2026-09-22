@@ -1,0 +1,66 @@
+# name: test/sql/ast_select_combinator_steps_part04.test
+# (part 4 of 5 — split from ast_select_combinator_steps.test for the v2.0 CI per-file 600s timeout budget, #160)
+# description: Combinator steps honor type, .class alias and #id; subject
+# group: [sql]
+
+#   modifiers apply to the last step; unsupported shapes raise instead of
+#   silently matching nothing (issue #127).
+#
+#   Fixture: test/data/python/combinator_steps.py -- classes Base and Widget
+#   (Widget has __init__, test_render, undocumented); module functions main,
+#   test_helper, calls_nothing. Counts below were derived by reading it.
+
+require sitting_duck
+
+# ---------------------------------------------------------------------------
+# Controls: each alias alone matches its exact type, so any failure further
+# down is isolated to the combinator path, not the alias mapping.
+# ---------------------------------------------------------------------------
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.class#Widget .func');
+----
+3
+
+# ---------------------------------------------------------------------------
+# Modifiers after the last step wrap the whole combinator and constrain the subject
+# ---------------------------------------------------------------------------
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition function_definition#__init__');
+----
+1
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.class .func#__init__');
+----
+1
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition function_definition[name^="test_"]');
+----
+1
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition function_definition:has(call)');
+----
+1
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'function_definition call#print');
+----
+1
+
+# ---------------------------------------------------------------------------
+# Unsupported shapes raise instead of returning 0 rows (#89)
+# ---------------------------------------------------------------------------
+
+statement error
+SELECT * FROM ast_select('test/data/python/combinator_steps.py', 'class_definition > block > function_definition');
+----
+more than two steps
+
+statement error
+SELECT * FROM ast_select('test/data/python/combinator_steps.py', '.class .func .call');
+----
+more than two steps

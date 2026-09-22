@@ -1,0 +1,124 @@
+# name: test/sql/css_selectors_multilang_part11.test
+# (part 11 of 15 — split from css_selectors_multilang.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Comprehensive CSS selector tests across multiple languages.
+# Tests type selectors, ID selectors, class (semantic) selectors,
+# combinators (descendant, child, adjacent sibling, general sibling),
+# pseudo-classes (:has, :not, :first-child, :last-child, :named, :definition, :scope),
+# and ast_select_from (pre-parsed table queries).
+#
+# Test fixtures:
+#   test/data/python/css_selectors_test.py
+#   test/data/javascript/css_selectors_test.js
+#   test/data/rust/css_selectors_test.rs
+#   test/data/go/css_selectors_test.go
+#   test/data/rosetta/Lang/*/Factorial/*
+#   test/data/rosetta/Lang/*/Abstract-type/*
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. TYPE SELECTORS across languages
+# =============================================================================
+# Each language uses different AST node types for the same concepts.
+
+query I
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js', 'method_definition:nth-child(2)')
+ORDER BY name;
+----
+constructor
+constructor
+constructor
+
+# Python: classes after another class that have a speak method.
+# CSS parser wraps as pseudo_class_selector(sibling_selector(...), :has(...));
+# sel_pseudo_class_unwrap re-roots to the sibling_selector so the combinator
+# CASE branch fires with the :has filter still applied.
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'class_definition ~ class_definition:has(function_definition#speak)')
+ORDER BY name;
+----
+Cat
+Dog
+
+# JavaScript: class_body > method_definition:has(return_statement)
+# Child combinator + :has on right side. Unwrap re-roots to child_selector.
+query I
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js',
+    'class_body > method_definition:has(return_statement)')
+ORDER BY name, start_line;
+----
+area
+area
+area
+describe
+perimeter
+
+# Python: classes that immediately follow another class AND have __init__
+# Adjacent sibling + :has
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
+    'class_definition + class_definition:has(function_definition#__init__)')
+ORDER BY name;
+----
+
+# Python: descendant combinator + :has
+# Functions containing a call to an if_statement descendant
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
+    'class_definition function_definition:has(return_statement)')
+ORDER BY name, start_line;
+----
+fetch
+move
+speak
+speak
+speak
+
+# Nested pseudo-class wraps: combinator + multiple chained :has / :not.
+# CSS parses "A B:has(X):not(Y)" as pcs(pcs(descendant_selector(A,B), :has(X)), :not(Y)),
+# so the combinator is two pcs layers deep. The engine must recursively unwrap
+# to find it.
+#
+# Nested class methods with return AND without if (excludes `fetch` which has if):
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
+    'class_definition function_definition:has(return_statement):not(:has(if_statement))')
+ORDER BY name, start_line;
+----
+move
+speak
+speak
+speak
+
+# Child combinator equivalent (via block intermediary) — same result
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
+    'block > function_definition:has(return_statement):not(:has(if_statement))')
+ORDER BY name, start_line;
+----
+move
+speak
+speak
+speak
+
+# Triple-nested: combinator + 3 pseudo-class filters
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py',
+    'class_definition function_definition:has(return_statement):not(:has(if_statement)):named')
+ORDER BY name, start_line;
+----
+move
+speak
+speak
+speak
+
+# =============================================================================
+# 16. :has() AND :not(:has()) WITH SEMANTIC CLASS (.class) inside
+# =============================================================================
+# Semantic class arguments inside :has() / :not() work regardless of whether
+# the base selector is a .class or a type selector.

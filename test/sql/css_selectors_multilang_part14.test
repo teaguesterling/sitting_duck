@@ -1,0 +1,125 @@
+# name: test/sql/css_selectors_multilang_part14.test
+# (part 14 of 15 — split from css_selectors_multilang.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Comprehensive CSS selector tests across multiple languages.
+# Tests type selectors, ID selectors, class (semantic) selectors,
+# combinators (descendant, child, adjacent sibling, general sibling),
+# pseudo-classes (:has, :not, :first-child, :last-child, :named, :definition, :scope),
+# and ast_select_from (pre-parsed table queries).
+#
+# Test fixtures:
+#   test/data/python/css_selectors_test.py
+#   test/data/javascript/css_selectors_test.js
+#   test/data/rust/css_selectors_test.rs
+#   test/data/go/css_selectors_test.go
+#   test/data/rosetta/Lang/*/Factorial/*
+#   test/data/rosetta/Lang/*/Abstract-type/*
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. TYPE SELECTORS across languages
+# =============================================================================
+# Each language uses different AST node types for the same concepts.
+
+# >>> replicated-setup start (created earlier in the original; each split file is an independent DB) >>>
+statement ok
+CREATE TABLE py_ast AS SELECT * FROM read_ast('test/data/python/css_selectors_test.py');
+# <<< replicated-setup end <<<
+
+# Combinator + pseudo-class on right side — exercises the Bug 3 fix path
+query I
+SELECT name FROM ast_select_from('py_ast',
+    'class_definition ~ class_definition:has(function_definition#speak)')
+ORDER BY name;
+----
+Cat
+Dog
+
+# Compound selector
+query I
+SELECT name FROM ast_select_from('py_ast', 'class_definition:has(function_definition#speak):not(:has(function_definition#fetch))')
+ORDER BY name;
+----
+Animal
+Cat
+
+# :named
+query I
+SELECT name FROM ast_select_from('py_ast', 'function_definition:named')
+ORDER BY name, start_line;
+----
+__init__
+fetch
+main
+make_animal
+move
+process_animals
+purr
+speak
+speak
+speak
+
+statement ok
+DROP TABLE py_ast;
+
+# ast_select_from with a different language (pattern language auto-detected from the table)
+statement ok
+CREATE TABLE js_ast AS SELECT * FROM read_ast('test/data/javascript/css_selectors_test.js');
+
+query I
+SELECT name FROM ast_select_from('js_ast', '.function')
+ORDER BY name, start_line;
+----
+add
+area
+area
+area
+constructor
+constructor
+constructor
+describe
+fetchShape
+greet
+perimeter
+processShapes
+
+query I
+SELECT name FROM ast_select_from('js_ast', 'class_declaration:has(method_definition#constructor)')
+ORDER BY name;
+----
+Circle
+Shape
+Square
+
+query I
+SELECT name FROM ast_select_from('js_ast', 'function_declaration + function_declaration')
+ORDER BY name;
+----
+add
+processShapes
+
+statement ok
+DROP TABLE js_ast;
+
+# =============================================================================
+# 18. ROSETTA CODE EXAMPLES — cross-language selector consistency
+# =============================================================================
+
+# All Rosetta factorial implementations should find functions
+query I
+SELECT name FROM ast_select('test/data/rosetta/Lang/Python/Factorial/factorial-2.py', '.function')
+ORDER BY name;
+----
+factorial
+
+query I
+SELECT name FROM ast_select('test/data/rosetta/Lang/Go/Factorial/factorial-1.go', '.function')
+ORDER BY name;
+----
+factorial
+main

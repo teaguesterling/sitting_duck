@@ -1,0 +1,35 @@
+# name: test/sql/ast_select_pseudo_classes_part07.test
+# (part 7 of 19 — split from ast_select_pseudo_classes.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Test ast_select pseudo-classes: positional, structural, scope, ordering
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Standard CSS positional pseudo-classes
+# =============================================================================
+
+# .class shape and its aliases resolve the same as the keyword (.module == .mod)
+# (decomposed from one 8-call assertion into 4x 2-call to fit the v2.0 per-file CI budget; #160)
+query I
+SELECT (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.module)'))
+     = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.mod)'));
+----
+true
+
+# :scope(.fn#foo) — the ONE scope boundary named foo
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.fn#top_level_function)')
+WHERE name = 'top_level_function';
+----
+1
+
+# =============================================================================
+# :in-scope — the node is CONTAINED WITHIN a scope. function/class/module use
+# the precomputed scope.* struct; a bare tree-sitter type walks to the nearest
+# enclosing ancestor of that type.
+# =============================================================================

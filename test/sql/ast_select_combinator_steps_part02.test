@@ -1,0 +1,43 @@
+# name: test/sql/ast_select_combinator_steps_part02.test
+# (part 2 of 5 — split from ast_select_combinator_steps.test for the v2.0 CI per-file 600s timeout budget, #160)
+# description: Combinator steps honor type, .class alias and #id; subject
+# group: [sql]
+
+#   modifiers apply to the last step; unsupported shapes raise instead of
+#   silently matching nothing (issue #127).
+#
+#   Fixture: test/data/python/combinator_steps.py -- classes Base and Widget
+#   (Widget has __init__, test_render, undocumented); module functions main,
+#   test_helper, calls_nothing. Counts below were derived by reading it.
+
+require sitting_duck
+
+# ---------------------------------------------------------------------------
+# Controls: each alias alone matches its exact type, so any failure further
+# down is isolated to the combinator path, not the alias mapping.
+# ---------------------------------------------------------------------------
+
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.loop .call'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'for_statement call'));
+----
+true
+
+# mixed spellings
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition .func'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition function_definition'));
+----
+true
+
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.class function_definition'))
+     = (SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', 'class_definition function_definition'));
+----
+true
+
+# every combinator kind with an alias step
+query I
+SELECT count(*) FROM ast_select('test/data/python/combinator_steps.py', '.class > block');
+----
+2

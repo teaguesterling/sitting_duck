@@ -1,0 +1,47 @@
+# name: test/sql/ast_select_pseudo_classes_part01.test
+# (part 1 of 19 — split from ast_select_pseudo_classes.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Test ast_select pseudo-classes: positional, structural, scope, ordering
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Standard CSS positional pseudo-classes
+# =============================================================================
+
+# :first-child — first sibling (sibling_index = 0)
+# The nested `inner` functions are the only function_definitions at sibling_index 0
+query II
+SELECT name, depth
+FROM ast_select('test/data/python/macros/recursive_match.py', 'function_definition:first-child')
+ORDER BY start_line;
+----
+inner	3
+inner	3
+
+# :last-child — last sibling at depth 1
+query II
+SELECT name, start_line
+FROM ast_select('test/data/python/macros/recursive_match.py', 'function_definition:last-child')
+WHERE depth = 1;
+----
+outer_no_execute	37
+
+# :nth-child(2) — second sibling (1-based) at depth 1
+# shallow_return is sibling_index 1 (comment is 0), so nth-child(2)
+query II
+SELECT name, start_line
+FROM ast_select('test/data/python/macros/recursive_match.py', 'function_definition:nth-child(2)')
+WHERE depth = 1;
+----
+shallow_return	2
+
+# :empty — nodes with no children
+query I
+SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py', ':empty');
+----
+true

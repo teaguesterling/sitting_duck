@@ -1,0 +1,103 @@
+# name: test/sql/css_selectors_multilang_part15.test
+# (part 15 of 15 — split from css_selectors_multilang.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Comprehensive CSS selector tests across multiple languages.
+# Tests type selectors, ID selectors, class (semantic) selectors,
+# combinators (descendant, child, adjacent sibling, general sibling),
+# pseudo-classes (:has, :not, :first-child, :last-child, :named, :definition, :scope),
+# and ast_select_from (pre-parsed table queries).
+#
+# Test fixtures:
+#   test/data/python/css_selectors_test.py
+#   test/data/javascript/css_selectors_test.js
+#   test/data/rust/css_selectors_test.rs
+#   test/data/go/css_selectors_test.go
+#   test/data/rosetta/Lang/*/Factorial/*
+#   test/data/rosetta/Lang/*/Abstract-type/*
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. TYPE SELECTORS across languages
+# =============================================================================
+# Each language uses different AST node types for the same concepts.
+
+# >>> replicated-setup start (created earlier in the original; each split file is an independent DB) >>>
+statement ok
+CREATE TABLE py_ast AS SELECT * FROM read_ast('test/data/python/css_selectors_test.py');
+
+# ast_select_from with a different language (pattern language auto-detected from the table)
+statement ok
+CREATE TABLE js_ast AS SELECT * FROM read_ast('test/data/javascript/css_selectors_test.js');
+# <<< replicated-setup end <<<
+
+query I
+SELECT name FROM ast_select('test/data/rosetta/Lang/Rust/Factorial/factorial.rs', '.function')
+ORDER BY name;
+----
+factorial_iterative
+factorial_recursive
+main
+
+query I
+SELECT name FROM ast_select('test/data/rosetta/Lang/JavaScript/Factorial/factorial-1.js', '.function')
+ORDER BY name;
+----
+factorial
+
+# Rosetta abstract types: .class across languages
+query I
+SELECT name FROM ast_select('test/data/rosetta/Lang/Python/Abstract-type/abstract-type-1.py', '.class')
+ORDER BY name;
+----
+BaseQueue
+
+# Go: .class returns struct/interface types (names are on parent type_spec)
+query I
+SELECT type FROM ast_select('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', '.class')
+ORDER BY type;
+----
+interface_type
+struct_type
+struct_type
+
+# Rust: .class in abstract type
+query I
+SELECT name FROM ast_select('test/data/rosetta/Lang/Rust/Abstract-type/abstract-type-1.rs', '.class')
+ORDER BY name;
+----
+Shape
+
+# Rosetta: :has(call) works with type selectors across languages
+query I
+SELECT name FROM ast_select('test/data/rosetta/Lang/Python/Factorial/factorial-2.py', 'function_definition:has(call)')
+ORDER BY name;
+----
+factorial
+
+query I
+SELECT name FROM ast_select('test/data/rosetta/Lang/JavaScript/Factorial/factorial-1.js', 'function_declaration:has(if_statement)')
+ORDER BY name;
+----
+factorial
+
+# Rosetta Go: all functions/methods
+query I
+SELECT name FROM ast_select('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', '.function')
+ORDER BY name;
+----
+Cry
+Cry
+Cry
+Kind
+Kind
+Kind
+Name
+Name
+Name
+bprint
+main

@@ -1,0 +1,124 @@
+# name: test/sql/css_selectors_multilang_part01.test
+# (part 1 of 15 — split from css_selectors_multilang.test for the v2.0 CI per-file 600s timeout budget, #160)
+# group: [sql]
+
+# Comprehensive CSS selector tests across multiple languages.
+# Tests type selectors, ID selectors, class (semantic) selectors,
+# combinators (descendant, child, adjacent sibling, general sibling),
+# pseudo-classes (:has, :not, :first-child, :last-child, :named, :definition, :scope),
+# and ast_select_from (pre-parsed table queries).
+#
+# Test fixtures:
+#   test/data/python/css_selectors_test.py
+#   test/data/javascript/css_selectors_test.js
+#   test/data/rust/css_selectors_test.rs
+#   test/data/go/css_selectors_test.go
+#   test/data/rosetta/Lang/*/Factorial/*
+#   test/data/rosetta/Lang/*/Abstract-type/*
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. TYPE SELECTORS across languages
+# =============================================================================
+# Each language uses different AST node types for the same concepts.
+
+# Python: function_definition
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition')
+ORDER BY name, start_line;
+----
+__init__
+fetch
+main
+make_animal
+move
+process_animals
+purr
+speak
+speak
+speak
+
+# Python: class_definition
+query I
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'class_definition')
+ORDER BY name;
+----
+Animal
+Cat
+Dog
+
+# JavaScript: function_declaration (standalone functions only, NOT methods)
+query I
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js', 'function_declaration')
+ORDER BY name;
+----
+add
+fetchShape
+greet
+processShapes
+
+# JavaScript: class_declaration
+query I
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js', 'class_declaration')
+ORDER BY name;
+----
+Circle
+Shape
+Square
+
+# JavaScript: method_definition (class methods)
+query I
+SELECT name FROM ast_select('test/data/javascript/css_selectors_test.js', 'method_definition')
+ORDER BY name, start_line;
+----
+area
+area
+area
+constructor
+constructor
+constructor
+describe
+perimeter
+
+# Rust: function_item
+query I
+SELECT name FROM ast_select('test/data/rust/css_selectors_test.rs', 'function_item')
+ORDER BY name;
+----
+area
+create_point
+distance
+draw
+helper
+is_origin
+new
+perimeter
+visible
+
+# Go: function_declaration (standalone functions)
+query I
+SELECT name FROM ast_select('test/data/go/css_selectors_test.go', 'function_declaration')
+ORDER BY name;
+----
+Helper
+NewPoint
+ProcessShapes
+
+# Go: method_declaration (methods with receiver)
+query I
+SELECT name FROM ast_select('test/data/go/css_selectors_test.go', 'method_declaration')
+ORDER BY name;
+----
+Area
+Distance
+Perimeter
+String
+
+# =============================================================================
+# 2. SEMANTIC CLASS SELECTORS (.class) across languages
+# =============================================================================
+# .function, .class, .call etc. use semantic type matching, not AST node type.
