@@ -6,13 +6,70 @@
 
 namespace duckdb {
 
+//! The argument types of a function, across the DuckDB versions this extension builds
+//! against. Two shapes exist, both measured in duckdb/src/include/duckdb/function/function.hpp
+//! rather than assumed:
+//!
+//!   v1.5.4 and earlier   SimpleFunction carries a PUBLIC member:
+//!                        `vector<LogicalType> arguments;`
+//!   DuckDB main (v2.0)   that member is GONE. Arguments live in a PROTECTED
+//!                        FunctionSignature reached through GetSignature(), whose
+//!                        parameters each carry their own type:
+//!                        SimpleFunction::GetSignature() ->
+//!                        FunctionSignature::GetParameters() -> FunctionParameter::GetType()
+//!
+//! FunctionDescription::parameter_types is still vector<LogicalType> on both lines, so
+//! only the read side differs. This is what broke the DuckDB-main canary: the header
+//! reached for `.arguments` directly, which does not compile on the v2.0 line.
+//!
+//! A SET'S ELEMENTS MAY BE POINTERS. ScalarFunctionSet::functions holds values on
+//! v1.5.4 but `shared_ptr<const ScalarFunction>` on main (TableFunctionSet likewise,
+//! with `shared_ptr<const TableFunction, true>`), so the element handed to us is
+//! sometimes a smart pointer carrying neither member. ArgumentTypesOf() answers the
+//! API question for a function REFERENCE; GetArgumentTypes() dereferences first where
+//! that is possible. Both axes are needed: value/pointer times old/new API is four
+//! combinations, and a test covering only the two value shapes passes while main's
+//! set variants fail to compile -- measured, that is exactly what happened here.
+//!
+//! THERE IS DELIBERATELY NO CATCH-ALL OVERLOAD. An earlier version of this header had
+//! one returning `{}`. That compiles against ANY future API and silently registers
+//! functions with EMPTY parameter_types -- documentation disappearing with no build
+//! anywhere reporting it, and this repo's own function_documentation.test asserts
+//! descriptions, examples and parameter NAMES but never parameter_types, so nothing
+//! would go red. Without the fallback, a DuckDB carrying neither shape fails to compile
+//! with an error naming this function. Do not add a fallback to make a build go green;
+//! add the shape that build actually has.
+template <typename F>
+auto ArgumentTypesOf(const F &fn, int) -> decltype(fn.arguments) {
+	return fn.arguments;
+}
+
+template <typename F>
+auto ArgumentTypesOf(const F &fn, long) -> decltype(fn.GetSignature(), vector<LogicalType>()) {
+	vector<LogicalType> types;
+	for (auto &parameter : fn.GetSignature().GetParameters()) {
+		types.push_back(parameter.GetType());
+	}
+	return types;
+}
+
+template <typename T>
+auto GetArgumentTypes(const T &fn, int) -> decltype(ArgumentTypesOf(*fn, 0)) {
+	return ArgumentTypesOf(*fn, 0);
+}
+
+template <typename T>
+auto GetArgumentTypes(const T &fn, long) -> decltype(ArgumentTypesOf(fn, 0)) {
+	return ArgumentTypesOf(fn, 0);
+}
+
 inline void RegisterDocumentedScalarFunction(ExtensionLoader &loader, ScalarFunction func, const string &description,
                                              const vector<string> &parameter_names = {},
                                              const vector<string> &examples = {},
                                              const vector<string> &categories = {"sitting_duck"}) {
 	FunctionDescription desc;
 	desc.description = description;
-	desc.parameter_types = func.arguments;
+	desc.parameter_types = GetArgumentTypes(func, 0);
 	desc.parameter_names = parameter_names;
 	desc.examples = examples;
 	desc.categories = categories;
@@ -32,7 +89,7 @@ inline void RegisterDocumentedScalarFunctionSet(ExtensionLoader &loader, ScalarF
 	for (idx_t i = 0; i < set.functions.size(); i++) {
 		FunctionDescription desc;
 		desc.description = description;
-		desc.parameter_types = set.functions[i].arguments;
+		desc.parameter_types = GetArgumentTypes(set.functions[i], 0);
 		if (i < parameter_names_list.size()) {
 			desc.parameter_names = parameter_names_list[i];
 		} else if (!parameter_names_list.empty()) {
@@ -54,7 +111,7 @@ inline void RegisterDocumentedTableFunction(ExtensionLoader &loader, TableFuncti
                                             const vector<string> &categories = {"sitting_duck"}) {
 	FunctionDescription desc;
 	desc.description = description;
-	desc.parameter_types = func.arguments;
+	desc.parameter_types = GetArgumentTypes(func, 0);
 	desc.parameter_names = parameter_names;
 	desc.examples = examples;
 	desc.categories = categories;
@@ -73,7 +130,7 @@ inline void RegisterDocumentedTableFunctionSet(ExtensionLoader &loader, TableFun
 	for (idx_t i = 0; i < set.functions.size(); i++) {
 		FunctionDescription desc;
 		desc.description = description;
-		desc.parameter_types = set.functions[i].arguments;
+		desc.parameter_types = GetArgumentTypes(set.functions[i], 0);
 		if (i < parameter_names_list.size()) {
 			desc.parameter_names = parameter_names_list[i];
 		} else if (!parameter_names_list.empty()) {
