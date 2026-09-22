@@ -248,16 +248,26 @@ jobs:
       - name: Run the test suite with the runtime-grammar tests enabled
         run: SITTING_DUCK_TEST_GRAMMAR_DIR=build/test_grammars make test
 
-  # Canary: builds AND tests against DuckDB v2.0-cyanoptera, which is what
-  # duckdb/community-extensions' `test_against_latest` runs on every release PR.
+  # Canary: BUILDS against DuckDB v2.0-cyanoptera (what duckdb/community-extensions'
+  # `test_against_latest` runs on every release PR), and is the forward-compat
+  # early-warning that catches API/compile breaks against the next DuckDB line.
   # Can also be driven on demand:
   #   gh workflow run MainDistributionPipeline.yml --ref <branch>
-  # Promoted 2026-09-13 (Teague's dual-line ruling): now runs on pull_request
-  # too (once per PR, see the gate comment on `if:` below), not just
-  # push-to-main or dispatch. Use `if:` and not `continue-on-error:` -- a job
-  # calling a reusable workflow accepts only a fixed key set, and
-  # `continue-on-error` makes the whole workflow fail to parse, scheduling
-  # zero jobs.
+  # Promoted 2026-09-13 (Teague's dual-line ruling): runs on pull_request too
+  # (once per PR, see the gate comment on `if:` below), not just push-to-main
+  # or dispatch. Use `if:` and not `continue-on-error:` -- a job calling a
+  # reusable workflow accepts only a fixed key set, and `continue-on-error`
+  # makes the whole workflow fail to parse, scheduling zero jobs.
+  #
+  # `skip_tests: true` (2026-09-22, Teague's ruling): the TEST phase is disabled
+  # on this leg. sitting_duck's ast_select tests time out under DuckDB v2.0's
+  # planner regression -- a super-linear-with-statement-size planning cost that
+  # is an UPSTREAM DuckDB bug (reported: duckdb/duckdb#26036), reproduces on both
+  # v2.0-cyanoptera and duckdb main, and is NOT a sitting_duck defect. Rather than
+  # maintain fragile per-file test splits sized against a moving upstream number,
+  # we keep the COMPILE-compat signal (which is what matters for "does it build on
+  # v2.0") and drop the test-timeout noise. Re-enable tests (drop skip_tests) when
+  # #26036 is fixed upstream or the C++ selector engine lands.
   duckdb-next-build:
     name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
@@ -269,6 +279,7 @@ jobs:
       duckdb_version: v2.0-cyanoptera
       ci_tools_version: main
       extension_name: sitting_duck
+      skip_tests: true
 
   duckdb-stable-build:
     name: Build extension binaries
