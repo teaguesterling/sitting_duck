@@ -30,7 +30,7 @@ jobs:
     # required-check configuration may key on this job name.
     runs-on: ubuntu-latest
     env:
-      DUCKDB_VERSION: v1.5.5
+      DUCKDB_VERSION: v1.5.6
       DUCKDB_NEXT: v2.0-cyanoptera
       # Flip day (spec §3 step 3) keeps a duckdb-legacy-build at the outgoing version
       # for one release; set this to that version then so the stray-literal scan below
@@ -207,7 +207,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GEN: ninja
-      OVERRIDE_GIT_DESCRIBE: v1.5.5
+      OVERRIDE_GIT_DESCRIBE: v1.5.6
       EXT_FLAGS: -DSITTING_DUCK_LANGUAGES="python;cpp"
     steps:
       - uses: actions/checkout@v4
@@ -233,7 +233,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GEN: ninja
-      OVERRIDE_GIT_DESCRIBE: v1.5.5
+      OVERRIDE_GIT_DESCRIBE: v1.5.6
     steps:
       - uses: actions/checkout@v4
       - name: Checkout required submodules
@@ -285,7 +285,7 @@ jobs:
     name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
     with:
-      duckdb_version: v1.5.5
+      duckdb_version: v1.5.6
       ci_tools_version: v1.5-variegata
       extension_name: sitting_duck
       # Windows stays excluded (fleet pattern): both Windows legs fail on
