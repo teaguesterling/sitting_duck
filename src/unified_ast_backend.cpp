@@ -286,7 +286,7 @@ ExtractionConfig ParseExtractionConfig(const string &context_str, const string &
 	return config;
 }
 
-void ParseResourceCapParameters(const named_parameter_map_t &named_parameters, ExtractionConfig &config) {
+void ParseResourceCapParameters(const NamedParamMap &named_parameters, ExtractionConfig &config) {
 	for (auto &param : named_parameters) {
 		if (param.first == "max_source_bytes") {
 			config.max_source_bytes = param.second.GetValue<int64_t>();
