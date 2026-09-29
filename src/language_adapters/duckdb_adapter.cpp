@@ -48,11 +48,20 @@ namespace duckdb {
 // units include, and this adapter -- the only code in the extension that walks
 // DuckDB's own parse tree -- is their only consumer.
 //
-// ONE probe for the whole refactor, because it IS one upstream change: the
-// entry names all moved into CreateInfo::qualified_name together. Probing
-// GetQualifiedName() asks for the v2.0-only API, never the one being replaced,
-// so it cannot be true on both lines the way a probe aimed at the old field
-// would be.
+// Probe the v2.0-only API, never the field being replaced: a probe aimed at the
+// old field can be true on both lines, while GetQualifiedName() and friends only
+// exist where the refactor landed.
+//
+// ONE PROBE IS NOT ENOUGH, though it was until v1.5.6. This started as a single
+// QualifiedNameTag on the theory that the entry names all moved into
+// CreateInfo::qualified_name as one upstream change. v1.5.6 disproved that by
+// BACKPORTING the refactor in pieces: GetQualifiedName() and the per-entry getters
+// arrived (the getters returning plain `string`, not an Identifier), while
+// CreateSchemaInfo::SchemaName() and BaseTableRef::Table() did not. A single tag
+// then answers "v2.0" and the two absent members break the build. So: one probe
+// per accessor whose presence differs, and IdentString() to absorb the difference
+// between a getter that returns a string and one that returns an Identifier.
+// Expect further partial backports; add a probe rather than widening an existing one.
 namespace {
 
 template <class T, class = void>
@@ -62,12 +71,45 @@ struct HasQualifiedName<T, decltype(void(std::declval<const T &>().GetQualifiedN
 
 typedef HasQualifiedName<CreateInfo> QualifiedNameTag;
 
+// One probe cannot answer for every accessor, because the v2.0 API does not
+// arrive all at once. v1.5.6 BACKPORTED `CreateInfo::GetQualifiedName()` (its
+// header says so in a NOTE(backport), assembling the QualifiedName on demand from
+// the separate catalog/schema members) and backported the per-entry getters
+// returning plain `string` — while NOT backporting `CreateSchemaInfo::SchemaName()`
+// or `BaseTableRef::Table()`, which stay v2.0-only. So `QualifiedNameTag` answers
+// "yes" on v1.5.6 and those two sites then name members that do not exist.
+// Probe each accessor separately, and normalise what the getters hand back.
+template <class T, class = void>
+struct HasSchemaNameAccessor : std::false_type {};
+template <class T>
+struct HasSchemaNameAccessor<T, decltype(void(std::declval<const T &>().SchemaName()))> : std::true_type {};
+
+typedef HasSchemaNameAccessor<CreateSchemaInfo> SchemaNameTag;
+
+template <class T, class = void>
+struct HasTableAccessor : std::false_type {};
+template <class T>
+struct HasTableAccessor<T, decltype(void(std::declval<const T &>().Table()))> : std::true_type {};
+
+typedef HasTableAccessor<BaseTableRef> TableAccessorTag;
+
+// The getters return a plain `string` on v1.5.6 and an `Identifier` on v2.0.
+// Exact-match overload resolution prefers the non-template for a string, so each
+// line compiles against whichever shape the pinned DuckDB has.
+inline string IdentString(const string &name) {
+	return name;
+}
+template <class IDENTIFIER>
+string IdentString(const IDENTIFIER &identifier) {
+	return identifier.GetIdentifierName();
+}
+
 // Tag dispatch rather than `if constexpr`: this extension compiles at C++11 on
 // Linux (see CMakeLists.txt). Only the selected overload is instantiated, so the
 // branch naming the absent member is never compiled.
 template <class INFO>
 string CreateEntryName(const INFO &info, std::true_type) {
-	return info.GetFunctionName().GetIdentifierName();
+	return IdentString(info.GetFunctionName());
 }
 template <class INFO>
 string CreateEntryName(const INFO &info, std::false_type) {
@@ -76,7 +118,7 @@ string CreateEntryName(const INFO &info, std::false_type) {
 
 template <class INFO>
 string CreateTableEntryName(const INFO &info, std::true_type) {
-	return info.GetTableName().GetIdentifierName();
+	return IdentString(info.GetTableName());
 }
 template <class INFO>
 string CreateTableEntryName(const INFO &info, std::false_type) {
@@ -85,7 +127,7 @@ string CreateTableEntryName(const INFO &info, std::false_type) {
 
 template <class INFO>
 string CreateViewEntryName(const INFO &info, std::true_type) {
-	return info.GetViewName().GetIdentifierName();
+	return IdentString(info.GetViewName());
 }
 template <class INFO>
 string CreateViewEntryName(const INFO &info, std::false_type) {
@@ -94,7 +136,7 @@ string CreateViewEntryName(const INFO &info, std::false_type) {
 
 template <class INFO>
 string CreateSequenceEntryName(const INFO &info, std::true_type) {
-	return info.GetSequenceName().GetIdentifierName();
+	return IdentString(info.GetSequenceName());
 }
 template <class INFO>
 string CreateSequenceEntryName(const INFO &info, std::false_type) {
@@ -103,7 +145,7 @@ string CreateSequenceEntryName(const INFO &info, std::false_type) {
 
 template <class INFO>
 string CreateTypeEntryName(const INFO &info, std::true_type) {
-	return info.GetTypeName().GetIdentifierName();
+	return IdentString(info.GetTypeName());
 }
 template <class INFO>
 string CreateTypeEntryName(const INFO &info, std::false_type) {
@@ -112,7 +154,7 @@ string CreateTypeEntryName(const INFO &info, std::false_type) {
 
 template <class INFO>
 string CreateIndexEntryName(const INFO &info, std::true_type) {
-	return info.GetIndexName().GetIdentifierName();
+	return IdentString(info.GetIndexName());
 }
 template <class INFO>
 string CreateIndexEntryName(const INFO &info, std::false_type) {
@@ -124,7 +166,7 @@ string CreateIndexEntryName(const INFO &info, std::false_type) {
 // <empty name>] and exposes SchemaName() to read it back.
 template <class INFO>
 string CreateSchemaName(const INFO &info, std::true_type) {
-	return info.template Cast<CreateSchemaInfo>().SchemaName().GetIdentifierName();
+	return IdentString(info.template Cast<CreateSchemaInfo>().SchemaName());
 }
 template <class INFO>
 string CreateSchemaName(const INFO &info, std::false_type) {
@@ -133,7 +175,7 @@ string CreateSchemaName(const INFO &info, std::false_type) {
 
 template <class REF>
 string BaseTableName(const REF &ref, std::true_type) {
-	return ref.Table().GetIdentifierName();
+	return IdentString(ref.Table());
 }
 template <class REF>
 string BaseTableName(const REF &ref, std::false_type) {
@@ -456,7 +498,7 @@ vector<ASTNode> DuckDBAdapter::ConvertCreateStatement(const CreateStatement &stm
 	case CatalogType::SCHEMA_ENTRY: {
 		// For CREATE SCHEMA, the schema name is stored in the base CreateInfo::schema field
 		node_type = "create_schema";
-		name = CreateSchemaName(info, QualifiedNameTag());
+		name = CreateSchemaName(info, SchemaNameTag());
 		semantic_type = SemanticTypes::DEFINITION_MODULE;
 		break;
 	}
@@ -938,7 +980,7 @@ vector<ASTNode> DuckDBAdapter::ConvertTableRef(const TableRef &table_ref, uint32
 	switch (table_ref.type) {
 	case TableReferenceType::BASE_TABLE: {
 		const auto &base_table = table_ref.Cast<BaseTableRef>();
-		const auto base_table_name = BaseTableName(base_table, QualifiedNameTag());
+		const auto base_table_name = BaseTableName(base_table, TableAccessorTag());
 		auto node = CreateASTNode("table_reference", base_table_name, base_table_name, SemanticTypes::NAME_QUALIFIED,
 		                          node_counter++, -1, 0);
 		nodes.push_back(node);
