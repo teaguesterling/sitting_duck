@@ -1,3 +1,4 @@
+#include "named_parameter_compat.hpp"
 #include "duckdb.hpp"
 #include "duckdb_compat.hpp"
 #include "function_doc_helper.hpp"
@@ -61,23 +62,23 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
 	// Parse optional named parameters
 	bool ignore_errors = false;
 	if (seen_parameters.find("ignore_errors") != seen_parameters.end()) {
-		ignore_errors = input.named_parameters.at("ignore_errors").GetValue<bool>();
+		ignore_errors = NamedParamAt(input.named_parameters, "ignore_errors").GetValue<bool>();
 	}
 
 	// Parse extraction config parameters
 	string context_str = "native"; // Default to native - memory issues fixed with flat schema
 	if (seen_parameters.find("context") != seen_parameters.end()) {
-		context_str = input.named_parameters.at("context").GetValue<string>();
+		context_str = NamedParamAt(input.named_parameters, "context").GetValue<string>();
 	}
 
 	string source_str = "lines"; // Default
 	if (seen_parameters.find("source") != seen_parameters.end()) {
-		source_str = input.named_parameters.at("source").GetValue<string>();
+		source_str = NamedParamAt(input.named_parameters, "source").GetValue<string>();
 	}
 
 	string structure_str = "full"; // Default
 	if (seen_parameters.find("structure") != seen_parameters.end()) {
-		structure_str = input.named_parameters.at("structure").GetValue<string>();
+		structure_str = NamedParamAt(input.named_parameters, "structure").GetValue<string>();
 	}
 
 	// Parse unified peek parameter (can be INTEGER or VARCHAR)
@@ -85,7 +86,7 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
 	int32_t peek_size = 120;
 	string peek_mode = "smart";
 	if (seen_parameters.find("peek") != seen_parameters.end()) {
-		auto &peek_value = input.named_parameters.at("peek");
+		auto &peek_value = NamedParamAt(input.named_parameters, "peek");
 		if (peek_value.type().id() == LogicalTypeId::INTEGER || peek_value.type().id() == LogicalTypeId::BIGINT) {
 			// INTEGER: custom size
 			peek_size = peek_value.GetValue<int32_t>();
@@ -98,15 +99,15 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
 
 	// Legacy parameter support (override if provided)
 	if (seen_parameters.find("peek_size") != seen_parameters.end()) {
-		peek_size = input.named_parameters.at("peek_size").GetValue<int32_t>();
+		peek_size = NamedParamAt(input.named_parameters, "peek_size").GetValue<int32_t>();
 	}
 	if (seen_parameters.find("peek_mode") != seen_parameters.end()) {
-		peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
+		peek_mode = NamedParamAt(input.named_parameters, "peek_mode").GetValue<string>();
 	}
 
 	int32_t batch_size = 1; // Default = current streaming behavior
 	if (seen_parameters.find("batch_size") != seen_parameters.end()) {
-		batch_size = input.named_parameters.at("batch_size").GetValue<int32_t>();
+		batch_size = NamedParamAt(input.named_parameters, "batch_size").GetValue<int32_t>();
 		if (batch_size < 1) {
 			throw BinderException("batch_size must be positive");
 		}
@@ -118,12 +119,12 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindTwoArg(ClientContext &co
 
 	// Parse max_depth parameter (#014)
 	if (seen_parameters.find("max_depth") != seen_parameters.end()) {
-		extraction_config.max_depth = input.named_parameters.at("max_depth").GetValue<int32_t>();
+		extraction_config.max_depth = NamedParamAt(input.named_parameters, "max_depth").GetValue<int32_t>();
 	}
 
 	// Parse prune parameter (#014)
 	if (seen_parameters.find("prune") != seen_parameters.end()) {
-		auto &prune_value = input.named_parameters.at("prune");
+		auto &prune_value = NamedParamAt(input.named_parameters, "prune");
 		auto &policy_list = ListValue::GetChildren(prune_value);
 		for (auto &policy : policy_list) {
 			if (policy.IsNull()) {
@@ -191,23 +192,23 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
 	// Parse optional named parameters
 	bool ignore_errors = false;
 	if (seen_parameters.find("ignore_errors") != seen_parameters.end()) {
-		ignore_errors = input.named_parameters.at("ignore_errors").GetValue<bool>();
+		ignore_errors = NamedParamAt(input.named_parameters, "ignore_errors").GetValue<bool>();
 	}
 
 	// Parse extraction config parameters
 	string context_str = "native"; // Default to native - memory issues fixed with flat schema
 	if (seen_parameters.find("context") != seen_parameters.end()) {
-		context_str = input.named_parameters.at("context").GetValue<string>();
+		context_str = NamedParamAt(input.named_parameters, "context").GetValue<string>();
 	}
 
 	string source_str = "lines"; // Default
 	if (seen_parameters.find("source") != seen_parameters.end()) {
-		source_str = input.named_parameters.at("source").GetValue<string>();
+		source_str = NamedParamAt(input.named_parameters, "source").GetValue<string>();
 	}
 
 	string structure_str = "full"; // Default
 	if (seen_parameters.find("structure") != seen_parameters.end()) {
-		structure_str = input.named_parameters.at("structure").GetValue<string>();
+		structure_str = NamedParamAt(input.named_parameters, "structure").GetValue<string>();
 	}
 
 	// Parse unified peek parameter (can be INTEGER or VARCHAR)
@@ -215,7 +216,7 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
 	int32_t peek_size = 120;
 	string peek_mode = "smart";
 	if (seen_parameters.find("peek") != seen_parameters.end()) {
-		auto &peek_value = input.named_parameters.at("peek");
+		auto &peek_value = NamedParamAt(input.named_parameters, "peek");
 		if (peek_value.type().id() == LogicalTypeId::INTEGER || peek_value.type().id() == LogicalTypeId::BIGINT) {
 			// INTEGER: custom size
 			peek_size = peek_value.GetValue<int32_t>();
@@ -228,15 +229,15 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
 
 	// Legacy parameter support (override if provided)
 	if (seen_parameters.find("peek_size") != seen_parameters.end()) {
-		peek_size = input.named_parameters.at("peek_size").GetValue<int32_t>();
+		peek_size = NamedParamAt(input.named_parameters, "peek_size").GetValue<int32_t>();
 	}
 	if (seen_parameters.find("peek_mode") != seen_parameters.end()) {
-		peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
+		peek_mode = NamedParamAt(input.named_parameters, "peek_mode").GetValue<string>();
 	}
 
 	int32_t batch_size = 1; // Default = current streaming behavior
 	if (seen_parameters.find("batch_size") != seen_parameters.end()) {
-		batch_size = input.named_parameters.at("batch_size").GetValue<int32_t>();
+		batch_size = NamedParamAt(input.named_parameters, "batch_size").GetValue<int32_t>();
 		if (batch_size < 1) {
 			throw BinderException("batch_size must be positive");
 		}
@@ -251,12 +252,12 @@ static unique_ptr<FunctionData> ReadASTFlatStreamingBindOneArg(ClientContext &co
 
 	// Parse max_depth parameter (#014)
 	if (seen_parameters.find("max_depth") != seen_parameters.end()) {
-		extraction_config.max_depth = input.named_parameters.at("max_depth").GetValue<int32_t>();
+		extraction_config.max_depth = NamedParamAt(input.named_parameters, "max_depth").GetValue<int32_t>();
 	}
 
 	// Parse prune parameter (#014)
 	if (seen_parameters.find("prune") != seen_parameters.end()) {
-		auto &prune_value = input.named_parameters.at("prune");
+		auto &prune_value = NamedParamAt(input.named_parameters, "prune");
 		auto &policy_list = ListValue::GetChildren(prune_value);
 		for (auto &policy : policy_list) {
 			if (policy.IsNull()) {
@@ -640,10 +641,15 @@ static void ReadASTHierarchicalFunction(ClientContext &context, TableFunctionInp
 
 // Register the resource cap named parameters on a table function (shared by
 // every read_ast variant so no registration site can drift)
+// Called AFTER the caller has declared its own parameters, so this extends the
+// existing kwargs group rather than creating one: on v2.0 those are different
+// operations and creating twice is an error.
 static void AddResourceCapNamedParameters(TableFunction &func) {
-	func.named_parameters["max_source_bytes"] = LogicalType::BIGINT;
-	func.named_parameters["parse_timeout_ms"] = LogicalType::BIGINT;
-	func.named_parameters["max_parse_nodes"] = LogicalType::BIGINT;
+	ExtendNamedParameters(func, {
+	    {"max_source_bytes", LogicalType::BIGINT},
+	    {"parse_timeout_ms", LogicalType::BIGINT},
+	    {"max_parse_nodes", LogicalType::BIGINT},
+	});
 }
 
 //==============================================================================
@@ -657,19 +663,23 @@ static TableFunction GetReadASTFlatFunctionTwoArg() {
 	read_ast.name = "read_ast";
 	read_ast.init_local = ReadASTInitLocal;
 	read_ast.order_preservation_type = OrderPreservationType::NO_ORDER;
-	read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-	read_ast.named_parameters["context"] = LogicalType::VARCHAR;
-	read_ast.named_parameters["source"] = LogicalType::VARCHAR;
-	read_ast.named_parameters["structure"] = LogicalType::VARCHAR;
-	read_ast.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
-	read_ast.named_parameters["batch_size"] = LogicalType::INTEGER;
-	read_ast.named_parameters["max_depth"] = LogicalType::INTEGER;
-	read_ast.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	DeclareNamedParameters(read_ast, {
+	    {"ignore_errors", LogicalType::BOOLEAN},
+	    {"context", LogicalType::VARCHAR},
+	    {"source", LogicalType::VARCHAR},
+	    {"structure", LogicalType::VARCHAR},
+	    {"peek", LogicalType::ANY}, // Can be INTEGER or VARCHAR
+	    {"batch_size", LogicalType::INTEGER},
+	    {"max_depth", LogicalType::INTEGER},
+	    {"prune", LogicalType::LIST(LogicalType::VARCHAR)},
+	});
 	AddResourceCapNamedParameters(read_ast);
 
 	// Legacy parameters for backward compatibility
-	read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
-	read_ast.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+	ExtendNamedParameters(read_ast, {
+	    {"peek_size", LogicalType::INTEGER},
+	    {"peek_mode", LogicalType::VARCHAR},
+	});
 	return read_ast;
 }
 
@@ -680,19 +690,23 @@ static TableFunction GetReadASTFlatFunctionOneArg() {
 	read_ast.name = "read_ast";
 	read_ast.init_local = ReadASTInitLocal;
 	read_ast.order_preservation_type = OrderPreservationType::NO_ORDER;
-	read_ast.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-	read_ast.named_parameters["context"] = LogicalType::VARCHAR;
-	read_ast.named_parameters["source"] = LogicalType::VARCHAR;
-	read_ast.named_parameters["structure"] = LogicalType::VARCHAR;
-	read_ast.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
-	read_ast.named_parameters["batch_size"] = LogicalType::INTEGER;
-	read_ast.named_parameters["max_depth"] = LogicalType::INTEGER;
-	read_ast.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	DeclareNamedParameters(read_ast, {
+	    {"ignore_errors", LogicalType::BOOLEAN},
+	    {"context", LogicalType::VARCHAR},
+	    {"source", LogicalType::VARCHAR},
+	    {"structure", LogicalType::VARCHAR},
+	    {"peek", LogicalType::ANY}, // Can be INTEGER or VARCHAR
+	    {"batch_size", LogicalType::INTEGER},
+	    {"max_depth", LogicalType::INTEGER},
+	    {"prune", LogicalType::LIST(LogicalType::VARCHAR)},
+	});
 	AddResourceCapNamedParameters(read_ast);
 
 	// Legacy parameters for backward compatibility
-	read_ast.named_parameters["peek_size"] = LogicalType::INTEGER;
-	read_ast.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+	ExtendNamedParameters(read_ast, {
+	    {"peek_size", LogicalType::INTEGER},
+	    {"peek_mode", LogicalType::VARCHAR},
+	});
 	return read_ast;
 }
 
@@ -704,12 +718,14 @@ static TableFunction GetReadASTStreamingFunctionTwoArg() {
 	read_ast_streaming.name = "read_ast_streaming";
 	read_ast_streaming.init_local = ReadASTInitLocal;
 	read_ast_streaming.order_preservation_type = OrderPreservationType::NO_ORDER;
-	read_ast_streaming.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-	read_ast_streaming.named_parameters["peek_size"] = LogicalType::INTEGER;
-	read_ast_streaming.named_parameters["peek_mode"] = LogicalType::VARCHAR;
-	read_ast_streaming.named_parameters["batch_size"] = LogicalType::INTEGER;
-	read_ast_streaming.named_parameters["max_depth"] = LogicalType::INTEGER;
-	read_ast_streaming.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	DeclareNamedParameters(read_ast_streaming, {
+	    {"ignore_errors", LogicalType::BOOLEAN},
+	    {"peek_size", LogicalType::INTEGER},
+	    {"peek_mode", LogicalType::VARCHAR},
+	    {"batch_size", LogicalType::INTEGER},
+	    {"max_depth", LogicalType::INTEGER},
+	    {"prune", LogicalType::LIST(LogicalType::VARCHAR)},
+	});
 	AddResourceCapNamedParameters(read_ast_streaming);
 	return read_ast_streaming;
 }
@@ -720,12 +736,14 @@ static TableFunction GetReadASTStreamingFunctionOneArg() {
 	read_ast_streaming.name = "read_ast_streaming";
 	read_ast_streaming.init_local = ReadASTInitLocal;
 	read_ast_streaming.order_preservation_type = OrderPreservationType::NO_ORDER;
-	read_ast_streaming.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-	read_ast_streaming.named_parameters["peek_size"] = LogicalType::INTEGER;
-	read_ast_streaming.named_parameters["peek_mode"] = LogicalType::VARCHAR;
-	read_ast_streaming.named_parameters["batch_size"] = LogicalType::INTEGER;
-	read_ast_streaming.named_parameters["max_depth"] = LogicalType::INTEGER;
-	read_ast_streaming.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	DeclareNamedParameters(read_ast_streaming, {
+	    {"ignore_errors", LogicalType::BOOLEAN},
+	    {"peek_size", LogicalType::INTEGER},
+	    {"peek_mode", LogicalType::VARCHAR},
+	    {"batch_size", LogicalType::INTEGER},
+	    {"max_depth", LogicalType::INTEGER},
+	    {"prune", LogicalType::LIST(LogicalType::VARCHAR)},
+	});
 	AddResourceCapNamedParameters(read_ast_streaming);
 	return read_ast_streaming;
 }
@@ -776,23 +794,23 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientCon
 	// Parse optional named parameters
 	bool ignore_errors = false;
 	if (seen_parameters.find("ignore_errors") != seen_parameters.end()) {
-		ignore_errors = input.named_parameters.at("ignore_errors").GetValue<bool>();
+		ignore_errors = NamedParamAt(input.named_parameters, "ignore_errors").GetValue<bool>();
 	}
 
 	// Parse extraction config parameters
 	string context_str = "native"; // Default to native - memory issues fixed with flat schema
 	if (seen_parameters.find("context") != seen_parameters.end()) {
-		context_str = input.named_parameters.at("context").GetValue<string>();
+		context_str = NamedParamAt(input.named_parameters, "context").GetValue<string>();
 	}
 
 	string source_str = "lines"; // Default
 	if (seen_parameters.find("source") != seen_parameters.end()) {
-		source_str = input.named_parameters.at("source").GetValue<string>();
+		source_str = NamedParamAt(input.named_parameters, "source").GetValue<string>();
 	}
 
 	string structure_str = "full"; // Default
 	if (seen_parameters.find("structure") != seen_parameters.end()) {
-		structure_str = input.named_parameters.at("structure").GetValue<string>();
+		structure_str = NamedParamAt(input.named_parameters, "structure").GetValue<string>();
 	}
 
 	// Parse unified peek parameter (can be INTEGER or VARCHAR)
@@ -800,7 +818,7 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientCon
 	int32_t peek_size = 120;
 	string peek_mode = "smart";
 	if (seen_parameters.find("peek") != seen_parameters.end()) {
-		auto &peek_value = input.named_parameters.at("peek");
+		auto &peek_value = NamedParamAt(input.named_parameters, "peek");
 		if (peek_value.type().id() == LogicalTypeId::INTEGER || peek_value.type().id() == LogicalTypeId::BIGINT) {
 			// INTEGER: custom size
 			peek_size = peek_value.GetValue<int32_t>();
@@ -813,15 +831,15 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientCon
 
 	// Legacy parameter support (override if provided)
 	if (seen_parameters.find("peek_size") != seen_parameters.end()) {
-		peek_size = input.named_parameters.at("peek_size").GetValue<int32_t>();
+		peek_size = NamedParamAt(input.named_parameters, "peek_size").GetValue<int32_t>();
 	}
 	if (seen_parameters.find("peek_mode") != seen_parameters.end()) {
-		peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
+		peek_mode = NamedParamAt(input.named_parameters, "peek_mode").GetValue<string>();
 	}
 
 	int32_t batch_size = 1; // Default = current streaming behavior
 	if (seen_parameters.find("batch_size") != seen_parameters.end()) {
-		batch_size = input.named_parameters.at("batch_size").GetValue<int32_t>();
+		batch_size = NamedParamAt(input.named_parameters, "batch_size").GetValue<int32_t>();
 		if (batch_size < 1) {
 			throw BinderException("batch_size must be positive");
 		}
@@ -833,12 +851,12 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindTwoArg(ClientCon
 
 	// Parse max_depth parameter (#014)
 	if (seen_parameters.find("max_depth") != seen_parameters.end()) {
-		extraction_config.max_depth = input.named_parameters.at("max_depth").GetValue<int32_t>();
+		extraction_config.max_depth = NamedParamAt(input.named_parameters, "max_depth").GetValue<int32_t>();
 	}
 
 	// Parse prune parameter (#014)
 	if (seen_parameters.find("prune") != seen_parameters.end()) {
-		auto &prune_value = input.named_parameters.at("prune");
+		auto &prune_value = NamedParamAt(input.named_parameters, "prune");
 		auto &policy_list = ListValue::GetChildren(prune_value);
 		for (auto &policy : policy_list) {
 			if (policy.IsNull()) {
@@ -907,23 +925,23 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientCon
 	// Parse optional named parameters
 	bool ignore_errors = false;
 	if (seen_parameters.find("ignore_errors") != seen_parameters.end()) {
-		ignore_errors = input.named_parameters.at("ignore_errors").GetValue<bool>();
+		ignore_errors = NamedParamAt(input.named_parameters, "ignore_errors").GetValue<bool>();
 	}
 
 	// Parse extraction config parameters
 	string context_str = "native"; // Default to native - memory issues fixed with flat schema
 	if (seen_parameters.find("context") != seen_parameters.end()) {
-		context_str = input.named_parameters.at("context").GetValue<string>();
+		context_str = NamedParamAt(input.named_parameters, "context").GetValue<string>();
 	}
 
 	string source_str = "lines"; // Default
 	if (seen_parameters.find("source") != seen_parameters.end()) {
-		source_str = input.named_parameters.at("source").GetValue<string>();
+		source_str = NamedParamAt(input.named_parameters, "source").GetValue<string>();
 	}
 
 	string structure_str = "full"; // Default
 	if (seen_parameters.find("structure") != seen_parameters.end()) {
-		structure_str = input.named_parameters.at("structure").GetValue<string>();
+		structure_str = NamedParamAt(input.named_parameters, "structure").GetValue<string>();
 	}
 
 	// Parse unified peek parameter (can be INTEGER or VARCHAR)
@@ -931,7 +949,7 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientCon
 	int32_t peek_size = 120;
 	string peek_mode = "smart";
 	if (seen_parameters.find("peek") != seen_parameters.end()) {
-		auto &peek_value = input.named_parameters.at("peek");
+		auto &peek_value = NamedParamAt(input.named_parameters, "peek");
 		if (peek_value.type().id() == LogicalTypeId::INTEGER || peek_value.type().id() == LogicalTypeId::BIGINT) {
 			// INTEGER: custom size
 			peek_size = peek_value.GetValue<int32_t>();
@@ -944,15 +962,15 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientCon
 
 	// Legacy parameter support (override if provided)
 	if (seen_parameters.find("peek_size") != seen_parameters.end()) {
-		peek_size = input.named_parameters.at("peek_size").GetValue<int32_t>();
+		peek_size = NamedParamAt(input.named_parameters, "peek_size").GetValue<int32_t>();
 	}
 	if (seen_parameters.find("peek_mode") != seen_parameters.end()) {
-		peek_mode = input.named_parameters.at("peek_mode").GetValue<string>();
+		peek_mode = NamedParamAt(input.named_parameters, "peek_mode").GetValue<string>();
 	}
 
 	int32_t batch_size = 1; // Default = current streaming behavior
 	if (seen_parameters.find("batch_size") != seen_parameters.end()) {
-		batch_size = input.named_parameters.at("batch_size").GetValue<int32_t>();
+		batch_size = NamedParamAt(input.named_parameters, "batch_size").GetValue<int32_t>();
 		if (batch_size < 1) {
 			throw BinderException("batch_size must be positive");
 		}
@@ -967,12 +985,12 @@ static unique_ptr<FunctionData> ReadASTHierarchicalStreamingBindOneArg(ClientCon
 
 	// Parse max_depth parameter (#014)
 	if (seen_parameters.find("max_depth") != seen_parameters.end()) {
-		extraction_config.max_depth = input.named_parameters.at("max_depth").GetValue<int32_t>();
+		extraction_config.max_depth = NamedParamAt(input.named_parameters, "max_depth").GetValue<int32_t>();
 	}
 
 	// Parse prune parameter (#014)
 	if (seen_parameters.find("prune") != seen_parameters.end()) {
-		auto &prune_value = input.named_parameters.at("prune");
+		auto &prune_value = NamedParamAt(input.named_parameters, "prune");
 		auto &policy_list = ListValue::GetChildren(prune_value);
 		for (auto &policy : policy_list) {
 			if (policy.IsNull()) {
@@ -1004,19 +1022,23 @@ static TableFunction GetReadASTFunctionTwoArg() {
 	read_ast_hierarchical_new.name = "read_ast_hierarchical_new";
 	read_ast_hierarchical_new.init_local = ReadASTInitLocal;
 	read_ast_hierarchical_new.order_preservation_type = OrderPreservationType::NO_ORDER;
-	read_ast_hierarchical_new.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-	read_ast_hierarchical_new.named_parameters["context"] = LogicalType::VARCHAR;
-	read_ast_hierarchical_new.named_parameters["source"] = LogicalType::VARCHAR;
-	read_ast_hierarchical_new.named_parameters["structure"] = LogicalType::VARCHAR;
-	read_ast_hierarchical_new.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
-	read_ast_hierarchical_new.named_parameters["batch_size"] = LogicalType::INTEGER;
-	read_ast_hierarchical_new.named_parameters["max_depth"] = LogicalType::INTEGER;
-	read_ast_hierarchical_new.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	DeclareNamedParameters(read_ast_hierarchical_new, {
+	    {"ignore_errors", LogicalType::BOOLEAN},
+	    {"context", LogicalType::VARCHAR},
+	    {"source", LogicalType::VARCHAR},
+	    {"structure", LogicalType::VARCHAR},
+	    {"peek", LogicalType::ANY}, // Can be INTEGER or VARCHAR
+	    {"batch_size", LogicalType::INTEGER},
+	    {"max_depth", LogicalType::INTEGER},
+	    {"prune", LogicalType::LIST(LogicalType::VARCHAR)},
+	});
 	AddResourceCapNamedParameters(read_ast_hierarchical_new);
 
 	// Legacy parameters for backward compatibility
-	read_ast_hierarchical_new.named_parameters["peek_size"] = LogicalType::INTEGER;
-	read_ast_hierarchical_new.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+	ExtendNamedParameters(read_ast_hierarchical_new, {
+	    {"peek_size", LogicalType::INTEGER},
+	    {"peek_mode", LogicalType::VARCHAR},
+	});
 	return read_ast_hierarchical_new;
 }
 
@@ -1028,19 +1050,23 @@ static TableFunction GetReadASTHierarchicalFunctionTwoArg() {
 	read_ast_hierarchical.name = "read_ast_hierarchical";
 	read_ast_hierarchical.init_local = ReadASTInitLocal;
 	read_ast_hierarchical.order_preservation_type = OrderPreservationType::NO_ORDER;
-	read_ast_hierarchical.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-	read_ast_hierarchical.named_parameters["context"] = LogicalType::VARCHAR;
-	read_ast_hierarchical.named_parameters["source"] = LogicalType::VARCHAR;
-	read_ast_hierarchical.named_parameters["structure"] = LogicalType::VARCHAR;
-	read_ast_hierarchical.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
-	read_ast_hierarchical.named_parameters["batch_size"] = LogicalType::INTEGER;
-	read_ast_hierarchical.named_parameters["max_depth"] = LogicalType::INTEGER;
-	read_ast_hierarchical.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	DeclareNamedParameters(read_ast_hierarchical, {
+	    {"ignore_errors", LogicalType::BOOLEAN},
+	    {"context", LogicalType::VARCHAR},
+	    {"source", LogicalType::VARCHAR},
+	    {"structure", LogicalType::VARCHAR},
+	    {"peek", LogicalType::ANY}, // Can be INTEGER or VARCHAR
+	    {"batch_size", LogicalType::INTEGER},
+	    {"max_depth", LogicalType::INTEGER},
+	    {"prune", LogicalType::LIST(LogicalType::VARCHAR)},
+	});
 	AddResourceCapNamedParameters(read_ast_hierarchical);
 
 	// Legacy parameters for backward compatibility
-	read_ast_hierarchical.named_parameters["peek_size"] = LogicalType::INTEGER;
-	read_ast_hierarchical.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+	ExtendNamedParameters(read_ast_hierarchical, {
+	    {"peek_size", LogicalType::INTEGER},
+	    {"peek_mode", LogicalType::VARCHAR},
+	});
 	return read_ast_hierarchical;
 }
 
@@ -1051,19 +1077,23 @@ static TableFunction GetReadASTFunctionOneArg() {
 	read_ast_hierarchical_new.name = "read_ast_hierarchical_new";
 	read_ast_hierarchical_new.init_local = ReadASTInitLocal;
 	read_ast_hierarchical_new.order_preservation_type = OrderPreservationType::NO_ORDER;
-	read_ast_hierarchical_new.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-	read_ast_hierarchical_new.named_parameters["context"] = LogicalType::VARCHAR;
-	read_ast_hierarchical_new.named_parameters["source"] = LogicalType::VARCHAR;
-	read_ast_hierarchical_new.named_parameters["structure"] = LogicalType::VARCHAR;
-	read_ast_hierarchical_new.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
-	read_ast_hierarchical_new.named_parameters["batch_size"] = LogicalType::INTEGER;
-	read_ast_hierarchical_new.named_parameters["max_depth"] = LogicalType::INTEGER;
-	read_ast_hierarchical_new.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	DeclareNamedParameters(read_ast_hierarchical_new, {
+	    {"ignore_errors", LogicalType::BOOLEAN},
+	    {"context", LogicalType::VARCHAR},
+	    {"source", LogicalType::VARCHAR},
+	    {"structure", LogicalType::VARCHAR},
+	    {"peek", LogicalType::ANY}, // Can be INTEGER or VARCHAR
+	    {"batch_size", LogicalType::INTEGER},
+	    {"max_depth", LogicalType::INTEGER},
+	    {"prune", LogicalType::LIST(LogicalType::VARCHAR)},
+	});
 	AddResourceCapNamedParameters(read_ast_hierarchical_new);
 
 	// Legacy parameters for backward compatibility
-	read_ast_hierarchical_new.named_parameters["peek_size"] = LogicalType::INTEGER;
-	read_ast_hierarchical_new.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+	ExtendNamedParameters(read_ast_hierarchical_new, {
+	    {"peek_size", LogicalType::INTEGER},
+	    {"peek_mode", LogicalType::VARCHAR},
+	});
 	return read_ast_hierarchical_new;
 }
 
@@ -1073,19 +1103,23 @@ static TableFunction GetReadASTHierarchicalFunctionOneArg() {
 	read_ast_hierarchical.name = "read_ast_hierarchical";
 	read_ast_hierarchical.init_local = ReadASTInitLocal;
 	read_ast_hierarchical.order_preservation_type = OrderPreservationType::NO_ORDER;
-	read_ast_hierarchical.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-	read_ast_hierarchical.named_parameters["context"] = LogicalType::VARCHAR;
-	read_ast_hierarchical.named_parameters["source"] = LogicalType::VARCHAR;
-	read_ast_hierarchical.named_parameters["structure"] = LogicalType::VARCHAR;
-	read_ast_hierarchical.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
-	read_ast_hierarchical.named_parameters["batch_size"] = LogicalType::INTEGER;
-	read_ast_hierarchical.named_parameters["max_depth"] = LogicalType::INTEGER;
-	read_ast_hierarchical.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	DeclareNamedParameters(read_ast_hierarchical, {
+	    {"ignore_errors", LogicalType::BOOLEAN},
+	    {"context", LogicalType::VARCHAR},
+	    {"source", LogicalType::VARCHAR},
+	    {"structure", LogicalType::VARCHAR},
+	    {"peek", LogicalType::ANY}, // Can be INTEGER or VARCHAR
+	    {"batch_size", LogicalType::INTEGER},
+	    {"max_depth", LogicalType::INTEGER},
+	    {"prune", LogicalType::LIST(LogicalType::VARCHAR)},
+	});
 	AddResourceCapNamedParameters(read_ast_hierarchical);
 
 	// Legacy parameters for backward compatibility
-	read_ast_hierarchical.named_parameters["peek_size"] = LogicalType::INTEGER;
-	read_ast_hierarchical.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+	ExtendNamedParameters(read_ast_hierarchical, {
+	    {"peek_size", LogicalType::INTEGER},
+	    {"peek_mode", LogicalType::VARCHAR},
+	});
 	return read_ast_hierarchical;
 }
 
@@ -1096,19 +1130,23 @@ static TableFunction GetReadASTFlatAliasFunctionOneArg() {
 	read_ast_flat.name = "read_ast_flat";
 	read_ast_flat.init_local = ReadASTInitLocal;
 	read_ast_flat.order_preservation_type = OrderPreservationType::NO_ORDER;
-	read_ast_flat.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-	read_ast_flat.named_parameters["context"] = LogicalType::VARCHAR;
-	read_ast_flat.named_parameters["source"] = LogicalType::VARCHAR;
-	read_ast_flat.named_parameters["structure"] = LogicalType::VARCHAR;
-	read_ast_flat.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
-	read_ast_flat.named_parameters["batch_size"] = LogicalType::INTEGER;
-	read_ast_flat.named_parameters["max_depth"] = LogicalType::INTEGER;
-	read_ast_flat.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	DeclareNamedParameters(read_ast_flat, {
+	    {"ignore_errors", LogicalType::BOOLEAN},
+	    {"context", LogicalType::VARCHAR},
+	    {"source", LogicalType::VARCHAR},
+	    {"structure", LogicalType::VARCHAR},
+	    {"peek", LogicalType::ANY}, // Can be INTEGER or VARCHAR
+	    {"batch_size", LogicalType::INTEGER},
+	    {"max_depth", LogicalType::INTEGER},
+	    {"prune", LogicalType::LIST(LogicalType::VARCHAR)},
+	});
 	AddResourceCapNamedParameters(read_ast_flat);
 
 	// Legacy parameters for backward compatibility
-	read_ast_flat.named_parameters["peek_size"] = LogicalType::INTEGER;
-	read_ast_flat.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+	ExtendNamedParameters(read_ast_flat, {
+	    {"peek_size", LogicalType::INTEGER},
+	    {"peek_mode", LogicalType::VARCHAR},
+	});
 	return read_ast_flat;
 }
 
@@ -1118,19 +1156,23 @@ static TableFunction GetReadASTFlatAliasFunctionTwoArg() {
 	read_ast_flat.name = "read_ast_flat";
 	read_ast_flat.init_local = ReadASTInitLocal;
 	read_ast_flat.order_preservation_type = OrderPreservationType::NO_ORDER;
-	read_ast_flat.named_parameters["ignore_errors"] = LogicalType::BOOLEAN;
-	read_ast_flat.named_parameters["context"] = LogicalType::VARCHAR;
-	read_ast_flat.named_parameters["source"] = LogicalType::VARCHAR;
-	read_ast_flat.named_parameters["structure"] = LogicalType::VARCHAR;
-	read_ast_flat.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
-	read_ast_flat.named_parameters["batch_size"] = LogicalType::INTEGER;
-	read_ast_flat.named_parameters["max_depth"] = LogicalType::INTEGER;
-	read_ast_flat.named_parameters["prune"] = LogicalType::LIST(LogicalType::VARCHAR);
+	DeclareNamedParameters(read_ast_flat, {
+	    {"ignore_errors", LogicalType::BOOLEAN},
+	    {"context", LogicalType::VARCHAR},
+	    {"source", LogicalType::VARCHAR},
+	    {"structure", LogicalType::VARCHAR},
+	    {"peek", LogicalType::ANY}, // Can be INTEGER or VARCHAR
+	    {"batch_size", LogicalType::INTEGER},
+	    {"max_depth", LogicalType::INTEGER},
+	    {"prune", LogicalType::LIST(LogicalType::VARCHAR)},
+	});
 	AddResourceCapNamedParameters(read_ast_flat);
 
 	// Legacy parameters for backward compatibility
-	read_ast_flat.named_parameters["peek_size"] = LogicalType::INTEGER;
-	read_ast_flat.named_parameters["peek_mode"] = LogicalType::VARCHAR;
+	ExtendNamedParameters(read_ast_flat, {
+	    {"peek_size", LogicalType::INTEGER},
+	    {"peek_mode", LogicalType::VARCHAR},
+	});
 	return read_ast_flat;
 }
 
