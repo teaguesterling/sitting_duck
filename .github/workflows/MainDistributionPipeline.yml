@@ -288,10 +288,17 @@ jobs:
       duckdb_version: v1.5.6
       ci_tools_version: v1.5-variegata
       extension_name: sitting_duck
-      # Windows stays excluded (fleet pattern): both Windows legs fail on
-      # v1.5.4 while the same source passes Linux/macOS/wasm. Windows is not
-      # a merge gate; re-enable once the Windows build is fixed.
-      exclude_archs: 'windows_amd64;windows_amd64_mingw'
+      # Windows was excluded here from the v1.5.4 era, on the grounds that both
+      # Windows legs failed while the same source passed Linux/macOS/wasm. That
+      # exclusion is now stale: the community registry builds sitting_duck for
+      # windows_amd64 AND windows_amd64_mingw, and both were green on PR #2722
+      # (v1.5.5). Excluding them here meant this repo could not see a Windows
+      # break until the registry did, and left the compat shims -- which lean on
+      # overload resolution and SFINAE, exactly where MSVC differs -- with no
+      # in-repo MSVC coverage at all.
+      #
+      # If Windows genuinely breaks again, fix it or re-exclude it WITH THE
+      # ERROR RECORDED HERE. A bare exclusion outlives the reason for it.
 
 #  code-quality-check:
 #    name: Code Quality Check
