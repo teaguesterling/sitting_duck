@@ -90,15 +90,55 @@ test-grammar-lib:
 # extension-ci-tools pins that predate TEST_RUNNER): TEST_RUNNER is empty there,
 # so nothing is appended and the unittest binary is invoked directly as before.
 #
-# REMOVE THIS once duckdb#26036 is fixed and the v2.0 planning cost is back to
-# v1.5 levels. Re-enabling tests on the canary (drop skip_tests in
-# MainDistributionPipeline.yml) depends on the same fix.
+# SCOPE: no in-repo job executes these flags today. duckdb-next-build is the only
+# leg on ci_tools_version: main, and it carries skip_tests: true (#179), so the
+# first real execution is a duckdb/community-extensions release PR, whose build.yml
+# passes ci_tools_version: 'main'. That is the point — it makes the registry's
+# test_against_latest leg completable, which is what lets a release pin
+# ref_next. It does mean an upstream flag rename would surface in a release PR
+# rather than here.
+#
+# RE-ENABLING CANARY TESTS is now gated on RUNTIME COST, not on duckdb#26036:
+# this budget already makes all four suites pass. The four alone are ~7500s of
+# serial work on a dev box, so dropping skip_tests trades a build-only canary for
+# a multi-hour one. That is a deliberate call to make with a release, not a
+# consequence of the upstream bug.
+#
+# REMOVE THIS once duckdb#26036 is fixed and v2.0 planning cost is back to v1.5
+# levels — at that point the suites fit the stock budget and none of this is needed.
+
+# --max-retries 0 is load-bearing, not tidiness. run_tests.py forces retry=2 when
+# CI is set, and it cannot be turned off with --retry: `retry = max(0, args.retry)`
+# then `if retry == 0 and os.environ.get("CI"): retry = 2`, so passing --retry 0 is
+# indistinguishable from the default. --max-retries is the lever that works:
+# can_retry() requires `retry_count < config.max_retries`, so 0 disables retries.
+# Without it a batch that overruns the budget is attempted 3 times — 3 x 7200s =
+# 21600s = exactly GitHub's 6h default job cap, which _extension_distribution.yml
+# never overrides. Build and test are steps of the SAME job, so the cap is shared
+# with a full DuckDB build and would be hit mid-retry: GitHub cancels the leg and
+# the test report is lost. A clean "timeout after 7200s for <file>" is strictly
+# more useful than a cancelled 6h job, and retrying a deterministic budget
+# overrun cannot succeed anyway.
+#
+# Each flag is guarded on a non-empty value so that `make test_release
+# TEST_BATCH_TIMEOUT=` opts out cleanly instead of emitting a bare --batch-timeout
+# and failing argparse ("expected one argument"). ?= alone does not do this: an
+# explicitly-empty override stays defined-but-empty.
 
 TEST_BATCH_TIMEOUT ?= 7200
 TEST_BATCH_SIZE ?= 1
+TEST_MAX_RETRIES ?= 0
 
 ifneq ($(TEST_RUNNER),)
-TEST_RUNNER := $(TEST_RUNNER) --batch-timeout $(TEST_BATCH_TIMEOUT) --batch-size $(TEST_BATCH_SIZE)
+ifneq ($(strip $(TEST_BATCH_TIMEOUT)),)
+TEST_RUNNER := $(TEST_RUNNER) --batch-timeout $(TEST_BATCH_TIMEOUT)
+endif
+ifneq ($(strip $(TEST_BATCH_SIZE)),)
+TEST_RUNNER := $(TEST_RUNNER) --batch-size $(TEST_BATCH_SIZE)
+endif
+ifneq ($(strip $(TEST_MAX_RETRIES)),)
+TEST_RUNNER := $(TEST_RUNNER) --max-retries $(TEST_MAX_RETRIES)
+endif
 endif
 
 ############################
