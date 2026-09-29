@@ -1,5 +1,6 @@
 #pragma once
 
+#include "named_parameter_compat.hpp"
 #include "duckdb.hpp"
 #include "ast_type.hpp"
 #include "language_adapter.hpp"
@@ -92,7 +93,7 @@ void CompilePrunePolicy(const string &policy_name, ExtractionConfig &config);
 // Bind-time helper: apply the resource-cap named parameters (max_source_bytes,
 // parse_timeout_ms, max_parse_nodes) to an ExtractionConfig. Shared by every
 // function that exposes the caps so no entry point can drift.
-void ParseResourceCapParameters(const named_parameter_map_t &named_parameters, ExtractionConfig &config);
+void ParseResourceCapParameters(const NamedParamMap &named_parameters, ExtractionConfig &config);
 
 // Read a source file into memory, enforcing max_source_bytes BEFORE allocating
 // the content buffer. Throws InvalidInputException when the file exceeds the cap.

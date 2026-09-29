@@ -1,3 +1,4 @@
+#include "named_parameter_compat.hpp"
 #include "parse_ast_function.hpp"
 #include "duckdb_compat.hpp"
 #include "function_doc_helper.hpp"
@@ -187,13 +188,15 @@ void ParseASTFunction::Register(ExtensionLoader &loader) {
 	parse_ast_func.name = "parse_ast";
 
 	// Add extraction config parameters
-	parse_ast_func.named_parameters["context"] = LogicalType::VARCHAR;
-	parse_ast_func.named_parameters["source"] = LogicalType::VARCHAR;
-	parse_ast_func.named_parameters["structure"] = LogicalType::VARCHAR;
-	parse_ast_func.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
-	parse_ast_func.named_parameters["max_source_bytes"] = LogicalType::BIGINT;
-	parse_ast_func.named_parameters["parse_timeout_ms"] = LogicalType::BIGINT;
-	parse_ast_func.named_parameters["max_parse_nodes"] = LogicalType::BIGINT;
+	DeclareNamedParameters(parse_ast_func, {
+	    {"context", LogicalType::VARCHAR},
+	    {"source", LogicalType::VARCHAR},
+	    {"structure", LogicalType::VARCHAR},
+	    {"peek", LogicalType::ANY}, // Can be INTEGER or VARCHAR
+	    {"max_source_bytes", LogicalType::BIGINT},
+	    {"parse_timeout_ms", LogicalType::BIGINT},
+	    {"max_parse_nodes", LogicalType::BIGINT},
+	});
 
 	RegisterDocumentedTableFunction(
 	    loader, parse_ast_func, "Parse source code string into an AST table representation.", {"code", "language"},
@@ -205,13 +208,15 @@ void ParseASTFunction::Register(ExtensionLoader &loader) {
 	parse_ast_flat_func.name = "parse_ast_flat";
 
 	// Add extraction config parameters
-	parse_ast_flat_func.named_parameters["context"] = LogicalType::VARCHAR;
-	parse_ast_flat_func.named_parameters["source"] = LogicalType::VARCHAR;
-	parse_ast_flat_func.named_parameters["structure"] = LogicalType::VARCHAR;
-	parse_ast_flat_func.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
-	parse_ast_flat_func.named_parameters["max_source_bytes"] = LogicalType::BIGINT;
-	parse_ast_flat_func.named_parameters["parse_timeout_ms"] = LogicalType::BIGINT;
-	parse_ast_flat_func.named_parameters["max_parse_nodes"] = LogicalType::BIGINT;
+	DeclareNamedParameters(parse_ast_flat_func, {
+	    {"context", LogicalType::VARCHAR},
+	    {"source", LogicalType::VARCHAR},
+	    {"structure", LogicalType::VARCHAR},
+	    {"peek", LogicalType::ANY}, // Can be INTEGER or VARCHAR
+	    {"max_source_bytes", LogicalType::BIGINT},
+	    {"parse_timeout_ms", LogicalType::BIGINT},
+	    {"max_parse_nodes", LogicalType::BIGINT},
+	});
 
 	RegisterDocumentedTableFunction(
 	    loader, parse_ast_flat_func,
@@ -224,13 +229,15 @@ void ParseASTFunction::Register(ExtensionLoader &loader) {
 	parse_ast_hierarchical_func.name = "parse_ast_hierarchical";
 
 	// Add extraction config parameters
-	parse_ast_hierarchical_func.named_parameters["context"] = LogicalType::VARCHAR;
-	parse_ast_hierarchical_func.named_parameters["source"] = LogicalType::VARCHAR;
-	parse_ast_hierarchical_func.named_parameters["structure"] = LogicalType::VARCHAR;
-	parse_ast_hierarchical_func.named_parameters["peek"] = LogicalType::ANY; // Can be INTEGER or VARCHAR
-	parse_ast_hierarchical_func.named_parameters["max_source_bytes"] = LogicalType::BIGINT;
-	parse_ast_hierarchical_func.named_parameters["parse_timeout_ms"] = LogicalType::BIGINT;
-	parse_ast_hierarchical_func.named_parameters["max_parse_nodes"] = LogicalType::BIGINT;
+	DeclareNamedParameters(parse_ast_hierarchical_func, {
+	    {"context", LogicalType::VARCHAR},
+	    {"source", LogicalType::VARCHAR},
+	    {"structure", LogicalType::VARCHAR},
+	    {"peek", LogicalType::ANY}, // Can be INTEGER or VARCHAR
+	    {"max_source_bytes", LogicalType::BIGINT},
+	    {"parse_timeout_ms", LogicalType::BIGINT},
+	    {"max_parse_nodes", LogicalType::BIGINT},
+	});
 
 	RegisterDocumentedTableFunction(
 	    loader, parse_ast_hierarchical_func, "Parse source code string into a hierarchical AST table representation.",

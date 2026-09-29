@@ -1,3 +1,4 @@
+#include "named_parameter_compat.hpp"
 #include "ast_file_utils.hpp"
 #include "duckdb.hpp"
 #include "duckdb_compat.hpp"
@@ -186,11 +187,13 @@ static void RegisterLanguageFunction(ClientContext &context, TableFunctionInput 
 void RegisterLanguageRegistrationFunction(ExtensionLoader &loader) {
 	TableFunction function("register_language", {LogicalType::VARCHAR, LogicalType::VARCHAR}, RegisterLanguageFunction,
 	                       RegisterLanguageBind, RegisterLanguageInit);
-	function.named_parameters["config"] = LogicalType::VARCHAR;
-	function.named_parameters["extensions"] = LogicalType::LIST(LogicalType::VARCHAR);
-	function.named_parameters["aliases"] = LogicalType::LIST(LogicalType::VARCHAR);
-	function.named_parameters["symbol"] = LogicalType::VARCHAR;
-	function.named_parameters["overwrite"] = LogicalType::BOOLEAN;
+	DeclareNamedParameters(function, {
+	    {"config", LogicalType::VARCHAR},
+	    {"extensions", LogicalType::LIST(LogicalType::VARCHAR)},
+	    {"aliases", LogicalType::LIST(LogicalType::VARCHAR)},
+	    {"symbol", LogicalType::VARCHAR},
+	    {"overwrite", LogicalType::BOOLEAN},
+	});
 	RegisterDocumentedTableFunction(
 	    loader, function, "Dynamically register a tree-sitter language grammar from a shared library.",
 	    {"name", "grammar_path"}, {"SELECT * FROM register_language('mylang', '/path/to/libtree-sitter-mylang.so')"},
