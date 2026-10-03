@@ -99,7 +99,7 @@ FROM ast_select('src/*.py',
     '.func:has(.call#execute):not(:has(try_statement))');
 
 -- Named definitions that are scope boundaries
-SELECT name, type FROM ast_select('src/*.py', ':named:definition:scope');
+SELECT name, type FROM ast_select('src/*.py', ':named:definition:is-scope');
 
 -- First function in each scope that has a return
 SELECT name FROM ast_select('src/*.py',
