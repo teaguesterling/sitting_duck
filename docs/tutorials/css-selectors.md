@@ -109,7 +109,15 @@ FROM ast_select('test/data/python/sample_app.py',
 
 ## Step 6: Use `:in-scope()` for Precision
 
-The sample app has methods inside classes and standalone functions at module level. `:in-scope()` matches nodes **contained within** a scope, letting you distinguish them. (Its complement, bare `:is-scope`, matches the scope boundaries themselves.)
+The sample app has methods inside classes and standalone functions at module level. `:in-scope()` matches nodes **contained within** a scope, letting you distinguish them.
+
+Three scope selectors are easy to confuse, so it is worth meeting all of them here:
+
+- `:in-scope(X)` — **filter**: keep nodes inside a scope *(this step)*
+- `:is-scope(X)` — **filter**: keep nodes that **are** a scope boundary
+- `::scope` — **map**: replace each match with its enclosing scope
+
+`:scope` on its own is not valid; it raises an error naming these three.
 
 Find return statements scoped to their direct enclosing function (not returns from nested functions):
 

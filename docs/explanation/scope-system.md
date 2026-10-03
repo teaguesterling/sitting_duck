@@ -160,7 +160,12 @@ The stack is a `LIST<STRUCT<id BIGINT, kind SEMANTIC_TYPE>>` — outermost scope
 
 The CSS selector engine uses scope fields internally:
 
-- **`:is-scope`** pseudo-class — matches scope boundaries themselves (optionally of a kind/name); **`:in-scope(...)`** — matches nodes by their enclosing scope kind/name (reads the `scope.*` fields)
+- **`::scope`** pseudo-element — **maps** each match to its enclosing scope (cardinality preserved)
+- **`:is-scope`** pseudo-class — **filters** to scope boundaries themselves (optionally of a kind/name)
+- **`:in-scope(...)`** pseudo-class — **filters** nodes by their enclosing scope kind/name (reads the `scope.*` fields)
+
+`::scope` and `:in-scope(...)` are inverses. `:scope` is not a pseudo-class — it was
+ambiguous between all three and now raises an error naming them.
 - **`::callers`** pseudo-element — finds all functions that call the matched function, using `scope.function` to group calls by their enclosing function
 - **`::callees`** pseudo-element — finds the calls made **directly** inside the matched function, reading `scope.function` (immediate scope; a call inside a nested lambda or function belongs to that inner scope, matching `:calls`/`::callers`)
 - **`:called`** pseudo-class — tests whether any call site references the matched function's name
