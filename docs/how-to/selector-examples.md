@@ -223,7 +223,7 @@ FROM ast_select('src/**/*', '.class:named');
 
 ```sql
 SELECT name, type, start_line, file_path
-FROM ast_select('src/**/*', '.func:named:scope');
+FROM ast_select('src/**/*', '.func:named:is-scope');
 ```
 
 ## Call Graph Analysis

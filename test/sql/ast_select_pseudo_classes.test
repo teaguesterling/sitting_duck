@@ -84,55 +84,55 @@ SELECT COUNT(*) > 0 FROM ast_select('test/data/python/macros/recursive_match.py'
 true
 
 # =============================================================================
-# :scope — the node IS a scope boundary (identity, CSS-consistent). Kind/name
+# :is-scope — the node IS a scope boundary (was :is-scope, retired in #184). Kind/name
 # filters narrow WHICH scope. Containment ("things inside a scope") is :in-scope.
 # =============================================================================
 
-# :scope (bare) — nodes that are themselves scope boundaries
+# :is-scope (bare) — nodes that are themselves scope boundaries
 query I
 SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py',
-    'function_definition:scope');
+    'function_definition:is-scope');
 ----
 10
 
-# :scope(function|class|module) — a scope OF that semantic kind (not its contents)
+# :is-scope(function|class|module) — a scope OF that semantic kind (not its contents)
 query III
 SELECT
-    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(function)')),
-    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(class)')),
-    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(module)'));
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(function)')),
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(class)')),
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(module)'));
 ----
 6	3	1
 
-# Bare :scope = the three kinds together (function 6 + class 3 + module 1 = 10)
+# Bare :is-scope = the three kinds together (function 6 + class 3 + module 1 = 10)
 query I
-SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope');
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope');
 ----
 10
 
-# :scope(<tree-sitter type>) — a scope of exactly that node type
+# :is-scope(<tree-sitter type>) — a scope of exactly that node type
 query I
-SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(function_definition)');
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(function_definition)');
 ----
 6
 
 # .class shape and its aliases resolve the same as the keyword
 query I
 SELECT
-    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.fn)'))
-      = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(function)'))
-AND (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.func)'))
-      = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.fn)'))
-AND (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.cls)'))
-      = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.class)'))
-AND (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.module)'))
-      = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.mod)'));
+    (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(.fn)'))
+      = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(function)'))
+AND (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(.func)'))
+      = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(.fn)'))
+AND (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(.cls)'))
+      = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(.class)'))
+AND (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(.module)'))
+      = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(.mod)'));
 ----
 true
 
-# :scope(.fn#foo) — the ONE scope boundary named foo
+# :is-scope(.fn#foo) — the ONE scope boundary named foo
 query I
-SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.fn#top_level_function)')
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(.fn#top_level_function)')
 WHERE name = 'top_level_function';
 ----
 1
@@ -162,7 +162,7 @@ SELECT
 true
 
 # Bare-type ancestor walk excludes nested-function returns from the outer function
-# (was :scope(function_definition) before the :scope/:in-scope split).
+# (was :is-scope(function_definition) before the :is-scope/:in-scope split).
 query I
 SELECT COUNT(*) FROM ast_select('test/data/python/macros/recursive_match.py',
     'return_statement:in-scope(function_definition)');
@@ -198,12 +198,12 @@ SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', '.fn:in-s
 2
 
 # =============================================================================
-# :scope / :in-scope argument guards — loud errors, never silent-wrong results
+# :is-scope / :in-scope argument guards — loud errors, never silent-wrong results
 # =============================================================================
 
 # An arbitrary semantic scope is Tier 2 (#145), not a silent empty result
 statement error
-SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(.loop)');
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(.loop)');
 ----
 issue #145
 
@@ -213,16 +213,22 @@ SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scop
 ----
 requires an argument
 
-# #name on the keyword form is rejected (grammar can't split function#foo) — use .fn#foo
-statement error
-SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':scope(function#top_level_function)');
+# #name on the keyword form USED to be rejected (#145: the CSS grammar cannot split
+# `function#foo`, so it arrived as one plain_value). It is now split, so the keyword
+# form accepts #name exactly as the `.fn#foo` form does, and both agree.
+query I
+SELECT (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(function#top_level_function)'))
+     = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(.fn#top_level_function)'));
 ----
-semantic-class form
+true
 
-statement error
-SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(function#top_level_function)');
+query I
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(function#top_level_function)');
 ----
-semantic-class form
+1
+
+statement ok
+SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(function#top_level_function)');
 
 # =============================================================================
 # :precedes(type) and :follows(type)
@@ -385,6 +391,135 @@ statement error
 SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:not(:alsonotreal)');
 ----
 unknown pseudo-class
+
+# =============================================================================
+# Zero-arity pseudo-classes reject an argument (#184)
+# =============================================================================
+# Previously :typed(X) / :decorated(X) parsed, ran, and returned the BARE result,
+# so a nonsense argument behaved exactly like a plausible one and the mistake was
+# unobservable. The unknown-NAME check never applied to a known name given an
+# argument it cannot read.
+
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:typed(None)');
+----
+:typed takes no argument
+
+# The message must name the attribute form, which is the actual answer.
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:typed(Zzzznotatype)');
+----
+[signature="None"]
+
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:decorated(by="property")');
+----
+[annotation*="property"]
+
+# Any zero-arity name, not just the two reported.
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:root(x)');
+----
+:root takes no argument
+
+# Bare forms are unaffected.
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:typed');
+
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:decorated');
+
+# :match and :contains DO take an argument -- they read it through ast_pattern
+# rather than pseudo_arg, so a pseudo_arg-only arity test would wrongly reject
+# them. Guard against that regression.
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:match("print()")');
+
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:contains("print()")');
+
+# #184 part 1: :scope is RETIRED as a pseudo-class -- it was ambiguous between
+# three different operations. Bare and with-argument both error, and the message
+# must name all three replacements.
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:scope');
+----
+:scope is not a pseudo-class
+
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:scope(.class#Animal)');
+----
+::scope
+
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:scope(function)');
+----
+:in-scope(X)
+
+# Bare :is-scope is fine (it is the filter), and keeps every argument form.
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:is-scope');
+
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:is-scope(function)');
+
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:is-scope(.fn)');
+
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', ':is-scope(function_definition)');
+
+# ::scope (the pseudo-element, the MAP) is untouched by the rename.
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.call::scope');
+
+# and :in-scope(X) (the containment FILTER) is untouched.
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:in-scope(.class#Animal)');
+
+# =============================================================================
+# #name works on the keyword and bare-type argument forms, not only `.class`
+# =============================================================================
+# The CSS grammar cannot split `function#foo` (no `.` to break the token), so it
+# arrives as one plain_value and used to be rejected outright. It is now split,
+# so all three argument shapes accept #name identically.
+
+query I
+SELECT (SELECT COUNT(*) FROM ast_select('test/data/python/*.py', ':is-scope(.fn#cached_property)'))
+     = (SELECT COUNT(*) FROM ast_select('test/data/python/*.py', ':is-scope(function#cached_property)'));
+----
+true
+
+query I
+SELECT (SELECT COUNT(*) FROM ast_select('test/data/python/*.py', ':is-scope(function#cached_property)'))
+     = (SELECT COUNT(*) FROM ast_select('test/data/python/*.py', ':is-scope(function_definition#cached_property)'));
+----
+true
+
+# :in-scope takes it too.
+statement ok
+SELECT * FROM ast_select('test/data/python/*.py', ':in-scope(function#cached_property)');
+
+# The semantic class and the exact tree-sitter type are NOT the same thing, and
+# #name makes that visible: `greet` is a lambda, so it is an :is-scope(function)
+# (semantic FN includes lambdas) but not an :is-scope(function_definition).
+query II
+SELECT
+    (SELECT COUNT(*) FROM ast_select('test/data/python/*.py', ':is-scope(function#greet)')),
+    (SELECT COUNT(*) FROM ast_select('test/data/python/*.py', ':is-scope(function_definition#greet)'));
+----
+1	0
+
+# Malformed #name shapes still error rather than half-matching.
+statement error
+SELECT * FROM ast_select('test/data/python/*.py', ':is-scope(function#a#b)');
+----
+malformed #name filter
+
+statement error
+SELECT * FROM ast_select('test/data/python/*.py', ':is-scope(function#)');
+----
+malformed #name filter
 
 # =============================================================================
 # Custom predicates via ast_selector_predicate_* macros

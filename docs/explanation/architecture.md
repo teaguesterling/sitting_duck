@@ -84,7 +84,7 @@ scope.stack     — full ancestor chain with semantic kinds (scope nodes only)
 
 These are computed during the DFS traversal by maintaining a stack of scope-creating nodes. When a node has `IS_SCOPE` in its flags, it pushes onto the stack; when traversal leaves its subtree, it pops. Every node reads the stack to fill its scope fields.
 
-This eliminates the range-join pattern that would otherwise be needed to answer "what function is this inside?" — a question that comes up in call-graph queries, scope resolution, and the `:scope()` CSS pseudo-class.
+This eliminates the range-join pattern that would otherwise be needed to answer "what function is this inside?" — a question that comes up in call-graph queries, scope resolution, and the `:is-scope()` CSS pseudo-class.
 
 ## The CSS selector engine
 
@@ -93,7 +93,7 @@ This eliminates the range-join pattern that would otherwise be needed to answer 
 The dispatch splits by selector root type:
 - **Simple selectors** (type, class, id, attribute) — scan the AST with filter predicates
 - **Combinators** (descendant, child, sibling, adjacent) — join the AST against itself using the DFS range check
-- **Pseudo-classes** (`:has`, `:not`, `:scope`, `:calls`, etc.) — correlated subqueries against the AST
+- **Pseudo-classes** (`:has`, `:not`, `:is-scope`, `:calls`, etc.) — correlated subqueries against the AST
 - **Pseudo-elements** (`::callers`, `::callees`, `::parent`) — post-filter navigation from matched nodes
 
 See [CSS Selector Syntax](../reference/css-selectors.md) for the full selector reference.

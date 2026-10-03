@@ -2,6 +2,21 @@
 
 All pseudo-classes supported by `ast_select`, organized by category. Pseudo-classes compose freely — chain as many as you need on a single selector.
 
+> **Arguments are checked.** A pseudo-class that takes no argument raises if you give
+> it one, rather than ignoring it. `:typed(None)` and `:decorated(by="property")` used
+> to parse, run, and return the same rows as bare `:typed` / `:decorated` — so a
+> nonsense argument behaved exactly like a plausible one and the mistake was invisible.
+> Both now raise and name the attribute form that actually filters:
+>
+> ```
+> .func:typed(None)      -> error: :typed takes no argument ... use [signature="None"]
+> .func:decorated(by=…)  -> error: :decorated takes no argument ... use [annotation*="…"]
+> ```
+>
+> An unknown pseudo-class name raises too. A **well-formed** selector that simply
+> matches nothing returns no rows — as in CSS, an empty result is an answer, not an
+> error.
+
 ## Containment
 
 ### `:has()` — Contains Descendant
@@ -103,25 +118,54 @@ SELECT name FROM ast_select('src/*.cpp', ':declaration');
 
 ## Scope
 
-`:scope` and `:in-scope` are complementary, mirroring CSS where `:scope` is the
-reference element **itself**, never its descendants:
+There are **three** scope operations, and the difference between them is what you get
+back. Two filter the rows you already have; one replaces them.
 
-- **`:scope`** — the node **is** a scope boundary.
-- **`:in-scope(...)`** — the node is **contained within** a scope.
+| Selector | Kind | What it does |
+|---|---|---|
+| `::scope` | **map** (pseudo-element) | replaces each match with its **enclosing scope** |
+| `:is-scope(…)` | **filter** | keeps matches that **are** a scope boundary |
+| `:in-scope(…)` | **filter** | keeps matches **contained within** a scope |
 
-Both take the same argument: a `function` / `class` / `module` keyword, a semantic
-class (`.fn`, `.cls`, `.mod`, and their aliases), or a bare tree-sitter node type;
-the `.class` form also accepts a `#name` filter.
+`::scope` and `:in-scope(…)` are inverses: one goes from nodes to the scopes around
+them, the other from scopes to the nodes inside them. `:is-scope(…)` asks about the
+node itself, mirroring CSS where `:scope` is the reference element and never its
+descendants.
 
-### `:scope` — Is a Scope Boundary
+```sql
+-- 90 calls -> the 90 scopes those calls sit in            (map: cardinality preserved)
+SELECT * FROM ast_select('src/*.py', '.call::scope');
+
+-- the functions that are themselves scope boundaries      (filter on the node)
+SELECT * FROM ast_select('src/*.py', '.func:is-scope');
+
+-- the functions inside class Animal                       (filter on the container)
+SELECT * FROM ast_select('src/*.py', '.func:in-scope(.class#Animal)');
+```
+
+> **`:scope` is not a pseudo-class.** It was ambiguous between all three of the above,
+> so it raises an error naming them rather than guessing. Use `::scope` to map,
+> `:is-scope` to filter by being a scope, `:in-scope(X)` to filter by containment.
+
+Both filters take the same argument: a `function` / `class` / `module` keyword, a
+semantic class (`.fn`, `.cls`, `.mod`, and their aliases), or a bare tree-sitter node
+type — and **any** of those forms may carry a `#name` filter.
+
+### `:is-scope` — Is a Scope Boundary
 
 ```sql
 -- All scope-creating nodes (functions, classes, module, …)
-SELECT type, name FROM ast_select('src/*.py', ':scope');
+SELECT type, name FROM ast_select('src/*.py', ':is-scope');
 
 -- Only class scopes; only the scope named Config
-SELECT name FROM ast_select('src/*.py', ':scope(class)');
-SELECT name FROM ast_select('src/*.py', ':scope(.class#Config)');
+SELECT name FROM ast_select('src/*.py', ':is-scope(class)');
+SELECT name FROM ast_select('src/*.py', ':is-scope(.class#Config)');
+
+-- `#name` works on every argument form, not just the semantic class:
+--   :is-scope(.fn#handler)                  semantic class + name
+--   :is-scope(function#handler)             keyword + name
+--   :is-scope(function_definition#handler)  exact tree-sitter type + name
+-- Note the keyword/semantic-class forms include lambdas, the exact type does not.
 ```
 
 ### `:in-scope(type)` — Contained Within Nearest Scope
@@ -147,10 +191,15 @@ Without `:in-scope()`, `ast_has` reports `outer_function` as containing `execute
 even when the call is inside a nested `inner_function`. With `:in-scope(function)`,
 only the direct enclosing function matches.
 
-> **Note:** a `#name` filter must use the semantic-class form — `:in-scope(.fn#load)`,
-> not `:in-scope(function#load)`. The CSS grammar lumps `function#load` into a single
-> token it cannot split, so that form is rejected with an error. Arbitrary semantic
-> scopes (e.g. `:in-scope(.loop)`) and full nested selectors are deferred to #145.
+> **`#name` works on every argument form.** `:in-scope(.fn#load)`,
+> `:in-scope(function#load)` and `:in-scope(function_definition#load)` are all
+> accepted and agree. (The CSS grammar hands `function#load` over as a single token
+> because there is no `.` to break it; sitting_duck splits it. Earlier versions
+> rejected that spelling.) Malformed shapes — more than one `#`, or an empty side
+> such as `function#` — still raise.
+>
+> Arbitrary semantic scopes (e.g. `:in-scope(.loop)`) and full nested selectors are
+> still deferred to #145.
 
 ### Scope Columns
 
@@ -325,7 +374,7 @@ SELECT name FROM ast_select('src/*.py', '.func#main::callees');
 | Pseudo-element | Returns | Cardinality |
 |---|---|---|
 | `::parent` | Parent node | 1 |
-| `::scope` | Enclosing scope node | 1 |
+| `::scope` | Enclosing scope node (the **map**; compare `:is-scope` / `:in-scope`) | 1 |
 | `::parent-definition` | Nearest enclosing definition | 1 |
 | `::next-sibling` | Next sibling | 1 |
 | `::prev-sibling` | Previous sibling | 1 |
@@ -594,7 +643,7 @@ This is useful in environments where you can't install community extensions, or 
 | `:reference` | Uses a name |
 | `:declaration` | Introduces a name without implementation |
 | **Scope** | |
-| `:scope` | Is a scope boundary (optionally of a kind/name) |
+| `:is-scope` | Is a scope boundary (optionally of a kind/name) |
 | `:in-scope(type)` | Contained within nearest scope of type (scope-aware) |
 | **Call Graph** | |
 | `:calls(name)` | Function directly calls name (immediate scope; nested lambdas excluded) |

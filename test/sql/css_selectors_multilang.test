@@ -4,7 +4,7 @@
 # Comprehensive CSS selector tests across multiple languages.
 # Tests type selectors, ID selectors, class (semantic) selectors,
 # combinators (descendant, child, adjacent sibling, general sibling),
-# pseudo-classes (:has, :not, :first-child, :last-child, :named, :definition, :scope),
+# pseudo-classes (:has, :not, :first-child, :last-child, :named, :definition, :is-scope),
 # and ast_select_from (pre-parsed table queries).
 #
 # Test fixtures:
@@ -774,7 +774,7 @@ ProcessShapes
 String
 
 # =============================================================================
-# 13. :definition AND :scope PSEUDO-CLASSES
+# 13. :definition AND :is-scope PSEUDO-CLASSES
 # =============================================================================
 
 # Python: all function_definitions are definition nodes
@@ -793,9 +793,9 @@ speak
 speak
 speak
 
-# Python: all function_definitions are scope boundaries
+# Python: all function_definitions are scope boundaries (:is-scope, was :scope)
 query I
-SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition:scope')
+SELECT name FROM ast_select('test/data/python/css_selectors_test.py', 'function_definition:is-scope')
 ORDER BY name, start_line;
 ----
 __init__
