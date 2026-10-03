@@ -741,7 +741,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- Refactored to use precomputed helper CTEs (sel_pcs_first_tag_or_int,
         -- sel_pcs_first_string, sel_pcs_outside_*) instead of correlated LIMIT 1
         -- scalar subqueries on sel.
-        pseudo_classes AS (
+        pseudo_classes_raw AS (
             -- Top-level pseudo-classes (not negated)
             SELECT cn.name as pseudo_name,
                    COALESCE(ftoi.name, fstr.name) AS pseudo_arg,
@@ -783,6 +783,36 @@ CREATE OR REPLACE MACRO ast_select_from(
             LEFT JOIN sel_pcs_first_id_name    fin  ON fin.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_plain_value fpv ON fpv.pcs_id = pcs.node_id
             WHERE cn.name != 'has'
+        ),
+
+        -- #184 follow-up: accept `#name` on the KEYWORD and BARE-TYPE argument forms,
+        -- not only on the `.class` form.
+        --
+        -- The CSS grammar cannot split `function#foo`: there is no `.` to break the
+        -- token, so tree-sitter hands it over whole as one plain_value, whereas
+        -- `.fn#foo` splits into a class_name plus an id. That is a tokenizer artifact,
+        -- not a deliberate restriction -- so split it here and the existing predicate
+        -- logic (which already pairs pseudo_arg with pseudo_arg_name) handles
+        -- :is-scope(function#foo) and :is-scope(function_definition#foo) exactly as it
+        -- already handles :is-scope(.fn#foo).
+        --
+        -- Scoped to is-scope/in-scope, the two forms whose grammar documents #name.
+        -- Malformed shapes (more than one `#`, or an empty side) are still rejected in
+        -- scope_arg_validation rather than silently half-matching.
+        pseudo_classes AS (
+            SELECT pseudo_name,
+                   CASE WHEN pseudo_name IN ('is-scope', 'in-scope')
+                             AND pseudo_arg_plain LIKE '%#%'
+                        THEN split_part(pseudo_arg_plain, '#', 1)
+                        ELSE pseudo_arg END AS pseudo_arg,
+                   pseudo_arg_class,
+                   CASE WHEN pseudo_name IN ('is-scope', 'in-scope')
+                             AND pseudo_arg_plain LIKE '%#%'
+                        THEN split_part(pseudo_arg_plain, '#', 2)
+                        ELSE pseudo_arg_name END AS pseudo_arg_name,
+                   pseudo_arg_plain,
+                   negated
+            FROM pseudo_classes_raw
         ),
 
         -- Detect whether func_apply extension is loaded (provides function_exists)
@@ -939,20 +969,27 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- no argument (meaningless — use :is-scope for scope boundaries).
         scope_arg_validation AS (
             SELECT CASE
-                -- (a) #name on the keyword/type form: the grammar captures `function#foo`
-                --     as one plain_value it cannot split. Check this BEFORE the bare
-                --     :in-scope guard, since such an arg leaves pseudo_arg/pseudo_arg_class
-                --     NULL and would otherwise look argument-less.
+                -- (a) MALFORMED #name on the keyword/type form. The valid shape
+                --     (`function#foo`, `function_definition#foo`) is now split in
+                --     pseudo_classes above, so only genuinely broken shapes reach here:
+                --     more than one `#`, or an empty side (`function#`, `#foo` inside
+                --     a plain_value). Those would otherwise half-match silently.
                 WHEN EXISTS (
                     SELECT 1 FROM pseudo_classes pc
                     WHERE pc.pseudo_name IN ('is-scope', 'in-scope')
                       AND pc.pseudo_arg_plain LIKE '%#%'
+                      AND (length(pc.pseudo_arg_plain) - length(replace(pc.pseudo_arg_plain, '#', '')) > 1
+                           OR split_part(pc.pseudo_arg_plain, '#', 1) = ''
+                           OR split_part(pc.pseudo_arg_plain, '#', 2) = '')
                 ) THEN error(format(
-                    'ast_select: :{}({}) — a #name filter is only supported on the '
-                    'semantic-class form. Write :{}(.fn#foo), not :{}(function#foo).',
+                    'ast_select: :{}({}) — malformed #name filter. Write one name after a '
+                    'single #, e.g. :{}(function#foo), :{}(.fn#foo) or '
+                    ':{}(function_definition#foo).',
                     (SELECT pc.pseudo_name FROM pseudo_classes pc
                      WHERE pc.pseudo_name IN ('is-scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
                     (SELECT pc.pseudo_arg_plain FROM pseudo_classes pc
+                     WHERE pc.pseudo_name IN ('is-scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
+                    (SELECT pc.pseudo_name FROM pseudo_classes pc
                      WHERE pc.pseudo_name IN ('is-scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
                     (SELECT pc.pseudo_name FROM pseudo_classes pc
                      WHERE pc.pseudo_name IN ('is-scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),

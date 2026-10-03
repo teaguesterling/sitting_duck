@@ -3209,7 +3209,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- Refactored to use precomputed helper CTEs (sel_pcs_first_tag_or_int,
         -- sel_pcs_first_string, sel_pcs_outside_*) instead of correlated LIMIT 1
         -- scalar subqueries on sel.
-        pseudo_classes AS (
+        pseudo_classes_raw AS (
             -- Top-level pseudo-classes (not negated)
             SELECT cn.name as pseudo_name,
                    COALESCE(ftoi.name, fstr.name) AS pseudo_arg,
@@ -3254,6 +3254,36 @@ CREATE OR REPLACE MACRO ast_select_from(
             LEFT JOIN sel_pcs_first_id_name    fin  ON fin.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_plain_value fpv ON fpv.pcs_id = pcs.node_id
             WHERE cn.name != 'has'
+        ),
+
+        -- #184 follow-up: accept `#name` on the KEYWORD and BARE-TYPE argument forms,
+        -- not only on the `.class` form.
+        --
+        -- The CSS grammar cannot split `function#foo`: there is no `.` to break the
+        -- token, so tree-sitter hands it over whole as one plain_value, whereas
+        -- `.fn#foo` splits into a class_name plus an id. That is a tokenizer artifact,
+        -- not a deliberate restriction -- so split it here and the existing predicate
+        -- logic (which already pairs pseudo_arg with pseudo_arg_name) handles
+        -- :is-scope(function#foo) and :is-scope(function_definition#foo) exactly as it
+        -- already handles :is-scope(.fn#foo).
+        --
+        -- Scoped to is-scope/in-scope, the two forms whose grammar documents #name.
+        -- Malformed shapes (more than one `#`, or an empty side) are still rejected in
+        -- scope_arg_validation rather than silently half-matching.
+        pseudo_classes AS (
+            SELECT pseudo_name,
+                   CASE WHEN pseudo_name IN ('is-scope', 'in-scope')
+                             AND pseudo_arg_plain LIKE '%#%'
+                        THEN split_part(pseudo_arg_plain, '#', 1)
+                        ELSE pseudo_arg END AS pseudo_arg,
+                   pseudo_arg_class,
+                   CASE WHEN pseudo_name IN ('is-scope', 'in-scope')
+                             AND pseudo_arg_plain LIKE '%#%'
+                        THEN split_part(pseudo_arg_plain, '#', 2)
+                        ELSE pseudo_arg_name END AS pseudo_arg_name,
+                   pseudo_arg_plain,
+                   negated
+            FROM pseudo_classes_raw
         ),
 
         -- Detect whether func_apply extension is loaded (provides function_exists)
@@ -3410,20 +3440,27 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- no argument (meaningless — use :is-scope for scope boundaries).
         scope_arg_validation AS (
             SELECT CASE
-                -- (a) #name on the keyword/type form: the grammar captures `function#foo`
-                --     as one plain_value it cannot split. Check this BEFORE the bare
-                --     :in-scope guard, since such an arg leaves pseudo_arg/pseudo_arg_class
-                --     NULL and would otherwise look argument-less.
+                -- (a) MALFORMED #name on the keyword/type form. The valid shape
+                --     (`function#foo`, `function_definition#foo`) is now split in
+                --     pseudo_classes above, so only genuinely broken shapes reach here:
+                --     more than one `#`, or an empty side (`function#`, `#foo` inside
+                --     a plain_value). Those would otherwise half-match silently.
                 WHEN EXISTS (
                     SELECT 1 FROM pseudo_classes pc
                     WHERE pc.pseudo_name IN ('is-scope', 'in-scope')
                       AND pc.pseudo_arg_plain LIKE '%#%'
+                      AND (length(pc.pseudo_arg_plain) - length(replace(pc.pseudo_arg_plain, '#', '')) > 1
+                           OR split_part(pc.pseudo_arg_plain, '#', 1) = ''
+                           OR split_part(pc.pseudo_arg_plain, '#', 2) = '')
                 ) THEN error(format(
-                    'ast_select: :{}({}) — a #name filter is only supported on the '
-                    'semantic-class form. Write :{}(.fn#foo), not :{}(function#foo).',
+                    'ast_select: :{}({}) — malformed #name filter. Write one name after a '
+                    'single #, e.g. :{}(function#foo), :{}(.fn#foo) or '
+                    ':{}(function_definition#foo).',
                     (SELECT pc.pseudo_name FROM pseudo_classes pc
                      WHERE pc.pseudo_name IN ('is-scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
                     (SELECT pc.pseudo_arg_plain FROM pseudo_classes pc
+                     WHERE pc.pseudo_name IN ('is-scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
+                    (SELECT pc.pseudo_name FROM pseudo_classes pc
                      WHERE pc.pseudo_name IN ('is-scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
                     (SELECT pc.pseudo_name FROM pseudo_classes pc
                      WHERE pc.pseudo_name IN ('is-scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
@@ -3441,6 +3478,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                     '(:in-scope(function)), a named scope (:in-scope(.fn#foo)), or a '
                     'node type (:in-scope(function_definition)). Use bare :is-scope to '
                     'select scope boundaries themselves.'
+
+)SQLMACRO"
+        R"SQLMACRO(
                 )
                 -- (c) a .class arg that isn't function/class/module is Tier 2 (#145).
                 WHEN EXISTS (
@@ -3470,9 +3510,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                        AND NOT (
                            is_semantic_type(semantic_type_code('DEFINITION_FUNCTION'), UPPER(pc.pseudo_arg_class))
                            OR is_semantic_type(semantic_type_code('DEFINITION_CLASS'), UPPER(pc.pseudo_arg_class))
-
-)SQLMACRO"
-        R"SQLMACRO(
                            OR is_semantic_type(semantic_type_code('DEFINITION_MODULE'), UPPER(pc.pseudo_arg_class))
                        )
                      LIMIT 1)
@@ -3684,6 +3721,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                     '(only a type, #name, and .class are honored there). Chain '
                     'ast_select calls to compose structural conditions.'
                 )
+
+)SQLMACRO"
+        R"SQLMACRO(
                 ELSE true
             END AS ok
         ),
@@ -3725,9 +3765,6 @@ CREATE OR REPLACE MACRO ast_select_from(
         ),
 
         -- =====================================================================
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- Apply selector: single scan with CASE dispatch (no UNION ALL)
         -- =====================================================================
 
@@ -3949,6 +3986,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                       AND s2.parent_id = a.parent_id
                       AND s2.sibling_index < a.sibling_index
                       AND NOT is_syntax_only(s2.flags)
+
+)SQLMACRO"
+        R"SQLMACRO(
                       AND NOT is_constituent(s2.flags))
                 AND (sp.left_type IS NULL OR adj.type = sp.left_type)
                 AND (sp.left_class IS NULL
@@ -3993,9 +4033,6 @@ CREATE OR REPLACE MACRO ast_select_from(
               AND d.node_id <= a.node_id + a.descendant_count
               AND (nh.not_has_type IS NULL OR d.type = nh.not_has_type)
               AND (nh.not_has_name IS NULL OR d.name = nh.not_has_name)
-
-)SQLMACRO"
-        R"SQLMACRO(
               -- Same construct-only rule as :has (#133): a .class not-has-target
               -- ignores syntax-only tokens and constituents, so
               -- .fn:not(:has(.fn)) is "no NESTED function", not "no def token".
@@ -4187,6 +4224,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 AND EXISTS (
                     SELECT 1 FROM ast ref
                     WHERE ref.file_path = a.file_path
+
+)SQLMACRO"
+        R"SQLMACRO(
                       AND ref.semantic_type = 'COMPUTATION_CALL'
                       AND ref.name = a.name
                       AND ref.node_id != a.node_id
@@ -4226,9 +4266,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- root of the parsed pattern. Equivalent to :has(:match(...)).
             -- Iterates descendants in the DFS node array and runs the same
             -- contiguity check as :match at each candidate root.
-
-)SQLMACRO"
-        R"SQLMACRO(
             WHEN 'contains' THEN (SELECT len FROM ast_pattern_len) > 0 AND EXISTS (
                 SELECT 1 FROM ast t
                 WHERE t.file_path = a.file_path
@@ -4438,6 +4475,9 @@ CREATE OR REPLACE MACRO ast_select_from(
           AND m.node_id > def.node_id
           AND m.node_id <= def.node_id + def.descendant_count
           AND is_name_definition(def.flags)
+
+)SQLMACRO"
+        R"SQLMACRO(
           AND def.name IS NOT NULL AND def.name != ''
           -- Nearest = deepest
           AND NOT EXISTS (
@@ -4490,9 +4530,6 @@ CREATE OR REPLACE MACRO ast_select(
 ) AS TABLE
     -- Parse into a temp name, then delegate to ast_select_from.
     -- We use read_ast directly and wrap with ast_select_from via a CTE trick:
-
-)SQLMACRO"
-        R"SQLMACRO(
     -- DuckDB table macros can accept subqueries as table arguments.
     --
     -- peek is skipped by default (it is the expensive part of extraction) but is

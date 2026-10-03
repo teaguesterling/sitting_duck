@@ -122,6 +122,12 @@ SELECT type, name FROM ast_select('src/*.py', ':is-scope');
 -- Only class scopes; only the scope named Config
 SELECT name FROM ast_select('src/*.py', ':is-scope(class)');
 SELECT name FROM ast_select('src/*.py', ':is-scope(.class#Config)');
+
+-- `#name` works on every argument form, not just the semantic class:
+--   :is-scope(.fn#handler)                  semantic class + name
+--   :is-scope(function#handler)             keyword + name
+--   :is-scope(function_definition#handler)  exact tree-sitter type + name
+-- Note the keyword/semantic-class forms include lambdas, the exact type does not.
 ```
 
 ### `:in-scope(type)` — Contained Within Nearest Scope

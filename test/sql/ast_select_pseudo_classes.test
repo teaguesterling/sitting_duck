@@ -213,16 +213,22 @@ SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scop
 ----
 requires an argument
 
-# #name on the keyword form is rejected (grammar can't split function#foo) — use .fn#foo
-statement error
+# #name on the keyword form USED to be rejected (#145: the CSS grammar cannot split
+# `function#foo`, so it arrived as one plain_value). It is now split, so the keyword
+# form accepts #name exactly as the `.fn#foo` form does, and both agree.
+query I
+SELECT (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(function#top_level_function)'))
+     = (SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(.fn#top_level_function)'));
+----
+true
+
+query I
 SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':is-scope(function#top_level_function)');
 ----
-semantic-class form
+1
 
-statement error
+statement ok
 SELECT COUNT(*) FROM ast_select('test/data/python/qualified_names.py', ':in-scope(function#top_level_function)');
-----
-semantic-class form
 
 # =============================================================================
 # :precedes(type) and :follows(type)
@@ -470,6 +476,50 @@ SELECT * FROM ast_select('test/data/python/sample_app.py', '.call::scope');
 # and :in-scope(X) (the containment FILTER) is untouched.
 statement ok
 SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:in-scope(.class#Animal)');
+
+# =============================================================================
+# #name works on the keyword and bare-type argument forms, not only `.class`
+# =============================================================================
+# The CSS grammar cannot split `function#foo` (no `.` to break the token), so it
+# arrives as one plain_value and used to be rejected outright. It is now split,
+# so all three argument shapes accept #name identically.
+
+query I
+SELECT (SELECT COUNT(*) FROM ast_select('test/data/python/*.py', ':is-scope(.fn#cached_property)'))
+     = (SELECT COUNT(*) FROM ast_select('test/data/python/*.py', ':is-scope(function#cached_property)'));
+----
+true
+
+query I
+SELECT (SELECT COUNT(*) FROM ast_select('test/data/python/*.py', ':is-scope(function#cached_property)'))
+     = (SELECT COUNT(*) FROM ast_select('test/data/python/*.py', ':is-scope(function_definition#cached_property)'));
+----
+true
+
+# :in-scope takes it too.
+statement ok
+SELECT * FROM ast_select('test/data/python/*.py', ':in-scope(function#cached_property)');
+
+# The semantic class and the exact tree-sitter type are NOT the same thing, and
+# #name makes that visible: `greet` is a lambda, so it is an :is-scope(function)
+# (semantic FN includes lambdas) but not an :is-scope(function_definition).
+query II
+SELECT
+    (SELECT COUNT(*) FROM ast_select('test/data/python/*.py', ':is-scope(function#greet)')),
+    (SELECT COUNT(*) FROM ast_select('test/data/python/*.py', ':is-scope(function_definition#greet)'));
+----
+1	0
+
+# Malformed #name shapes still error rather than half-matching.
+statement error
+SELECT * FROM ast_select('test/data/python/*.py', ':is-scope(function#a#b)');
+----
+malformed #name filter
+
+statement error
+SELECT * FROM ast_select('test/data/python/*.py', ':is-scope(function#)');
+----
+malformed #name filter
 
 # =============================================================================
 # Custom predicates via ast_selector_predicate_* macros
