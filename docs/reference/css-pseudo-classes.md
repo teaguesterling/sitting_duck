@@ -103,25 +103,25 @@ SELECT name FROM ast_select('src/*.cpp', ':declaration');
 
 ## Scope
 
-`:scope` and `:in-scope` are complementary, mirroring CSS where `:scope` is the
+`:is-scope` and `:in-scope` are complementary, mirroring CSS where `:is-scope` is the
 reference element **itself**, never its descendants:
 
-- **`:scope`** — the node **is** a scope boundary.
+- **`:is-scope`** — the node **is** a scope boundary.
 - **`:in-scope(...)`** — the node is **contained within** a scope.
 
 Both take the same argument: a `function` / `class` / `module` keyword, a semantic
 class (`.fn`, `.cls`, `.mod`, and their aliases), or a bare tree-sitter node type;
 the `.class` form also accepts a `#name` filter.
 
-### `:scope` — Is a Scope Boundary
+### `:is-scope` — Is a Scope Boundary
 
 ```sql
 -- All scope-creating nodes (functions, classes, module, …)
-SELECT type, name FROM ast_select('src/*.py', ':scope');
+SELECT type, name FROM ast_select('src/*.py', ':is-scope');
 
 -- Only class scopes; only the scope named Config
-SELECT name FROM ast_select('src/*.py', ':scope(class)');
-SELECT name FROM ast_select('src/*.py', ':scope(.class#Config)');
+SELECT name FROM ast_select('src/*.py', ':is-scope(class)');
+SELECT name FROM ast_select('src/*.py', ':is-scope(.class#Config)');
 ```
 
 ### `:in-scope(type)` — Contained Within Nearest Scope
@@ -594,7 +594,7 @@ This is useful in environments where you can't install community extensions, or 
 | `:reference` | Uses a name |
 | `:declaration` | Introduces a name without implementation |
 | **Scope** | |
-| `:scope` | Is a scope boundary (optionally of a kind/name) |
+| `:is-scope` | Is a scope boundary (optionally of a kind/name) |
 | `:in-scope(type)` | Contained within nearest scope of type (scope-aware) |
 | **Call Graph** | |
 | `:calls(name)` | Function directly calls name (immediate scope; nested lambdas excluded) |

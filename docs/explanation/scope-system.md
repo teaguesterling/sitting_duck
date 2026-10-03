@@ -160,7 +160,7 @@ The stack is a `LIST<STRUCT<id BIGINT, kind SEMANTIC_TYPE>>` — outermost scope
 
 The CSS selector engine uses scope fields internally:
 
-- **`:scope`** pseudo-class — matches scope boundaries themselves (optionally of a kind/name); **`:in-scope(...)`** — matches nodes by their enclosing scope kind/name (reads the `scope.*` fields)
+- **`:is-scope`** pseudo-class — matches scope boundaries themselves (optionally of a kind/name); **`:in-scope(...)`** — matches nodes by their enclosing scope kind/name (reads the `scope.*` fields)
 - **`::callers`** pseudo-element — finds all functions that call the matched function, using `scope.function` to group calls by their enclosing function
 - **`::callees`** pseudo-element — finds the calls made **directly** inside the matched function, reading `scope.function` (immediate scope; a call inside a nested lambda or function belongs to that inner scope, matching `:calls`/`::callers`)
 - **`:called`** pseudo-class — tests whether any call site references the matched function's name
@@ -182,5 +182,5 @@ The pseudo-element syntax is syntactic sugar over the scope-based hash join patt
 
 - [Output Schema](../reference/output-schema.md) — column details and scope STRUCT definition
 - [Architecture](architecture.md) — how parsing, traversal, and enrichment fit together
-- [CSS Pseudo-Classes](../reference/css-pseudo-classes.md) — `:scope`, `:called`, and other scope-aware selectors
+- [CSS Pseudo-Classes](../reference/css-pseudo-classes.md) — `:is-scope`, `:called`, and other scope-aware selectors
 - [Selector Engine](selector-engine.md) — how `::callers`/`::callees` are implemented

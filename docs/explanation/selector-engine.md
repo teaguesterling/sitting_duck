@@ -195,7 +195,7 @@ See [Custom Predicates](../reference/css-pseudo-classes.md#custom-predicates) fo
 ## See also
 
 - [CSS Selector Syntax](../reference/css-selectors.md) — full selector reference
-- [Pseudo-Classes](../reference/css-pseudo-classes.md) — `:has`, `:not`, `:scope`, `:is-called`, custom predicates
+- [Pseudo-Classes](../reference/css-pseudo-classes.md) — `:has`, `:not`, `:is-scope`, `:is-called`, custom predicates
 - [Semantic Aliases](../reference/semantic-aliases.md) — the ~80 cross-language type aliases
 - [Architecture](architecture.md) — how parsing and traversal fit together
 - [Scope System](scope-system.md) — how `::callers`/`::callees` use scope.function

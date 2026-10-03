@@ -745,8 +745,8 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- Top-level pseudo-classes (not negated)
             SELECT cn.name as pseudo_name,
                    COALESCE(ftoi.name, fstr.name) AS pseudo_arg,
-                   fcn.name AS pseudo_arg_class,   -- a `.class` inside the args (e.g. :scope(.fn))
-                   fin.name AS pseudo_arg_name,    -- a `#name` inside the args (e.g. :scope(.fn#foo))
+                   fcn.name AS pseudo_arg_class,   -- a `.class` inside the args (e.g. :is-scope(.fn))
+                   fin.name AS pseudo_arg_name,    -- a `#name` inside the args (e.g. :is-scope(.fn#foo))
                    fpv.name AS pseudo_arg_plain,   -- an unquoted plain_value (e.g. the `function#foo` footgun)
                    false as negated
             FROM sel_pseudo_classes pcs
@@ -804,8 +804,32 @@ CREATE OR REPLACE MACRO ast_select_from(
                    ('decorated'), ('typed'), ('void'), ('variadic'),
                    ('calls'), ('called-by'), ('is-called'), ('is-referenced'), ('exported'),
                    ('match'), ('contains'),
-                   ('scope'), ('in-scope'), ('precedes'), ('follows')
+                   ('is-scope'), ('in-scope'), ('precedes'), ('follows')
         ),
+        -- #184: `:scope` is RETIRED as a pseudo-class. It was ambiguous between three
+        -- genuinely different operations, and the author of a selector could not tell
+        -- which one they were getting -- which is how this issue was filed. Each now
+        -- has its own unambiguous spelling, so `:scope` errors rather than guessing:
+        --   ::scope        MAP each match to its enclosing scope   (pseudo-element)
+        --   :is-scope(X)   FILTER to nodes that ARE a scope        (was :scope(X))
+        --   :in-scope(X)   FILTER by the scope a node is IN
+        -- Dedicated message because the generic unknown-pseudo-class text advises
+        -- defining a custom predicate, which is not the fix here.
+        retired_scope_validation AS (
+            SELECT CASE
+                WHEN EXISTS (SELECT 1 FROM pseudo_classes pc WHERE pc.pseudo_name = 'scope')
+                THEN error(
+                    'ast_select: :scope is not a pseudo-class -- it was ambiguous between '
+                    'three different operations. Use ::scope (pseudo-element) to MAP each '
+                    'match to its enclosing scope; :is-scope or :is-scope(X) to FILTER to '
+                    'nodes that ARE a scope (:is-scope(function), :is-scope(.fn#foo)); or '
+                    ':in-scope(X) to FILTER by the scope a node is IN '
+                    '(.fn:in-scope(.class#Animal)).'
+                )
+                ELSE true
+            END AS ok
+        ),
+
         pseudo_class_validation AS (
             SELECT CASE
                 WHEN EXISTS (
@@ -912,7 +936,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- class): a .class that isn't function/class/module (Tier 2), a #name on
         -- the keyword/type form (the CSS grammar lumps `function#foo` into one
         -- token it can't split — only `.fn#foo` works), and a bare :in-scope with
-        -- no argument (meaningless — use :scope for scope boundaries).
+        -- no argument (meaningless — use :is-scope for scope boundaries).
         scope_arg_validation AS (
             SELECT CASE
                 -- (a) #name on the keyword/type form: the grammar captures `function#foo`
@@ -921,21 +945,21 @@ CREATE OR REPLACE MACRO ast_select_from(
                 --     NULL and would otherwise look argument-less.
                 WHEN EXISTS (
                     SELECT 1 FROM pseudo_classes pc
-                    WHERE pc.pseudo_name IN ('scope', 'in-scope')
+                    WHERE pc.pseudo_name IN ('is-scope', 'in-scope')
                       AND pc.pseudo_arg_plain LIKE '%#%'
                 ) THEN error(format(
                     'ast_select: :{}({}) — a #name filter is only supported on the '
                     'semantic-class form. Write :{}(.fn#foo), not :{}(function#foo).',
                     (SELECT pc.pseudo_name FROM pseudo_classes pc
-                     WHERE pc.pseudo_name IN ('scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
+                     WHERE pc.pseudo_name IN ('is-scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
                     (SELECT pc.pseudo_arg_plain FROM pseudo_classes pc
-                     WHERE pc.pseudo_name IN ('scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
+                     WHERE pc.pseudo_name IN ('is-scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
                     (SELECT pc.pseudo_name FROM pseudo_classes pc
-                     WHERE pc.pseudo_name IN ('scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
+                     WHERE pc.pseudo_name IN ('is-scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1),
                     (SELECT pc.pseudo_name FROM pseudo_classes pc
-                     WHERE pc.pseudo_name IN ('scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1)
+                     WHERE pc.pseudo_name IN ('is-scope','in-scope') AND pc.pseudo_arg_plain LIKE '%#%' LIMIT 1)
                 ))
-                -- (b) bare :in-scope with no argument is meaningless (use :scope).
+                -- (b) bare :in-scope with no argument is meaningless (use :is-scope).
                 WHEN EXISTS (
                     SELECT 1 FROM pseudo_classes pc
                     WHERE pc.pseudo_name = 'in-scope'
@@ -944,13 +968,13 @@ CREATE OR REPLACE MACRO ast_select_from(
                 ) THEN error(
                     'ast_select: :in-scope requires an argument — a scope kind '
                     '(:in-scope(function)), a named scope (:in-scope(.fn#foo)), or a '
-                    'node type (:in-scope(function_definition)). Use bare :scope to '
+                    'node type (:in-scope(function_definition)). Use bare :is-scope to '
                     'select scope boundaries themselves.'
                 )
                 -- (c) a .class arg that isn't function/class/module is Tier 2 (#145).
                 WHEN EXISTS (
                     SELECT 1 FROM pseudo_classes pc
-                    WHERE pc.pseudo_name IN ('scope', 'in-scope')
+                    WHERE pc.pseudo_name IN ('is-scope', 'in-scope')
                       AND pc.pseudo_arg_class IS NOT NULL
                       AND NOT (
                           is_semantic_type(semantic_type_code('DEFINITION_FUNCTION'), UPPER(pc.pseudo_arg_class))
@@ -963,7 +987,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                     '(e.g. :scope(.fn), :in-scope(.class#Foo), :scope(.mod)). Arbitrary '
                     'semantic scopes and full selectors are deferred to issue #145.',
                     (SELECT pc.pseudo_name FROM pseudo_classes pc
-                     WHERE pc.pseudo_name IN ('scope','in-scope') AND pc.pseudo_arg_class IS NOT NULL
+                     WHERE pc.pseudo_name IN ('is-scope','in-scope') AND pc.pseudo_arg_class IS NOT NULL
                        AND NOT (
                            is_semantic_type(semantic_type_code('DEFINITION_FUNCTION'), UPPER(pc.pseudo_arg_class))
                            OR is_semantic_type(semantic_type_code('DEFINITION_CLASS'), UPPER(pc.pseudo_arg_class))
@@ -971,7 +995,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                        )
                      LIMIT 1),
                     (SELECT pc.pseudo_arg_class FROM pseudo_classes pc
-                     WHERE pc.pseudo_name IN ('scope','in-scope') AND pc.pseudo_arg_class IS NOT NULL
+                     WHERE pc.pseudo_name IN ('is-scope','in-scope') AND pc.pseudo_arg_class IS NOT NULL
                        AND NOT (
                            is_semantic_type(semantic_type_code('DEFINITION_FUNCTION'), UPPER(pc.pseudo_arg_class))
                            OR is_semantic_type(semantic_type_code('DEFINITION_CLASS'), UPPER(pc.pseudo_arg_class))
@@ -1303,6 +1327,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 (SELECT right_class FROM combinator_parts) as right_class,
                 (SELECT right_id FROM combinator_parts) as right_id,
                 ((SELECT ok FROM pseudo_class_validation)
+                 AND (SELECT ok FROM retired_scope_validation)
                  AND (SELECT ok FROM zero_arity_validation)
                  AND (SELECT ok FROM scope_arg_validation)
                  AND (SELECT ok FROM peek_filter_validation)
@@ -1739,30 +1764,31 @@ CREATE OR REPLACE MACRO ast_select_from(
                       <= a.node_id + a.descendant_count
             )
 
-            -- :scope — the node IS a scope boundary. Mirrors CSS, where :scope is
+            -- :is-scope — the node IS a scope boundary (was :scope, retired in #184).
             -- the reference element itself, never its descendants. Containment
             -- ("things inside a scope") is :in-scope, below. Same arg grammar:
-            --   :scope                        any scope boundary
-            --   :scope(function|class|module) a scope of that semantic kind
-            --   :scope(.fn|.cls|.mod ...)     same, via any semantic-class alias
-            --   :scope(<tree-sitter type>)    a scope of that exact node type
-            --   :scope(.fn#foo)               the scope boundary named foo
-            -- NOTE (#184): because the argument describes THIS node, combining a
-            -- semantic class with a different-kind :scope argument is a contradiction
-            -- and correctly yields 0 -- `.fn:scope(.class#Animal)` asks for a node that
-            -- is both a function and the class Animal. That empty result is the right
-            -- answer, not a silent failure. For "functions INSIDE class Animal" use
-            -- `.fn:in-scope(.class#Animal)`. Sanity anchors on the python fixture:
-            --   .fn:scope              94   (every function is a scope boundary)
-            --   .fn:scope(.fn)         94   (argument honoured, same set)
-            --   .class:scope(.class#Animal)  2   (the Animal classes themselves)
-            --   .fn:scope(.class#Animal)      0   (contradiction, correctly empty)
+            --   :is-scope                     any scope boundary
+            --   :is-scope(function|class|module) a scope of that semantic kind
+            --   :is-scope(.fn|.cls|.mod ...)  same, via any semantic-class alias
+            --   :is-scope(<tree-sitter type>) a scope of that exact node type
+            --   :is-scope(.fn#foo)            the scope boundary named foo
+            -- NOTE (#184): the argument describes THIS node, so a semantic class
+            -- combined with a different-kind argument is a contradiction and correctly
+            -- yields 0 -- `.fn:is-scope(.class#Animal)` asks for a node that is both a
+            -- function and the class Animal. For "functions INSIDE class Animal" use
+            -- `.fn:in-scope(.class#Animal)`; to MAP a match to its scope use `::scope`.
+            -- Measured anchors on the python fixture:
+            --   .fn:is-scope                 94   (every function is a scope boundary)
+            --   .fn:is-scope(.fn)            94   (argument honoured, same set)
+            --   .class:is-scope(.class#Animal) 2  (the Animal classes themselves)
+            --   .fn:is-scope(.class#Animal)   0   (contradiction, correctly empty)
             --   .fn:in-scope(.class#Animal)   5   (containment -- what you usually want)
+            --   .call::scope                 90   (MAP: the scopes the calls are in)
             -- Alias -> kind resolution reuses is_semantic_type (so .func/.method,
             -- .struct/.trait, .namespace/.package all resolve). A .class that isn't
             -- function/class/module, and #name on the keyword form, are rejected in
             -- scope_arg_validation (Tier 2 / #145).
-            WHEN 'scope' THEN
+            WHEN 'is-scope' THEN
                 is_scope(a.flags)
                 AND (
                     (pc.pseudo_arg IS NULL AND pc.pseudo_arg_class IS NULL)
@@ -1786,7 +1812,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 AND (pc.pseudo_arg_name IS NULL OR a.name = pc.pseudo_arg_name)
 
             -- :in-scope — the node is CONTAINED WITHIN a scope (complement of
-            -- :scope). function/class/module (and aliases) use the precomputed
+            -- :is-scope). function/class/module (and aliases) use the precomputed
             -- scope.* struct with an optional #name; a bare tree-sitter type walks
             -- to the nearest enclosing ancestor of that type.
             --   :in-scope(function)   inside any function scope
