@@ -82,6 +82,10 @@ SELECT name FROM ast_select('src/*.java', '.func[modifier=static]');
 
 ### `[annotation]` — Decorators / Annotations
 
+> Use this to filter on **which** decorator. `:decorated` is the boolean
+> counterpart — "has any decorator" — and takes no argument; `:decorated(by="x")`
+> raises rather than silently ignoring the argument.
+
 ```sql
 -- Decorated with a specific decorator
 SELECT name FROM ast_select('src/*.py', '.func[annotation*=pytest]');
@@ -101,6 +105,10 @@ SELECT name FROM ast_select('src/*.py', '.func[qualified^=UserService.]');
 ```
 
 ### `[signature]` — Return Type / Signature
+
+> Use this to filter on **what** the type is. `:typed` is the boolean counterpart —
+> "has a type annotation" — and takes no argument; `:typed(X)` raises rather than
+> silently ignoring the argument.
 
 ```sql
 -- Functions returning a specific type
