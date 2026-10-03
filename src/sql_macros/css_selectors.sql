@@ -858,6 +858,53 @@ CREATE OR REPLACE MACRO ast_select_from(
             END as ok
         ),
 
+        -- Zero-arity pseudo-classes: an argument is an ERROR, not something to ignore (#184).
+        -- Before this, `.fn:typed(None)` and `.fn:decorated(by="property")` parsed, ran, and
+        -- returned the BARE result -- a deliberately nonsense argument behaved exactly like a
+        -- plausible one, so the mistake was unobservable at runtime and the caller got a
+        -- superset that looked like a reasonable answer. pseudo_class_validation above catches
+        -- an unknown NAME; this catches a known name handed an argument it cannot read.
+        --
+        -- The list is every branch of the predicate CASE that never reads pseudo_arg* or
+        -- ast_pattern. :match and :contains are deliberately NOT here: they take an argument,
+        -- they just read it through ast_pattern rather than pseudo_arg, so testing for
+        -- pseudo_arg alone would wrongly reject them.
+        zero_arity_pseudo_class_names(name) AS (
+            VALUES ('first-child'), ('last-child'), ('empty'), ('root'),
+                   ('named'), ('syntax'),
+                   ('definition'), ('reference'), ('declaration'),
+                   ('async'), ('static'), ('abstract'), ('const'),
+                   ('public'), ('private'), ('protected'),
+                   ('decorated'), ('typed'), ('void'), ('variadic'),
+                   ('is-called'), ('is-referenced'), ('exported')
+        ),
+        zero_arity_offender AS (
+            SELECT pc.pseudo_name AS name
+            FROM pseudo_classes pc
+            WHERE pc.pseudo_name IN (SELECT name FROM zero_arity_pseudo_class_names)
+              AND (pc.pseudo_arg IS NOT NULL OR pc.pseudo_arg_class IS NOT NULL
+                   OR pc.pseudo_arg_name IS NOT NULL OR pc.pseudo_arg_plain IS NOT NULL)
+            LIMIT 1
+        ),
+        zero_arity_validation AS (
+            SELECT CASE
+                WHEN EXISTS (SELECT 1 FROM zero_arity_offender) THEN error(format(
+                    'ast_select: :{} takes no argument. {}',
+                    (SELECT name FROM zero_arity_offender),
+                    CASE (SELECT name FROM zero_arity_offender)
+                        WHEN 'typed' THEN 'It tests only WHETHER a type annotation is present. '
+                                          'To filter on the type itself use the attribute form, '
+                                          'e.g. [signature="None"] or [signature*="int"].'
+                        WHEN 'decorated' THEN 'It tests only WHETHER a decorator is present. '
+                                              'To filter on which decorator, use the attribute '
+                                              'form, e.g. [annotation*="property"].'
+                        ELSE 'It is a boolean predicate -- write it with no parentheses.'
+                    END
+                ))
+                ELSE true
+            END as ok
+        ),
+
         -- :scope / :in-scope argument guards (#145). Both take the same grammar
         -- (keyword function|class|module | .class alias | bare tree-sitter type |
         -- optional #name on the .class form). Three shapes are rejected loudly
@@ -1256,6 +1303,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 (SELECT right_class FROM combinator_parts) as right_class,
                 (SELECT right_id FROM combinator_parts) as right_id,
                 ((SELECT ok FROM pseudo_class_validation)
+                 AND (SELECT ok FROM zero_arity_validation)
                  AND (SELECT ok FROM scope_arg_validation)
                  AND (SELECT ok FROM peek_filter_validation)
                  AND (SELECT ok FROM attr_filter_validation)
@@ -1691,7 +1739,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                       <= a.node_id + a.descendant_count
             )
 
-            -- :scope — either bare (is a scope node) or with arg (within scope of type)
             -- :scope — the node IS a scope boundary. Mirrors CSS, where :scope is
             -- the reference element itself, never its descendants. Containment
             -- ("things inside a scope") is :in-scope, below. Same arg grammar:
@@ -1700,6 +1747,17 @@ CREATE OR REPLACE MACRO ast_select_from(
             --   :scope(.fn|.cls|.mod ...)     same, via any semantic-class alias
             --   :scope(<tree-sitter type>)    a scope of that exact node type
             --   :scope(.fn#foo)               the scope boundary named foo
+            -- NOTE (#184): because the argument describes THIS node, combining a
+            -- semantic class with a different-kind :scope argument is a contradiction
+            -- and correctly yields 0 -- `.fn:scope(.class#Animal)` asks for a node that
+            -- is both a function and the class Animal. That empty result is the right
+            -- answer, not a silent failure. For "functions INSIDE class Animal" use
+            -- `.fn:in-scope(.class#Animal)`. Sanity anchors on the python fixture:
+            --   .fn:scope              94   (every function is a scope boundary)
+            --   .fn:scope(.fn)         94   (argument honoured, same set)
+            --   .class:scope(.class#Animal)  2   (the Animal classes themselves)
+            --   .fn:scope(.class#Animal)      0   (contradiction, correctly empty)
+            --   .fn:in-scope(.class#Animal)   5   (containment -- what you usually want)
             -- Alias -> kind resolution reuses is_semantic_type (so .func/.method,
             -- .struct/.trait, .namespace/.package all resolve). A .class that isn't
             -- function/class/module, and #name on the keyword form, are rejected in

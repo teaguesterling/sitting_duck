@@ -387,6 +387,65 @@ SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:not(:alsonotre
 unknown pseudo-class
 
 # =============================================================================
+# Zero-arity pseudo-classes reject an argument (#184)
+# =============================================================================
+# Previously :typed(X) / :decorated(X) parsed, ran, and returned the BARE result,
+# so a nonsense argument behaved exactly like a plausible one and the mistake was
+# unobservable. The unknown-NAME check never applied to a known name given an
+# argument it cannot read.
+
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:typed(None)');
+----
+:typed takes no argument
+
+# The message must name the attribute form, which is the actual answer.
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:typed(Zzzznotatype)');
+----
+[signature="None"]
+
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:decorated(by="property")');
+----
+[annotation*="property"]
+
+# Any zero-arity name, not just the two reported.
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:root(x)');
+----
+:root takes no argument
+
+# Bare forms are unaffected.
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:typed');
+
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:decorated');
+
+# :match and :contains DO take an argument -- they read it through ast_pattern
+# rather than pseudo_arg, so a pseudo_arg-only arity test would wrongly reject
+# them. Guard against that regression.
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:match("print()")');
+
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:contains("print()")');
+
+# :scope is a SELF predicate and takes an argument describing THIS node, so
+# combining it with a different-kind class is a contradiction and correctly
+# empty -- it is not a silent failure (#184 part 1).
+query I
+SELECT count(*) > 0 FROM ast_select('test/data/python/sample_app.py', '.func:scope(.func)');
+----
+true
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.func:scope(.class#Animal)');
+----
+0
+
+# =============================================================================
 # Custom predicates via ast_selector_predicate_* macros
 # Uses a mock ast_dispatch_predicate that hardcodes test predicates via CASE.
 # In production, sitting_duck auto-loads func_apply and registers a real
