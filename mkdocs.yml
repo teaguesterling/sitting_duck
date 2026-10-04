@@ -134,6 +134,23 @@ nav:
       - Enterprise: languages/enterprise.md
       - Infrastructure: languages/infrastructure.md
   - Releases:
+    - v1.15.4: releases/v1.15.4.md
+    - v1.15.3: releases/v1.15.3.md
+    - v1.15.2: releases/v1.15.2.md
+    - v1.15.1: releases/v1.15.1.md
+    - v1.15.0: releases/v1.15.0.md
+    - v1.14.2: releases/v1.14.2.md
+    - v1.14.1: releases/v1.14.1.md
+    - v1.14.0: releases/v1.14.0.md
+    - v1.13.0: releases/v1.13.0.md
+    - v1.12.0: releases/v1.12.0.md
+    - v1.11.1: releases/v1.11.1.md
+    - v1.11.0: releases/v1.11.0.md
+    - v1.10.3: releases/v1.10.3.md
+    - v1.10.2: releases/v1.10.2.md
+    - v1.10.1: releases/v1.10.1.md
+    - v1.10.0: releases/v1.10.0.md
+    - v1.9.0: releases/v1.9.0.md
     - v1.8.0: releases/v1.8.0.md
     - v1.7.4: releases/v1.7.4.md
     - v1.7.1: releases/v1.7.1.md

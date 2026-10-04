@@ -661,8 +661,8 @@ This is useful in environments where you can't install community extensions, or 
 | `:const` | Has const/final modifier |
 | `:public` / `:private` / `:protected` | Access modifiers |
 | **Annotations** | |
-| `:decorated` | Has decorators/annotations |
-| `:typed` | Has type annotation/signature |
+| `:decorated` | Has decorators/annotations — boolean only; to filter on *which*, use `[annotation*=x]` |
+| `:typed` | Has type annotation/signature — boolean only; to filter on *what*, use `[signature=x]` |
 | `:void` | No return type |
 | `:variadic` | Has variadic parameters (*args, ...rest) |
 | **Custom** | |
