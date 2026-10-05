@@ -1185,7 +1185,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         known_pseudo_element_names(name) AS (
             VALUES ('parent'), ('parent-definition'), ('scope'),
                    ('next-sibling'), ('prev-sibling'), ('previous-sibling'),
-                   ('callers'), ('callees')
+                   ('callers'), ('callees'), ('call-sites')
         ),
         pseudo_element_validation AS (
             SELECT CASE
@@ -1195,7 +1195,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 THEN error(format(
                     'ast_select: unknown pseudo-element "::{}". Supported: ::parent, '
                     '::parent-definition, ::scope, ::next-sibling, ::prev-sibling, '
-                    '::callers, ::callees.',
+                    '::callers, ::callees, ::call-sites.',
                     (SELECT element_name FROM pseudo_element)
                 ))
                 ELSE true
@@ -1970,6 +1970,20 @@ CREATE OR REPLACE MACRO ast_select_from(
           ON caller_fn.node_id = call_node.scope.function
          AND caller_fn.file_path = call_node.file_path
     ),
+    -- ::call-sites — the CALL EXPRESSIONS that invoke this function, regardless of
+    -- where they sit. This is ::callers without the join to the calling function, and
+    -- it exists because that join silently drops module-level calls: `main` is called
+    -- from `if __name__ == '__main__': main()` in both fixtures, which has no enclosing
+    -- function, so `.fn#main::callers` is 0 while main is demonstrably called twice.
+    -- That answer is correct for "which FUNCTIONS call main" and useless for "where is
+    -- main called", so the two questions now have two spellings rather than one.
+    pe_call_sites AS (
+        SELECT DISTINCT call_node.* FROM matched m
+        JOIN ast call_node ON call_node.file_path = m.file_path
+          AND call_node.semantic_type = 'COMPUTATION_CALL'
+          AND call_node.name = m.name
+          AND call_node.node_id != m.node_id
+    ),
     -- ::callees — calls DIRECTLY inside this function (immediate scope). Made
     -- direct to match :calls and ::callers, which all resolve through
     -- scope.function now (Teague's 2026-09-16 ruling, #152/#164): a call inside a
@@ -2029,6 +2043,9 @@ CREATE OR REPLACE MACRO ast_select_from(
     UNION ALL
     SELECT * FROM pe_callees
     WHERE (SELECT element_name FROM pseudo_element) = 'callees'
+    UNION ALL
+    SELECT * FROM pe_call_sites
+    WHERE (SELECT element_name FROM pseudo_element) = 'call-sites'
     ORDER BY file_path, node_id;
 
 

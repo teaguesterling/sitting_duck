@@ -2,6 +2,7 @@
 #include "duckdb_compat.hpp"
 #include "function_doc_helper.hpp"
 #include "include/semantic_types.hpp"
+#include "include/semantic_aliases.hpp"
 #include "include/node_config.hpp"
 #include "include/ast_file_utils.hpp"
 #include "duckdb/common/types/vector.hpp"
@@ -78,150 +79,12 @@ static void IsSemanticTypeFunction(DataChunk &args, ExpressionState &state, Vect
 		    uint8_t type = semantic_type;
 		    uint8_t base_type = semantic_type & 0xFC; // Mask refinement bits for base comparisons
 
-		    // ================================================================
-		    // ALIAS TABLE: maps short selector names to semantic type checks.
-		    // Ordered by measured call frequency from real workloads — the
-		    // hottest super-types come first so a typical predicate hits its
-		    // branch in 1-3 string comparisons rather than 30+. CALL is
-		    // particularly hot via ::callers/::callees and was previously
-		    // ~3x slower than FUNCTION purely due to its position in the
-		    // cascade. Three levels remain available:
-		    //   Super-type (mid):  .func, .class, .call, .cond, .loop, ...
-		    //   Kind (broad):      .def, .flow, .literal, .external, ...
-		    //   Existing names:    FUNCTION, CLASS, DEFINITION, LITERAL, ...
-		    // ================================================================
-
-		    // --- Tier 1: hottest super-types (fast path for selector engine) ---
-		    if (pattern == "FUNCTION" || pattern == "FUNC" || pattern == "FN" || pattern == "METHOD") {
-			    return base_type == SemanticTypes::DEFINITION_FUNCTION;
-		    } else if (pattern == "CALL" || pattern == "INVOKE") {
-			    return base_type == SemanticTypes::COMPUTATION_CALL;
-		    } else if (pattern == "CLASS" || pattern == "CLS" || pattern == "STRUCT" || pattern == "TRAIT" ||
-		               pattern == "INTERFACE") {
-			    return base_type == SemanticTypes::DEFINITION_CLASS;
-		    } else if (pattern == "IDENTIFIER" || pattern == "ID" || pattern == "IDENT") {
-			    return base_type == SemanticTypes::NAME_IDENTIFIER;
-		    } else if (pattern == "MODULE" || pattern == "MOD" || pattern == "PACKAGE" || pattern == "NAMESPACE" ||
-		               pattern == "NS") {
-			    // NAMESPACE/NS map to DEFINITION_MODULE because the current
-			    // taxonomy's 4 DEFINITION super-type slots are full
-			    // (FUNCTION/VARIABLE/CLASS/MODULE) and DEFINITION_MODULE is
-			    // the conceptual home for any named module/namespace
-			    // definition (Python module, C++/C# namespace, Rust mod,
-			    // Java package decl). A future refinement could split
-			    // namespace from module by repurposing the language-specific
-			    // refinement bits — see tracker entry on namespace taxonomy.
-			    return base_type == SemanticTypes::DEFINITION_MODULE;
-		    } else if (pattern == "VARIABLE" || pattern == "VAR" || pattern == "LET" || pattern == "CONST") {
-			    return base_type == SemanticTypes::DEFINITION_VARIABLE;
-
-			    // --- Tier 2: common control-flow super-types ---
-		    } else if (pattern == "CONDITIONAL" || pattern == "COND" || pattern == "IF") {
-			    return base_type == SemanticTypes::FLOW_CONDITIONAL;
-		    } else if (pattern == "LOOP" || pattern == "FOR" || pattern == "WHILE") {
-			    return base_type == SemanticTypes::FLOW_LOOP;
-		    } else if (pattern == "JUMP" || pattern == "RETURN" || pattern == "BREAK" || pattern == "CONTINUE" ||
-		               pattern == "YIELD") {
-			    return base_type == SemanticTypes::FLOW_JUMP;
-
-			    // --- Tier 3: common kind-level patterns ---
-		    } else if (pattern == "DEFINITION" || pattern == "DEF") {
-			    return (base_type & 0xF0) == SemanticTypes::DEFINITION;
-		    } else if (pattern == "LITERAL" || pattern == "LIT" || pattern == "VALUE") {
-			    return (base_type & 0xF0) == SemanticTypes::LITERAL;
-		    } else if (pattern == "NAME") {
-			    return (base_type & 0xF0) == SemanticTypes::NAME;
-		    } else if (pattern == "FLOW" || pattern == "CONTROL") {
-			    return (base_type & 0xF0) == SemanticTypes::FLOW_CONTROL;
-		    } else if (pattern == "EXTERNAL" || pattern == "EXT") {
-			    return (base_type & 0xF0) == SemanticTypes::EXTERNAL;
-
-			    // --- Tier 4: less-common super-types ---
-		    } else if (pattern == "MEMBER" || pattern == "ATTR" || pattern == "FIELD" || pattern == "PROP") {
-			    return base_type == SemanticTypes::COMPUTATION_ACCESS;
-		    } else if (pattern == "IMPORT" || pattern == "REQUIRE" || pattern == "USE") {
-			    return base_type == SemanticTypes::EXTERNAL_IMPORT;
-		    } else if (pattern == "EXPORT" || pattern == "PUB") {
-			    return base_type == SemanticTypes::EXTERNAL_EXPORT;
-
-			    // --- Tier 5: error-handling super-types ---
-		    } else if (pattern == "TRY") {
-			    return base_type == SemanticTypes::ERROR_TRY;
-		    } else if (pattern == "CATCH" || pattern == "EXCEPT" || pattern == "RESCUE") {
-			    return base_type == SemanticTypes::ERROR_CATCH;
-		    } else if (pattern == "THROW" || pattern == "RAISE") {
-			    return base_type == SemanticTypes::ERROR_THROW;
-		    } else if (pattern == "FINALLY" || pattern == "ENSURE" || pattern == "DEFER") {
-			    return base_type == SemanticTypes::ERROR_FINALLY;
-
-			    // --- Tier 6: literal super-types ---
-		    } else if (pattern == "STR" || pattern == "STRING") {
-			    return base_type == SemanticTypes::LITERAL_STRING;
-		    } else if (pattern == "NUM" || pattern == "NUMBER") {
-			    return base_type == SemanticTypes::LITERAL_NUMBER;
-		    } else if (pattern == "BOOL" || pattern == "BOOLEAN") {
-			    return base_type == SemanticTypes::LITERAL_ATOMIC;
-		    } else if (pattern == "COLL" || pattern == "LIST" || pattern == "DICT" || pattern == "ARRAY" ||
-		               pattern == "MAP" || pattern == "SET" || pattern == "TUPLE") {
-			    return base_type == SemanticTypes::LITERAL_STRUCTURED;
-
-			    // --- Tier 7: name / operator / transform super-types ---
-		    } else if (pattern == "QUALIFIED" || pattern == "DOTTED") {
-			    return base_type == SemanticTypes::NAME_QUALIFIED;
-		    } else if (pattern == "SELF" || pattern == "THIS") {
-			    return base_type == SemanticTypes::NAME_SCOPED;
-		    } else if (pattern == "LABEL") {
-			    return base_type == SemanticTypes::NAME_ATTRIBUTE;
-		    } else if (pattern == "ARITH" || pattern == "MATH") {
-			    return base_type == SemanticTypes::OPERATOR_ARITHMETIC;
-		    } else if (pattern == "CMP" || pattern == "COMPARISON") {
-			    return base_type == SemanticTypes::OPERATOR_COMPARISON;
-		    } else if (pattern == "LOGIC" || pattern == "LOGICAL") {
-			    return base_type == SemanticTypes::OPERATOR_LOGICAL;
-		    } else if (pattern == "COMP" || pattern == "COMPREHENSION") {
-			    return base_type == SemanticTypes::TRANSFORM_QUERY;
-
-			    // --- Tier 8: rare kind-level patterns ---
-		    } else if (pattern == "COMPUTATION") {
-			    return (base_type & 0xC0) == SemanticTypes::COMPUTATION;
-		    } else if (pattern == "ERROR" || pattern == "ERR") {
-			    return (base_type & 0xF0) == SemanticTypes::ERROR_HANDLING;
-		    } else if (pattern == "OPERATOR" || pattern == "OP") {
-			    return (base_type & 0xF0) == SemanticTypes::OPERATOR;
-		    } else if (pattern == "TYPEDEF" || pattern == "TYPE") {
-			    return (base_type & 0xF0) == SemanticTypes::TYPE;
-		    } else if (pattern == "PATTERN" || pattern == "PAT") {
-			    return (base_type & 0xF0) == SemanticTypes::PATTERN;
-		    } else if (pattern == "BLOCK") {
-			    return (base_type & 0xF0) == SemanticTypes::ORGANIZATION;
-		    } else if (pattern == "STATEMENT" || pattern == "STMT") {
-			    return (base_type & 0xF0) == SemanticTypes::EXECUTION;
-		    } else if (pattern == "SYNTAX" || pattern == "SYN") {
-			    return (base_type & 0xF0) == SemanticTypes::PARSER_SPECIFIC;
-		    } else if (pattern == "TRANSFORM" || pattern == "XFORM") {
-			    return (base_type & 0xF0) == SemanticTypes::TRANSFORM;
-		    } else if (pattern == "COMMENT") {
-			    // Narrowed from the kind-level METADATA mask to the COMMENT super-type
-			    // only (issue #134). METADATA also covers ANNOTATION (decorators/
-			    // attributes), DIRECTIVE, and DEBUG, so the old `& 0xF0` made `.comment`
-			    // match decorators — a false positive peers hit. Use METADATA/META
-			    // (below) for the whole kind. Parallel to the .access fix (#135).
-			    return base_type == SemanticTypes::METADATA_COMMENT;
-		    } else if (pattern == "METADATA" || pattern == "META") {
-			    // Kind-level umbrella: comments, annotations, directives, debug info.
-			    return (base_type & 0xF0) == SemanticTypes::METADATA;
-		    } else if (pattern == "ACCESS") {
-			    // The COMPUTATION_NODE kind (0xD0): calls/access/expression/closure.
-			    // Was `== COMPUTATION` (0xC0) — the top-level quadrant constant, whose
-			    // `& 0xF0` lands on the OPERATOR kind, so `.access` matched arithmetic/
-			    // logical/comparison/assignment operators and MISSED the actual
-			    // call/access nodes. Kind-level alias, parallel to the other Tier-8
-			    // `& 0xF0` entries. (COMPUTATION_ACCESS specifically stays .member/.attr.)
-			    return (base_type & 0xF0) == SemanticTypes::COMPUTATION_NODE;
-		    }
-
-		    // Default: exact string match with full semantic type name
-		    return SemanticTypes::GetSemanticTypeName(base_type) == pattern;
+		    // The alias table moved to src/include/semantic_aliases.hpp as DATA, so it can
+		    // be enumerated -- for validating a selector class and for documenting the
+		    // vocabulary, neither of which was possible while it was control flow (#188).
+		    // The frequency ordering that made this fast is preserved there verbatim.
+		    bool known = false;
+		    return MatchSemanticAlias(base_type, pattern, known);
 	    });
 }
 

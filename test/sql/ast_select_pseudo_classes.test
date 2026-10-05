@@ -469,6 +469,43 @@ SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:is-scope(.fn)'
 statement ok
 SELECT * FROM ast_select('test/data/python/sample_app.py', ':is-scope(function_definition)');
 
+# ::call-sites — where a function is CALLED, as opposed to ::callers which returns
+# the calling FUNCTIONS. The distinction matters because a module-level call has no
+# enclosing function, so ::callers cannot return anything for it.
+
+# main() is called from `if __name__ == '__main__':` at module level in the fixtures,
+# so ::callers is legitimately empty while ::call-sites finds the call.
+query I
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.func#main::callers');
+----
+0
+
+query I
+SELECT count(*) > 0 FROM ast_select('test/data/python/sample_app.py', '.func#main::call-sites');
+----
+true
+
+# For a function called from inside another function, both answer.
+query I
+SELECT
+    (SELECT count(*) FROM ast_select('test/data/python/*.py', '.func#__init__::callers')) > 0
+AND (SELECT count(*) FROM ast_select('test/data/python/*.py', '.func#__init__::call-sites')) > 0;
+----
+true
+
+# ::call-sites returns CALL nodes, not functions.
+query I
+SELECT DISTINCT is_semantic_type(semantic_type, 'CALL')
+FROM ast_select('test/data/python/*.py', '.func#main::call-sites');
+----
+true
+
+# An unknown pseudo-element still raises, and now lists ::call-sites.
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func::not-an-element');
+----
+::call-sites
+
 # ::scope (the pseudo-element, the MAP) is untouched by the rename.
 statement ok
 SELECT * FROM ast_select('test/data/python/sample_app.py', '.call::scope');

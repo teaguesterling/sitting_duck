@@ -3659,7 +3659,7 @@ CREATE OR REPLACE MACRO ast_select_from(
         known_pseudo_element_names(name) AS (
             VALUES ('parent'), ('parent-definition'), ('scope'),
                    ('next-sibling'), ('prev-sibling'), ('previous-sibling'),
-                   ('callers'), ('callees')
+                   ('callers'), ('callees'), ('call-sites')
         ),
         pseudo_element_validation AS (
             SELECT CASE
@@ -3669,7 +3669,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                 THEN error(format(
                     'ast_select: unknown pseudo-element "::{}". Supported: ::parent, '
                     '::parent-definition, ::scope, ::next-sibling, ::prev-sibling, '
-                    '::callers, ::callees.',
+                    '::callers, ::callees, ::call-sites.',
                     (SELECT element_name FROM pseudo_element)
                 ))
                 ELSE true
@@ -3720,10 +3720,10 @@ CREATE OR REPLACE MACRO ast_select_from(
                     'ast_select: combinators inside :has(...) are not supported '
                     '(only a type, #name, and .class are honored there). Chain '
                     'ast_select calls to compose structural conditions.'
-                )
 
 )SQLMACRO"
         R"SQLMACRO(
+                )
                 ELSE true
             END AS ok
         ),
@@ -3985,10 +3985,10 @@ CREATE OR REPLACE MACRO ast_select_from(
                     WHERE s2.file_path = a.file_path
                       AND s2.parent_id = a.parent_id
                       AND s2.sibling_index < a.sibling_index
-                      AND NOT is_syntax_only(s2.flags)
 
 )SQLMACRO"
         R"SQLMACRO(
+                      AND NOT is_syntax_only(s2.flags)
                       AND NOT is_constituent(s2.flags))
                 AND (sp.left_type IS NULL OR adj.type = sp.left_type)
                 AND (sp.left_class IS NULL
@@ -4223,10 +4223,10 @@ CREATE OR REPLACE MACRO ast_select_from(
                 is_name_definition(a.flags) AND a.name IS NOT NULL AND a.name != ''
                 AND EXISTS (
                     SELECT 1 FROM ast ref
-                    WHERE ref.file_path = a.file_path
 
 )SQLMACRO"
         R"SQLMACRO(
+                    WHERE ref.file_path = a.file_path
                       AND ref.semantic_type = 'COMPUTATION_CALL'
                       AND ref.name = a.name
                       AND ref.node_id != a.node_id
@@ -4453,10 +4453,27 @@ CREATE OR REPLACE MACRO ast_select_from(
           ON caller_fn.node_id = call_node.scope.function
          AND caller_fn.file_path = call_node.file_path
     ),
+    -- ::call-sites — the CALL EXPRESSIONS that invoke this function, regardless of
+    -- where they sit. This is ::callers without the join to the calling function, and
+    -- it exists because that join silently drops module-level calls: `main` is called
+    -- from `if __name__ == '__main__': main()` in both fixtures, which has no enclosing
+    -- function, so `.fn#main::callers` is 0 while main is demonstrably called twice.
+    -- That answer is correct for "which FUNCTIONS call main" and useless for "where is
+    -- main called", so the two questions now have two spellings rather than one.
+    pe_call_sites AS (
+        SELECT DISTINCT call_node.* FROM matched m
+        JOIN ast call_node ON call_node.file_path = m.file_path
+          AND call_node.semantic_type = 'COMPUTATION_CALL'
+          AND call_node.name = m.name
+          AND call_node.node_id != m.node_id
+    ),
     -- ::callees — calls DIRECTLY inside this function (immediate scope). Made
     -- direct to match :calls and ::callers, which all resolve through
     -- scope.function now (Teague's 2026-09-16 ruling, #152/#164): a call inside a
     -- nested lambda or function belongs to THAT inner scope, not to m — its
+
+)SQLMACRO"
+        R"SQLMACRO(
     -- scope.function points to the inner function. Previously this was a subtree
     -- range scan (transitive, including nested calls), which left ::callees
     -- inconsistent with :calls. Equi-join on the callee's precomputed
@@ -4475,9 +4492,6 @@ CREATE OR REPLACE MACRO ast_select_from(
           AND m.node_id > def.node_id
           AND m.node_id <= def.node_id + def.descendant_count
           AND is_name_definition(def.flags)
-
-)SQLMACRO"
-        R"SQLMACRO(
           AND def.name IS NOT NULL AND def.name != ''
           -- Nearest = deepest
           AND NOT EXISTS (
@@ -4515,6 +4529,9 @@ CREATE OR REPLACE MACRO ast_select_from(
     UNION ALL
     SELECT * FROM pe_callees
     WHERE (SELECT element_name FROM pseudo_element) = 'callees'
+    UNION ALL
+    SELECT * FROM pe_call_sites
+    WHERE (SELECT element_name FROM pseudo_element) = 'call-sites'
     ORDER BY file_path, node_id;
 
 
