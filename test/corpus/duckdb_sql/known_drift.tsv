@@ -1,0 +1,28 @@
+# Accepted cross-line STRUCTURAL differences for scripts/compare_duckdb_lines.sh.
+#
+# Without this file the script would be permanently red: the differences below
+# are upstream DuckDB behaviour that sitting_duck cannot and should not undo, so
+# "fail on any structural drift" would mean "fail forever", and a tool that is
+# always red stops being read. Entries here are reported as KNOWN DRIFT and do
+# not fail the run; anything structural that does NOT match an entry is
+# UNEXPECTED and still fails. Pass --strict to ignore this file entirely.
+#
+# An entry is keyed on the SHAPE of the change, never on node_id -- adding one
+# statement to a corpus file renumbers every node after it, so an id-keyed
+# allowlist would go stale on unrelated edits. An entry matches a changed node
+# only when the baseline triple and the candidate triple both match AND no
+# other structural column moved; a node that also changed parent, depth or
+# descendant count is a different (and unexplained) event, so it is reported as
+# unexpected even if its triple matches.
+#
+# An entry that matches nothing in a run is reported as a STALE ALLOWLIST ENTRY
+# and fails the run: upstream having changed again is exactly the kind of news
+# this script exists to deliver, and silently tolerating a dead entry would
+# hide it.
+#
+# Tab-separated. Empty fields mean "the empty string", not "any value"; there
+# are no wildcards, on purpose. Blank lines and #-comments are ignored.
+#
+# corpus_file	from_type	from_name	from_semantic_type	to_type	to_name	to_semantic_type	reason
+kitchen_sink.sql	cast_expression		COMPUTATION_EXPRESSION	literal	true	LITERAL_ATOMIC	v2.0 stops wrapping a boolean comparison operand in an implicit cast; upstream behaviour and v2.0 is the more correct rendering (`true` is a literal, not a cast). See commit b8c06a8 / PR #113 and test/sql/duckdb_parser_test.test:50, which already excludes cast_expression/literal for this reason.
+kitchen_sink.sql	cast_expression		COMPUTATION_EXPRESSION	literal	false	LITERAL_ATOMIC	Same change as the `true` entry above, for a `false` operand (`refunded <> false`).
