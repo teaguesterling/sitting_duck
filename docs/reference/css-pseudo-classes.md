@@ -367,7 +367,17 @@ SELECT name FROM ast_select('src/*.py', '.func#get_user::callers');
 
 -- What this function calls
 SELECT name FROM ast_select('src/*.py', '.func#main::callees');
+
+-- WHERE this function is called — the call expressions themselves
+SELECT file_path, start_line FROM ast_select('src/*.py', '.func#main::call-sites');
 ```
+
+> **`::callers` vs `::call-sites`.** `::callers` returns the *functions* doing the
+> calling, so a call with no enclosing function has no caller to return. That makes
+> `.func#main::callers` empty for the common `if __name__ == '__main__': main()`
+> pattern — correct for "which functions call main", useless for "where is main
+> called". `::call-sites` answers the second question: it returns the call nodes
+> regardless of where they sit, including module level.
 
 ### Pseudo-Element Quick Reference
 
@@ -380,6 +390,7 @@ SELECT name FROM ast_select('src/*.py', '.func#main::callees');
 | `::prev-sibling` | Previous sibling | 1 |
 | `::callers` | Functions that call this | N |
 | `::callees` | Calls made directly by this (immediate scope; nested lambdas excluded) | N |
+| `::call-sites` | The call expressions invoking this, anywhere — including module level, which `::callers` cannot return | N |
 
 ## Ordering
 

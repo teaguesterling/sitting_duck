@@ -24,6 +24,7 @@ void RegisterReadASTFunction(ExtensionLoader &loader); // Streaming-based implem
 void RegisterASTSQLMacros(ExtensionLoader &loader);
 // void RegisterDuckDBASTShortNamesFunction(ExtensionLoader &loader); // Removed
 void RegisterASTSupportedLanguagesFunction(ExtensionLoader &loader);
+void RegisterASTSemanticAliasesFunction(ExtensionLoader &loader);
 void RegisterASTTypeMapFunction(ExtensionLoader &loader);
 void RegisterLanguageRegistrationFunction(ExtensionLoader &loader);
 void RegisterUnparseRulesFunction(ExtensionLoader &loader);
@@ -80,6 +81,7 @@ static void LoadInternal(ExtensionLoader &loader) {
 
 	// Register supported languages function
 	RegisterASTSupportedLanguagesFunction(loader);
+	RegisterASTSemanticAliasesFunction(loader);
 
 	// Register ast_type_map() for node type discovery
 	RegisterASTTypeMapFunction(loader);
