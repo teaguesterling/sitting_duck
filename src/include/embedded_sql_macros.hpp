@@ -3596,6 +3596,72 @@ CREATE OR REPLACE MACRO ast_select_from(
             END AS ok
         ),
 
+        -- Unknown semantic class raises instead of matching nothing (#188).
+        --
+        -- `.frobnicate` and `.annotation` both returned 0 rows in silence, so a mistyped
+        -- or invented class was indistinguishable from a correct selector over code that
+        -- happens to contain none of that kind. The pseudo-class path already gets this
+        -- right; this is the same treatment for the class path.
+        --
+        -- A class_name whose parent is a class_selector is a SEMANTIC class. A class_name
+        -- whose parent is a pseudo_class_selector is a pseudo-class NAME (`:has`, `:typed`)
+        -- and is validated by pseudo_class_validation instead -- validating those here
+        -- would reject every `:has`.
+        --
+        -- Deliberately NOT anti-joined against sel_arg_blocks: a typo inside
+        -- `:has(.frobnicate)` or `:is-scope(.frobnicate)` is just as silent as one at top
+        -- level, so argument-block classes are validated too.
+        --
+        -- Known = in the alias table, or a full semantic type name (`.DEFINITION_FUNCTION`
+        -- is a valid selector). Both are checked against the one source of truth, so there
+        -- is no second copy of the vocabulary to drift.
+        all_semantic_classes AS (
+            SELECT DISTINCT cn.name AS cls
+            FROM sel_class_names cn
+            INNER JOIN sel_class_selectors cs ON cs.node_id = cn.parent_id
+        ),
+        unknown_semantic_class AS (
+            SELECT c.cls
+            FROM all_semantic_classes c
+            WHERE NOT EXISTS (SELECT 1 FROM ast_semantic_aliases() a WHERE a.alias = UPPER(c.cls))
+              AND semantic_type_code(UPPER(c.cls)) IS NULL
+            ORDER BY c.cls
+            LIMIT 1
+        ),
+        semantic_class_near_misses AS (
+            SELECT string_agg(selector, ', ') AS hint FROM (
+                SELECT DISTINCT a.selector
+                FROM ast_semantic_aliases() a, unknown_semantic_class u
+                WHERE a.alias LIKE UPPER(substr(u.cls, 1, 3)) || '%'
+                ORDER BY a.selector
+                LIMIT 6
+            )
+        ),
+        semantic_class_validation AS (
+            SELECT CASE
+                WHEN EXISTS (SELECT 1 FROM unknown_semantic_class) THEN error(format(
+                    'ast_select: unknown semantic class ".{}". {}',
+                    (SELECT cls FROM unknown_semantic_class),
+                    CASE
+                        -- an attribute of the same name is the likeliest intent: `.annotation`
+                        -- is not a class, but [annotation*="x"] is a real filter.
+                        WHEN (SELECT lower(cls) FROM unknown_semantic_class)
+                             IN (SELECT name FROM known_attribute_names)
+                            THEN format('There is an ATTRIBUTE filter of that name -- did you mean '
+                                        '[{}*="..."]? A semantic class selects by node kind; an '
+                                        'attribute filters by value.',
+                                        (SELECT lower(cls) FROM unknown_semantic_class))
+                        WHEN (SELECT hint FROM semantic_class_near_misses) IS NOT NULL
+                            THEN format('Did you mean: {}? Full list: '
+                                        'SELECT selector, resolves_to FROM ast_semantic_aliases().',
+                                        (SELECT hint FROM semantic_class_near_misses))
+                        ELSE 'Full list: SELECT selector, resolves_to FROM ast_semantic_aliases().'
+                    END
+                ))
+                ELSE true
+            END AS ok
+        ),
+
         -- #name-on-call binding guard (issues #88/#89): a selector that binds a
         -- name to CALL-semantic nodes (`.call#foo`, `.call[name=foo]`,
         -- `:has(.call#foo)`, `:not(:has(.call#foo))`) requires call nodes to
@@ -3650,6 +3716,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             JOIN sel_pseudo_elements pe ON pe.node_id = t.parent_id
         ),
         pseudo_element AS (
+
+)SQLMACRO"
+        R"SQLMACRO(
             SELECT (SELECT name FROM sel_pe_tag_names_ranked WHERE rn = 1) AS element_name
         ),
 
@@ -3720,9 +3789,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                     'ast_select: combinators inside :has(...) are not supported '
                     '(only a type, #name, and .class are honored there). Chain '
                     'ast_select calls to compose structural conditions.'
-
-)SQLMACRO"
-        R"SQLMACRO(
                 )
                 ELSE true
             END AS ok
@@ -3846,6 +3912,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                  AND (SELECT ok FROM scope_arg_validation)
                  AND (SELECT ok FROM peek_filter_validation)
                  AND (SELECT ok FROM attr_filter_validation)
+                 AND (SELECT ok FROM semantic_class_validation)
                  AND (SELECT ok FROM call_name_binding_validation)
                  AND (SELECT ok FROM pseudo_element_validation)
                  AND (SELECT ok FROM has_args_validation)
@@ -3903,6 +3970,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 AND (sp.left_class IS NULL
                      OR (is_semantic_type(anc.semantic_type, UPPER(sp.left_class))
                          AND NOT is_syntax_only(anc.flags)))
+
+)SQLMACRO"
+        R"SQLMACRO(
                 AND (sp.left_id IS NULL OR anc.name = sp.left_id)
           )
 
@@ -3985,9 +4055,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                     WHERE s2.file_path = a.file_path
                       AND s2.parent_id = a.parent_id
                       AND s2.sibling_index < a.sibling_index
-
-)SQLMACRO"
-        R"SQLMACRO(
                       AND NOT is_syntax_only(s2.flags)
                       AND NOT is_constituent(s2.flags))
                 AND (sp.left_type IS NULL OR adj.type = sp.left_type)
@@ -4158,6 +4225,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- Standard CSS positional pseudo-classes
             WHEN 'first-child' THEN a.sibling_index = 0
             WHEN 'last-child' THEN NOT EXISTS (
+
+)SQLMACRO"
+        R"SQLMACRO(
                 SELECT 1 FROM ast sib
                 WHERE sib.parent_id = a.parent_id
                   AND sib.file_path = a.file_path
@@ -4223,9 +4293,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                 is_name_definition(a.flags) AND a.name IS NOT NULL AND a.name != ''
                 AND EXISTS (
                     SELECT 1 FROM ast ref
-
-)SQLMACRO"
-        R"SQLMACRO(
                     WHERE ref.file_path = a.file_path
                       AND ref.semantic_type = 'COMPUTATION_CALL'
                       AND ref.name = a.name
@@ -4390,6 +4457,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             )
 
             -- :follows(type) — this node comes after a sibling of the given type
+
+)SQLMACRO"
+        R"SQLMACRO(
             WHEN 'follows' THEN EXISTS (
                 SELECT 1 FROM ast before_sib
                 WHERE before_sib.file_path = a.file_path
@@ -4471,9 +4541,6 @@ CREATE OR REPLACE MACRO ast_select_from(
     -- direct to match :calls and ::callers, which all resolve through
     -- scope.function now (Teague's 2026-09-16 ruling, #152/#164): a call inside a
     -- nested lambda or function belongs to THAT inner scope, not to m — its
-
-)SQLMACRO"
-        R"SQLMACRO(
     -- scope.function points to the inner function. Previously this was a subtree
     -- range scan (transitive, including nested calls), which left ::callees
     -- inconsistent with :calls. Equi-join on the callee's precomputed

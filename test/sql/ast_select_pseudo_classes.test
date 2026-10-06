@@ -469,6 +469,62 @@ SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:is-scope(.fn)'
 statement ok
 SELECT * FROM ast_select('test/data/python/sample_app.py', ':is-scope(function_definition)');
 
+# =============================================================================
+# Unknown semantic class raises (#188)
+# =============================================================================
+# `.frobnicate` used to return 0 rows in silence, indistinguishable from a correct
+# selector over code containing none of that kind.
+
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.frobnicate');
+----
+unknown semantic class ".frobnicate"
+
+# A typo inside an argument block is just as silent, so it is validated too.
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:has(.frobnicate)');
+----
+unknown semantic class
+
+# When an ATTRIBUTE of that name exists, the error names it -- `.annotation` is not a
+# class, but [annotation*="x"] is a real filter. This is the #188 ambiguity resolved.
+statement error
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.annotation');
+----
+[annotation*=
+
+# Pseudo-class NAMES are also class_name nodes in the grammar; validating them here
+# would reject every :has. Guard against that regression.
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:has(.call)');
+
+statement ok
+SELECT * FROM ast_select('test/data/python/sample_app.py', '.func:not(:has(.call))');
+
+# Every class the vocabulary advertises must actually work -- the docs are generated
+# from this table, so a class listed but not accepted would be a lie in the docs.
+query I
+SELECT count(*) = 0 FROM (
+    SELECT a.selector FROM ast_semantic_aliases() a
+    WHERE a.alias NOT IN (SELECT UPPER(alias) FROM ast_semantic_aliases())
+);
+----
+true
+
+# Full semantic type names remain valid classes.
+query I
+SELECT (SELECT count(*) FROM ast_select('test/data/python/*.py', '.DEFINITION_FUNCTION'))
+     = (SELECT count(*) FROM ast_select('test/data/python/*.py', '.fn'));
+----
+true
+
+# The vocabulary is non-trivial and enumerable (#188: it used to be unreadable
+# control flow that nothing could list).
+query I
+SELECT count(*) > 100 FROM ast_semantic_aliases();
+----
+true
+
 # ::call-sites — where a function is CALLED, as opposed to ::callers which returns
 # the calling FUNCTIONS. The distinction matters because a module-level call has no
 # enclosing function, so ::callers cannot return anything for it.

@@ -81,6 +81,7 @@ nav:
     - Semantic Types: reference/semantic-types.md
     - CSS Selector Syntax: reference/css-selectors.md
     - Pseudo-Classes: reference/css-pseudo-classes.md
+    - Semantic Classes: reference/semantic-classes.md
     - Attribute Selectors: reference/css-attributes.md
     - Semantic Aliases: reference/semantic-aliases.md
     - Node Type Selectors: reference/node-type-selectors.md

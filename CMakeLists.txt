@@ -310,6 +310,7 @@ set(EXTENSION_SOURCES
     src/semantic_type_logical_type.cpp
     src/ast_file_utils.cpp
     src/ast_supported_languages_function.cpp
+    src/ast_semantic_aliases_function.cpp
     src/ast_type_map_function.cpp
     src/native_context_extraction.cpp
     src/unparse_rules.cpp

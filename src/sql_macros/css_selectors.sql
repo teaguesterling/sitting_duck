@@ -1122,6 +1122,72 @@ CREATE OR REPLACE MACRO ast_select_from(
             END AS ok
         ),
 
+        -- Unknown semantic class raises instead of matching nothing (#188).
+        --
+        -- `.frobnicate` and `.annotation` both returned 0 rows in silence, so a mistyped
+        -- or invented class was indistinguishable from a correct selector over code that
+        -- happens to contain none of that kind. The pseudo-class path already gets this
+        -- right; this is the same treatment for the class path.
+        --
+        -- A class_name whose parent is a class_selector is a SEMANTIC class. A class_name
+        -- whose parent is a pseudo_class_selector is a pseudo-class NAME (`:has`, `:typed`)
+        -- and is validated by pseudo_class_validation instead -- validating those here
+        -- would reject every `:has`.
+        --
+        -- Deliberately NOT anti-joined against sel_arg_blocks: a typo inside
+        -- `:has(.frobnicate)` or `:is-scope(.frobnicate)` is just as silent as one at top
+        -- level, so argument-block classes are validated too.
+        --
+        -- Known = in the alias table, or a full semantic type name (`.DEFINITION_FUNCTION`
+        -- is a valid selector). Both are checked against the one source of truth, so there
+        -- is no second copy of the vocabulary to drift.
+        all_semantic_classes AS (
+            SELECT DISTINCT cn.name AS cls
+            FROM sel_class_names cn
+            INNER JOIN sel_class_selectors cs ON cs.node_id = cn.parent_id
+        ),
+        unknown_semantic_class AS (
+            SELECT c.cls
+            FROM all_semantic_classes c
+            WHERE NOT EXISTS (SELECT 1 FROM ast_semantic_aliases() a WHERE a.alias = UPPER(c.cls))
+              AND semantic_type_code(UPPER(c.cls)) IS NULL
+            ORDER BY c.cls
+            LIMIT 1
+        ),
+        semantic_class_near_misses AS (
+            SELECT string_agg(selector, ', ') AS hint FROM (
+                SELECT DISTINCT a.selector
+                FROM ast_semantic_aliases() a, unknown_semantic_class u
+                WHERE a.alias LIKE UPPER(substr(u.cls, 1, 3)) || '%'
+                ORDER BY a.selector
+                LIMIT 6
+            )
+        ),
+        semantic_class_validation AS (
+            SELECT CASE
+                WHEN EXISTS (SELECT 1 FROM unknown_semantic_class) THEN error(format(
+                    'ast_select: unknown semantic class ".{}". {}',
+                    (SELECT cls FROM unknown_semantic_class),
+                    CASE
+                        -- an attribute of the same name is the likeliest intent: `.annotation`
+                        -- is not a class, but [annotation*="x"] is a real filter.
+                        WHEN (SELECT lower(cls) FROM unknown_semantic_class)
+                             IN (SELECT name FROM known_attribute_names)
+                            THEN format('There is an ATTRIBUTE filter of that name -- did you mean '
+                                        '[{}*="..."]? A semantic class selects by node kind; an '
+                                        'attribute filters by value.',
+                                        (SELECT lower(cls) FROM unknown_semantic_class))
+                        WHEN (SELECT hint FROM semantic_class_near_misses) IS NOT NULL
+                            THEN format('Did you mean: {}? Full list: '
+                                        'SELECT selector, resolves_to FROM ast_semantic_aliases().',
+                                        (SELECT hint FROM semantic_class_near_misses))
+                        ELSE 'Full list: SELECT selector, resolves_to FROM ast_semantic_aliases().'
+                    END
+                ))
+                ELSE true
+            END AS ok
+        ),
+
         -- #name-on-call binding guard (issues #88/#89): a selector that binds a
         -- name to CALL-semantic nodes (`.call#foo`, `.call[name=foo]`,
         -- `:has(.call#foo)`, `:not(:has(.call#foo))`) requires call nodes to
@@ -1369,6 +1435,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                  AND (SELECT ok FROM scope_arg_validation)
                  AND (SELECT ok FROM peek_filter_validation)
                  AND (SELECT ok FROM attr_filter_validation)
+                 AND (SELECT ok FROM semantic_class_validation)
                  AND (SELECT ok FROM call_name_binding_validation)
                  AND (SELECT ok FROM pseudo_element_validation)
                  AND (SELECT ok FROM has_args_validation)
