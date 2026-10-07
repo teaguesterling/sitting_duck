@@ -79,6 +79,41 @@
 > declares them at any level but fills them with NULL — that is what the
 > `+schema` suffix means: the FULL schema with only the requested data.)
 >
+> **Select by name, not by position.** `start_byte` and `end_byte` were added
+> (v1.x, tracker 048 #2) immediately after `end_column`, inside the positional
+> group where they belong. At `source := 'full'` — and only there — that moves
+> the seven columns after them two positions right:
+>
+> | column | position before | position after |
+> |---|---|---|
+> | `parent_id` | 18 | 20 |
+> | `depth` | 19 | 21 |
+> | `sibling_index` | 20 | 22 |
+> | `children_count` | 21 | 23 |
+> | `descendant_count` | 22 | 24 |
+> | `scope` | 23 | 25 |
+> | `peek` | 24 | 26 |
+>
+> Every one of those columns keeps its name, its declared type and its value
+> for every node — nothing was altered, two columns were inserted. So anything
+> that names its columns (`SELECT peek FROM …`, or any of the `ast_*` macros,
+> all of which reference columns by name) is unaffected. The only code that
+> notices is code that consumes `SELECT *` **by ordinal** at
+> `source := 'full'`: a positional unpack, a `read_csv`-style column index, a
+> client binding that reads result columns by number. Name your columns and
+> this cannot reach you — which is the right habit against every future
+> addition, not just this one.
+>
+> Lower `source :=` levels are byte-for-byte unchanged, schema and values.
+>
+> For `docs/releases/`, ready to paste under **Upgrading**: *"`read_ast` /
+> `parse_ast` with `source := 'full'` gained two columns, `start_byte` and
+> `end_byte`, inserted after `end_column`; `parent_id`, `depth`,
+> `sibling_index`, `children_count`, `descendant_count`, `scope` and `peek`
+> therefore each shift two positions right at that one source level, with
+> their names, types and values unchanged — select columns by name rather than
+> by ordinal. All lower `source :=` levels are unchanged."*
+>
 > **Older builds returned 0.** A community build reporting `extension_version`
 > `f7b9c60` returned `start_column = 0` for all 169 nodes of
 > `test/data/test_native_context.py` under `source := 'full'`. Line numbers were
