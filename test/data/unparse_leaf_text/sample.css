@@ -1,0 +1,10 @@
+/* a comment */
+.selector {
+    color: #ff0000;
+    content: "quoted";
+    margin: 10px;
+}
+
+#ident > .child {
+    width: 50%;
+}
