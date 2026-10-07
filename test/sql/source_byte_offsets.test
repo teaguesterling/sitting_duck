@@ -1,6 +1,7 @@
 # name: test/sql/source_byte_offsets.test
 # description: source := 'full' must expose byte-exact start_byte / end_byte
 # group: [sql]
+
 #
 # tracker/features/048 #2 — byte offsets as the substrate for byte-exact
 # unparse (`write_ast(read_ast(x, source := 'full')) = x`).
