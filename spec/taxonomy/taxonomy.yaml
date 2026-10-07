@@ -1,0 +1,511 @@
+# sitting_duck universal taxonomy spec
+#
+# THE single versioned definition of the universal node taxonomy: the 8-bit
+# semantic_type encoding, the node flag byte, and the name/native extraction
+# strategy enums. The C++ tables that used to be hand-maintained in parallel are
+# GENERATED from this file by scripts/generate_taxonomy.py; the committed C++ and
+# this spec are kept in lockstep by the "taxonomy tables in sync" CI check.
+#
+# The src/language_configs/*.def files keep referring to these names
+# (DEF_TYPE(raw_type, semantic_type, name_extraction, native_extraction, flags));
+# this spec is the single definition those names resolve to.
+#
+# Edit this file, then run:  python3 scripts/generate_taxonomy.py
+#
+# Versioning: taxonomy_spec_version is semver'd independently of the extension
+# version (v2.0 M1 "the contract", tracker/features/044-v2-m1-contract.md).
+#   MAJOR — a code or bit meaning changed (breaks stored semantic_type bytes)
+#   MINOR — a name, flag, or strategy was added
+#   PATCH — documentation only
+taxonomy_spec_version: 1.0.0
+
+# 8-bit semantic type encoding. Byte layout: [ ss kk tt ll ]
+#   ss = super_kind         (bits 6-7)  4 super kinds
+#   kk = kind               (bits 4-5)  4 kinds within each super kind
+#   tt = super_type         (bits 2-3)  4 variants within each kind
+#   ll = language_specific  (bits 0-1)  per-language refinement
+# A semantic_type's code is super_kind.code | kind.offset | semantic_type.offset,
+# so the three tables below fully determine all 64 codes.
+
+rendering:
+  # The hand-written C++ declares COMPUTATION's kinds and semantic types before
+  # CONTROL_EFFECTS's, while GetKindName/GetKindCode in semantic_types.cpp list
+  # kinds in plain numeric code order. Ordering inside a switch or an
+  # unordered_map is behaviour-free, so the generator reproduces both orders
+  # rather than silently unifying them — that keeps the first generated output
+  # byte-identical to the hand-written tables. Unifying them later is a
+  # pure-ordering diff, reviewable on its own.
+  super_kind_declaration_order: [META_EXTERNAL, DATA_STRUCTURE, COMPUTATION, CONTROL_EFFECTS]
+
+super_kinds:
+  - name: META_EXTERNAL
+    code: 0x00
+  - name: DATA_STRUCTURE
+    code: 0x40
+  - name: CONTROL_EFFECTS
+    code: 0x80
+  - name: COMPUTATION
+    code: 0xC0
+
+kinds:
+  - name: PARSER_SPECIFIC
+    super_kind: META_EXTERNAL
+    offset: 0x00
+  - name: RESERVED
+    super_kind: META_EXTERNAL
+    offset: 0x10
+  - name: METADATA
+    super_kind: META_EXTERNAL
+    offset: 0x20
+  - name: EXTERNAL
+    super_kind: META_EXTERNAL
+    offset: 0x30
+  - name: LITERAL
+    super_kind: DATA_STRUCTURE
+    offset: 0x00
+  - name: NAME
+    super_kind: DATA_STRUCTURE
+    offset: 0x10
+  - name: PATTERN
+    super_kind: DATA_STRUCTURE
+    offset: 0x20
+  - name: TYPE
+    super_kind: DATA_STRUCTURE
+    offset: 0x30
+  - name: OPERATOR
+    super_kind: COMPUTATION
+    offset: 0x00
+  - name: COMPUTATION_NODE
+    super_kind: COMPUTATION
+    offset: 0x10
+  - name: TRANSFORM
+    super_kind: COMPUTATION
+    offset: 0x20
+  - name: DEFINITION
+    super_kind: COMPUTATION
+    offset: 0x30
+  - name: EXECUTION
+    super_kind: CONTROL_EFFECTS
+    offset: 0x00
+  - name: FLOW_CONTROL
+    super_kind: CONTROL_EFFECTS
+    offset: 0x10
+  - name: ERROR_HANDLING
+    super_kind: CONTROL_EFFECTS
+    offset: 0x20
+  - name: ORGANIZATION
+    super_kind: CONTROL_EFFECTS
+    offset: 0x30
+
+semantic_types:
+  - name: PARSER_CONSTRUCT
+    kind: PARSER_SPECIFIC
+    offset: 0x00
+    description: "unique language constructs"
+  - name: PARSER_DELIMITER
+    kind: PARSER_SPECIFIC
+    offset: 0x04
+    description: "delimiters, separators"
+  - name: PARSER_PUNCTUATION
+    kind: PARSER_SPECIFIC
+    offset: 0x08
+    description: "language-specific punctuation"
+  - name: PARSER_SYNTAX
+    kind: PARSER_SPECIFIC
+    offset: 0x0C
+    description: "syntax elements"
+  - name: RESERVED_FUTURE1
+    kind: RESERVED
+    offset: 0x00
+    description: "reserved for future use"
+  - name: RESERVED_FUTURE2
+    kind: RESERVED
+    offset: 0x04
+    description: "reserved for future use"
+  - name: RESERVED_FUTURE3
+    kind: RESERVED
+    offset: 0x08
+    description: "reserved for future use"
+  - name: RESERVED_FUTURE4
+    kind: RESERVED
+    offset: 0x0C
+    description: "reserved for future use"
+  - name: METADATA_COMMENT
+    kind: METADATA
+    offset: 0x00
+    description: "comments, documentation"
+  - name: METADATA_ANNOTATION
+    kind: METADATA
+    offset: 0x04
+    description: "decorators, attributes"
+  - name: METADATA_DIRECTIVE
+    kind: METADATA
+    offset: 0x08
+    description: "preprocessor directives"
+  - name: METADATA_DEBUG
+    kind: METADATA
+    offset: 0x0C
+    description: "debug information, source maps"
+  - name: EXTERNAL_IMPORT
+    kind: EXTERNAL
+    offset: 0x00
+    description: "import statements"
+  - name: EXTERNAL_EXPORT
+    kind: EXTERNAL
+    offset: 0x04
+    description: "export statements"
+  - name: EXTERNAL_FOREIGN
+    kind: EXTERNAL
+    offset: 0x08
+    description: "foreign function interface"
+  - name: EXTERNAL_EMBED
+    kind: EXTERNAL
+    offset: 0x0C
+    description: "embedded content (HTML, CSS, SQL)"
+  - name: LITERAL_NUMBER
+    kind: LITERAL
+    offset: 0x00
+    description: "integers, floats, decimals"
+  - name: LITERAL_STRING
+    kind: LITERAL
+    offset: 0x04
+    description: "strings, chars, text"
+  - name: LITERAL_ATOMIC
+    kind: LITERAL
+    offset: 0x08
+    description: "true, false, null, None, undefined"
+  - name: LITERAL_STRUCTURED
+    kind: LITERAL
+    offset: 0x0C
+    description: "arrays, objects, composite"
+  - name: NAME_IDENTIFIER
+    kind: NAME
+    offset: 0x00
+    description: "simple identifiers"
+  - name: NAME_QUALIFIED
+    kind: NAME
+    offset: 0x04
+    description: "qualified names (obj.prop)"
+  - name: NAME_SCOPED
+    kind: NAME
+    offset: 0x08
+    description: "scoped references (::, this, super, @instance_var)"
+  - name: NAME_ATTRIBUTE
+    kind: NAME
+    offset: 0x0C
+    description: "decorative metadata (@decorator, @media, attributes)"
+  - name: PATTERN_DESTRUCTURE
+    kind: PATTERN
+    offset: 0x00
+    description: "breaking apart into multiple terms"
+  - name: PATTERN_COLLECT
+    kind: PATTERN
+    offset: 0x04
+    description: "gathering together into single term"
+  - name: PATTERN_TEMPLATE
+    kind: PATTERN
+    offset: 0x08
+    description: "parameterized patterns"
+  - name: PATTERN_MATCH
+    kind: PATTERN
+    offset: 0x0C
+    description: "structured entities for comparison"
+  - name: TYPE_PRIMITIVE
+    kind: TYPE
+    offset: 0x00
+    description: "basic types (int, string, etc)"
+  - name: TYPE_COMPOSITE
+    kind: TYPE
+    offset: 0x04
+    description: "structs, unions, tuples"
+  - name: TYPE_REFERENCE
+    kind: TYPE
+    offset: 0x08
+    description: "pointers, references"
+  - name: TYPE_GENERIC
+    kind: TYPE
+    offset: 0x0C
+    description: "generic/template types"
+  - name: OPERATOR_ARITHMETIC
+    kind: OPERATOR
+    offset: 0x00
+    description: "+, -, *, /, %, **, //, &, |, ^, ~, <<, >>"
+  - name: OPERATOR_LOGICAL
+    kind: OPERATOR
+    offset: 0x04
+    description: "&&, ||, !, and, or, not, ? :"
+  - name: OPERATOR_COMPARISON
+    kind: OPERATOR
+    offset: 0x08
+    description: "==, !=, <, >, <=, >=, ===, is, in, not in"
+  - name: OPERATOR_ASSIGNMENT
+    kind: OPERATOR
+    offset: 0x0C
+    description: "=, +=, -=, *=, /=, :=, etc."
+  - name: COMPUTATION_CALL
+    kind: COMPUTATION_NODE
+    offset: 0x00
+    description: "function calls"
+  - name: COMPUTATION_ACCESS
+    kind: COMPUTATION_NODE
+    offset: 0x04
+    description: "member access, indexing"
+  - name: COMPUTATION_EXPRESSION
+    kind: COMPUTATION_NODE
+    offset: 0x08
+    description: "complex expressions"
+  - name: COMPUTATION_CLOSURE
+    kind: COMPUTATION_NODE
+    offset: 0x0C
+    description: "closures, captured environments"
+  - name: TRANSFORM_QUERY
+    kind: TRANSFORM
+    offset: 0x00
+    description: "SQL queries, LINQ"
+  - name: TRANSFORM_ITERATION
+    kind: TRANSFORM
+    offset: 0x04
+    description: "map, filter, reduce"
+  - name: TRANSFORM_PROJECTION
+    kind: TRANSFORM
+    offset: 0x08
+    description: "select, extract operations"
+  - name: TRANSFORM_AGGREGATION
+    kind: TRANSFORM
+    offset: 0x0C
+    description: "group by, aggregate ops"
+  - name: DEFINITION_FUNCTION
+    kind: DEFINITION
+    offset: 0x00
+    description: "function definitions"
+  - name: DEFINITION_VARIABLE
+    kind: DEFINITION
+    offset: 0x04
+    description: "variable/constant definitions"
+  - name: DEFINITION_CLASS
+    kind: DEFINITION
+    offset: 0x08
+    description: "class/struct definitions"
+  - name: DEFINITION_MODULE
+    kind: DEFINITION
+    offset: 0x0C
+    description: "named module/namespace definitions (Python module, C++/C# namespace, Rust mod, Java package decl)"
+  - name: EXECUTION_STATEMENT
+    kind: EXECUTION
+    offset: 0x00
+    description: "expression statements"
+  - name: EXECUTION_DECLARATION
+    kind: EXECUTION
+    offset: 0x04
+    description: "variable declarations"
+  - name: EXECUTION_STATEMENT_CALL
+    kind: EXECUTION
+    offset: 0x08
+    description: "statement-level invocations"
+  - name: EXECUTION_MUTATION
+    kind: EXECUTION
+    offset: 0x0C
+    description: "assignments, scope modifications"
+  - name: FLOW_CONDITIONAL
+    kind: FLOW_CONTROL
+    offset: 0x00
+    description: "if, switch, match"
+  - name: FLOW_LOOP
+    kind: FLOW_CONTROL
+    offset: 0x04
+    description: "for, while, do-while"
+  - name: FLOW_JUMP
+    kind: FLOW_CONTROL
+    offset: 0x08
+    description: "break, continue, return, goto"
+  - name: FLOW_SYNC
+    kind: FLOW_CONTROL
+    offset: 0x0C
+    description: "async, await, synchronized, yield"
+  - name: ERROR_TRY
+    kind: ERROR_HANDLING
+    offset: 0x00
+    description: "try blocks"
+  - name: ERROR_CATCH
+    kind: ERROR_HANDLING
+    offset: 0x04
+    description: "catch, except blocks"
+  - name: ERROR_THROW
+    kind: ERROR_HANDLING
+    offset: 0x08
+    description: "throw, raise statements"
+  - name: ERROR_FINALLY
+    kind: ERROR_HANDLING
+    offset: 0x0C
+    description: "finally, ensure blocks"
+  - name: ORGANIZATION_BLOCK
+    kind: ORGANIZATION
+    offset: 0x00
+    description: "code blocks, scopes"
+  - name: ORGANIZATION_LIST
+    kind: ORGANIZATION
+    offset: 0x04
+    description: "argument lists, parameter lists"
+  - name: ORGANIZATION_SECTION
+    kind: ORGANIZATION
+    offset: 0x08
+    description: "sections, regions"
+  - name: ORGANIZATION_CONTAINER
+    kind: ORGANIZATION
+    offset: 0x0C
+    # clang-format breaks this declaration after the '=' (the statement plus its
+    # comment cannot fit on one line); recorded so the generated header stays
+    # byte-identical to the committed, clang-format-clean source.
+    layout: break_after_assign
+    description: "structural containers (source_file/program/compilation_unit roots) — distinct from DEFINITION_MODULE, which tags named module/namespace definitions within the file"
+# ---------------------------------------------------------------------------
+# The node flag byte (ASTNodeFlags)
+# ---------------------------------------------------------------------------
+# Eight orthogonal bits carried alongside every node's semantic_type. `fields`
+# is in bit order and fully determines the byte layout; `kind: bit` is a single
+# boolean bit, `kind: enum` is a multi-bit mutually exclusive role.
+#
+# runtime_selectable marks the names a runtime language config (register_language)
+# may name in its "flags" array — masks, the zero NAME_NONE sentinel and the
+# deprecated aliases are not selectable.
+flag_byte:
+  namespace: ASTNodeFlags
+  fields:
+    - name: IS_SYNTAX_ONLY
+      kind: bit
+      bits: [0]
+      value: 0x01
+      summary: "Bit 0: syntax token"
+      doc: "pure syntax token (keyword, punctuation)"
+      runtime_selectable: true
+
+    - name: NAME_ROLE
+      kind: enum
+      bits: [1, 2]
+      mask_name: NAME_ROLE_MASK
+      mask: 0x06
+      mask_doc: "mask for bits 1-2"
+      summary: "Bits 1-2: NAME_ROLE — mutually exclusive name-binding role"
+      doc: "2-bit enum for name-binding role"
+      values:
+        - name: NAME_NONE
+          role_value: 0
+          value: 0x00
+          label: ""
+          doc: "not involved in name binding"
+          runtime_selectable: false
+        - name: NAME_REFERENCE
+          role_value: 1
+          value: 0x02
+          label: reference
+          doc: "uses a name"
+          runtime_selectable: true
+        - name: NAME_DECLARATION
+          role_value: 2
+          value: 0x04
+          label: declaration
+          doc: "introduces name (no body/impl)"
+          runtime_selectable: true
+        - name: NAME_DEFINITION
+          role_value: 3
+          value: 0x06
+          label: definition
+          doc: "introduces name (with body/impl)"
+          runtime_selectable: true
+
+    - name: IS_SCOPE
+      kind: bit
+      bits: [3]
+      value: 0x08
+      summary: "Bit 3: scope boundary"
+      doc: "creates scope boundary"
+      runtime_selectable: true
+
+    - name: IS_EXPORTED
+      kind: bit
+      bits: [4]
+      value: 0x10
+      summary: "Bit 4: exported / publicly visible outside file/module"
+      doc: "visible outside file/module"
+      runtime_selectable: true
+
+    - name: IS_CONSTITUENT
+      kind: bit
+      bits: [5]
+      value: 0x20
+      summary: |
+        Bit 5: constituent — a meaningful sub-part of a larger construct that already
+        represents the whole (string content/fragment/escape, a function declarator,
+        an import specifier/clause). Unlike IS_SYNTAX_ONLY (a valueless grammar token),
+        a constituent has payload but is subordinate; class selectors skip it and
+        return the enclosing construct instead.
+      doc: "a meaningful sub-part of a larger construct"
+      runtime_selectable: true
+
+  # Derived convenience constants (not independent bits).
+  derived:
+    - name: BINDS_NAME
+      value: 0x04
+      summary: 'Convenience: single-bit check for "binds a name" (definition OR declaration)'
+
+  # Kept so older .def files still compile. IS_CONSTRUCT / IS_EMBODIED are 0x00
+  # no-ops; the IS_KEYWORD* spellings alias IS_SYNTAX_ONLY.
+  deprecated_aliases_summary: "Backward compatibility aliases"
+  deprecated_aliases:
+    - name: IS_CONSTRUCT
+      value: "0x00"
+      doc: "DEPRECATED: no-op"
+    - name: IS_EMBODIED
+      value: "0x00"
+      doc: "DEPRECATED: no-op"
+    - name: IS_KEYWORD
+      value: IS_SYNTAX_ONLY
+    - name: IS_KEYWORD_IF_LEAF
+      value: IS_SYNTAX_ONLY
+
+# ---------------------------------------------------------------------------
+# Extraction strategy enums
+# ---------------------------------------------------------------------------
+# The third and fourth arguments of DEF_TYPE(raw_type, semantic_type,
+# name_extraction, native_extraction, flags). `label` (used by ast_type_map())
+# defaults to the lowercased name. runtime_selectable: false means the strategy
+# needs native C++ and cannot be named by a runtime language config.
+strategies:
+  - enum: ExtractionStrategy
+    header_comment: "Extraction strategy for node names/values"
+    underlying: uint8_t
+    explicit_values: all        # every enumerator carries its own "= N"
+    values:
+      - {name: NONE, value: 0, doc: "No extraction needed", runtime_selectable: true}
+      - {name: NODE_TEXT, value: 1, doc: "Extract the node's own text content", runtime_selectable: true}
+      - {name: FIRST_CHILD, value: 2, doc: "Extract text from first child", runtime_selectable: true}
+      - {name: FIND_IDENTIFIER, value: 3, doc: 'Find first child of type "identifier"', runtime_selectable: true}
+      - {name: FIND_PROPERTY, value: 4, doc: 'Find first child of type "property_identifier"', runtime_selectable: true}
+      - {name: FIND_ASSIGNMENT_TARGET, value: 5, doc: "Find identifier in parent assignment (universal pattern)", runtime_selectable: true}
+      - {name: FIND_QUALIFIED_IDENTIFIER, value: 6, doc: "Find qualified/scoped identifiers and extract just the name part", runtime_selectable: true}
+      - {name: FIND_IN_DECLARATOR, value: 7, doc: "Find identifiers inside declarator nodes (universal pattern)", runtime_selectable: true}
+      - {name: FIND_CALL_TARGET, value: 8, doc: "Find method/function name from call (handles obj.method patterns)", runtime_selectable: true}
+      - {name: CUSTOM, value: 9, doc: "Language-specific custom logic", runtime_selectable: false}
+
+  - enum: NativeExtractionStrategy
+    header_comment: "Native context extraction strategies - pattern-based approach"
+    underlying: uint8_t
+    explicit_values: endpoints  # only the first and last carry a "= N"
+    values:
+      - {name: NONE, value: 0, doc: "No native context extraction"}
+      - {name: FUNCTION_WITH_PARAMS, doc: "Standard function with parameter list"}
+      - {name: FUNCTION_WITH_DECORATORS, doc: "Function with annotations/decorators"}
+      - {name: ARROW_FUNCTION, doc: "Lambda/arrow function pattern"}
+      - {name: ASYNC_FUNCTION, doc: "Async function pattern"}
+      - {name: CLASS_WITH_INHERITANCE, doc: "Class with base classes"}
+      - {name: CLASS_WITH_METHODS, doc: "Class with method definitions"}
+      - {name: VARIABLE_WITH_TYPE, doc: "Typed variable assignment"}
+      - {name: GENERIC_FUNCTION, doc: "Function with generic parameters"}
+      - {name: METHOD_DEFINITION, doc: "Class/object method"}
+      - {name: CONSTRUCTOR_DEFINITION, doc: "Constructor/initializer"}
+      - {name: INTERFACE_DEFINITION, doc: "Interface/trait/protocol"}
+      - {name: ENUM_DEFINITION, doc: "Enum/union type"}
+      - {name: IMPORT_STATEMENT, doc: "Import/include/using"}
+      - {name: EXPORT_STATEMENT, doc: "Export/public declarations"}
+      - {name: FUNCTION_CALL, doc: "Function call/invocation with arguments"}
+      - {name: CUSTOM, value: 255, doc: "Language-specific custom logic"}

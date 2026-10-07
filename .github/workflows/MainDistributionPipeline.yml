@@ -163,6 +163,32 @@ jobs:
             exit 1
           fi
 
+  # The taxonomy tables — the semantic_type codes and names, the node flag byte,
+  # and the name/native extraction strategy enums — are generated from
+  # spec/taxonomy/taxonomy.yaml into marked blocks in five sources (v2.0 M1
+  # "the contract", tracker/features/044-v2-m1-contract.md). Unlike the SQL
+  # macros, NOTHING in the build regenerates them, so a spec-only commit, or a
+  # hand-edit inside a generated block, would ship C++ that disagrees with the
+  # spec — which is the hand-sync drift this codegen exists to retire. This
+  # check makes that divergence a hard CI failure.
+  taxonomy-tables-sync:
+    name: taxonomy tables in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure PyYAML is available
+        # Present in the runner image's system Python; installed only if not,
+        # so the job does not depend on pip being usable.
+        run: python3 -c "import yaml" || python3 -m pip install --break-system-packages pyyaml
+      - name: Regenerate the taxonomy tables from spec/taxonomy/taxonomy.yaml
+        run: python3 scripts/generate_taxonomy.py
+      - name: Verify the committed tables match
+        run: |
+          if ! git diff --exit-code -- src/include/semantic_types.hpp src/semantic_types.cpp src/include/node_config.hpp src/language_config_json.cpp src/ast_type_map_function.cpp; then
+            echo '::error file=spec/taxonomy/taxonomy.yaml::the generated taxonomy tables are out of sync with spec/taxonomy/taxonomy.yaml. Run `python3 scripts/generate_taxonomy.py` and commit the regenerated sources alongside the spec change.'
+            exit 1
+          fi
+
   # Guard for issue #82: a from-source dev build (no OVERRIDE_GIT_DESCRIBE)
   # must produce an extension that LOADs in the bundled dev shell. During
   # sitting_duck's LoadInternal, core_functions is NOT available: sitting_duck
