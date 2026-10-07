@@ -805,3 +805,34 @@ DEF_TYPE("result_builder", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
 
 /** @} */ // end swift_parser_errors
+
+// =============================================================================
+// LEAF TEXT COVERAGE (tracker 047 "4a")
+// =============================================================================
+// Named, text-bearing leaf types that this grammar exposes but that no
+// DEF_TYPE entry configured. The unparser emits one token per leaf as
+// COALESCE(NULLIF(name, ''), type) (src/sql_macros/ast_unparse.sql), so a
+// named leaf with no text-producing name strategy round-trips to its own type
+// name instead of its text. On a leaf every FIND_*/FIRST_CHILD strategy
+// returns "" -- there are no children to search -- so NODE_TEXT is the only
+// strategy that can recover it.
+//
+// PARSER_CONSTRUCT is what PopulateSemanticFieldsTemplated already assigns to
+// an unconfigured type, so these entries change name extraction only and
+// leave semantic classification exactly as it is today.
+//
+// Derived, not hand-written. Regenerate after a grammar bump with:
+//   workspace/unparse_leaf_text_audit/derive_named_leaf_text_gaps.py
+DEF_TYPE("bin_literal", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("catch_keyword", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("default_keyword", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("hex_literal", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("oct_literal", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("raw_str_continuing_indicator", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("raw_str_end_part", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("raw_str_interpolation_start", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("raw_str_part", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("statement_label", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("throw_keyword", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("where_keyword", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("wildcard_pattern", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)

@@ -325,7 +325,7 @@ DEF_TYPE("do_statement", ORGANIZATION_BLOCK | SemanticRefinements::Organization:
  */
 
 /// @brief Break statement - exits loop
-DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
+DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NODE_TEXT, NONE, 0)
 
 /// @brief Goto statement - jumps to label (Lua 5.2+)
 DEF_TYPE("goto_statement", FLOW_JUMP | SemanticRefinements::Jump::GOTO, FIND_IDENTIFIER, NONE, 0)
@@ -518,3 +518,44 @@ DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
 
 /** @} */ // end lua_errors
+
+// =============================================================================
+// LEAF TEXT COVERAGE (tracker 047 "4a")
+// =============================================================================
+// Named, text-bearing leaf types that this grammar exposes but that no
+// DEF_TYPE entry configured. The unparser emits one token per leaf as
+// COALESCE(NULLIF(name, ''), type) (src/sql_macros/ast_unparse.sql), so a
+// named leaf with no text-producing name strategy round-trips to its own type
+// name instead of its text. On a leaf every FIND_*/FIRST_CHILD strategy
+// returns "" -- there are no children to search -- so NODE_TEXT is the only
+// strategy that can recover it.
+//
+// PARSER_CONSTRUCT is what PopulateSemanticFieldsTemplated already assigns to
+// an unconfigured type, so these entries change name extraction only and
+// leave semantic classification exactly as it is today.
+//
+// Derived, not hand-written. Regenerate after a grammar bump with:
+//   workspace/unparse_leaf_text_audit/derive_named_leaf_text_gaps.py
+DEF_TYPE("comment_content", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("escape_sequence", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("hash_bang_line", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("string_content", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+
+// =============================================================================
+// LEAF TEXT COVERAGE (tracker 047 "4a")
+// =============================================================================
+// Named, text-bearing leaf types that this grammar exposes but that no
+// DEF_TYPE entry configured. The unparser emits one token per leaf as
+// COALESCE(NULLIF(name, ''), type) (src/sql_macros/ast_unparse.sql), so a
+// named leaf with no text-producing name strategy round-trips to its own type
+// name instead of its text. On a leaf every FIND_*/FIRST_CHILD strategy
+// returns "" -- there are no children to search -- so NODE_TEXT is the only
+// strategy that can recover it.
+//
+// PARSER_CONSTRUCT is what PopulateSemanticFieldsTemplated already assigns to
+// an unconfigured type, so these entries change name extraction only and
+// leave semantic classification exactly as it is today.
+//
+// Derived, not hand-written. Regenerate after a grammar bump with:
+//   workspace/unparse_leaf_text_audit/derive_named_leaf_text_gaps.py
+DEF_TYPE("[[", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)

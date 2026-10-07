@@ -156,20 +156,55 @@ def unescape_c(s: str) -> str:
 
 
 def split_top_level_commas(arg_text: str) -> list[str]:
-    """Split a macro argument list on commas that are not nested in parens."""
+    """Split a macro argument list on commas that are not nested or in a string.
+
+    String awareness is load-bearing, not defensive: the raw node type is
+    itself a C string literal and node types routinely *are* bracket
+    characters -- DEF_TYPE("["), DEF_TYPE("("), DEF_TYPE("[[") and friends.
+    Counting those as nesting left depth permanently unbalanced, so the
+    remaining commas stopped looking top-level and the entry was silently
+    skipped. That made lua's DEF_TYPE("[[") invisible and the fix
+    non-idempotent.
+
+    Angle brackets are deliberately NOT treated as nesting: DEF_TYPE arguments
+    contain no templates, but they do contain operator node types like
+    DEF_TYPE(">") and DEF_TYPE("<="), where a lone bracket would unbalance the
+    depth in exactly the same way.
+    """
     parts: list[str] = []
     depth = 0
+    in_string = False
     current: list[str] = []
-    for ch in arg_text:
-        if ch in "(<[":
+    i = 0
+    while i < len(arg_text):
+        ch = arg_text[i]
+        if in_string:
+            current.append(ch)
+            if ch == "\\" and i + 1 < len(arg_text):
+                current.append(arg_text[i + 1])
+                i += 2
+                continue
+            if ch == '"':
+                in_string = False
+            i += 1
+            continue
+
+        if ch == '"':
+            in_string = True
+            current.append(ch)
+            i += 1
+            continue
+        if ch in "([":
             depth += 1
-        elif ch in ")>]":
+        elif ch in ")]":
             depth -= 1
+
         if ch == "," and depth == 0:
             parts.append("".join(current).strip())
             current = []
         else:
             current.append(ch)
+        i += 1
     parts.append("".join(current).strip())
     return parts
 
@@ -349,28 +384,56 @@ def collect_def_sources(path: Path, seen: set[Path] | None = None) -> list[Path]
     return sources
 
 
+def preprocess_def(path: Path, seen: set[Path] | None = None) -> str:
+    """Inline .def #includes to reproduce the text the compiler actually sees.
+
+    Order matters: the DEF_TYPE table is an unordered_map initialiser list, and
+    duplicate keys there are first-wins (later entries are no-ops, as with
+    insert()). So the strategy in force for a type is the one in its *first*
+    occurrence in this preprocessed text, not the last.
+    """
+    if seen is None:
+        seen = set()
+    resolved = path.resolve()
+    if resolved in seen:
+        return ""
+    seen.add(resolved)
+
+    out: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+        m = DEF_INCLUDE_RE.match(line)
+        if m:
+            included = (path.parent / m.group(1)).resolve()
+            if included.exists():
+                out.append(preprocess_def(included, seen))
+                continue
+        out.append(line)
+    return "".join(out)
+
+
 def parse_def_strategies(path: Path) -> tuple[dict[str, str], list[Path]]:
     """Map raw node type -> name-extraction strategy from a DEF_TYPE table.
 
     Works for ``src/language_configs/*_types.def`` (following .def #includes)
     and the inline tables in ``src/language_adapters/{sql,duckdb}_adapter.cpp``.
+
+    Duplicate raw types resolve first-wins, matching the unordered_map
+    initialiser list the entries feed. ruby_types.def really does declare
+    "super" twice with different strategies, so this is not hypothetical.
     """
     strategies: dict[str, str] = {}
     sources = collect_def_sources(path)
-    # Walk included files first so the including file's own entries win, which
-    # matches C++ initialiser-list semantics only loosely but is the safe
-    # direction: a language that re-declares an inherited type overrides it.
-    for source in reversed(sources):
-        text = source.read_text(encoding="utf-8")
-        for arglist in iter_macro_arglists(text):
-            args = split_top_level_commas(arglist)
-            if len(args) < 3:
-                continue
-            m = RAW_TYPE_RE.match(args[0])
-            if not m:
-                continue
-            # args = [raw_type, semantic_type, name_strategy, native_strategy, flags]
-            strategies[unescape_c(m.group(1))] = args[2].strip()
+    text = preprocess_def(path)
+    for arglist in iter_macro_arglists(text):
+        args = split_top_level_commas(arglist)
+        if len(args) < 3:
+            continue
+        m = RAW_TYPE_RE.match(args[0])
+        if not m:
+            continue
+        raw_type = unescape_c(m.group(1))
+        # args = [raw_type, semantic_type, name_strategy, native_strategy, flags]
+        strategies.setdefault(raw_type, args[2].strip())
     return strategies, sources
 
 

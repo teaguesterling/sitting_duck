@@ -139,7 +139,7 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
     // Generic keywords and aliases
     DEF_TYPE("keyword", PARSER_CONSTRUCT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
         DEF_TYPE("keyword_as", NAME_SCOPED, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-            DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
+            DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
     // Core SQL constructs
     DEF_TYPE("select_expression", TRANSFORM_QUERY, NONE, NONE, 0)
@@ -192,7 +192,7 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
                                     ASTNodeFlags::IS_KEYWORD) DEF_TYPE("]", PARSER_DELIMITER, NONE, NONE, 0)
                                     DEF_TYPE("[", PARSER_DELIMITER, NONE, NONE,
                                              0) DEF_TYPE("cte", TRANSFORM_QUERY, NONE, NONE, 0)
-                                        DEF_TYPE("op_other", OPERATOR_ARITHMETIC, NONE, NONE,
+                                        DEF_TYPE("op_other", OPERATOR_ARITHMETIC, NODE_TEXT, NONE,
                                                  0) DEF_TYPE(":=", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
                                             DEF_TYPE("keyword_with", TRANSFORM_QUERY, NODE_TEXT, NONE,
                                                      ASTNodeFlags::IS_KEYWORD)
@@ -502,7 +502,29 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
                                                                                                                     NODE_TEXT,
                                                                                                                     NONE,
                                                                                                                     ASTNodeFlags::
-                                                                                                                        IS_KEYWORD)};
+                                                                                                                        IS_KEYWORD)
+
+// =============================================================================
+// LEAF TEXT COVERAGE (tracker 047 "4a")
+// =============================================================================
+// Named, text-bearing leaf types that this grammar exposes but that no
+// DEF_TYPE entry configured. The unparser emits one token per leaf as
+// COALESCE(NULLIF(name, ''), type) (src/sql_macros/ast_unparse.sql), so a
+// named leaf with no text-producing name strategy round-trips to its own type
+// name instead of its text. On a leaf every FIND_*/FIRST_CHILD strategy
+// returns "" -- there are no children to search -- so NODE_TEXT is the only
+// strategy that can recover it.
+//
+// PARSER_CONSTRUCT is what PopulateSemanticFieldsTemplated already assigns to
+// an unconfigured type, so these entries change name extraction only and
+// leave semantic classification exactly as it is today.
+//
+// Derived, not hand-written. Regenerate after a grammar bump with:
+//   workspace/unparse_leaf_text_audit/derive_named_leaf_text_gaps.py
+DEF_TYPE("bang", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("dollar_quote", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+DEF_TYPE("op_unary_other", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+};
 
 #undef DEF_TYPE
 

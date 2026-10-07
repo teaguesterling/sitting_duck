@@ -4,26 +4,25 @@
       "alias_candidates": [],
       "alias_uncovered": [],
       "covered": [
-        "comment",
-        "number",
-        "raw_string",
-        "special_variable_name",
-        "variable_name",
-        "word"
-      ],
-      "def": "src/language_configs/bash_types.def",
-      "gaps_missing_entry": [
         "ansi_c_string",
+        "comment",
         "extglob_pattern",
         "file_descriptor",
         "heredoc_body",
         "heredoc_content",
         "heredoc_end",
         "heredoc_start",
+        "number",
+        "raw_string",
         "regex",
+        "special_variable_name",
         "string_content",
-        "test_operator"
+        "test_operator",
+        "variable_name",
+        "word"
       ],
+      "def": "src/language_configs/bash_types.def",
+      "gaps_missing_entry": [],
       "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "ansi_c_string",
@@ -60,6 +59,8 @@
         "false",
         "identifier",
         "ms_restrict_modifier",
+        "ms_signed_ptr_modifier",
+        "ms_unsigned_ptr_modifier",
         "number_literal",
         "preproc_arg",
         "preproc_directive",
@@ -69,10 +70,7 @@
         "true"
       ],
       "def": "src/language_configs/c_types.def",
-      "gaps_missing_entry": [
-        "ms_signed_ptr_modifier",
-        "ms_unsigned_ptr_modifier"
-      ],
+      "gaps_missing_entry": [],
       "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "character",
@@ -107,32 +105,30 @@
         "statement_identifier"
       ],
       "covered": [
+        "auto",
         "character",
+        "comment",
         "escape_sequence",
         "false",
         "identifier",
+        "literal_suffix",
+        "ms_restrict_modifier",
+        "ms_signed_ptr_modifier",
+        "ms_unsigned_ptr_modifier",
         "number_literal",
+        "preproc_arg",
+        "preproc_directive",
         "primitive_type",
         "raw_string_content",
         "raw_string_delimiter",
         "string_content",
         "system_lib_string",
+        "this",
         "true"
       ],
       "def": "src/language_configs/cpp_types.def",
-      "gaps_missing_entry": [
-        "literal_suffix",
-        "ms_restrict_modifier",
-        "ms_signed_ptr_modifier",
-        "ms_unsigned_ptr_modifier"
-      ],
-      "gaps_wrong_strategy": {
-        "auto": "NONE",
-        "comment": "NONE",
-        "preproc_arg": "NONE",
-        "preproc_directive": "NONE",
-        "this": "NONE"
-      },
+      "gaps_missing_entry": [],
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "auto",
         "character",
@@ -170,29 +166,28 @@
         "interpolation_quote"
       ],
       "covered": [
-        "comment",
-        "integer_literal",
-        "null_literal",
-        "predefined_type",
-        "real_literal"
-      ],
-      "def": "src/language_configs/csharp_types.def",
-      "gaps_missing_entry": [
         "character_literal_content",
+        "comment",
         "discard",
         "escape_sequence",
+        "integer_literal",
         "interpolation_brace",
         "interpolation_start",
+        "null_literal",
+        "predefined_type",
         "preproc_arg",
         "raw_string_content",
         "raw_string_end",
         "raw_string_start",
+        "real_literal",
         "shebang_directive",
         "string_content",
         "string_literal_content",
         "string_literal_encoding",
         "verbatim_string_literal"
       ],
+      "def": "src/language_configs/csharp_types.def",
+      "gaps_missing_entry": [],
       "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "character_literal_content",
@@ -235,22 +230,20 @@
         "at_keyword",
         "class_name",
         "comment",
+        "escape_sequence",
         "from",
         "identifier",
         "important",
+        "important_value",
+        "js_comment",
         "nesting_selector",
         "plain_value",
+        "string_content",
         "unit"
       ],
       "def": "src/language_configs/css_types.def",
-      "gaps_missing_entry": [
-        "important_value",
-        "js_comment"
-      ],
-      "gaps_wrong_strategy": {
-        "escape_sequence": "NONE",
-        "string_content": "NONE"
-      },
+      "gaps_missing_entry": [],
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "at_keyword",
         "class_name",
@@ -324,6 +317,8 @@
         "type_constraint"
       ],
       "covered": [
+        "blank_identifier",
+        "comment",
         "escape_sequence",
         "false",
         "float_literal",
@@ -333,17 +328,13 @@
         "interpreted_string_literal_content",
         "iota",
         "nil",
+        "raw_string_literal_content",
         "rune_literal",
         "true"
       ],
       "def": "src/language_configs/go_types.def",
-      "gaps_missing_entry": [
-        "blank_identifier",
-        "raw_string_literal_content"
-      ],
-      "gaps_wrong_strategy": {
-        "comment": "NONE"
-      },
+      "gaps_missing_entry": [],
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "blank_identifier",
         "comment",
@@ -367,18 +358,16 @@
       "alias_candidates": [],
       "alias_uncovered": [],
       "covered": [
+        "comma",
+        "comment",
         "float_value",
         "int_value",
         "name",
         "null_value"
       ],
       "def": "src/language_configs/graphql_types.def",
-      "gaps_missing_entry": [
-        "comma"
-      ],
-      "gaps_wrong_strategy": {
-        "comment": "NONE"
-      },
+      "gaps_missing_entry": [],
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "comma",
         "comment",
@@ -394,23 +383,22 @@
       "alias_candidates": [],
       "alias_uncovered": [],
       "covered": [
+        "comment",
+        "ellipsis",
         "heredoc_identifier",
         "identifier",
         "null_lit",
         "quoted_template_end",
         "quoted_template_start",
+        "strip_marker",
+        "template_directive_end",
+        "template_directive_start",
         "template_interpolation_end",
         "template_interpolation_start"
       ],
       "def": "src/language_configs/hcl_types.def",
       "gaps_missing_entry": [],
-      "gaps_wrong_strategy": {
-        "comment": "NONE",
-        "ellipsis": "NONE",
-        "strip_marker": "NONE",
-        "template_directive_end": "NONE",
-        "template_directive_start": "NONE"
-      },
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "comment",
         "ellipsis",
@@ -469,6 +457,7 @@
         "character_literal",
         "decimal_floating_point_literal",
         "decimal_integer_literal",
+        "escape_sequence",
         "false",
         "hex_floating_point_literal",
         "hex_integer_literal",
@@ -480,13 +469,11 @@
         "super",
         "this",
         "true",
+        "underscore_pattern",
         "void_type"
       ],
       "def": "src/language_configs/java_types.def",
-      "gaps_missing_entry": [
-        "escape_sequence",
-        "underscore_pattern"
-      ],
+      "gaps_missing_entry": [],
       "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "binary_integer_literal",
@@ -522,12 +509,18 @@
       ],
       "alias_uncovered": [],
       "covered": [
+        "comment",
         "escape_sequence",
         "false",
         "hash_bang_line",
+        "html_character_reference",
+        "html_comment",
         "identifier",
+        "jsx_text",
         "null",
         "number",
+        "optional_chain",
+        "private_property_identifier",
         "regex_flags",
         "regex_pattern",
         "string_fragment",
@@ -537,16 +530,8 @@
         "undefined"
       ],
       "def": "src/language_configs/javascript_types.def",
-      "gaps_missing_entry": [
-        "html_character_reference",
-        "html_comment",
-        "jsx_text",
-        "private_property_identifier"
-      ],
-      "gaps_wrong_strategy": {
-        "comment": "NONE",
-        "optional_chain": "NONE"
-      },
+      "gaps_missing_entry": [],
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "comment",
         "escape_sequence",
@@ -575,6 +560,7 @@
       "alias_candidates": [],
       "alias_uncovered": [],
       "covered": [
+        "comment",
         "escape_sequence",
         "false",
         "null",
@@ -583,9 +569,7 @@
         "true"
       ],
       "def": "src/language_configs/json_types.def",
-      "gaps_missing_entry": [
-        "comment"
-      ],
+      "gaps_missing_entry": [],
       "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "comment",
@@ -606,28 +590,25 @@
         "type_identifier"
       ],
       "alias_uncovered": [
-        "interpolated_expression",
-        "interpolated_identifier"
+        "interpolated_expression"
       ],
       "covered": [
         "bin_literal",
         "hex_literal",
         "integer_literal",
-        "null_literal",
-        "real_literal"
-      ],
-      "def": "src/language_configs/kotlin_types.def",
-      "gaps_missing_entry": [
         "label",
+        "line_comment",
+        "multiline_comment",
+        "null_literal",
         "property_modifier",
+        "real_literal",
         "reification_modifier",
         "string_content",
         "wildcard_import"
       ],
-      "gaps_wrong_strategy": {
-        "line_comment": "NONE",
-        "multiline_comment": "NONE"
-      },
+      "def": "src/language_configs/kotlin_types.def",
+      "gaps_missing_entry": [],
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "bin_literal",
         "hex_literal",
@@ -649,23 +630,21 @@
       "alias_candidates": [],
       "alias_uncovered": [],
       "covered": [
+        "break_statement",
+        "comment_content",
+        "escape_sequence",
         "false",
+        "hash_bang_line",
         "identifier",
         "nil",
         "number",
+        "string_content",
         "true",
         "vararg_expression"
       ],
       "def": "src/language_configs/lua_types.def",
-      "gaps_missing_entry": [
-        "comment_content",
-        "escape_sequence",
-        "hash_bang_line",
-        "string_content"
-      ],
-      "gaps_wrong_strategy": {
-        "break_statement": "NONE"
-      },
+      "gaps_missing_entry": [],
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "break_statement",
         "comment_content",
@@ -700,22 +679,20 @@
         "atx_h3_marker",
         "atx_h4_marker",
         "atx_h5_marker",
+        "atx_h6_marker",
+        "block_continuation",
         "block_quote_marker",
         "entity_reference",
+        "fenced_code_block_delimiter",
         "minus_metadata",
         "numeric_character_reference",
-        "setext_h1_underline"
-      ],
-      "def": "src/language_configs/markdown_types.def",
-      "gaps_missing_entry": [
-        "atx_h6_marker",
         "plus_metadata",
+        "setext_h1_underline",
         "setext_h2_underline"
       ],
-      "gaps_wrong_strategy": {
-        "block_continuation": "NONE",
-        "fenced_code_block_delimiter": "NONE"
-      },
+      "def": "src/language_configs/markdown_types.def",
+      "gaps_missing_entry": [],
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "atx_h1_marker",
         "atx_h2_marker",
@@ -744,24 +721,23 @@
         "operation"
       ],
       "covered": [
-        "comment",
-        "float",
-        "integer",
-        "name",
-        "php_tag"
-      ],
-      "def": "src/language_configs/php_types.def",
-      "gaps_missing_entry": [
         "bottom_type",
+        "comment",
         "escape_sequence",
+        "float",
         "heredoc_end",
         "heredoc_start",
+        "integer",
+        "name",
         "nowdoc_string",
         "php_end_tag",
+        "php_tag",
         "sentinel_error",
         "string_content",
         "var_modifier"
       ],
+      "def": "src/language_configs/php_types.def",
+      "gaps_missing_entry": [],
       "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "bottom_type",
@@ -792,7 +768,9 @@
         "format_expression"
       ],
       "covered": [
+        "comment",
         "ellipsis",
+        "escape_interpolation",
         "escape_sequence",
         "false",
         "float",
@@ -802,15 +780,12 @@
         "none",
         "string_end",
         "string_start",
-        "true"
+        "true",
+        "type_conversion"
       ],
       "def": "src/language_configs/python_types.def",
       "gaps_missing_entry": [],
-      "gaps_wrong_strategy": {
-        "comment": "NONE",
-        "escape_interpolation": "NONE",
-        "type_conversion": "NONE"
-      },
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "comment",
         "ellipsis",
@@ -834,28 +809,26 @@
       "alias_candidates": [],
       "alias_uncovered": [],
       "covered": [
+        "break",
         "comma",
+        "comment",
         "dot_dot_i",
         "dots",
+        "escape_sequence",
         "false",
         "identifier",
         "inf",
         "nan",
+        "next",
         "null",
+        "string_close",
+        "string_content",
+        "string_open",
         "true"
       ],
       "def": "src/language_configs/r_types.def",
-      "gaps_missing_entry": [
-        "string_close",
-        "string_open"
-      ],
-      "gaps_wrong_strategy": {
-        "break": "NONE",
-        "comment": "NONE",
-        "escape_sequence": "NONE",
-        "next": "NONE",
-        "string_content": "NONE"
-      },
+      "gaps_missing_entry": [],
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "break",
         "comma",
@@ -891,6 +864,7 @@
       "covered": [
         "character",
         "class_variable",
+        "comment",
         "constant",
         "encoding",
         "escape_sequence",
@@ -900,6 +874,7 @@
         "global_variable",
         "hash_key_symbol",
         "heredoc_beginning",
+        "heredoc_content",
         "heredoc_end",
         "identifier",
         "instance_variable",
@@ -908,17 +883,13 @@
         "self",
         "simple_symbol",
         "string_content",
-        "true"
-      ],
-      "def": "src/language_configs/ruby_types.def",
-      "gaps_missing_entry": [
+        "super",
+        "true",
         "uninterpreted"
       ],
-      "gaps_wrong_strategy": {
-        "comment": "NONE",
-        "heredoc_content": "NONE",
-        "super": "NONE"
-      },
+      "def": "src/language_configs/ruby_types.def",
+      "gaps_missing_entry": [],
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "character",
         "class_variable",
@@ -962,24 +933,23 @@
       "covered": [
         "char_literal",
         "crate",
+        "doc_comment",
+        "escape_sequence",
         "float_literal",
         "identifier",
+        "inner_doc_comment_marker",
         "integer_literal",
+        "metavariable",
         "mutable_specifier",
+        "outer_doc_comment_marker",
         "primitive_type",
         "self",
+        "shebang",
+        "string_content",
         "super"
       ],
       "def": "src/language_configs/rust_types.def",
-      "gaps_missing_entry": [
-        "doc_comment",
-        "escape_sequence",
-        "inner_doc_comment_marker",
-        "metavariable",
-        "outer_doc_comment_marker",
-        "shebang",
-        "string_content"
-      ],
+      "gaps_missing_entry": [],
       "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "char_literal",
@@ -1732,28 +1702,27 @@
         "protocol_function_declaration"
       ],
       "covered": [
-        "comment",
-        "else",
-        "integer_literal",
-        "multiline_comment",
-        "real_literal"
-      ],
-      "def": "src/language_configs/swift_types.def",
-      "gaps_missing_entry": [
         "bin_literal",
         "catch_keyword",
+        "comment",
         "default_keyword",
+        "else",
         "hex_literal",
+        "integer_literal",
+        "multiline_comment",
         "oct_literal",
         "raw_str_continuing_indicator",
         "raw_str_end_part",
         "raw_str_interpolation_start",
         "raw_str_part",
+        "real_literal",
         "statement_label",
         "throw_keyword",
         "where_keyword",
         "wildcard_pattern"
       ],
+      "def": "src/language_configs/swift_types.def",
+      "gaps_missing_entry": [],
       "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "bin_literal",
@@ -1821,12 +1790,16 @@
         "interface_body"
       ],
       "covered": [
+        "comment",
         "escape_sequence",
         "false",
         "hash_bang_line",
+        "html_comment",
         "identifier",
+        "jsx_text",
         "null",
         "number",
+        "private_property_identifier",
         "regex_flags",
         "regex_pattern",
         "string_fragment",
@@ -1836,14 +1809,8 @@
         "undefined"
       ],
       "def": "src/language_configs/typescript_types.def, src/language_configs/javascript_types.def",
-      "gaps_missing_entry": [
-        "html_comment",
-        "jsx_text",
-        "private_property_identifier"
-      ],
-      "gaps_wrong_strategy": {
-        "comment": "NONE"
-      },
+      "gaps_missing_entry": [],
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "comment",
         "escape_sequence",
@@ -1875,18 +1842,16 @@
       ],
       "covered": [
         "builtin_identifier",
+        "character_content",
+        "comment",
+        "escape_sequence",
         "float",
         "integer",
         "string_content"
       ],
       "def": "src/language_configs/zig_types.def",
-      "gaps_missing_entry": [
-        "character_content",
-        "escape_sequence"
-      ],
-      "gaps_wrong_strategy": {
-        "comment": "NONE"
-      },
+      "gaps_missing_entry": [],
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "builtin_identifier",
         "character_content",
