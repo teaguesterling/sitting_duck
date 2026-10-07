@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Empirical companion to derive_named_leaf_text_gaps.py.
+"""Empirical companion to scripts/audit_leaf_text_gaps.py.
 
 Does two jobs the static derivation cannot do alone.
 
@@ -24,38 +24,50 @@ Does two jobs the static derivation cannot do alone.
    quietly under-report. That is the issue #184 lesson applied to this script
    itself.
 
-`duckdb` is covered here only, since it has no tree-sitter grammar.
+`duckdb` is NOT covered: its adapter reports children_count = 0 for every
+node, so the whole tree reads as leaves and the unparse model does not apply
+(filed as issue #197). That is a structural bug, not a leaf-text gap.
+
+The static derivation is recomputed in-process rather than read from a
+committed JSON snapshot, so this can never validate against a stale list.
+
+When to re-run
+--------------
+After a grammar bump, after changing any *_types.def name strategy, and as the
+check that a leaf-text fix actually worked. Exit codes: 0 clean, 1 a
+statically derived gap is still mismatching (regression), 2 unfixed gaps
+remain.
+
+Companions: scripts/audit_leaf_text_gaps.py (the derivation),
+scripts/apply_leaf_text_fixes.py, scripts/make_leaf_text_corpus.py.
 
 Usage
 -----
-    python3 workspace/unparse_leaf_text_audit/sweep_observed_leaves.py
-    python3 .../sweep_observed_leaves.py --binary build/release/duckdb
+    python3 scripts/sweep_leaf_text_observed.py
+    python3 scripts/sweep_leaf_text_observed.py --binary build/release/duckdb
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import subprocess
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-CORPUS_DIR = REPO_ROOT / "test" / "data" / "unparse_leaf_text"
-GAPS_JSON = Path(__file__).resolve().parent / "leaf_text_gaps.json"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-# language -> corpus filename (mirrors make_corpus.py)
-CORPUS = {
-    "bash": "sample.sh", "c": "sample.c", "cpp": "sample.cpp",
-    "csharp": "sample.cs", "css": "sample.css", "dart": "sample.dart",
-    "go": "sample.go", "graphql": "sample.graphql", "hcl": "sample.tf",
-    "html": "sample.html", "java": "sample.java", "javascript": "sample.js",
-    "json": "sample.json", "kotlin": "sample.kt", "lua": "sample.lua",
-    "markdown": "sample.md", "php": "sample.php", "python": "sample.py",
-    "r": "sample.R", "ruby": "sample.rb", "rust": "sample.rs",
-    "sql": "sample.sql", "swift": "sample.swift", "toml": "sample.toml",
-    "typescript": "sample.ts", "zig": "sample.zig",
-}
+from audit_leaf_text_gaps import (  # noqa: E402
+    REPO_ROOT,
+    audit_language,
+    read_manifest,
+    resolve_config_source,
+)
+from make_leaf_text_corpus import CORPUS as CORPUS_SPEC  # noqa: E402
+
+CORPUS_DIR = REPO_ROOT / "test" / "data" / "unparse_leaf_text"
+
+# language -> corpus filename (single source of truth: the corpus generator)
+CORPUS = {lang: filename for lang, (filename, _) in CORPUS_SPEC.items()}
 
 # The unparser's own leaf predicate and token expression, kept verbatim so the
 # sweep measures exactly the row set the unparser emits.
@@ -78,13 +90,25 @@ def run_sql(binary: Path, sql: str) -> list[list[str]]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(
+        description='Parse the committed corpus and report every leaf whose unparsed token would differ from its own source text; also validates the static derivation against what is actually observed.',
+        epilog='Exit 0 clean, 1 a statically derived gap is still mismatching (regression), 2 unfixed gaps remain. Needs a built binary.',
+    )
     ap.add_argument("--binary", type=Path,
-                    default=REPO_ROOT / "build" / "release" / "duckdb")
-    ap.add_argument("--gaps", type=Path, default=GAPS_JSON)
+                    default=REPO_ROOT / "build" / "release" / "duckdb",
+                    help="duckdb binary to query (default: build/release/duckdb)")
     args = ap.parse_args()
 
-    static = json.loads(args.gaps.read_text())["languages"]
+    # Recompute the static derivation here rather than reading a snapshot, so
+    # the validation below can never pass against a stale list.
+    manifest = read_manifest()
+    static: dict[str, set[str]] = {}
+    for language in sorted(manifest):
+        def_path = resolve_config_source(language)
+        if def_path is None:
+            continue
+        audit = audit_language(language, manifest[language], def_path)
+        static[language] = set(audit.named_leaf_types)
 
     total_bad = 0
     validation_failures: list[str] = []
@@ -123,9 +147,8 @@ def main() -> int:
         # named non-terminal with only hidden children, or an anonymous token
         # whose text is not its own name). Those are findings to fix from this
         # sweep, not evidence the filter is broken.
-        entry = static.get(language)
-        if entry is not None:
-            derived_tokens = set(entry["named_leaf_types"])
+        derived_tokens = static.get(language)
+        if derived_tokens is not None:
             regressions = [t for t in bad_types if t in derived_tokens]
             if regressions:
                 validation_failures.append(

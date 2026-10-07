@@ -50,15 +50,21 @@ Work:
 ## 4a status
 
 Derived list, fixes and acceptance tests landed. Audit tooling lives in
-`workspace/unparse_leaf_text_audit/` and is re-runnable after a grammar bump:
+`scripts/` and is re-runnable after a grammar bump:
 
-- `derive_named_leaf_text_gaps.py` — reads each committed parser's symbol table
+- `scripts/audit_leaf_text_gaps.py` — reads each committed parser's symbol table
   (`enum ts_symbol_identifiers`, `ts_symbol_names[]`, `ts_symbol_metadata[]`,
   `TOKEN_COUNT`) and takes the visible+named symbols with `id < TOKEN_COUNT`.
-- `apply_leaf_text_fixes.py` — applies the edits (idempotent).
-- `sweep_observed_leaves.py` — parses the corpus, confirms live gaps, and
-  **validates the static derivation** against what is actually observed.
-- `make_corpus.py` — writes `test/data/unparse_leaf_text/`.
+- `scripts/apply_leaf_text_fixes.py` — applies the edits (idempotent; a clean
+  tree produces no edits).
+- `scripts/sweep_leaf_text_observed.py` — parses the corpus, confirms live gaps,
+  and **validates the static derivation** against what is actually observed.
+- `scripts/make_leaf_text_corpus.py` — writes `test/data/unparse_leaf_text/`.
+
+Each takes `--help`. The gap list is recomputed in-process every run; there is
+deliberately **no committed JSON snapshot**, because a tracked snapshot goes
+stale silently the first time a grammar moves and a stale baseline is worse
+than none. The outstanding work is recorded as prose below instead.
 
 Result — 348 gaps found, 134 closed, 214 outstanding:
 
@@ -81,10 +87,11 @@ The reproducer now returns `# hello there\nx = 1`.
   carry meaningful semantic types and `IS_KEYWORD`, so 214 `PARSER_CONSTRUCT`
   rows beside them want their own change (and probably a per-keyword semantic
   classification pass).
-- **`duckdb` (native parser).** Its adapter reports `children_count = 0` for
-  *every* node, so the whole tree looks like leaves and
-  `ast_unparse_code(..., 'duckdb')` emits `program select_statement select_node
-  ...`. A separate structural bug, not a leaf-text gap.
+- **`duckdb` (native parser) — filed as issue #197.** Its adapter reports
+  `children_count = 0` for *every* node (while `descendant_count` is correct),
+  so the whole tree reads as leaves and `ast_unparse_code(..., 'duckdb')` emits
+  `program select_statement select_node ...`. A separate structural bug, not a
+  leaf-text gap.
 
 ### Findings worth carrying forward
 

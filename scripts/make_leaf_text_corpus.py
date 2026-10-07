@@ -6,15 +6,32 @@ classes that carry text in a *named* leaf -- the ones tracker 047 "4a" is
 about: comments, string bodies and escapes, numeric literals in several bases,
 and operators that the grammar exposes as named nodes.
 
-Kept as a generator rather than 25 hand-edited files so the corpus can be
-regrown or extended uniformly. Output goes to test/data/unparse_leaf_text/.
+Kept as a generator rather than 26 hand-edited files so the corpus can be
+regrown or extended uniformly. Output goes to test/data/unparse_leaf_text/,
+which test/sql/ast_unparse_leaf_text.test reads.
+
+When to re-run
+--------------
+Only when the corpus itself needs changing -- to add a language, or to cover a
+construct a grammar bump introduced. The generated files are committed, so a
+normal audit does not need this. Re-running is safe and idempotent; it
+rewrites the same bytes unless CORPUS below changed.
+
+Companions: scripts/audit_leaf_text_gaps.py (grammar-derived gap list),
+scripts/sweep_leaf_text_observed.py (empirical check over this corpus).
+
+Usage
+-----
+    python3 scripts/make_leaf_text_corpus.py
+    python3 scripts/make_leaf_text_corpus.py --list
 """
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = REPO_ROOT / "test" / "data" / "unparse_leaf_text"
 
 CORPUS: dict[str, tuple[str, str]] = {
@@ -349,6 +366,21 @@ LIMIT 10;
 
 
 def main() -> int:
+    ap = argparse.ArgumentParser(
+        description="Write the per-language unparse leaf-text round-trip corpus.",
+        epilog="Re-run only to add a language or cover a new construct; "
+               "the generated files are committed.",
+    )
+    ap.add_argument("--list", action="store_true",
+                    help="list the languages and filenames without writing")
+    args = ap.parse_args()
+
+    if args.list:
+        for language, (filename, content) in sorted(CORPUS.items()):
+            print(f"{language:<12} {filename:<18} {len(content):>5} bytes")
+        print(f"\n{len(CORPUS)} languages")
+        return 0
+
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for language, (filename, content) in sorted(CORPUS.items()):
         path = OUT_DIR / filename

@@ -30,7 +30,7 @@
 # around 80 characters, which would make long comments look like mismatches.
 #
 # The gap list these tests were built from is derived from the grammars, not
-# hand-written, by workspace/unparse_leaf_text_audit/derive_named_leaf_text_gaps.py
+# hand-written, by scripts/audit_leaf_text_gaps.py
 # (tracker 047 requires this; see issue #184 for why a hand-enumerated list is
 # not acceptable). Regenerate it after a grammar bump.
 #
@@ -46,7 +46,7 @@
 #   a leaf-text one.
 # * language 'duckdb' (the native, non-tree-sitter parser) is excluded: its
 #   adapter reports children_count = 0 for *every* node, so the whole tree
-#   looks like leaves and unparse is meaningless for it. A separate bug.
+#   looks like leaves and unparse is meaningless for it. Separate bug: #197.
 
 require sitting_duck
 

@@ -57,16 +57,28 @@ than silently dropped:
   with ``children_count == 0``. Not statically derivable here.
 
 Both classes are resolved by the empirical companion script
-``sweep_observed_leaves.py``, which also validates stage A by asserting that
+``scripts/sweep_leaf_text_observed.py``, which also validates stage A by asserting that
 every named leaf type actually observed in a parsed corpus is present in the
 statically derived set. That cross-check is the #184 lesson applied to this
 script itself: if the layout assumption above is ever wrong, the sweep fails
 loudly instead of the audit quietly under-reporting.
 
+When to re-run
+--------------
+After ANY grammar submodule bump or parser regeneration, and before trusting
+any claim about leaf-text coverage. The named-leaf set is a property of the
+grammars, so it moves when they move; a stale list silently under-reports.
+A non-zero gap count means some node type will unparse to its own type name.
+
+Companions: scripts/sweep_leaf_text_observed.py (empirical check + validates
+this derivation), scripts/apply_leaf_text_fixes.py (applies the edits),
+scripts/make_leaf_text_corpus.py (writes the corpus).
+
 Usage
 -----
-    python3 workspace/unparse_leaf_text_audit/derive_named_leaf_text_gaps.py
-    python3 .../derive_named_leaf_text_gaps.py --json out.json --language python
+    python3 scripts/audit_leaf_text_gaps.py
+    python3 scripts/audit_leaf_text_gaps.py --language python --language rust
+    python3 scripts/audit_leaf_text_gaps.py --json /tmp/gaps.json --quiet
 """
 
 from __future__ import annotations
@@ -78,7 +90,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 PARSERS_DIR = REPO_ROOT / "generated_parsers"
 MANIFEST = PARSERS_DIR / "MANIFEST"
 DEFS_DIR = REPO_ROOT / "src" / "language_configs"
@@ -520,7 +532,10 @@ def audit_language(language: str, parser_rel: str, def_path: Path) -> LanguageAu
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(
+        description='Derive, from the tree-sitter grammars, which named text-bearing leaf node types lack a NODE_TEXT name strategy and would therefore unparse to their own type name.',
+        epilog='Re-run after any grammar bump or parser regeneration. A non-zero gap count means some node type unparses to its type name instead of its text. See the module docstring for the derivation and its limits.',
+    )
     ap.add_argument("--json", type=Path, help="write machine-readable results here")
     ap.add_argument("--language", action="append", help="limit to these languages")
     ap.add_argument("--quiet", action="store_true", help="summary table only")
@@ -575,7 +590,7 @@ def main() -> int:
     print(f"{'TOTAL':<12} {total_leaves:>7} {total_covered:>8} {total_gaps:>6}")
     print("\nNote: `duckdb` is a native (non-tree-sitter) language and has no")
     print("generated parser, so it is outside this static derivation. Use")
-    print("sweep_observed_leaves.py to audit it empirically.")
+    print("scripts/sweep_leaf_text_observed.py to audit it empirically.")
 
     if args.json:
         payload = {

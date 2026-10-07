@@ -520,7 +520,7 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
 // leave semantic classification exactly as it is today.
 //
 // Derived, not hand-written. Regenerate after a grammar bump with:
-//   workspace/unparse_leaf_text_audit/derive_named_leaf_text_gaps.py
+//   scripts/audit_leaf_text_gaps.py
 DEF_TYPE("bang", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
 DEF_TYPE("dollar_quote", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
 DEF_TYPE("op_unary_other", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)

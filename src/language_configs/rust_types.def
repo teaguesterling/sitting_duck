@@ -649,7 +649,7 @@ DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
 // leave semantic classification exactly as it is today.
 //
 // Derived, not hand-written. Regenerate after a grammar bump with:
-//   workspace/unparse_leaf_text_audit/derive_named_leaf_text_gaps.py
+//   scripts/audit_leaf_text_gaps.py
 DEF_TYPE("doc_comment", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
 DEF_TYPE("escape_sequence", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
 DEF_TYPE("inner_doc_comment_marker", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)

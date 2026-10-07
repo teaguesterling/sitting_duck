@@ -628,7 +628,7 @@ DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
 // leave semantic classification exactly as it is today.
 //
 // Derived, not hand-written. Regenerate after a grammar bump with:
-//   workspace/unparse_leaf_text_audit/derive_named_leaf_text_gaps.py
+//   scripts/audit_leaf_text_gaps.py
 DEF_TYPE("atx_h6_marker", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
 DEF_TYPE("plus_metadata", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
 DEF_TYPE("setext_h2_underline", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)

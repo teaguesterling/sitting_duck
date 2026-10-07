@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply the leaf-text fixes that derive_named_leaf_text_gaps.py reports.
+"""Apply the leaf-text fixes that scripts/audit_leaf_text_gaps.py reports.
 
 This is the mechanical half of tracker 047 "4a — leaf-text coverage". The
 audit script derives *which* named leaves lack a text-producing name
@@ -39,33 +39,40 @@ Excluded languages
   them to typescript_types.def too would duplicate keys in the merged map.
 * ``duckdb`` -- native parser, no tree-sitter grammar, outside the derivation.
 
+When to re-run
+--------------
+After a grammar bump, once scripts/audit_leaf_text_gaps.py reports new gaps.
+Idempotent: a clean tree produces no edits. Always --dry-run first, then
+rebuild and run scripts/sweep_leaf_text_observed.py to confirm.
+
+The gap list is recomputed in-process, not read from a committed snapshot.
+
 Usage
 -----
-    python3 workspace/unparse_leaf_text_audit/apply_leaf_text_fixes.py --dry-run
-    python3 workspace/unparse_leaf_text_audit/apply_leaf_text_fixes.py
+    python3 scripts/apply_leaf_text_fixes.py --dry-run
+    python3 scripts/apply_leaf_text_fixes.py
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from derive_named_leaf_text_gaps import (  # noqa: E402
+from audit_leaf_text_gaps import (  # noqa: E402
     DEF_TYPE_TOKEN,
     RAW_TYPE_RE,
     REPO_ROOT,
+    audit_language,
     collect_def_sources,
     parse_def_strategies,
+    read_manifest,
     resolve_config_source,
     split_top_level_commas,
     unescape_c,
 )
-
-GAPS_JSON = Path(__file__).resolve().parent / "leaf_text_gaps.json"
 
 # See module docstring for why each is excluded.
 EXCLUDED_LANGUAGES = {"typescript"}
@@ -132,7 +139,7 @@ APPEND_HEADER = """
 // leave semantic classification exactly as it is today.
 //
 // Derived, not hand-written. Regenerate after a grammar bump with:
-//   workspace/unparse_leaf_text_audit/derive_named_leaf_text_gaps.py
+//   scripts/audit_leaf_text_gaps.py
 """
 
 
@@ -258,12 +265,27 @@ def splice_into_initializer(text: str, block: str, path: Path) -> str:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--gaps", type=Path, default=GAPS_JSON)
+    ap = argparse.ArgumentParser(
+        description='Apply the leaf-text fixes reported by scripts/audit_leaf_text_gaps.py: retarget a name-extraction column to NODE_TEXT, or add a missing DEF_TYPE entry as PARSER_CONSTRUCT.',
+        epilog='Idempotent; a clean tree produces no edits. Always --dry-run first, then rebuild and run scripts/sweep_leaf_text_observed.py to confirm.',
+    )
+    ap.add_argument("--dry-run", action="store_true",
+                    help="report the edits without writing them")
     args = ap.parse_args()
 
-    data = json.loads(args.gaps.read_text())["languages"]
+    # Recompute the gap list here rather than reading a snapshot, so the edits
+    # always reflect the grammars currently in the tree.
+    manifest = read_manifest()
+    data: dict[str, dict] = {}
+    for language in sorted(manifest):
+        def_path = resolve_config_source(language)
+        if def_path is None:
+            continue
+        audit = audit_language(language, manifest[language], def_path)
+        data[language] = {
+            "gaps_wrong_strategy": dict(audit.gaps_wrong_strategy),
+            "gaps_missing_entry": list(audit.gaps_missing_entry),
+        }
 
     pending: dict[Path, str] = {}
     appended: dict[str, list[str]] = {}
