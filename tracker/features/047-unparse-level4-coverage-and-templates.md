@@ -1,7 +1,8 @@
 # 047 — unparse level 4: leaf-text coverage + node templates
 
-**Status:** Not started. On the v2.0.0 list; the work was described in 041 as future
-steps but never tracked as a milestone (this is it).
+**Status:** 4a largely done (see "4a status" below); 4b not started. On the v2.0.0
+list; the work was described in 041 as future steps but never tracked as a milestone
+(this is it).
 **Related:** 041 (the PoC and the fidelity path), 045 / #174 (level 5 — `COPY ... TO
 (FORMAT ast)`), shipped in v1.15.0 (default rules, 27 languages) and v1.15.1 (style
 presets, custom rules tables, synthetic AST layout).
@@ -13,7 +14,7 @@ together they are what "level 4" means:
 
 | 041 step | what it is | status |
 |---|---|---|
-| 1. Leaf-text coverage | every named, non-self-describing leaf needs `NODE_TEXT` so its text is recoverable | **not done** |
+| 1. Leaf-text coverage | every named, non-self-describing leaf needs `NODE_TEXT` so its text is recoverable | **done for 25 of 26 tree-sitter languages**; sql's `keyword_*` table outstanding |
 | 2. Spacing / tight-token rules | per-language spacing, keyword-vs-identifier before `(` | **shipped** as the rules engine + presets (v1.15.0–v1.15.1) |
 | 3. Node templates | per-node-type unparse templates — emit a *modified* tree with exact layout | **not done** |
 
@@ -46,6 +47,61 @@ Work:
   node type (the `comment` → `"comment"` signature), plus byte-identity on a corpus
   under `source := 'full'` where columns are available.
 
+## 4a status
+
+Derived list, fixes and acceptance tests landed. Audit tooling lives in
+`workspace/unparse_leaf_text_audit/` and is re-runnable after a grammar bump:
+
+- `derive_named_leaf_text_gaps.py` — reads each committed parser's symbol table
+  (`enum ts_symbol_identifiers`, `ts_symbol_names[]`, `ts_symbol_metadata[]`,
+  `TOKEN_COUNT`) and takes the visible+named symbols with `id < TOKEN_COUNT`.
+- `apply_leaf_text_fixes.py` — applies the edits (idempotent).
+- `sweep_observed_leaves.py` — parses the corpus, confirms live gaps, and
+  **validates the static derivation** against what is actually observed.
+- `make_corpus.py` — writes `test/data/unparse_leaf_text/`.
+
+Result: 705 named leaves across 26 tree-sitter languages, 344 lacking a text
+strategy; 125 closed across 25 languages. Acceptance test:
+`test/sql/ast_unparse_leaf_text.test` (35 assertions).
+
+The reproducer now returns `# hello there\nx = 1`.
+
+### Outstanding
+
+- **sql: 214 `keyword_*` leaves.** Real — `ON DELETE NO ACTION` unparses as
+  `keyword_no keyword_action`. Deferred because the existing SQL keyword entries
+  carry meaningful semantic types and `IS_KEYWORD`, so 214 `PARSER_CONSTRUCT`
+  rows beside them want their own change (and probably a per-keyword semantic
+  classification pass).
+- **`duckdb` (native parser).** Its adapter reports `children_count = 0` for
+  *every* node, so the whole tree looks like leaves and
+  `ast_unparse_code(..., 'duckdb')` emits `program select_statement select_node
+  ...`. A separate structural bug, not a leaf-text gap.
+
+### Findings worth carrying forward
+
+- **"Anonymous tokens need nothing because `type` == text" is false.**
+  tree-sitter reuses one token symbol across grammar alternatives, so lua's
+  `[[` also matches `--[[` and ruby's `"` symbol also matches `'` — the latter
+  meant single-quoted Ruby strings round-tripped with a double quote. Any future
+  audit of this kind must not assume anonymous ⇒ safe.
+- **Three classes are invisible to a terminals-only derivation** and need the
+  empirical sweep: named non-terminals whose children are all hidden (dart
+  `comment`), anonymous tokens with variable text (above), and visible+named
+  alias symbols (kotlin `interpolated_identifier`).
+- **Semantic-type follow-up for the semantic-types owner:** 31 of the newly
+  added entries have cross-language precedent for a richer type than
+  `PARSER_CONSTRUCT` (e.g. `string_content` is `LITERAL_STRING` in 7 other
+  languages, `escape_sequence` in 12, `comment` is `METADATA_COMMENT` in 25).
+  Deliberately not applied here — 4a is a text fix, not a reclassification.
+- **Byte-identity does not hold** for any of the 26 corpus languages; it fails
+  on inter-token whitespace only. Python's output is semantically correct and
+  differs just in spacing (`->` vs ` -> `). This is the open question below, and
+  it is now measured rather than assumed.
+- **Some grammars hide delimiters entirely:** tree-sitter-kotlin's
+  `string_literal` has no child node for its quote characters, so leaf
+  concatenation structurally cannot recover them. That is 4b work.
+
 ## 4b — node templates (enables transformation)
 
 Per-node-type unparse templates, so a *modified* tree can be emitted with controlled
@@ -69,6 +125,6 @@ depends on the answer, so decide before starting 4b.
 
 ## Sequencing note
 
-4a is independent and can land now. 4b should wait on the byte-exact decision above,
+4a is independent and has landed for 25 of 26 tree-sitter languages. 4b should wait on the byte-exact decision above,
 and 045/#174 (level 5) should land after 4a — writing lossy output to disk is worse
 than returning it in a result set, because it looks like a file you can keep.
