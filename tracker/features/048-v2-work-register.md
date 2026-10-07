@@ -64,6 +64,36 @@ Eight of the eighteen pieces have a real v1.x half:
 - **#17** — `ast_to_blocks`. A producer of conforming STRUCTs; no LOAD, no dependency.
 - **#18** — the selector backlog, already in flight.
 
+## Measured 2026-10-07: #160's magnitude is ~12x smaller than the issue states
+
+Issue #160 says `ast_select_from` "spends ~6 s planning per call regardless of table
+size or selector". Measured on v1.15.x (`build/release/duckdb`, `.timer on`):
+
+| table | nodes | selector | run 1 | run 2 |
+|---|---|---|---|---|
+| small | 795 | `.fn` | 0.461s | 0.486s |
+| big | 155,559 | `.fn` | 0.551s | 0.607s |
+| small | 795 | `.fn:calls(main)` | 0.490s | — |
+| small | 795 | `.fn::callers` | 0.455s | — |
+
+The **shape** in #160 is confirmed and still present: the cost is constant, independent
+of both table size (795 vs 155k nodes differ by <0.15s) and selector complexity (plain,
+pseudo-class and pseudo-element arms are indistinguishable). That is exactly what 043
+Part A predicts — SQL macros always inline, so every arm including `pe_callers`/
+`pe_callees` is bound on every call whether referenced or not.
+
+But the **magnitude is ~0.5s, not ~6s.** Either it improved since the issue was filed
+(the decorrelated-join 17x speedup in the v1.14 line is a plausible cause) or the
+original figure came from a different build or selector. Someone should update #160
+rather than leave a 6s claim driving prioritisation.
+
+Consequence for ordering: #6 is still worth doing — 0.5s of pure per-call overhead is
+bad for interactive use and compounds badly in loops — but it is not the emergency a
+6s figure implies. It does NOT by itself justify jumping #5 (`ast_select` → C++) ahead
+of the safer items. Note also that #164's OOM was reported on a 78k-node table with
+call-graph pseudo-classes; the measurements above used a 795-node table for the
+call-graph arms, so they say nothing about that blowup, which remains unmeasured here.
+
 ## Recommended order (near term)
 
 1. **#10 taxonomy spec → codegen.** Safest possible first move: provable, no behaviour
