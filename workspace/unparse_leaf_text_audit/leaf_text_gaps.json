@@ -976,6 +976,9 @@
       "alias_candidates": [],
       "alias_uncovered": [],
       "covered": [
+        "bang",
+        "comment",
+        "dollar_quote",
         "keyword_all",
         "keyword_alter",
         "keyword_analyze",
@@ -1106,12 +1109,12 @@
         "keyword_without",
         "keyword_zone",
         "marginalia",
+        "op_other",
+        "op_unary_other",
         "parameter"
       ],
       "def": "src/language_adapters/sql_adapter.cpp",
       "gaps_missing_entry": [
-        "bang",
-        "dollar_quote",
         "keyword_action",
         "keyword_add",
         "keyword_admin",
@@ -1325,13 +1328,9 @@
         "keyword_wait",
         "keyword_write",
         "keyword_xml",
-        "keyword_zerofill",
-        "op_unary_other"
+        "keyword_zerofill"
       ],
-      "gaps_wrong_strategy": {
-        "comment": "NONE",
-        "op_other": "NONE"
-      },
+      "gaps_wrong_strategy": {},
       "named_leaf_types": [
         "bang",
         "comment",

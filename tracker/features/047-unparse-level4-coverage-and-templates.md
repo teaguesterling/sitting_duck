@@ -60,9 +60,17 @@ Derived list, fixes and acceptance tests landed. Audit tooling lives in
   **validates the static derivation** against what is actually observed.
 - `make_corpus.py` — writes `test/data/unparse_leaf_text/`.
 
-Result: 705 named leaves across 26 tree-sitter languages, 344 lacking a text
-strategy; 125 closed across 25 languages. Acceptance test:
-`test/sql/ast_unparse_leaf_text.test` (35 assertions).
+Result — 348 gaps found, 134 closed, 214 outstanding:
+
+- 705 named leaves across 26 tree-sitter languages; **344** lacked a text
+  strategy per the grammar derivation, plus **4** the derivation structurally
+  cannot see (found by the corpus sweep) = **348**.
+- Closed **134**: 125 static non-sql (121 file edits — TypeScript's 4 close via
+  javascript_types.def, which it `#include`s), 4 empirical, 5 sql non-keyword.
+- Outstanding **214**: sql `keyword_*` only.
+
+Acceptance test: `test/sql/ast_unparse_leaf_text.test` (35 assertions, 1107
+corpus leaves across 26 languages).
 
 The reproducer now returns `# hello there\nx = 1`.
 
@@ -89,6 +97,12 @@ The reproducer now returns `# hello there\nx = 1`.
   empirical sweep: named non-terminals whose children are all hidden (dart
   `comment`), anonymous tokens with variable text (above), and visible+named
   alias symbols (kotlin `interpolated_identifier`).
+- **Pre-existing duplicate DEF_TYPE keys shadow live entries.** Under
+  first-wins, `graphql_types.def` declares `type` and `directive` twice,
+  `kotlin_types.def` declares `annotation` twice, and `ruby_types.def`
+  declares `super`, `class` and `module` twice — in each case the later entry
+  is dead code. Unrelated to this change (present before it), but a real bug:
+  the keyword-section entries never take effect.
 - **Semantic-type follow-up for the semantic-types owner:** 31 of the newly
   added entries have cross-language precedent for a richer type than
   `PARSER_CONSTRUCT` (e.g. `string_content` is `LITERAL_STRING` in 7 other
