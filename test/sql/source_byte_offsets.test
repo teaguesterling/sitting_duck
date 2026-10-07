@@ -1,0 +1,372 @@
+# name: test/sql/source_byte_offsets.test
+# description: source := 'full' must expose byte-exact start_byte / end_byte
+# group: [sql]
+#
+# tracker/features/048 #2 — byte offsets as the substrate for byte-exact
+# unparse (`write_ast(read_ast(x, source := 'full')) = x`).
+#
+# CONTRACT UNDER TEST
+#   * start_byte / end_byte are tree-sitter's absolute byte positions, surfaced
+#     verbatim: 0-BASED and HALF-OPEN, [start_byte, end_byte).
+#   * They appear only at source := 'full' (or any '<level>+schema', where they
+#     exist as NULLs — that is what the +schema suffix means).
+#   * Note the deliberate asymmetry with the neighbouring columns:
+#     start_line / start_column / end_line / end_column are all 1-BASED.
+#
+# BYTE SLICING IN SQL
+#   DuckDB's substring() on VARCHAR is CHARACTER-indexed, and v1.5.6 has no
+#   substring(BLOB, ...) overload, so `substring(content, start_byte + 1, ...)`
+#   is NOT byte-exact on multi-byte input. The byte-exact primitive used below
+#   hex-encodes first: to_hex() of a BLOB is pure ASCII at exactly two
+#   characters per byte, so character indexing over the hex string IS byte
+#   indexing over the bytes. read_blob() (not read_text()) keeps the bytes raw.
+#
+# OUT OF SCOPE
+#   The `duckdb` language adapter wraps DuckDB's own parser, not tree-sitter;
+#   it already hardcodes its line/column columns to 1 and has no byte positions
+#   to report. Byte offsets are for tree-sitter-backed languages only; the last
+#   section pins (rather than endorses) what that adapter returns.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# Fixture integrity — the fixtures must still be what the test assumes
+# =============================================================================
+#
+# test/data/python/crlf_utf8.py is the whole point of byte offsets: CRLF line
+# endings AND multi-byte UTF-8. If git ever normalized it, every assertion
+# below would pass while testing nothing, so assert its bytes directly.
+# (.gitattributes marks it `-text` to prevent exactly that.)
+
+# 111 bytes but only 99 characters => multi-byte content is present.
+query III
+SELECT octet_length(content), length(decode(content)),
+       octet_length(content) - length(decode(content))
+FROM read_blob('test/data/python/crlf_utf8.py');
+----
+111	99	12
+
+# Four CR bytes => CRLF line endings are present (one per line).
+query I
+SELECT length(string_split(decode(content), chr(13))) - 1
+FROM read_blob('test/data/python/crlf_utf8.py');
+----
+4
+
+# =============================================================================
+# Schema gating — the columns appear only at source := 'full'
+# =============================================================================
+
+query I
+SELECT count(*) FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', source := 'full'))
+WHERE column_name IN ('start_byte', 'end_byte');
+----
+2
+
+query I
+SELECT count(*) FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', source := 'lines'))
+WHERE column_name IN ('start_byte', 'end_byte');
+----
+0
+
+query I
+SELECT count(*) FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', source := 'lines_only'))
+WHERE column_name IN ('start_byte', 'end_byte');
+----
+0
+
+query I
+SELECT count(*) FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', source := 'path'))
+WHERE column_name IN ('start_byte', 'end_byte');
+----
+0
+
+query I
+SELECT count(*) FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', source := 'none'))
+WHERE column_name IN ('start_byte', 'end_byte');
+----
+0
+
+# Below 'full' the columns do not merely read NULL — they do not exist.
+statement error
+SELECT start_byte FROM read_ast('test/data/python/simple.py', source := 'lines');
+----
+Binder Error
+
+# Declared as UINTEGER, matching start_column / end_column.
+query II
+SELECT column_name, column_type
+FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', source := 'full'))
+WHERE column_name IN ('start_byte', 'end_byte')
+ORDER BY column_name;
+----
+end_byte	UINTEGER
+start_byte	UINTEGER
+
+# parse_ast shares the flat projection and must gate identically.
+query I
+SELECT count(*) FROM (DESCRIBE SELECT * FROM parse_ast('x = 1', 'python', source := 'full'))
+WHERE column_name IN ('start_byte', 'end_byte');
+----
+2
+
+query I
+SELECT count(*) FROM (DESCRIBE SELECT * FROM parse_ast('x = 1', 'python', source := 'lines'))
+WHERE column_name IN ('start_byte', 'end_byte');
+----
+0
+
+# '+schema' declares the FULL schema at any level and fills the unrequested
+# columns with NULL — the same behaviour start_column already has (see
+# schema_suffix.test). This is the one place a non-'full' source level sees the
+# new columns at all, and they are NULL there, exactly like start_column.
+query IIII
+SELECT start_line, start_column, start_byte, end_byte
+FROM read_ast('test/data/python/simple.py', 'python', source := 'lines+schema')
+WHERE type = 'function_definition'
+LIMIT 1;
+----
+1	NULL	NULL	NULL
+
+# =============================================================================
+# Semantics — 0-based, half-open, whole-file at the root
+# =============================================================================
+
+# The root node spans the entire file: [0, file_size). simple.py is 297 bytes.
+query III
+SELECT r.start_byte, r.end_byte, (SELECT octet_length(content) FROM read_blob('test/data/python/simple.py'))
+FROM read_ast('test/data/python/simple.py', source := 'full') r
+WHERE r.parent_id IS NULL;
+----
+0	297	297
+
+# Zero nodes may claim to end past the end of the file, and none may run
+# backwards.
+query II
+SELECT count(*) FILTER (WHERE end_byte > (SELECT octet_length(content) FROM read_blob('test/data/python/simple.py'))),
+       count(*) FILTER (WHERE start_byte > end_byte)
+FROM read_ast('test/data/python/simple.py', source := 'full');
+----
+0	0
+
+# A child's byte range is contained in its parent's — the structural invariant
+# any splice-based unparser relies on.
+query I
+SELECT count(*)
+FROM read_ast('test/data/python/simple.py', source := 'full') c
+JOIN read_ast('test/data/python/simple.py', source := 'full') p ON c.parent_id = p.node_id
+WHERE c.start_byte < p.start_byte OR c.end_byte > p.end_byte;
+----
+0
+
+# =============================================================================
+# Byte-exactness on multi-byte UTF-8 + CRLF (hand-computed offsets)
+# =============================================================================
+#
+# test/data/python/crlf_utf8.py, line 1 is `def grüße(nom):` + CRLF. Byte by
+# byte: d=0 e=1 f=2 ' '=3 g=4 r=5 ü=6,7 ß=8,9 e=10 (=11 n=12 o=13 m=14 )=15
+# :=16 CR=17 LF=18. So the function name occupies bytes [4, 11) — 7 bytes for
+# 5 characters — and the parameter `nom` occupies [12, 15).
+
+query II
+SELECT start_byte, end_byte
+FROM read_ast('test/data/python/crlf_utf8.py', source := 'full')
+WHERE type = 'identifier' AND name = 'grüße';
+----
+4	11
+
+query II
+SELECT start_byte, end_byte
+FROM read_ast('test/data/python/crlf_utf8.py', source := 'full')
+WHERE type = 'identifier' AND name = 'nom' AND start_line = 1;
+----
+12	15
+
+# The byte slice at those offsets is the name, byte for byte.
+query I
+SELECT decode(from_hex(substring(f.hex, 2 * r.start_byte + 1, 2 * (r.end_byte - r.start_byte))))
+FROM read_ast('test/data/python/crlf_utf8.py', source := 'full') r,
+     (SELECT to_hex(content) AS hex FROM read_blob('test/data/python/crlf_utf8.py')) f
+WHERE r.type = 'identifier' AND r.name = 'grüße';
+----
+grüße
+
+# WHY BYTES AND NOT substring(): character-indexed slicing at the same offsets
+# silently returns the wrong text on this file. This is the failure mode byte
+# offsets exist to remove, so it is asserted rather than described.
+query I
+SELECT substring(t.content, r.start_byte + 1, r.end_byte - r.start_byte)
+FROM read_ast('test/data/python/crlf_utf8.py', source := 'full') r,
+     read_text('test/data/python/crlf_utf8.py') t
+WHERE r.type = 'identifier' AND r.name = 'grüße';
+----
+grüße(n
+
+# CRLF: the byte offsets must agree with (line, column) under *correct* CRLF
+# and multi-byte handling. Reconstructing an absolute position from
+# start_line/start_column means deriving each line's start offset from the
+# text — splitting on LF, counting the retained CR, counting bytes not
+# characters. Doing that here and requiring it to match start_byte for EVERY
+# node is the strongest available statement that the surfaced offsets are the
+# real ones: line 1 of this fixture is 18 bytes (CR included), so line 2
+# starts at byte 19, and `grüße` at column 5 of line 1 is byte 4.
+query II
+WITH f AS (SELECT decode(content) AS txt FROM read_blob('test/data/python/crlf_utf8.py')),
+     parts AS (
+        SELECT unnest(string_split(txt, chr(10))) AS l,
+               unnest(range(1, len(string_split(txt, chr(10))) + 1)) AS line_no
+        FROM f
+     ),
+     line_starts AS (
+        SELECT line_no,
+               coalesce(sum(octet_length(encode(l)) + 1) OVER (ORDER BY line_no
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS line_start
+        FROM parts
+     )
+SELECT count(*),
+       count(*) FILTER (WHERE r.start_byte <> s.line_start + r.start_column - 1
+                           OR r.end_byte <> e.line_start + r.end_column - 1)
+FROM read_ast('test/data/python/crlf_utf8.py', source := 'full') r
+JOIN line_starts s ON s.line_no = r.start_line
+JOIN line_starts e ON e.line_no = r.end_line;
+----
+29	0
+
+# The CRLF corruption signature: a node range that starts on a line-ending
+# byte, or that ends on a CR — i.e. one that splits a CRLF pair and would hand
+# a splicing unparser a lone CR. Neither may happen. (A node ending on LF is
+# legitimate and expected: the root `module` node spans the whole file,
+# trailing CRLF included — which is itself why end_byte must be the file size
+# and not the last non-whitespace byte.)
+query I
+SELECT count(*)
+FROM read_ast('test/data/python/crlf_utf8.py', source := 'full') r,
+     (SELECT to_hex(content) AS hex FROM read_blob('test/data/python/crlf_utf8.py')) f
+WHERE r.end_byte > r.start_byte
+  AND (substring(f.hex, 2 * r.start_byte + 1, 2) IN ('0D', '0A')
+       OR substring(f.hex, 2 * r.end_byte - 1, 2) = '0D');
+----
+0
+
+# The root node spans the file including its trailing CRLF.
+query II
+SELECT r.start_byte, r.end_byte
+FROM read_ast('test/data/python/crlf_utf8.py', source := 'full') r
+WHERE r.parent_id IS NULL;
+----
+0	111
+
+# =============================================================================
+# Bulk invariant — every node of every fixture slices to its own source text
+# =============================================================================
+#
+# peek := 'full' is the parser's own content.substr(start_byte, end_byte -
+# start_byte) (passed through a UTF-8 sanitizer that is the identity on valid
+# UTF-8 input). So slice == peek over every node is an end-to-end check that
+# the surfaced offsets address the text the parser actually saw. BLOBs are
+# compared so no decode step can mask a difference. Zero-width nodes have a
+# NULL peek and an empty slice, and are counted as agreeing.
+
+query II
+WITH n AS (
+    SELECT node_id, start_byte, end_byte, peek
+    FROM read_ast('test/data/python/crlf_utf8.py', source := 'full', peek := 'full')
+),
+f AS (SELECT to_hex(content) AS hex FROM read_blob('test/data/python/crlf_utf8.py'))
+SELECT count(*),
+       count(*) FILTER (
+           WHERE coalesce(from_hex(substring(f.hex, 2 * n.start_byte + 1,
+                                                    2 * (n.end_byte - n.start_byte))), ''::BLOB)
+                 <> coalesce(encode(n.peek), ''::BLOB)
+       )
+FROM n, f;
+----
+29	0
+
+query II
+WITH n AS (
+    SELECT node_id, start_byte, end_byte, peek
+    FROM read_ast('test/data/python/unicode.py', source := 'full', peek := 'full')
+),
+f AS (SELECT to_hex(content) AS hex FROM read_blob('test/data/python/unicode.py'))
+SELECT count(*),
+       count(*) FILTER (
+           WHERE coalesce(from_hex(substring(f.hex, 2 * n.start_byte + 1,
+                                                    2 * (n.end_byte - n.start_byte))), ''::BLOB)
+                 <> coalesce(encode(n.peek), ''::BLOB)
+       )
+FROM n, f;
+----
+55	0
+
+# Same check over a plain-ASCII LF file, so the invariant is not only exercised
+# on the exotic fixtures.
+query I
+WITH n AS (
+    SELECT node_id, start_byte, end_byte, peek
+    FROM read_ast('test/data/python/simple.py', source := 'full', peek := 'full')
+),
+f AS (SELECT to_hex(content) AS hex FROM read_blob('test/data/python/simple.py'))
+SELECT count(*) FILTER (
+           WHERE coalesce(from_hex(substring(f.hex, 2 * n.start_byte + 1,
+                                                    2 * (n.end_byte - n.start_byte))), ''::BLOB)
+                 <> coalesce(encode(n.peek), ''::BLOB)
+       )
+FROM n, f;
+----
+0
+
+# =============================================================================
+# Strict additivity — nothing below 'full' changed, and 'full' only gained
+# =============================================================================
+
+# Column count at each level: 'full' is exactly 'lines' plus the four
+# positional columns (start_column, end_column, start_byte, end_byte).
+query III
+SELECT
+    (SELECT count(*) FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', source := 'lines'))),
+    (SELECT count(*) FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', source := 'full'))),
+    (SELECT count(*) FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', source := 'full')))
+  - (SELECT count(*) FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', source := 'lines')));
+----
+22	26	4
+
+# Every column that exists at 'lines' still exists at 'full' with the same
+# declared type.
+query I
+SELECT count(*)
+FROM (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', source := 'lines')) l
+ANTI JOIN (DESCRIBE SELECT * FROM read_ast('test/data/python/simple.py', source := 'full')) fu
+  ON l.column_name = fu.column_name AND l.column_type = fu.column_type;
+----
+0
+
+# The pre-existing positional columns are untouched by the addition: a
+# definition starting in the leftmost position still reports start_column = 1
+# (cf. source_full_columns.test), and now also start_byte = 0.
+query IIII
+SELECT start_line, start_column, start_byte, end_byte
+FROM read_ast('test/data/python/simple.py', source := 'full')
+WHERE parent_id IS NULL;
+----
+1	1	0	297
+
+# =============================================================================
+# duckdb language adapter — out of scope, behaviour pinned not endorsed
+# =============================================================================
+#
+# This adapter wraps DuckDB's own SQL parser, so it has no tree-sitter byte
+# positions. It already reports 1 for every line and column; it reports 0 for
+# both byte offsets. A zero-width range is a self-evidently empty slice rather
+# than a plausible-looking wrong one, but it is NOT a position. Surfacing real
+# offsets here would mean teaching that adapter to carry them, which is
+# deliberately not part of tracker 048 #2.
+
+query IIIIII
+SELECT DISTINCT start_line, start_column, end_line, end_column, start_byte, end_byte
+FROM read_ast('test/data/sql/example.sql', 'duckdb', source := 'full');
+----
+1	1	1	1	0	0

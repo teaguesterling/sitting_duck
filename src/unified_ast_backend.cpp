@@ -627,6 +627,9 @@ vector<LogicalType> UnifiedASTBackend::GetFlatDynamicTableSchema(const Extractio
 		if (schema_config.source >= SourceLevel::FULL) {
 			schema.push_back(LogicalType::UINTEGER); // start_column
 			schema.push_back(LogicalType::UINTEGER); // end_column
+			// Byte offsets: 0-based, half-open. Same FULL gate as the columns.
+			schema.push_back(LogicalType::UINTEGER); // start_byte
+			schema.push_back(LogicalType::UINTEGER); // end_byte
 		}
 	}
 
@@ -693,6 +696,12 @@ vector<string> UnifiedASTBackend::GetFlatDynamicTableColumnNames(const Extractio
 		if (schema_config.source >= SourceLevel::FULL) {
 			names.push_back("start_column");
 			names.push_back("end_column");
+			// Must stay in lockstep with GetFlatDynamicTableSchema,
+			// ProjectToDynamicTable and ConvertASTResultToList in
+			// parse_ast_list_function.cpp — see the #86 `receiver` note there
+			// for what drift costs.
+			names.push_back("start_byte");
+			names.push_back("end_byte");
 		}
 	}
 
@@ -982,13 +991,15 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 
 	// Source columns based on schema_config.source (AGENT J FIX: Track indices)
 	idx_t file_path_col = 0, language_col = 0, start_line_col = 0, end_line_col = 0, start_column_col = 0,
-	      end_column_col = 0;
+	      end_column_col = 0, start_byte_col = 0, end_byte_col = 0;
 	string_t *file_path_vec = nullptr;
 	string_t *language_vec = nullptr;
 	uint32_t *start_line_vec = nullptr;
 	uint32_t *end_line_vec = nullptr;
 	uint32_t *start_column_vec = nullptr;
 	uint32_t *end_column_vec = nullptr;
+	uint32_t *start_byte_vec = nullptr;
+	uint32_t *end_byte_vec = nullptr;
 
 	if (schema_config.source != SourceLevel::NONE) {
 		file_path_col = col_idx++;
@@ -1006,8 +1017,12 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 		if (schema_config.source >= SourceLevel::FULL) {
 			start_column_col = col_idx++;
 			end_column_col = col_idx++;
+			start_byte_col = col_idx++;
+			end_byte_col = col_idx++;
 			start_column_vec = CompatFlatDataMutable<uint32_t>(output.data[start_column_col]);
 			end_column_vec = CompatFlatDataMutable<uint32_t>(output.data[end_column_col]);
+			start_byte_vec = CompatFlatDataMutable<uint32_t>(output.data[start_byte_col]);
+			end_byte_vec = CompatFlatDataMutable<uint32_t>(output.data[end_byte_col]);
 		}
 	}
 
@@ -1215,10 +1230,14 @@ void UnifiedASTBackend::ProjectToDynamicTable(const ASTResult &result, DataChunk
 				if (config.source >= SourceLevel::FULL) {
 					start_column_vec[count] = node.source_start_column;
 					end_column_vec[count] = node.source_end_column;
+					start_byte_vec[count] = node.source_start_byte;
+					end_byte_vec[count] = node.source_end_byte;
 				} else {
 					// +schema: column exists but data wasn't computed — NULL
 					FlatVector::SetNull(output.data[start_column_col], count, true);
 					FlatVector::SetNull(output.data[end_column_col], count, true);
+					FlatVector::SetNull(output.data[start_byte_col], count, true);
+					FlatVector::SetNull(output.data[end_byte_col], count, true);
 				}
 			}
 		}

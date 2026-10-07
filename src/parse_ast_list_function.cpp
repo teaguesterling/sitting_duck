@@ -150,6 +150,13 @@ static Value ConvertASTResultToList(const ASTResult &result, const ExtractionCon
 			if (config.source >= SourceLevel::FULL) {
 				fields.push_back(make_pair("start_column", Value::UINTEGER(static_cast<uint32_t>(node.start_column))));
 				fields.push_back(make_pair("end_column", Value::UINTEGER(static_cast<uint32_t>(node.end_column))));
+				// Byte offsets (tracker 048 #2) — populated here for the same
+				// reason as receiver above: the flat schema declares them, so
+				// omitting them here would hand back a NULL column instead of
+				// the offsets. Read from the source_* fields, not the legacy
+				// ones: there is no legacy byte field to narrow into.
+				fields.push_back(make_pair("start_byte", Value::UINTEGER(node.source_start_byte)));
+				fields.push_back(make_pair("end_byte", Value::UINTEGER(node.source_end_byte)));
 			}
 		}
 
