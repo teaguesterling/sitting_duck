@@ -37,7 +37,7 @@ LOAD sitting_duck;
 # Fixture integrity — the fixtures must still be what the test assumes
 # =============================================================================
 #
-# test/data/python/crlf_utf8.py is the whole point of byte offsets: CRLF line
+# test/data/encoding/crlf_utf8.py is the whole point of byte offsets: CRLF line
 # endings AND multi-byte UTF-8. If git ever normalized it, every assertion
 # below would pass while testing nothing, so assert its bytes directly.
 # (.gitattributes marks it `-text` to prevent exactly that.)
@@ -46,14 +46,14 @@ LOAD sitting_duck;
 query III
 SELECT octet_length(content), length(decode(content)),
        octet_length(content) - length(decode(content))
-FROM read_blob('test/data/python/crlf_utf8.py');
+FROM read_blob('test/data/encoding/crlf_utf8.py');
 ----
 111	99	12
 
 # Four CR bytes => CRLF line endings are present (one per line).
 query I
 SELECT length(string_split(decode(content), chr(13))) - 1
-FROM read_blob('test/data/python/crlf_utf8.py');
+FROM read_blob('test/data/encoding/crlf_utf8.py');
 ----
 4
 
@@ -167,21 +167,21 @@ WHERE c.start_byte < p.start_byte OR c.end_byte > p.end_byte;
 # Byte-exactness on multi-byte UTF-8 + CRLF (hand-computed offsets)
 # =============================================================================
 #
-# test/data/python/crlf_utf8.py, line 1 is `def grüße(nom):` + CRLF. Byte by
+# test/data/encoding/crlf_utf8.py, line 1 is `def grüße(nom):` + CRLF. Byte by
 # byte: d=0 e=1 f=2 ' '=3 g=4 r=5 ü=6,7 ß=8,9 e=10 (=11 n=12 o=13 m=14 )=15
 # :=16 CR=17 LF=18. So the function name occupies bytes [4, 11) — 7 bytes for
 # 5 characters — and the parameter `nom` occupies [12, 15).
 
 query II
 SELECT start_byte, end_byte
-FROM read_ast('test/data/python/crlf_utf8.py', source := 'full')
+FROM read_ast('test/data/encoding/crlf_utf8.py', source := 'full')
 WHERE type = 'identifier' AND name = 'grüße';
 ----
 4	11
 
 query II
 SELECT start_byte, end_byte
-FROM read_ast('test/data/python/crlf_utf8.py', source := 'full')
+FROM read_ast('test/data/encoding/crlf_utf8.py', source := 'full')
 WHERE type = 'identifier' AND name = 'nom' AND start_line = 1;
 ----
 12	15
@@ -189,8 +189,8 @@ WHERE type = 'identifier' AND name = 'nom' AND start_line = 1;
 # The byte slice at those offsets is the name, byte for byte.
 query I
 SELECT decode(from_hex(substring(f.hex, 2 * r.start_byte + 1, 2 * (r.end_byte - r.start_byte))))
-FROM read_ast('test/data/python/crlf_utf8.py', source := 'full') r,
-     (SELECT to_hex(content) AS hex FROM read_blob('test/data/python/crlf_utf8.py')) f
+FROM read_ast('test/data/encoding/crlf_utf8.py', source := 'full') r,
+     (SELECT to_hex(content) AS hex FROM read_blob('test/data/encoding/crlf_utf8.py')) f
 WHERE r.type = 'identifier' AND r.name = 'grüße';
 ----
 grüße
@@ -200,8 +200,8 @@ grüße
 # offsets exist to remove, so it is asserted rather than described.
 query I
 SELECT substring(t.content, r.start_byte + 1, r.end_byte - r.start_byte)
-FROM read_ast('test/data/python/crlf_utf8.py', source := 'full') r,
-     read_text('test/data/python/crlf_utf8.py') t
+FROM read_ast('test/data/encoding/crlf_utf8.py', source := 'full') r,
+     read_text('test/data/encoding/crlf_utf8.py') t
 WHERE r.type = 'identifier' AND r.name = 'grüße';
 ----
 grüße(n
@@ -215,7 +215,7 @@ grüße(n
 # real ones: line 1 of this fixture is 18 bytes (CR included), so line 2
 # starts at byte 19, and `grüße` at column 5 of line 1 is byte 4.
 query II
-WITH f AS (SELECT decode(content) AS txt FROM read_blob('test/data/python/crlf_utf8.py')),
+WITH f AS (SELECT decode(content) AS txt FROM read_blob('test/data/encoding/crlf_utf8.py')),
      parts AS (
         SELECT unnest(string_split(txt, chr(10))) AS l,
                unnest(range(1, len(string_split(txt, chr(10))) + 1)) AS line_no
@@ -230,7 +230,7 @@ WITH f AS (SELECT decode(content) AS txt FROM read_blob('test/data/python/crlf_u
 SELECT count(*),
        count(*) FILTER (WHERE r.start_byte <> s.line_start + r.start_column - 1
                            OR r.end_byte <> e.line_start + r.end_column - 1)
-FROM read_ast('test/data/python/crlf_utf8.py', source := 'full') r
+FROM read_ast('test/data/encoding/crlf_utf8.py', source := 'full') r
 JOIN line_starts s ON s.line_no = r.start_line
 JOIN line_starts e ON e.line_no = r.end_line;
 ----
@@ -244,8 +244,8 @@ JOIN line_starts e ON e.line_no = r.end_line;
 # and not the last non-whitespace byte.)
 query I
 SELECT count(*)
-FROM read_ast('test/data/python/crlf_utf8.py', source := 'full') r,
-     (SELECT to_hex(content) AS hex FROM read_blob('test/data/python/crlf_utf8.py')) f
+FROM read_ast('test/data/encoding/crlf_utf8.py', source := 'full') r,
+     (SELECT to_hex(content) AS hex FROM read_blob('test/data/encoding/crlf_utf8.py')) f
 WHERE r.end_byte > r.start_byte
   AND (substring(f.hex, 2 * r.start_byte + 1, 2) IN ('0D', '0A')
        OR substring(f.hex, 2 * r.end_byte - 1, 2) = '0D');
@@ -255,7 +255,7 @@ WHERE r.end_byte > r.start_byte
 # The root node spans the file including its trailing CRLF.
 query II
 SELECT r.start_byte, r.end_byte
-FROM read_ast('test/data/python/crlf_utf8.py', source := 'full') r
+FROM read_ast('test/data/encoding/crlf_utf8.py', source := 'full') r
 WHERE r.parent_id IS NULL;
 ----
 0	111
@@ -274,9 +274,9 @@ WHERE r.parent_id IS NULL;
 query II
 WITH n AS (
     SELECT node_id, start_byte, end_byte, peek
-    FROM read_ast('test/data/python/crlf_utf8.py', source := 'full', peek := 'full')
+    FROM read_ast('test/data/encoding/crlf_utf8.py', source := 'full', peek := 'full')
 ),
-f AS (SELECT to_hex(content) AS hex FROM read_blob('test/data/python/crlf_utf8.py'))
+f AS (SELECT to_hex(content) AS hex FROM read_blob('test/data/encoding/crlf_utf8.py'))
 SELECT count(*),
        count(*) FILTER (
            WHERE coalesce(from_hex(substring(f.hex, 2 * n.start_byte + 1,
