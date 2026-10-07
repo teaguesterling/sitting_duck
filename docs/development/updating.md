@@ -17,6 +17,13 @@ What this means for extension development is that when updating your extensions 
 
 Currently, DuckDB does not (yet) provide a specific change log for these API changes, but it is generally not too hard to figure out what has changed.
 
+**sitting_duck already builds against two DuckDB lines**, and the API breaks between them are
+catalogued with their shims, the rule for choosing a probe over `#if`, the `__has_include`
+sentinel rule, and the verification method (and its limits) in
+[DuckDB version compatibility](duckdb-version-compatibility.md). Read that before bumping the
+`duckdb` submodule — DuckDB v1.5.6 partially backported the v2.0 refactor, so a single
+"is this v2.0?" check is wrong by construction.
+
 For figuring out how and why the C++ API changed, we recommend using the following resources:
 - DuckDB's [Release Notes](https://github.com/duckdb/duckdb/releases)
 - DuckDB's history of [Core extension patches](https://github.com/duckdb/duckdb/commits/main/.github/patches/extensions)
