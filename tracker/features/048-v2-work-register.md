@@ -17,7 +17,7 @@ Its job is to be the answer to "what is actually left, and what can we do today?
 | 2 | **Unparse: byte offsets under `source := 'full'`** | `047`, RFC substrate note | M1 contract | **Yes — small, additive** |
 | 3 | **Unparse: node templates** (4b) | `047` | M4 cap. 3 | Partly — design now, needs #2 first |
 | 4 | **`COPY … TO (FORMAT ast)`** (level 5) | `045`, #174 | M4 cap. 3 | After #1 |
-| 5 | **`ast_select` → C++** | `046`, #160, #117, #164 | independent | **Yes — #160/#164 are live v1.x pain** |
+| 5 | **`ast_select` → C++** | `046`, #160, #117, #164 | independent | Yes, but do #6 first — see the #160 measurement below |
 | 6 | **Call-graph rewrite** (seeded join) | `043` Part A | independent | **Yes — SQL only, fixes #160 + #164** |
 | 7 | **Transitive call closure** (`:reaches`) | `043` Part B | M4 | Deferred — C++ or depth-capped SQL |
 | 8 | **Cross-module name resolver** | `043` Part C | M4 | No — the epic; enables precise everything |
@@ -60,7 +60,9 @@ Eight of the eighteen pieces have a real v1.x half:
   check mirrors the existing "Embedded SQL macros header in sync".
 - **#11** — the conformance kit. Pure test writing against the current layout; it is also
   what makes #13/#14 verifiable later, so writing it early is not speculative.
-- **#5** — `ast_select` in C++. Larger, but #160 (≈6 s planning per call) is felt today.
+- **#5** — `ast_select` in C++. Larger. #160's constant per-call overhead is real and felt,
+  but measured at ~0.5s rather than the ~6s the issue claims (see below) — so it argues for
+  #6 first, not for jumping straight to C++.
 - **#17** — `ast_to_blocks`. A producer of conforming STRUCTs; no LOAD, no dependency.
 - **#18** — the selector backlog, already in flight.
 
