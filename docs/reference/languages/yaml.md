@@ -4,8 +4,11 @@
 
 > **Note: YAML support is currently disabled.** The tree-sitter YAML grammar's
 > self-modifying structure is incompatible with the tree-sitter CLI used to
-> generate parsers, so the YAML adapter is not registered (see
-> `src/language_adapter_registry_init.cpp`). This page documents the intended
+> generate parsers, so the YAML adapter is not built in: there is no
+> `sitting_duck_language(yaml ...)` declaration in `cmake/BuiltinLanguages.cmake`,
+> which is what drives registration. `src/language_adapters/yaml_adapter.cpp` and
+> the `YAMLAdapter` class therefore exist but are never compiled or registered.
+> This page documents the intended
 > node-type mappings (`src/language_configs/yaml_types.def`) for when the
 > grammar issue is resolved; `read_ast` does not accept `'yaml'` today.
 

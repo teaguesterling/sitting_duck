@@ -20,9 +20,16 @@ tracker/
 ## Current Status (Updated 2026-04-26)
 
 ### Language Support: 27 languages
-Bash, C, C++, C#, CSS, Dart, Go, GraphQL, HCL, HTML, Java, JavaScript, JSON,
-Kotlin, Lua, Markdown, PHP, Python, R, Ruby, Rust, SQL, Swift, TOML, TypeScript,
-YAML, Zig
+26 tree-sitter grammars plus the native `duckdb` adapter (which wraps DuckDB's own
+SQL parser and has no grammar):
+
+Bash, C, C++, C#, CSS, Dart, DuckDB, Go, GraphQL, HCL, HTML, Java, JavaScript, JSON,
+Kotlin, Lua, Markdown, PHP, Python, R, Ruby, Rust, SQL, Swift, TOML, TypeScript, Zig
+
+**Not supported**, despite having `.def` files and reference pages: YAML (grammar
+incompatible with the tree-sitter CLI), Scala, F#, Haskell, Julia (never wired up).
+Authoritative list: `cmake/BuiltinLanguages.cmake`, or
+`SELECT language FROM ast_supported_languages()`.
 
 ### Core Capabilities
 - `read_ast()` - Parse files/globs into flattened AST tables (18 columns)

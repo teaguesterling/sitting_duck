@@ -373,7 +373,8 @@ read_ast(['script.py'], peek_mode := 'lines')
 - `file_path`: Source file path
 - `language`: Detected or specified language
 - `start_line`, `end_line`: Position info (line numbers)
-- `start_column`, `end_column`: Column positions (**only with `source := 'full'`**)
+- `start_column`, `end_column`: Column positions, 1-based (**only with `source := 'full'`**)
+- `start_byte`, `end_byte`: Byte offsets, 0-based and half-open (**only with `source := 'full'`**) — slice exact node text out of the file with these rather than reconstructing from line/column
 - `parent_id`: Parent node ID (for tree structure)
 - `depth`: Nesting depth in the AST
 - `sibling_index`: Position among siblings

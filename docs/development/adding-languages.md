@@ -31,9 +31,7 @@ git submodule update --init --recursive
 
 ### 1.2 Configure Build System
 
-Add grammar generation to `CMakeLists.txt` using the existing `generate_parser` function. The system respects dependencies automatically:
-
-**Location in CMakeLists.txt**: Lines 89-106 (after existing parsers)
+Add grammar generation to `CMakeLists.txt` using the existing `generate_parser` function. The system respects dependencies automatically. Search for the existing `generate_parser(` calls rather than a line number:
 
 ```cmake
 # Add your language to the parser generation section
@@ -49,19 +47,13 @@ generate_parser("tree-sitter-<language>" "tree-sitter-<language>/src/parser.c" "
 generate_parser("tree-sitter-<language>/<language>" "tree-sitter-<language>/<language>/src/parser.c" "tree-sitter-<language>/<language>/src/scanner.c")
 ```
 
-**Add to EXTENSION_SOURCES** (lines 168-220):
-
-```cmake
-set(EXTENSION_SOURCES 
-    # ... existing sources ...
-    # Add adapter source file:
-    src/language_adapters/<language>_adapter.cpp
-    # Add generated parser files:
-    grammars/tree-sitter-<language>/src/parser.c
-    # Add scanner if it exists:
-    grammars/tree-sitter-<language>/src/scanner.c
-)
-```
+**Do not add your adapter or parser to `EXTENSION_SOURCES` by hand.** Since PR #92,
+`EXTENSION_SOURCES` interpolates `${SD_LANGUAGE_ADAPTER_SOURCES}` and
+`${SD_LANGUAGE_PARSER_SOURCES}`, both computed by `sitting_duck_configure_languages()`
+from your `sitting_duck_language(...)` declaration in `cmake/BuiltinLanguages.cmake`
+(see §3.1). Declaring the language there is what adds both to the build; listing them
+again in `EXTENSION_SOURCES` would compile them twice and would defeat the
+compile-out path.
 
 ### 1.3 Handle Grammar Dependencies
 
@@ -249,7 +241,34 @@ DEF_TYPE(")", PARSER_SYNTAX, NONE, NONE, 0)
 // Add other punctuation...
 ```
 
-**Semantic Type Hierarchy** (see `src/include/semantic_types.hpp`):
+!!! note "`.def` files are hand-written; the taxonomy tables are generated"
+
+    These two live in different places, and the distinction matters:
+
+    - **Your `<language>_types.def` file is hand-written.** Mapping this grammar's
+      node-type names onto semantic types is exactly the work, and nothing
+      generates it. That is this section.
+    - **The semantic types themselves are generated.** Since PR #195,
+      `spec/taxonomy/taxonomy.yaml` is the source of truth for semantic-type codes
+      and names, the node flag byte, and the name/native extraction-strategy enums.
+      `scripts/generate_taxonomy.py` writes them into marked
+      `<<< BEGIN GENERATED TAXONOMY >>>` blocks in five sources
+      (`src/include/semantic_types.hpp`, `src/semantic_types.cpp`,
+      `src/include/node_config.hpp`, `src/language_config_json.cpp`,
+      `src/ast_type_map_function.cpp`).
+
+    So if your language needs a semantic type, flag or strategy that does not yet
+    exist, **edit `spec/taxonomy/taxonomy.yaml`, then run
+    `python3 scripts/generate_taxonomy.py` and commit the regenerated sources
+    alongside the spec change.** Do not hand-edit inside a generated block: nothing
+    in the build regenerates these, so the CI job `taxonomy-tables-sync` fails the
+    build on any divergence between the spec and the committed tables.
+
+    Adding a *language* normally needs no spec change — the existing taxonomy is
+    meant to be universal. Reach for the spec only when no existing type fits.
+
+**Semantic Type Hierarchy** (generated from `spec/taxonomy/taxonomy.yaml`; read the
+current list in `src/include/semantic_types.hpp`):
 
 | Category | Examples | Purpose |
 |----------|----------|---------|
@@ -453,13 +472,50 @@ string <Language>Adapter::ExtractNodeName(TSNode node, const string &content) co
 
 ### 3.1 Register Language Adapter
 
-Add to `src/language_adapter_registry_init.cpp`:
+!!! warning "Do not hand-edit `src/language_adapter_registry_init.cpp`"
 
-```cpp
-void LanguageAdapterRegistry::InitializeDefaultAdapters() {
-    // ... existing registrations ...
-    RegisterLanguageFactory("<language>", []() { return make_uniq<<Language>Adapter>(); });
-}
+    Since PR #92 (compile-time language selection), registration is **generated**.
+    `language_adapter_registry_init.cpp` contains no per-language code: it is pure
+    X-macro expansion over `sitting_duck_builtin_languages.def`, which CMake writes
+    from `cmake/BuiltinLanguages.cmake`. Adding a `RegisterLanguageFactory(...)`
+    call there by hand will be overwritten in spirit and will not get your language
+    compiled in — the adapter translation unit is only built if the language is
+    declared below.
+
+Declare the language in **`cmake/BuiltinLanguages.cmake`**, which carries everything
+the build needs to include or exclude it as a unit — adapter translation unit,
+vendored parser sources, and the adapter class name used by the generated
+registration table:
+
+```cmake
+sitting_duck_language(<language> <Language>Adapter TS
+    ADAPTER src/language_adapters/<language>_adapter.cpp
+    PARSERS tree-sitter-<language>/src/parser.c
+            tree-sitter-<language>/src/scanner.c)   # omit if the grammar has no scanner
+```
+
+Notes:
+
+- **Declaration order is registration order.** Append to the end of the existing
+  declarations unless you have a reason to do otherwise; a subset build re-sorts
+  user-supplied language lists into this canonical order so registration order is
+  invariant.
+- The third argument is the **kind**: `TS` for a vendored Tree-sitter grammar,
+  `NATIVE` for a parser with no Tree-sitter grammar (today only `duckdb`, which
+  wraps DuckDB's own SQL parser). `NATIVE` languages take no `PARSERS`.
+- Once declared, the language is built by default and can be compiled out with
+  `-DSITTING_DUCK_EXCLUDE_LANGUAGES=<language>`, or selected exclusively with
+  `-DSITTING_DUCK_LANGUAGES="<language>;python"`. Unknown names fail the configure.
+- A language with no declaration here behaves exactly like an unknown one:
+  `detect_language()` misses it, `ast_supported_languages()` omits it, and explicit
+  use raises `Unsupported language: <language>`. (This is why `yaml`, `scala`,
+  `fsharp`, `haskell` and `julia` have `.def` files and reference pages but do not
+  work — see `docs/reference/languages/index.md`.)
+
+Verify after building:
+
+```sql
+SELECT language FROM ast_supported_languages() WHERE language = '<language>';
 ```
 
 ### 3.2 Add File Extension Mapping
@@ -978,12 +1034,13 @@ ParsingFunction KotlinAdapter::GetParsingFunction() const {
 
 ### Step 5: Register and Map Extensions
 
-**src/language_adapter_registry_init.cpp**:
-```cpp
-void LanguageAdapterRegistry::InitializeDefaultAdapters() {
-    // ... existing registrations ...
-    RegisterLanguageFactory("kotlin", []() { return make_uniq<KotlinAdapter>(); });
-}
+**cmake/BuiltinLanguages.cmake** — this is where registration comes from; see §3.1.
+Do not hand-edit `src/language_adapter_registry_init.cpp`, which is generated
+X-macro expansion:
+```cmake
+sitting_duck_language(kotlin KotlinAdapter TS
+    ADAPTER src/language_adapters/kotlin_adapter.cpp
+    PARSERS tree-sitter-kotlin/src/parser.c tree-sitter-kotlin/src/scanner.c)
 ```
 
 **src/ast_file_utils.cpp**:
