@@ -157,6 +157,24 @@ JOIN (SELECT filename, to_hex(content) AS hex FROM read_blob('src/main.py')) f
 Use `read_blob()` rather than `read_text()` so nothing can normalize the bytes
 on the way in.
 
+**There is a second, cheaper primitive: `blob[i:j]`.** DuckDB's list-slice
+operator applies to BLOB and is **1-based inclusive and byte-indexed**, so the
+same slice is `content[start_byte + 1 : end_byte]` — no hex round trip, and
+O(slice) rather than O(file) per slice. `src/sql_macros/ast_patch.sql` has
+relied on it since it landed, and `src/sql_macros/ast_unparse.sql`'s byte-exact
+splice uses it; the two spellings were verified to agree byte for byte on every
+node of the CRLF + multi-byte fixtures (`test/sql/ast_unparse_exact.test` §4a
+asserts the agreement, and `scripts/verify_unparse_byte_exact.sh` re-checks it
+on every run). Prefer `blob[i:j]`; the hex form above remains the right answer
+for anything that must slice a *VARCHAR* by byte, and is useful precisely
+because it has no UTF-8 validity constraint — a boundary planted inside a
+multi-byte sequence yields wrong hex rather than a `decode()` error, which is
+what makes it the right tool for a negative control.
+
+**Byte-exact unparse now exists.** `ast_unparse_exact(path)` splices these
+offsets back into the original file, byte for byte — see
+[`ast_unparse_exact`](#ast_unparse_exactpath-language--null--byte-exact-round-trip).
+
 **Why not reconstruct from line/column?** `start_column` is itself a byte offset
 *within its line*, so an absolute position can in principle be rebuilt from
 line starts — but doing so means re-deriving every line's start offset from the
@@ -387,6 +405,155 @@ SELECT ast_unparse(ast) AS code;
 SELECT rule_kind, node_type, int_arg
 FROM ast_unparse_rules('python');
 ```
+
+### `ast_unparse_exact(path, [language := NULL])` — byte-exact round trip
+
+**Byte-exact unparse.** Reproduces the file verbatim from its own AST, satisfying
+the textual law that `source := 'full'` buys:
+
+```
+write_ast(read_ast(x, source := 'full')) = x          -- byte for byte
+```
+
+This is a different guarantee from `ast_unparse` above. `ast_unparse` and its
+siblings reconstruct source from node types and names, never read a position
+column, and **normalise inter-token whitespace** — which is conformant below
+`source := 'full'`, where only the structural law
+`read_ast(write_ast(read_ast(x))) = read_ast(x)` applies, and is not a bug
+(issue #89). `ast_unparse_exact` instead **splices the original bytes**.
+
+| | `ast_unparse*` | `ast_unparse_exact*` |
+|---|---|---|
+| guarantee | structural (tree survives) | **textual (byte for byte)** |
+| needs `source := 'full'` | no | **yes** |
+| needs the original bytes | no | **yes** (re-read, or the string argument) |
+| whitespace | normalised | verbatim |
+| hidden delimiters (kotlin string quotes) | lost | **recovered** |
+| multi-file glob | one row per file | **errors** — scope to one file |
+| cannot produce an answer | n/a | **errors**, never falls back |
+
+**How it works — a splice over the leaf frontier.** The output is assembled
+from byte ranges of the original bytes, in one ordered pass over the rows with
+no descendants (`descendant_count = 0`), whose spans are therefore disjoint:
+
+```
+for each leaf, in (start_byte, end_byte, node_id) order:
+    emit bytes [previous leaf's end_byte, this leaf's start_byte)   -- the GAP
+    emit bytes [this leaf's start_byte,   this leaf's end_byte)     -- the LEAF
+emit bytes [last leaf's end_byte, EOF)                              -- the TAIL
+```
+
+Every byte of the file is emitted exactly once, attributed either to a leaf or
+to a gap. Because the gaps are computed from **byte offsets rather than from
+grammar knowledge**, they recover whatever is not inside a leaf: inter-token
+whitespace, leading and trailing whitespace outside the root's own span, and
+**delimiters a grammar hides entirely** — tree-sitter-kotlin's `string_literal`
+has no child node for its quote characters, so leaf *concatenation* cannot
+recover them, while the splice emits them as gap bytes. No per-language
+knowledge is involved at any point.
+
+**Family:**
+
+| macro | input | bytes come from |
+|---|---|---|
+| `ast_unparse_exact(path, language := NULL)` | a file path | `read_blob(path)`, in the same statement |
+| `ast_unparse_exact_from(ast_table, files, language := NULL, file_path := NULL)` | a node table you already have | `read_blob(files)` |
+| `ast_unparse_exact_code(source_code, language)` | an in-memory string | the string argument itself |
+| `ast_unparse_exact_splice(ast_table, blob_table, language := NULL, file_path := NULL)` | the shared core | a relation of `(fp, cblob)` |
+
+`files` is required on the `_from` form because DuckDB table functions accept
+only literal arguments — there are no per-row lateral paths — so the bytes
+cannot be looked up from a column. Pass the same path or glob used for
+`read_ast`. This is the same constraint `ast_patch` documents.
+
+`ast_unparse_exact_splice`'s `blob_table` argument is **trusted**: the macro
+checks that the bytes are the right *length* for the parse, but cannot check
+that they are that path's bytes at all. Prefer `ast_unparse_exact` (which
+establishes them from the path in the same statement) or
+`ast_unparse_exact_from`.
+
+**`language :=` is an override, never a requirement.** The language is inferred
+from the `language` column `read_ast`/`parse_ast` already emit; an explicit
+`language :=` disambiguates a table that carries more than one. `file_path :=`
+does the same for a table carrying more than one file.
+
+**Returns:** Table with `file_path` (VARCHAR) and `source` (VARCHAR), one row.
+
+**Examples:**
+```sql
+-- The law, in one statement.
+SELECT source FROM ast_unparse_exact('src/main.py');
+
+-- Verify it: compared as BLOBs, so no decode step can mask a difference.
+SELECT encode(u.source) = b.content   -- true
+FROM ast_unparse_exact('src/main.py') u, read_blob('src/main.py') b;
+
+-- From a table you already have (pass the same path used for read_ast).
+CREATE TABLE t AS SELECT * FROM read_ast('src/main.py', source := 'full');
+SELECT source FROM ast_unparse_exact_from('t', 'src/main.py');
+
+-- One file out of a multi-language table.
+CREATE TABLE all_src AS
+SELECT * FROM read_ast('src/**/*', source := 'full', ignore_errors := true);
+SELECT source FROM ast_unparse_exact_from('all_src', 'src/**/*', file_path := 'src/main.py');
+
+-- No file needed: the bytes are the string argument.
+SELECT source = $code FROM ast_unparse_exact_code($code, 'python');
+```
+
+**It errors rather than guessing (issue #89).** Byte-exact output is impossible
+without the original bytes, and returning normalised text where byte-exact text
+was asked for is worse than returning nothing, because it looks like a round
+trip. Every one of these raises:
+
+| condition | why |
+|---|---|
+| `start_byte`/`end_byte` are NULL | parsed below `source := 'full'` (a `'<level>+schema'` parse declares the columns and fills them with NULL). Below `'full'` without `+schema` the columns do not exist and the macro fails to bind — also an error |
+| more than one distinct `language` | no single textual answer; pass `language :=` |
+| more than one distinct `file_path` | no single textual answer; pass `file_path :=` |
+| no root row, or more than one | not one whole parse |
+| row count ≠ `root.descendant_count + 1` | a **filtered subset**. This one matters: the missing nodes would be absorbed into the gaps and the output would be byte-exact anyway, looking right while proving nothing |
+| the file is not readable via `files` | pass the same path used for `read_ast` |
+| `file_path = '<inline>'` | in-memory `parse_ast` output has no file; use `ast_unparse_exact_code` |
+| `root.end_byte ≠ octet_length(file)` | the file **changed since the parse** — see staleness below |
+| any `end_byte` past end of file | likewise |
+| leaf spans overlap | the frontier is not an antichain, so a splice would duplicate or drop bytes |
+
+**Staleness, and what it cannot catch.** No extraction configuration retains
+per-node source text, so the bytes are re-read at unparse time. The guard is
+`root.end_byte = octet_length(file)`: tree-sitter's root node ends at EOF
+(measured for all 26 tree-sitter languages, including empty, whitespace-only
+and no-trailing-newline files), so any change to the file's **length** is
+caught and errors. A **same-length edit is invisible**, exactly as for
+`ast_patch`. Parse and unparse in one motion — `ast_unparse_exact(path)` does
+both in one statement for precisely this reason — and do not cache a node table
+across a file change.
+
+**Not available for input that is not valid UTF-8.** `source` is VARCHAR, and
+DuckDB requires VARCHAR to be valid UTF-8, so such a file cannot be returned
+byte-exactly at all — `decode()` raises a conversion error. That is honest
+failure rather than corruption, and it is worth contrasting with the
+rules-based path: `read_ast` parses such a file happily (tree-sitter works on
+bytes) and `ast_unparse` returns a *string* for it, having silently dropped the
+offending bytes. Serving it would need a BLOB-returning variant.
+
+**Not available for the `duckdb` language adapter**, for two reasons that both
+outlive issue #197. PR #205 fixed that adapter's constant-zero
+`children_count` / `sibling_index` / `depth`, so its tree structure is now
+correct — but it still reports `start_byte = end_byte = 0` (and an empty
+`file_path`) for every node, and its tree is an **AST rather than a CST**: no
+node for any keyword, punctuation or comment, so no leaf frontier over it could
+tile the text even if the offsets were there. `ast_unparse_exact` errors with a
+dedicated message naming the missing byte positions, rather than letting the
+readability or staleness guard fire first and misdiagnose it as a missing or
+changed file.
+
+**Verified by:** `test/sql/ast_unparse_exact.test` (61 assertions / 77 as the
+runner counts them, covering all 26 tree-sitter languages, the CRLF +
+multi-byte fixtures, every error path, and a negative control that plants a
+one-byte boundary shift and a replaced leaf and requires both to be detected).
+`scripts/verify_unparse_byte_exact.sh` sweeps a corpus with per-language
+numbers; re-run it after a grammar bump.
 
 ### `detect_language(file_path)`
 
