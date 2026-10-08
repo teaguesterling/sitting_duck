@@ -1,10 +1,46 @@
 # AST Unparsing (`ast_unparse`)
 
-The `ast_unparse` suite reconstructs formatted source code from Sitting Duck AST tables. It provides a pluggable, rules-based formatter that guarantees the **pseudo-identity property**:
+The `ast_unparse` suite reconstructs formatted source code from Sitting Duck AST tables. It is a pluggable, rules-based formatter whose **target** property is pseudo-identity:
 
 $$\text{parse}(S) \equiv \text{parse}(\text{unparse}(\text{parse}(S)))$$
 
-Parsing the unparsed output of any valid AST yields a syntactically and semantically identical AST across all 27+ supported languages.
+That is: re-parsing unparsed output should yield a syntactically and semantically identical AST, even though the *text* may differ in whitespace and formatting.
+
+!!! warning "This is the target, not a guarantee — read the current limits"
+
+    Pseudo-identity holds for most of the 26 tree-sitter languages, but **not all**, and
+    the gaps are tracked rather than hidden. As of v1.15.4 (`tracker/features/047`):
+
+    - **Leaf-text coverage landed for 25 of the 26 tree-sitter languages** (PR #199).
+      Before that, text-bearing leaves could unparse to their own node type (a comment
+      came out as the literal word `comment`).
+    - **`sql` is incomplete.** 214 `keyword_*` leaves still lack a text strategy, so
+      `ON DELETE NO ACTION` unparses as `ON DELETE keyword_no keyword_action`.
+    - **The native `duckdb` language does not unparse at all** ([#197]): its adapter
+      reports `children_count = 0` for every node, so the whole tree reads as leaves
+      and `SELECT 1` comes back as `program select_statement select_node select_list 1
+      unknown_table_ref`. Use the tree-sitter `sql` language instead.
+    - **Byte-identity does not hold today**, for any language, even under
+      `source := 'full'` — the unparse macros take no `source` parameter and never read
+      the position columns. Output differs on inter-token whitespace only. Closing this
+      is "4b / node templates" in `047`.
+
+    [#197]: https://github.com/teaguesterling/sitting_duck/issues/197
+
+### How this relates to the planned `write_ast` laws
+
+`docs/planning/v2-architecture.md` is the authoritative statement of where unparse is
+going. It splits the requirement by whether the parse retained its source, and the
+distinction matters when reading the guarantee above:
+
+| Retention | Law | Strength |
+|---|---|---|
+| `source := 'full'` | `write_ast(read_ast(x, source := 'full')) = x` | **byte-exact** |
+| anything less | `read_ast(write_ast(read_ast(x))) = read_ast(x)` | **pseudo-inverse only** — the tree survives, the text need not |
+
+Below `'full'`, `write_ast(read_ast(x)) = x` is explicitly **not** required: normalising
+whitespace there is conformant, not a bug. Today's `ast_unparse` suite implements the
+weaker, lower row — byte-exactness is future work, not a current property.
 
 ---
 
@@ -86,7 +122,7 @@ Discovers active whitespace, indentation, and punctuation rules.
 ### Signatures
 
 ```sql
--- All default rules across all 27+ languages and universal punctuation
+-- All default rules across all built-in languages and universal punctuation
 SELECT * FROM ast_unparse_rules();
 
 -- Rules for a specific language

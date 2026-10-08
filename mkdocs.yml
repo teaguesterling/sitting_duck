@@ -51,6 +51,17 @@ markdown_extensions:
   - attr_list
   - md_in_html
 
+# This nav is EXPLICIT: a page under docs/ that is not listed here does not appear
+# in the built site at all. Audited 2026-10-08 — every entry below resolves to an
+# existing file, and the only unlisted pages are these, deliberately:
+#
+#   docs/internal/archive/*.md  — superseded designs, kept for history only
+#                                 (see docs/internal/archive/README.md)
+#   docs/plans/*.md             — dated historical implementation plans. Note the
+#                                 confusing near-duplicate: docs/planning/ IS in the
+#                                 nav (live RFCs), docs/plans/ is not (finished plans).
+#
+# If you add a page under docs/, add it here too, or it is invisible.
 nav:
   - Home: index.md
   - Tutorials:
@@ -110,16 +121,16 @@ nav:
       - Kotlin: reference/languages/kotlin.md
       - Swift: reference/languages/swift.md
       - Dart: reference/languages/dart.md
-      - Scala: reference/languages/scala.md
+      - "Scala (not built in)": reference/languages/scala.md
       - HCL: reference/languages/hcl.md
       - JSON: reference/languages/json.md
       - TOML: reference/languages/toml.md
       - GraphQL: reference/languages/graphql.md
-      - YAML: reference/languages/yaml.md
+      - "YAML (not built in)": reference/languages/yaml.md
       - Markdown: reference/languages/markdown.md
-      - F#: reference/languages/fsharp.md
-      - Haskell: reference/languages/haskell.md
-      - Julia: reference/languages/julia.md
+      - "F# (not built in)": reference/languages/fsharp.md
+      - "Haskell (not built in)": reference/languages/haskell.md
+      - "Julia (not built in)": reference/languages/julia.md
   - Explanation:
     - Architecture: explanation/architecture.md
     - How Parsing Works: explanation/how-parsing-works.md

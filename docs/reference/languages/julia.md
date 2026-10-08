@@ -2,6 +2,15 @@
 
 > Julia language node type mappings for AST semantic extraction
 
+> **Note: Julia support is not built in.** There is no `julia` entry in
+> `cmake/BuiltinLanguages.cmake` and no `JuliaAdapter` class in
+> `src/include/language_adapter.hpp`, so `julia` is not among the languages
+> `ast_supported_languages()` reports, and `read_ast`/`parse_ast` reject it with
+> "Unsupported language: julia". Only the semantic-type mapping
+> (`src/language_configs/julia_types.def`) and this page exist — the adapter and
+> grammar wiring were never added. Treat this page as a design reference, not a
+> description of working behaviour.
+
 ## Language Characteristics
 
 - **Scientific computing**: Designed for numerical/scientific work

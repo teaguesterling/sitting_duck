@@ -1,0 +1,211 @@
+# name: test/sql/conformance/builtin_set_under_runtime_grammars.test
+# description: Conformance kit -- prove the built-in language filter actually excludes a runtime registration
+# group: [conformance]
+
+# WHY THIS FILE EXISTS
+#
+# capability_declarations.test and call_naming_conformance.test both pin facts
+# about the BUILT-IN language set, and both recover that set by filtering
+# ast_supported_languages() on `parser_type <> 'tree-sitter (dynamic)'`.
+#
+# Neither of them can prove that filter does anything, because in every CI leg
+# but one there is no runtime-registered language to exclude. That is how the
+# original bug shipped: capability_declarations.test asserted
+#     SELECT count(*) FROM ast_supported_languages()  ----  27
+# which is correct in 21 of 22 legs and wrong in the one job that sets
+# SITTING_DUCK_TEST_GRAMMAR_DIR, because registration is PROCESS-GLOBAL and
+# test/sql/dynamic_languages/register_language*.test had already added one.
+#
+# So this file registers a grammar itself and asserts BOTH directions:
+#   * the registration really is visible (so the test is not vacuous), and
+#   * the filter really does exclude it (so the other two files' filters are
+#     doing work, not decorating a query).
+#
+# It is `require-env`-gated, which means it runs ONLY in that job -- and that is
+# deliberate rather than a compromise. A conditionally-skipped assertion is one
+# that can stop running unnoticed, so the gating lives HERE, in an additive
+# file, instead of in the two files that carry the actual baseline. Those two
+# run everywhere and are immune by construction; this one proves the mechanism
+# they rely on, in the only environment where the mechanism is observable.
+
+require sitting_duck
+
+# Requires the test grammar library built by `make test-grammar-lib`.
+# Run with: SITTING_DUCK_TEST_GRAMMAR_DIR=build/test_grammars make test
+require-env SITTING_DUCK_TEST_GRAMMAR_DIR
+
+statement ok
+SET sitting_duck_enable_runtime_grammars = true;
+
+# The same pinned set the other two files use. Kept verbatim rather than
+# imported, because a sqllogictest file cannot share state with another one --
+# and because a copy that drifts shows up as a failure here, which is the
+# cheapest possible way to notice the drift.
+statement ok
+CREATE TABLE __builtin_expected(language VARCHAR);
+
+statement ok
+INSERT INTO __builtin_expected VALUES
+    ('bash'), ('c'), ('cpp'), ('csharp'), ('css'), ('dart'), ('duckdb'), ('go'),
+    ('graphql'), ('hcl'), ('html'), ('java'), ('javascript'), ('json'),
+    ('kotlin'), ('lua'), ('markdown'), ('php'), ('python'), ('r'), ('ruby'),
+    ('rust'), ('sql'), ('swift'), ('toml'), ('typescript'), ('zig');
+
+# Register WITH a config: that is the worse case for the other two files,
+# because a configured grammar contributes node types and therefore shows up in
+# ast_type_map() as well as in ast_supported_languages(). An unconfigured one
+# only perturbs the latter.
+#
+# Registered as `jsond` because the registry enforces that a config's declared
+# language matches the registration name, and jsond_types.json declares
+# "jsond". `overwrite := true` makes this idempotent and order-independent:
+# register_language.test may already have registered the same name in this
+# process (registration is process-global), and re-registering the extension it
+# already owns is the overwrite path, not a collision.
+query TT
+SELECT language, status
+FROM register_language('jsond', '${SITTING_DUCK_TEST_GRAMMAR_DIR}/libjson_dyn.so',
+                       symbol := 'tree_sitter_json',
+                       config := 'test/data/dynamic_grammars/jsond_types.json',
+                       extensions := ['jsond'],
+                       overwrite := true);
+----
+jsond	registered
+
+# -----------------------------------------------------------------------------
+# NON-VACUITY: the registration is actually visible. Without this, every
+# assertion below could pass because nothing was registered at all.
+# -----------------------------------------------------------------------------
+
+query TT
+SELECT language, parser_type FROM ast_supported_languages() WHERE language = 'jsond';
+----
+jsond	tree-sitter (dynamic)
+
+# It contributes declaration rows too, so it is in ast_type_map()'s scope --
+# which is what makes it the worse case for call_naming_conformance.test.
+query I
+SELECT count(*) > 0 FROM ast_type_map('jsond');
+----
+true
+
+# -----------------------------------------------------------------------------
+# THE CONTROL: the filter must EXCLUDE it.
+#
+# Stated about the ONE row this file registered rather than as a count over all
+# dynamic languages. register_language.test and its siblings register several
+# names in the same process and some of those registrations are expected to
+# fail, so "how many dynamic languages exist" depends on test ordering and on
+# which error paths ran -- an assertion on that number would be exactly the
+# kind of environment-dependent pin that caused the bug this file is about.
+# `jsond` is a row this file put there, so both directions are exact.
+# -----------------------------------------------------------------------------
+
+# Present in the unfiltered view...
+query I
+SELECT count(*) FROM ast_supported_languages() WHERE language = 'jsond';
+----
+1
+
+# ...and absent from the filtered one. A no-op filter makes this 1 and fails.
+query I
+SELECT count(*) FROM ast_supported_languages()
+WHERE language = 'jsond' AND parser_type <> 'tree-sitter (dynamic)';
+----
+0
+
+# And the unfiltered total is strictly larger than the built-in set, which is
+# exactly the condition that broke the original hardcoded-count assertion.
+query I
+SELECT (SELECT count(*) FROM ast_supported_languages())
+       > (SELECT count(*) FROM __builtin_expected);
+----
+true
+
+# -----------------------------------------------------------------------------
+# THE PAYOFF: with a runtime grammar present, the filtered views still match
+# the baselines the other two files pin. These are the exact assertions that
+# failed (or would have failed) before the fix.
+# -----------------------------------------------------------------------------
+
+# capability_declarations.test: the exact built-in set.
+query I
+SELECT language FROM ast_supported_languages()
+WHERE parser_type <> 'tree-sitter (dynamic)'
+ORDER BY language;
+----
+bash
+c
+cpp
+csharp
+css
+dart
+duckdb
+go
+graphql
+hcl
+html
+java
+javascript
+json
+kotlin
+lua
+markdown
+php
+python
+r
+ruby
+rust
+sql
+swift
+toml
+typescript
+zig
+
+# capability_declarations.test: 26 of the 27 built-ins carry declarations.
+query I
+SELECT count(DISTINCT language) FROM ast_type_map()
+WHERE language IN (SELECT language FROM __builtin_expected);
+----
+26
+
+# capability_declarations.test: duckdb is still the ONLY built-in with none.
+query I
+SELECT language FROM __builtin_expected
+WHERE language NOT IN (SELECT language FROM ast_type_map())
+ORDER BY language;
+----
+duckdb
+
+# capability_declarations.test: duckdb is still the only built-in reporting
+# node_type_count = 0 (an unconfigured runtime grammar also reports 0, which is
+# why that assertion needed the filter).
+query I
+SELECT count(*) FROM ast_supported_languages()
+WHERE node_type_count = 0
+  AND language IN (SELECT language FROM __builtin_expected);
+----
+1
+
+# call_naming_conformance.test: the capability-gate declaration table is still
+# 22 rows, and bash is still the only language the gate excludes.
+query I
+SELECT count(*) FROM (
+    SELECT language FROM ast_type_map()
+    WHERE language IN (SELECT language FROM __builtin_expected)
+    GROUP BY language
+    HAVING count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')) > 0
+);
+----
+22
+
+query I
+SELECT language FROM ast_type_map()
+WHERE language IN (SELECT language FROM __builtin_expected)
+GROUP BY language
+HAVING count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')) > 0
+   AND count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')
+                          AND name_strategy <> 'none') = 0
+ORDER BY language;
+----
+bash

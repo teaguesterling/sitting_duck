@@ -2,6 +2,15 @@
 
 > Scala language node type mappings for AST semantic extraction
 
+> **Note: Scala support is not built in.** There is no `scala` entry in
+> `cmake/BuiltinLanguages.cmake` and no `ScalaAdapter` class in
+> `src/include/language_adapter.hpp`, so `scala` is not among the languages
+> `ast_supported_languages()` reports, and `read_ast`/`parse_ast` reject it with
+> "Unsupported language: scala". Only the semantic-type mapping
+> (`src/language_configs/scala_types.def`) and this page exist — the adapter and
+> grammar wiring were never added. Treat this page as a design reference, not a
+> description of working behaviour.
+
 ## Language Characteristics
 
 - **Multi-paradigm**: Functional and object-oriented
