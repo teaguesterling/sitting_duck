@@ -96,6 +96,28 @@ of the safer items. Note also that #164's OOM was reported on a 78k-node table w
 call-graph pseudo-classes; the measurements above used a 795-node table for the
 call-graph arms, so they say nothing about that blowup, which remains unmeasured here.
 
+### Addendum 2026-10-08: the ~0.5s figure is v1.5.x-line-only; the v2.0 line is ~12.8s
+
+Both halves of #160's story are now measured on one sitting_duck source (`6f82c98`,
+all 27 languages), with v1.5.6 (`069cc9f9b5b`) and cyanoptera (`d4c9dfd469f`) built
+side by side. Full record, every run, with load conditions: **`bugs/040`,
+"RE-MEASUREMENT 2026-10-08"**.
+
+- The ~0.5s above is **reproduced independently** (0.44–0.61s), from a separate build.
+- On the **v2.0 line the same calls cost ~12.8s** — a ~27x penalty, and ~2x *worse*
+  than the ~6s #160 claims rather than 12x better. So neither number in #160's thread
+  is wrong; they are measuring different DuckDB lines, and #160 should say so.
+- The constant-cost shape holds on both lines and is starker on v2.0: 303 nodes and
+  156,169 nodes differ by 0.1s.
+- `taskset -c 0,1` changes the v2.0 cost by under 2% — the expensive work is
+  single-threaded binding, so neither a wider dev box nor a narrow CI runner moves it.
+
+Consequence for the ordering above: the "it is not the emergency a 6s figure implies"
+conclusion **holds for the v1.5.x line we ship on, and is false for the v2.0 line.**
+Crucially, upstream duckdb/duckdb#26036 improved ~5x over the same three weeks and
+**none of that reached this path** (`040` Result 3), so #5/#6 can no longer be
+deferred on the expectation of an upstream fix landing for us.
+
 ## Recommended order (near term)
 
 1. **#10 taxonomy spec → codegen.** Safest possible first move: provable, no behaviour
