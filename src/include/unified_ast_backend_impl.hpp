@@ -203,20 +203,32 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 				ast_node.source_start_line = start.row + 1;
 				ast_node.source_end_line = end.row + 1;
 
-				// Column information only available at FULL level
+				// Column and byte-offset information only available at FULL level
 				if (config.source >= SourceLevel::FULL) {
 					ast_node.source_start_column = start.column + 1;
 					ast_node.source_end_column = end.column + 1;
+					// Byte offsets stay exactly as tree-sitter reports them:
+					// 0-based, half-open. No bounds guard here on purpose —
+					// zero-width nodes (MISSING / zero-length ERROR nodes, EOF)
+					// have start == end and must report their true position, not
+					// be silently zeroed the way the peek extraction below skips
+					// them.
+					ast_node.source_start_byte = ts_node_start_byte(entry.node);
+					ast_node.source_end_byte = ts_node_end_byte(entry.node);
 				} else {
 					ast_node.source_start_column = 0;
 					ast_node.source_end_column = 0;
+					ast_node.source_start_byte = 0;
+					ast_node.source_end_byte = 0;
 				}
 			} else {
-				// No line/column info
+				// No line/column/byte info
 				ast_node.source_start_line = 0;
 				ast_node.source_end_line = 0;
 				ast_node.source_start_column = 0;
 				ast_node.source_end_column = 0;
+				ast_node.source_start_byte = 0;
+				ast_node.source_end_byte = 0;
 			}
 
 			// Tree structure -> FLATTENED FIELDS

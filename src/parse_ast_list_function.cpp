@@ -150,6 +150,23 @@ static Value ConvertASTResultToList(const ASTResult &result, const ExtractionCon
 			if (config.source >= SourceLevel::FULL) {
 				fields.push_back(make_pair("start_column", Value::UINTEGER(static_cast<uint32_t>(node.start_column))));
 				fields.push_back(make_pair("end_column", Value::UINTEGER(static_cast<uint32_t>(node.end_column))));
+				// Byte offsets (tracker 048 #2) — populated here for the same
+				// reason as receiver above: the flat schema declares them, so
+				// omitting them here would hand back a NULL column instead of
+				// the offsets. Read from the source_* fields, not the legacy
+				// ones: there is no legacy byte field to narrow into.
+				//
+				// NOTE: this branch is currently UNREACHABLE from SQL.
+				// parse_ast_list is registered as a scalar taking only
+				// (code, language), and ParseASTListBind returns a default
+				// ExtractionConfig (source = LINES), so config.source never
+				// reaches FULL here. It is written anyway rather than left
+				// out, because the day that function gains a source parameter
+				// the omission would be a silent NULL column, not a build
+				// error — which is exactly how #86's receiver bug happened.
+				// Kept in sync deliberately; untested because untestable.
+				fields.push_back(make_pair("start_byte", Value::UINTEGER(node.source_start_byte)));
+				fields.push_back(make_pair("end_byte", Value::UINTEGER(node.source_end_byte)));
 			}
 		}
 

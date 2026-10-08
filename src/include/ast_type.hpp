@@ -59,7 +59,8 @@ enum class SourceLevel : uint8_t {
 	PATH,       // + file_path, language
 	LINES_ONLY, // + start_line, end_line (no path duplication)
 	LINES,      // + file_path, language, start_line, end_line
-	FULL        // + file_path, language, start_line, end_line, start_column, end_column
+	FULL        // + file_path, language, start_line, end_line, start_column, end_column,
+	            //   start_byte, end_byte
 };
 
 enum class StructureLevel : uint8_t {
@@ -250,6 +251,21 @@ struct ASTNode {
 	uint32_t source_end_line = 0;     // Ending line number
 	uint32_t source_start_column = 0; // Starting column
 	uint32_t source_end_column = 0;   // Ending column
+
+	// Absolute byte offsets into the source text, taken straight from
+	// tree-sitter: 0-BASED and HALF-OPEN, [source_start_byte, source_end_byte).
+	//
+	// Deliberately NOT shifted to 1-based like the line/column fields above.
+	// The whole point of surfacing them is exact slicing — end - start is the
+	// node's length in bytes, with no off-by-one correction — which is the
+	// substrate for byte-exact unparse (tracker 048 #2):
+	//   write_ast(read_ast(x, source := 'full')) = x
+	//
+	// Populated only when the extraction config asks for source >= FULL, the
+	// same gate start_column / end_column already sit behind. Adapters that do
+	// not wrap tree-sitter (the `duckdb` SQL adapter) leave both at 0.
+	uint32_t source_start_byte = 0;
+	uint32_t source_end_byte = 0;
 
 	// Context fields (flattened from ContextInfo, except native)
 	string name_raw;                                      // Raw node name/identifier
