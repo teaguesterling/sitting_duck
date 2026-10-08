@@ -1,0 +1,320 @@
+# name: test/sql/ast_unparse_leaf_text.test
+# description: unparse leaf-text coverage - no leaf may unparse to its own node type (tracker 047 "4a")
+# group: [sql]
+#
+# What this guards
+# ----------------
+# ast_unparse emits exactly one token per leaf node, as
+#
+#     COALESCE(NULLIF(name, ''), type)   over   WHERE children_count = 0
+#
+# (see src/sql_macros/ast_unparse.sql). So when a leaf's name-extraction
+# strategy yields nothing, the unparser emits the node's *type* where its
+# *text* belongs. For an anonymous token that is usually harmless, because
+# tree-sitter names anonymous tokens after their own text. For a named one it
+# is a round-trip correctness failure that is not flagged as lossy:
+#
+#     SELECT source FROM ast_unparse_code('# hello there' || chr(10) || 'x = 1', 'python');
+#     -- emitted the literal string "comment" in place of "# hello there"
+#
+# The invariant below is the general form of that bug. Rather than enumerate
+# "tokens that must not equal their type" (which is unfalsifiable for
+# self-describing nodes like python's `true`, whose type legitimately IS its
+# text), it asserts the stronger and exact property:
+#
+#     every leaf's emitted token equals that leaf's own source text
+#
+# `peek` is a sound independent oracle here precisely because the unparser
+# deliberately never reads it - ast_unparse.sql "reconstructs source from AST
+# rows WITHOUT peek". peek_mode := 'full' is required: the default truncates
+# around 80 characters, which would make long comments look like mismatches.
+#
+# The gap list these tests were built from is derived from the grammars, not
+# hand-written, by scripts/audit_leaf_text_gaps.py
+# (tracker 047 requires this; see issue #184 for why a hand-enumerated list is
+# not acceptable). Regenerate it after a grammar bump.
+#
+# Known limitations, deliberately NOT asserted here
+# -------------------------------------------------
+# * Byte-identity against the original file does not hold for any language in
+#   this corpus. The unparser normalizes inter-token whitespace and does not
+#   read start_column/end_column, so reconstructing exact gaps is the open
+#   design question 041 records and 047 defers to "4b" (node templates).
+# * Some grammars hide delimiter tokens entirely - tree-sitter-kotlin's
+#   `string_literal` has no child node for its quote characters - so leaf
+#   concatenation structurally cannot recover them. That is a 4b concern, not
+#   a leaf-text one.
+# * language 'duckdb' (the native, non-tree-sitter parser) is excluded: its
+#   adapter reports children_count = 0 for *every* node, so the whole tree
+#   looks like leaves and unparse is meaningless for it. Separate bug: #197.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. The tracker 047 reproducer
+# =============================================================================
+
+# Python's `comment` had no name strategy, so its text was replaced by the
+# literal word "comment".
+query T
+SELECT replace(source, chr(10), '|') FROM ast_unparse_code('# hello there' || chr(10) || 'x = 1', 'python');
+----
+# hello there|x = 1
+
+# =============================================================================
+# 2. The leaf-text invariant, per language
+# =============================================================================
+# Each file is a small valid program exercising comments, string bodies and
+# escapes, and numeric literals - the node classes that carry text in a named
+# leaf. Zero means every leaf would unparse to its own text.
+
+# bash
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.sh', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# c
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.c', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# cpp
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.cpp', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# csharp
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.cs', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# css
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.css', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# dart
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.dart', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# go
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.go', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# graphql
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.graphql', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# hcl
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.tf', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# html
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.html', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# java
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.java', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# javascript
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.js', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# json
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.json', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# kotlin
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.kt', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# lua
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.lua', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# markdown
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.md', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# php
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.php', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# python
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.py', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# r
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.R', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# ruby
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.rb', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# rust
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.rs', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# sql
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.sql', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# swift
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.swift', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# toml
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.toml', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# typescript
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.ts', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# zig
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/sample.zig', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# =============================================================================
+# 3. Whole-corpus aggregate
+# =============================================================================
+# Defence in depth: one query over the whole corpus, so a language added to
+# test/data/unparse_leaf_text/ is covered even before it gets its own block
+# above.
+
+query I
+SELECT count(*) FROM read_ast('test/data/unparse_leaf_text/*', peek_mode := 'full')
+WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
+----
+0
+
+# The corpus must actually span the built-in tree-sitter languages, otherwise
+# the zero above could be vacuous.
+query I
+SELECT count(DISTINCT language) >= 26 FROM read_ast('test/data/unparse_leaf_text/*')
+WHERE children_count = 0;
+----
+true
+
+# =============================================================================
+# 4. Regression guards for the classes the static derivation could not see
+# =============================================================================
+# These four were found by sweeping a parsed corpus, not by reading parser.c,
+# and each is a distinct structural class. They are pinned individually
+# because a future grammar bump could silently reintroduce any of them.
+
+# ruby: tree-sitter reuses ONE token symbol for both quote characters, so the
+# single-quote delimiter has type `"`. Without a text strategy a single-quoted
+# string round-tripped with a double quote: x = "hi".
+query T
+SELECT source FROM ast_unparse_code('x = ''hi''', 'ruby');
+----
+x = 'hi'
+
+# lua: the anonymous token `[[` also matches `--[[`, so its type is not its
+# text. The comment opener was emitted as `[[`.
+query T
+SELECT source LIKE '--[[%' FROM ast_unparse_code('--[[ c ]] x = 1', 'lua');
+----
+true
+
+# dart: `comment` is a named NON-terminal whose children are all hidden, so it
+# arrives with children_count = 0. Its symbol id is past TOKEN_COUNT, which is
+# why a terminals-only derivation misses it.
+query T
+SELECT replace(source, chr(10), '|') FROM ast_unparse_code('/* c */' || chr(10) || 'var x = 1;', 'dart');
+----
+/* c */|var x = 1;
+
+# kotlin: `interpolated_identifier` is a visible+named ALIAS symbol; alias ids
+# also sit past TOKEN_COUNT. The interpolated name was emitted as the literal
+# string "interpolated_identifier".
+query T
+SELECT source LIKE '%a $ b%' FROM ast_unparse_code('val s = "a$b"', 'kotlin');
+----
+true
+
+# sql: comments are the one non-keyword class fixed for sql in this change.
+# sql's 214 keyword_* leaves remain outstanding (tracked separately).
+query T
+SELECT replace(source, chr(10), '|') FROM ast_unparse_code('-- hi' || chr(10) || 'SELECT 1;', 'sql');
+----
+-- hi|SELECT 1;

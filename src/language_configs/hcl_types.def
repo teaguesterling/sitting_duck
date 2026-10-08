@@ -336,7 +336,7 @@ DEF_TYPE("attr_splat", COMPUTATION_ACCESS, NONE, NONE, 0)
 DEF_TYPE("full_splat", COMPUTATION_ACCESS, NONE, NONE, 0)
 
 /// @brief Ellipsis - `...`
-DEF_TYPE("ellipsis", PARSER_SYNTAX, NONE, NONE, 0)
+DEF_TYPE("ellipsis", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
 
 /** @} */ // end hcl_splat
 
@@ -398,10 +398,10 @@ DEF_TYPE("template_interpolation_end", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE("template_directive", FLOW_CONDITIONAL, NONE, NONE, 0)
 
 /// @brief Template directive start - `%{`
-DEF_TYPE("template_directive_start", PARSER_DELIMITER, NONE, NONE, 0)
+DEF_TYPE("template_directive_start", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 
 /// @brief Template directive end - `}`
-DEF_TYPE("template_directive_end", PARSER_DELIMITER, NONE, NONE, 0)
+DEF_TYPE("template_directive_end", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 
 /// @brief Template if block
 DEF_TYPE("template_if", FLOW_CONDITIONAL, NONE, NONE, 0)
@@ -425,7 +425,7 @@ DEF_TYPE("template_for_start", FLOW_LOOP, NONE, NONE, 0)
 DEF_TYPE("template_for_end", FLOW_LOOP, NONE, NONE, 0)
 
 /// @brief Strip marker - `~`
-DEF_TYPE("strip_marker", PARSER_SYNTAX, NONE, NONE, 0)
+DEF_TYPE("strip_marker", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
 
 /** @} */ // end hcl_template_directives
 
@@ -467,7 +467,7 @@ DEF_TYPE("heredoc_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 /// @{
 
 /// @brief Comment
-DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 /** @} */ // end hcl_comments
 

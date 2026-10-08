@@ -164,7 +164,7 @@ DEF_TYPE("string_content", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CON
 DEF_TYPE("concatenated_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("escape_sequence", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 DEF_TYPE("interpolation", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
-DEF_TYPE("escape_interpolation", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("escape_interpolation", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("format_specifier", LITERAL_STRING, NONE, NONE, 0)
 DEF_TYPE("format_expression", LITERAL_STRING, NONE, NONE, 0)
 DEF_TYPE("conversion", LITERAL_STRING, NONE, NONE, 0)
@@ -286,7 +286,7 @@ DEF_TYPE("type", TYPE_REFERENCE, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 DEF_TYPE("generic_type", TYPE_GENERIC, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
 DEF_TYPE("type_parameter", TYPE_GENERIC, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("->", TYPE_REFERENCE, NONE, NONE, 0)
-DEF_TYPE("type_conversion", TYPE_REFERENCE, NONE, NONE, 0)
+DEF_TYPE("type_conversion", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
 /** @} */
 
 // =============================================================================
@@ -441,7 +441,7 @@ DEF_TYPE("exec_statement", EXECUTION_STATEMENT_CALL, NONE, NONE, 0)
  * @brief Comment nodes
  * @{
  */
-DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 /** @} */
 
 // =============================================================================

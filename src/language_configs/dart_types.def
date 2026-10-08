@@ -958,7 +958,7 @@ DEF_TYPE("script_tag", METADATA_DIRECTIVE, NONE, NONE, 0)
 /// @{
 
 /// @brief Comment
-DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 /// @brief Documentation comment - `/// doc`
 DEF_TYPE("documentation_comment", METADATA_COMMENT, NONE, NONE, 0)

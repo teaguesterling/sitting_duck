@@ -520,7 +520,7 @@ DEF_TYPE("prepend", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEY
  */
 
 /// @brief Comment - `# single line comment`
-DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
+DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 /** @} */ // end ruby_comments
 
@@ -543,7 +543,7 @@ DEF_TYPE("comment", METADATA_COMMENT, NONE, NONE, 0)
 DEF_TYPE("yield", FLOW_SYNC, NONE, NONE, 0)
 
 /// @brief Super - calls parent class method
-DEF_TYPE("super", COMPUTATION_CALL, NONE, NONE, 0)
+DEF_TYPE("super", COMPUTATION_CALL, NODE_TEXT, NONE, 0)
 
 /// @brief Self - reference to current object
 DEF_TYPE("self", NAME_SCOPED, NODE_TEXT, NONE, 0)
@@ -668,7 +668,7 @@ DEF_TYPE("not", OPERATOR_LOGICAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
  * @{
  */
 
-DEF_TYPE("\"", PARSER_DELIMITER, NONE, NONE, 0)
+DEF_TYPE("\"", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE("'", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE(",", PARSER_PUNCTUATION, NONE, NONE, 0)
 DEF_TYPE(".", PARSER_PUNCTUATION, NONE, NONE, 0)
@@ -1056,7 +1056,7 @@ DEF_TYPE("hash_key_symbol", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("bare_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("delimited_symbol", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("chained_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("heredoc_content", LITERAL_STRING, NONE, NONE, 0)
+DEF_TYPE("heredoc_content", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
 /** @} */ // end ruby_extra_literals
 
@@ -1115,3 +1115,22 @@ DEF_TYPE("...", PATTERN_COLLECT, NONE, NONE, 0)
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
 
 /** @} */ // end ruby_errors
+
+// =============================================================================
+// LEAF TEXT COVERAGE (tracker 047 "4a")
+// =============================================================================
+// Named, text-bearing leaf types that this grammar exposes but that no
+// DEF_TYPE entry configured. The unparser emits one token per leaf as
+// COALESCE(NULLIF(name, ''), type) (src/sql_macros/ast_unparse.sql), so a
+// named leaf with no text-producing name strategy round-trips to its own type
+// name instead of its text. On a leaf every FIND_*/FIRST_CHILD strategy
+// returns "" -- there are no children to search -- so NODE_TEXT is the only
+// strategy that can recover it.
+//
+// PARSER_CONSTRUCT is what PopulateSemanticFieldsTemplated already assigns to
+// an unconfigured type, so these entries change name extraction only and
+// leave semantic classification exactly as it is today.
+//
+// Derived, not hand-written. Regenerate after a grammar bump with:
+//   scripts/audit_leaf_text_gaps.py
+DEF_TYPE("uninterpreted", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)

@@ -1,0 +1,9 @@
+# a comment
+name = "world"
+count = 42
+ratio = 3.5
+flag = true
+
+[section]
+list = [1, 2, 3]
+nested = { key = "value" }
