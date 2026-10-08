@@ -523,6 +523,14 @@ caught and errors. A **same-length edit is invisible**, exactly as for
 both in one statement for precisely this reason — and do not cache a node table
 across a file change.
 
+**Not available for input that is not valid UTF-8.** `source` is VARCHAR, and
+DuckDB requires VARCHAR to be valid UTF-8, so such a file cannot be returned
+byte-exactly at all — `decode()` raises a conversion error. That is honest
+failure rather than corruption, and it is worth contrasting with the
+rules-based path: `read_ast` parses such a file happily (tree-sitter works on
+bytes) and `ast_unparse` returns a *string* for it, having silently dropped the
+offending bytes. Serving it would need a BLOB-returning variant.
+
 **Not available for the `duckdb` language adapter.** It wraps DuckDB's own SQL
 parser, has no byte positions (`start_byte = end_byte = 0` for every node) and
 reports `children_count = 0` for every node (issue #197). `ast_unparse_exact`

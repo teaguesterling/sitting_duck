@@ -6838,6 +6838,14 @@ CREATE OR REPLACE MACRO ast_unparse_custom(ast_table, rules_table) AS TABLE (
 -- across a file change. `ast_unparse_exact(path)` does both in one statement
 -- for precisely this reason.
 --
+-- NOT SERVED: input that is not valid UTF-8. `source` is VARCHAR and DuckDB
+-- requires VARCHAR to be valid UTF-8, so such a file cannot be returned
+-- byte-exactly at all and decode() raises a conversion error. Honest failure,
+-- not corruption — and worth contrasting: read_ast PARSES such a file happily
+-- (tree-sitter works on bytes) and the rules-based ast_unparse returns a string
+-- for it, having silently dropped the offending bytes. Serving it would need a
+-- BLOB-returning variant.
+--
 -- NOT SERVED: the `duckdb` language adapter. It wraps DuckDB's own parser, has
 -- no byte positions, and reports start_byte = end_byte = 0 for every node
 -- (and children_count = 0 for every node — issue #197). The length guard
@@ -6891,6 +6899,9 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
                    t.language                              AS node_language,
                    t.node_id                               AS node_id,
                    t.depth                                 AS depth,
+
+)SQLMACRO"
+        R"SQLMACRO(
                    t.descendant_count                      AS descendant_count,
                    t.start_byte                            AS start_byte,
                    t.end_byte                              AS end_byte
@@ -6902,9 +6913,6 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
               AND (file_path IS NULL OR fp = regexp_replace(file_path, '^\./', ''))
         ),
         __sdx_bytes AS (
-
-)SQLMACRO"
-        R"SQLMACRO(
             SELECT DISTINCT ON (fp) *
             FROM (SELECT regexp_replace(b.fp, '^\./', '') AS fp,
                          b.cblob                          AS cblob,
@@ -7112,6 +7120,9 @@ CREATE OR REPLACE MACRO ast_unparse_exact_from(ast_table, files,
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_exact_code(source_code, language) AS TABLE
     WITH __sdx_code_src AS (
+
+)SQLMACRO"
+        R"SQLMACRO(
         SELECT * FROM parse_ast(source_code, language, source := 'full', peek := 'none')
     ),
     __sdx_code_file AS (

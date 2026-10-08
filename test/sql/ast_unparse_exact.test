@@ -669,3 +669,37 @@ SELECT source = 'println("$s $hex $d")'
 FROM ast_unparse_exact_code('println("$s $hex $d")', 'kotlin');
 ----
 true
+
+# A tree with ERROR nodes. The splice makes no claim about the tree being
+# well-formed, only that the frontier tiles the bytes, so unparseable input
+# still round-trips.
+query I
+SELECT source = E'def f(:\n  ???\n'
+FROM ast_unparse_exact_code(E'def f(:\n  ???\n', 'python');
+----
+true
+
+# A UTF-8 BOM. It is outside the root's span, so it survives as prologue gap.
+query I
+SELECT source = (chr(65279) || E'x = 1\n')
+FROM ast_unparse_exact_code(chr(65279) || E'x = 1\n', 'python');
+----
+true
+
+# A glob is accepted when it matches exactly ONE file - it is more than one
+# that has no single textual answer.
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/encoding/*.py') u, read_blob('test/data/encoding/*.py') b;
+----
+true
+
+# KNOWN LIMITATION, deliberately not asserted here. `source` is VARCHAR, and
+# DuckDB requires VARCHAR to be valid UTF-8, so a file that is NOT valid UTF-8
+# cannot be returned byte-exactly at all: decode() raises a conversion error.
+# That is honest failure rather than corruption - and note the contrast,
+# verified by hand on a file containing 0xFF 0xFE: read_ast parses it (tree-
+# sitter works on bytes) and the rules-based ast_unparse returns a *string*
+# for it, having silently dropped the offending bytes. Serving such a file
+# would need a BLOB-returning variant; no committed fixture exists because
+# keeping one unnormalized is its own exercise (see .gitattributes).

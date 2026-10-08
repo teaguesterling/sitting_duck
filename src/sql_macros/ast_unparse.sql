@@ -479,6 +479,14 @@ CREATE OR REPLACE MACRO ast_unparse_custom(ast_table, rules_table) AS TABLE (
 -- across a file change. `ast_unparse_exact(path)` does both in one statement
 -- for precisely this reason.
 --
+-- NOT SERVED: input that is not valid UTF-8. `source` is VARCHAR and DuckDB
+-- requires VARCHAR to be valid UTF-8, so such a file cannot be returned
+-- byte-exactly at all and decode() raises a conversion error. Honest failure,
+-- not corruption — and worth contrasting: read_ast PARSES such a file happily
+-- (tree-sitter works on bytes) and the rules-based ast_unparse returns a string
+-- for it, having silently dropped the offending bytes. Serving it would need a
+-- BLOB-returning variant.
+--
 -- NOT SERVED: the `duckdb` language adapter. It wraps DuckDB's own parser, has
 -- no byte positions, and reports start_byte = end_byte = 0 for every node
 -- (and children_count = 0 for every node — issue #197). The length guard
