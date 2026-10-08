@@ -6,6 +6,9 @@ namespace duckdb {
 
 namespace SemanticTypes {
 
+// <<< BEGIN GENERATED TAXONOMY: semantic_type_tables >>>
+// Generated from spec/taxonomy/taxonomy.yaml by scripts/generate_taxonomy.py.
+// Edit the spec, not this block.
 string GetSemanticTypeName(uint8_t semantic_type) {
 	switch (semantic_type) {
 	// PARSER_SPECIFIC types
@@ -388,6 +391,7 @@ uint8_t GetSuperKindCode(const string &name) {
 	}
 	return 255; // Invalid code
 }
+// <<< END GENERATED TAXONOMY: semantic_type_tables >>>
 
 // Helper predicates
 bool IsDefinition(uint8_t semantic_type) {

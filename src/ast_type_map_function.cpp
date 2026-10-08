@@ -87,6 +87,9 @@ static string GetKindName(uint8_t semantic_type) {
 	}
 }
 
+// <<< BEGIN GENERATED TAXONOMY: type_map_name_tables >>>
+// Generated from spec/taxonomy/taxonomy.yaml by scripts/generate_taxonomy.py.
+// Edit the spec, not this block.
 static string GetNameRoleString(uint8_t flags) {
 	uint8_t role = (flags & ASTNodeFlags::NAME_ROLE_MASK) >> 1;
 	switch (role) {
@@ -129,6 +132,7 @@ static string GetExtractionStrategyName(ExtractionStrategy strategy) {
 		return "unknown";
 	}
 }
+// <<< END GENERATED TAXONOMY: type_map_name_tables >>>
 
 static unique_ptr<FunctionData> TypeMapBind(ClientContext &context, TableFunctionBindInput &input,
                                             vector<LogicalType> &return_types, vector<CompatName> &names) {

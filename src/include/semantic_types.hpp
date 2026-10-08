@@ -13,6 +13,9 @@ namespace duckdb {
 
 namespace SemanticTypes {
 
+// <<< BEGIN GENERATED TAXONOMY: semantic_type_constants >>>
+// Generated from spec/taxonomy/taxonomy.yaml by scripts/generate_taxonomy.py.
+// Edit the spec, not this block.
 // Super kinds (bits 6-7)
 constexpr uint8_t META_EXTERNAL = 0x00;   // 00xx xxxx
 constexpr uint8_t DATA_STRUCTURE = 0x40;  // 01xx xxxx
@@ -141,6 +144,7 @@ constexpr uint8_t ORGANIZATION_SECTION = ORGANIZATION | 0x08; // 1011 1000 - sec
 constexpr uint8_t ORGANIZATION_CONTAINER =
     ORGANIZATION | 0x0C; // 1011 1100 - structural containers (source_file/program/compilation_unit roots) — distinct
                          // from DEFINITION_MODULE, which tags named module/namespace definitions within the file
+// <<< END GENERATED TAXONOMY: semantic_type_constants >>>
 
 // Utility functions to extract components
 constexpr uint8_t GetSuperKind(uint8_t semantic_type) {

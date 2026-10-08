@@ -6,6 +6,9 @@
 
 namespace duckdb {
 
+// <<< BEGIN GENERATED TAXONOMY: extraction_strategy_enums >>>
+// Generated from spec/taxonomy/taxonomy.yaml by scripts/generate_taxonomy.py.
+// Edit the spec, not this block.
 // Extraction strategy for node names/values
 enum class ExtractionStrategy : uint8_t {
 	NONE = 0,                      // No extraction needed
@@ -40,6 +43,7 @@ enum class NativeExtractionStrategy : uint8_t {
 	FUNCTION_CALL,            // Function call/invocation with arguments
 	CUSTOM = 255              // Language-specific custom logic
 };
+// <<< END GENERATED TAXONOMY: extraction_strategy_enums >>>
 
 // Simple node configuration
 struct NodeConfig {
@@ -85,6 +89,9 @@ struct NodeConfig {
 //   flags & 0x08          — is a scope boundary
 //   flags & 0x20          — is a constituent (sub-part) of a larger construct
 namespace ASTNodeFlags {
+// <<< BEGIN GENERATED TAXONOMY: node_flag_constants >>>
+// Generated from spec/taxonomy/taxonomy.yaml by scripts/generate_taxonomy.py.
+// Edit the spec, not this block.
 // Bit 0: syntax token
 constexpr uint8_t IS_SYNTAX_ONLY = 0x01;
 
@@ -116,6 +123,7 @@ constexpr uint8_t IS_CONSTRUCT = 0x00; // DEPRECATED: no-op
 constexpr uint8_t IS_EMBODIED = 0x00;  // DEPRECATED: no-op
 constexpr uint8_t IS_KEYWORD = IS_SYNTAX_ONLY;
 constexpr uint8_t IS_KEYWORD_IF_LEAF = IS_SYNTAX_ONLY;
+// <<< END GENERATED TAXONOMY: node_flag_constants >>>
 } // namespace ASTNodeFlags
 
 // Semantic refinement constants for fine-grained classification

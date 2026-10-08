@@ -30,6 +30,9 @@ struct NameStrategyEntry {
 	ExtractionStrategy strategy;
 };
 
+// <<< BEGIN GENERATED TAXONOMY: name_strategy_entries >>>
+// Generated from spec/taxonomy/taxonomy.yaml by scripts/generate_taxonomy.py.
+// Edit the spec, not this block.
 constexpr NameStrategyEntry NAME_STRATEGY_ENTRIES[] = {
     {"NONE", ExtractionStrategy::NONE},
     {"NODE_TEXT", ExtractionStrategy::NODE_TEXT},
@@ -41,6 +44,7 @@ constexpr NameStrategyEntry NAME_STRATEGY_ENTRIES[] = {
     {"FIND_IN_DECLARATOR", ExtractionStrategy::FIND_IN_DECLARATOR},
     {"FIND_CALL_TARGET", ExtractionStrategy::FIND_CALL_TARGET},
 };
+// <<< END GENERATED TAXONOMY: name_strategy_entries >>>
 
 // Parity guard: ExtractionStrategy is a contiguous enum whose final value,
 // CUSTOM, needs native C++ logic and is intentionally not runtime-selectable.
@@ -69,6 +73,9 @@ const unordered_map<string, uint8_t> &FlagNameTable() {
 	// enumerate, so it has no compile-time count guard like the strategies above.
 	// Only the user-facing single-purpose flags are exposed; masks, the zero
 	// NAME_NONE sentinel, and deprecated aliases are omitted.
+	// <<< BEGIN GENERATED TAXONOMY: flag_name_table >>>
+	// Generated from spec/taxonomy/taxonomy.yaml by scripts/generate_taxonomy.py.
+	// Edit the spec, not this block.
 	static const unordered_map<string, uint8_t> flag_names = {
 	    {"IS_SYNTAX_ONLY", ASTNodeFlags::IS_SYNTAX_ONLY},
 	    {"NAME_REFERENCE", ASTNodeFlags::NAME_REFERENCE},
@@ -78,6 +85,7 @@ const unordered_map<string, uint8_t> &FlagNameTable() {
 	    {"IS_EXPORTED", ASTNodeFlags::IS_EXPORTED},
 	    {"IS_CONSTITUENT", ASTNodeFlags::IS_CONSTITUENT},
 	};
+	// <<< END GENERATED TAXONOMY: flag_name_table >>>
 	return flag_names;
 }
 
