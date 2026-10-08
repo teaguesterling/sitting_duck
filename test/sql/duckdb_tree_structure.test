@@ -1,0 +1,230 @@
+# name: test/sql/duckdb_tree_structure.test
+# description: tree-shape invariants for the native `duckdb` language adapter (issue #197)
+# group: [sql]
+#
+# What this guards
+# ----------------
+# The `duckdb` language wraps DuckDB's own SQL parser instead of tree-sitter,
+# so it builds ASTNodes directly (DuckDBAdapter::CreateASTNode) rather than
+# through the tree-sitter walk in unified_ast_backend_impl.hpp that fills in
+# the structural columns. Before issue #197 that meant:
+#
+#   * children_count was 0 on EVERY node, including `program` -- so every node
+#     looked like a leaf while descendant_count said otherwise;
+#   * sibling_index was 0 on every node;
+#   * depth was only correct for the node at the top of each converted
+#     subtree: the expression/tableref handlers create their nested nodes at
+#     depth 0 and only the caller's `if (parent_id == -1)` branch fixed one of
+#     them, leaving e.g. a comparison's operands at depth 0 under a depth-4
+#     parent;
+#   * descendant_count was therefore ALSO wrong wherever a converted subtree
+#     had a non-leaf child, because the old pass ordered its bottom-up count by
+#     that broken depth (nested conjunctions, nested joins, nested call args).
+#
+# These are asserted as mutual invariants rather than as one golden dump, so
+# that a future change cannot satisfy one column by breaking another.
+#
+# Deliberately NOT asserted here: source positions. This adapter hardcodes
+# start_line/end_line/start_column/end_column to 1 and the byte offsets to 0
+# (pinned in test/sql/source_byte_offsets.test); giving it real positions is a
+# separate change.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. The issue #197 reproducer, as an exact shape
+# =============================================================================
+# Every column that was constant before the fix is pinned here, so a regression
+# to "all zeros" is a diff rather than a silently weaker invariant below.
+
+query IIITIIII
+SELECT node_id, parent_id, type, name, depth, sibling_index, children_count, descendant_count
+FROM parse_ast('SELECT a FROM t WHERE x = 1;', 'duckdb')
+ORDER BY node_id;
+----
+1	0	program	(empty)	0	0	1	9
+2	1	select_statement	(empty)	1	0	1	8
+3	2	select_node	(empty)	2	0	3	7
+4	3	select_list	(empty)	3	0	1	1
+5	4	column_reference	a	4	0	0	0
+6	3	table_reference	t	3	1	0	0
+7	3	where_clause	(empty)	3	2	1	3
+8	7	comparison	(empty)	4	0	2	2
+9	8	column_reference	x	5	0	0	0
+10	8	literal	1	5	1	0	0
+
+# The consequence the issue led with: `program` is not a leaf.
+query I
+SELECT children_count FROM parse_ast('SELECT a FROM t WHERE x = 1;', 'duckdb')
+WHERE type = 'program';
+----
+1
+
+# =============================================================================
+# 2. Nested non-leaf subtrees
+# =============================================================================
+# The cases where the old depth-ordered descendant count mis-counted, and where
+# children_count has to come from the real edge set. Most constructs in this
+# adapter collapse to a single childless node (HandleWindow, HandleCase,
+# HandleSubquery, INSERT/UPDATE/DELETE, every CREATE), so an invariant suite
+# built only from those would pass without exercising any of this.
+
+# conjunction over two comparisons: 2 children, 6 descendants
+query TIII
+SELECT type, depth, children_count, descendant_count
+FROM parse_ast('SELECT a FROM t WHERE x = 1 AND y = 2', 'duckdb')
+WHERE type IN ('conjunction', 'comparison')
+ORDER BY node_id;
+----
+conjunction	4	2	6
+comparison	5	2	2
+comparison	5	2	2
+
+# nested joins: the outer join owns the inner one
+query TIII
+SELECT type, depth, children_count, descendant_count
+FROM parse_ast('SELECT u.name FROM users u LEFT JOIN posts p ON u.id = p.user_id INNER JOIN comments c ON p.id = c.post_id', 'duckdb')
+WHERE type = 'join'
+ORDER BY node_id;
+----
+join	3	2	4
+join	4	2	2
+
+# nested call arguments: upper(trim(x)) is a function_call whose only child is
+# itself a function_call
+query TIII
+SELECT type, name, children_count, descendant_count
+FROM parse_ast('SELECT 1 FROM t WHERE upper(trim(x)) = ''A''', 'duckdb')
+WHERE type = 'function_call'
+ORDER BY node_id;
+----
+function_call	upper	1	2
+function_call	trim	1	1
+
+# =============================================================================
+# 3. Mutual invariants over a broad corpus
+# =============================================================================
+# test/corpus/duckdb_sql/kitchen_sink.sql spans DDL, DML, joins, CTEs, window
+# functions, subqueries, set operations and expressions. Each query below
+# returns the number of nodes VIOLATING an invariant, so every answer is 0.
+
+# children_count equals the number of nodes that name this node as parent
+query I
+SELECT count(*)
+FROM read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb') n
+LEFT JOIN (
+    SELECT parent_id, count(*) AS c
+    FROM read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb')
+    WHERE parent_id > 0
+    GROUP BY parent_id
+) e ON e.parent_id = n.node_id
+WHERE n.children_count <> COALESCE(e.c, 0);
+----
+0
+
+# a leaf has no descendants, and a node with descendants is not a leaf -- the
+# specific invariant #197 violated (children_count = 0 with descendant_count = 9)
+query I
+SELECT count(*) FROM read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb')
+WHERE (children_count = 0) <> (descendant_count = 0);
+----
+0
+
+# descendant_count equals the full subtree size, computed independently
+query I
+WITH RECURSIVE ast AS (
+    SELECT node_id, parent_id, descendant_count
+    FROM read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb')
+), sub(root, node_id) AS (
+    SELECT node_id, node_id FROM ast
+    UNION ALL
+    SELECT s.root, c.node_id FROM sub s JOIN ast c ON c.parent_id = s.node_id
+)
+SELECT count(*)
+FROM (SELECT root, count(*) - 1 AS subtree_size FROM sub GROUP BY root) t
+JOIN ast n ON n.node_id = t.root
+WHERE n.descendant_count <> t.subtree_size;
+----
+0
+
+# every parent_id resolves to a real node (no dangling edges, which is what
+# would silently turn a node into a second root)
+query I
+SELECT count(*)
+FROM read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb') n
+WHERE n.parent_id > 0
+  AND NOT EXISTS (
+      SELECT 1 FROM read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb') p
+      WHERE p.node_id = n.parent_id);
+----
+0
+
+# exactly one root, and it is `program` with parent_id = 0
+query TI
+SELECT type, count(*)
+FROM read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb')
+WHERE parent_id IS NULL OR parent_id = 0
+GROUP BY type;
+----
+program	1
+
+# depth is the tree's own depth: one more than the parent's
+query I
+SELECT count(*)
+FROM read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb') n
+JOIN read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb') p
+  ON n.parent_id = p.node_id
+WHERE n.depth <> p.depth + 1;
+----
+0
+
+# sibling_index is dense 0..children_count-1 within each parent
+query I
+SELECT count(*) FROM (
+    SELECT parent_id,
+           count(*) AS c,
+           min(sibling_index) AS lo,
+           max(sibling_index) AS hi,
+           count(DISTINCT sibling_index) AS distinct_indexes
+    FROM read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb')
+    WHERE parent_id > 0
+    GROUP BY parent_id
+) WHERE lo <> 0 OR hi <> c - 1 OR distinct_indexes <> c;
+----
+0
+
+# sibling_index orders siblings the way node_id does -- node ids are handed out
+# in parse order, so this is "siblings are indexed in source order"
+query I
+SELECT count(*)
+FROM read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb') a
+JOIN read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb') b
+  ON a.parent_id = b.parent_id AND a.parent_id > 0 AND a.node_id < b.node_id
+WHERE a.sibling_index >= b.sibling_index;
+----
+0
+
+# node ids are pre-order: a child's id is greater than its parent's and its
+# whole subtree range [node_id, node_id + descendant_count] nests inside the
+# parent's. This is the contiguity the O(1) subtree macros assume.
+query I
+SELECT count(*)
+FROM read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb') c
+JOIN read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb') p
+  ON c.parent_id = p.node_id
+WHERE c.node_id <= p.node_id
+   OR c.node_id + c.descendant_count > p.node_id + p.descendant_count;
+----
+0
+
+# The corpus must actually contain interior nodes, otherwise every zero above
+# could be vacuously true of an all-leaf tree.
+query II
+SELECT count(*) FILTER (WHERE children_count > 1) > 10,
+       max(depth) >= 5
+FROM read_ast('test/corpus/duckdb_sql/kitchen_sink.sql', 'duckdb');
+----
+true	true
