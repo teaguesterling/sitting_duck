@@ -360,9 +360,9 @@ done < <(run_sql "
 ")
 
 # ---- 2b. DEF-DERIVED: native extraction, from the DEF_TYPE tables -----------
-# Emits <language>\t<node_type>\t<name_strategy>\t<native_strategy>, one row
-# per DEF_TYPE entry, for the whole scanned tree. Parsed from the RIGHT: the
-# last four comma-separated fields are semantic_type, name_strategy,
+# Emits <language>\t<node_type>\t<name_strategy>\t<native_strategy>\t<semantic_type>,
+# one row per DEF_TYPE entry, for the whole scanned tree. Parsed from the
+# RIGHT: the last four comma-separated fields are semantic_type, name_strategy,
 # native_strategy, flags, and none of those four can contain a comma -- whereas
 # the quoted raw_type CAN (DEF_TYPE(",", PARSER_PUNCTUATION, ...) is a real
 # entry in most .def files). Splitting from the left would silently mis-field
@@ -397,15 +397,17 @@ for pattern in "${def_sources[@]}"; do
                 raw = f[1]
                 for (i = 2; i <= n - 4; i++) raw = raw "," f[i]
                 gsub(/^[ \t]*"|"[ \t]*$/, "", raw)
-                nm = f[n-2]; nat = f[n-1]
+                nm = f[n-2]; nat = f[n-1]; sem = f[n-3]
                 gsub(/^[ \t]+|[ \t]+$/, "", nm)
                 gsub(/^[ \t]+|[ \t]+$/, "", nat)
+                gsub(/^[ \t]+|[ \t]+$/, "", sem)
+                gsub(/[ \t]*\|[ \t]*/, "|", sem)
                 # The macro definition itself (DEF_TYPE(raw_type, semantic_type,
                 # name_strat, native_strat, flags)) looks like an entry; its
                 # raw_type is the unquoted parameter name, so the quote strip
                 # above leaves it as-is and this catches it.
                 if (raw == "raw_type") next
-                printf "%s\t%s\t%s\t%s\n", lang, raw, nm, nat
+                printf "%s\t%s\t%s\t%s\t%s\n", lang, raw, nm, nat, sem
             }
         ' "${f}" >>"${def_table}"
     done
@@ -762,7 +764,8 @@ check_native_absent() {
             SELECT column2 AS node_type
             FROM read_csv('$(sql_quote "${tbl}")', delim := '\t', header := false,
                           columns := {'column1': 'VARCHAR', 'column2': 'VARCHAR',
-                                      'column3': 'VARCHAR', 'column4': 'VARCHAR'})
+                                      'column3': 'VARCHAR', 'column4': 'VARCHAR',
+                                      'column5': 'VARCHAR'})
             WHERE column1 = '$(sql_quote "${lang}")'
             GROUP BY column2
             HAVING count(DISTINCT column4) = 1 AND any_value(column4) = 'NONE'
@@ -1007,7 +1010,12 @@ check_decl_unique() {
     out=$(awk -F'\t' -v l="${lang}" '
         $1 == l {
             n[$2]++
-            key = $3 "|" $4
+            # The variant key covers the SEMANTIC TYPE as well as both
+            # strategies: dart declares `type_alias` as DEFINITION_CLASS at
+            # dart_types.def:109 and TYPE_REFERENCE at :682, and a key over
+            # strategies alone would have missed a pair that differed only in
+            # what the node IS.
+            key = $3 "|" $4 "|" $5
             if (!($2 SUBSEP key in seen)) { seen[$2 SUBSEP key] = 1; variants[$2]++ }
         }
         END {
@@ -1200,12 +1208,23 @@ fi
 control_failures=0
 control_note() {
     local name="$1" result="$2" want="$3" got="$4"
-    if [ "${result}" = "fired" ]; then
-        say "$(printf '  ok       %-14s %s' "${name}" "${got}")"
-    else
-        say "$(printf '  NOTFIRED %-14s wanted %s, got %s' "${name}" "${want}" "${got}")"
-        control_failures=$((control_failures + 1))
-    fi
+    case "${result}" in
+        fired)
+            say "$(printf '  ok       %-14s %s' "${name}" "${got}")" ;;
+        skipped)
+            # The control's PREREQUISITE is absent in this configuration, and
+            # the check it guards is reported UNDECL for every language, so
+            # nothing is being claimed about it. Distinguished from `notfired`
+            # on purpose: an out-of-tree module with no reachable .def cannot
+            # run the def-derived controls, and voiding every such run would
+            # make the kit unusable for exactly the case 044 requires it to
+            # support. A skip here is only safe BECAUSE the matrix shows UNDECL
+            # rather than ok.
+            say "$(printf '  skip     %-14s %s' "${name}" "${got}")" ;;
+        *)
+            say "$(printf '  NOTFIRED %-14s wanted %s, got %s' "${name}" "${want}" "${got}")"
+            control_failures=$((control_failures + 1)) ;;
+    esac
 }
 
 say "NEGATIVE CONTROLS (each plants a fault; the named check must notice)"
@@ -1252,7 +1271,7 @@ fi
 # the DECLARATION table -- the input this check reads -- and run the real
 # check: it has to see the payload leak onto NONE-declared node types.
 planted_def="${workdir}/planted_def.tsv"
-awk -F'\t' 'BEGIN{OFS="\t"} $1=="python" {print $1,$2,$3,"NONE"}' "${def_table}" >"${planted_def}"
+awk -F'\t' 'BEGIN{OFS="\t"} $1=="python" {print $1,$2,$3,"NONE",$5}' "${def_table}" >"${planted_def}"
 if [ -s "${planted_def}" ] && [ -n "${corpus_files[python]+x}" ]; then
     r=$(check_native_absent python "${planted_def}")
     cv="${r%%$'\t'*}"
@@ -1261,6 +1280,8 @@ if [ -s "${planted_def}" ] && [ -n "${corpus_files[python]+x}" ]; then
     else
         control_note "NATIVE-ABST" notfired "payload on NONE-declared nodes" "${cv}: ${r#*$'\t'}"
     fi
+elif [ "${def_rows}" -eq 0 ]; then
+    control_note "NATIVE-ABST" skipped "" "no DEF_TYPE source scanned; NATIVE-ABST is UNDECL everywhere"
 else
     control_note "NATIVE-ABST" notfired "python def rows + fixture" "missing"
 fi
@@ -1312,6 +1333,8 @@ if [ -s "${planted_dup}" ]; then
         control_note "DECL-UNIQUE" notfired "conflicting duplicate declaration" \
             "baseline ${baseline_dup%%$'\t'*}, planted ${cv}: ${r#*$'\t'}"
     fi
+elif [ "${def_rows}" -eq 0 ]; then
+    control_note "DECL-UNIQUE" skipped "" "no DEF_TYPE source scanned; DECL-UNIQUE is UNDECL everywhere"
 else
     control_note "DECL-UNIQUE" notfired "python def rows" "missing"
 fi
