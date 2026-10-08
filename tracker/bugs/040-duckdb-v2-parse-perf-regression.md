@@ -176,10 +176,26 @@ cyanoptera (`d4c9dfd469`), 463 assertions, `rc=0` each:
 Spread 0.8%. `user`/`real` = 1.06 on run 1 — the suite is essentially
 single-threaded end to end.
 
-**This bug records 2060s. Run 1 came back as 2060.017s.** The exact agreement to
-four significant figures is a coincidence worth naming rather than trusting —
-but run 2's 2043.7s puts the honest reading beyond doubt: **the number in this
-bug is not stale. It is current, to within 1%.**
+**This bug records 2060s. Run 1 came back as 2060.017s.** That exact agreement
+to four significant figures is a **coincidence, not a confirmation**, and the
+reason matters: the recorded 2060s was measured on the mitigation branch
+`fix/css-selectors-multilang-timeout` (pre-parsing applied, ~102 parses -> ~7),
+at **464** assertions, on an earlier cyanoptera commit, via a harness this file
+does not name. Today's figure is **main @ `6f82c98`**, 463 assertions,
+`d4c9dfd469f`, via the `unittest` binary directly. Two different configurations
+landing on 2060 is luck.
+
+**So read the comparison this way:** neither historical comparison is clean —
+the `Makefile`'s four figures came via `run_tests.py` at a different commit, and
+this bug's 2060s came from a different branch and assertion count via an
+unrecorded harness. **What is clean is the two sides measured here today, on one
+source tree with one harness: 167.0s on v1.5.6 against 2051.9s on cyanoptera,
+12.3x.** The agreement with the recorded 2060s is same-order across
+configurations that differ in known ways. That is enough to retire "stale" —
+this bug's magnitude is current — and not enough to call the numbers identical.
+It is also consistent with the branch difference being immaterial, since this
+bug's own measurement shows parsing is negligible (`read_ast` 0.026s), which is
+exactly why pre-parsing did not help in the first place.
 
 ## Result 3 — all four heavy suites named in the `Makefile`
 
@@ -307,8 +323,15 @@ does not have.**
 
 ## What could still be wrong with this record
 
-- The 2060.017s / 2060s coincidence is unexplained. Run 2 (2043.7s) is the
-  reason to believe the magnitude anyway.
+- The 2060.017s / 2060s agreement is a coincidence between two configurations
+  that differ in branch, assertion count, DuckDB commit and harness. Run 2
+  (2043.7s) and the clean same-day 167.0s-vs-2051.9s pair are the reasons to
+  believe the magnitude; the coincidence itself is not evidence of anything.
+- **The assertion count moved, 464 -> 463.** This bug records 464; both builds
+  report 463 today. One assertion was removed or merged from the suite between
+  then and `6f82c98`. It is a 0.2% change and cannot explain a 2000s runtime,
+  but it is one more reason the historical number is not a like-for-like
+  baseline, and I did not track down which assertion changed.
 - The `Makefile`'s four baseline figures came via `run_tests.py`; mine came from
   `unittest` directly. The 1.44x "improvement" against them may be harness
   overhead rather than DuckDB, and I did not separate the two.
