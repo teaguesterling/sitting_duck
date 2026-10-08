@@ -47,6 +47,12 @@ typescript	../unparse_leaf_text/sample.ts
 typescript	../javascript/typed_example.ts
 sql	../unparse_leaf_text/sample.sql
 sql	../sql/create_function_example.sql
+# sql_calls.sql, not duckdb_macros.sql: the tree-sitter `sql` grammar cannot
+# parse DuckDB's CREATE MACRO and produces an ERROR node, which the parse guard
+# then quarantines -- leaving a language that declares FIVE naming call node
+# types with no call coverage, since the other two sql fixtures contain no call
+# nodes either. sql_calls.sql is portable SQL that the grammar parses cleanly.
+sql	sql_calls.sql
 duckdb	duckdb_macros.sql
 go	../unparse_leaf_text/sample.go
 go	../call_extraction/calls.go
@@ -83,7 +89,13 @@ r	../unparse_leaf_text/sample.R
 r	../r/simple.r
 kotlin	../unparse_leaf_text/sample.kt
 kotlin	../call_extraction/calls.kt
+# ../kotlin/simple.kt has an ERROR node at line 27, so the parse guard
+# quarantines it -- which is why kotlin_constructors.kt exists: it carries the
+# constructor_invocation shape in a file that parses cleanly. Keeping simple.kt
+# listed anyway so the `dirty` verdict stays visible instead of the fixture
+# quietly disappearing from the corpus.
 kotlin	../kotlin/simple.kt
+kotlin	kotlin_constructors.kt
 csharp	../unparse_leaf_text/sample.cs
 csharp	../call_extraction/calls.cs
 csharp	../csharp/simple.cs

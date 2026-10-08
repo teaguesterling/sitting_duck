@@ -22,6 +22,18 @@
 # ast_supported_languages(), changes the pinned column lists below. That is the
 # intent -- the test should fail when the finding is fixed, not quietly keep
 # passing.
+#
+# KNOWN LIMITATION: the totals below (27 registered languages, 26 with
+# declarations, the per-strategy language counts) are pinned for the DEFAULT
+# build. cmake/BuiltinLanguages.cmake supports subset builds via
+# -DSITTING_DUCK_LANGUAGES / -DSITTING_DUCK_EXCLUDE_LANGUAGES (groundwork for
+# the slim "sitting_duckling" build, #87), and every count here changes under
+# one. scripts/conformance_kit.sh takes its language list from
+# ast_supported_languages() precisely so it does NOT have this problem; this
+# CI slice trades that for the ability to pin an exact baseline, which is what
+# makes a regression visible. If subset builds enter CI, these counts need to
+# become relative (e.g. "every registered language except duckdb has
+# declarations") rather than absolute.
 
 require sitting_duck
 

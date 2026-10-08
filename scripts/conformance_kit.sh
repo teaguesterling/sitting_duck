@@ -499,14 +499,19 @@ fi
 
 # Build a DuckDB list literal of absolute paths for one language.
 #
-# Once check_parse has run it prefers clean_paths[lang] -- the fixtures that
-# parsed with no ERROR node. Downstream checks must never measure a fixture the
-# guard quarantined: an ERROR subtree shifts node ids, loses names and would
-# make every number after it a guess.
+# Once check_parse has run it prefers the fixtures that parsed with no ERROR
+# node. Downstream checks must never measure a fixture the guard quarantined:
+# an ERROR subtree shifts node ids, loses names and would make every number
+# after it a guess.
+corpus_paths() {
+    local lang="$1" f
+    f="$(clean_list_file "${lang}")"
+    if [ -f "${f}" ]; then cat -- "${f}"; else printf '%s' "${corpus_files[${lang}]-}"; fi
+}
+
 paths_list() {
     local lang="$1" out="" p src
-    src="${clean_paths[${lang}]-}"
-    [ -z "${src}" ] && src="${corpus_files[${lang}]-}"
+    src="$(corpus_paths "${lang}")"
     while IFS= read -r p; do
         [ -z "${p}" ] && continue
         out="${out}${out:+, }'$(sql_quote "${p}")'"
@@ -515,10 +520,7 @@ paths_list() {
 }
 
 first_path() {
-    local lang="$1" src
-    src="${clean_paths[${lang}]-}"
-    [ -z "${src}" ] && src="${corpus_files[${lang}]-}"
-    printf '%s' "${src}" | head -1
+    corpus_paths "$1" | head -1
 }
 
 # =============================================================================
@@ -536,8 +538,19 @@ first_path() {
 # coverage, not every verdict for its language. (test/data/kotlin/simple.kt has
 # a single ERROR node at line 27 -- that is a real finding about the kotlin
 # grammar, and it should not also erase kotlin's six other verdicts.)
-# Side effect: sets clean_paths[lang] to the fixtures downstream checks may use.
-declare -A clean_paths=()
+# Side effect: writes the fixtures downstream checks may use to
+# ${workdir}/clean_<lang>.
+#
+# A FILE, not a shell variable, and that is not an accident. check_parse is
+# called as `r=$(check_parse "$lang")`, i.e. inside a command substitution,
+# which runs in a SUBSHELL -- so an assignment to an associative array here is
+# discarded the moment the function returns. An earlier revision did exactly
+# that and the quarantine was a silent no-op: `paths_list` fell back to the
+# full corpus, so every downstream check measured the fixtures the guard had
+# just rejected while the matrix claimed they were quarantined. sql's row
+# reported CALL-NAMED `ok` off the one fixture that had failed to parse. A file
+# survives the subshell; the array did not.
+clean_list_file() { printf '%s/clean_%s' "${workdir}" "$1"; }
 check_parse() {
     local lang="$1" plist out nodes errs files clean row p
     plist=$(paths_list "${lang}")
@@ -575,7 +588,7 @@ check_parse() {
             dirty="${dirty}${dirty:+, }$(basename -- "${p}"):${e}"
         fi
     done <<<"${out}"
-    clean_paths["${lang}"]="${clean}"
+    printf '%s' "${clean}" >"$(clean_list_file "${lang}")"
     local pnote=""
     [ "${pathless}" -eq 1 ] && pnote="; file_path not reported by this adapter, quarantine is language-wide"
     if [ "${files}" -eq 0 ] || [ "${nodes}" -eq 0 ]; then
@@ -805,15 +818,27 @@ check_native_absent() {
 # that is the negative control, and it must make the comparison disagree.
 check_raw_join() {
     local lang="$1" selector_b="${2-}" f callee out a b c d
-    f=$(first_path "${lang}")
-    [ -z "${f}" ] && { printf 'void\tno fixture'; return; }
-    callee=$(run_sql "
-        SELECT name FROM read_ast('$(sql_quote "${f}")', '$(sql_quote "${lang}")', ignore_errors := true)
-        WHERE is_semantic_type(semantic_type, 'CALL') AND name IS NOT NULL AND name <> ''
-          AND regexp_matches(name, '^[A-Za-z_][A-Za-z0-9_]*\$')
-        GROUP BY name ORDER BY count(*) DESC, name LIMIT 1;
-    ")
-    [ -z "${callee}" ] && { printf 'void\tno named call in fixture'; return; }
+    # ITERATE the clean fixtures. Stopping at the first one voided this check
+    # for 10 of 27 languages, and at least two of those voids were false: hcl's
+    # six named `function_call` nodes are in test/data/hcl/simple.tf while
+    # corpus.tsv lists the call-free unparse_leaf_text/sample.tf first, and css
+    # is the same shape. A `void` here must mean "no named call ANYWHERE in this
+    # language's corpus", not "not in whichever fixture was listed first".
+    local src p
+    src="$(corpus_paths "${lang}")"
+    f=""; callee=""
+    while IFS= read -r p; do
+        [ -z "${p}" ] && continue
+        callee=$(run_sql "
+            SELECT name FROM read_ast('$(sql_quote "${p}")', '$(sql_quote "${lang}")', ignore_errors := true)
+            WHERE is_semantic_type(semantic_type, 'CALL') AND NOT is_syntax_only(flags)
+              AND name IS NOT NULL AND name <> ''
+              AND regexp_matches(name, '^[A-Za-z_][A-Za-z0-9_]*\$')
+            GROUP BY name ORDER BY count(*) DESC, name LIMIT 1;
+        ")
+        if [ -n "${callee}" ]; then f="${p}"; break; fi
+    done <<<"${src}"
+    [ -z "${f}" ] && { printf 'void\tno named call in any fixture'; return; }
     local sel_callee="${callee}"
     [ -n "${selector_b}" ] && sel_callee="${selector_b}"
     # `language := ${lang}` on BOTH sides is load-bearing. ast_select()
