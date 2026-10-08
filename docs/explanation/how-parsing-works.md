@@ -162,10 +162,11 @@ SELECT * FROM read_ast('file.py', peek := 'none');    -- No source text
 ### Source and Structure
 
 ```sql
--- Control source extraction
-SELECT * FROM read_ast('file.py', source := 'full');     -- Full source
-SELECT * FROM read_ast('file.py', source := 'lines');    -- Line-based
-SELECT * FROM read_ast('file.py', source := 'none');     -- No source
+-- Control which source-LOCATION columns are emitted.
+-- No level retains per-node source text; 'full' means "all position info".
+SELECT * FROM read_ast('file.py', source := 'full');     -- + columns and byte offsets
+SELECT * FROM read_ast('file.py', source := 'lines');    -- + line numbers (the default)
+SELECT * FROM read_ast('file.py', source := 'none');     -- no location columns at all
 
 -- Control structure extraction
 SELECT * FROM read_ast('file.py', structure := 'full');    -- Full tree info

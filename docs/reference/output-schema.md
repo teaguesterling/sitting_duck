@@ -401,7 +401,7 @@ WHERE type = 'function_definition';
 
 **Type:** `UINTEGER`
 
-Column positions (1-based). **Only available with `source := 'full'`.**
+Column positions (**1-based**). **Only available with `source := 'full'`.**
 
 ```sql
 -- Must use source := 'full' to get column positions
@@ -409,6 +409,31 @@ SELECT name, start_line, start_column, end_line, end_column
 FROM read_ast('test/data/python/sample_app.py', source := 'full')
 WHERE type = 'identifier';
 ```
+
+---
+
+### `start_byte` / `end_byte`
+
+**Type:** `UINTEGER`
+
+Whole-file byte offsets for the node, **0-based and half-open** —
+`[start_byte, end_byte)` — so `end_byte - start_byte` is the node's length in
+bytes. These are tree-sitter's own offsets, passed through unchanged. **Only
+available with `source := 'full'`** (added in PR #198).
+
+Note the basing difference from the line and column columns, which are 1-based.
+Prefer these over reconstructing byte positions from line/column: that
+reconstruction is error-prone with multi-byte characters and varying line
+endings, which is why these were exposed.
+
+```sql
+SELECT name, start_byte, end_byte, end_byte - start_byte AS byte_length
+FROM read_ast('test/data/python/sample_app.py', source := 'full')
+WHERE type = 'identifier';
+```
+
+See `API_REFERENCE.md` for a worked example of slicing a node's exact source
+text out of the file with these offsets.
 
 ---
 

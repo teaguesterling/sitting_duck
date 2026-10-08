@@ -187,7 +187,9 @@ language module or embodies an analysis opinion is an add-on.
        than returning it in a result set, because it looks authoritative.
      - **Substrate gap (verified 2026-07-23, PR #94 investigation)**: today
        `source :=` controls *location columns only* (`'full'` adds
-       start/end_column); **no extraction config retains per-node source
+       start/end_column — and, since PR #198 landed 2026-10-07,
+       `start_byte`/`end_byte` too; see the byte-offsets note below);
+       **no extraction config retains per-node source
        text**. Peek is the only per-node text, and exact source requires
        re-reading files (fails for in-memory `parse_ast` and moved files).
        So source-text retention is *new engine work* — either a real
@@ -212,6 +214,9 @@ language module or embodies an analysis opinion is an add-on.
        natively. Exposing those under `source := 'full'` makes exact slicing
        a `substring()` rather than a reconstruction, and is a prerequisite
        worth landing before 4b rather than during it.
+       **LANDED 2026-10-07, PR #198**: `source := 'full'` now emits four
+       positional columns — `start_column`, `end_column` (1-based) and
+       `start_byte`, `end_byte` (0-based, half-open). So 4b's substrate is in.
 4. **Incremental reparse**: tree-sitter's edit-aware reparsing, exposed for
    edit-and-requery loops (agent workflows).
 5. **New languages (DuckPL, …)**: the architecture's acceptance test — *one module,
