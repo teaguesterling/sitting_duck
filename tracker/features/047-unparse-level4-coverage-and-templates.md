@@ -39,7 +39,8 @@ Work:
 - Audit every language's `.def` for named, text-bearing leaves lacking `NODE_TEXT`:
   comments, numeric and string literals, operators that appear as *named* nodes.
   Anonymous tokens need nothing (`type` == text).
-- 27 languages × the audit. This is mechanical but wide, and it is the kind of list
+- 26 tree-sitter languages × the audit (the 27th, native `duckdb`, has no grammar to
+  derive leaves from). This is mechanical but wide, and it is the kind of list
   that must be derived from the grammars rather than written by hand — the same
   lesson as deriving the zero-arity pseudo-class list from the predicate dispatch
   rather than from the two reported cases (#184).

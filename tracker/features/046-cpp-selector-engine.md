@@ -18,10 +18,25 @@ upstream duckdb/duckdb#26036 (test-timeout symptom), 043 (diagnosis).
 Three separate costs follow from that shape, and all three are the same root cause —
 the selector is *re-planned as a 88-CTE query on every call*:
 
-1. **~6 s of planning per call, independent of table size or selector** (#160):
-   ~5.2 s planner + ~0.9 s optimizer against ~0.2 s of execution. `PREPARE` does not
-   amortize it — each `EXECUTE` pays again. Anything issuing many selectors (a
-   verifier, an eval harness, an agent loop) pays it per selector.
+1. **Constant planning cost per call, independent of table size or selector** (#160).
+   `PREPARE` does not amortize it — each `EXECUTE` pays again. Anything issuing many
+   selectors (a verifier, an eval harness, an agent loop) pays it per selector.
+
+    **The magnitude depends on which DuckDB line you are on, and the two differ by
+    ~12×. Do not quote a number without saying which.**
+
+    | DuckDB line | planning cost per call | measured |
+    |---|---|---|
+    | v2.0-dev (cyanoptera) | **~6 s** — ~5.2 s planner + ~0.9 s optimizer against ~0.2 s execution | `042`, 2026-09-15, build `e3946f2327` |
+    | **shipped v1.5.x** | **~0.3–0.5 s** | `042` (v1.5.5, ~0.3–0.4 s); `048` and 2026-10-08 re-measure (v1.5.6, 0.441–0.502 s) |
+
+    So the ~6 s figure in #160 is the **DuckDB v2.0 planning-cost regression**
+    (`tracker/bugs/040`), not the shipped-line cost — and the shape, not the
+    magnitude, is what this spec rests on. Point 2 below is the same phenomenon seen
+    from the test suite. The constant ~0.5 s on the shipped line is still bad for
+    interactive use and compounds in loops, but it is not the emergency a 6 s figure
+    implies; `048` therefore orders the seeded call-graph join (`043` Part A) ahead of
+    this work.
 2. **The v2.0 canary runs `skip_tests`.** `css_selectors_multilang.test` takes ~40 min
    on the v2.0 line against seconds on v1.5.6, so the repo's own cyanoptera leg builds
    but does not test (upstream duckdb/duckdb#26036). We ship a compile-only v2.0
@@ -43,8 +58,12 @@ tests are the specification; this is an implementation change underneath them.
 
 ## Why it gates v2.0.0
 
-- It is the only fix for #160, and #160 is what makes selector-driven tooling
-  (verifiers, eval harnesses, agents) impractical today.
+- It is the only *structural* fix for #160. On the shipped v1.5.x line the ~0.5 s
+  constant makes selector-driven tooling (verifiers, eval harnesses, agents) slow rather
+  than impossible; on the v2.0 line the ~6 s makes it impractical, and v2.0 is where the
+  project is heading. Note that `043` Part A (the seeded call-graph join) retires much of
+  the same per-call bind tax in pure SQL and is sequenced first — this work is the
+  remainder, not the only lever.
 - It retires the `skip_tests` compromise, so the v2.0 line gets a *tested* signal
   rather than a compile-only one.
 - The v2.0 architecture (docs/planning/v2-architecture.md) puts the selector engine in
@@ -53,8 +72,9 @@ tests are the specification; this is an implementation change underneath them.
 
 ## Acceptance
 
-1. `ast_select_from` planning cost is O(selector), not ~6 s fixed — #160's repro drops
-   to the execution floor (~0.2 s CPU).
+1. `ast_select_from` planning cost is O(selector), not a fixed constant — #160's repro
+   drops to the execution floor (~0.2 s CPU) on **both** DuckDB lines (from ~6 s on the
+   v2.0 line and ~0.3–0.5 s on the shipped v1.5.x line; see the table above).
 2. `css_selectors_multilang.test` runs in comparable time on both DuckDB lines, and
    the repo's v2.0 canary drops `skip_tests`.
 3. **Every existing selector test passes unchanged.** The suite is the spec: 7138

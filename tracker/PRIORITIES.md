@@ -35,7 +35,7 @@
 - Bugs #009 (is_syntax_only for delimiters), #010 (punctuation consistency), #011 (comparison types) — all fixed in PR #43
 
 ### Previously Completed
-- 27 language support (Bash, C, C++, C#, CSS, Dart, Go, GraphQL, HCL, HTML, Java, JavaScript, JSON, Kotlin, Lua, Markdown, PHP, Python, R, Ruby, Rust, SQL, Swift, TOML, TypeScript, YAML, Zig)
+- 27 language support (Bash, C, C++, C#, CSS, Dart, DuckDB, Go, GraphQL, HCL, HTML, Java, JavaScript, JSON, Kotlin, Lua, Markdown, PHP, Python, R, Ruby, Rust, SQL, Swift, TOML, TypeScript, Zig) — 26 tree-sitter grammars plus the native `duckdb` adapter. **YAML is not supported** (its tree-sitter grammar is incompatible with the parser-generation CLI); the authoritative list is `cmake/BuiltinLanguages.cmake`.
 - Semantic type system with cross-language type codes
 - 50+ SQL macros (tree navigation, pattern matching, analysis)
 - SQL-based pattern matching with `ast_match()` / `ast_pattern()` / `ast_capture()`

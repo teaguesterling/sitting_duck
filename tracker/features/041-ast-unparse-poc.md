@@ -101,6 +101,16 @@ Prototype macro: `tracker/features/ast_unparse.prototype.sql` (`ast_unparse(path
 differ). This is the right bar for a *rules-based* unparser (and the only bar that
 still holds once the tree is transformed — which is the whole point of unparse).
 
+> **Superseded as a *universal* statement (2026-10-07).** Pseudo-identity is the bar
+> **below** `source := 'full'`, not everywhere. The settled `write_ast` laws split by
+> retention: **byte-exact** at `source := 'full'`
+> (`write_ast(read_ast(x, source := 'full')) = x`), **pseudo-inverse only** below it
+> (`read_ast(write_ast(read_ast(x))) = read_ast(x)`, where `write_ast(read_ast(x)) = x`
+> is explicitly NOT required). Both are in scope, at different levels — which is what
+> unblocked 047's 4b. Authoritative statement:
+> `docs/planning/v2-architecture.md`. The reasoning below is kept as the record of how
+> the pseudo-identity half was arrived at and validated.
+
 **Indentation rule (needed for off-side languages).** Whitespace-insensitive
 languages (JS/C/Go) round-trip on token-spacing alone. Indentation-sensitive ones
 (Python) do NOT: without indentation the re-parse pulls trailing statements into the
@@ -129,7 +139,21 @@ offsets (`source:='full'`) would round-trip an *unmodified* tree but can't forma
 (1) leaf-text coverage (NODE_TEXT on text leaves like `comment`), (2) layout — block
 type(s) for indent + the tight-token set.
 
-## Open questions for direction
-- Ship as a macro `ast_unparse(path)` (v1 spacing) now, or keep exploratory?
-- Which languages to seed first for the leaf-text + spacing audit (python? the reporter's C++/JS)?
-- Byte-exact (source:='full') in scope, or is normalized reconstruction the target?
+## Open questions for direction — all three now answered
+
+- ~~Ship as a macro `ast_unparse(path)` (v1 spacing) now, or keep exploratory?~~
+  **Shipped**, v1.15.0 (default rules) and v1.15.1 (style presets, custom rules tables).
+  See `docs/reference/unparse.md`.
+- ~~Which languages to seed first for the leaf-text + spacing audit?~~ **Moot** — the
+  audit was derived from the grammars mechanically rather than seeded by hand, covering
+  all 26 tree-sitter languages at once (PR #199; `scripts/audit_leaf_text_gaps.py`).
+  Deriving it rather than hand-listing was the point; see 047's findings.
+- ~~Byte-exact (source:='full') in scope, or is normalized reconstruction the target?~~
+  **Settled 2026-10-07 (Teague): both, at different retention levels.** Byte-exact at
+  `source := 'full'`; pseudo-inverse only below it. This is what unblocked 047's 4b.
+  Authoritative: `docs/planning/v2-architecture.md`. Substrate for it landed in PR #198
+  (`start_byte`/`end_byte` under `source := 'full'`).
+
+**Status:** this document is the historical PoC record. Live work is tracked in `047`
+(leaf-text coverage 4a — landed; node templates 4b — next) and `045`/#174 (the COPY
+sink). `048` is the overall v2.0 work register.
