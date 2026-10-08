@@ -1,0 +1,671 @@
+# name: test/sql/ast_unparse_exact.test
+# description: byte-exact unparse - write_ast(read_ast(x, source := 'full')) = x (tracker 047 "4b", first half)
+# group: [sql]
+#
+# WHAT THIS GUARDS
+# ----------------
+# docs/planning/v2-architecture.md ("write_ast laws", settled 2026-10-07) states
+# two laws, split by whether the parse retained the source:
+#
+#   source := 'full'   write_ast(read_ast(x, source := 'full')) = x   BYTE-EXACT
+#   anything less      read_ast(write_ast(read_ast(x))) = read_ast(x)  pseudo-inverse
+#
+# The rules-based macros (ast_unparse / ast_unparse_from / ast_unparse_code /
+# ast_unparse_custom) implement the second. They reconstruct source from node
+# types and names, never read a position column, and normalise inter-token
+# whitespace - which is CONFORMANT below 'full', not a bug, and must not be
+# reported as one (#89). tracker 047 recorded, as a measured result, that
+# byte-identity therefore held for NONE of the 26 corpus languages.
+#
+# ast_unparse_exact* implements the first, by SPLICING the original bytes at
+# [start_byte, end_byte) rather than reconstructing anything:
+#
+#     for each leaf (descendant_count = 0), in byte order:
+#         emit bytes [previous leaf's end_byte, this leaf's start_byte)   GAP
+#         emit bytes [this leaf's start_byte,   this leaf's end_byte)     LEAF
+#     emit bytes [last leaf's end_byte, EOF)                             TAIL
+#
+# Section 2 below asserts the law for all 26 tree-sitter languages. Section 3
+# is the part that makes those 26 assertions worth anything: an equality
+# against the file is ALSO satisfied by a whole-file slice that ignores the
+# tree entirely, so sections 3 and 4 prove the pieces are load-bearing and
+# that the comparison can fail.
+#
+# The oracle is the FILE ITSELF, read with read_blob() and compared as a BLOB.
+# Nothing derived from the parse takes part in the comparison - not `peek`, not
+# line/column, not the byte offsets - so a wrong offset cannot hide behind it.
+# This is strictly stronger than scripts/verify_byte_offsets.sh pass 1, which
+# compares a slice against `peek` (derived from the same offsets).
+#
+# The corpus sweep with per-language numbers lives in
+# scripts/verify_unparse_byte_exact.sh; per-node hex slicing is too slow to put
+# a whole corpus in the suite. Re-run it after a grammar bump.
+#
+# NOT COVERED
+# -----------
+# language 'duckdb' (the native, non-tree-sitter parser). Its adapter has no
+# byte positions (start_byte = end_byte = 0 for every node) and reports
+# children_count = 0 for every node (#197). ast_unparse_exact ERRORS on it -
+# asserted in section 5 - rather than emitting anything.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. The law, in one statement
+# =============================================================================
+# ast_unparse_exact(path) parses with source := 'full' and re-reads the bytes
+# in the same statement, which is the narrowest staleness window available.
+
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.py') u,
+     read_blob('test/data/unparse_leaf_text/sample.py') b;
+----
+true
+
+# The same thing the long way round: a node table plus the bytes.
+statement ok
+CREATE TABLE py_full AS
+SELECT * FROM read_ast('test/data/unparse_leaf_text/sample.py', source := 'full', peek := 'none');
+
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact_from('py_full', 'test/data/unparse_leaf_text/sample.py') u,
+     read_blob('test/data/unparse_leaf_text/sample.py') b;
+----
+true
+
+# And for an in-memory parse, where the "file" is the string argument itself.
+query I
+SELECT source = E'def f(a,b):\n  return a+b  # trailing comment\n'
+FROM ast_unparse_exact_code(E'def f(a,b):\n  return a+b  # trailing comment\n', 'python');
+----
+true
+
+# =============================================================================
+# 2. The law, per language
+# =============================================================================
+# One assertion per tree-sitter language so a failure names the language.
+# Compared as BLOBs: no decode step can mask a difference.
+
+# bash
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.sh') u, read_blob('test/data/unparse_leaf_text/sample.sh') b;
+----
+true
+
+# c
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.c') u, read_blob('test/data/unparse_leaf_text/sample.c') b;
+----
+true
+
+# cpp
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.cpp') u, read_blob('test/data/unparse_leaf_text/sample.cpp') b;
+----
+true
+
+# csharp
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.cs') u, read_blob('test/data/unparse_leaf_text/sample.cs') b;
+----
+true
+
+# css
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.css') u, read_blob('test/data/unparse_leaf_text/sample.css') b;
+----
+true
+
+# dart
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.dart') u, read_blob('test/data/unparse_leaf_text/sample.dart') b;
+----
+true
+
+# go
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.go') u, read_blob('test/data/unparse_leaf_text/sample.go') b;
+----
+true
+
+# graphql
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.graphql') u, read_blob('test/data/unparse_leaf_text/sample.graphql') b;
+----
+true
+
+# hcl
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.tf') u, read_blob('test/data/unparse_leaf_text/sample.tf') b;
+----
+true
+
+# html
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.html') u, read_blob('test/data/unparse_leaf_text/sample.html') b;
+----
+true
+
+# java
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.java') u, read_blob('test/data/unparse_leaf_text/sample.java') b;
+----
+true
+
+# javascript
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.js') u, read_blob('test/data/unparse_leaf_text/sample.js') b;
+----
+true
+
+# json
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.json') u, read_blob('test/data/unparse_leaf_text/sample.json') b;
+----
+true
+
+# kotlin
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.kt') u, read_blob('test/data/unparse_leaf_text/sample.kt') b;
+----
+true
+
+# lua
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.lua') u, read_blob('test/data/unparse_leaf_text/sample.lua') b;
+----
+true
+
+# markdown
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.md') u, read_blob('test/data/unparse_leaf_text/sample.md') b;
+----
+true
+
+# php
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.php') u, read_blob('test/data/unparse_leaf_text/sample.php') b;
+----
+true
+
+# python
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.py') u, read_blob('test/data/unparse_leaf_text/sample.py') b;
+----
+true
+
+# r
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.R') u, read_blob('test/data/unparse_leaf_text/sample.R') b;
+----
+true
+
+# ruby
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.rb') u, read_blob('test/data/unparse_leaf_text/sample.rb') b;
+----
+true
+
+# rust
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.rs') u, read_blob('test/data/unparse_leaf_text/sample.rs') b;
+----
+true
+
+# sql
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.sql') u, read_blob('test/data/unparse_leaf_text/sample.sql') b;
+----
+true
+
+# swift
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.swift') u, read_blob('test/data/unparse_leaf_text/sample.swift') b;
+----
+true
+
+# toml
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.toml') u, read_blob('test/data/unparse_leaf_text/sample.toml') b;
+----
+true
+
+# typescript
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.ts') u, read_blob('test/data/unparse_leaf_text/sample.ts') b;
+----
+true
+
+# zig
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.zig') u, read_blob('test/data/unparse_leaf_text/sample.zig') b;
+----
+true
+
+# ---------------------------------------------------------------------------
+# The two fixtures byte-exactness is actually about. Both are marked `-text` in
+# .gitattributes so git cannot normalize them into testing nothing. A
+# reconstruction that counted characters instead of bytes, or dropped a CR,
+# fails here and nowhere else.
+# ---------------------------------------------------------------------------
+
+# python / CRLF + multi-byte UTF-8 in one file
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/encoding/crlf_utf8.py') u, read_blob('test/data/encoding/crlf_utf8.py') b;
+----
+true
+
+# python / multi-byte UTF-8, LF
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/python/unicode.py') u, read_blob('test/data/python/unicode.py') b;
+----
+true
+
+# =============================================================================
+# 3. The equality is not vacuous
+# =============================================================================
+# A whole-file slice that ignored the tree would pass every assertion above.
+# These show the leaf frontier and the gaps are both real and both load-bearing.
+
+# 3a. The frontier is non-empty, its leaves carry bytes, and a third of the
+#     file is NOT inside any leaf. If gap_bytes were 0 the gap machinery would
+#     be untested; if leaf_bytes were 0 the output would be all gap.
+query III
+SELECT count(*),
+       sum(end_byte - start_byte),
+       (SELECT octet_length(content) FROM read_blob('test/data/unparse_leaf_text/sample.py'))
+         - sum(end_byte - start_byte)
+FROM read_ast('test/data/unparse_leaf_text/sample.py', source := 'full', peek := 'none')
+WHERE descendant_count = 0;
+----
+55	172	50
+
+# 3b. The leaf frontier is an antichain: no leaf starts before the previous
+#     leaf ends. This is the property that makes the splice a tiling rather
+#     than a concatenation with duplicated or dropped bytes.
+query I
+SELECT count(*) FROM (
+    SELECT start_byte,
+           lag(end_byte) OVER (ORDER BY start_byte, end_byte, node_id) AS prev_end
+    FROM read_ast('test/data/unparse_leaf_text/sample.py', source := 'full', peek := 'none')
+    WHERE descendant_count = 0
+) WHERE prev_end IS NOT NULL AND start_byte < prev_end;
+----
+0
+
+# 3c. GAPS ARE COMPUTED FROM OFFSETS, NOT FROM GRAMMAR - which dissolves a
+#     limit tracker 047 recorded as structural. tree-sitter-kotlin's
+#     `string_literal` [75,79) = `"hi"` has exactly one child,
+#     `string_content` [76,78) = `hi`: there is NO node for either quote
+#     character, so bytes 75 and 78 are covered by no leaf at all.
+query II
+SELECT count(*) FILTER (WHERE start_byte <= 75 AND 75 < end_byte),
+       count(*) FILTER (WHERE start_byte <= 78 AND 78 < end_byte)
+FROM read_ast('test/data/unparse_leaf_text/sample.kt', source := 'full', peek := 'none')
+WHERE descendant_count = 0;
+----
+0	0
+
+# ...and yet the quotes come back, because they are gap bytes. The rules-based
+# unparser, which concatenates leaves, loses them - this is the same line from
+# both unparsers, and the contrast is the point of the whole section.
+query T
+SELECT regexp_extract(source, 'val s = [^\n]*')
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.kt');
+----
+val s = "hi"
+
+query T
+SELECT regexp_extract(source, 'val s = [^\n]*')
+FROM ast_unparse('test/data/unparse_leaf_text/sample.kt');
+----
+val s = hi
+
+# 3d. The leaf slices are SUBSTITUTABLE, which is what makes this formulation
+#     the one that generalises to a modified tree (047's 4b second half -
+#     layout for synthesized nodes - is NOT implemented). The same splice with
+#     one leaf's bytes swapped for '99' produces exactly the edited text and
+#     leaves every other byte alone. A whole-span slice could not do this.
+query T
+WITH b AS (SELECT encode(E'x = 1\ny = 2\n') AS cblob),
+l AS (SELECT node_id, start_byte, end_byte,
+             COALESCE(lag(end_byte) OVER (ORDER BY start_byte, end_byte, node_id), 0) AS prev_end
+      FROM parse_ast(E'x = 1\ny = 2\n', 'python', source := 'full', peek := 'none')
+      WHERE descendant_count = 0),
+m AS (SELECT string_agg(decode(b.cblob[l.prev_end + 1 : l.start_byte]) ||
+                        CASE WHEN l.start_byte = 4 THEN '99'
+                             ELSE decode(b.cblob[l.start_byte + 1 : l.end_byte]) END,
+                        '' ORDER BY l.start_byte, l.end_byte, l.node_id) AS head,
+             max(l.end_byte) AS last_end
+      FROM l, b)
+SELECT replace(m.head || decode(b.cblob[m.last_end + 1 : ]), chr(10), '|') FROM m, b;
+----
+x = 99|y = 2|
+
+# =============================================================================
+# 4. NEGATIVE CONTROL - can any of this fail?
+# =============================================================================
+# Every assertion above is an equality, and an equality that cannot fail is
+# worth nothing. These plant faults in the same splice arithmetic and require
+# them to be caught. Computed in HEX SPACE (to_hex of the BLOB, two ASCII
+# characters per byte, so character indexing over the hex string IS byte
+# indexing over the bytes): a one-byte shift lands inside a UTF-8 sequence, so
+# decode() of the shifted pieces would raise a conversion error instead of
+# producing a wrong string, and an error is not a detection.
+
+# 4a. The control's own arithmetic, unshifted, must reproduce the file. Without
+#     this, a detected difference below could be the control being wrong rather
+#     than the plant being caught. It also cross-checks the two byte-slicing
+#     primitives: this is API_REFERENCE's from_hex(substring(to_hex(...)))
+#     spelling, the macro uses blob[i:j], and they agree on a CRLF +
+#     multi-byte file.
+query I
+WITH b AS (SELECT to_hex(content) AS hex FROM read_blob('test/data/encoding/crlf_utf8.py')),
+l AS (SELECT node_id, start_byte, end_byte,
+             COALESCE(lag(end_byte) OVER (ORDER BY start_byte, end_byte, node_id), 0) AS prev_end
+      FROM read_ast('test/data/encoding/crlf_utf8.py', source := 'full', peek := 'none')
+      WHERE descendant_count = 0),
+c AS (SELECT string_agg(substring(b.hex, 2 * l.prev_end   + 1, 2 * (l.start_byte - l.prev_end)) ||
+                        substring(b.hex, 2 * l.start_byte + 1, 2 * (l.end_byte - l.start_byte)),
+                        '' ORDER BY l.start_byte, l.end_byte, l.node_id) AS head,
+             max(l.end_byte) AS last_end
+      FROM l, b)
+SELECT (c.head || substring(b.hex, 2 * c.last_end + 1)) = b.hex FROM c, b;
+----
+true
+
+# 4b. Every slice boundary shifted one byte late must NOT reproduce the file.
+query I
+WITH b AS (SELECT to_hex(content) AS hex FROM read_blob('test/data/encoding/crlf_utf8.py')),
+l AS (SELECT node_id, start_byte, end_byte,
+             COALESCE(lag(end_byte) OVER (ORDER BY start_byte, end_byte, node_id), 0) AS prev_end
+      FROM read_ast('test/data/encoding/crlf_utf8.py', source := 'full', peek := 'none')
+      WHERE descendant_count = 0),
+s AS (SELECT string_agg(substring(b.hex, 2 * (l.prev_end   + 1) + 1, 2 * (l.start_byte - l.prev_end)) ||
+                        substring(b.hex, 2 * (l.start_byte + 1) + 1, 2 * (l.end_byte - l.start_byte)),
+                        '' ORDER BY l.start_byte, l.end_byte, l.node_id) AS head,
+             max(l.end_byte) AS last_end
+      FROM l, b)
+SELECT (s.head || substring(b.hex, 2 * s.last_end + 1)) = b.hex FROM s, b;
+----
+false
+
+# 4c. One leaf's bytes replaced must NOT reproduce the file. 4b is a boundary
+#     fault, this is a content fault; they fail for different reasons.
+query I
+WITH b AS (SELECT to_hex(content) AS hex FROM read_blob('test/data/encoding/crlf_utf8.py')),
+l AS (SELECT node_id, start_byte, end_byte,
+             COALESCE(lag(end_byte) OVER (ORDER BY start_byte, end_byte, node_id), 0) AS prev_end
+      FROM read_ast('test/data/encoding/crlf_utf8.py', source := 'full', peek := 'none')
+      WHERE descendant_count = 0),
+r AS (SELECT string_agg(substring(b.hex, 2 * l.prev_end + 1, 2 * (l.start_byte - l.prev_end)) ||
+                        CASE WHEN l.node_id = (SELECT min(node_id) FROM l WHERE end_byte > start_byte)
+                             THEN '5A5A5A5A'
+                             ELSE substring(b.hex, 2 * l.start_byte + 1, 2 * (l.end_byte - l.start_byte)) END,
+                        '' ORDER BY l.start_byte, l.end_byte, l.node_id) AS head,
+             max(l.end_byte) AS last_end
+      FROM l, b)
+SELECT (r.head || substring(b.hex, 2 * r.last_end + 1)) = b.hex FROM r, b;
+----
+false
+
+# 4d. And the BLOB-slicing primitive the macro actually uses, with one boundary
+#     moved, must not reproduce the file either - so 2's `true`s are not an
+#     artefact of the comparison operator.
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.py') u,
+     read_blob('test/data/unparse_leaf_text/sample.c') b;
+----
+false
+
+# =============================================================================
+# 5. Honest failure (#89) - nothing falls back to normalised output
+# =============================================================================
+# Byte-exact output is impossible without the original bytes. Every case below
+# ERRORS. The one outcome worse than no answer is normalised text returned
+# where byte-exact text was asked for, because it looks like a round trip.
+
+# 5a. Parsed below source := 'full' with '+schema': the byte columns exist but
+#     are NULL. (Below 'full' WITHOUT '+schema' they do not exist at all and
+#     the macro fails to bind - also an error, with DuckDB's own message.)
+statement ok
+CREATE TABLE py_lines AS
+SELECT * FROM read_ast('test/data/unparse_leaf_text/sample.py', source := 'lines+schema', peek := 'none');
+
+statement error
+SELECT * FROM ast_unparse_exact_from('py_lines', 'test/data/unparse_leaf_text/sample.py');
+----
+have a NULL start_byte/end_byte
+
+# 5b. A filtered subset. This one matters: the missing nodes would be absorbed
+#     into the gaps and the output would be byte-exact ANYWAY, looking right
+#     while proving nothing about the subset. The completeness check
+#     (row count = root.descendant_count + 1) is what refuses it.
+statement ok
+CREATE TABLE py_shallow AS
+SELECT * FROM read_ast('test/data/unparse_leaf_text/sample.py', source := 'full', peek := 'none')
+WHERE depth <= 2;
+
+statement error
+SELECT * FROM ast_unparse_exact_from('py_shallow', 'test/data/unparse_leaf_text/sample.py');
+----
+is not a complete tree
+
+# 5c. More than one language in the table: no single textual answer.
+statement ok
+CREATE TABLE multi_lang AS
+SELECT * FROM read_ast('test/data/unparse_leaf_text/*', source := 'full', peek := 'none', ignore_errors := true);
+
+statement error
+SELECT * FROM ast_unparse_exact_from('multi_lang', 'test/data/unparse_leaf_text/*');
+----
+distinct languages
+
+# 5d. More than one file, same language.
+statement ok
+CREATE TABLE multi_file AS
+SELECT * FROM read_ast('test/data/encoding/crlf_utf8.py', source := 'full', peek := 'none')
+UNION ALL
+SELECT * FROM read_ast('test/data/python/unicode.py', source := 'full', peek := 'none');
+
+statement error
+SELECT * FROM ast_unparse_exact_from('multi_file', ['test/data/encoding/*.py', 'test/data/python/unicode.py']);
+----
+distinct file_paths
+
+# 5e. The bytes are not reachable through the `files` argument.
+statement error
+SELECT * FROM ast_unparse_exact_from('py_full', 'test/data/unparse_leaf_text/sample.c');
+----
+was not readable as bytes
+
+# 5f. An in-memory parse_ast() table has no file to re-read, and gets a message
+#     that names the macro which can serve it.
+statement ok
+CREATE TABLE inline_tbl AS SELECT * FROM parse_ast('x = 1', 'python', source := 'full', peek := 'none');
+
+statement error
+SELECT * FROM ast_unparse_exact_from('inline_tbl', 'test/data/unparse_leaf_text/sample.py');
+----
+in-memory parse_ast() output
+
+# 5g. STALENESS. The guard is root.end_byte = octet_length(file): tree-sitter's
+#     root node ends at EOF, so any change to the file's LENGTH is caught.
+#     Simulated by handing the splice a shorter blob for the same path - which
+#     is exactly what a truncated or appended-to file looks like.
+#     It cannot catch a SAME-LENGTH edit; parse and unparse in one statement.
+statement ok
+CREATE TABLE short_blob AS
+SELECT 'test/data/unparse_leaf_text/sample.py' AS fp, encode('x = 1') AS cblob;
+
+statement error
+SELECT * FROM ast_unparse_exact_splice('py_full', 'short_blob');
+----
+the file changed since it was parsed
+
+# 5h. A leaf frontier whose spans overlap cannot be spliced - bytes would be
+#     duplicated or dropped. This is the shape an adapter that reports
+#     children_count = 0 for every node produces (#197).
+statement ok
+CREATE TABLE overlapping AS
+    SELECT 'f' AS file_path, 'python' AS language, 0 AS node_id, 0 AS depth,
+           2 AS descendant_count, 0::UINTEGER AS start_byte, 5::UINTEGER AS end_byte
+    UNION ALL SELECT 'f', 'python', 1, 1, 0, 0::UINTEGER, 4::UINTEGER
+    UNION ALL SELECT 'f', 'python', 2, 1, 0, 2::UINTEGER, 5::UINTEGER;
+
+statement ok
+CREATE TABLE five_bytes AS SELECT 'f' AS fp, encode('abcde') AS cblob;
+
+statement error
+SELECT * FROM ast_unparse_exact_splice('overlapping', 'five_bytes');
+----
+leaf spans overlap
+
+# 5i. language 'duckdb': no byte positions, and depth = 0 on several nodes.
+#     Errors rather than emitting anything.
+statement error
+SELECT * FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.sql', 'duckdb');
+----
+ast_unparse_exact:
+
+# =============================================================================
+# 6. language := / file_path := are overrides, not requirements
+# =============================================================================
+# The law: write_ast infers the language from the `language` column read_ast
+# already emits. An explicit language := is a disambiguator, never required.
+
+# Inferred - no language argument anywhere.
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.kt') u,
+     read_blob('test/data/unparse_leaf_text/sample.kt') b;
+----
+true
+
+# language := resolves a 26-language table down to one file.
+query IT
+SELECT encode(u.source) = b.content, u.file_path
+FROM ast_unparse_exact_from('multi_lang', 'test/data/unparse_leaf_text/*', language := 'kotlin') u,
+     read_blob('test/data/unparse_leaf_text/sample.kt') b;
+----
+true	test/data/unparse_leaf_text/sample.kt
+
+# file_path := does the same for a multi-file table of one language.
+query IT
+SELECT encode(u.source) = b.content, u.file_path
+FROM ast_unparse_exact_from('multi_file', ['test/data/encoding/*.py', 'test/data/python/unicode.py'],
+                            file_path := 'test/data/python/unicode.py') u,
+     read_blob('test/data/python/unicode.py') b;
+----
+true	test/data/python/unicode.py
+
+# =============================================================================
+# 7. Additivity: the rules-based macros are untouched
+# =============================================================================
+# This change is strictly additive - four new macros, no edit to the four that
+# were here. test/sql/ast_unparse.test (46 assertions),
+# ast_unparse_presets.test (23) and ast_unparse_leaf_text.test (35) are the
+# full guard; these are spot checks that the normalising behaviour, including
+# the whitespace normalisation that is CONFORMANT below 'full' (#89), is
+# exactly as it was.
+
+statement ok
+CREATE TABLE py_sample_add AS SELECT * FROM parse_ast(E'def add(a, b):\n    return a + b\n', 'python');
+
+query T
+SELECT replace(source, E'\n', '__NEWLINE__') FROM ast_unparse_from('py_sample_add');
+----
+def add(a, b):__NEWLINE__    return a + b
+
+# The 047 4a reproducer still returns the comment's text, not the word.
+query T
+SELECT replace(source, chr(10), '|') FROM ast_unparse_code('# hello there' || chr(10) || 'x = 1', 'python');
+----
+# hello there|x = 1
+
+# And the rules-based unparser is still NOT byte-exact, which is what makes
+# ast_unparse_exact necessary rather than optional. Normalising here is
+# conformant; do not "fix" it.
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse('test/data/unparse_leaf_text/sample.py') u,
+     read_blob('test/data/unparse_leaf_text/sample.py') b;
+----
+false
+
+# =============================================================================
+# 8. Edge shapes
+# =============================================================================
+# Degenerate inputs where the gap pieces are all there is, or nearly.
+
+# A file that is only whitespace. tree-sitter gives it a single node, the
+# root, zero-width AT EOF (start_byte = end_byte = 3) - so every byte of the
+# output comes from the prologue gap and none from a leaf. The three newlines
+# must survive anyway.
+query I
+SELECT source = E'\n\n\n' FROM ast_unparse_exact_code(E'\n\n\n', 'python');
+----
+true
+
+# The empty string.
+query T
+SELECT source FROM ast_unparse_exact_code('', 'python');
+----
+(empty)
+
+# No trailing newline (the tail gap is empty, the last leaf ends at EOF).
+query T
+SELECT source FROM ast_unparse_exact_code('x = 1', 'python');
+----
+x = 1
+
+# Leading whitespace, which falls OUTSIDE the root node's own span
+# (root.start_byte = 6 here, not 0) and is recovered as the prologue gap. A
+# root-span slice would silently drop it.
+query I
+SELECT source = E'\n\n   \n# c\nx = 1\n\n   \n'
+FROM ast_unparse_exact_code(E'\n\n   \n# c\nx = 1\n\n   \n', 'python');
+----
+true
+
+# An interpolated string, where several leaves sit inside one literal and the
+# delimiters between them belong to no leaf at all.
+query I
+SELECT source = 'println("$s $hex $d")'
+FROM ast_unparse_exact_code('println("$s $hex $d")', 'kotlin');
+----
+true

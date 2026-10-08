@@ -1,8 +1,10 @@
 # 047 — unparse level 4: leaf-text coverage + node templates
 
-**Status:** 4a largely done (see "4a status" below); 4b not started. On the v2.0.0
-list; the work was described in 041 as future steps but never tracked as a milestone
-(this is it).
+**Status:** 4a largely done (see "4a status" below). 4b is **split in two, and the
+first half has landed**: byte-exact reproduction of an *unmodified* tree is done and
+measured (see "4b part 1" below); per-node templates for *synthesized / modified*
+nodes are not started. On the v2.0.0 list; the work was described in 041 as future
+steps but never tracked as a milestone (this is it).
 **Related:** 041 (the PoC and the fidelity path), 045 / #174 (level 5 — `COPY ... TO
 (FORMAT ast)`), shipped in v1.15.0 (default rules, 27 languages) and v1.15.1 (style
 presets, custom rules tables, synthetic AST layout).
@@ -16,7 +18,8 @@ together they are what "level 4" means:
 |---|---|---|
 | 1. Leaf-text coverage | every named, non-self-describing leaf needs `NODE_TEXT` so its text is recoverable | **done for 25 of 26 tree-sitter languages**; sql's `keyword_*` table outstanding |
 | 2. Spacing / tight-token rules | per-language spacing, keyword-vs-identifier before `(` | **shipped** as the rules engine + presets (v1.15.0–v1.15.1) |
-| 3. Node templates | per-node-type unparse templates — emit a *modified* tree with exact layout | **not done** |
+| 3a. Byte-exact round trip | reproduce an *unmodified* tree byte for byte under `source := 'full'` | **done** — `ast_unparse_exact*`, 26/26 languages |
+| 3b. Node templates | per-node-type unparse templates — emit a *modified* tree with exact layout | **not done** |
 
 Level 5 (`045` / #174) is already tracked and is "Planned (Phase 6)". It writes
 unparsed output to disk; it does not improve fidelity, so it sits on top of this.
@@ -115,13 +118,22 @@ The reproducer now returns `# hello there\nx = 1`.
   `PARSER_CONSTRUCT` (e.g. `string_content` is `LITERAL_STRING` in 7 other
   languages, `escape_sequence` in 12, `comment` is `METADATA_COMMENT` in 25).
   Deliberately not applied here — 4a is a text fix, not a reclassification.
-- **Byte-identity does not hold** for any of the 26 corpus languages; it fails
-  on inter-token whitespace only. Python's output is semantically correct and
-  differs just in spacing (`->` vs ` -> `). This is the open question below, and
-  it is now measured rather than assumed.
+- **Byte-identity does not hold** for any of the 26 corpus languages **for the
+  rules-based macros**; it fails on inter-token whitespace only. Python's output
+  is semantically correct and differs just in spacing (`->` vs ` -> `). That is
+  still true of `ast_unparse*` and is *conformant* below `source := 'full'`
+  (#89) — but it is no longer the whole picture: `ast_unparse_exact*` now holds
+  byte-identity for 26/26, by splicing instead of reconstructing. See "4b part
+  1" below.
 - **Some grammars hide delimiters entirely:** tree-sitter-kotlin's
   `string_literal` has no child node for its quote characters, so leaf
-  concatenation structurally cannot recover them. That is 4b work.
+  concatenation structurally cannot recover them. **Resolved by 4b part 1, and
+  the framing was wrong:** it is not a structural limit of *unparse*, only of
+  *leaf concatenation*. A splice computes the gaps between leaves from BYTE
+  OFFSETS rather than from grammar knowledge, so bytes inside a parent that no
+  child covers — exactly kotlin's quotes, verified at bytes 75 and 78 of
+  `test/data/unparse_leaf_text/sample.kt` — are emitted verbatim as gap bytes.
+  No language needed special handling.
 
 ## 4b — node templates (enables transformation)
 
@@ -155,6 +167,144 @@ Two further decisions from the same ruling:
 See `docs/planning/v2-architecture.md`, the `write_ast` laws, for the authoritative
 statement.
 
+## 4b part 1 — byte-exact round trip (LANDED)
+
+4b as written ("per-node unparse templates") is two separable pieces, and only the
+second needs design decisions:
+
+| | what | status |
+|---|---|---|
+| **part 1** | byte-exact reproduction of an **unmodified** tree | **landed** |
+| **part 2** | templates for **synthesized / modified** nodes — emit a changed tree with controlled layout | not started |
+
+Part 1 is precisely specified by the settled law and needs no template vocabulary
+at all, because nothing is generated: the output is a **splice** of the original
+bytes.
+
+### The design
+
+Four new macros in `src/sql_macros/ast_unparse.sql`, strictly additive (367
+inserted lines, 0 deleted; the pre-existing 391 lines are byte-identical to
+`6f82c98`):
+
+| macro | input | bytes from |
+|---|---|---|
+| `ast_unparse_exact(path, language := NULL)` | a path | `read_blob(path)`, same statement |
+| `ast_unparse_exact_from(ast_table, files, language := NULL, file_path := NULL)` | a node table | `read_blob(files)` |
+| `ast_unparse_exact_code(source_code, language)` | an in-memory string | the string argument |
+| `ast_unparse_exact_splice(ast_table, blob_table, …)` | the shared core | a `(fp, cblob)` relation |
+
+The splice walks the **leaf frontier** — rows with `descendant_count = 0`, an
+antichain, so their spans are disjoint — in `(start_byte, end_byte, node_id)`
+order and emits, per leaf, the GAP `[previous end_byte, this start_byte)` then
+the LEAF `[start_byte, end_byte)`, finishing with the TAIL
+`[last end_byte, EOF)`.
+
+**Why per-leaf-plus-gap rather than "slice the root's whole span".** The two
+produce the same bytes for an unmodified tree, and that is the point: they differ
+in what they *prove* and in what they generalise to.
+
+- The splice is a **tiling proof**. Every byte is emitted exactly once,
+  attributed either to a leaf or to a gap. A root-span slice is byte-exact while
+  proving nothing whatever about the tree — and would not even be correct in
+  general, because the root's span does not always start at byte 0 (leading
+  whitespace sits outside it: `root.start_byte = 6` for a file beginning with
+  three blank lines, measured).
+- The splice is the shape **part 2** needs: substitute one leaf's slice and
+  everything around it still comes from the original bytes. Asserted directly —
+  `test/sql/ast_unparse_exact.test` §3d swaps one leaf for `'99'` and requires
+  the exact edited text.
+
+`descendant_count = 0` is used rather than `children_count = 0` (which the
+rules-based macros use). The two select identical rows on all 26 languages
+(measured), but the former is definitionally "no descendant rows exist", which
+is the antichain property the splice needs, and it is immune to an adapter that
+miscounts children (#197).
+
+`language :=` is an override, not a requirement: it is inferred from the
+`language` column, and a table carrying more than one language — or more than one
+`file_path` — errors unless `language :=` / `file_path :=` resolves it. Note the
+deliberate asymmetry with `ast_unparse(glob)`, which returns one row per file:
+the textual law is stated over a single `x`, and the same writer has to serve the
+COPY sink (045/#174) where one destination means one textual answer.
+
+### Measured result
+
+| | before (`6f82c98`) | after |
+|---|---|---|
+| byte-identity, 26-language corpus | **0 / 26** | **26 / 26** |
+| byte-identity, CRLF + multi-byte fixtures | 0 / 2 | 2 / 2 |
+| byte-identity, 176 real source files (incl. a 352 KB and a 207 KB file) | — | **176 / 176**, 421 267 gap bytes spliced |
+| rules-based `ast_unparse` on the same corpus | 0 / 28 | 0 / 28 (**unchanged — conformant, #89**) |
+
+Languages served: **all 26 tree-sitter languages**, with no per-language code.
+Not served: `duckdb` (#197) — no byte positions, and `depth = 0` on several
+nodes; it **errors** rather than emitting anything.
+
+The kotlin case 4a recorded as a structural limit is served too: `"hi"` comes
+back with its quotes, while the rules-based unparser emits `val s = hi`. Both
+lines are asserted side by side in the test.
+
+### Honest failure (#89)
+
+Nine conditions error rather than falling back to normalised output — NULL byte
+columns, multi-language, multi-file, missing/duplicate root, **incomplete tree**,
+unreadable file, `<inline>` parse, length-mismatch staleness, overlapping leaves.
+Each has a `statement error` assertion. The incomplete-tree check (row count =
+`root.descendant_count + 1`) is the subtle one: a filtered subset would be
+absorbed into the gaps and come out byte-exact anyway, looking right while
+proving nothing.
+
+Staleness guard: `root.end_byte = octet_length(file)`. tree-sitter's root ends at
+EOF for all 26 languages and for empty, whitespace-only and no-trailing-newline
+files (measured), so any change to the file's **length** is caught. A same-length
+edit is invisible — the same limitation `ast_patch` documents. Parse and unparse
+in one motion; `ast_unparse_exact(path)` does.
+
+### Verification
+
+- `test/sql/ast_unparse_exact.test` — 61 assertions (77 as the runner counts
+  them). Includes a negative control: a one-byte boundary shift and a replaced
+  leaf must both be detected, and the control's own unshifted arithmetic must
+  reproduce the file first, so a detected difference is attributable to the plant.
+- `scripts/verify_unparse_byte_exact.sh` — the corpus sweep with per-language
+  numbers, harness guards (empty glob, wrong row count), vacuity guards (empty
+  frontier, zero-width leaves, zero corpus-wide gap bytes) and the same negative
+  control. Re-run after a grammar bump.
+- Additivity: `ast_unparse.test` (46), `ast_unparse_presets.test` (23),
+  `ast_unparse_leaf_text.test` (35) and `ast_patch.test` (64) all pass unchanged,
+  and 345 captured outputs of the four pre-existing macros over the corpus and
+  all nine presets are identical between the embedded (re-chunked) definitions
+  and the pristine `6f82c98` SQL text.
+
+### Incidental findings
+
+- **`blob[i:j]` is a better byte-slicing primitive than
+  `from_hex(substring(to_hex(blob), …))`.** It is 1-based inclusive and
+  byte-indexed, needs no hex round trip, and is O(slice) rather than O(file) per
+  slice. `ast_patch.sql` already relied on it; API_REFERENCE documented only the
+  hex form. Both were verified to agree byte for byte on the CRLF + multi-byte
+  fixtures, and API_REFERENCE now records both — the hex form stays useful for a
+  negative control precisely because it has no UTF-8 validity constraint (a
+  boundary planted mid-sequence yields wrong hex rather than a `decode()` error).
+- **A scalar subquery inside a `CASE` is materialized whether or not its branch
+  is taken.** `CASE` short-circuits its result *expressions*, but the planner
+  evaluates the subqueries regardless — so a bare
+  `(SELECT nbytes FROM one_row_per_file)` on a two-file table raised DuckDB's own
+  "more than one row returned by a subquery" *before* the multi-file branch could
+  produce the message that explains the problem. Every validation probe is wrapped
+  in an aggregate to keep it single-row. Any future SQL-macro validation chain
+  wants this.
+- **A macro parameter named after a column it must compare against is a silent
+  no-op risk.** `WHERE t.language = language` in a scope that also has a
+  `language` column binds the bare name to the column, making the filter always
+  true. The columns are renamed in a CTE that references nothing unqualified
+  before any filtering, so the parameters are the only possible meaning.
+- **`scripts/embed_sql_macros.py` splits mid-statement, and that is fine** — the
+  chunks are emitted as adjacent C++ string literals and concatenate at compile
+  time. Worth knowing before anyone "fixes" the boundaries: `ast_unparse.sql` went
+  from 2 chunks to 3 and the new boundaries land inside statements.
+
 ## Why it gates v2.0.0
 
 - Unparse is the output half of the transformation story the v2.0 architecture is
@@ -179,18 +329,24 @@ characters and mixed line endings. The remaining order is:
    #197 (the `duckdb` adapter's unparse is broken for an unrelated reason —
    `children_count` is 0 on every node).
 2. ~~**byte offsets under `source := 'full'`**~~ — **Landed**, PR #198.
-3. **4b** — node templates, designed against the byte-exact target. Now unblocked on
-   both counts: the decision is made and the substrate is in.
-4. **045/#174** — the COPY sink. Gated on 4a, which has landed, so this is now
+3. ~~**4b part 1** — byte-exact round trip for an unmodified tree.~~ **Landed**
+   (`ast_unparse_exact*`); 26/26 languages, `duckdb` excluded (#197). See
+   "4b part 1" above.
+4. **4b part 2** — node templates for synthesized / modified nodes, designed
+   against the splice that part 1 established. Still open.
+5. **045/#174** — the COPY sink. Gated on 4a, which has landed, so this is now
    available to start. Writing lossy output to disk is worse than returning it in a
-   result set, because it looks like a file you can keep.
+   result set, because it looks like a file you can keep. 4b part 1 gives it a
+   byte-exact writer for the `source := 'full'` case, and the single-file /
+   single-language error semantics it needs are already enforced there.
 
 Note the stated textual law takes a *path*, so the file-backed case needs only a
 file re-read with honest staleness detection — not per-node text retention. Per-node
 retention is required only for `parse_ast` over a string and for tables that outlive
 their files, and can follow later.
 
-Measured caveat for 4b: byte-identity under `source := 'full'` does **not** hold
-today — it fails for all 26 corpus languages, on inter-token whitespace only. The
-unparse macros take no `source` parameter and never read the position columns. That
-is the gap 4b closes, and it is why 4b is required rather than optional.
+Measured caveat for 4b, as recorded before part 1 landed: byte-identity under
+`source := 'full'` did **not** hold — it failed for all 26 corpus languages, on
+inter-token whitespace only, because the unparse macros take no `source` parameter
+and never read the position columns. **That gap is now closed for an unmodified
+tree** (part 1 below); it remains open for a modified one (part 2).
