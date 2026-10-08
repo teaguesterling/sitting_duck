@@ -96,6 +96,40 @@ of the safer items. Note also that #164's OOM was reported on a 78k-node table w
 call-graph pseudo-classes; the measurements above used a 795-node table for the
 call-graph arms, so they say nothing about that blowup, which remains unmeasured here.
 
+## Measured 2026-10-08: upstream #26036 is ~5x less severe, and its startup half is FIXED
+
+Re-ran the generator from duckdb/duckdb#26036 on a **quiet** box (load 1.7-3.3), three
+builds on the same machine. Net of startup:
+
+| N | SQL size | v1.5.6 | cyanoptera `d4c9dfd469f` | main `688937993a` |
+|---|---|---|---|---|
+| 400 | 46 KB | 0.09s | 0.35s | 0.57s |
+| 800 | 93 KB | **0.19s** | **0.82s** | **1.36s** |
+
+Startup (`SELECT 1`): v1.5.6 0.13s · cyanoptera **0.08s** · main 0.06s.
+
+1. **Scaling regression persists but is much smaller.** At 93 KB cyanoptera is **4.3x**
+   v1.5.6, down from the **20.6x** recorded 2026-09-22. Per-doubling cost is 2.3x on
+   cyanoptera vs 2.1x on v1.5.6 -- still super-linear, now close to linear.
+2. **The startup regression is FIXED on cyanoptera** (2.50s recorded -> 0.08s now,
+   faster than v1.5.6). The separate upstream backport request that was pending
+   Teague's OK is **no longer needed** -- do not file it.
+3. **The "ratio is load-independent" claim in #26036 is wrong**, and it inflated the
+   headline. Same main binary, same SQL, only load differs: **19.0x at load ~26 vs
+   7.2x at load ~1.7**. The v2 line degrades disproportionately under contention, so
+   the original 19-20x figures are an upper bound under load, not a fixed cost.
+   #26036 was updated upstream with this correction on 2026-10-08.
+
+**The canary stays off** (Teague, 2026-10-08). 4.3x on the flat-CASE repro, but the
+real `css_selectors` case is recorded as ~3x worse per KB than that repro predicts
+(~13x on the actual 52 KB statement), and CI runners have 2-4 cores against this box's
+36. The `skip_tests: true` gate in `.github/workflows/MainDistributionPipeline.yml`
+is unchanged.
+
+**Note on provenance:** the 2026-09-22 three-way measurement this corrects lives only
+in UNCOMMITTED working-copy edits to `043` in the shared checkout (~115 lines). It is
+not on `main` and would be lost if that checkout were cleaned. Worth committing.
+
 ## Recommended order (near term)
 
 1. **#10 taxonomy spec → codegen.** Safest possible first move: provable, no behaviour
