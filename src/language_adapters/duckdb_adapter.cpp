@@ -1157,9 +1157,11 @@ void DuckDBAdapter::FinalizeTreeStructure(vector<ASTNode> &nodes) const {
 		return;
 	}
 
-	// node_id -> position. Ids come from a counter that starts at 1, so no node
-	// ever has id 0 and the root's parent_id of 0 reads as "no parent", exactly
-	// like the -1 an unattached node carries.
+	// node_id -> position. Every node that reaches this pass was numbered by the
+	// counter in ConvertStatementsToAST, which starts at 1, so none has id 0 and
+	// the root's parent_id of 0 reads as "no parent", exactly like the -1 an
+	// unattached node carries. (CreateErrorResult does build a node with id 0,
+	// but it returns an ASTResult of its own and never reaches here.)
 	unordered_map<uint64_t, size_t> index_of;
 	index_of.reserve(nodes.size() * 2);
 	for (size_t i = 0; i < nodes.size(); i++) {
