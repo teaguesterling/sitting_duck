@@ -8,6 +8,23 @@ organized by programming language. Each page shows:
 - **Name Extraction**: Strategy for extracting identifiers
 - **Description**: What the node represents
 
+!!! warning "Five pages here document languages that are not built in"
+
+    `read_ast` / `parse_ast` accept **27** languages — 26 Tree-sitter grammars plus
+    the native `duckdb` adapter. The authoritative list is
+    `cmake/BuiltinLanguages.cmake`, and `SELECT language FROM
+    ast_supported_languages()` reports what your build has.
+
+    **[YAML](yaml.md), [Scala](scala.md), [F#](fsharp.md), [Haskell](haskell.md)
+    and [Julia](julia.md) are not among them.** Each has a semantic-type mapping
+    (`src/language_configs/<lang>_types.def`) and a page here, but no adapter is
+    built, so they error with "Unsupported language". YAML was deliberately
+    disabled — its Tree-sitter grammar is incompatible with the parser-generation
+    CLI; the other four were never wired up. Those pages are design references.
+
+    Conversely, two **supported** languages have no page here: `sql` (the
+    Tree-sitter SQL grammar) and `duckdb` (DuckDB's own parser, no grammar).
+
 ## Languages
 
 ### Web

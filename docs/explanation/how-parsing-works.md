@@ -103,8 +103,10 @@ The `read_ast()` function returns a table with one row per AST node. Column set 
 | `language` | VARCHAR | Detected language |
 | `start_line` | UINTEGER | Starting line (1-based) |
 | `end_line` | UINTEGER | Ending line (1-based) |
-| `start_column` | UINTEGER | Starting column (**only with `source := 'full'`**) |
-| `end_column` | UINTEGER | Ending column (**only with `source := 'full'`**) |
+| `start_column` | UINTEGER | Starting column, 1-based (**only with `source := 'full'`**) |
+| `end_column` | UINTEGER | Ending column, 1-based (**only with `source := 'full'`**) |
+| `start_byte` | UINTEGER | Byte offset of the first byte, 0-based (**only with `source := 'full'`**) |
+| `end_byte` | UINTEGER | Byte offset one past the last byte, 0-based exclusive (**only with `source := 'full'`**) |
 | `parent_id` | BIGINT | Parent node ID |
 | `depth` | UINTEGER | Tree depth (0 for root) |
 | `sibling_index` | UINTEGER | Position among siblings |

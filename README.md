@@ -68,7 +68,7 @@ ORDER BY COUNT(*) DESC;
 
 Sitting Duck transforms your source code into queriable data structures:
 
-1. **Tree-sitter parsing** - Robust, error-recovering parsers for 27 languages
+1. **Tree-sitter parsing** - Robust, error-recovering parsers for 26 languages, plus the native `duckdb` adapter which wraps DuckDB's own SQL parser (27 in total)
 2. **Native semantic extraction** - Language-specific semantic analysis with type information
 3. **Multiple context levels** - From basic parsing to full semantic understanding
 4. **SQL interface** - Rich table functions with DuckDB-consistent design
@@ -77,7 +77,9 @@ Sitting Duck transforms your source code into queriable data structures:
 
 ## Supported Languages
 
-Currently supports **27 languages** via Tree-sitter parsers, all with universal semantic type classification. Native extraction depth (names, signatures, parameters, modifiers) varies by language — see the per-language docs below for quality ratings:
+Currently supports **27 languages**, all with universal semantic type classification: **26 via vendored Tree-sitter grammars**, plus the native **`duckdb`** adapter, which has no Tree-sitter grammar and wraps DuckDB's own SQL parser instead. (`sql` and `duckdb` are two different languages here — `sql` is the Tree-sitter grammar, `duckdb` is the database's own parser.) Native extraction depth (names, signatures, parameters, modifiers) varies by language — see the per-language docs below for quality ratings.
+
+The built-in set is declared in `cmake/BuiltinLanguages.cmake`; `SELECT language FROM ast_supported_languages()` reports what your build actually has.
 
 | Category | Languages |
 |----------|-----------|
@@ -247,8 +249,10 @@ The `read_ast()` function returns a table with one row per AST node. Column set 
 | `language` | VARCHAR | Detected programming language |
 | `start_line` | UINTEGER | Starting line number (1-based) |
 | `end_line` | UINTEGER | Ending line number (1-based) |
-| `start_column` | UINTEGER | Starting column (**only with `source := 'full'`**) |
-| `end_column` | UINTEGER | Ending column (**only with `source := 'full'`**) |
+| `start_column` | UINTEGER | Starting column, 1-based (**only with `source := 'full'`**) |
+| `end_column` | UINTEGER | Ending column, 1-based (**only with `source := 'full'`**) |
+| `start_byte` | UINTEGER | Byte offset of the first byte, 0-based (**only with `source := 'full'`**) |
+| `end_byte` | UINTEGER | Byte offset one past the last byte, 0-based exclusive (**only with `source := 'full'`**) |
 | `parent_id` | BIGINT | Parent node ID (NULL for root) |
 | `depth` | UINTEGER | Tree depth (0 for root) |
 | `sibling_index` | UINTEGER | Position among siblings (0-based) |
@@ -650,9 +654,13 @@ SELECT file_path, patched_source FROM ast_patch('edits', 'src/**/*.py');
 
 **The edit flow:**
 
-1. Parse with `source := 'full'` (location columns `start_column`/`end_column`
-   only exist at this level; positions are 1-indexed **byte** offsets,
-   `end_column` exclusive).
+1. Parse with `source := 'full'` — the only level that emits the four
+   positional columns `start_column`, `end_column`, `start_byte` and `end_byte`.
+   The column values are 1-indexed **byte** offsets within their line, with
+   `end_column` exclusive; `start_byte`/`end_byte` are whole-file byte offsets,
+   0-based and half-open (added in PR #198). Edit rows below are anchored by
+   line/column; the byte columns are the simpler way to slice a node's exact
+   text straight out of the file.
 2. Match the nodes to change (any `WHERE`, selector, or pattern you like) and
    build edit rows: `(file_path, start_line, start_column, end_line,
    end_column, edit_kind, new_text)` with `edit_kind` one of `replace`,

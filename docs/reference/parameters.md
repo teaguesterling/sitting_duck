@@ -139,19 +139,31 @@ SELECT * FROM read_ast('file.py', context := 'native');
 
 Control source text extraction.
 
-| Value | Description |
-|-------|-------------|
-| `'none'` | No source text |
-| `'path'` | File path only |
-| `'lines_only'` | Line numbers only |
-| `'lines'` | Line-based info |
-| `'full'` | Complete source |
+Control which **source-location columns** are emitted. Despite the name, no level
+retains per-node source *text* — `'full'` means "all position information", not
+"the source code".
+
+| Value | Columns added |
+|-------|---------------|
+| `'none'` | none |
+| `'path'` | `file_path`, `language` |
+| `'lines_only'` | `file_path`, `language`, `start_line`, `end_line` |
+| `'lines'` | same as `'lines_only'` |
+| `'full'` | the above plus `start_column`, `end_column`, `start_byte`, `end_byte` |
+
+Columns not listed for a level are absent from the result schema entirely, not
+NULL-filled. `'lines_only'` and `'lines'` yield identical flat output.
+
+Line and column numbers are **1-based**; `start_byte` / `end_byte` are
+**0-based and half-open** (`[start_byte, end_byte)`), passed straight through
+from tree-sitter. The byte columns were added in PR #198 — select by name rather
+than position, since `'full'` adds four columns, not two.
 
 ```sql
--- No source extraction
+-- No source location columns at all
 SELECT * FROM read_ast('file.py', source := 'none');
 
--- Full source text
+-- All position columns, including byte offsets
 SELECT * FROM read_ast('file.py', source := 'full');
 ```
 

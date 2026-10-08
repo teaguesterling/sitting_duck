@@ -2,6 +2,15 @@
 
 > Haskell language node type mappings for AST semantic extraction
 
+> **Note: Haskell support is not built in.** There is no `haskell` entry in
+> `cmake/BuiltinLanguages.cmake` and no `HaskellAdapter` class in
+> `src/include/language_adapter.hpp`, so `haskell` is not among the languages
+> `ast_supported_languages()` reports, and `read_ast`/`parse_ast` reject it with
+> "Unsupported language: haskell". Only the semantic-type mapping
+> (`src/language_configs/haskell_types.def`) and this page exist — the adapter and
+> grammar wiring were never added. Treat this page as a design reference, not a
+> description of working behaviour.
+
 ## Language Characteristics
 
 - **Pure functional**: No side effects, referential transparency

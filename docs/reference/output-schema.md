@@ -34,8 +34,18 @@ Complete reference for `read_ast()` output columns.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `start_column` | UINTEGER | Starting column (1-based) |
-| `end_column` | UINTEGER | Ending column (1-based) |
+| `start_column` | UINTEGER | Starting column (**1-based**) |
+| `end_column` | UINTEGER | Ending column (**1-based**) |
+| `start_byte` | UINTEGER | Byte offset of the node's first byte (**0-based**) |
+| `end_byte` | UINTEGER | Byte offset one past the node's last byte (**0-based, exclusive**) |
+
+`start_byte` / `end_byte` were added in PR #198. Note the basing difference: the
+line and column columns are 1-based, while the byte offsets are **0-based and
+half-open** — `[start_byte, end_byte)` — because they are tree-sitter's own
+offsets, passed through unchanged. `end_byte - start_byte` is the node's length
+in bytes. Select these columns **by name**, not by position: `'full'` now adds
+four columns rather than two. See `API_REFERENCE.md` for worked byte-slicing
+examples.
 
 ```sql
 -- Get column positions with source := 'full'
@@ -584,17 +594,34 @@ WHERE type = 'function_definition';
 | Column | `'none'` | `'path'` | `'lines_only'` | `'lines'` | `'full'` |
 |--------|----------|----------|----------------|-----------|----------|
 | `file_path` | No | Yes | Yes | Yes | Yes |
+| `language` | No | Yes | Yes | Yes | Yes |
 | `start_line` | No | No | Yes | Yes | Yes |
 | `end_line` | No | No | Yes | Yes | Yes |
 | `start_column` | No | No | No | No | **Yes** |
 | `end_column` | No | No | No | No | **Yes** |
+| `start_byte` | No | No | No | No | **Yes** |
+| `end_byte` | No | No | No | No | **Yes** |
+
+Columns absent at a given level are **not present in the result schema** at all —
+they are not NULL-filled — so `SELECT *` returns a different column list per level.
+
+Two notes on this table:
+
+- **`'lines_only'` and `'lines'` produce the same flat schema.** Both yield
+  `file_path`, `language`, `start_line` and `end_line`. The distinction exists in
+  the `SourceLevel` enum but does not change the flat output of `read_ast` /
+  `parse_ast`.
+- **`'full'` does not retain source *text*.** It adds position columns only. No
+  extraction level retains per-node source text; `peek` is the only per-node text
+  and it is a presentation substrate, not a correctness one. Exact source comes
+  from slicing the file with `start_byte`/`end_byte`.
 
 ```sql
 -- Default: line positions only
 SELECT start_line, end_line FROM read_ast('test/data/python/sample_app.py');
 
--- With source := 'full': includes column positions
-SELECT start_line, start_column, end_line, end_column
+-- With source := 'full': includes column positions and byte offsets
+SELECT start_line, start_column, end_line, end_column, start_byte, end_byte
 FROM read_ast('test/data/python/sample_app.py', source := 'full');
 ```
 
