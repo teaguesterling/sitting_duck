@@ -134,22 +134,57 @@ language module or embodies an analysis opinion is an add-on.
      nor a readable file *errors*, per the #89 principle. Plus
      `ast_replace(source, pattern, replacement)` generating edits from the
      pattern matcher — codemods in SQL before any unparser exists.
-   - **`write_ast` — declarative, .def-driven unparse.** Two laws, two owners:
-     - **Structural law (universal, per-module)**:
-       `read_ast(write_ast(read_ast(x))) = read_ast(x)` — the only requirement
-       every write-capable module owes. Serialization rules (delimiters,
-       separators, keyword tokens) are DATA in each module's `.def` — "how to
-       write" lives beside "how to read"; the engine is a generic walker with
-       no language knowledge. Enforced by the **conformance kit** over each
-       module's fixtures.
-     - **Textual law (conditional, engine-owned)**:
-       `write_ast(read_ast(x, source := 'full')) = x` — verbatim reproduction
-       is only defined when the parse retained the source, and is then
-       delivered by the engine's splice layer (untouched subtrees keep their
-       text; only synthesized nodes are generated). Language-agnostic, no
-       module involvement. On tables without retained source, `write_ast`
-       produces structurally-correct output and makes no textual claim (#89:
-       never pretend).
+   - **`write_ast` — declarative, .def-driven unparse.** Two laws, split by
+     whether the parse retained the source. **Settled by Teague 2026-10-07**;
+     this supersedes the earlier "universal structural law + conditional
+     textual law" framing, which demanded more of the no-source case than is
+     either achievable or useful.
+     - **`source := 'full'` — textual law (exact, engine-owned)**:
+
+           write_ast(read_ast(x, source := 'full')) = x
+
+       Verbatim reproduction, byte for byte. Delivered by the engine's splice
+       layer (untouched subtrees keep their text; only synthesized nodes are
+       generated). Language-agnostic, no module involvement.
+     - **Anything less than `'full'` — structural law only (per-module)**:
+
+           read_ast(write_ast(read_ast(x))) = read_ast(x)
+
+       A **pseudo-inverse**: the tree must survive the round trip, the text
+       need not. `write_ast(read_ast(x)) = x` is explicitly **NOT** required
+       here — whitespace and formatting may normalise. This is the only
+       requirement a write-capable module owes. Serialization rules
+       (delimiters, separators, keyword tokens) are DATA in each module's
+       `.def` — "how to write" lives beside "how to read"; the engine is a
+       generic walker with no language knowledge. Enforced by the
+       **conformance kit** over each module's fixtures.
+     - Why the split matters: it resolves the open design question that has
+       been blocking 047's 4b (node templates) — *is byte-exact in scope, or
+       is normalized reconstruction the target?* **Both are, at different
+       retention levels.** 4b can now be designed against a definite target.
+       It also keeps the no-source case honest: a module that normalises
+       whitespace is conformant, and nothing pretends otherwise (#89).
+     - **Language is inferred, not required.** `read_ast`/`parse_ast` already
+       emit a `language` column per row, so `write_ast` takes its language
+       from the data. An explicit `language :=` is an override and a
+       disambiguator, not a requirement:
+
+           write_ast(read_ast(x, source := 'full'))                      -- inferred
+           write_ast(read_ast(x, source := 'full'), language := 'c')     -- forced
+
+       A table carrying more than one distinct `language` is an error unless
+       `language :=` resolves it, per #89 (never guess which one was meant).
+       The same applies to `file_path`: a multi-file table has no single
+       textual answer, so `write_ast` errors unless scoped to one file.
+     - **COPY form (level 5, `045`/#174)** — the same writer, addressed as a
+       sink rather than a scalar:
+
+           COPY (FROM read_ast(x, source := 'full')) TO 'x2' (FORMAT ast, LANGUAGE 'c')
+
+       `LANGUAGE` is likewise optional when the table's `language` column is
+       unambiguous. Because a COPY writes a file someone will keep, level 5
+       must land **after** 047's 4a: writing lossy output to disk is worse
+       than returning it in a result set, because it looks authoritative.
      - **Substrate gap (verified 2026-07-23, PR #94 investigation)**: today
        `source :=` controls *location columns only* (`'full'` adds
        start/end_column); **no extraction config retains per-node source
@@ -160,6 +195,23 @@ language module or embodies an analysis opinion is an add-on.
        staleness semantics — and is a prerequisite for the textual law and
        for `ast_patch` over non-file inputs. This belongs in M1's contract
        scope.
+     - **Scope note on the gap (2026-10-07).** The textual law as stated is
+       `write_ast(read_ast(x, source := 'full')) = x` where `x` is a *path*,
+       and that case is satisfiable by **re-reading the file** — no per-node
+       text retention needed, only honest staleness semantics (the file must
+       not have changed since the parse; detect and error rather than emit
+       stale text, per #89). Per-node retention is required only for the
+       harder cases: `parse_ast` over an in-memory string, and tables that
+       outlive or move away from their files. So the gap splits into two
+       pieces of very different size, and the *file-backed* half — the half
+       the stated law needs — is the smaller one and can land on v1.x.
+     - **Byte offsets vs line/column.** Reconstructing inter-token gaps from
+       `start_line`/`start_column` requires re-deriving byte positions from
+       the text, which is error-prone with multi-byte characters and varying
+       line endings. tree-sitter already provides `start_byte`/`end_byte`
+       natively. Exposing those under `source := 'full'` makes exact slicing
+       a `substring()` rather than a reconstruction, and is a prerequisite
+       worth landing before 4b rather than during it.
 4. **Incremental reparse**: tree-sitter's edit-aware reparsing, exposed for
    edit-and-requery loops (agent workflows).
 5. **New languages (DuckPL, …)**: the architecture's acceptance test — *one module,
