@@ -131,10 +131,29 @@ needed for a round-trip PoC" — correct then, but it is the prerequisite for th
 transformation story (`ast_patch` / `ast_replace`, shipped v1.11.0) producing
 idiomatic output rather than normalized-whitespace output.
 
-Open design question from 041, still open: **is byte-exact (`source := 'full'`,
-reconstructing inter-token gaps from `start_column`/`end_column`) in scope, or is
-normalized reconstruction the target?** 4a can proceed either way; 4b's design
-depends on the answer, so decide before starting 4b.
+**SETTLED 2026-10-07 (Teague) — 4b is unblocked.** The open question was *"is
+byte-exact in scope, or is normalized reconstruction the target?"* Answer: **both,
+at different retention levels**, which is what makes 4b designable.
+
+| retention | law | strength |
+|---|---|---|
+| `source := 'full'` | `write_ast(read_ast(x, source := 'full')) = x` | **byte-exact** |
+| anything less | `read_ast(write_ast(read_ast(x))) = read_ast(x)` | **pseudo-inverse only** — tree survives, text need not |
+
+Explicitly **not** required below `'full'`: `write_ast(read_ast(x)) = x`. Normalising
+whitespace there is conformant, not a bug, and must not be reported as one (#89).
+
+Two further decisions from the same ruling:
+- **`language :=` is an override, not a requirement.** `write_ast` infers the language
+  from the `language` column that `read_ast`/`parse_ast` already emit. A table with
+  more than one distinct `language` errors unless `language :=` resolves it; same for
+  multi-`file_path` tables, which have no single textual answer.
+- **COPY form is the same writer as a sink:**
+  `COPY (FROM read_ast(x, source := 'full')) TO 'x2' (FORMAT ast, LANGUAGE 'c')`,
+  with `LANGUAGE` optional when the column is unambiguous. This is 045/#174.
+
+See `docs/planning/v2-architecture.md`, the `write_ast` laws, for the authoritative
+statement.
 
 ## Why it gates v2.0.0
 
@@ -146,6 +165,32 @@ depends on the answer, so decide before starting 4b.
 
 ## Sequencing note
 
-4a is independent and has landed for 25 of 26 tree-sitter languages. 4b should wait on the byte-exact decision above,
-and 045/#174 (level 5) should land after 4a — writing lossy output to disk is worse
-than returning it in a result set, because it looks like a file you can keep.
+4a has **landed** for 25 of the 26 tree-sitter languages (PR #199); sql's 214
+`keyword_*` leaves remain, deferred for a per-keyword classification pass, and sql's
+5 non-keyword gaps are closed. 4b no longer waits on a decision (settled 2026-10-07)
+and its substrate now exists: `start_byte` / `end_byte` are exposed under
+`source := 'full'` (PR #198), so byte-exact slicing is a `substring()` on raw bytes
+rather than a reconstruction from line/column — which was fragile with multi-byte
+characters and mixed line endings. The remaining order is:
+
+1. ~~**4a** — leaf-text coverage.~~ **Landed**, PR #199. 134 of 348 grammar-derived
+   gaps closed; 214 sql `keyword_*` outstanding. See also #200 (the
+   anonymous-token-with-variable-text class is corpus-bounded, not enumerated) and
+   #197 (the `duckdb` adapter's unparse is broken for an unrelated reason —
+   `children_count` is 0 on every node).
+2. ~~**byte offsets under `source := 'full'`**~~ — **Landed**, PR #198.
+3. **4b** — node templates, designed against the byte-exact target. Now unblocked on
+   both counts: the decision is made and the substrate is in.
+4. **045/#174** — the COPY sink. Gated on 4a, which has landed, so this is now
+   available to start. Writing lossy output to disk is worse than returning it in a
+   result set, because it looks like a file you can keep.
+
+Note the stated textual law takes a *path*, so the file-backed case needs only a
+file re-read with honest staleness detection — not per-node text retention. Per-node
+retention is required only for `parse_ast` over a string and for tables that outlive
+their files, and can follow later.
+
+Measured caveat for 4b: byte-identity under `source := 'full'` does **not** hold
+today — it fails for all 26 corpus languages, on inter-token whitespace only. The
+unparse macros take no `source` parameter and never read the position columns. That
+is the gap 4b closes, and it is why 4b is required rather than optional.
