@@ -6846,11 +6846,20 @@ CREATE OR REPLACE MACRO ast_unparse_custom(ast_table, rules_table) AS TABLE (
 -- for it, having silently dropped the offending bytes. Serving it would need a
 -- BLOB-returning variant.
 --
--- NOT SERVED: the `duckdb` language adapter. It wraps DuckDB's own parser, has
--- no byte positions, and reports start_byte = end_byte = 0 for every node
--- (and children_count = 0 for every node — issue #197). The length guard
--- fires, so it errors rather than emitting anything. Byte offsets are a
--- tree-sitter-backed property.
+-- NOT SERVED: the `duckdb` language adapter, for two reasons that both
+-- outlive #197. (#197's constant-zero children_count / sibling_index / depth
+-- were fixed by PR #205, so the tree structure is now correct and the
+-- single-root guard no longer fires — the premise changed, the conclusion did
+-- not.) Re-measured against #205 on an 84-byte, 7-statement SQL file:
+--   * it reports start_byte = end_byte = 0 for EVERY node, and an empty
+--     file_path, so there is nothing to slice and nothing to re-read; and
+--   * its tree is an AST, not a CST. 15 nodes for that file, with no node for
+--     any keyword, punctuation or comment, and ORDER BY / LIMIT absent
+--     entirely. No leaf frontier over such a tree could tile the text, so byte
+--     offsets alone would not make it serveable.
+-- Both conditions error (a dedicated guard reports the zero offsets rather
+-- than letting the readability or staleness guard misdiagnose it). Byte
+-- offsets are a tree-sitter-backed property.
 --
 -- MULTI-FILE IS AN ERROR HERE, unlike `ast_unparse(glob)` which returns one
 -- row per file. That is deliberate, not an oversight: the textual law is
@@ -6870,6 +6879,8 @@ CREATE OR REPLACE MACRO ast_unparse_custom(ast_table, rules_table) AS TABLE (
 --                descendant_count, start_byte, end_byte.
 --   blob_table — name of a relation exposing exactly two columns:
 --                  fp    VARCHAR -- file path, matching ast_table.file_path
+--                                -- (matched separator- and './'-insensitively;
+--                                --  see PATH MATCHING below)
 --                  cblob BLOB    -- that file's pristine bytes
 --                A relation rather than a path because DuckDB table functions
 --                (read_blob) accept only literal arguments — no per-row
@@ -6885,9 +6896,34 @@ CREATE OR REPLACE MACRO ast_unparse_custom(ast_table, rules_table) AS TABLE (
 --                bytes themselves from a path; prefer them.
 --   language   — optional override / disambiguator (the law: inferred from the
 --                data, never required). Filters rows to that language.
+
+)SQLMACRO"
+        R"SQLMACRO(
 --   file_path  — optional scoping disambiguator for a multi-file table.
+--                Matched separator-insensitively, so the forward-slash spelling
+--                you handed read_ast works on Windows too.
 --
 -- Returns (file_path, source), one row. An empty ast_table yields no rows.
+--
+-- PATH MATCHING. Three relations have to agree on one join key: the node
+-- table's `file_path`, the blob relation's `fp`, and the `file_path :=`
+-- argument. They can disagree on spelling without disagreeing on the file:
+--
+--   * DuckDB's globber returns './'-prefixed relative paths while an exact
+--     path passes through verbatim, so one file has two spellings;
+--   * ON WINDOWS the globber returns NATIVE separators — a table built from
+--     read_ast('test/data/*') carries `test\data\x.py` — while an exact path
+--     and any hand-written `file_path :=` keep their forward slashes. Mixing a
+--     globbed node table with an exact `files` path therefore made the blob
+--     join miss on Windows and the macro report the file as unreadable, which
+--     was a wrong diagnosis of a correct input.
+--
+-- So all three are normalised for MATCHING only: leading './' stripped,
+-- backslashes folded to forward slashes. The `file_path` COLUMN RETURNED is
+-- the spelling your node table carried, untouched, so it still joins back to
+-- that table. (A path that genuinely contains a backslash — legal on POSIX,
+-- pathological — would be folded together with its forward-slash twin. The
+-- same trade `ast_patch` makes for './'.)
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
                                                  language := NULL,
@@ -6898,16 +6934,14 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
         -- unqualified. A bare `language` in a scope that also has a `language`
         -- column would bind to the column and turn the filter into a silent
         -- no-op; after this CTE no such column exists, so `language` and
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- `file_path` can only mean the parameters.
         --
-        -- './' is stripped from file paths because DuckDB's globber returns
-        -- './'-prefixed relative paths while an exact path passes through
-        -- verbatim; both spellings of one file must be one join key.
+        -- `fp` is the normalised MATCHING key (see PATH MATCHING above);
+        -- `fp_raw` is the spelling the node table carried, which is what gets
+        -- returned and what error messages name.
         __sdx_all AS (
-            SELECT regexp_replace(t.file_path, '^\./', '') AS fp,
+            SELECT replace(regexp_replace(t.file_path, '^\./', ''), '\', '/') AS fp,
+                   t.file_path                             AS fp_raw,
                    t.language                              AS node_language,
                    t.node_id                               AS node_id,
                    t.depth                                 AS depth,
@@ -6919,13 +6953,14 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
         __sdx_nodes AS (
             SELECT * FROM __sdx_all
             WHERE (language  IS NULL OR node_language = language)
-              AND (file_path IS NULL OR fp = regexp_replace(file_path, '^\./', ''))
+              AND (file_path IS NULL
+                   OR fp = replace(regexp_replace(file_path, '^\./', ''), '\', '/'))
         ),
         __sdx_bytes AS (
             SELECT DISTINCT ON (fp) *
-            FROM (SELECT regexp_replace(b.fp, '^\./', '') AS fp,
-                         b.cblob                          AS cblob,
-                         octet_length(b.cblob)            AS nbytes
+            FROM (SELECT replace(regexp_replace(b.fp, '^\./', ''), '\', '/') AS fp,
+                         b.cblob                           AS cblob,
+                         octet_length(b.cblob)             AS nbytes
                   FROM (SELECT * FROM query_table(blob_table)) b)
             WHERE fp IN (SELECT fp FROM __sdx_nodes WHERE fp IS NOT NULL)
         ),
@@ -6941,7 +6976,7 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
         -- select exactly the same rows as `children_count = 0` on all 26
         -- tree-sitter languages.
         __sdx_leaves AS (
-            SELECT fp, node_id, start_byte, end_byte,
+            SELECT fp, fp_raw, node_id, start_byte, end_byte,
                    COALESCE(lag(end_byte) OVER (PARTITION BY fp
                        ORDER BY start_byte, end_byte, node_id), 0) AS prev_end
             FROM __sdx_nodes
@@ -6954,8 +6989,11 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
                    count(*) FILTER (WHERE start_byte IS NULL OR end_byte IS NULL) AS n_null_pos,
                    count(*) FILTER (WHERE depth = 0)  AS n_roots,
                    count(*) FILTER (WHERE fp IS NULL) AS n_null_fp,
+                   count(*) FILTER (WHERE fp = '')    AS n_empty_fp,
                    min(node_language) AS lang_lo, max(node_language) AS lang_hi,
-                   min(fp) AS fp_lo, max(fp) AS fp_hi,
+                   -- the node table's own spelling, so a message names the path
+                   -- the caller wrote rather than a normalised rewrite of it
+                   min(fp_raw) AS fp_lo, max(fp_raw) AS fp_hi,
                    max(end_byte) AS max_end
             FROM __sdx_nodes
         ),
@@ -6987,9 +7025,27 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
                                'file_path := ''<path>'' to disambiguate. (ast_unparse(glob) ' ||
                                'returns one row per file; the byte-exact law is stated over ' ||
                                'a single input.)')
+                -- A parser that reports no byte positions at all. Only a
+                -- ZERO-BYTE file can legitimately have max(end_byte) = 0, and
+                -- that file has exactly one node, so the n_rows > 1 conjunct
+                -- makes this unambiguous. Checked BEFORE the readability and
+                -- staleness guards, both of which would otherwise fire first
+                -- and misdiagnose it as a missing or changed file.
+                WHEN s.n_rows > 1 AND s.max_end = 0
+                    THEN error('ast_unparse_exact: every node reports ' ||
+                               'start_byte = end_byte = 0, so this parser surfaces no byte ' ||
+                               'positions and there is nothing to slice. Byte offsets are a ' ||
+                               'tree-sitter-backed property; the `duckdb` adapter wraps ' ||
+                               'DuckDB''s own parser and has none (and its tree is an AST, ' ||
+                               'not a CST — no keyword, punctuation or comment nodes — so ' ||
+                               'even with offsets its leaves could not cover the text). ' ||
+                               'Parse with a tree-sitter language.')
                 WHEN s.n_null_fp > 0
                     THEN error('ast_unparse_exact: ' || s.n_null_fp::VARCHAR || ' node rows ' ||
                                'have a NULL file_path, so their bytes cannot be located.')
+                WHEN s.n_empty_fp > 0
+                    THEN error('ast_unparse_exact: ' || s.n_empty_fp::VARCHAR || ' node rows ' ||
+                               'have an empty file_path, so their bytes cannot be located.')
                 WHEN s.n_null_pos > 0
                     THEN error('ast_unparse_exact: ' || s.n_null_pos::VARCHAR || ' node rows ' ||
                                'have a NULL start_byte/end_byte. Byte offsets exist only under ' ||
@@ -7041,7 +7097,11 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
                                ''' (a leaf starts before the previous leaf ends), so the ' ||
                                'frontier is not an antichain and a splice would duplicate or ' ||
                                'drop bytes. An adapter reporting children_count = 0 for every ' ||
-                               'node (issue #197) produces exactly this.')
+                               'node produces exactly this — which is what the `duckdb` ' ||
+                               'adapter did before PR #205 fixed it (issue #197).')
+
+)SQLMACRO"
+        R"SQLMACRO(
                 ELSE true
             END AS ok
             FROM __sdx_stats s
@@ -7064,6 +7124,10 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
         -- output.
         __sdx_assembled AS (
             SELECT l.fp,
+                   -- min() rather than any_value() so the returned spelling is
+                   -- deterministic if one file somehow arrived under two
+                   -- spellings (it cannot from a single read_ast call).
+                   min(l.fp_raw) AS fp_raw,
                    string_agg(decode(b.cblob[l.prev_end   + 1 : l.start_byte]) ||
                               decode(b.cblob[l.start_byte + 1 : l.end_byte]),
                               '' ORDER BY l.start_byte, l.end_byte, l.node_id) AS head,
@@ -7071,7 +7135,7 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
             FROM __sdx_leaves l JOIN __sdx_bytes b USING (fp)
             GROUP BY l.fp
         )
-    SELECT a.fp AS file_path,
+    SELECT a.fp_raw AS file_path,
            a.head || decode(b.cblob[a.last_end + 1 : ]) AS source
     FROM __sdx_assembled a
     JOIN __sdx_bytes b USING (fp)
@@ -7119,9 +7183,6 @@ CREATE OR REPLACE MACRO ast_unparse_exact_from(ast_table, files,
 
 -- ----------------------------------------------------------------------------
 -- ast_unparse_exact_code(source_code, language) — byte-exact for an in-memory
-
-)SQLMACRO"
-        R"SQLMACRO(
 -- parse. There is no file and therefore no staleness: the bytes spliced
 -- against are the string argument itself.
 --

@@ -44,9 +44,14 @@
 #   `string_literal` has no child node for its quote characters - so leaf
 #   concatenation structurally cannot recover them. That is a 4b concern, not
 #   a leaf-text one.
-# * language 'duckdb' (the native, non-tree-sitter parser) is excluded: its
-#   adapter reports children_count = 0 for *every* node, so the whole tree
-#   looks like leaves and unparse is meaningless for it. Separate bug: #197.
+# * language 'duckdb' (the native, non-tree-sitter parser) is excluded. When
+#   this file was written its adapter reported children_count = 0 for *every*
+#   node, so the whole tree looked like leaves (#197); PR #205 fixed that, and
+#   the tree structure is now correct. It stays excluded for the reason that
+#   outlives the fix: its tree is an AST rather than a CST, with no node for any
+#   keyword, punctuation or comment, so there is no leaf whose text could be
+#   compared against its own source in the first place. See
+#   test/sql/ast_unparse_exact.test for the re-measurement.
 
 require sitting_duck
 

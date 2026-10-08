@@ -90,11 +90,16 @@ The reproducer now returns `# hello there\nx = 1`.
   carry meaningful semantic types and `IS_KEYWORD`, so 214 `PARSER_CONSTRUCT`
   rows beside them want their own change (and probably a per-keyword semantic
   classification pass).
-- **`duckdb` (native parser) — filed as issue #197.** Its adapter reports
-  `children_count = 0` for *every* node (while `descendant_count` is correct),
-  so the whole tree reads as leaves and `ast_unparse_code(..., 'duckdb')` emits
+- **`duckdb` (native parser) — was issue #197, FIXED by PR #205.** Its adapter
+  reported `children_count = 0` for *every* node (while `descendant_count` was
+  correct), so the whole tree read as leaves and
+  `ast_unparse_code(..., 'duckdb')` emitted
   `program select_statement select_node ...`. A separate structural bug, not a
-  leaf-text gap.
+  leaf-text gap — and now repaired: the tree structure is correct. `duckdb`
+  nonetheless stays out of scope for unparse of either kind, because its tree
+  is an **AST rather than a CST**: no node for any keyword, punctuation or
+  comment, so there is nothing to reconstruct or splice the text from. See
+  "4b part 1" below for the re-measurement against #205.
 
 ### Findings worth carrying forward
 
@@ -238,8 +243,26 @@ COPY sink (045/#174) where one destination means one textual answer.
 | rules-based `ast_unparse` on the same corpus | 0 / 28 | 0 / 28 (**unchanged — conformant, #89**) |
 
 Languages served: **all 26 tree-sitter languages**, with no per-language code.
-Not served: `duckdb` (#197) — no byte positions, and `depth = 0` on several
-nodes; it **errors** rather than emitting anything.
+
+Not served: `duckdb` — it **errors** rather than emitting anything. The original
+report blamed #197 (`depth = 0` on several nodes tripping the single-root
+guard). **PR #205 fixed #197, so that premise is gone and the conclusion is
+unchanged.** Re-measured against #205 on `sample.sql` (84 bytes, 7 clauses):
+the tree structure is now correct (1 root, 15 nodes, 7 leaves,
+`children_count = 0` ≡ `descendant_count = 0`), but
+
+  * every node still reports `start_byte = end_byte = 0`, and `file_path` is the
+    empty string — nothing to slice and nothing to re-read; and
+  * the tree is an **AST, not a CST**: no node for any keyword, punctuation or
+    comment, and `ORDER BY` / `LIMIT` absent from the tree entirely. No leaf
+    frontier over such a tree could tile the text, so fixing the offsets alone
+    would not make it serveable.
+
+The second reason is the durable one, and it is a property of wrapping a query
+planner's parse rather than a bug. A dedicated guard now reports the zero
+offsets directly ("surfaces no byte positions"), checked ahead of the
+readability and staleness guards — all three would fire, and only this one
+names the cause and gives an instruction.
 
 The kotlin case 4a recorded as a structural limit is served too: `"hi"` comes
 back with its quotes, while the rules-based unparser emits `val s = hi`. Both
@@ -347,8 +370,9 @@ characters and mixed line endings. The remaining order is:
    `children_count` is 0 on every node).
 2. ~~**byte offsets under `source := 'full'`**~~ — **Landed**, PR #198.
 3. ~~**4b part 1** — byte-exact round trip for an unmodified tree.~~ **Landed**
-   (`ast_unparse_exact*`); 26/26 languages, `duckdb` excluded (#197). See
-   "4b part 1" above.
+   (`ast_unparse_exact*`); 26/26 languages, `duckdb` excluded — not for #197
+   (fixed by #205) but because it reports no byte positions and its tree is an
+   AST rather than a CST. See "4b part 1" above.
 4. **4b part 2** — node templates for synthesized / modified nodes, designed
    against the splice that part 1 established. Still open.
 5. **045/#174** — the COPY sink. Gated on 4a, which has landed, so this is now

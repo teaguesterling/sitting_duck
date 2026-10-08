@@ -43,10 +43,26 @@
 #
 # NOT COVERED
 # -----------
-# language 'duckdb' (the native, non-tree-sitter parser). Its adapter has no
-# byte positions (start_byte = end_byte = 0 for every node) and reports
-# children_count = 0 for every node (#197). ast_unparse_exact ERRORS on it -
-# asserted in section 5 - rather than emitting anything.
+# language 'duckdb' (the native, non-tree-sitter parser), for two reasons that
+# both outlive #197. PR #205 fixed that adapter's constant-zero children_count /
+# sibling_index / depth, so its tree structure is now correct - but re-measured
+# against #205 it still reports start_byte = end_byte = 0 (and an empty
+# file_path) for every node, AND its tree is an AST rather than a CST: 15 nodes
+# for an 84-byte, 7-clause SQL file, with no node for any keyword, punctuation
+# or comment and ORDER BY / LIMIT absent entirely. No leaf frontier over such a
+# tree could tile the text, so byte offsets alone would not make it serveable.
+# ast_unparse_exact ERRORS on it - asserted in section 5 - rather than emitting
+# anything.
+#
+# PLATFORM NOTE. Nothing here may pin a literal forward-slash path against a
+# `file_path` column: DuckDB's globber returns NATIVE separators, so on Windows
+# a table built from read_ast('test/data/*') carries `test\data\x.py`. Every
+# comparison against a path column goes through replace(..., '\', '/') - and
+# section 6 has a test that deliberately feeds the macro Windows-style
+# separators to prove the matching is separator-insensitive. (This is not
+# hypothetical: it is the one CI failure the first version of this file
+# produced, on Windows only, and only the path half of that row - the
+# byte-identity half passed.)
 
 require sitting_duck
 
@@ -555,12 +571,29 @@ SELECT * FROM ast_unparse_exact_splice('overlapping', 'five_bytes');
 ----
 leaf spans overlap
 
-# 5i. language 'duckdb': no byte positions, and depth = 0 on several nodes.
-#     Errors rather than emitting anything.
+# 5i. language 'duckdb' reports start_byte = end_byte = 0 for every node, so
+#     there is nothing to slice. A dedicated guard says so, rather than letting
+#     the readability or staleness guard fire first and misdiagnose it as a
+#     missing or changed file - all three are symptoms and only this one is the
+#     cause. Checked through both read_ast and parse_ast, which take different
+#     paths into the adapter.
 statement error
 SELECT * FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.sql', 'duckdb');
 ----
-ast_unparse_exact:
+surfaces no byte positions
+
+statement error
+SELECT * FROM ast_unparse_exact_code('SELECT a FROM t', 'duckdb');
+----
+surfaces no byte positions
+
+# 5j. ...and a table parsed below 'full' has NULL offsets, not zero ones, so
+#     5a's message is not shadowed by 5i's guard. (Re-asserted here because the
+#     two guards are adjacent in one CASE and their order is load-bearing.)
+statement error
+SELECT * FROM ast_unparse_exact_from('py_lines', 'test/data/unparse_leaf_text/sample.py');
+----
+have a NULL start_byte/end_byte
 
 # =============================================================================
 # 6. language := / file_path := are overrides, not requirements
@@ -576,9 +609,14 @@ FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.kt') u,
 ----
 true
 
-# language := resolves a 26-language table down to one file.
+# language := resolves a 26-language table down to one file. The file_path
+# column stays in the assertion on purpose: without it, `encode(source) =
+# content` would be satisfied by ANY file that happened to round-trip, and the
+# claim being tested is that language := picked the RIGHT one. Normalised
+# because `multi_lang` was built from a glob, so on Windows it carries native
+# separators.
 query IT
-SELECT encode(u.source) = b.content, u.file_path
+SELECT encode(u.source) = b.content, replace(u.file_path, '\', '/')
 FROM ast_unparse_exact_from('multi_lang', 'test/data/unparse_leaf_text/*', language := 'kotlin') u,
      read_blob('test/data/unparse_leaf_text/sample.kt') b;
 ----
@@ -586,12 +624,54 @@ true	test/data/unparse_leaf_text/sample.kt
 
 # file_path := does the same for a multi-file table of one language.
 query IT
-SELECT encode(u.source) = b.content, u.file_path
+SELECT encode(u.source) = b.content, replace(u.file_path, '\', '/')
 FROM ast_unparse_exact_from('multi_file', ['test/data/encoding/*.py', 'test/data/python/unicode.py'],
                             file_path := 'test/data/python/unicode.py') u,
      read_blob('test/data/python/unicode.py') b;
 ----
 true	test/data/python/unicode.py
+
+# ---------------------------------------------------------------------------
+# Separator-insensitive matching. Three relations must agree on one join key -
+# the node table's file_path, the blob relation's path, and the file_path :=
+# argument - and on Windows they do NOT agree on spelling: the globber returns
+# `test\data\x.py` while an exact path and any hand-written file_path := keep
+# forward slashes. A globbed node table plus an exact `files` path therefore
+# made the blob join miss and the macro call a perfectly good file unreadable.
+#
+# Simulated here on ANY platform by rewriting the separators in the table, so
+# the Windows-only bug has a Linux-runnable regression test.
+# ---------------------------------------------------------------------------
+statement ok
+CREATE TABLE win_style AS
+SELECT * REPLACE (replace(file_path, '/', '\') AS file_path)
+FROM read_ast('test/data/unparse_leaf_text/sample.py', source := 'full', peek := 'none');
+
+# The control first: the table really does carry a different string, so the
+# assertion below is testing the normalisation rather than nothing.
+query I
+SELECT (SELECT DISTINCT file_path FROM win_style) = 'test/data/unparse_leaf_text/sample.py';
+----
+false
+
+# Backslash-separated node table + forward-slash blob path + forward-slash
+# file_path := argument, and it still matches and still round-trips.
+query IT
+SELECT encode(u.source) = b.content, replace(u.file_path, '\', '/')
+FROM ast_unparse_exact_from('win_style', 'test/data/unparse_leaf_text/sample.py',
+                            file_path := 'test/data/unparse_leaf_text/sample.py') u,
+     read_blob('test/data/unparse_leaf_text/sample.py') b;
+----
+true	test/data/unparse_leaf_text/sample.py
+
+# The returned file_path is the spelling the NODE TABLE carried, untouched, so
+# it still joins back to that table. Normalising it in the output would have
+# broken that join - which is why the normalisation is for matching only.
+query I
+SELECT u.file_path = (SELECT DISTINCT file_path FROM win_style)
+FROM ast_unparse_exact_from('win_style', 'test/data/unparse_leaf_text/sample.py') u;
+----
+true
 
 # =============================================================================
 # 7. Additivity: the rules-based macros are untouched

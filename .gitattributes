@@ -8,3 +8,14 @@
 test/data/encoding/crlf_utf8.py -text
 test/data/python/unicode.py -text
 test/data/python/macros/patch_unicode.py -text
+
+# The 26-language unparse corpus joined this list when byte-exact unparse
+# landed (test/sql/ast_unparse_exact.test, tracker 047 "4b part 1"). That test
+# pins LITERAL BYTE COUNTS and BYTE OFFSETS on these files -- 55 leaves / 172
+# leaf bytes / 50 gap bytes for sample.py, and the hidden quote characters of
+# sample.kt at bytes 75 and 78 -- so a checkout that rewrote their line endings
+# would change every one of those numbers. It would fail loudly rather than
+# silently, unlike the cases above, but it would fail for a reason that has
+# nothing to do with the code under test. GitHub's checkout action happens not
+# to translate today; `-text` makes that a guarantee instead of a default.
+test/data/unparse_leaf_text/* -text

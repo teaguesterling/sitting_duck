@@ -61,11 +61,14 @@
 #
 # NOT COVERED
 # -----------
-# The `duckdb` language adapter: it wraps DuckDB's own SQL parser, has no byte
-# positions (start_byte = end_byte = 0 for every node) and reports
-# children_count = 0 for every node (issue #197). ast_unparse_exact ERRORS on
-# it rather than emitting anything, which is the intended behaviour; do not
-# point this script at it.
+# The `duckdb` language adapter. #197's constant-zero children_count /
+# sibling_index / depth were fixed by PR #205, so its tree structure is now
+# correct -- but it still reports start_byte = end_byte = 0 (and an empty
+# file_path) for every node, and its tree is an AST rather than a CST: no node
+# for any keyword, punctuation or comment, so no leaf frontier over it could
+# tile the text even given offsets. ast_unparse_exact ERRORS on it rather than
+# emitting anything, which is the intended behaviour; do not point this script
+# at it.
 #
 set -euo pipefail
 
