@@ -168,14 +168,23 @@ language x check matrix.
 
 Checks (each gated on a DECLARED capability; see the header for where
 declarations come from):
-  PARSE        harness guard -- the fixture yields nodes and no ERROR nodes.
-               A failure VOIDs that language's row; it is not a conformance
-               verdict.
-  CALL-NAMED   every call-semantic node carries a callee name (#88/#91).
-               Gated on the runtime call-naming declaration.
+  PARSE        harness guard -- each fixture yields nodes and no ERROR nodes.
+               Not a conformance verdict: a fixture that will not parse is
+               ambiguous between a bad fixture and a grammar gap. A fixture
+               that trips it is QUARANTINED (\`dirty\`) and the language is
+               still judged on its remaining clean fixtures; only a language
+               with no clean fixture at all is voided.
+  CALL-NAMED   every call-semantic node whose OWN node type declares a
+               name-extraction strategy carries a callee name (#88/#91).
+               Gated PER NODE TYPE on ast_type_map()'s name_strategy, so a
+               node type declared \`none\` (bash command_substitution, hcl
+               template_interpolation) is excluded rather than failed.
   NATIVE-DECL  a language declaring a function-shaped native strategy produces
-               at least one function definition with parameters.
-               Gated on the def-derived native declaration.
+               at least one function definition with parameters. Gated on the
+               def-derived native declaration AND on the corpus actually
+               containing a function that takes a parameter in source, so a
+               corpus of no-argument functions reports \`void\` (fixture gap),
+               never \`FAIL\`.
   NATIVE-ABST  node types whose declared native strategy is NONE produce NO
                native payload. The direction with no "untyped code" excuse: if
                the .def says NONE and the engine emits parameters anyway, the
@@ -186,11 +195,23 @@ declarations come from):
   NO-EMPTY     #89. A selector that cannot be answered ERRORS (with the
                expected message); one that is merely not satisfied returns 0
                rows cleanly.
+  DECL-UNIQUE  one node type, one declaration. A raw_type declared twice with
+               conflicting semantic type or strategies silently loses one of
+               them to the node_configs map, so what the module does depends on
+               insertion order rather than on anything written down. Agreeing
+               duplicates are reported, not failed.
   DECL-RUNTIME declaration integrity: an overridden or def-derived capability
                must not contradict what ast_type_map() shows at run time.
 
-Verdicts: ok | FAIL | n/a (capability not declared) | UNDECL (no declaration
-source could answer) | void (no fixture, or the fixture did not parse).
+Verdicts:
+  ok      the declared capability was delivered
+  FAIL    it was not -- a conformance failure, sets exit ${EXIT_FAIL}
+  dirty   PARSE only: some fixture did not parse and was quarantined; the
+          language is still judged on the rest. Counted, never a FAIL.
+  n/a     the capability is not declared, so nothing is owed
+  UNDECL  no declaration source could answer -- neither pass nor fail
+  void    nothing to measure (no fixture, no clean fixture, or the corpus does
+          not exercise the capability). NEVER read as a pass.
 A \`*\` suffix marks a verdict reached under a --force-capability override.
 
 Options:
