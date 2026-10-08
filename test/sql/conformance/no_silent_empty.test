@@ -1,0 +1,122 @@
+# name: test/sql/conformance/no_silent_empty.test
+# description: Conformance kit (044 M1 #3) -- #89: a query that cannot answer must error, not return 0 rows
+# group: [conformance]
+
+# v2.0 M1 deliverable 3 requires every module to prove "no silent-empty (#89)".
+# docs/planning/v2-architecture.md states it as engine principle 1:
+#
+#     "No silent empties (#89): when the engine can't honor a query's
+#      semantics, it says so -- 0 rows always means 'searched correctly, not
+#      there.'"
+#
+# BOTH DIRECTIONS ARE CHECKED, and that is the point of this file. A missing
+# guard turns "cannot answer" into a confident empty answer. An over-eager
+# guard turns "correctly not there" into an error. Either one breaks the
+# principle, and a suite that only tests the first half would let a fix for it
+# break the second half unnoticed.
+#
+# Each must-error assertion pins its MESSAGE, not just the failure. An error for
+# some other reason -- a typo'd path, an unloaded extension -- is not a guard
+# firing, and a kit that cannot tell the difference has stopped checking.
+
+require sitting_duck
+
+# =============================================================================
+# Direction 1: CANNOT ANSWER -> must error, with the expected message.
+# =============================================================================
+
+# Unknown attribute name. Before #91 this fell through the dispatch CASE to
+# `ELSE false` and silently matched nothing.
+statement error
+SELECT * FROM ast_select('test/data/unparse_leaf_text/sample.py', '.func[frobnicate=x]');
+----
+unknown attribute "[frobnicate...]"
+
+# Unknown pseudo-element. Fell through every arm of the routing UNION.
+statement error
+SELECT * FROM ast_select('test/data/unparse_leaf_text/sample.py', '.func::bogus_pseudo');
+----
+unknown pseudo-element "::bogus_pseudo"
+
+# Documented-but-unimplemented operator combinations. `language` implements only
+# `=`; the dispatch used to ignore the operator and do an exact match anyway,
+# which is silently wrong rather than empty.
+statement error
+SELECT * FROM ast_select('test/data/unparse_leaf_text/sample.py', '.func[language^=py]');
+----
+attribute "language" only supports exact match
+
+# `modifier` implements `=` and `*=` (both "has this modifier" over a list) and
+# nothing else.
+statement error
+SELECT * FROM ast_select('test/data/unparse_leaf_text/sample.py', '.func[modifier^=asy]');
+----
+attribute "modifier" supports = and *=
+
+# :has() honors only a type, #name and .class. Attribute filters inside it were
+# silently DROPPED, which made :has match more than it was asked for -- the
+# same failure family, in the direction of false positives.
+statement error
+SELECT * FROM ast_select('test/data/unparse_leaf_text/sample.py', '.func:has(.call[name=x])');
+----
+attribute filters inside :has(...) are not supported
+
+# The #88/#89 pairing itself: a selector binding a name to call nodes over a
+# source whose call nodes carry NO callee name cannot be answered.
+statement error
+SELECT * FROM ast_select('test/data/conformance/control/unnamed_calls.sh', '.call#date',
+                         language := 'bash');
+----
+no call node in this source carries a callee name
+
+# =============================================================================
+# Direction 2: CORRECTLY NOT THERE -> must return 0 rows, with NO error.
+# The positive twin of every assertion above. #91 is explicit that this
+# asymmetry is deliberate: `.call#absent` over NAMED calls is a true "not
+# there", and guarding it would be the over-eager failure.
+# =============================================================================
+
+query I
+SELECT count(*) FROM ast_select('test/data/unparse_leaf_text/sample.py', '.call#zz_absent_callee_xyz');
+----
+0
+
+query I
+SELECT count(*) FROM ast_select('test/data/call_extraction/calls.c', '.call#zz_absent_callee_xyz');
+----
+0
+
+query I
+SELECT count(*) FROM ast_select('test/data/unparse_leaf_text/sample.py', '.func:has(.call#zz_absent_callee_xyz)');
+----
+0
+
+# The working form of each rejected selector still works, so the guards above
+# cannot have been implemented by rejecting the whole feature.
+query I
+SELECT count(*) > 0 FROM ast_select('test/data/unparse_leaf_text/sample.py', '.func[language=python]');
+----
+true
+
+query I
+SELECT count(*) > 0 FROM ast_select('test/data/unparse_leaf_text/sample.py', '.func::parent');
+----
+true
+
+query I
+SELECT count(*) > 0 FROM ast_select('test/data/call_extraction/calls.py', '.func:has(.call#transform)');
+----
+true
+
+# =============================================================================
+# NEGATIVE CONTROL for the message pinning. A nonexistent fixture also raises,
+# but with a completely different message -- so "the statement errored" on its
+# own proves nothing about a guard. This asserts the DIFFERENT error, which is
+# what makes every `statement error` above an assertion about the guard rather
+# than about failure in general.
+# =============================================================================
+
+statement error
+SELECT * FROM ast_select('test/data/conformance/zz_no_such_fixture.py', '.func[frobnicate=x]');
+----
+zz_no_such_fixture.py

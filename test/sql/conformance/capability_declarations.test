@@ -1,0 +1,288 @@
+# name: test/sql/conformance/capability_declarations.test
+# description: Conformance kit (044 M1 #3) -- what a language module declares, and what it does not
+# group: [conformance]
+
+# v2.0 M1 deliverable 3 requires that "modifiers/signatures populate per
+# DECLARED capabilities". That sentence only means something if a module's
+# capabilities are declared somewhere checkable, so this file pins the
+# declaration surface as it actually exists today.
+#
+# THE M1 FINDING THIS FILE RECORDS: there is no capability declaration surface.
+#   * ast_supported_languages() returns (language, extensions, parser_type,
+#     node_type_count) and nothing about what the module can do.
+#   * ast_type_map() exposes the per-node-type NAME strategy -- so the
+#     call-naming capability IS derivable at run time -- but NOT the
+#     native_strategy that drives signature / parameter / modifier extraction.
+#     That capability is therefore only derivable by reading
+#     src/language_configs/*_types.def, which an out-of-tree module (M3) may not
+#     ship, so scripts/conformance_kit.sh reports it as UNDECL in that case.
+#
+# These assertions are deliberately shaped so that CLOSING the gap breaks them:
+# adding a native_strategy column to ast_type_map(), or a capability surface to
+# ast_supported_languages(), changes the pinned column lists below. That is the
+# intent -- the test should fail when the finding is fixed, not quietly keep
+# passing.
+#
+# KNOWN LIMITATION: the totals below (27 registered languages, 26 with
+# declarations, the per-strategy language counts) are pinned for the DEFAULT
+# build. cmake/BuiltinLanguages.cmake supports subset builds via
+# -DSITTING_DUCK_LANGUAGES / -DSITTING_DUCK_EXCLUDE_LANGUAGES (groundwork for
+# the slim "sitting_duckling" build, #87), and every count here changes under
+# one. scripts/conformance_kit.sh takes its language list from
+# ast_supported_languages() precisely so it does NOT have this problem; this
+# CI slice trades that for the ability to pin an exact baseline, which is what
+# makes a regression visible. If subset builds enter CI, these counts need to
+# become relative rather than absolute.
+#
+# RUNTIME-REGISTERED LANGUAGES ARE EXCLUDED THROUGHOUT, and the reason is worth
+# writing down because this file got it wrong once. The first revision asserted
+#     SELECT count(*) FROM ast_supported_languages()  ----  27
+# which passed everywhere except the one CI job that sets
+# SITTING_DUCK_TEST_GRAMMAR_DIR. That job runs
+# test/sql/dynamic_languages/register_language*.test, which register a grammar
+# at run time; registration is PROCESS-GLOBAL, so by the time this file ran the
+# answer was 28. Every other leg require-env-skips those four files, which is
+# why it was green locally and green on 21 of 22 legs.
+#
+# The irony is the lesson: the kit's central principle is "take the language
+# list from the runtime, never a hardcoded array" -- and then this test
+# hardcoded the count. So the fix is not a looser count.
+#
+# `>= 27` is NOT acceptable here (see #202, filed over `COUNT(*) >= 0`
+# assertions that pass for every possible result): it would still pass if a
+# language silently DISAPPEARED, which is the regression this file exists to
+# catch. Replacing a brittle assertion with an unfalsifiable one is a net loss.
+#
+# Instead: pin the exact SET OF NAMES of the built-in languages, filtered on
+# the only runtime discriminator that exists -- parser_type, which reads
+# 'tree-sitter (dynamic)' for a runtime registration ('native' for duckdb,
+# 'tree-sitter' for the rest; see SupportedLanguagesFunction in
+# src/ast_supported_languages_function.cpp). An exact set is strictly stronger
+# than a count: it catches a language being renamed or dropped, which a count
+# cannot, and it is inherently immune to additions.
+
+require sitting_duck
+
+# =============================================================================
+# The built-in language set, pinned BY NAME. Everything below filters through
+# this, so a runtime-registered grammar cannot perturb any assertion in this
+# file.
+# =============================================================================
+
+statement ok
+CREATE TABLE __builtin_expected(language VARCHAR);
+
+statement ok
+INSERT INTO __builtin_expected VALUES
+    ('bash'), ('c'), ('cpp'), ('csharp'), ('css'), ('dart'), ('duckdb'), ('go'),
+    ('graphql'), ('hcl'), ('html'), ('java'), ('javascript'), ('json'),
+    ('kotlin'), ('lua'), ('markdown'), ('php'), ('python'), ('r'), ('ruby'),
+    ('rust'), ('sql'), ('swift'), ('toml'), ('typescript'), ('zig');
+
+# GUARD, and the reason the next two assertions are not vacuous: a typo that
+# emptied the pinned table would make "nothing disappeared" trivially true.
+# This is the #202 shape, inverted -- assert the oracle is non-empty before
+# trusting a zero from it.
+query I
+SELECT count(*) FROM __builtin_expected;
+----
+27
+
+# THE assertion that replaces the hardcoded total. Exact set, both directions:
+# a dropped or renamed built-in fails it, an unexpected built-in fails it, and a
+# runtime registration cannot affect it.
+query I
+SELECT language FROM ast_supported_languages()
+WHERE parser_type <> 'tree-sitter (dynamic)'
+ORDER BY language;
+----
+bash
+c
+cpp
+csharp
+css
+dart
+duckdb
+go
+graphql
+hcl
+html
+java
+javascript
+json
+kotlin
+lua
+markdown
+php
+python
+r
+ruby
+rust
+sql
+swift
+toml
+typescript
+zig
+
+# Stated separately because it is the thing that must never pass vacuously:
+# no language this file expects has silently gone away.
+query I
+SELECT count(*) FROM __builtin_expected
+WHERE language NOT IN (SELECT language FROM ast_supported_languages());
+----
+0
+
+# And the filter has to stay honest. If parser_type ever stops distinguishing a
+# runtime registration, the exact-set assertion above would start admitting one
+# -- this says so directly: anything registered that is NOT in the pinned set
+# must be reported as dynamic.
+query I
+SELECT count(*) FROM ast_supported_languages()
+WHERE language NOT IN (SELECT language FROM __builtin_expected)
+  AND parser_type <> 'tree-sitter (dynamic)';
+----
+0
+
+# =============================================================================
+# The declaration surfaces, pinned column by column.
+# =============================================================================
+
+statement ok
+CREATE TABLE __sl AS SELECT * FROM ast_supported_languages();
+
+query I
+SELECT column_name FROM (DESCRIBE __sl) ORDER BY column_name;
+----
+extensions
+language
+node_type_count
+parser_type
+
+statement ok
+CREATE TABLE __tm AS SELECT * FROM ast_type_map();
+
+# name_strategy is here; native_strategy is NOT. This absence is the finding.
+query I
+SELECT column_name FROM (DESCRIBE __tm) ORDER BY column_name;
+----
+flags
+is_scope
+is_syntax
+kind
+language
+name_role
+name_strategy
+node_type
+semantic_type
+
+query I
+SELECT count(*) FROM (DESCRIBE __tm) WHERE column_name = 'name_strategy';
+----
+1
+
+query I
+SELECT count(*) FROM (DESCRIBE __tm) WHERE column_name LIKE '%native%';
+----
+0
+
+# =============================================================================
+# Coverage of the runtime declaration surface. ast_type_map() is driven by each
+# adapter's GetNodeConfigs(), so a language with no DEF_TYPE table contributes
+# no rows -- and the conformance kit must report that as UNDECLARED rather than
+# as a pass. `duckdb` is exactly that case: it wraps DuckDB's own parser and
+# ships no node-config table, so NOTHING about its capabilities is declared
+# anywhere the runtime can see.
+# =============================================================================
+
+# Of the 27 built-ins, 26 contribute declaration rows. Counted over the pinned
+# set rather than over ast_supported_languages(), so a runtime registration --
+# which contributes rows iff it was given a config -- cannot move it.
+query I
+SELECT count(DISTINCT language) FROM ast_type_map()
+WHERE language IN (SELECT language FROM __builtin_expected);
+----
+26
+
+query I
+SELECT count(*) FROM ast_type_map('duckdb');
+----
+0
+
+# duckdb is the ONLY built-in with no declaration rows. Restricted to the
+# pinned set: a configured runtime grammar adds itself to ast_type_map(), and an
+# unconfigured one does not, so without the filter this answer depends on how
+# the dynamic-language tests happened to leave the process.
+query I
+SELECT language FROM __builtin_expected
+WHERE language NOT IN (SELECT language FROM ast_type_map())
+ORDER BY language;
+----
+duckdb
+
+# `duckdb` still registers and parses, but its node_type_count is 0: the
+# adapter carries no DEF_TYPE table at all (src/language_adapters/
+# duckdb_adapter.cpp has no DEF_TYPE entry, unlike every other adapter, which
+# either includes a *_types.def or inlines its table as sql_adapter.cpp does).
+# So for this one language NOTHING about its capabilities is declared anywhere
+# -- not at run time, not in a .def -- and the conformance kit can only report
+# UNDECL for it.
+query II
+SELECT parser_type, node_type_count FROM ast_supported_languages() WHERE language = 'duckdb';
+----
+native	0
+
+# ...while every other BUILT-IN language declares node types. The filter is
+# load-bearing: a runtime grammar registered without a config also reports
+# node_type_count = 0, so unfiltered this answer is 2 in the
+# SITTING_DUCK_TEST_GRAMMAR_DIR job.
+query I
+SELECT count(*) FROM ast_supported_languages()
+WHERE node_type_count = 0
+  AND language IN (SELECT language FROM __builtin_expected);
+----
+1
+
+# =============================================================================
+# NEGATIVE CONTROL for the "no native_strategy column" assertions. A column
+# count of 0 is also what a typo'd predicate returns, so the same LIKE shape
+# must find the column that IS there.
+# =============================================================================
+
+query I
+SELECT count(*) FROM (DESCRIBE __tm) WHERE column_name LIKE '%strategy%';
+----
+1
+
+# And ast_type_map() must actually be populated -- an empty table would satisfy
+# several assertions above for the wrong reason. This is a deliberate one-sided
+# NON-VACUITY BOUND rather than a measurement (the exact per-strategy table
+# below is the measurement), so unlike #202's `COUNT(*) >= 0` it is guarding
+# other assertions instead of standing in for one. Restricted to the pinned set
+# so a runtime-registered grammar's rows cannot satisfy it.
+query I
+SELECT count(*) > 1000 FROM ast_type_map()
+WHERE language IN (SELECT language FROM __builtin_expected);
+----
+true
+
+# The name strategies in use, pinned. This is the vocabulary the call-naming
+# capability gate in call_naming_conformance.test is derived from; a strategy
+# appearing or disappearing changes what that gate can see.
+#
+# Restricted to the pinned built-in set. A runtime grammar registered WITH a
+# config contributes its own node types (test/data/dynamic_grammars/
+# jsond_types.json declares FIRST_CHILD and NODE_TEXT strategies), which
+# unfiltered adds a `first_child` row and bumps node_text/none to 27.
+query II
+SELECT name_strategy, count(DISTINCT language) FROM ast_type_map()
+WHERE language IN (SELECT language FROM __builtin_expected)
+GROUP BY 1 ORDER BY 1;
+----
+custom	19
+find_assignment_target	13
+find_call_target	18
+find_identifier	21
+find_in_declarator	2
+find_property	3
+node_text	26
+none	26
