@@ -28,8 +28,8 @@
 #include "duckdb/common/enums/catalog_type.hpp"
 #include <cstring>
 #include <mutex>
-#include <numeric>   // for std::iota
 #include <algorithm> // for std::sort
+#include <utility>   // for std::pair
 
 namespace duckdb {
 
@@ -401,8 +401,10 @@ ASTResult DuckDBAdapter::ConvertStatementsToAST(const vector<unique_ptr<SQLState
 		}
 	}
 
-	// Update descendant counts
-	UpdateDescendantCounts(nodes);
+	// Derive depth, sibling_index, children_count and descendant_count from the
+	// finished parent_id edge set. Must run after the loop above, because that
+	// is where the statement roots stop being detached (parent_id == -1).
+	FinalizeTreeStructure(nodes);
 
 	result.nodes = std::move(nodes);
 	result.node_count = result.nodes.size();
@@ -1095,7 +1097,17 @@ ASTNode DuckDBAdapter::CreateASTNode(const string &type, const string &name, con
 	node.source_start_column = 1;
 	node.source_end_column = 1;
 
-	// Tree structure
+	// Tree structure.
+	//
+	// depth is a HINT here, not the answer: the handlers below build a subtree
+	// bottom-up and only the node at the top of each returned vector gets its
+	// depth corrected by the caller (the `if (parent_id == -1)` branches), so a
+	// nested node's depth is whatever its handler happened to pass. The counts
+	// cannot be known at all until the whole statement list exists, because a
+	// node's children are created after it. All four of depth, sibling_index,
+	// children_count and descendant_count are therefore (re)derived from the
+	// finished parent_id edge set in FinalizeTreeStructure(); the values here
+	// are placeholders.
 	node.parent_id = parent_id;
 	node.depth = depth;
 	node.sibling_index = 0;
@@ -1124,29 +1136,129 @@ ASTResult DuckDBAdapter::CreateErrorResult(const string &error_message) const {
 	return result;
 }
 
-void DuckDBAdapter::UpdateDescendantCounts(vector<ASTNode> &nodes) const {
-	// Calculate descendant counts in bottom-up order (highest depth first)
-	// Sort by depth descending to ensure we process children before parents
-	vector<size_t> indices(nodes.size());
-	std::iota(indices.begin(), indices.end(), 0);
+void DuckDBAdapter::FinalizeTreeStructure(vector<ASTNode> &nodes) const {
+	// Derive every structural column from the one thing the conversion above
+	// establishes reliably: parent_id. Nothing here reads a pre-existing depth,
+	// sibling_index, children_count or descendant_count.
+	//
+	// This replaced a pass that computed descendant_count alone, by sorting on
+	// `node_depth` descending so that children were counted before parents. It
+	// left children_count and sibling_index at their CreateASTNode zeros --
+	// issue #197, every node reporting itself a leaf -- and the ordering it
+	// relied on was itself unsound: the expression and table-ref handlers
+	// create their nested nodes at depth 0 and only the top node of each
+	// returned vector has its depth fixed by the caller. A nested conjunction
+	// therefore sorted BEFORE its own comparison children and counted them as
+	// childless, so `WHERE x = 1 AND y = 2` reported 2 descendants under the
+	// conjunction instead of 6, and 9 under `program` instead of 13. Deriving
+	// depth here as well is what makes the counts trustworthy, rather than
+	// correct only for the subtrees whose depths happened to be right.
+	if (nodes.empty()) {
+		return;
+	}
 
-	std::sort(indices.begin(), indices.end(),
-	          [&nodes](size_t a, size_t b) { return nodes[a].node_depth > nodes[b].node_depth; });
+	// node_id -> position. Every node that reaches this pass was numbered by the
+	// counter in ConvertStatementsToAST, which starts at 1, so none has id 0 and
+	// the root's parent_id of 0 reads as "no parent", exactly like the -1 an
+	// unattached node carries. (CreateErrorResult does build a node with id 0,
+	// but it returns an ASTResult of its own and never reaches here.)
+	unordered_map<uint64_t, size_t> index_of;
+	index_of.reserve(nodes.size() * 2);
+	for (size_t i = 0; i < nodes.size(); i++) {
+		index_of[nodes[i].node_id] = i;
+	}
 
-	// Process nodes in depth order (deepest first)
-	for (size_t idx : indices) {
-		auto &node = nodes[idx];
-		uint32_t count = 0;
-
-		// Count direct children and their descendants
-		for (const auto &other : nodes) {
-			if (other.parent_id == static_cast<int64_t>(node.node_id)) {
-				count += 1 + other.descendant_count;
-			}
+	vector<vector<size_t>> children(nodes.size());
+	vector<size_t> roots;
+	for (size_t i = 0; i < nodes.size(); i++) {
+		const auto &node = nodes[i];
+		if (node.parent_id <= 0) {
+			roots.push_back(i);
+			continue;
 		}
-		node.descendant_count = count;
+		auto entry = index_of.find(static_cast<uint64_t>(node.parent_id));
+		if (entry == index_of.end() || entry->second == i) {
+			// A parent_id naming no node (or itself) would otherwise drop this
+			// node out of the walk entirely, leaving it with stale counts.
+			// Treat it as a root so it is still visited and still consistent.
+			roots.push_back(i);
+			continue;
+		}
+		children[entry->second].push_back(i);
+	}
 
-		// Update legacy fields after descendant count change
+	// Siblings in ascending node_id. The counter is handed out as the parse tree
+	// is walked, so that is source order -- which is what sibling_index has to
+	// mean for the ordering predicates (ast_precedes / :first-child / nth-child)
+	// to say anything true. Push order already matches, so this is a safety net
+	// against a future handler that appends out of order rather than a reorder.
+	auto by_node_id = [&nodes](size_t a, size_t b) { return nodes[a].node_id < nodes[b].node_id; };
+	for (auto &child_list : children) {
+		std::sort(child_list.begin(), child_list.end(), by_node_id);
+	}
+	std::sort(roots.begin(), roots.end(), by_node_id);
+
+	for (size_t i = 0; i < nodes.size(); i++) {
+		nodes[i].children_count = static_cast<uint32_t>(children[i].size());
+		for (size_t k = 0; k < children[i].size(); k++) {
+			nodes[children[i][k]].sibling_index = static_cast<int32_t>(k);
+		}
+	}
+	// A well-formed result has exactly one root (`program`), which then gets
+	// sibling_index 0 like a tree-sitter root. Indexing them as siblings of each
+	// other keeps the "dense 0..k-1 per parent" property if a second one appears.
+	for (size_t k = 0; k < roots.size(); k++) {
+		nodes[roots[k]].sibling_index = static_cast<int32_t>(k);
+	}
+
+	// Depth down, descendant_count up, in one explicit post-order walk. An
+	// explicit stack rather than recursion because the depth of this tree is
+	// bounded by the nesting of the SQL, not by anything in our control.
+	//
+	// `entered` is a termination guard, not an optimisation. The edge set cannot
+	// contain a cycle today -- a parent_id is always an already-created node's
+	// id, so a child's id always exceeds its parent's -- but that is a property
+	// of every handler above, not of anything checked here, and a walk that
+	// loops forever is a far worse failure than one that counts a malformed
+	// edge set a little wrong.
+	vector<bool> entered(nodes.size(), false);
+	vector<std::pair<size_t, bool>> stack; // (index, children already pushed)
+	for (size_t root : roots) {
+		if (entered[root]) {
+			continue;
+		}
+		nodes[root].depth = 0;
+		entered[root] = true;
+		stack.emplace_back(root, false);
+		while (!stack.empty()) {
+			auto visit = stack.back();
+			stack.pop_back();
+			const size_t idx = visit.first;
+			if (!visit.second) {
+				stack.emplace_back(idx, true);
+				for (size_t child : children[idx]) {
+					if (entered[child]) {
+						continue;
+					}
+					entered[child] = true;
+					nodes[child].depth = nodes[idx].depth + 1;
+					stack.emplace_back(child, false);
+				}
+				continue;
+			}
+			uint32_t count = 0;
+			for (size_t child : children[idx]) {
+				count += 1 + nodes[child].descendant_count;
+			}
+			nodes[idx].descendant_count = count;
+		}
+	}
+
+	// The output path reads the legacy mirrors (legacy_children_count,
+	// legacy_sibling_index, node_depth, legacy_descendant_count), not the fields
+	// set above, so every node has to be re-synced -- including the leaves, whose
+	// depth changed even though their counts did not.
+	for (auto &node : nodes) {
 		node.UpdateComputedLegacyFields();
 	}
 }
