@@ -6874,6 +6874,15 @@ CREATE OR REPLACE MACRO ast_unparse_custom(ast_table, rules_table) AS TABLE (
 --                A relation rather than a path because DuckDB table functions
 --                (read_blob) accept only literal arguments — no per-row
 --                lateral paths. The same constraint `ast_patch` documents.
+--
+--                THIS ARGUMENT IS TRUSTED. The macro verifies that the bytes
+--                are the right LENGTH for the parse (the staleness guard) but
+--                cannot verify they are that path's bytes at all: hand it a
+--                same-length blob from somewhere else and it will splice that,
+--                which is exactly what test/sql/ast_unparse_exact.test §5g
+--                does on purpose to make the guard fire. `ast_unparse_exact`
+--                and `ast_unparse_exact_from` exist because they establish the
+--                bytes themselves from a path; prefer them.
 --   language   — optional override / disambiguator (the law: inferred from the
 --                data, never required). Filters rows to that language.
 --   file_path  — optional scoping disambiguator for a multi-file table.
@@ -6889,6 +6898,9 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
         -- unqualified. A bare `language` in a scope that also has a `language`
         -- column would bind to the column and turn the filter into a silent
         -- no-op; after this CTE no such column exists, so `language` and
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- `file_path` can only mean the parameters.
         --
         -- './' is stripped from file paths because DuckDB's globber returns
@@ -6899,9 +6911,6 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
                    t.language                              AS node_language,
                    t.node_id                               AS node_id,
                    t.depth                                 AS depth,
-
-)SQLMACRO"
-        R"SQLMACRO(
                    t.descendant_count                      AS descendant_count,
                    t.start_byte                            AS start_byte,
                    t.end_byte                              AS end_byte
@@ -7110,6 +7119,9 @@ CREATE OR REPLACE MACRO ast_unparse_exact_from(ast_table, files,
 
 -- ----------------------------------------------------------------------------
 -- ast_unparse_exact_code(source_code, language) — byte-exact for an in-memory
+
+)SQLMACRO"
+        R"SQLMACRO(
 -- parse. There is no file and therefore no staleness: the bytes spliced
 -- against are the string argument itself.
 --
@@ -7120,9 +7132,6 @@ CREATE OR REPLACE MACRO ast_unparse_exact_from(ast_table, files,
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_exact_code(source_code, language) AS TABLE
     WITH __sdx_code_src AS (
-
-)SQLMACRO"
-        R"SQLMACRO(
         SELECT * FROM parse_ast(source_code, language, source := 'full', peek := 'none')
     ),
     __sdx_code_file AS (

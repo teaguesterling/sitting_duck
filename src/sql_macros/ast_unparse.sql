@@ -515,6 +515,15 @@ CREATE OR REPLACE MACRO ast_unparse_custom(ast_table, rules_table) AS TABLE (
 --                A relation rather than a path because DuckDB table functions
 --                (read_blob) accept only literal arguments — no per-row
 --                lateral paths. The same constraint `ast_patch` documents.
+--
+--                THIS ARGUMENT IS TRUSTED. The macro verifies that the bytes
+--                are the right LENGTH for the parse (the staleness guard) but
+--                cannot verify they are that path's bytes at all: hand it a
+--                same-length blob from somewhere else and it will splice that,
+--                which is exactly what test/sql/ast_unparse_exact.test §5g
+--                does on purpose to make the guard fire. `ast_unparse_exact`
+--                and `ast_unparse_exact_from` exist because they establish the
+--                bytes themselves from a path; prefer them.
 --   language   — optional override / disambiguator (the law: inferred from the
 --                data, never required). Filters rows to that language.
 --   file_path  — optional scoping disambiguator for a multi-file table.

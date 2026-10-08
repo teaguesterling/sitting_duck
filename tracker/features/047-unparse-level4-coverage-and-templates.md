@@ -261,6 +261,23 @@ files (measured), so any change to the file's **length** is caught. A same-lengt
 edit is invisible — the same limitation `ast_patch` documents. Parse and unparse
 in one motion; `ast_unparse_exact(path)` does.
 
+**That guard is MEASURED, not proven**, and it is the one empirical
+generalization the whole thing rests on. If a future grammar's root node stops
+short of EOF, `ast_unparse_exact` will error on *every* file of that language
+rather than produce a wrong answer — a loud, self-diagnosing failure (the
+message names both numbers), and the one
+`scripts/verify_unparse_byte_exact.sh` would catch on a grammar bump. The
+alternative, dropping to `max(end_byte) <= octet_length(file)`, detects
+truncation but not an append, which is a silent wrong answer; the stricter guard
+is the right trade.
+
+Two further notes for whoever touches this next. §3a of the test asserts literal
+fixture-dependent numbers (`55 172 50` — leaves, leaf bytes, gap bytes for
+`sample.py`); editing that fixture breaks it loudly and obviously.
+`ast_unparse_exact_splice`'s `blob_table` argument is **trusted**: the length
+guard is all that stands between a caller and a same-length blob from the wrong
+file, which is exactly what §5g exploits to make the guard fire.
+
 ### Verification
 
 - `test/sql/ast_unparse_exact.test` — 61 assertions (77 as the runner counts

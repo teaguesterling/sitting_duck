@@ -466,6 +466,12 @@ only literal arguments — there are no per-row lateral paths — so the bytes
 cannot be looked up from a column. Pass the same path or glob used for
 `read_ast`. This is the same constraint `ast_patch` documents.
 
+`ast_unparse_exact_splice`'s `blob_table` argument is **trusted**: the macro
+checks that the bytes are the right *length* for the parse, but cannot check
+that they are that path's bytes at all. Prefer `ast_unparse_exact` (which
+establishes them from the path in the same statement) or
+`ast_unparse_exact_from`.
+
 **`language :=` is an override, never a requirement.** The language is inferred
 from the `language` column `read_ast`/`parse_ast` already emit; an explicit
 `language :=` disambiguates a table that carries more than one. `file_path :=`
