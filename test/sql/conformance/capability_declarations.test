@@ -1,0 +1,150 @@
+# name: test/sql/conformance/capability_declarations.test
+# description: Conformance kit (044 M1 #3) -- what a language module declares, and what it does not
+# group: [conformance]
+
+# v2.0 M1 deliverable 3 requires that "modifiers/signatures populate per
+# DECLARED capabilities". That sentence only means something if a module's
+# capabilities are declared somewhere checkable, so this file pins the
+# declaration surface as it actually exists today.
+#
+# THE M1 FINDING THIS FILE RECORDS: there is no capability declaration surface.
+#   * ast_supported_languages() returns (language, extensions, parser_type,
+#     node_type_count) and nothing about what the module can do.
+#   * ast_type_map() exposes the per-node-type NAME strategy -- so the
+#     call-naming capability IS derivable at run time -- but NOT the
+#     native_strategy that drives signature / parameter / modifier extraction.
+#     That capability is therefore only derivable by reading
+#     src/language_configs/*_types.def, which an out-of-tree module (M3) may not
+#     ship, so scripts/conformance_kit.sh reports it as UNDECL in that case.
+#
+# These assertions are deliberately shaped so that CLOSING the gap breaks them:
+# adding a native_strategy column to ast_type_map(), or a capability surface to
+# ast_supported_languages(), changes the pinned column lists below. That is the
+# intent -- the test should fail when the finding is fixed, not quietly keep
+# passing.
+
+require sitting_duck
+
+# =============================================================================
+# The declaration surfaces, pinned column by column.
+# =============================================================================
+
+statement ok
+CREATE TABLE __sl AS SELECT * FROM ast_supported_languages();
+
+query I
+SELECT column_name FROM (DESCRIBE __sl) ORDER BY column_name;
+----
+extensions
+language
+node_type_count
+parser_type
+
+statement ok
+CREATE TABLE __tm AS SELECT * FROM ast_type_map();
+
+# name_strategy is here; native_strategy is NOT. This absence is the finding.
+query I
+SELECT column_name FROM (DESCRIBE __tm) ORDER BY column_name;
+----
+flags
+is_scope
+is_syntax
+kind
+language
+name_role
+name_strategy
+node_type
+semantic_type
+
+query I
+SELECT count(*) FROM (DESCRIBE __tm) WHERE column_name = 'name_strategy';
+----
+1
+
+query I
+SELECT count(*) FROM (DESCRIBE __tm) WHERE column_name LIKE '%native%';
+----
+0
+
+# =============================================================================
+# Coverage of the runtime declaration surface. ast_type_map() is driven by each
+# adapter's GetNodeConfigs(), so a language with no DEF_TYPE table contributes
+# no rows -- and the conformance kit must report that as UNDECLARED rather than
+# as a pass. `duckdb` is exactly that case: it wraps DuckDB's own parser and
+# ships no node-config table, so NOTHING about its capabilities is declared
+# anywhere the runtime can see.
+# =============================================================================
+
+query I
+SELECT count(*) FROM ast_supported_languages();
+----
+27
+
+query I
+SELECT count(DISTINCT language) FROM ast_type_map();
+----
+26
+
+query I
+SELECT count(*) FROM ast_type_map('duckdb');
+----
+0
+
+query I
+SELECT language FROM ast_supported_languages()
+WHERE language NOT IN (SELECT language FROM ast_type_map())
+ORDER BY language;
+----
+duckdb
+
+# `duckdb` still registers and parses, but its node_type_count is 0: the
+# adapter carries no DEF_TYPE table at all (src/language_adapters/
+# duckdb_adapter.cpp has no DEF_TYPE entry, unlike every other adapter, which
+# either includes a *_types.def or inlines its table as sql_adapter.cpp does).
+# So for this one language NOTHING about its capabilities is declared anywhere
+# -- not at run time, not in a .def -- and the conformance kit can only report
+# UNDECL for it.
+query II
+SELECT parser_type, node_type_count FROM ast_supported_languages() WHERE language = 'duckdb';
+----
+native	0
+
+# ...while every other registered language declares node types.
+query I
+SELECT count(*) FROM ast_supported_languages() WHERE node_type_count = 0;
+----
+1
+
+# =============================================================================
+# NEGATIVE CONTROL for the "no native_strategy column" assertions. A column
+# count of 0 is also what a typo'd predicate returns, so the same LIKE shape
+# must find the column that IS there.
+# =============================================================================
+
+query I
+SELECT count(*) FROM (DESCRIBE __tm) WHERE column_name LIKE '%strategy%';
+----
+1
+
+# And ast_type_map() must actually be populated -- an empty table would satisfy
+# several assertions above for the wrong reason.
+query I
+SELECT count(*) > 1000 FROM ast_type_map();
+----
+true
+
+# The name strategies in use, pinned. This is the vocabulary the call-naming
+# capability gate in call_naming_conformance.test is derived from; a strategy
+# appearing or disappearing changes what that gate can see.
+query II
+SELECT name_strategy, count(DISTINCT language) FROM ast_type_map() GROUP BY 1 ORDER BY 1;
+----
+custom	19
+find_assignment_target	13
+find_call_target	18
+find_identifier	21
+find_in_declarator	2
+find_property	3
+node_text	26
+none	26

@@ -1,0 +1,102 @@
+# Conformance corpus index -- consumed by scripts/conformance_kit.sh.
+#
+# Format: <language><TAB><path>, one row per fixture. Multiple rows per
+# language are allowed and are measured together.
+#
+# Paths are resolved RELATIVE TO THIS FILE'S DIRECTORY, never to $PWD, so an
+# out-of-tree language module can ship its own corpus.tsv next to its fixtures
+# (RFC "Language module anatomy": languages/<lang>/conformance/) and the kit
+# runs unchanged against it.
+#
+# The language column is EXPLICIT rather than derived from the file extension.
+# Two reasons: the `duckdb` adapter has no file extensions at all
+# (ast_supported_languages() reports an empty list for it), and `sample.sql`
+# is a legitimate fixture for both `sql` (tree-sitter) and `duckdb` (native).
+#
+# Languages here are intersected with ast_supported_languages() at run time, so
+# a row for a language this build compiled out is skipped, and a language the
+# build registers but this file omits is reported VOID (no fixture) -- never
+# silently passed.
+#
+# Most fixtures are existing committed test data rather than new files: a
+# fixture already exercised by another suite is one that is already known to
+# parse, which keeps a harness artifact from being reported as a conformance
+# defect.
+#
+# WHY SO MANY FIXTURES PER LANGUAGE. The ../unparse_leaf_text/sample.* set
+# covers 26 of the 27 registered languages in one place, which makes it the
+# natural spine of this corpus -- but those files were written to exercise LEAF
+# TEXT, so several of them have only a no-argument function (`void main()`,
+# `auto greet() -> std::string`). A corpus like that cannot distinguish "this
+# module does not extract parameters" from "nothing in the corpus has a
+# parameter to extract", and the first revision of this corpus duly reported
+# cpp and dart as non-conformant when the fixtures were the problem. So every
+# language that has richer committed test data gets it listed here as well.
+# The checks still carry their own source-side guards; this is belt and braces,
+# because a fixture gap reported as a defect is worse than no check at all.
+
+python	../unparse_leaf_text/sample.py
+python	../call_extraction/calls.py
+python	../python/inheritance.py
+javascript	../unparse_leaf_text/sample.js
+javascript	../call_extraction/calls.js
+javascript	../javascript/simple.js
+cpp	../unparse_leaf_text/sample.cpp
+cpp	../cpp/simple.cpp
+typescript	../unparse_leaf_text/sample.ts
+typescript	../javascript/typed_example.ts
+sql	../unparse_leaf_text/sample.sql
+sql	../sql/create_function_example.sql
+duckdb	duckdb_macros.sql
+go	../unparse_leaf_text/sample.go
+go	../call_extraction/calls.go
+go	../go/simple.go
+ruby	../unparse_leaf_text/sample.rb
+ruby	../ruby/simple.rb
+markdown	../unparse_leaf_text/sample.md
+markdown	../languages/markdown/test.md
+java	../unparse_leaf_text/sample.java
+java	../languages/java/Test.java
+java	../languages/java/Inheritance.java
+php	../unparse_leaf_text/sample.php
+php	../call_extraction/calls.php
+php	../languages/php/Inheritance.php
+html	../unparse_leaf_text/sample.html
+html	../languages/html/test.html
+css	../unparse_leaf_text/sample.css
+css	../languages/css/test.css
+c	../unparse_leaf_text/sample.c
+c	../call_extraction/calls.c
+c	../languages/c/test.c
+rust	../unparse_leaf_text/sample.rs
+rust	../call_extraction/calls.rs
+rust	../rust/simple.rs
+json	../unparse_leaf_text/sample.json
+json	../json/simple.json
+bash	../unparse_leaf_text/sample.sh
+bash	../call_extraction/calls.sh
+bash	../bash/simple.sh
+swift	../unparse_leaf_text/sample.swift
+swift	../call_extraction/calls.swift
+swift	../languages/swift/Inheritance.swift
+r	../unparse_leaf_text/sample.R
+r	../r/simple.r
+kotlin	../unparse_leaf_text/sample.kt
+kotlin	../call_extraction/calls.kt
+kotlin	../kotlin/simple.kt
+csharp	../unparse_leaf_text/sample.cs
+csharp	../call_extraction/calls.cs
+csharp	../csharp/simple.cs
+lua	../unparse_leaf_text/sample.lua
+lua	../call_extraction/calls.lua
+lua	../lua/simple.lua
+hcl	../unparse_leaf_text/sample.tf
+hcl	../hcl/simple.tf
+graphql	../unparse_leaf_text/sample.graphql
+toml	../unparse_leaf_text/sample.toml
+toml	../toml/sample.toml
+zig	../unparse_leaf_text/sample.zig
+zig	../zig/sample.zig
+dart	../unparse_leaf_text/sample.dart
+dart	../dart/anonymous_functions.dart
+dart	../languages/dart/Inheritance.dart

@@ -1,0 +1,249 @@
+# name: test/sql/conformance/call_naming_conformance.test
+# description: Conformance kit (044 M1 #3) -- call nodes are named, for EVERY declaring language
+# group: [conformance]
+
+# v2.0 M1 deliverable 3 (tracker/features/044-v2-m1-contract.md):
+#
+#     "Conformance kit -- generalize the #91 pattern: every module proves call
+#      nodes are named (#name binds) ... Out-of-tree modules run the same kit."
+#
+# test/sql/bugs/issue_88_89_callee_name_and_guards.test proves this for the five
+# grammars issue #88 broke, by hand, with pinned rows. This file is the
+# GENERALIZATION: the language list and the capability gate both come from the
+# runtime, so a language added, removed or compiled out changes these results
+# without anyone editing this file. scripts/conformance_kit.sh is the full
+# per-language x per-check driver (and the thing to run against an out-of-tree
+# module); this file is the CI-sized slice of it.
+#
+# WHY A CAPABILITY GATE. 27 languages do not all have calls, and the ones that
+# do do not all extract callee names: bash's `$(...)` has no single callee, so
+# bash declares no call naming and must not be penalised for it (#91 says so
+# explicitly). The gate is derived at run time from ast_type_map()'s
+# name_strategy -- a language declares call naming iff some call-semantic node
+# type has a strategy other than 'none'.
+
+require sitting_duck
+
+# =============================================================================
+# The declaration table, pinned. This is the capability gate every assertion
+# below is derived from, so it is pinned first: a change here changes what the
+# kit demands of whom, and that should never happen silently.
+# Columns: language, call-semantic node types, of which name-extracting.
+# =============================================================================
+
+query III
+SELECT language,
+       count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')) AS call_types,
+       count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')
+                          AND name_strategy <> 'none')                                     AS naming_types
+FROM ast_type_map()
+GROUP BY language
+HAVING count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')) > 0
+ORDER BY language;
+----
+bash	3	0
+c	4	3
+cpp	5	3
+csharp	2	2
+css	8	8
+dart	3	3
+go	2	2
+graphql	1	1
+hcl	2	1
+java	3	3
+javascript	3	2
+kotlin	2	2
+lua	2	2
+php	4	4
+python	1	1
+r	2	2
+ruby	5	5
+rust	4	4
+sql	5	5
+swift	2	2
+typescript	4	2
+zig	2	2
+
+# bash is the #91 exception made explicit: it HAS call-semantic node types and
+# declares naming for none of them, so it is `n/a`, not a failure.
+query I
+SELECT count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')
+                          AND name_strategy <> 'none')
+FROM ast_type_map('bash');
+----
+0
+
+# =============================================================================
+# THE CHECK. Every call node whose OWN node type declares a name-extraction
+# strategy must carry a name. The loop is in SQL, not in this file: read_ast()
+# over a glob reports each row's own `language`, which joins straight to
+# ast_type_map() on (language, node_type).
+#
+# THE GATE IS PER NODE TYPE, not per language. A language-level gate is wrong
+# in both directions, and demonstrably so: hcl declares FIND_CALL_TARGET on one
+# call node type and NONE on `template_interpolation`, so a language-level gate
+# reports hcl's legitimately-unnamed interpolations as a failure; and a language
+# with one naming type among many would pass on the strength of the one.
+#
+# `NOT is_syntax_only(flags)` is also load-bearing. javascript and typescript
+# both map the bare `new` KEYWORD TOKEN to COMPUTATION_CALL:
+#     DEF_TYPE("new", COMPUTATION_CALL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+# and IS_KEYWORD is IS_SYNTAX_ONLY. A keyword token is not a call site and
+# cannot carry a callee name. The quirk is pinned separately below, not hidden.
+#
+# THIS IS A BASELINE, NOT A GREEN LIGHT. Two languages currently fail, and the
+# counts are pinned rather than fixed so that a fix shows up here as a test
+# change and a regression shows up as a test failure:
+#
+#   java  object_creation_expression declares FIND_CALL_TARGET
+#         (java_types.def) and leaves `new Test(10)`, `new ArrayList<>()`,
+#         `new IllegalArgumentException(...)` UNNAMED -- so `.call#Test`
+#         silently misses every java constructor call. #91 fixed php's
+#         object_creation_expression; java's has the same shape and was not
+#         covered.
+#   lua   function_call declares FIND_CALL_TARGET and names `helper(...)` and
+#         `obj:render(...)` (the latter fixed by #91) but NOT dotted module
+#         calls -- `math.floor(...)`, `coroutine.create(...)`,
+#         `coroutine.yield(...)` are unnamed.
+# =============================================================================
+
+query III
+WITH tm AS (SELECT language, node_type, name_strategy FROM ast_type_map()),
+calls AS (
+    SELECT language, type, name
+    FROM read_ast(['test/data/unparse_leaf_text/*', 'test/data/call_extraction/*',
+                   'test/data/languages/java/*', 'test/data/lua/simple.lua'],
+                  ignore_errors := true)
+    WHERE is_semantic_type(semantic_type, 'CALL') AND NOT is_syntax_only(flags)
+)
+SELECT c.language,
+       count(*)                                                   AS naming_declared,
+       count(*) FILTER (WHERE c.name IS NULL OR c.name = '')       AS unnamed
+FROM calls c
+JOIN tm ON tm.language = c.language AND tm.node_type = c.type AND tm.name_strategy <> 'none'
+GROUP BY 1 ORDER BY 1;
+----
+c	9	0
+cpp	1	0
+csharp	3	0
+go	12	0
+java	16	3
+javascript	13	0
+kotlin	4	0
+lua	17	3
+php	6	0
+python	15	0
+r	3	0
+ruby	2	0
+rust	17	0
+swift	4	0
+typescript	1	0
+zig	2	0
+
+# The two failures, pinned by node type and row so a partial fix is visible.
+query IIII
+WITH tm AS (SELECT language, node_type, name_strategy FROM ast_type_map())
+-- First line of peek only: a sqllogictest row cannot contain a newline, and
+-- lua's `coroutine.create(function ... end)` call spans four lines.
+SELECT c.language, c.type, c.start_line, split_part(c.peek, chr(10), 1) AS first_line
+FROM (
+    SELECT language, type, name, start_line, peek
+    FROM read_ast(['test/data/languages/java/Test.java', 'test/data/lua/simple.lua'],
+                  peek := 'full', ignore_errors := true)
+    WHERE is_semantic_type(semantic_type, 'CALL') AND NOT is_syntax_only(flags)
+) c
+JOIN tm ON tm.language = c.language AND tm.node_type = c.type AND tm.name_strategy <> 'none'
+WHERE c.name IS NULL OR c.name = ''
+ORDER BY c.language, c.start_line;
+----
+java	object_creation_expression	40	new Test(10)
+java	object_creation_expression	43	new ArrayList<>()
+java	object_creation_expression	63	new IllegalArgumentException("Input cannot be null")
+lua	function_call	94	coroutine.create(function(a, b)
+lua	function_call	95	coroutine.yield(a + b)
+lua	function_call	101	math.floor(a / b)
+
+# The positive twin for each: the SAME node type DOES bind a name elsewhere, so
+# neither failure is "the strategy never runs" -- it is shape-specific, which is
+# exactly the #88 failure mode.
+query III
+SELECT language, type, name
+FROM read_ast(['test/data/call_extraction/calls.php', 'test/data/call_extraction/calls.lua'],
+              ignore_errors := true)
+WHERE is_semantic_type(semantic_type, 'CALL') AND NOT is_syntax_only(flags)
+  AND type IN ('object_creation_expression', 'function_call')
+  AND name IS NOT NULL AND name <> ''
+ORDER BY language, start_line;
+----
+lua	function_call	helper
+lua	function_call	helper
+lua	function_call	render
+php	object_creation_expression	Widget
+
+# hcl's legitimately-unnamed node type: declared NONE, so excluded by the gate
+# above rather than reported as a failure. This is what the per-node-type gate
+# buys, pinned so a regression to a language-level gate is visible.
+query IIII
+SELECT n.type, tm.name_strategy, count(*),
+       count(*) FILTER (WHERE n.name IS NULL OR n.name = '') AS unnamed
+FROM read_ast('test/data/hcl/simple.tf') n
+JOIN (SELECT node_type, name_strategy FROM ast_type_map('hcl')) tm ON tm.node_type = n.type
+WHERE is_semantic_type(n.semantic_type, 'CALL') AND NOT is_syntax_only(n.flags)
+GROUP BY 1, 2 ORDER BY 1;
+----
+function_call	find_call_target	6	0
+template_interpolation	none	2	2
+
+# =============================================================================
+# NEGATIVE CONTROL. Every assertion above reports 0 when it is right AND when
+# it compared nothing. These plant the fault the check exists to catch and
+# require the SAME query shape to see it.
+# =============================================================================
+
+# The control fixture is pure `$(...)` command substitution, so every one of its
+# call nodes is unnamed and none is syntax-only. Point the predicate at it and
+# it must count them -- if this returned 0, the "0 unnamed" above would mean
+# nothing.
+query II
+SELECT count(*) FILTER (WHERE name IS NULL OR name = ''), count(*)
+FROM read_ast('test/data/conformance/control/unnamed_calls.sh', 'bash')
+WHERE is_semantic_type(semantic_type, 'CALL') AND NOT is_syntax_only(flags);
+----
+6	6
+
+# And the capability gate itself must be able to exclude: inverting it selects
+# exactly the languages the check does NOT cover, and that set must be
+# non-empty -- otherwise the gate is decorative.
+query I
+SELECT count(*) > 0
+FROM ast_type_map()
+GROUP BY language
+HAVING count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')) > 0
+   AND count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')
+                          AND name_strategy <> 'none') = 0;
+----
+true
+
+# =============================================================================
+# The `new`-keyword classification quirk, pinned rather than hidden. A bare
+# keyword token carrying COMPUTATION_CALL means `.call` double-counts
+# `new Service(...)` -- once for `new_expression` (named) and once for the
+# `new` token (unnamed). Recorded here so the exclusion above is visible and
+# so a fix shows up as a test change.
+# =============================================================================
+
+query IIII
+SELECT language, type, name IS NULL OR name = '' AS unnamed, is_syntax_only(flags) AS syntax_only
+FROM read_ast('test/data/call_extraction/calls.js')
+WHERE is_semantic_type(semantic_type, 'CALL') AND is_syntax_only(flags);
+----
+javascript	new	true	true
+
+query III
+SELECT type, name, is_syntax_only(flags)
+FROM read_ast('test/data/call_extraction/calls.js')
+WHERE is_semantic_type(semantic_type, 'CALL') AND start_line = 39
+ORDER BY node_id;
+----
+new_expression	Service	false
+new	(empty)	true
