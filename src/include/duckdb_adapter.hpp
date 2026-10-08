@@ -82,7 +82,10 @@ private:
 	                      uint32_t node_id, int64_t parent_id, uint32_t depth) const;
 
 	ASTResult CreateErrorResult(const string &error_message) const;
-	void UpdateDescendantCounts(vector<ASTNode> &nodes) const;
+	// Derives depth, sibling_index, children_count and descendant_count from the
+	// parent_id edge set once every node of every statement exists. CreateASTNode
+	// cannot know any of them: a node is created before its children are.
+	void FinalizeTreeStructure(vector<ASTNode> &nodes) const;
 	uint32_t CalculateMaxDepth(const vector<ASTNode> &nodes) const;
 
 	// Function name normalization
