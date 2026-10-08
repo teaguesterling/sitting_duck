@@ -610,9 +610,9 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
         -- The LEAF FRONTIER. `descendant_count = 0` rather than
         -- `children_count = 0`: it is definitionally "no descendant rows
         -- exist", which is the antichain property the splice needs, and it is
-        -- immune to an adapter that miscounts children (#197). Measured to
-        -- select exactly the same rows as `children_count = 0` on all 26
-        -- tree-sitter languages.
+        -- immune to an adapter that miscounts children — which the `duckdb`
+        -- adapter did until PR #205 (#197). Measured to select exactly the same
+        -- rows as `children_count = 0` on all 26 tree-sitter languages.
         __sdx_leaves AS (
             SELECT fp, fp_raw, node_id, start_byte, end_byte,
                    COALESCE(lag(end_byte) OVER (PARTITION BY fp
@@ -663,12 +663,23 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
                                'file_path := ''<path>'' to disambiguate. (ast_unparse(glob) ' ||
                                'returns one row per file; the byte-exact law is stated over ' ||
                                'a single input.)')
-                -- A parser that reports no byte positions at all. Only a
-                -- ZERO-BYTE file can legitimately have max(end_byte) = 0, and
-                -- that file has exactly one node, so the n_rows > 1 conjunct
-                -- makes this unambiguous. Checked BEFORE the readability and
-                -- staleness guards, both of which would otherwise fire first
-                -- and misdiagnose it as a missing or changed file.
+                -- A parser that reports no byte positions at all. The
+                -- n_rows > 1 conjunct is what keeps this off a legitimately
+                -- EMPTY file, which also has max(end_byte) = 0: MEASURED, all
+                -- 26 tree-sitter languages return exactly ONE node for empty
+                -- input (parse_ast('', <lang>) -> 1 row, end_byte 0), and
+                -- test/sql/ast_unparse_exact.test pins that, so a grammar bump
+                -- producing a root PLUS an ERROR node for empty input fails
+                -- where the premise is stated rather than by erroring on every
+                -- empty file of that language.
+                --
+                -- Checked FIRST among the substrate guards: the `duckdb`
+                -- adapter also reports an empty file_path, and the readability
+                -- and staleness guards would fire too. All three are symptoms;
+                -- this is the cause, and the only one with an actionable
+                -- instruction. A table parsed below 'full' has NULL offsets
+                -- rather than zero ones, so this cannot shadow the
+                -- NULL-positions message.
                 WHEN s.n_rows > 1 AND s.max_end = 0
                     THEN error('ast_unparse_exact: every node reports ' ||
                                'start_byte = end_byte = 0, so this parser surfaces no byte ' ||

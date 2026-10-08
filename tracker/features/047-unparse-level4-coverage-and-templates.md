@@ -224,7 +224,9 @@ in what they *prove* and in what they generalise to.
 rules-based macros use). The two select identical rows on all 26 languages
 (measured), but the former is definitionally "no descendant rows exist", which
 is the antichain property the splice needs, and it is immune to an adapter that
-miscounts children (#197).
+miscounts children — which the `duckdb` adapter did until PR #205 (#197). The
+choice was made for that robustness and keeps it for free; it is not load-bearing
+for any adapter today.
 
 `language :=` is an override, not a requirement: it is inferred from the
 `language` column, and a table carrying more than one language — or more than one
@@ -366,8 +368,10 @@ characters and mixed line endings. The remaining order is:
 1. ~~**4a** — leaf-text coverage.~~ **Landed**, PR #199. 134 of 348 grammar-derived
    gaps closed; 214 sql `keyword_*` outstanding. See also #200 (the
    anonymous-token-with-variable-text class is corpus-bounded, not enumerated) and
-   #197 (the `duckdb` adapter's unparse is broken for an unrelated reason —
-   `children_count` is 0 on every node).
+   #197 (the `duckdb` adapter's unparse was broken for an unrelated reason —
+   `children_count` was 0 on every node; **fixed by PR #205**, though `duckdb`
+   remains out of scope for unparse because its tree is an AST rather than a
+   CST — see "4b part 1").
 2. ~~**byte offsets under `source := 'full'`**~~ — **Landed**, PR #198.
 3. ~~**4b part 1** — byte-exact round trip for an unmodified tree.~~ **Landed**
    (`ast_unparse_exact*`); 26/26 languages, `duckdb` excluded — not for #197

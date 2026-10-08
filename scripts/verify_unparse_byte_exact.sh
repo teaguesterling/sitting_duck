@@ -135,7 +135,9 @@ Exit codes:
                    or no file in the corpus had any gap bytes
   ${EXIT_CONTROL}  the negative control did not fire
 
-Do NOT point this at the \`duckdb\` language: no byte positions (issue #197).
+Do NOT point this at the \`duckdb\` language: it reports no byte positions and
+its tree is an AST rather than a CST (see NOT COVERED in this file's header;
+issue #197, the separate children_count bug, was fixed by PR #205).
 ast_unparse_exact errors on it by design.
 EOF
 }

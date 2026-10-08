@@ -554,8 +554,10 @@ SELECT * FROM ast_unparse_exact_splice('py_full', 'short_blob');
 the file changed since it was parsed
 
 # 5h. A leaf frontier whose spans overlap cannot be spliced - bytes would be
-#     duplicated or dropped. This is the shape an adapter that reports
-#     children_count = 0 for every node produces (#197).
+#     duplicated or dropped. This is the shape an adapter reporting
+#     children_count = 0 for every node produces, which is what the `duckdb`
+#     adapter did until PR #205 fixed it (#197). No adapter does it today, so
+#     the table below is hand-built.
 statement ok
 CREATE TABLE overlapping AS
     SELECT 'f' AS file_path, 'python' AS language, 0 AS node_id, 0 AS depth,
@@ -594,6 +596,48 @@ statement error
 SELECT * FROM ast_unparse_exact_from('py_lines', 'test/data/unparse_leaf_text/sample.py');
 ----
 have a NULL start_byte/end_byte
+
+# ---------------------------------------------------------------------------
+# 5i's guard is `n_rows > 1 AND max(end_byte) = 0`, and the conjunct that keeps
+# it off a legitimately EMPTY file - which also has max(end_byte) = 0 - is
+# `n_rows > 1`. That rests on a measured fact about the grammars, not on
+# anything this code controls: every tree-sitter language returns exactly ONE
+# node for empty input. Pinned here over all 26, so a grammar bump that
+# produced a root PLUS an ERROR node for empty input (n_rows = 2, max_end = 0)
+# fails where the premise is stated, rather than by making ast_unparse_exact
+# error on every empty file of that language.
+# ---------------------------------------------------------------------------
+query I
+SELECT count(*) FROM (
+  SELECT 'bash' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'bash', source := 'full', peek := 'none')
+  UNION ALL SELECT 'c' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'c', source := 'full', peek := 'none')
+  UNION ALL SELECT 'cpp' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'cpp', source := 'full', peek := 'none')
+  UNION ALL SELECT 'csharp' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'csharp', source := 'full', peek := 'none')
+  UNION ALL SELECT 'css' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'css', source := 'full', peek := 'none')
+  UNION ALL SELECT 'dart' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'dart', source := 'full', peek := 'none')
+  UNION ALL SELECT 'go' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'go', source := 'full', peek := 'none')
+  UNION ALL SELECT 'graphql' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'graphql', source := 'full', peek := 'none')
+  UNION ALL SELECT 'hcl' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'hcl', source := 'full', peek := 'none')
+  UNION ALL SELECT 'html' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'html', source := 'full', peek := 'none')
+  UNION ALL SELECT 'java' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'java', source := 'full', peek := 'none')
+  UNION ALL SELECT 'javascript' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'javascript', source := 'full', peek := 'none')
+  UNION ALL SELECT 'json' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'json', source := 'full', peek := 'none')
+  UNION ALL SELECT 'kotlin' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'kotlin', source := 'full', peek := 'none')
+  UNION ALL SELECT 'lua' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'lua', source := 'full', peek := 'none')
+  UNION ALL SELECT 'markdown' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'markdown', source := 'full', peek := 'none')
+  UNION ALL SELECT 'php' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'php', source := 'full', peek := 'none')
+  UNION ALL SELECT 'python' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'python', source := 'full', peek := 'none')
+  UNION ALL SELECT 'r' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'r', source := 'full', peek := 'none')
+  UNION ALL SELECT 'ruby' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'ruby', source := 'full', peek := 'none')
+  UNION ALL SELECT 'rust' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'rust', source := 'full', peek := 'none')
+  UNION ALL SELECT 'sql' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'sql', source := 'full', peek := 'none')
+  UNION ALL SELECT 'swift' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'swift', source := 'full', peek := 'none')
+  UNION ALL SELECT 'toml' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'toml', source := 'full', peek := 'none')
+  UNION ALL SELECT 'typescript' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'typescript', source := 'full', peek := 'none')
+  UNION ALL SELECT 'zig' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'zig', source := 'full', peek := 'none')
+) WHERE n <> 1 OR e <> 0;
+----
+0
 
 # =============================================================================
 # 6. language := / file_path := are overrides, not requirements
