@@ -988,16 +988,28 @@ check_no_empty() {
     # (Skipped when the control has redirected the probes to a bogus path.)
     local zero_note="skipped"
     if [ -z "${bad_path}" ]; then
-        local calls named out
-        out=$(run_sql "
-            SELECT count(*) FILTER (WHERE is_semantic_type(semantic_type, 'CALL')),
-                   count(*) FILTER (WHERE is_semantic_type(semantic_type, 'CALL')
-                                      AND name IS NOT NULL AND name <> '')
-            FROM read_ast('$(sql_quote "${f}")', '$(sql_quote "${lang}")', ignore_errors := true);
-        ")
-        calls=$(printf '%s' "${out}" | cut -d'|' -f1)
-        named=$(printf '%s' "${out}" | cut -d'|' -f2)
-        local probe_sql="SELECT count(*) FROM ast_select('$(sql_quote "${f}")', '.call#zz_absent_callee_xyz',
+        local calls named out p target_f=""
+        # Pick the first fixture that HAS call nodes, rather than just the first
+        # fixture. Both of these directions are about call nodes, so a
+        # call-free fixture makes them inapplicable -- and sql's first fixture
+        # (a bare SELECT) has none while sql_calls.sql has seven, so stopping
+        # at first_path reported "neither direction applies" for a language
+        # whose clean-zero behaviour is perfectly testable.
+        calls=0; named=0
+        while IFS= read -r p; do
+            [ -z "${p}" ] && continue
+            out=$(run_sql "
+                SELECT count(*) FILTER (WHERE is_semantic_type(semantic_type, 'CALL')),
+                       count(*) FILTER (WHERE is_semantic_type(semantic_type, 'CALL')
+                                          AND name IS NOT NULL AND name <> '')
+                FROM read_ast('$(sql_quote "${p}")', '$(sql_quote "${lang}")', ignore_errors := true);
+            ")
+            calls=$(printf '%s' "${out}" | cut -d'|' -f1)
+            named=$(printf '%s' "${out}" | cut -d'|' -f2)
+            if [ "${calls}" -gt 0 ]; then target_f="${p}"; break; fi
+        done < <(corpus_paths "${lang}")
+        [ -z "${target_f}" ] && target_f="${f}"
+        local probe_sql="SELECT count(*) FROM ast_select('$(sql_quote "${target_f}")', '.call#zz_absent_callee_xyz',
                                                         language := '$(sql_quote "${lang}")');"
         if [ "${named}" -gt 0 ]; then
             set +e
