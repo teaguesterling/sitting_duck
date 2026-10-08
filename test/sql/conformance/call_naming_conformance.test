@@ -29,7 +29,26 @@ require sitting_duck
 # below is derived from, so it is pinned first: a change here changes what the
 # kit demands of whom, and that should never happen silently.
 # Columns: language, call-semantic node types, of which name-extracting.
+#
+# RUNTIME-REGISTERED LANGUAGES ARE EXCLUDED. The one CI job that sets
+# SITTING_DUCK_TEST_GRAMMAR_DIR runs test/sql/dynamic_languages/
+# register_language*.test, and registration is PROCESS-GLOBAL -- so a grammar
+# registered there is still in ast_supported_languages() and, if it was given a
+# config, in ast_type_map() too, when this file runs. The built-in set is
+# recovered from the only runtime discriminator there is: parser_type reads
+# 'tree-sitter (dynamic)' for a runtime registration.
+#
+# This file was not what failed in that job (capability_declarations.test was,
+# on a hardcoded language count), and it would not have failed TODAY either --
+# the registration that survives into the process happens to carry no call-
+# semantic node types. That is luck about one fixture's contents, not a
+# property of anything, so the filter goes in now rather than waiting for the
+# fixture to change.
 # =============================================================================
+
+statement ok
+CREATE TABLE __builtin AS
+SELECT language FROM ast_supported_languages() WHERE parser_type <> 'tree-sitter (dynamic)';
 
 query III
 SELECT language,
@@ -37,6 +56,7 @@ SELECT language,
        count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')
                           AND name_strategy <> 'none')                                     AS naming_types
 FROM ast_type_map()
+WHERE language IN (SELECT language FROM __builtin)
 GROUP BY language
 HAVING count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')) > 0
 ORDER BY language;
@@ -112,7 +132,8 @@ FROM ast_type_map('bash');
 # =============================================================================
 
 query III
-WITH tm AS (SELECT language, node_type, name_strategy FROM ast_type_map()),
+WITH tm AS (SELECT language, node_type, name_strategy FROM ast_type_map()
+            WHERE language IN (SELECT language FROM __builtin)),
 calls AS (
     SELECT language, type, name
     FROM read_ast(['test/data/unparse_leaf_text/*', 'test/data/call_extraction/*',
@@ -149,7 +170,8 @@ zig	2	0
 
 # The two failures, pinned by node type and row so a partial fix is visible.
 query IIII
-WITH tm AS (SELECT language, node_type, name_strategy FROM ast_type_map())
+WITH tm AS (SELECT language, node_type, name_strategy FROM ast_type_map()
+            WHERE language IN (SELECT language FROM __builtin))
 -- First line of peek only: a sqllogictest row cannot contain a newline, and
 -- lua's `coroutine.create(function ... end)` call spans four lines.
 SELECT c.language, c.type, c.start_line, split_part(c.peek, chr(10), 1) AS first_line
@@ -226,15 +248,26 @@ WHERE is_semantic_type(semantic_type, 'CALL') AND NOT is_syntax_only(flags);
 # And the capability gate itself must be able to exclude: inverting it selects
 # exactly the languages the check does NOT cover, and that set must be
 # non-empty -- otherwise the gate is decorative.
-query I
-SELECT count(*) > 0
+#
+# Pinned as the exact SET, not as `count(*) > 0`. The boolean form was the same
+# shape as the assertions #202 was filed about: it passes for one excluded
+# language and equally for twenty, so it would not notice the gate starting to
+# exclude something it should be checking. Naming bash makes the claim
+# falsifiable in both directions.
+query III
+SELECT language,
+       count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')) AS call_types,
+       count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')
+                          AND name_strategy <> 'none')                                     AS naming_types
 FROM ast_type_map()
+WHERE language IN (SELECT language FROM __builtin)
 GROUP BY language
 HAVING count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')) > 0
    AND count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')
-                          AND name_strategy <> 'none') = 0;
+                          AND name_strategy <> 'none') = 0
+ORDER BY language;
 ----
-true
+bash	3	0
 
 # =============================================================================
 # The `new`-keyword classification quirk, pinned rather than hidden. A bare
