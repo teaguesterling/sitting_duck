@@ -1,0 +1,10 @@
+# Fixtures whose exact bytes are the thing under test.
+#
+# The AST byte-offset tests (test/sql/source_byte_offsets.test) assert that
+# start_byte / end_byte slice the right bytes out of these files. If git
+# normalized their line endings or re-encoded them, the fixtures would silently
+# become LF/ASCII on a fresh clone and the tests would pass while testing
+# nothing. `-text` means "never translate this file's line endings".
+test/data/encoding/crlf_utf8.py -text
+test/data/python/unicode.py -text
+test/data/python/macros/patch_unicode.py -text

@@ -61,6 +61,8 @@
 | `end_line` | UINTEGER | Ending line number (1-based) |
 | `start_column` | UINTEGER | Starting column (1-based). **Only present when `source := 'full'`** — see note below |
 | `end_column` | UINTEGER | Ending column (1-based). **Only present when `source := 'full'`** — see note below |
+| `start_byte` | UINTEGER | Byte offset of the node's first byte (**0-based**). **Only present when `source := 'full'`** — see "Byte offsets" below |
+| `end_byte` | UINTEGER | Byte offset one past the node's last byte (**0-based, exclusive**). **Only present when `source := 'full'`** |
 | `parent_id` | BIGINT | Parent node ID (NULL for root) |
 | `depth` | UINTEGER | Tree depth (0 for root) |
 | `sibling_index` | UINTEGER | Position among siblings (0-based) |
@@ -71,8 +73,46 @@
 | `flags` | UTINYINT | Universal semantic flags (IS_SYNTAX_ONLY, NAME_ROLE, IS_SCOPE, IS_EXPORTED) — see [Universal Flags](#universal-flags) |
 | `arity_bin` | UTINYINT | Binned arity for analysis |
 
-> **Column availability.** The default projection is 21 columns. Passing
-> `source := 'full'` adds `start_column` and `end_column` (23 columns).
+> **Column availability.** `source := 'full'` is what adds the four positional
+> columns `start_column`, `end_column`, `start_byte` and `end_byte`; every
+> lower `source :=` level omits all four. (`source := '<level>+schema'`
+> declares them at any level but fills them with NULL — that is what the
+> `+schema` suffix means: the FULL schema with only the requested data.)
+>
+> **Select by name, not by position.** `start_byte` and `end_byte` were added
+> (v1.x, tracker 048 #2) immediately after `end_column`, inside the positional
+> group where they belong. At `source := 'full'` — and only there — that moves
+> the seven columns after them two positions right:
+>
+> | column | position before | position after |
+> |---|---|---|
+> | `parent_id` | 18 | 20 |
+> | `depth` | 19 | 21 |
+> | `sibling_index` | 20 | 22 |
+> | `children_count` | 21 | 23 |
+> | `descendant_count` | 22 | 24 |
+> | `scope` | 23 | 25 |
+> | `peek` | 24 | 26 |
+>
+> Every one of those columns keeps its name, its declared type and its value
+> for every node — nothing was altered, two columns were inserted. So anything
+> that names its columns (`SELECT peek FROM …`, or any of the `ast_*` macros,
+> all of which reference columns by name) is unaffected. The only code that
+> notices is code that consumes `SELECT *` **by ordinal** at
+> `source := 'full'`: a positional unpack, a `read_csv`-style column index, a
+> client binding that reads result columns by number. Name your columns and
+> this cannot reach you — which is the right habit against every future
+> addition, not just this one.
+>
+> Lower `source :=` levels are byte-for-byte unchanged, schema and values.
+>
+> For `docs/releases/`, ready to paste under **Upgrading**: *"`read_ast` /
+> `parse_ast` with `source := 'full'` gained two columns, `start_byte` and
+> `end_byte`, inserted after `end_column`; `parent_id`, `depth`,
+> `sibling_index`, `children_count`, `descendant_count`, `scope` and `peek`
+> therefore each shift two positions right at that one source level, with
+> their names, types and values unchanged — select columns by name rather than
+> by ordinal. All lower `source :=` levels are unchanged."*
 >
 > **Older builds returned 0.** A community build reporting `extension_version`
 > `f7b9c60` returned `start_column = 0` for all 169 nodes of
@@ -84,6 +124,54 @@
 > file. If you see zeros, check what you actually have loaded before anything
 > else: `SELECT extension_version, install_path FROM duckdb_extensions() WHERE
 > extension_name = 'sitting_duck'`.
+
+### Byte offsets (`start_byte` / `end_byte`)
+
+`source := 'full'` also exposes `start_byte` and `end_byte`: tree-sitter's own
+absolute byte positions for the node, surfaced verbatim.
+
+**They are 0-based and half-open — `[start_byte, end_byte)` — unlike
+`start_line` / `start_column` / `end_line` / `end_column`, which are all
+1-based.** The same row therefore carries 1-based line/column numbers next to
+0-based byte offsets. That asymmetry is deliberate: the bytes are exactly what
+tree-sitter reports, so `end_byte - start_byte` is the node's length in bytes
+and no off-by-one correction is needed to slice it.
+
+**Slicing is byte-indexed, and DuckDB's `substring()` is not.** On VARCHAR,
+`substring()` counts *characters*: `substring('héllo', 2, 2)` is `'él'`, not the
+two bytes at offset 1. DuckDB v1.5.6 has no `substring(BLOB, …)` overload
+either. The byte-exact primitive is to hex-encode first — `to_hex()` of a BLOB
+is pure ASCII at exactly two characters per byte, so character indexing over
+the hex string *is* byte indexing over the bytes:
+
+```sql
+-- the exact bytes of every node of a file
+SELECT n.node_id, n.type,
+       decode(from_hex(substring(f.hex, 2 * n.start_byte + 1,
+                                        2 * (n.end_byte - n.start_byte)))) AS exact_source
+FROM read_ast('src/main.py', source := 'full') n
+JOIN (SELECT filename, to_hex(content) AS hex FROM read_blob('src/main.py')) f
+  ON f.filename = n.file_path;
+```
+
+Use `read_blob()` rather than `read_text()` so nothing can normalize the bytes
+on the way in.
+
+**Why not reconstruct from line/column?** `start_column` is itself a byte offset
+*within its line*, so an absolute position can in principle be rebuilt from
+line starts — but doing so means re-deriving every line's start offset from the
+text, which has to get multi-byte characters and mixed line endings (LF vs
+CRLF) right. Byte offsets make exact extraction a slice instead of a
+reconstruction; this is the substrate for byte-exact unparse
+(`write_ast(read_ast(x, source := 'full')) = x`).
+
+**Not available for the `duckdb` language adapter.** The `duckdb` adapter wraps
+DuckDB's own SQL parser rather than tree-sitter, and has no byte positions to
+report — it already hardcodes `start_line`/`end_line`/`start_column`/
+`end_column` to `1`, and reports `start_byte = end_byte = 0` for every node.
+Byte offsets are meaningful for tree-sitter-backed languages only. A zero-width
+range is at least a self-evidently empty slice rather than a plausible-looking
+wrong one, but do not read it as a position.
 
 ### Extracting source from minified files
 
