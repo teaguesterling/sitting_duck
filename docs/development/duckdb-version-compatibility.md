@@ -222,6 +222,19 @@ still default-constructible with a public `node`; it is just no longer what a CT
 is the only reason that branch can name it at all. Had v2.0 also sealed `SelectStatement`, this
 would have had to become an `#if`.
 
+!!! warning "This shim is verified at rung 1 only — it has never executed"
+    Per [the ladder](#the-ladder), the canary runs `skip_tests: true`, so a green canary proves
+    **compiles** and nothing further. Families A and F have long-standing consumers whose v2.0
+    branches the canary has carried for a while; **`SetCTEQuery`'s `query_node` branch is new
+    and has run zero times on any DuckDB.** The two branches are not merely different
+    spellings at runtime: on v1.5 a fresh `SelectStatement` wraps the node, on v2.0 no
+    `SelectStatement` exists at all. If v2.0's CTE binder wants anything that wrapper used to
+    carry (`stmt_location` / `stmt_length` for error spans, say), `COPY … TO (FORMAT ast)` would
+    **bind**-fail there and no in-repo job would notice.
+
+    The first thing to run against a real cyanoptera build is
+    `test/sql/ast_copy_format.test` — §1 alone exercises the rewrite end to end.
+
 ## Cross-line drift in the `duckdb` language
 
 A 43-statement corpus (`test/corpus/duckdb_sql/kitchen_sink.sql`) and a 120 KB real-world file
