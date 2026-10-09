@@ -101,7 +101,7 @@ WHERE callee = 'main';
 # =============================================================================
 # Anonymous enclosing scopes — where the two macros disagree again
 # =============================================================================
-# callgraph_anon_scope.py is built for this: an anonymous lambda (passed as an
+# test/data/callgraph/anon_scope.py is built for this: an anonymous lambda (passed as an
 # argument, so there is no assignment target whose name could be inferred) calls
 # anon_target(). sitting_duck DOES infer a name for an assigned lambda, so
 # `bound = lambda: bound_target()` has caller 'bound' and is NOT affected.
@@ -110,7 +110,7 @@ WHERE callee = 'main';
 # no caller at all. module_target is dropped too (module level).
 query IIII
 SELECT caller, caller_line, callee, callee_line
-FROM ast_callees('test/data/python/callgraph_anon_scope.py')
+FROM ast_callees('test/data/callgraph/anon_scope.py')
 ORDER BY callee_line, callee;
 ----
 named	36	named_target	37
@@ -128,7 +128,7 @@ calls_twice	48	twice_target	50
 query IIII
 SELECT CASE WHEN caller = '' THEN '<EMPTY>' ELSE caller END AS caller,
        caller_line, callee, call_line
-FROM ast_callers('test/data/python/callgraph_anon_scope.py')
+FROM ast_callers('test/data/callgraph/anon_scope.py')
 ORDER BY call_line, callee;
 ----
 named	36	named_target	37
@@ -144,7 +144,7 @@ calls_twice	48	twice_target	50
 # all; here it found the lambda, whose name is ''.
 query III
 SELECT caller = '' AS is_empty_string, caller IS NULL AS is_null, callee
-FROM ast_callers('test/data/python/callgraph_anon_scope.py')
+FROM ast_callers('test/data/callgraph/anon_scope.py')
 WHERE callee = 'anon_target';
 ----
 true	false	anon_target
@@ -152,8 +152,8 @@ true	false	anon_target
 # Stated as a single difference: ast_callers sees 7 call sites, ast_callees 5.
 query II
 SELECT
-    (SELECT count(*) FROM ast_callers('test/data/python/callgraph_anon_scope.py')),
-    (SELECT count(*) FROM ast_callees('test/data/python/callgraph_anon_scope.py'));
+    (SELECT count(*) FROM ast_callers('test/data/callgraph/anon_scope.py')),
+    (SELECT count(*) FROM ast_callees('test/data/callgraph/anon_scope.py'));
 ----
 7	5
 
@@ -206,13 +206,13 @@ create_point	37	new	38
 # (1) GRAIN. calls_twice calls twice_target twice. ::callers returns DISTINCT
 # caller-FUNCTION nodes (1 row); ast_callers returns one row per CALL SITE (2).
 query I
-SELECT count(*) FROM ast_select('test/data/python/callgraph_anon_scope.py',
+SELECT count(*) FROM ast_select('test/data/callgraph/anon_scope.py',
     '.func#twice_target::callers');
 ----
 1
 
 query I
-SELECT count(*) FROM ast_callers('test/data/python/callgraph_anon_scope.py')
+SELECT count(*) FROM ast_callers('test/data/callgraph/anon_scope.py')
 WHERE callee = 'twice_target';
 ----
 2
@@ -222,7 +222,7 @@ WHERE callee = 'twice_target';
 # the LAMBDA, not to uses_anon_lambda — and the lambda has no name to address it
 # with. uses_anon_lambda's only direct callee is `sorted`.
 query II
-SELECT name, start_line FROM ast_select('test/data/python/callgraph_anon_scope.py',
+SELECT name, start_line FROM ast_select('test/data/callgraph/anon_scope.py',
     'function_definition#uses_anon_lambda::callees')
 ORDER BY start_line, name;
 ----
@@ -260,15 +260,15 @@ process_animals	41	43
 # module_target()'s call has scope.function = NULL.
 query II
 SELECT
-    (SELECT count(*) FROM ast_select('test/data/python/callgraph_anon_scope.py', '.call')),
-    (SELECT count(*) FROM ast_select('test/data/python/callgraph_anon_scope.py', '.call:called-by'));
+    (SELECT count(*) FROM ast_select('test/data/callgraph/anon_scope.py', '.call')),
+    (SELECT count(*) FROM ast_select('test/data/callgraph/anon_scope.py', '.call:called-by'));
 ----
 7	6
 
 # :called-by(uses_anon_lambda) matches ONLY the `sorted` call. anon_target()'s
 # immediate scope is the lambda, not uses_anon_lambda — the #152 direct ruling.
 query I
-SELECT count(*) FROM ast_select('test/data/python/callgraph_anon_scope.py',
+SELECT count(*) FROM ast_select('test/data/callgraph/anon_scope.py',
     '.call:called-by(uses_anon_lambda)');
 ----
 1
@@ -276,7 +276,7 @@ SELECT count(*) FROM ast_select('test/data/python/callgraph_anon_scope.py',
 # :calls is direct and EXISTS-shaped: calls_twice calls twice_target (twice), and
 # the selector returns the one matching FUNCTION node, not one row per call.
 query I
-SELECT count(*) FROM ast_select('test/data/python/callgraph_anon_scope.py',
+SELECT count(*) FROM ast_select('test/data/callgraph/anon_scope.py',
     'function_definition#calls_twice:calls(twice_target)');
 ----
 1
