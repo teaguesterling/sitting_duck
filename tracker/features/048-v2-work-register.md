@@ -60,6 +60,17 @@ Eight of the eighteen pieces have a real v1.x half:
   **Both landed 2026-10-07** (PRs #199, #198).
 - **#6** — the seeded call-graph join. Pure SQL; retires the global name self-join that
   is simultaneously the imprecision, the #164 OOM, and the #160 bind tax.
+  **PREMISE ALREADY SATISFIED — re-read before planning this (2026-10-08).** The
+  seeded-join rewrite shipped in PR #167 (`e9b8456`, `11daf7b`, both ancestors of
+  `9388a02`). `:calls`, `:called-by` and `::callees` are correlated `EXISTS`/joins on
+  `scope.function`; `::callers` is seeded off the small `matched` set. **There is no
+  global `call.name = def.name` self-join left in the four DIRECT selectors.** The
+  wording above survives from before #167 and overstates what is left. What actually
+  remains of 043 Part A is only the *dispatch* (take `pe_callers`/`pe_callees` out of
+  the hot path), and that was **measured on this HEAD and is not worth building** —
+  see 043's "PART A RE-AUDIT" section for the numbers and the recommendation. The
+  remaining name self-joins are `:is-called`/`:is-referenced`, which 043 scopes to
+  Part C, not here.
 - **#10** — taxonomy spec → codegen. Safe *by construction*: the gate was byte-equivalence
   against the then hand-written tables, so it could not change behaviour, and the CI
   check mirrors the existing "Embedded SQL macros header in sync".

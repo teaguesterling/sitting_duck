@@ -198,3 +198,106 @@ matched_raw CASE (~0.18s): simplify the ~30-branch pseudo-class dispatch, or C++
 STATUS: diagnosis complete + verified. The rewrite itself is a real multi-build-cycle effort;
 do it as a focused piece with the verified-harness discipline (re-extract from current main,
 confirm ==installed, EXPLAIN-min before/after quiet AND under load, full suite).
+
+## PART A RE-AUDIT (2026-10-08) — the rewrite is DONE; the dispatch is NOT worth building
+
+Picked up as "rewrite the DIRECT call-graph selectors to use a seeded join instead of a
+global name self-join". **That rewrite had already shipped** and the task premise (also
+still in `048` item #6) was stale. Recorded here so the next pickup does not re-derive it.
+
+### 1. There is no global name self-join left in the four DIRECT selectors
+
+Read against `main` @ `9388a02`. Both rewrite commits are ancestors of it:
+`e9b8456` (":called-by/:calls bounded via scope.function; lambda-direct") and
+`11daf7b` ("::callees is DIRECT"). Current shapes in `src/sql_macros/css_selectors.sql`:
+
+| selector | edge | seeded? |
+|---|---|---|
+| `:calls(x)` | `EXISTS (callee.scope.function = a.node_id AND callee.name = x)` | correlated per candidate row; equi-join on scope.function |
+| `:called-by(x)` | `EXISTS (caller_fn.node_id = a.scope.function AND caller_fn.name = x)` | same |
+| `::callees` | `callee.scope.function = m.node_id` | seeded off `matched`; **no name in the edge at all** |
+| `::callers` | `call_node.name = m.name` then `caller_fn.node_id = call_node.scope.function` | seeded off `matched` — the one call-graph edge that IS a name match, which 043 says to KEEP |
+
+`::call-sites` (added later, `048bd59`) is `::callers` without the second join. The only
+remaining *global* name self-joins are `:is-called` and `:is-referenced`, which this epic
+already scopes to Part C and which were deliberately left alone.
+
+So the three things the self-join was blamed for have separated cleanly: the **#164 OOM**
+is fixed (it was an execution blowup, fixed by the seeding), the **imprecision** remains
+by design and is now documented in the macro bodies, and the **#160 bind tax** turns out
+not to live here at all — see below.
+
+### 2. The dispatch: measured ceiling ~6%. Recommendation: do NOT build it in SQL
+
+Part A's open item was "take `pe_callers`/`pe_callees` out of the hot `ast_select_from`
+path". Measured the **absolute ceiling** of that work on this HEAD by excising all three
+call-graph pseudo-element CTEs (`pe_callers`, `pe_callees`, `pe_call_sites`) and their
+terminal `UNION ALL` branches, rebuilding, and timing interleaved A/B/A/B against the
+unexcised build so load drift hits both sides equally. v1.5.6 (`069cc9f9`), `threads=8`
+pinned on both sides, `/proc/loadavg` 15.7–19.4 (36-core box, other agents building).
+
+Guarded against the failure mode this file already retracted once ("ERROR-PATH times
+masquerading as fast binds"): on the excised build `ast_select_from('small','.fn')` still
+returns **10**, identical to the unexcised build, so the macro genuinely binds; and
+`'.fn#speak::callers'` goes **1 → 0 rows**, so the excision genuinely took effect.
+
+`EXPLAIN` (bind+optimize only, 3-node table), six paired rounds, every run reported:
+
+| round | with pe_* | without pe_* | paired delta |
+|---|---|---|---|
+| 1 | 0.654s | 0.607s | 0.047 |
+| 2 | 0.606s | 0.567s | 0.039 |
+| 3 | 0.642s | 0.577s | 0.065 |
+| 4 | 0.592s | 0.556s | 0.036 |
+| 5 | 0.652s | 0.619s | 0.033 |
+| 6 | 0.575s | 0.562s | 0.013 |
+| **mean** | **0.620s** | **0.581s** | **0.039s (6.3%)** |
+
+The paired delta is positive in 6/6 rounds, so ~6% is a real signal rather than noise —
+but it is only ~6%. Execution-side the difference is indistinguishable: `.fn` exec was
+0.428–0.512s with pe_* and 0.409–0.477s without, paired deltas of **mixed sign**.
+
+This **reproduces** the earlier verified figure (`asf_full` 0.66s vs `matched` 0.59s,
+~0.07s) on a macro that has since grown `::call-sites` and `730b648`'s per-call
+validation — so the share did not grow with the macro; if anything it shrank.
+
+**Why that kills the SQL dispatch rather than just deprioritising it.** 043 already
+establishes that SQL macros always inline, so the dispatch cannot live in a wrapper — it
+has to be "tooling/client picks the macro". That means every caller must CSS-parse the
+selector *before* issuing SQL to decide which macro to name, and a person at a bare
+DuckDB prompt has no dispatcher at all, so the headline feature would acquire two
+spellings and a rule about which to use. Paying an API split plus a client-side selector
+pre-parse to buy 6% of bind is a bad trade. The two-macro split was already dropped as a
+#160 remedy on a ~10ms measurement; this re-measurement, on current HEAD and with a
+correctness guard, says the same thing with a bigger number and a tighter method.
+
+**Where the cost actually is** remains this file's own verified decomposition: `sel_props`
+validations ~0.23s and the `matched_raw` ~30-branch pseudo-class CASE ~0.18s, of a ~0.62s
+bind. Neither is touched by the call-graph dispatch. So the live options for #160 are
+unchanged and both are different work from Part A: consolidate the 9 validation CTEs into
+fewer passes (fix path (a) above), or `046`/`048` #5, `ast_select` in C++.
+
+**NOT verified: the same excision ceiling on the DuckDB v2.0 line.** `040` measured
+~12.8s per call on cyanoptera the same day and showed that cost is constant and
+compile-side (515x more nodes costs 0.1s more; a call-graph pseudo-class is
+indistinguishable from a bare class), which makes it unlikely that a 6% SQL-side slice
+becomes the dominant term there — but that is an inference, not a measurement. Building a
+cyanoptera toolchain to excise-and-compare is the one experiment that would settle the
+dispatch question for v2.0, and nobody has run it.
+
+### 3. Part A's documentation item is done, and the safety net it needed now exists
+
+`043` asked for DIRECT to be documented as "direct, name-matched (not resolved)". Done in
+the macro bodies for `:calls`, `:called-by`, `::callers`, `::callees`, `ast_callees` and
+`ast_callers`, with the distinction drawn per selector rather than as a blanket claim,
+because it is not uniform: the containment edge is exact everywhere (`scope.function`),
+`::callers` is the only one whose edge is itself a name match, and `::callees` involves no
+name in its edge at all.
+
+Issue #203 (`ast_callers`/`ast_callees` had **no** test coverage) is closed by
+`test/sql/scope_resolution/callgraph_macros.test` — 186 assertions on real values across
+Python, JavaScript, Go and Rust, each shown to fail under a perturbed fixture. It pins
+three divergences between the table macros and the selectors that a "unify these
+spellings" refactor would otherwise break silently: module-level calls
+(`<module>` vs dropped), anonymous enclosing scopes (`''` vs dropped entirely), and grain
+(one row per call site vs DISTINCT caller nodes).
