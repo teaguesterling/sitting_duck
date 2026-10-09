@@ -111,24 +111,33 @@ FROM ast_type_map('bash');
 # and IS_KEYWORD is IS_SYNTAX_ONLY. A keyword token is not a call site and
 # cannot carry a callee name. The quirk is pinned separately below, not hidden.
 #
-# THIS IS A BASELINE, NOT A GREEN LIGHT. Three languages currently fail, and
-# the counts are pinned rather than fixed so that a fix shows up here as a test
-# change and a regression shows up as a test failure:
+# THE THREE FAILURES THIS FILE WAS WRITTEN AGAINST ARE NOW FIXED (#209). The
+# counts were pinned rather than asserted-to-be-zero precisely so that a fix
+# would show up here as a test change; this is that change. What used to fail,
+# and what each case was:
 #
-#   java    object_creation_expression declares FIND_CALL_TARGET
-#           (java_types.def:...) and leaves `new Test(10)`, `new ArrayList<>()`,
+#   java    object_creation_expression declares FIND_CALL_TARGET and left
+#           `new Test(10)`, `new ArrayList<>()`,
 #           `new IllegalArgumentException(...)` UNNAMED -- so `.call#Test`
-#           silently misses every java constructor call. #91 fixed php's
+#           silently missed every java constructor call. #91 fixed php's
 #           object_creation_expression; java's has the same shape and was not
-#           covered.
-#   lua     function_call declares FIND_CALL_TARGET and names `helper(...)` and
+#           covered. A constructor's callee is a TYPE node (type_identifier,
+#           wrapped in generic_type / scoped_type_identifier), which the
+#           strategy's identifier-leaf sets did not include.
+#   lua     function_call declares FIND_CALL_TARGET and named `helper(...)` and
 #           `obj:render(...)` (the latter fixed by #91) but NOT dotted module
 #           calls -- `math.floor(...)`, `coroutine.create(...)`,
-#           `coroutine.yield(...)` are unnamed.
+#           `coroutine.yield(...)`. The colon form's method_index_expression
+#           was in the member-call list; the dot form's dot_index_expression
+#           was not.
 #   kotlin  constructor_invocation declares FIND_CALL_TARGET
 #           (kotlin_types.def:85) and the superclass constructor call in
-#           `class Derived(n: Int) : Base(n)` is unnamed, while the ordinary
-#           `Base(1)` call_expression beside it binds fine.
+#           `class Derived(n: Int) : Base(n)` was unnamed, while the ordinary
+#           `Base(1)` call_expression beside it bound fine. Its callee is a
+#           type_identifier inside a user_type wrapper.
+#
+# The counts stay pinned per language (not collapsed to a single "0 unnamed"
+# total) so a regression names the language it broke.
 # =============================================================================
 
 query III
@@ -154,10 +163,10 @@ c	9	0
 cpp	1	0
 csharp	3	0
 go	12	0
-java	16	3
+java	16	0
 javascript	13	0
-kotlin	7	1
-lua	17	3
+kotlin	7	0
+lua	17	0
 php	6	0
 python	15	0
 r	3	0
@@ -168,7 +177,13 @@ swift	4	0
 typescript	1	0
 zig	2	0
 
-# The two failures, pinned by node type and row so a partial fix is visible.
+# The former failures, pinned by node type and row so a PARTIAL fix is visible.
+# Now empty: no naming-declared call node in these three fixtures is unnamed.
+# An empty expectation would be vacuous on its own (it is also what a query
+# over nothing returns), so the query's own reach is pinned by the row-level
+# assertions further down this file -- the positive twin below names the rows
+# these fixtures DO produce, and the negative control at the end proves the
+# same query shape still counts unnamed calls when they exist.
 query IIII
 WITH tm AS (SELECT language, node_type, name_strategy FROM ast_type_map()
             WHERE language IN (SELECT language FROM __builtin))
@@ -186,13 +201,35 @@ JOIN tm ON tm.language = c.language AND tm.node_type = c.type AND tm.name_strate
 WHERE c.name IS NULL OR c.name = ''
 ORDER BY c.language, c.start_line;
 ----
-java	object_creation_expression	40	new Test(10)
-java	object_creation_expression	43	new ArrayList<>()
-java	object_creation_expression	63	new IllegalArgumentException("Input cannot be null")
-kotlin	constructor_invocation	21	Base(n)
-lua	function_call	94	coroutine.create(function(a, b)
-lua	function_call	95	coroutine.yield(a + b)
-lua	function_call	101	math.floor(a / b)
+
+# The rows the former-failure query used to return, now asserted POSITIVELY by
+# the callee name each one binds. This is what keeps the empty expectation
+# above honest: if the query above started comparing nothing, these would still
+# have to hold, and if #209 regressed, these would fail with the name missing.
+query IIII
+SELECT c.language, c.type, c.start_line, c.name
+FROM (
+    SELECT language, type, name, start_line
+    FROM read_ast(['test/data/languages/java/Test.java', 'test/data/lua/simple.lua',
+                   'test/data/conformance/kotlin_constructors.kt'],
+                  ignore_errors := true)
+    WHERE is_semantic_type(semantic_type, 'CALL') AND NOT is_syntax_only(flags)
+) c
+WHERE (c.language, c.type, c.start_line) IN (
+    ('java', 'object_creation_expression', 40), ('java', 'object_creation_expression', 43),
+    ('java', 'object_creation_expression', 63), ('kotlin', 'constructor_invocation', 21),
+    ('lua', 'function_call', 94), ('lua', 'function_call', 95),
+    ('lua', 'function_call', 101)
+)
+ORDER BY c.language, c.start_line;
+----
+java	object_creation_expression	40	Test
+java	object_creation_expression	43	ArrayList
+java	object_creation_expression	63	IllegalArgumentException
+kotlin	constructor_invocation	21	Base
+lua	function_call	94	create
+lua	function_call	95	yield
+lua	function_call	101	floor
 
 # The positive twin for each: the SAME node type DOES bind a name elsewhere, so
 # neither failure is "the strategy never runs" -- it is shape-specific, which is
