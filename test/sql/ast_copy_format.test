@@ -1,0 +1,602 @@
+# name: test/sql/ast_copy_format.test
+# description: COPY ... TO (FORMAT ast) - the byte-exact unparse sink (tracker 045, issue #174, "level 5")
+# group: [sql]
+#
+# WHAT THIS GUARDS
+# ----------------
+# The settled form (Teague 2026-10-07; docs/planning/v2-architecture.md,
+# "write_ast laws"):
+#
+#     COPY (FROM read_ast(x, source := 'full')) TO 'x2' (FORMAT ast, LANGUAGE 'c')
+#
+# with LANGUAGE optional - inferred from the `language` column read_ast and
+# parse_ast already emit, an override and disambiguator when given.
+#
+# BYTE-EXACT OR REFUSE. There is no normalising mode. tracker 047 sequenced this
+# feature last precisely because "writing lossy output to disk is worse than
+# returning it in a result set, because it looks authoritative" - so the sink
+# writes a byte-for-byte reproduction of the parsed file or it writes nothing.
+# Section 4 is therefore the heart of this file: every refusal condition, with
+# the assertion that it fires, and - for the ones that could otherwise leave a
+# truncated file where source code was asked for - that the destination is
+# untouched (section 6).
+#
+# The sink is a PLAN REWRITE, not a second splice: CopyFunction::plan rewrites
+# the statement into a FORMAT blob COPY over ast_unparse_exact_splice (see
+# src/ast_copy_function.cpp). So the nine guards asserted here are the SAME
+# guards test/sql/ast_unparse_exact.test asserts on the macro - what this file
+# proves is that they still fire through COPY, where the consequence of not
+# firing is a file on disk rather than a row in a result set.
+#
+# THE ORACLE IS THE FILE ITSELF, read with read_blob() and compared as a BLOB on
+# both sides. Nothing derived from the parse takes part in the comparison, so a
+# wrong byte offset cannot hide behind it. Section 3 shows the comparison can
+# fail and that the file really was written by this statement.
+#
+# NOT COVERED
+# -----------
+#  * language 'duckdb' - its tree is an AST rather than a CST (no keyword,
+#    punctuation or comment nodes, ORDER BY / LIMIT absent entirely) and it
+#    reports start_byte = end_byte = 0 for every node, so no leaf frontier over
+#    it can tile the text. It ERRORS, naming that reason: section 4i.
+#  * input that is not valid UTF-8. The splice returns VARCHAR, and DuckDB
+#    requires VARCHAR to be valid UTF-8, so such a file cannot be reproduced at
+#    all - decode() raises a conversion error. Inherited from the macro, honest
+#    failure rather than corruption, and asserted there rather than here (no
+#    committed non-UTF-8 fixture exists).
+#  * PRESET / INDENT / LINE_ENDINGS / STRIP_COMMENTS from 045's original option
+#    table. They belong to the whitespace-NORMALISING unparser; FORMAT ast
+#    rejects them (section 5) rather than quietly honouring them.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. The law, through the sink
+# =============================================================================
+
+statement ok
+COPY (FROM read_ast('test/data/unparse_leaf_text/sample.py', source := 'full', peek := 'none'))
+TO '__TEST_DIR__/rt_one.py' (FORMAT ast);
+
+query I
+SELECT (SELECT content FROM read_blob('test/data/unparse_leaf_text/sample.py'))
+     = (SELECT content FROM read_blob('__TEST_DIR__/rt_one.py'));
+----
+true
+
+# The file is written with no row terminator of its own: a writer that appended
+# a newline would still "round trip" every file that ends in one, so pin the
+# length against a fixture that does NOT end in a newline.
+statement ok
+COPY (SELECT encode('x = 1') AS b) TO '__TEST_DIR__/no_nl.py' (FORMAT blob);
+
+statement ok
+COPY (FROM read_ast('__TEST_DIR__/no_nl.py', source := 'full', peek := 'none'))
+TO '__TEST_DIR__/rt_no_nl.py' (FORMAT ast);
+
+query II
+SELECT (SELECT octet_length(content) FROM read_blob('__TEST_DIR__/rt_no_nl.py')),
+       (SELECT content FROM read_blob('__TEST_DIR__/rt_no_nl.py')) = encode('x = 1');
+----
+5	true
+
+# A table, rather than a subquery, is the same writer.
+statement ok
+CREATE TABLE py_full AS
+SELECT * FROM read_ast('test/data/unparse_leaf_text/sample.py', source := 'full', peek := 'none');
+
+statement ok
+COPY (FROM py_full) TO '__TEST_DIR__/rt_tbl.py' (FORMAT ast);
+
+query I
+SELECT (SELECT content FROM read_blob('test/data/unparse_leaf_text/sample.py'))
+     = (SELECT content FROM read_blob('__TEST_DIR__/rt_tbl.py'));
+----
+true
+
+# =============================================================================
+# 2. The law, per language
+# =============================================================================
+# All 26 tree-sitter languages through the sink. The splice's per-language
+# coverage is proved in ast_unparse_exact.test; what this adds is that the
+# WRITER does not touch the bytes - which is content-dependent, not
+# language-independent (a text-mode write would corrupt CRLF, a narrowing
+# conversion would corrupt multi-byte sequences), so it is worth the breadth.
+
+foreach fixture sample.c sample.cpp sample.cs sample.css sample.dart sample.go sample.graphql sample.html sample.java sample.js sample.json sample.kt sample.lua sample.md sample.php sample.py sample.R sample.rb sample.rs sample.sh sample.sql sample.swift sample.tf sample.toml sample.ts sample.zig
+
+statement ok
+COPY (FROM read_ast('test/data/unparse_leaf_text/${fixture}', source := 'full', peek := 'none'))
+TO '__TEST_DIR__/rt_${fixture}' (FORMAT ast);
+
+query I
+SELECT (SELECT content FROM read_blob('test/data/unparse_leaf_text/${fixture}'))
+     = (SELECT content FROM read_blob('__TEST_DIR__/rt_${fixture}'));
+----
+true
+
+endloop
+
+# CRLF line endings and multi-byte characters: the two shapes a byte-mangling
+# writer would break first.
+statement ok
+COPY (FROM read_ast('test/data/encoding/crlf_utf8.py', source := 'full', peek := 'none'))
+TO '__TEST_DIR__/rt_crlf.py' (FORMAT ast);
+
+query II
+SELECT (SELECT content FROM read_blob('test/data/encoding/crlf_utf8.py'))
+     = (SELECT content FROM read_blob('__TEST_DIR__/rt_crlf.py')),
+       -- and the written file really does contain CR bytes, so the equality is
+       -- not between two files that both lost them
+       (SELECT count(*) FROM read_blob('__TEST_DIR__/rt_crlf.py') WHERE contains(to_hex(content), '0D0A')) ;
+----
+true	1
+
+statement ok
+COPY (FROM read_ast('test/data/python/unicode.py', source := 'full', peek := 'none'))
+TO '__TEST_DIR__/rt_unicode.py' (FORMAT ast);
+
+query I
+SELECT (SELECT content FROM read_blob('test/data/python/unicode.py'))
+     = (SELECT content FROM read_blob('__TEST_DIR__/rt_unicode.py'));
+----
+true
+
+# A file far larger than DuckDB's string-inlining threshold and than one
+# vector: 60 000 bytes, 50 001 nodes, written as one BLOB in one row. Built
+# here so the test is hermetic.
+statement ok
+COPY (SELECT encode(repeat('x = 1' || chr(10), 10000)) AS b) TO '__TEST_DIR__/big.py' (FORMAT blob);
+
+statement ok
+COPY (SELECT encode(repeat('x = 1' || chr(10), 20000)) AS b) TO '__TEST_DIR__/huge.py' (FORMAT blob);
+
+statement ok
+COPY (FROM read_ast('__TEST_DIR__/big.py', source := 'full', peek := 'none'))
+TO '__TEST_DIR__/rt_big.py' (FORMAT ast);
+
+query II
+SELECT (SELECT octet_length(content) FROM read_blob('__TEST_DIR__/rt_big.py')),
+       (SELECT content FROM read_blob('__TEST_DIR__/big.py'))
+     = (SELECT content FROM read_blob('__TEST_DIR__/rt_big.py'));
+----
+60000	true
+
+# ---------------------------------------------------------------------------
+# PINNED UPSTREAM LIMIT, found while writing this file: `descendant_count` is
+# computed as a uint32 and then stored through a uint16 field
+# (ast_type.hpp: `legacy_descendant_count = static_cast<uint16_t>(...)`,
+# emitted into the UINTEGER column), so it WRAPS at 65 536. Measured: a tree of
+# 100 001 nodes reports root.descendant_count = 34 464, which is
+# 100 000 - 65 536.
+#
+# The splice's completeness guard is `row count = root.descendant_count + 1`,
+# so every file whose AST exceeds 65 536 nodes is REFUSED - loudly, with the
+# "not a complete tree" message, which is the wrong diagnosis for the right
+# reason. Byte-exactness is never silently lost; a correct file is rejected.
+# This is pre-existing and affects ast_unparse_exact* identically (047's
+# 176-file sweep did not reach a file that large).
+#
+# Pinned here rather than worked around so that a fix makes this fail where the
+# premise is written down. IF THIS STARTS FAILING: the overflow was fixed -
+# delete this block and raise the 10 000 above to 20 000.
+query III
+SELECT count(*) AS n_rows,
+       (SELECT descendant_count FROM read_ast('__TEST_DIR__/huge.py', source := 'full', peek := 'none')
+        WHERE depth = 0) AS root_dc,
+       count(*) - 1 - 65536 = (SELECT descendant_count
+                               FROM read_ast('__TEST_DIR__/huge.py', source := 'full', peek := 'none')
+                               WHERE depth = 0) AS wraps_at_65536
+FROM read_ast('__TEST_DIR__/huge.py', source := 'full', peek := 'none');
+----
+100001	34464	true
+
+statement error
+COPY (FROM read_ast('__TEST_DIR__/huge.py', source := 'full', peek := 'none'))
+TO '__TEST_DIR__/rt_huge.py' (FORMAT ast);
+----
+is not a complete tree
+
+# An empty source file is NOT the same thing as no rows (section 4j): it parses
+# to one root node and is reproduced as a 0-byte file.
+statement ok
+COPY (SELECT ''::BLOB AS b) TO '__TEST_DIR__/empty.py' (FORMAT blob);
+
+statement ok
+COPY (FROM read_ast('__TEST_DIR__/empty.py', source := 'full', peek := 'none'))
+TO '__TEST_DIR__/rt_empty.py' (FORMAT ast);
+
+query II
+SELECT (SELECT count(*) FROM glob('__TEST_DIR__/rt_empty.py')),
+       (SELECT octet_length(content) FROM read_blob('__TEST_DIR__/rt_empty.py'));
+----
+1	0
+
+# =============================================================================
+# 3. The equalities are not vacuous
+# =============================================================================
+
+# 3a. The file was written by THIS statement, not found lying around. Without
+#     this, every `true` above would also be produced by a sink that did
+#     nothing and a destination that happened to exist.
+query I
+SELECT count(*) FROM glob('__TEST_DIR__/rt_fresh.py');
+----
+0
+
+statement ok
+COPY (FROM read_ast('test/data/unparse_leaf_text/sample.rs', source := 'full', peek := 'none'))
+TO '__TEST_DIR__/rt_fresh.py' (FORMAT ast);
+
+query II
+SELECT count(*), (SELECT content FROM read_blob('__TEST_DIR__/rt_fresh.py'))
+                 = (SELECT content FROM read_blob('test/data/unparse_leaf_text/sample.rs'))
+FROM glob('__TEST_DIR__/rt_fresh.py');
+----
+1	true
+
+# 3b. NEGATIVE CONTROL: the comparison discriminates. Computed in HEX SPACE (two
+#     ASCII characters per byte, so character indexing over the hex string IS
+#     byte indexing over the bytes) because a one-byte shift lands inside a
+#     UTF-8 sequence and decode() of the shifted pieces would ERROR rather than
+#     produce a wrong string - and an error is not a detection.
+#     The unshifted arithmetic must reproduce the written file first, so a
+#     detected difference is attributable to the plant and not to the control.
+query II
+WITH w AS (SELECT to_hex(content) AS hex FROM read_blob('__TEST_DIR__/rt_crlf.py')),
+     o AS (SELECT to_hex(content) AS hex FROM read_blob('test/data/encoding/crlf_utf8.py'))
+SELECT w.hex = o.hex,                                   -- control: identical
+       w.hex = (substring(o.hex, 3) || '5A')            -- plant: one byte late
+FROM w, o;
+----
+true	false
+
+# 3c. ...and a deliberately wrong file, written through FORMAT blob with one
+#     byte shifted off the front, is REJECTED by the same comparison. This is
+#     the one that proves the oracle would catch a byte-mangling writer.
+statement ok
+COPY (SELECT from_hex(substring(to_hex(content), 3) || '5A') AS b
+      FROM read_blob('test/data/encoding/crlf_utf8.py'))
+TO '__TEST_DIR__/planted.py' (FORMAT blob);
+
+query II
+SELECT (SELECT octet_length(content) FROM read_blob('__TEST_DIR__/planted.py'))
+     = (SELECT octet_length(content) FROM read_blob('test/data/encoding/crlf_utf8.py')),
+       (SELECT content FROM read_blob('__TEST_DIR__/planted.py'))
+     = (SELECT content FROM read_blob('test/data/encoding/crlf_utf8.py'));
+----
+true	false
+
+# 3d. The sink is on the BYTE-EXACT path, not the normalising one. sample.kt is
+#     the discriminator: tree-sitter-kotlin's string_literal has no child node
+#     for its quote characters, so leaf concatenation structurally cannot
+#     recover them, while a splice emits them as gap bytes. The rules-based
+#     unparser's output for the same file is NOT the file - asserted here so
+#     the `true` for sample.kt in section 2 cannot be explained by the sink
+#     having quietly used it.
+query I
+SELECT encode(source) = (SELECT content FROM read_blob('test/data/unparse_leaf_text/sample.kt'))
+FROM ast_unparse('test/data/unparse_leaf_text/sample.kt');
+----
+false
+
+query II
+SELECT contains(decode(content), '"hi"'), contains(decode(content), 'val s = hi')
+FROM read_blob('__TEST_DIR__/rt_sample.kt');
+----
+true	false
+
+# =============================================================================
+# 4. Honest failure - every refusal condition, and that it fires
+# =============================================================================
+# 047's argument for sequencing level 5 last is that a written file looks
+# authoritative. So each condition below ERRORS rather than writing something
+# plausible. Section 6 adds the other half: the destination is untouched.
+
+# 4a. More than one language in the table: no single textual answer (#89 -
+#     never guess which one was meant).
+statement ok
+CREATE TABLE multi_lang AS
+SELECT * FROM read_ast('test/data/unparse_leaf_text/*', source := 'full', peek := 'none', ignore_errors := true);
+
+statement error
+COPY (FROM multi_lang) TO '__TEST_DIR__/refuse_lang.py' (FORMAT ast);
+----
+distinct languages
+
+# 4b. More than one file, one language.
+statement ok
+CREATE TABLE multi_file AS
+SELECT * FROM read_ast('test/data/encoding/crlf_utf8.py', source := 'full', peek := 'none')
+UNION ALL
+SELECT * FROM read_ast('test/data/python/unicode.py', source := 'full', peek := 'none');
+
+statement error
+COPY (FROM multi_file) TO '__TEST_DIR__/refuse_file.py' (FORMAT ast);
+----
+distinct file_paths
+
+# 4c. No root row.
+statement error
+COPY (SELECT * FROM py_full WHERE depth > 0) TO '__TEST_DIR__/refuse_noroot.py' (FORMAT ast);
+----
+expected exactly one root row
+
+# 4d. Two root rows - the same parse unioned with itself. Row count is also
+#     wrong here, but the root check is deliberately first: "which parse is
+#     this?" has to be answered before "is this parse complete?".
+statement error
+COPY (SELECT * FROM py_full UNION ALL SELECT * FROM py_full)
+TO '__TEST_DIR__/refuse_tworoot.py' (FORMAT ast);
+----
+expected exactly one root row
+
+# 4e. An incomplete tree. This is the subtle one: a filtered subset's missing
+#     nodes are absorbed into the gaps, so the output comes out byte-exact
+#     ANYWAY - looking right while proving nothing about the subset. The
+#     completeness check (row count = root.descendant_count + 1) is the only
+#     thing standing between a filtered query and a file that lies about what
+#     it is.
+statement error
+COPY (SELECT * FROM py_full WHERE depth <= 2) TO '__TEST_DIR__/refuse_subset.py' (FORMAT ast);
+----
+is not a complete tree
+
+# 4f. NULL byte columns: parsed below source := 'full' with '+schema', so the
+#     columns exist and are NULL.
+statement ok
+CREATE TABLE py_lines AS
+SELECT * FROM read_ast('test/data/unparse_leaf_text/sample.py', source := 'lines+schema', peek := 'none');
+
+statement error
+COPY (FROM py_lines) TO '__TEST_DIR__/refuse_null.py' (FORMAT ast);
+----
+have a NULL start_byte/end_byte
+
+# 4g. Parsed below 'full' WITHOUT '+schema': the byte columns do not exist at
+#     all. The sink names the missing columns rather than letting a bare
+#     "Referenced column not found" surface from inside a generated query the
+#     user never wrote.
+statement error
+COPY (FROM read_ast('test/data/unparse_leaf_text/sample.py', peek := 'none'))
+TO '__TEST_DIR__/refuse_cols.py' (FORMAT ast);
+----
+missing the column(s) start_byte, end_byte
+
+# 4h. A destination that cannot be opened for writing. This one fires at
+#     global-init, i.e. BEFORE the splice guards - which is why every other
+#     refusal above writes to a writable path.
+statement error
+COPY (FROM py_full) TO '__TEST_DIR__/no_such_dir/refuse_io.py' (FORMAT ast);
+----
+IO Error
+
+# 4i. language 'duckdb': not a leaf-text gap and not #197 (fixed by PR #205),
+#     but a property of wrapping a query planner's parse. Its tree is an AST
+#     rather than a CST and it reports no byte positions at all, and the
+#     message says so - the readability and staleness guards would also fire,
+#     and both would misdiagnose it.
+statement error
+COPY (FROM read_ast('test/data/unparse_leaf_text/sample.sql', 'duckdb', source := 'full', peek := 'none'))
+TO '__TEST_DIR__/refuse_duckdb.sql' (FORMAT ast);
+----
+surfaces no byte positions
+
+# 4j. No rows at all. A 0-byte file is a faithful reproduction of an empty
+#     source file (section 2) and of nothing else, so an empty query refuses
+#     rather than writing one.
+statement error
+COPY (SELECT * FROM py_full WHERE false) TO '__TEST_DIR__/refuse_empty.py' (FORMAT ast);
+----
+produced no rows
+
+# 4k. An in-memory parse_ast() table has no file to re-read. ast_source_bytes()
+#     returns NULL for the '<inline>' pseudo-path, which lets the macro's own
+#     message - the one that names the macro that CAN serve it - come through.
+statement ok
+CREATE TABLE inline_tbl AS SELECT * FROM parse_ast('x = 1', 'python', source := 'full', peek := 'none');
+
+statement error
+COPY (FROM inline_tbl) TO '__TEST_DIR__/refuse_inline.py' (FORMAT ast);
+----
+in-memory parse_ast() output
+
+# 4l. STALENESS. The guard is root.end_byte = octet_length(file), so any change
+#     to the file's LENGTH between parse and write is caught. Parse and write
+#     in one statement and the window is as narrow as it can be; a cached node
+#     table reopens it, which is what this simulates.
+statement ok
+COPY (SELECT encode('x = 1' || chr(10)) AS b) TO '__TEST_DIR__/mut.py' (FORMAT blob);
+
+statement ok
+CREATE TABLE mut_nodes AS
+SELECT * FROM read_ast('__TEST_DIR__/mut.py', source := 'full', peek := 'none');
+
+statement ok
+COPY (SELECT encode('x = 1 + 2' || chr(10)) AS b) TO '__TEST_DIR__/mut.py' (FORMAT blob);
+
+statement error
+COPY (FROM mut_nodes) TO '__TEST_DIR__/refuse_stale.py' (FORMAT ast);
+----
+the file changed since it was parsed
+
+# 4m. A leaf frontier whose spans overlap: bytes would be duplicated or
+#     dropped. No adapter produces this today (the `duckdb` adapter did until
+#     PR #205), so the table is hand-built against a real 5-byte file so that
+#     the readability and staleness guards pass and the overlap guard is the
+#     one that fires.
+statement ok
+COPY (SELECT encode('abcde') AS b) TO '__TEST_DIR__/five.py' (FORMAT blob);
+
+statement ok
+CREATE TABLE overlapping AS
+    SELECT '__TEST_DIR__/five.py' AS file_path, 'python' AS language, 0 AS node_id, 0 AS depth,
+           2 AS descendant_count, 0::UINTEGER AS start_byte, 5::UINTEGER AS end_byte
+    UNION ALL SELECT '__TEST_DIR__/five.py', 'python', 1, 1, 0, 0::UINTEGER, 4::UINTEGER
+    UNION ALL SELECT '__TEST_DIR__/five.py', 'python', 2, 1, 0, 2::UINTEGER, 5::UINTEGER;
+
+statement error
+COPY (FROM overlapping) TO '__TEST_DIR__/refuse_overlap.py' (FORMAT ast);
+----
+leaf spans overlap
+
+# 4n. A FILE_PATH override naming a path the node table does not carry: after
+#     the filter nothing is left, and the message names the override.
+statement error
+COPY (FROM py_full) TO '__TEST_DIR__/refuse_fp.py' (FORMAT ast, FILE_PATH 'test/data/unparse_leaf_text/sample.c');
+----
+override matched none of them
+
+# =============================================================================
+# 5. Options: LANGUAGE and FILE_PATH are overrides; the rest are refused
+# =============================================================================
+
+# 5a. LANGUAGE is not required - sections 1 and 2 never pass it. Given, it is an
+#     override, and it resolves a 26-language table down to one file. The
+#     file_path is part of the assertion on purpose: `content = content` alone
+#     would be satisfied by ANY file that round-tripped, and the claim is that
+#     LANGUAGE picked the RIGHT one.
+statement ok
+COPY (FROM multi_lang) TO '__TEST_DIR__/lang_kt.kt' (FORMAT ast, LANGUAGE 'kotlin');
+
+query I
+SELECT (SELECT content FROM read_blob('test/data/unparse_leaf_text/sample.kt'))
+     = (SELECT content FROM read_blob('__TEST_DIR__/lang_kt.kt'));
+----
+true
+
+# 5b. FILE_PATH resolves a multi-file, single-language table.
+statement ok
+COPY (FROM multi_file) TO '__TEST_DIR__/fp_one.py' (FORMAT ast, FILE_PATH 'test/data/python/unicode.py');
+
+query I
+SELECT (SELECT content FROM read_blob('test/data/python/unicode.py'))
+     = (SELECT content FROM read_blob('__TEST_DIR__/fp_one.py'));
+----
+true
+
+# 5c. A LANGUAGE that matches nothing refuses rather than writing the file it
+#     could have inferred - and the message says the OVERRIDE emptied the
+#     table, not that the query did. One message for both would misdiagnose
+#     whichever it was.
+statement error
+COPY (FROM py_full) TO '__TEST_DIR__/lang_wrong.py' (FORMAT ast, LANGUAGE 'c');
+----
+The LANGUAGE 'c' override matched none of them
+
+# 5d. The 045 option table's style options belong to the NORMALISING unparser.
+#     Honouring them would put normalised text in a file that looks
+#     authoritative, which is the whole reason this feature was sequenced last.
+statement error
+COPY (FROM py_full) TO '__TEST_DIR__/opt.py' (FORMAT ast, PRESET 'black');
+----
+is not supported, and is not an oversight
+
+statement error
+COPY (FROM py_full) TO '__TEST_DIR__/opt.py' (FORMAT ast, INDENT 4);
+----
+is not supported, and is not an oversight
+
+statement error
+COPY (FROM py_full) TO '__TEST_DIR__/opt.py' (FORMAT ast, STRIP_COMMENTS true);
+----
+is not supported, and is not an oversight
+
+# 5e. PARTITION_BY: one parse, one file.
+statement error
+COPY (FROM py_full) TO '__TEST_DIR__/parts' (FORMAT ast, PARTITION_BY (file_path));
+----
+writes exactly ONE file
+
+# 5f. USE_TMP_FILE is always on, and saying so beats silently overriding it.
+statement error
+COPY (FROM py_full) TO '__TEST_DIR__/opt.py' (FORMAT ast, USE_TMP_FILE false);
+----
+always sets it
+
+# 5g. An unknown option is named, not ignored.
+statement error
+COPY (FROM py_full) TO '__TEST_DIR__/opt.py' (FORMAT ast, FLAVOUR 'vanilla');
+----
+unrecognized option FLAVOUR
+
+# =============================================================================
+# 6. A refusal leaves no file, and does not truncate an existing one
+# =============================================================================
+# This is the condition that makes the rest honest. Every guard above fires
+# AFTER the destination would have been opened, so the sink always writes
+# through a temporary file; without that, a refusal would leave a 0-byte file
+# exactly where source code was asked for - 047's "a file looks authoritative"
+# in its worst form.
+
+# 6a. None of section 4's destinations exist, and no temporary file was left
+#     behind either - the glob is '*refuse*' rather than 'refuse_*' precisely
+#     so that a stranded 'tmp_refuse_x.py' would be caught.
+query I
+SELECT count(*) FROM glob('__TEST_DIR__/*refuse*');
+----
+0
+
+# 6b. An existing destination keeps its bytes when the write is refused.
+statement ok
+COPY (SELECT encode('# precious' || chr(10)) AS b) TO '__TEST_DIR__/precious.py' (FORMAT blob);
+
+statement error
+COPY (SELECT * FROM py_full WHERE depth <= 2) TO '__TEST_DIR__/precious.py' (FORMAT ast);
+----
+is not a complete tree
+
+query II
+SELECT octet_length(content), content = encode('# precious' || chr(10))
+FROM read_blob('__TEST_DIR__/precious.py');
+----
+11	true
+
+# 6c. ...and a successful write over an existing destination does replace it.
+statement ok
+COPY (FROM read_ast('test/data/unparse_leaf_text/sample.lua', source := 'full', peek := 'none'))
+TO '__TEST_DIR__/precious.py' (FORMAT ast);
+
+query I
+SELECT (SELECT content FROM read_blob('test/data/unparse_leaf_text/sample.lua'))
+     = (SELECT content FROM read_blob('__TEST_DIR__/precious.py'));
+----
+true
+
+# =============================================================================
+# 7. ast_source_bytes - the per-row byte substrate
+# =============================================================================
+# read_blob() cannot be given a per-row path (DuckDB table functions take only
+# constant arguments), which is why ast_unparse_exact_from() has to ask for a
+# `files` literal covering a path every row already names. The sink cannot ask:
+# it sees a query, not a path.
+
+query II
+SELECT ast_source_bytes('test/data/unparse_leaf_text/sample.py')
+     = (SELECT content FROM read_blob('test/data/unparse_leaf_text/sample.py')),
+       octet_length(ast_source_bytes('test/data/unparse_leaf_text/sample.py')) > 0;
+----
+true	true
+
+# NULL, not an error, for a path with no file - which is what lets the splice's
+# own "not readable as bytes" and "<inline>" messages survive (4k).
+query III
+SELECT ast_source_bytes('test/data/no_such_file.py') IS NULL,
+       ast_source_bytes('<inline>') IS NULL,
+       ast_source_bytes(NULL) IS NULL;
+----
+true	true	true
+
+# Derived from the node table's own file_path column, so the join key on both
+# sides of the splice's blob join is the same string by construction - the
+# spelling disagreement the macro's PATH MATCHING block exists for cannot arise
+# here.
+query II
+SELECT count(*), bool_and(cblob = (SELECT content FROM read_blob('test/data/unparse_leaf_text/sample.py')))
+FROM (SELECT fp, ast_source_bytes(fp) AS cblob
+      FROM (SELECT DISTINCT file_path AS fp FROM py_full));
+----
+1	true

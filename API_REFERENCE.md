@@ -555,6 +555,111 @@ one-byte boundary shift and a replaced leaf and requires both to be detected).
 `scripts/verify_unparse_byte_exact.sh` sweeps a corpus with per-language
 numbers; re-run it after a grammar bump.
 
+### `COPY (<query>) TO '<path>' (FORMAT ast)` — write byte-exact source to disk
+
+**The unparse sink** (tracker `045`, issue #174, "level 5"). The same byte-exact
+writer as `ast_unparse_exact`, addressed as a `COPY` destination rather than as
+a scalar:
+
+```sql
+COPY (FROM read_ast('src/main.c', source := 'full')) TO 'out/main.c' (FORMAT ast);
+COPY (FROM read_ast('src/main.c', source := 'full')) TO 'out/main.c' (FORMAT ast, LANGUAGE 'c');
+```
+
+`out/main.c` is then byte-for-byte identical to `src/main.c`.
+
+**Byte-exact or refuse — there is no normalising mode.** A file on disk looks
+authoritative in a way a result set does not, so the one outcome this must never
+produce is a file that quietly holds normalised text where the original bytes
+were expected. `FORMAT ast` therefore writes a verbatim reproduction of the
+parsed file or it writes nothing at all. The whitespace-normalising unparser is
+still available, but only by naming it:
+
+```sql
+-- deliberately lossy: normalised whitespace, not the original file
+COPY (SELECT encode(source) FROM ast_unparse('src/main.py', preset := 'black'))
+TO 'out/main.py' (FORMAT blob);
+```
+
+**Options.** Only the two the law defines; everything else is refused with a
+reason rather than ignored.
+
+| option | meaning |
+|---|---|
+| `LANGUAGE '<language>'` | **optional.** An override for the `language` column `read_ast`/`parse_ast` already emit, and a disambiguator for a table carrying several |
+| `FILE_PATH '<path>'` | **optional.** A disambiguator for a table carrying more than one `file_path` |
+
+`PRESET`, `INDENT`, `LINE_ENDINGS` and `STRIP_COMMENTS` (listed in `045`'s
+original spec) belong to the normalising unparser and are **rejected**:
+byte-exact output has no layout left to choose. `PARTITION_BY`,
+`PER_THREAD_OUTPUT`, `FILE_SIZE_BYTES`, `FILENAME_PATTERN` and `FILE_EXTENSION`
+are rejected because one parse means one file. `USE_TMP_FILE` is rejected
+because `FORMAT ast` always sets it — see below.
+
+**It errors rather than guessing (issue #89).** Every condition in
+`ast_unparse_exact`'s table above applies unchanged, because this *is* that
+writer: the copy function rewrites the statement into a `FORMAT blob` `COPY`
+over `ast_unparse_exact_splice`, so there is exactly one splice and exactly one
+set of guards in the codebase. Four refusals are specific to the sink:
+
+| condition | message |
+|---|---|
+| the query does not carry the node columns | names the missing ones (`file_path`, `language`, `node_id`, `depth`, `descendant_count`, `start_byte`, `end_byte`) and says `source := 'full'` is required |
+| the query produced no rows | a 0-byte file is a faithful reproduction of an empty *source file* and of nothing else |
+| a `LANGUAGE` / `FILE_PATH` override matched nothing | says the override emptied the table, not that the query did |
+| the destination cannot be opened | DuckDB's own IO error, raised before any of the above |
+
+**A refusal leaves no file, and does not truncate an existing one.** Every guard
+above fires *after* the destination would have been opened, so the sink always
+writes through a temporary file (this is why `USE_TMP_FILE` is not accepted:
+turning it off would trade the guarantee for nothing). Measured: after each of
+the fourteen refusals in `test/sql/ast_copy_format.test`, the destination does
+not exist, no temporary file is left behind, and a pre-existing destination
+still holds its original bytes.
+
+**`COPY ... FROM ... (FORMAT ast)`** — the read direction — is not implemented;
+`read_ast()` is that direction.
+
+**Known limit, inherited from the substrate:** `descendant_count` is emitted
+through a `uint16` field, so it **wraps at 65 536** (measured: a 100 001-node
+tree reports `root.descendant_count = 34 464 = 100 000 − 65 536`). The splice's
+completeness guard is `row count = root.descendant_count + 1`, so a file whose
+AST exceeds 65 536 nodes is **refused** — loudly, with the "not a complete tree"
+message, which is the right behaviour for the wrong reason. Byte-exactness is
+never silently lost; a correct file is rejected. Affects `ast_unparse_exact*`
+identically. Pinned in `test/sql/ast_copy_format.test` §2.
+
+**Verified by:** `test/sql/ast_copy_format.test` (140 assertions: the round trip
+for all 26 tree-sitter languages plus CRLF, multi-byte, empty, no-trailing-
+newline and 60 KB files, compared as BLOBs against the files themselves; every
+refusal condition; the destination-integrity assertions; and negative controls
+in hex space). Three planted faults — an appended newline, the normalising
+unparser swapped in for the splice, and the no-rows guard disabled — were each
+caught by it.
+
+### `ast_source_bytes(path)` — a file's bytes, per row
+
+```sql
+SELECT ast_source_bytes('src/main.py');                    -- BLOB
+SELECT fp, ast_source_bytes(fp) AS cblob
+FROM (SELECT DISTINCT file_path AS fp FROM nodes);         -- the splice's blob relation
+```
+
+Returns the file's pristine bytes as a `BLOB`, or **NULL** when the path does
+not exist — including the `'<inline>'` pseudo-path that `parse_ast` reports.
+NULL rather than an error because its caller is the splice's validation chain,
+whose "not readable as bytes" and "in-memory `parse_ast()` output" messages
+carry instructions that a bare IO error would replace. A path that exists but
+cannot be *read* still throws: that is a real fault, not an absent file.
+
+This exists because DuckDB table functions take only constant-foldable
+arguments, so `read_blob(file_path)` over a node table is not expressible —
+which is why `ast_unparse_exact_from` has to be handed a `files` literal
+covering a path every row already names. `COPY ... TO (FORMAT ast)` cannot be
+handed one: it sees a query, not a path. File access goes through the client
+context's `FileSystem`, so `enable_external_access`, `allowed_directories` and
+any registered file system apply exactly as they do to `read_blob`.
+
 ### `detect_language(file_path)`
 
 **Language detection** - Detect programming language from a file path. Uses the same detection logic as `read_ast()`.
