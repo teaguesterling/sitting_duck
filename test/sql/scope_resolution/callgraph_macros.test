@@ -16,6 +16,24 @@
 # shape (issue #202), which is true for every possible result and therefore
 # cannot fail.
 #
+# FIXTURE LOCATION — test/data/callgraph/, deliberately NOT test/data/python/.
+# Adding any .py file to test/data/python/ breaks exact-count assertions that glob
+# that directory — multi_file_edge_cases.test's `COUNT(DISTINCT file_path) = 25`
+# and core/glob_array_support.test's `python 3474 19`. That is what turned #211
+# red. Those counts are deliberately exact and are guards worth keeping, and they
+# have nothing to do with call graphs, so the fixture moved rather than the
+# expectation (same resolution as test/data/encoding/). The globs that DO reach
+# test/data/callgraph/ were checked and are all bounds — `COUNT(*) > 0`,
+# `COUNT(*) > 100`, `COUNT(DISTINCT file_path) > 0` in multi_file_edge_cases.test
+# — which adding a file cannot break. callgraph_direct.py stays in
+# test/data/python/: it predates those counts and is already inside the 25, so
+# moving it would break them too.
+#
+# LINE NUMBERS: the assertions below pin absolute start_line values from the
+# fixtures. Adding or removing a line in a fixture — including a COMMENT line
+# above the code — shifts them. Observed during #211: a 10-line comment added to
+# the fixture header moved every expected line by +10.
+#
 # ORDERING: ast_callees and ast_callers both ORDER BY (file_path, line) only, so
 # two calls on the SAME line come back in an unspecified order — observed to
 # differ between the two macros for css_selectors_test.py line 43. Every query

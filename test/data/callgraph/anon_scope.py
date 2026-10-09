@@ -1,17 +1,7 @@
 # Fixture for the ANONYMOUS-enclosing-scope and MODULE-LEVEL call cases, where
 # ast_callees, ast_callers and the ::callees/::callers pseudo-elements provably
-# disagree.
-#
-# WHY THIS DIRECTORY, not test/data/python/ — do not move it back.
-# Adding any .py file to test/data/python/ breaks exact-count assertions that
-# glob it: multi_file_edge_cases.test's `COUNT(DISTINCT file_path) = 25` and
-# core/glob_array_support.test's per-language file counts. Those counts are
-# deliberately exact and are guards worth keeping, so the fixture moves rather
-# than the expectation. The globs that DO reach this directory
-# (`test/data/*/*.py`, `test/data/**/*.py`) were checked and are all `> 0` /
-# `> 100` bounds, which adding a file cannot break.
-# (callgraph_direct.py stays in test/data/python/ because it predates those
-# counts and is already baked into the 25 — moving it would break them too.)
+# disagree. Lives HERE, not test/data/python/ (#211); must not move back, and any
+# line added above the code breaks 10 pinned line numbers — see callgraph_macros.test.
 #
 # Deliberate shape:
 #   - named()            calls named_target()  -> enclosing function has a name
