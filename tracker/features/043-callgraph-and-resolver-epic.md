@@ -199,6 +199,121 @@ STATUS: diagnosis complete + verified. The rewrite itself is a real multi-build-
 do it as a focused piece with the verified-harness discipline (re-extract from current main,
 confirm ==installed, EXPLAIN-min before/after quiet AND under load, full suite).
 
+## CI FAILURE MECHANISM — CONFIRMED from actual log (2026-09-22, run 35680211017, main)
+Ground truth, no longer inferred. Runner: duckdb/scripts/ci/run_tests.py via ci_phase.py
+`make test_release`. Config printed by CI:
+  workers=3, retry=2, max_retries=4, batch_size=10, batch_timeout_seconds=600
+- Timeout is EFFECTIVELY PER-TEST-FILE at **600s**: batches of ~10 time out, then re-run
+  individually; the offending file is isolated and reported `error: timeout (600s) for <file>`.
+  => Splitting a file so each piece's ast_select-call-count * per-call-cost < 600s DOES work.
+- `--batch-timeout` override exists (DEFAULT_BATCH_TIMEOUT_SECONDS=600, drops to 300 if
+  workers>=10). Uncertain the community-extensions `test_against_latest` harness lets the repo
+  set it; and even 2x won't save the 120-call file. Splitting the monster is unavoidable regardless.
+- The 5 failures on that run:
+    ast_select_combinator_steps.test        timeout 600s   (37 ast_select calls)
+    css_selectors_multilang.test            timeout 600s   (120 calls)
+    bugs/issue_88_89_callee_name_and_guards timeout 600s   (25 calls)
+    ast_select_pseudo_classes.test          timeout 600s   (67 calls)
+    function_documentation.test:116         WRONG RESULT   <- NOT a timeout; fixed by PR #177
+  Total step: 132 passed, 5 failed in 2400s (inflated by retries of the 4 timeouts).
+- CI per-call cost is UNEVEN and >= ~24s for the failing files: issue_88_89 (25 calls) busted
+  600s => >24s/call; yet ast_select_native (31 calls) PASSED => its calls are cheaper (~<19s).
+  (Cost also drifts UP each DuckDB nightly: 6s dev83854 -> 21s dev85467 local; >=24s on CI amd64.)
+
+## STOPGAP PROMISE-CHECK (per Teague's "try stopgap first, bail to C++ if not promising")
+To fit 600s with ~20-call margin/file: css_multilang 120->~6, pseudo_classes 67->~4,
+combinator_steps 37->2, issue_88_89 25->2, native 31->2 (defensive) = 5 files -> ~16 files.
+Margin thin; cost drifts upward each nightly => fragile, needs babysitting per DuckDB bump.
+All destined for the v2.0 branch, where the C++ selector compiler (on Teague's v2.0 list) makes
+them moot. Assessment: mechanically valid but below the "promising" bar; #177 (kills 1/5,
+version-agnostic) stays on main. Surfaced to Teague 2026-09-22 for re-ruling.
+
+## RESOLUTION PATH — 2026-09-22 (Teague ruled: split-on-main + file upstream)
+Root cause reframed by fleet measurement: the ast_select blowup is a **DuckDB v2.0
+planner regression**, not a sitting_duck design cost. Same sitting_duck commit 648b570:
+ast_select ~1.2s net on v1.5.5 -> ~23.5s net on v2.0.0-dev85467 (19x). C++ table funcs
+(parse_ast/read_ast/CSS parse) ~0 net on both — cost is entirely planning the ~52KB
+ast_select_from macro body. Minimal repro (no extension): one SELECT with N three-arm
+CASE over range(10); planning scales super-linearly with statement SIZE on v2.0
+(45KB->91KB = 3.6x on v2.0 vs ~linear on v1.5.5). Real macro ~3x worse per KB than
+flat-CASE predicts (extra amplifier in the construct mix). Startup also regressed
+0.22->2.54s (separate). Main is NOT branch-protected => canary advisory.
+
+Actions taken:
+- PR #178 (branch test/v2-split-ast-select-timeouts, off main): split the 4 timeout
+  files into <=12-ast_select-call partitions (css_multilang->10, pseudo_classes->7,
+  combinator_steps->4, issue_88_89->3 = 24 files). Verified: assertion-record multiset
+  conserved (124/50/28/30), setup replicated, require+LOAD in every part. BRIDGE,
+  revertible if upstream fixes the regression. Splitter + verifier in scratchpad.
+- Upstream: duckdb/duckdb#26036 filed (size-scaling regression; honest caveat that the
+  standalone repro under-predicts our real case ~3x/KB). Watch it — if fixed before
+  v2.0.0 tags, revert #178.
+- PR #177 (function_documentation:116 wrong-result) is the OTHER half: canary needs
+  BOTH #177 and #178 on main to go green. Merge order: #177 -> rebase #178 -> #178.
+- HOLDING both merges pending fleet re-verification of #178 on the real v2.0 build
+  (margin per part; may re-split to 8-10 calls/part if per-file cost >24s/call).
+
+## SPLIT FINAL SHAPE — per-family sizing (2026-09-22, commit b53130c on #178)
+Fleet measured per-call cost varies ~2.3x across families on v2.0 (pseudo_classes ~66.5s/call
+vs ~29-35s elsewhere) — uniform sizing was WRONG (uniform-12 left pseudo_classes ~798s, still
+over budget; even uniform-8 = 1.13x). Re-sized PER FAMILY for >=2.1x margin:
+  css_selectors_multilang     8 calls/part -> 15 parts (~2.6x)
+  ast_select_pseudo_classes   4 calls/part -> 19 parts (~2.26x)
+  ast_select_combinator_steps 8 calls/part ->  5 parts (~2.1x)
+  bugs/issue_88_89            8 calls/part ->  4 parts (~2.6x)
+  = 43 parts total.
+ONE content edit beyond partitioning: pseudo_classes' single atomic 8-call assertion
+(:scope(.fn)==:scope(function) AND ...x4 alias-equalities) decomposed into 4x 2-call
+assertions (semantically identical; couldn't partition an atomic 8-call record below 8).
+Verified: assertion-record conservation exact (pseudo vs decomposed source; selector multiset
+== original), require+LOAD in all 43, setup replicated, reachability clean.
+Still HELD for merge: fleet full-parts verification on v2.0 build + duckdb-main repro answer.
+
+## MAIN-REPRO ANSWER (2026-09-22) — split is NEEDED, not throwaway
+Fleet built plain CLI from duckdb main 688937993a (v2.1.0-dev84812), three-way:
+- SCALING regression: STILL REPRODUCES on main. Net@91KB: v1.5.5 0.39s | cyanoptera 8.03s
+  (20.6x) | main 7.41s (19.0x). 269 commits since cyanoptera didn't fix it; super-linear
+  shape persists. => #178 is REQUIRED (not revertible-soon); #26036 updated with the 3-way
+  table (strongest form: live on release branch AND main). Revert condition is now "if/when
+  DuckDB actually fixes the scaling regression" — NOT tied to v2.0.0 tagging.
+- STARTUP regression: FIXED on main (0.13s) vs cyanoptera (2.50s), vs v1.5.5 0.27s. Distinct
+  fixed-per-process cost. Backport candidate — worth a SHORT separate upstream issue
+  ("fixed on main, please backport to v2.0-cyanoptera before v2.0.0"). Pending Teague OK
+  (outward-facing, like #26036 was). NOT yet filed.
+
+## STARTUP ISSUE — HELD (2026-09-22, Teague)
+Teague: hold filing the startup-regression backport issue; wants the "fixed on main"
+claim re-tested first (a public "please backport" ask is only valid if startup is genuinely
+fixed on main). Fleet asked to re-run isolated `SELECT 1` startup timing (5x, min+median) on
+all 3 builds to confirm direction unambiguously. Off the merge critical path. File decision
+returns to Teague after retest. #26036 (scaling) unaffected — stands as updated.
+
+## STARTUP ISSUE — retest done, Teague: KEEP HOLDING (2026-09-22)
+Clean retest (7 runs each, non-overlapping ranges): v1.5.5 0.224s min / cyanoptera 2.226s min
+/ main 0.116s min. "Fixed on main" CONFIRMED (main faster than v1.5.5). Backport-ask premise
+is sound — but Teague chose to KEEP HOLDING, do NOT file. Validated backport candidate on
+record; revisit before v2.0.0 if desired. #26036 (scaling) unaffected.
+
+## MERGE GATE STATUS (2026-09-22)
+Fleet margins satisfied (gate43: 2.16x-5.04x, pseudo true-worst unmeasured but projected ~2.26x).
+Startup: held. Remaining gate: #178's own amd64 v2.0-cyanoptera canary showing all 43 split
+parts pass (function_documentation:116 the sole expected red). Canary IN_PROGRESS as of this note.
+On green-of-the-splits: merge #177 -> rebase #178 on main -> merge #178 -> main canary fully green.
+
+## OUTCOME — de-fang, drop split (2026-09-22, Teague's ruling)
+#178 canary showed the split PARTIALLY worked: 41/43 parts passed, but 2 combinator_steps parts
+(part01 8-call, part05 6-call) still timed out at 600s on CI. Cause: CI is ~2-3x slower than the
+fleet's dev box, and combinator globs *.py (many files/call) — so measured margins evaporated.
+Teague ruled: de-fang the canary, don't chase the split.
+- PR #178 (split): CLOSED/dropped.
+- PR #179 (ci/defang-v2-canary): adds `skip_tests: true` to the duckdb-next-build (v2.0-cyanoptera)
+  job -> canary is BUILD-ONLY (keeps compile-compat signal, drops timeout noise). NB: continue-on-error
+  is invalid on a reusable-workflow-calling job (breaks parse) — skip_tests is the lever.
+- PR #177 (function_documentation:116): merges for correctness.
+- BOTH #177 + #179 PENDING TEAGUE MERGE (agent blocked from merging PRs; main unprotected).
+- Re-enable canary tests (drop skip_tests) when #26036 fixed upstream or C++ selector engine lands.
+- Salvageable-if-wanted: the pseudo_classes 8-call->4x2-call decomposition (more diagnostic).
+
 ## PART A RE-AUDIT (2026-10-08) — the rewrite is DONE; the dispatch is NOT worth building
 
 Picked up as "rewrite the DIRECT call-graph selectors to use a seeded join instead of a

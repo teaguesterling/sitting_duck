@@ -167,9 +167,10 @@ real `css_selectors` case is recorded as ~3x worse per KB than that repro predic
 36. The `skip_tests: true` gate in `.github/workflows/MainDistributionPipeline.yml`
 is unchanged.
 
-**Note on provenance:** the 2026-09-22 three-way measurement this corrects lives only
-in UNCOMMITTED working-copy edits to `043` in the shared checkout (~115 lines). It is
-not on `main` and would be lost if that checkout were cleaned. Worth committing.
+**Note on provenance:** the 2026-09-22 three-way measurement this corrects is now
+committed -- it spent several sessions as uncommitted working-copy edits to `043` in the
+shared checkout and is on `main` as of 2026-10-09 (the "CI FAILURE MECHANISM" through
+"OUTCOME -- de-fang" sections of `043`).
 
 ### Addendum 2026-10-08: the ~0.5s figure is v1.5.x-line-only; the v2.0 line is ~12.8s
 
