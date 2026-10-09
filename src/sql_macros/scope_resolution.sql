@@ -300,6 +300,27 @@ CREATE OR REPLACE MACRO ast_resolve(
 -- See also: ast_get_calls/ast_call_graph in tree_navigation.sql for richer
 -- call extraction with call-type classification (function/method/constructor/macro).
 --
+-- SEMANTICS: **direct, name-matched (NOT resolved)** — see 043.
+-- `caller` is exact: it comes from scope.function, the parse-time node_id of the
+-- call's IMMEDIATELY enclosing function, so a call inside a nested def or lambda
+-- is attributed to that inner function, not the outer one (#152).
+-- `callee` is just the call expression's `name` string. Nothing resolves it to a
+-- definition: imports are not followed, scope chains are not walked, receivers are
+-- ignored. Treat (caller, callee) as "function X contains a call spelled Y", an
+-- over-approximation of "X calls Y". Precise edges need the resolver (043 Part C).
+--
+-- NOT the same as the `::callees` selector pseudo-element. This macro INNER-joins
+-- the enclosing function and requires `f.name` non-empty, so a call whose immediate
+-- enclosing function is ANONYMOUS (a bare lambda used as an argument, an arrow
+-- function, an IIFE) is DROPPED ENTIRELY — it appears under no caller at all.
+-- Module-level calls are dropped too; `ast_callers` keeps those as '<module>', this
+-- macro does not. Note that sitting_duck INFERS a name for an assigned lambda
+-- (`bound = lambda: ...` yields name 'bound'), so only genuinely unnamed scopes are
+-- affected. `::callees` does not recover these either — it keys on
+-- `scope.function = m.node_id`, and an anonymous scope has no name to address it by
+-- with `#name`. Measured and pinned in
+-- test/sql/scope_resolution/callgraph_macros.test.
+--
 -- Usage:
 --   SELECT * FROM ast_callees('src/**/*.py');
 --   SELECT caller, callee FROM ast_callees('src/*.py') WHERE caller = 'main';
@@ -344,6 +365,24 @@ CREATE OR REPLACE MACRO ast_callees(
 --
 -- Module-level calls (no enclosing function) get caller = '<module>',
 -- caller_line = 0.
+--
+-- SEMANTICS: **direct, name-matched (NOT resolved)** — see 043.
+-- Despite the name, this does NOT take a function and find its callers. It emits
+-- ONE ROW PER CALL SITE in the corpus, labelled with its immediately enclosing
+-- function; "who calls F" is `WHERE callee = 'F'`, and that filter is a string
+-- match on the call expression's `name` — no import following, no scope-chain
+-- resolution, no receiver handling. So filtering `callee = 'speak'` returns every
+-- call spelled `speak`, including `animal.speak()` and same-named methods on
+-- unrelated classes. An over-approximation by name; 043 Part C is the fix.
+--
+-- Differs from the `::callers` pseudo-element in two ways, both pinned in
+-- test/sql/scope_resolution/callgraph_macros.test: (1) LEFT JOIN, so module-level calls survive
+-- as caller = '<module>' where ::callers drops them (that gap is why ::call-sites
+-- exists); (2) the grain is the CALL SITE, so a function calling F twice yields two
+-- rows, where ::callers returns DISTINCT caller-function nodes.
+-- Unlike ast_callees, `f.name` is NOT required non-empty, so a call inside an
+-- anonymous lambda is reported with caller = '' (empty), not '<module>' and not
+-- dropped — scope.function matched a real but unnamed function node.
 --
 -- Usage:
 --   SELECT * FROM ast_callers('src/**/*.py');

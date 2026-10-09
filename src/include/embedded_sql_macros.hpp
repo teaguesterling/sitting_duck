@@ -4266,6 +4266,18 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- belongs to THAT inner scope, not to a. Bounded equi-join on the callee's
             -- precomputed scope.function — replaces the subtree range self-join that
             -- decorrelated into a huge intermediate on large tables (#164).
+            --
+            -- SEMANTICS: **direct, name-matched (NOT resolved)** — see 043.
+            -- The containment edge (which function a call sits in) IS precise: it is
+            -- scope.function, computed at parse time. What is NOT precise is `name`.
+            -- `:calls(foo)` means "directly contains a call expression whose callee
+            -- text is literally 'foo'" — it does NOT mean "calls the definition foo".
+            -- No import is followed, no scope chain walked, no receiver considered, so
+            -- a local `foo()`, an imported `foo()`, a shadowed `foo` and an unrelated
+            -- `foo` from another module all match identically, and `obj.foo()` matches
+            -- or not purely according to how the language adapter fills `name`.
+            -- Precise resolution is the cross-module resolver (043 Part C); until it
+            -- exists, read this as an over-approximation by name.
             WHEN 'calls' THEN EXISTS (
                 SELECT 1 FROM ast callee
                 WHERE callee.file_path = a.file_path
@@ -4279,6 +4291,15 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- inside F is called-by the LAMBDA, not F. Bounded equi-join on the node's
             -- precomputed scope.function — replaces the doubly-nested range subquery that
             -- blew up to a ~17.8M-row intermediate / OOM on a 78k-node table (#164).
+            --
+            -- SEMANTICS: **direct, name-matched (NOT resolved)** — see 043.
+            -- The edge is precise (scope.function, parse-time), the ARGUMENT is not:
+            -- `:called-by(foo)` means "the immediately enclosing function's `name`
+            -- field is the string 'foo'", so every function spelled `foo` anywhere in
+            -- the corpus satisfies it. Note the asymmetry with the direct ruling: an
+            -- anonymous enclosing scope (a bare lambda) has no name, so a call inside
+            -- one can never be :called-by(anything) even though it IS inside a function
+            -- — use the bare zero-arg `:called-by` to mean "inside some function scope".
             WHEN 'called-by' THEN
                 a.scope.function IS NOT NULL
                 AND EXISTS (
@@ -4427,6 +4448,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                         THEN a.scope.module IS NOT NULL
                              AND (pc.pseudo_arg_name IS NULL OR EXISTS (
                                  SELECT 1 FROM ast s WHERE s.file_path = a.file_path
+
+)SQLMACRO"
+        R"SQLMACRO(
                                    AND s.node_id = a.scope.module AND s.name = pc.pseudo_arg_name))
                     -- bare tree-sitter type: nearest enclosing ancestor of that exact
                     -- type, excluding subtrees of a closer same-type ancestor
@@ -4457,9 +4481,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             )
 
             -- :follows(type) — this node comes after a sibling of the given type
-
-)SQLMACRO"
-        R"SQLMACRO(
             WHEN 'follows' THEN EXISTS (
                 SELECT 1 FROM ast before_sib
                 WHERE before_sib.file_path = a.file_path
@@ -4513,6 +4534,21 @@ CREATE OR REPLACE MACRO ast_select_from(
     -- that contains each call site" collapses from a range join + correlated
     -- NOT EXISTS into a plain hash join. Same semantics (immediate caller),
     -- ~1000x faster on large codebases.
+    --
+    -- SEMANTICS: **direct, name-matched (NOT resolved)** — see 043.
+    -- This is the one call-graph selector whose EDGE is a name match, not just its
+    -- argument: it is SEEDED off `matched` (small) and then finds call sites by
+    -- `call_node.name = m.name`, scoped to the same file_path. So it answers "which
+    -- functions contain a call expression spelled the same as this definition",
+    -- which is an over-approximation of "which functions call this definition":
+    -- two same-named definitions in one file collide, imports are not followed, and
+    -- a method call `x.speak()` is attributed to every `speak` definition in that
+    -- file. The join is bounded (seed-driven, equi-join on name then on
+    -- scope.function) — the imprecision is semantic, not a scaling problem.
+    -- Precise attribution needs the resolver (043 Part C).
+    --
+    -- Also note this is an INNER join to the calling function, so module-level call
+    -- sites (no enclosing function) are DROPPED — use ::call-sites for those.
     pe_callers AS (
         SELECT DISTINCT caller_fn.* FROM matched m
         JOIN ast call_node ON call_node.file_path = m.file_path
@@ -4545,6 +4581,15 @@ CREATE OR REPLACE MACRO ast_select_from(
     -- range scan (transitive, including nested calls), which left ::callees
     -- inconsistent with :calls. Equi-join on the callee's precomputed
     -- scope.function — also bounded, no per-node subtree scan.
+    --
+    -- SEMANTICS: **direct, name-matched (NOT resolved)** — see 043.
+    -- Unlike ::callers, the EDGE here involves no name at all: it is a pure
+    -- equi-join `callee.scope.function = m.node_id`, so "which calls sit directly
+    -- in this function" is exact. What is unresolved is WHAT each returned call
+    -- node refers to — the rows are call expressions carrying a `name` string that
+    -- has not been bound to any definition. So ::callees is precise as
+    -- "call sites directly inside this function" and name-matched only in the sense
+    -- that consumers comparing those names to definitions get an approximation.
     pe_callees AS (
         SELECT DISTINCT callee.* FROM matched m
         JOIN ast callee ON callee.file_path = m.file_path
@@ -5326,6 +5371,30 @@ CREATE OR REPLACE MACRO ast_resolve(
 -- See also: ast_get_calls/ast_call_graph in tree_navigation.sql for richer
 -- call extraction with call-type classification (function/method/constructor/macro).
 --
+-- SEMANTICS: **direct, name-matched (NOT resolved)** — see 043.
+-- `caller` is exact: it comes from scope.function, the parse-time node_id of the
+-- call's IMMEDIATELY enclosing function, so a call inside a nested def or lambda
+-- is attributed to that inner function, not the outer one (#152).
+-- `callee` is just the call expression's `name` string. Nothing resolves it to a
+-- definition: imports are not followed, scope chains are not walked, receivers are
+
+)SQLMACRO"
+        R"SQLMACRO(
+-- ignored. Treat (caller, callee) as "function X contains a call spelled Y", an
+-- over-approximation of "X calls Y". Precise edges need the resolver (043 Part C).
+--
+-- NOT the same as the `::callees` selector pseudo-element. This macro INNER-joins
+-- the enclosing function and requires `f.name` non-empty, so a call whose immediate
+-- enclosing function is ANONYMOUS (a bare lambda used as an argument, an arrow
+-- function, an IIFE) is DROPPED ENTIRELY — it appears under no caller at all.
+-- Module-level calls are dropped too; `ast_callers` keeps those as '<module>', this
+-- macro does not. Note that sitting_duck INFERS a name for an assigned lambda
+-- (`bound = lambda: ...` yields name 'bound'), so only genuinely unnamed scopes are
+-- affected. `::callees` does not recover these either — it keys on
+-- `scope.function = m.node_id`, and an anonymous scope has no name to address it by
+-- with `#name`. Measured and pinned in
+-- test/sql/scope_resolution/callgraph_macros.test.
+--
 -- Usage:
 --   SELECT * FROM ast_callees('src/**/*.py');
 --   SELECT caller, callee FROM ast_callees('src/*.py') WHERE caller = 'main';
@@ -5338,9 +5407,6 @@ CREATE OR REPLACE MACRO ast_callees(
     -- enclosing function — precomputed at parse time. So "find calls inside
     -- function F" collapses from an O(calls x funcs) range join into a
     -- simple hash join on scope.function. The range-join version this
-
-)SQLMACRO"
-        R"SQLMACRO(
     -- replaces took up to 20 seconds on DuckDB's own source tree; this
     -- runs in under a second.
     WITH ast AS (
@@ -5373,6 +5439,24 @@ CREATE OR REPLACE MACRO ast_callees(
 --
 -- Module-level calls (no enclosing function) get caller = '<module>',
 -- caller_line = 0.
+--
+-- SEMANTICS: **direct, name-matched (NOT resolved)** — see 043.
+-- Despite the name, this does NOT take a function and find its callers. It emits
+-- ONE ROW PER CALL SITE in the corpus, labelled with its immediately enclosing
+-- function; "who calls F" is `WHERE callee = 'F'`, and that filter is a string
+-- match on the call expression's `name` — no import following, no scope-chain
+-- resolution, no receiver handling. So filtering `callee = 'speak'` returns every
+-- call spelled `speak`, including `animal.speak()` and same-named methods on
+-- unrelated classes. An over-approximation by name; 043 Part C is the fix.
+--
+-- Differs from the `::callers` pseudo-element in two ways, both pinned in
+-- test/sql/scope_resolution/callgraph_macros.test: (1) LEFT JOIN, so module-level calls survive
+-- as caller = '<module>' where ::callers drops them (that gap is why ::call-sites
+-- exists); (2) the grain is the CALL SITE, so a function calling F twice yields two
+-- rows, where ::callers returns DISTINCT caller-function nodes.
+-- Unlike ast_callees, `f.name` is NOT required non-empty, so a call inside an
+-- anonymous lambda is reported with caller = '' (empty), not '<module>' and not
+-- dropped — scope.function matched a real but unnamed function node.
 --
 -- Usage:
 --   SELECT * FROM ast_callers('src/**/*.py');

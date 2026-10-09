@@ -1,0 +1,394 @@
+# name: test/sql/scope_resolution/callgraph_macros.test
+# group: [scope_resolution]
+
+# Characterisation tests for the call-graph surface: the standalone table macros
+# ast_callees / ast_callers (which had NO test coverage at all — issue #203) and
+# the points where they provably DISAGREE with the ::callees / ::callers selector
+# pseudo-elements and the :calls / :called-by pseudo-classes.
+#
+# PURPOSE: this file is a safety net, not a specification of what the semantics
+# OUGHT to be. It pins the behaviour that exists today — "direct, name-matched
+# (not resolved)" per tracker/features/043 — so that the 043 Part A / 048 #6
+# call-graph work, or any future attempt to unify these overlapping spellings,
+# cannot silently change which rows come back.
+#
+# Every assertion below names actual values. None is of the `COUNT(*) >= 0`
+# shape (issue #202), which is true for every possible result and therefore
+# cannot fail.
+#
+# FIXTURE LOCATION — test/data/callgraph/, deliberately NOT test/data/python/.
+# Adding any .py file to test/data/python/ breaks exact-count assertions that glob
+# that directory — multi_file_edge_cases.test's `COUNT(DISTINCT file_path) = 25`
+# and core/glob_array_support.test's `python 3474 19`. That is what turned #211
+# red. Those counts are deliberately exact and are guards worth keeping, and they
+# have nothing to do with call graphs, so the fixture moved rather than the
+# expectation (same resolution as test/data/encoding/). The globs that DO reach
+# test/data/callgraph/ were checked and are all bounds — `COUNT(*) > 0`,
+# `COUNT(*) > 100`, `COUNT(DISTINCT file_path) > 0` in multi_file_edge_cases.test
+# — which adding a file cannot break. callgraph_direct.py stays in
+# test/data/python/: it predates those counts and is already inside the 25, so
+# moving it would break them too.
+#
+# LINE NUMBERS: the assertions below pin absolute start_line values from the
+# fixtures. Adding or removing a line in a fixture — including a COMMENT line
+# above the code — shifts them. Observed during #211: a 10-line comment added to
+# the fixture header moved every expected line by +10.
+#
+# ORDERING: ast_callees and ast_callers both ORDER BY (file_path, line) only, so
+# two calls on the SAME line come back in an unspecified order — observed to
+# differ between the two macros for css_selectors_test.py line 43. Every query
+# here therefore adds `callee` to its own ORDER BY. Do not remove it; without it
+# these assertions are flaky rather than wrong.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# ast_callees — Python, full row set
+# =============================================================================
+# `caller` comes from scope.function (the IMMEDIATE enclosing function), `callee`
+# is the call expression's bare name. Note `speak` and `fetch`: these are METHOD
+# calls (`animal.speak()`, `animal.fetch("ball")`) and are reported by the bare
+# method name with no receiver and no resolution — the name-match imprecision.
+
+query IIII
+SELECT caller, caller_line, callee, callee_line
+FROM ast_callees('test/data/python/css_selectors_test.py')
+ORDER BY callee_line, callee;
+----
+make_animal	33	Dog	35
+make_animal	33	Cat	37
+make_animal	33	Animal	38
+process_animals	41	print	43
+process_animals	41	speak	43
+process_animals	41	isinstance	44
+process_animals	41	fetch	45
+main	48	make_animal	49
+main	48	make_animal	50
+main	48	process_animals	51
+
+# The grain is the CALL SITE, not the (caller, callee) pair: main() calls
+# make_animal twice and gets two rows, distinguished only by callee_line.
+query I
+SELECT count(*) FROM ast_callees('test/data/python/css_selectors_test.py')
+WHERE caller = 'main' AND callee = 'make_animal';
+----
+2
+
+# =============================================================================
+# ast_callees is DIRECT (immediate scope), lambda-aware — #152
+# =============================================================================
+# outer() calls helper(); a lambda named `inner` calls helper2(); nested() calls
+# helper3(). Each call is attributed to its IMMEDIATE enclosing function, so
+# outer's only callee is helper — NOT the transitive {helper, helper2, helper3}.
+
+query IIII
+SELECT caller, caller_line, callee, callee_line
+FROM ast_callees('test/data/python/callgraph_direct.py')
+ORDER BY callee_line, callee;
+----
+outer	4	helper	5
+inner	6	helper2	6
+nested	7	helper3	8
+
+# =============================================================================
+# ast_callers — Python, and the '<module>' row ast_callees cannot produce
+# =============================================================================
+# sample_app.py calls main() at module level under `if __name__ == "__main__":`.
+# ast_callers LEFT-joins the enclosing function, so that call survives with
+# caller = '<module>' and caller_line = 0.
+
+query IIII
+SELECT caller, caller_line, callee, call_line
+FROM ast_callers('test/data/python/sample_app.py')
+WHERE callee = 'main'
+ORDER BY call_line;
+----
+<module>	0	main	163
+
+# ast_callees INNER-joins and requires a non-empty caller name, so the very same
+# call is absent entirely. This is the headline divergence between the two macros.
+query I
+SELECT count(*) FROM ast_callees('test/data/python/sample_app.py')
+WHERE callee = 'main';
+----
+0
+
+# =============================================================================
+# Anonymous enclosing scopes — where the two macros disagree again
+# =============================================================================
+# test/data/callgraph/anon_scope.py is built for this: an anonymous lambda (passed as an
+# argument, so there is no assignment target whose name could be inferred) calls
+# anon_target(). sitting_duck DOES infer a name for an assigned lambda, so
+# `bound = lambda: bound_target()` has caller 'bound' and is NOT affected.
+
+# ast_callees DROPS the anonymous-lambda call entirely: anon_target appears under
+# no caller at all. module_target is dropped too (module level).
+query IIII
+SELECT caller, caller_line, callee, callee_line
+FROM ast_callees('test/data/callgraph/anon_scope.py')
+ORDER BY callee_line, callee;
+----
+named	36	named_target	37
+uses_anon_lambda	40	sorted	42
+bound	45	bound_target	45
+calls_twice	48	twice_target	49
+calls_twice	48	twice_target	50
+
+# ast_callers keeps BOTH: the anonymous-lambda call with an EMPTY caller (not
+# '<module>' — scope.function matched a real but unnamed lambda node), and the
+# module-level call as '<module>'.
+# The empty caller is rendered here as '<EMPTY>' only because the sqllogictest
+# harness splits expected rows on tabs and cannot represent a leading empty
+# field. The assertion below pins caller = '' directly.
+query IIII
+SELECT CASE WHEN caller = '' THEN '<EMPTY>' ELSE caller END AS caller,
+       caller_line, callee, call_line
+FROM ast_callers('test/data/callgraph/anon_scope.py')
+ORDER BY call_line, callee;
+----
+named	36	named_target	37
+<EMPTY>	42	anon_target	42
+uses_anon_lambda	40	sorted	42
+bound	45	bound_target	45
+calls_twice	48	twice_target	49
+calls_twice	48	twice_target	50
+<module>	0	module_target	53
+
+# The anonymous-lambda caller is the EMPTY STRING, not NULL and not '<module>'.
+# COALESCE(f.name,'<module>') only fires when the LEFT JOIN found no function at
+# all; here it found the lambda, whose name is ''.
+query III
+SELECT caller = '' AS is_empty_string, caller IS NULL AS is_null, callee
+FROM ast_callers('test/data/callgraph/anon_scope.py')
+WHERE callee = 'anon_target';
+----
+true	false	anon_target
+
+# Stated as a single difference: ast_callers sees 7 call sites, ast_callees 5.
+query II
+SELECT
+    (SELECT count(*) FROM ast_callers('test/data/callgraph/anon_scope.py')),
+    (SELECT count(*) FROM ast_callees('test/data/callgraph/anon_scope.py'));
+----
+7	5
+
+# =============================================================================
+# ast_callers / ast_callees across languages
+# =============================================================================
+# scope.function must be populated by each language adapter for these macros to
+# return anything at all, so this is coverage of the extraction layer too.
+
+# JavaScript — method calls reported by bare name (log, json, area, describe)
+query IIII
+SELECT caller, caller_line, callee, call_line
+FROM ast_callers('test/data/javascript/css_selectors_test.js')
+ORDER BY call_line, callee;
+----
+greet	3	log	4
+fetchShape	51	fetch	53
+fetchShape	51	json	54
+fetchShape	51	error	57
+processShapes	62	area	64
+processShapes	62	describe	65
+processShapes	62	log	65
+
+# Go — a method on a value receiver (String) is a caller like any other function
+query IIII
+SELECT caller, caller_line, callee, call_line
+FROM ast_callers('test/data/go/css_selectors_test.go')
+ORDER BY call_line, callee;
+----
+String	20	Sprintf	21
+ProcessShapes	42	Area	44
+ProcessShapes	42	Area	45
+ProcessShapes	42	Println	45
+
+# Rust — two `powi` calls on one line, and `Point::new` reported as bare `new`
+query IIII
+SELECT caller, caller_line, callee, callee_line
+FROM ast_callees('test/data/rust/css_selectors_test.rs')
+ORDER BY callee_line, callee;
+----
+distance	13	powi	14
+distance	13	powi	14
+distance	13	sqrt	14
+create_point	37	new	38
+
+# =============================================================================
+# The macros vs the selector pseudo-elements — three real divergences
+# =============================================================================
+
+# (1) GRAIN. calls_twice calls twice_target twice. ::callers returns DISTINCT
+# caller-FUNCTION nodes (1 row); ast_callers returns one row per CALL SITE (2).
+query I
+SELECT count(*) FROM ast_select('test/data/callgraph/anon_scope.py',
+    '.func#twice_target::callers');
+----
+1
+
+query I
+SELECT count(*) FROM ast_callers('test/data/callgraph/anon_scope.py')
+WHERE callee = 'twice_target';
+----
+2
+
+# (2) ANONYMOUS SCOPES are not recoverable through ::callees either. It keys on
+# `scope.function = m.node_id`, so the call inside the anonymous lambda belongs to
+# the LAMBDA, not to uses_anon_lambda — and the lambda has no name to address it
+# with. uses_anon_lambda's only direct callee is `sorted`.
+query II
+SELECT name, start_line FROM ast_select('test/data/callgraph/anon_scope.py',
+    'function_definition#uses_anon_lambda::callees')
+ORDER BY start_line, name;
+----
+sorted	42
+
+# (3) NAME-MATCHED, NOT RESOLVED. `speak` is defined three times in
+# css_selectors_test.py (Animal line 8, Dog 16, Cat 26) and called once, as
+# `animal.speak()` on line 43. `.func#speak` matches all three definitions; the
+# single call site is attributed to every one of them by name, and DISTINCT
+# collapses the result to the one enclosing function. No resolver decides WHICH
+# speak was meant — that is 043 Part C.
+query III
+SELECT name, type, start_line FROM ast_select('test/data/python/css_selectors_test.py',
+    '.func#speak::callers')
+ORDER BY start_line;
+----
+process_animals	function_definition	41
+
+query III
+SELECT caller, caller_line, call_line
+FROM ast_callers('test/data/python/css_selectors_test.py')
+WHERE callee = 'speak'
+ORDER BY call_line;
+----
+process_animals	41	43
+
+# =============================================================================
+# :calls / :called-by pseudo-classes on the anonymous-scope fixture
+# =============================================================================
+# These are already covered on callgraph_direct.py in
+# test/sql/ast_select_pseudo_classes.test (lines ~321-362). What is added here is
+# the module-level and anonymous-scope behaviour that fixture does not contain.
+
+# 7 call expressions in the file, but only 6 are inside some function scope —
+# module_target()'s call has scope.function = NULL.
+query II
+SELECT
+    (SELECT count(*) FROM ast_select('test/data/callgraph/anon_scope.py', '.call')),
+    (SELECT count(*) FROM ast_select('test/data/callgraph/anon_scope.py', '.call:called-by'));
+----
+7	6
+
+# :called-by(uses_anon_lambda) matches ONLY the `sorted` call. anon_target()'s
+# immediate scope is the lambda, not uses_anon_lambda — the #152 direct ruling.
+query I
+SELECT count(*) FROM ast_select('test/data/callgraph/anon_scope.py',
+    '.call:called-by(uses_anon_lambda)');
+----
+1
+
+# :calls is direct and EXISTS-shaped: calls_twice calls twice_target (twice), and
+# the selector returns the one matching FUNCTION node, not one row per call.
+query I
+SELECT count(*) FROM ast_select('test/data/callgraph/anon_scope.py',
+    'function_definition#calls_twice:calls(twice_target)');
+----
+1
+
+# =============================================================================
+# DEFINITION AND SCOPE COUNTS — the gap #214 exposed in this file
+# =============================================================================
+# Everything above asserts over CALLS and caller attribution and deliberately
+# says nothing about definition counts. That is exactly why all 186 assertions
+# above survived #214, a change that provably moved `.fn` on both of these
+# fixtures. The gap is closed here, in the file that found it.
+#
+# WHAT #214 DID (verified against a pre-#214 binary, both directions):
+# a raw tree-sitter type string is not a unique key — `def` names both the
+# function-definition rule and the anonymous keyword token that introduces it,
+# so the keyword leaf inherited the DEFINITION's config and counted as a second
+# definition. #214 clears NAME_ROLE and IS_SCOPE on unnamed grammar tokens and
+# marks them IS_SYNTAX_ONLY.
+#
+# WHY THESE NUMBERS ARE RIGHT, not merely current: callgraph_direct.py contains
+# exactly three functions a human would name — outer, the lambda inner, and
+# nested. `.fn` returned 4 before #214 and returns 3 now, so 4 was wrong. That
+# agreement with a reading of the source is the oracle here, not the measurement.
+#
+# ALL FIVE ASSERTIONS BELOW HELD A DIFFERENT VALUE PRE-#214, measured against a
+# pre-#214 binary — so none of them is vacuous, and the demonstration is a real
+# code change rather than a synthetic perturbation:
+#       .fn anon_scope.py           12  ->  10
+#       .fn callgraph_direct.py      4  ->   3
+#       flag row (4 cols)   11 8 3 3  ->  11 10 1 1
+#       surviving definition   3 rows  ->   1 row   (line 42 was counted TWICE,
+#                                                    once for the rule node and
+#                                                    once for its keyword leaf)
+#       direct contrast          2  1  ->   3  0
+# Independently, making the named lambda `bound` anonymous moves the flag row to
+# 12 10 2 2 and the surviving-definition query to 2 rows.
+#
+# COUPLED TO #214 AND #215 — these may legitimately move again. The counts are
+# sensitive to the anonymous-token rule, which #214 deliberately scoped narrowly
+# (it does NOT make "unnamed implies syntax-only" universal, because that would
+# flip operator tokens that prune('syntax') would then delete). #215 tracks the
+# remaining type-string collisions — 19 of them — and needs namedness in the
+# config key to fix. A change there could move these legitimately. If one of
+# these four fails, check #215 before assuming a regression.
+
+# `.fn` counts one node per function, not one per function plus its keyword leaf.
+# anon_scope.py: 8 `def` functions + 2 lambdas (one anonymous, one named `bound`).
+query I
+SELECT count(*) FROM ast_select('test/data/callgraph/anon_scope.py', '.fn');
+----
+10
+
+# callgraph_direct.py: outer, the lambda `inner`, nested. Was 4 before #214.
+query I
+SELECT count(*) FROM ast_select('test/data/python/callgraph_direct.py', '.fn');
+----
+3
+
+# The flag-level view of the same thing. NOTE the metric: "def/lambda-typed nodes
+# whose NAME FIELD is empty" is NOT tree-sitter namedness — the genuine anonymous
+# lambda is a `named: true` RULE node that simply has no name to infer, which is
+# why it is counted here and yet correctly keeps its definition role.
+#
+# 11 such nodes in anon_scope.py: 10 are syntax-only keyword tokens (8 `def`,
+# 2 `lambda`), and exactly 1 is a real definition — the anonymous lambda at
+# line 42, which is also still a scope. Before #214 the def-role count was 3,
+# because the two `lambda` keyword leaves were counted as definitions too.
+query IIII
+SELECT
+    count(*) AS empty_named_def_or_lambda,
+    count(*) FILTER (is_syntax_only(flags)) AS syntax_only,
+    count(*) FILTER (is_name_definition(flags)) AS still_a_definition,
+    count(*) FILTER (is_scope(flags)) AS still_a_scope
+FROM read_ast('test/data/callgraph/anon_scope.py')
+WHERE type IN ('def', 'lambda') AND name = '';
+----
+11	10	1	1
+
+# The surviving definition is the anonymous lambda, identified positionally so a
+# future change cannot satisfy this by keeping some *other* node's role.
+query II
+SELECT type, start_line FROM read_ast('test/data/callgraph/anon_scope.py')
+WHERE type IN ('def', 'lambda') AND name = '' AND is_name_definition(flags);
+----
+lambda	42
+
+# The contrast that makes the rule legible: in callgraph_direct.py EVERY lambda
+# is named (`inner` is inferred from its assignment), so after #214 nothing with
+# an empty name retains a definition role there — 3 syntax-only, 0 definitions.
+query II
+SELECT
+    count(*) FILTER (is_syntax_only(flags)) AS syntax_only,
+    count(*) FILTER (is_name_definition(flags)) AS still_a_definition
+FROM read_ast('test/data/python/callgraph_direct.py')
+WHERE type IN ('def', 'lambda') AND name = '';
+----
+3	0
