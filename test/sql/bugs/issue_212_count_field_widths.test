@@ -126,12 +126,12 @@ WHERE c.depth <> p.depth + 1;
 ----
 0
 
-# And the chain really is deeper than 255 at a single node, not merely deep
-# somewhere: there is exactly one node at each depth below the assignment.
+# And the tree really is one deep chain, not merely deep somewhere: every
+# depth from 0 to max is occupied, with no gaps. Stated as contiguity rather
+# than as a node count per level, which would pin the grammar's shape for a
+# binary_operator chain rather than anything #212 is about.
 query I
-SELECT count(*) FROM (
-  SELECT depth, count(*) AS n FROM read_ast('__TEST_DIR__/i212_deep.py', peek := 'none')
-  WHERE depth BETWEEN 256 AND 3000 GROUP BY depth HAVING count(*) <> 3
-);
+SELECT count(DISTINCT depth) - max(depth) - 1
+FROM read_ast('__TEST_DIR__/i212_deep.py', peek := 'none');
 ----
 0
