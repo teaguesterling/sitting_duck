@@ -6,7 +6,7 @@ measured (see "4b part 1" below); per-node templates for *synthesized / modified
 nodes are not started. On the v2.0.0 list; the work was described in 041 as future
 steps but never tracked as a milestone (this is it).
 **Related:** 041 (the PoC and the fidelity path), 045 / #174 (level 5 — `COPY ... TO
-(FORMAT ast)`), shipped in v1.15.0 (default rules, 27 languages) and v1.15.1 (style
+(FORMAT ast)`, **landed 2026-10-08**), shipped in v1.15.0 (default rules, 27 languages) and v1.15.1 (style
 presets, custom rules tables, synthetic AST layout).
 
 ## Where the levels stand
@@ -21,8 +21,10 @@ together they are what "level 4" means:
 | 3a. Byte-exact round trip | reproduce an *unmodified* tree byte for byte under `source := 'full'` | **done** — `ast_unparse_exact*`, 26/26 languages |
 | 3b. Node templates | per-node-type unparse templates — emit a *modified* tree with exact layout | **not done** |
 
-Level 5 (`045` / #174) is already tracked and is "Planned (Phase 6)". It writes
-unparsed output to disk; it does not improve fidelity, so it sits on top of this.
+Level 5 (`045` / #174) is **landed (2026-10-08)**. It writes unparsed output to
+disk and does not improve fidelity, so it sat on top of this — and it turned out
+not to need 3b at all: it writes a splice of the original bytes or it refuses, so
+there is no synthesized node whose layout a template would decide.
 
 ## 4a — leaf-text coverage (correctness, not polish)
 
@@ -380,11 +382,19 @@ characters and mixed line endings. The remaining order is:
    AST rather than a CST. See "4b part 1" above.
 4. **4b part 2** — node templates for synthesized / modified nodes, designed
    against the splice that part 1 established. Still open.
-5. **045/#174** — the COPY sink. Gated on 4a, which has landed, so this is now
-   available to start. Writing lossy output to disk is worse than returning it in a
-   result set, because it looks like a file you can keep. 4b part 1 gives it a
-   byte-exact writer for the `source := 'full'` case, and the single-file /
-   single-language error semantics it needs are already enforced there.
+5. ~~**045/#174** — the COPY sink.~~ **LANDED 2026-10-08.**
+   `COPY (<query>) TO '<path>' (FORMAT ast)`, with `LANGUAGE` optional. It is the
+   same writer: a `CopyFunction::plan` hook rewrites the statement into a
+   `FORMAT blob` COPY over `ast_unparse_exact_splice`, so there is exactly one
+   splice and one set of guards in the codebase — no C++ reimplementation, and no
+   normalising fallback. **Byte-exact or refuse**, which is stricter than "say
+   which": `PRESET`/`INDENT`/`LINE_ENDINGS`/`STRIP_COMMENTS` are rejected with a
+   message naming the explicit lossy recipe, so writing normalised text to disk
+   requires spelling out `ast_unparse` by name. One new primitive,
+   `ast_source_bytes(path) -> BLOB`, because a table function cannot take a
+   per-row path. 4b part 2 is **not** a prerequisite: nothing is synthesized, so
+   there is no layout to template. See `045` and
+   `test/sql/ast_copy_format.test` (140 assertions).
 
 Note the stated textual law takes a *path*, so the file-backed case needs only a
 file re-read with honest staleness detection — not per-node text retention. Per-node

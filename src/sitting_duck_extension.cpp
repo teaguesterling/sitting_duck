@@ -28,6 +28,8 @@ void RegisterASTSemanticAliasesFunction(ExtensionLoader &loader);
 void RegisterASTTypeMapFunction(ExtensionLoader &loader);
 void RegisterLanguageRegistrationFunction(ExtensionLoader &loader);
 void RegisterUnparseRulesFunction(ExtensionLoader &loader);
+void RegisterASTSourceBytesFunction(ExtensionLoader &loader);
+void RegisterASTCopyFunction(ExtensionLoader &loader);
 // Temporarily disabled:
 // void RegisterASTObjectsFunction(ExtensionLoader &loader);
 // void RegisterASTHelperFunctions(ExtensionLoader &loader);
@@ -100,8 +102,17 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// Register ast_unparse_rules() table function (must be before RegisterASTSQLMacros)
 	RegisterUnparseRulesFunction(loader);
 
+	// Register ast_source_bytes() -- the per-row byte substrate the byte-exact
+	// unparse splice needs (read_blob() cannot take a per-row path).
+	RegisterASTSourceBytesFunction(loader);
+
 	// Register SQL macros for natural AST querying (depends on functions above)
 	RegisterASTSQLMacros(loader);
+
+	// Register COPY ... TO (FORMAT ast): the byte-exact unparse sink (045/#174).
+	// Registered after the macros because its rewrite calls
+	// ast_unparse_exact_splice, and after ast_source_bytes for the same reason.
+	RegisterASTCopyFunction(loader);
 
 	// Register pragma to enable dynamic custom predicate dispatch via func_apply
 	loader.RegisterFunction(

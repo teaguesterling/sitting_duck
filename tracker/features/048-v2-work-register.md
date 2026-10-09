@@ -14,13 +14,16 @@ Its job is to be the answer to "what is actually left, and what can we do today?
 **Updated 2026-10-08:** rows 1, 2 and 10 landed on 2026-10-07 (PRs #199, #198, #195),
 i.e. the first three items of the recommended order below are done. The order has been
 re-cut accordingly; the original ordering rationale is preserved beneath it.
+**Also 2026-10-08:** row 4 (the COPY sink) landed. Its ordering note below said it
+"wants 4b's fidelity first in practice" — that turned out not to hold, because the
+sink refuses rather than normalising, so there is no lossy output for 4b to improve.
 
 | # | Piece | Tracked in | Milestone | v1.x-doable now? |
 |---|---|---|---|---|
 | 1 | **Unparse: leaf-text coverage** (4a) | `047` | M4 cap. 3 | **LANDED** PR #199 — 134 of 348 grammar-derived gaps closed; 214 sql `keyword_*` outstanding |
 | 2 | **Unparse: byte offsets under `source := 'full'`** | `047`, RFC substrate note | M1 contract | **LANDED** PR #198 — `start_byte`/`end_byte`, 0-based half-open |
 | 3 | **Unparse: node templates** (4b) | `047` | M4 cap. 3 | Partly — design now, needs #2 first |
-| 4 | **`COPY … TO (FORMAT ast)`** (level 5) | `045`, #174 | M4 cap. 3 | After #1 |
+| 4 | **`COPY … TO (FORMAT ast)`** (level 5) | `045`, #174 | M4 cap. 3 | **LANDED 2026-10-08** — byte-exact or refuse; a `CopyFunction::plan` rewrite over `ast_unparse_exact_splice`, so no second splice. 4b was *not* a prerequisite |
 | 5 | **`ast_select` → C++** | `046`, #160, #117, #164 | independent | Yes, but do #6 first — see the #160 measurement below |
 | 6 | **Call-graph rewrite** (seeded join) | `043` Part A | independent | **Yes — SQL only, fixes #160 + #164** |
 | 7 | **Transitive call closure** (`:reaches`) | `043` Part B | M4 | Deferred — C++ or depth-capped SQL |
@@ -214,9 +217,11 @@ Steps 1–3 of the original order (#10, #1, #2) **landed on 2026-10-07**. What r
 2. **#3 unparse node templates (4b).** Now unblocked on both counts — the byte-exact-vs-
    normalized question was settled 2026-10-07 and the substrate (#2) is in. See `047`.
 3. **#11 conformance kit**, continuously — it is the safety net for M2/M3.
-4. **#4 `COPY … TO (FORMAT ast)`.** Gated on #1, which has landed, so it is now
-   available to start — but it writes lossy output to disk, so it wants 4b's fidelity
-   first in practice.
+4. ~~**#4 `COPY … TO (FORMAT ast)`.**~~ **LANDED 2026-10-08.** The worry recorded
+   here — "it writes lossy output to disk, so it wants 4b's fidelity first in
+   practice" — was answered by making lossy output impossible rather than better:
+   the sink is byte-exact or it refuses, and the normalising unparser is reachable
+   only by naming it. 4b part 2 is therefore not a prerequisite.
 5. **#1 remainder:** sql's 214 `keyword_*` leaves, deferred for a per-keyword semantic
    classification pass; and #197, the `duckdb` adapter's unrelated `children_count`
    bug which breaks its unparse entirely.
