@@ -73,6 +73,16 @@ DEF_TYPE("anonymous_function", DEFINITION_FUNCTION | SemanticRefinements::Functi
 DEF_TYPE("annotated_lambda", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Lambda literal - `{ params -> body }`
+///
+/// Issue #208: `lambda_literal` was ALSO declared in the structure section as
+/// `ORGANIZATION_BLOCK | SEQUENTIAL` with no flags, so whether a kotlin lambda
+/// was a function or a block depended on `unordered_map` insertion order. This
+/// declaration is the one that was winning and the one that is kept: a
+/// `lambda_literal` is kotlin's anonymous-function form, it sits with
+/// `anonymous_function` and `annotated_lambda` which are classified
+/// identically, and only this row's ARROW_FUNCTION native strategy populates
+/// the lambda's parameters. The removed row's own comment read "Lambda literal
+/// body" — the block it wanted is `function_body` / `block`, not this node.
 DEF_TYPE("lambda_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Primary constructor - in class header
@@ -564,11 +574,16 @@ DEF_TYPE("multiline_comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 
 /**
  * @name Modifier Keywords
+ *
+ * Issue #208: no row here may repeat a raw_type already declared above. The
+ * `annotation` row was such a repeat — kotlin's grammar has both a named
+ * `annotation` rule (`@Annotation`, declared in the annotations section) and
+ * an anonymous `annotation` modifier keyword, and a second entry for the same
+ * map key is silently dropped by the loader. It was removed.
  * @{
  */
 DEF_TYPE("abstract", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("actual", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("annotation", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("by", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("const", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("crossinline", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -682,9 +697,6 @@ DEF_TYPE("class_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::S
 
 /// @brief Block - statement block
 DEF_TYPE("block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, ASTNodeFlags::IS_SCOPE)
-
-/// @brief Lambda literal body
-DEF_TYPE("lambda_literal", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 /// @brief Function body
 DEF_TYPE("function_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)

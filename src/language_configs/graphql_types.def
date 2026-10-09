@@ -592,6 +592,14 @@ DEF_TYPE(",", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 /**
  * @defgroup gql_keywords Keywords
  * @brief GraphQL reserved keywords
+ *
+ * Issue #208: a raw_type declared here must not already be declared above.
+ * `type` and `directive` were: the graphql grammar uses each string for both a
+ * named rule (`type` the type reference at @ref gql_type_refs, `directive` the
+ * directive usage at @ref gql_directives) and the anonymous keyword token, and
+ * `node_configs` is keyed by that string alone, so the keyword rows were
+ * silently dropped by the loader and have been removed. Before adding a
+ * keyword row, check node-types.json for a `named: true` twin.
  * @{
  */
 
@@ -609,9 +617,6 @@ DEF_TYPE("fragment", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYW
 
 /// @brief On keyword - type condition
 DEF_TYPE("on", PARSER_SYNTAX, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief Type keyword
-DEF_TYPE("type", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /// @brief Interface keyword
 DEF_TYPE("interface", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -633,9 +638,6 @@ DEF_TYPE("schema", DEFINITION_MODULE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /// @brief Extend keyword
 DEF_TYPE("extend", PARSER_SYNTAX, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief Directive keyword
-DEF_TYPE("directive", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /// @brief Implements keyword
 DEF_TYPE("implements", PARSER_SYNTAX, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
