@@ -65,8 +65,8 @@ void ASTNode::populate_from_structured(const StructuredASTNode &structured_node)
 	// Source location - copy from structured to flat legacy fields
 	start_line = structured_node.source.start_line;
 	end_line = structured_node.source.end_line;
-	start_column = static_cast<uint16_t>(structured_node.source.start_column);
-	end_column = static_cast<uint16_t>(structured_node.source.end_column);
+	start_column = structured_node.source.start_column;
+	end_column = structured_node.source.end_column;
 
 	// Tree structure - copy from structured to flat fields
 	parent_id = structured_node.structure.parent_id;
@@ -77,10 +77,10 @@ void ASTNode::populate_from_structured(const StructuredASTNode &structured_node)
 
 	// Also populate legacy flat fields for compatibility
 	parent_index = parent_id;
-	node_depth = static_cast<uint8_t>(depth);
+	node_depth = depth;
 	legacy_sibling_index = sibling_index;
-	legacy_children_count = static_cast<uint16_t>(children_count);
-	legacy_descendant_count = static_cast<uint16_t>(descendant_count);
+	legacy_children_count = children_count;
+	legacy_descendant_count = descendant_count;
 	node_index = static_cast<int64_t>(node_id);
 
 	// Context/semantic info

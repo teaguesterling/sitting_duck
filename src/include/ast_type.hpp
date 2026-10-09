@@ -229,18 +229,22 @@ struct ASTNode {
 	int64_t node_index = 0;           // Position in depth-first traversal
 	int64_t parent_index = -1;        // Parent's position (-1 for root)
 	int32_t legacy_sibling_index = 0; // Position among siblings (legacy)
-	uint8_t node_depth = 0;           // Depth from root (legacy)
+	uint32_t node_depth = 0;          // Depth from root (legacy). uint32 to match `depth` (#212).
 
 	// Legacy file position fields (flat)
 	int64_t start_line = 0;
 	int64_t end_line = 0;
-	uint16_t start_column = 0;
-	uint16_t end_column = 0;
+	uint32_t start_column = 0;
+	uint32_t end_column = 0;
 
 	// Legacy subtree fields (flat)
-	uint8_t tree_depth = 0;               // Max depth of subtree rooted here
-	uint16_t legacy_children_count = 0;   // Number of children (legacy)
-	uint16_t legacy_descendant_count = 0; // Total descendants (legacy)
+	// These four legacy mirrors are what the row emitters actually write into the
+	// UINTEGER output columns, so their width IS the width users see. They were
+	// uint8/uint16 and silently wrapped: descendant_count at 65536 nodes, depth at
+	// 256 levels, columns at 65536 characters (#212). All UINTEGER on the SQL side.
+	uint32_t tree_depth = 0;              // Max depth of subtree rooted here
+	uint32_t legacy_children_count = 0;   // Number of children (legacy)
+	uint32_t legacy_descendant_count = 0; // Total descendants (legacy)
 
 	// FULLY FLATTENED FIELDS (no nested structs except native context)
 
@@ -309,18 +313,18 @@ struct ASTNode {
 		// Copy from flat source fields to legacy file position fields
 		start_line = static_cast<int64_t>(source_start_line);
 		end_line = static_cast<int64_t>(source_end_line);
-		start_column = static_cast<uint16_t>(source_start_column);
-		end_column = static_cast<uint16_t>(source_end_column);
+		start_column = source_start_column;
+		end_column = source_end_column;
 
 		// Copy from structure fields to flat legacy tree fields
 		parent_index = parent_id;
-		node_depth = static_cast<uint8_t>(depth);
+		node_depth = depth;
 		legacy_sibling_index = sibling_index;
 		node_index = static_cast<int64_t>(node_id);
 
 		// Copy from structure fields to flat legacy subtree fields
-		legacy_children_count = static_cast<uint16_t>(children_count);
-		legacy_descendant_count = static_cast<uint16_t>(descendant_count);
+		legacy_children_count = children_count;
+		legacy_descendant_count = descendant_count;
 
 		// Legacy name and semantic info references flat fields
 		// Note: These legacy fields will be removed in a future version
