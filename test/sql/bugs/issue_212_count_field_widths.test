@@ -1,0 +1,137 @@
+# name: test/sql/bugs/issue_212_count_field_widths.test
+# group: [bugs]
+
+# Issue #212: the emitted structural columns were stored through narrow legacy
+# mirrors in ASTNode and wrapped modulo their width. The canonical fields were
+# always correct uint32s; the row emitters wrote the mirrors, so the mirror
+# width WAS the width users saw. Every emitted column is UINTEGER on the SQL
+# side, so nothing but the C++ field width was ever the limit.
+#
+# Measured on the pre-fix binary (the control for each assertion below):
+#
+#   field                   mirror    fixture                 before -> after
+#   descendant_count        uint16    100 001-node tree        34 464 -> 100 000
+#   children_count          uint16    70 000 sibling stmts      4 464 ->  70 000
+#   depth / node_depth      uint8     3 000-term expression        255 ->   3 003
+#
+# Each "before" is exactly the true value minus 2^16 (or clamped at 2^8 - 1 for
+# depth, since every deeper node wraps into the same range), which is what
+# makes this a width bug rather than a counting bug: #205 already proved the
+# counts themselves are derived correctly from parent_id.
+#
+# The serious half is descendant_count: CLAUDE.md recommends
+# `node_id BETWEEN x AND x + descendant_count` as the O(1) subtree idiom, and
+# with the wrap that returned 34 465 of 100 001 rows with no error at all.
+# ast_unparse_exact / COPY TO (FORMAT ast) were the only consumers that failed
+# loudly, because their completeness guard compares row count against
+# root.descendant_count; that half is pinned in test/sql/ast_copy_format.test.
+#
+# start_column / end_column had the same uint16 mirror but no user-visible
+# symptom: read_ast emits columns from source_start_column / source_end_column
+# (uint32), and parse_ast_list's FULL branch is unreachable from SQL. They are
+# widened with the rest so the latent truncation is gone before that branch
+# becomes reachable -- there is deliberately no assertion for them here,
+# because there is no path that would exercise one.
+
+require sitting_duck
+
+# ---------------------------------------------------------------------------
+# 1. descendant_count past 2^16
+# ---------------------------------------------------------------------------
+
+# 20 000 statements, 100 001 nodes. Before the fix the root reported 34 464.
+statement ok
+COPY (SELECT encode(repeat('x = 1' || chr(10), 20000)) AS b) TO '__TEST_DIR__/i212_wide.py' (FORMAT blob);
+
+query III
+SELECT count(*) AS n_rows,
+       (SELECT descendant_count FROM read_ast('__TEST_DIR__/i212_wide.py', peek := 'none')
+        WHERE depth = 0) AS root_dc,
+       count(*) - 1 = (SELECT descendant_count FROM read_ast('__TEST_DIR__/i212_wide.py', peek := 'none')
+                       WHERE depth = 0) AS root_spans_whole_file
+FROM read_ast('__TEST_DIR__/i212_wide.py', peek := 'none');
+----
+100001	100000	true
+
+# The idiom, not just the number: the root's subtree range must select every
+# row. Before the fix this returned 34 465 and raised nothing.
+query II
+SELECT (SELECT count(*)
+        FROM read_ast('__TEST_DIR__/i212_wide.py', peek := 'none') n,
+             (SELECT node_id AS r, descendant_count AS d
+              FROM read_ast('__TEST_DIR__/i212_wide.py', peek := 'none')
+              WHERE depth = 0) root
+        WHERE n.node_id BETWEEN root.r AND root.r + root.d) AS subtree_rows,
+       (SELECT count(*) FROM read_ast('__TEST_DIR__/i212_wide.py', peek := 'none')) AS n_rows;
+----
+100001	100001
+
+# No node may report more descendants than there are nodes after it, which is
+# the property the wrap violated at the root and nowhere else.
+query I
+SELECT count(*) FROM read_ast('__TEST_DIR__/i212_wide.py', peek := 'none')
+WHERE node_id + descendant_count >= (SELECT count(*) FROM read_ast('__TEST_DIR__/i212_wide.py', peek := 'none'));
+----
+0
+
+# parse_ast_list shares the mirrors and was wrong identically (34 464).
+query II
+SELECT max(n.descendant_count) AS max_dc, count(*) AS n
+FROM (SELECT unnest(parse_ast_list(repeat('x = 1' || chr(10), 20000), 'python')) AS n);
+----
+100000	100001
+
+# ---------------------------------------------------------------------------
+# 2. children_count past 2^16
+# ---------------------------------------------------------------------------
+
+# 70 000 module-level statements -> the module has 70 000 direct children.
+# `pass` keeps the tree at 140 001 nodes rather than 350 001. Before the fix
+# the module reported 4 464.
+statement ok
+COPY (SELECT encode(repeat('pass' || chr(10), 70000)) AS b) TO '__TEST_DIR__/i212_children.py' (FORMAT blob);
+
+query II
+SELECT children_count,
+       children_count = (SELECT count(*) FROM read_ast('__TEST_DIR__/i212_children.py', peek := 'none')
+                         WHERE depth = 1) AS matches_actual_children
+FROM read_ast('__TEST_DIR__/i212_children.py', peek := 'none')
+WHERE depth = 0;
+----
+70000	true
+
+# ---------------------------------------------------------------------------
+# 3. depth past 2^8
+# ---------------------------------------------------------------------------
+
+# `y = 1+1+...+1` with 3 000 terms: python's binary_operator is left
+# recursive, so the chain nests ~3 000 deep. Before the fix max(depth) was
+# exactly 255 and the deepest 2 700-odd nodes all reported depths in [0, 255].
+statement ok
+COPY (SELECT encode('y = ' || repeat('1+', 3000) || '1' || chr(10)) AS b) TO '__TEST_DIR__/i212_deep.py' (FORMAT blob);
+
+query III
+SELECT max(depth) AS max_depth, count(*) AS n_rows, max(depth) > 255 AS past_uint8
+FROM read_ast('__TEST_DIR__/i212_deep.py', peek := 'none');
+----
+3003	9006	true
+
+# Depth must still be exactly one more than the parent's at every node, all the
+# way down -- the #205 invariant, re-checked past the old ceiling.
+query I
+SELECT count(*)
+FROM read_ast('__TEST_DIR__/i212_deep.py', peek := 'none') c
+JOIN read_ast('__TEST_DIR__/i212_deep.py', peek := 'none') p ON c.parent_id = p.node_id
+WHERE c.depth <> p.depth + 1;
+----
+0
+
+# And the chain really is deeper than 255 at a single node, not merely deep
+# somewhere: there is exactly one node at each depth below the assignment.
+query I
+SELECT count(*) FROM (
+  SELECT depth, count(*) AS n FROM read_ast('__TEST_DIR__/i212_deep.py', peek := 'none')
+  WHERE depth BETWEEN 256 AND 3000 GROUP BY depth HAVING count(*) <> 3
+);
+----
+0

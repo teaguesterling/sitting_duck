@@ -115,21 +115,21 @@ ASTNode ASTNode::FromValue(const Value &value) {
 	auto &file_pos_struct = StructValue::GetChildren(struct_value[3]);
 	node.start_line = file_pos_struct[0].GetValue<int64_t>();
 	node.end_line = file_pos_struct[1].GetValue<int64_t>();
-	node.start_column = file_pos_struct[2].GetValue<uint16_t>();
-	node.end_column = file_pos_struct[3].GetValue<uint16_t>();
+	node.start_column = file_pos_struct[2].GetValue<uint32_t>();
+	node.end_column = file_pos_struct[3].GetValue<uint32_t>();
 
 	// Tree position struct
 	auto &tree_pos_struct = StructValue::GetChildren(struct_value[4]);
 	node.node_index = tree_pos_struct[0].GetValue<int64_t>();
 	node.parent_index = tree_pos_struct[1].IsNull() ? -1 : tree_pos_struct[1].GetValue<int64_t>();
 	node.legacy_sibling_index = tree_pos_struct[2].GetValue<int32_t>();
-	node.node_depth = tree_pos_struct[3].GetValue<uint8_t>();
+	node.node_depth = tree_pos_struct[3].GetValue<uint32_t>();
 
 	// Subtree info struct
 	auto &subtree_struct = StructValue::GetChildren(struct_value[5]);
-	node.tree_depth = subtree_struct[0].GetValue<uint8_t>();
-	node.legacy_children_count = subtree_struct[1].GetValue<uint16_t>();
-	node.legacy_descendant_count = subtree_struct[2].GetValue<uint16_t>();
+	node.tree_depth = subtree_struct[0].GetValue<uint32_t>();
+	node.legacy_children_count = subtree_struct[1].GetValue<uint32_t>();
+	node.legacy_descendant_count = subtree_struct[2].GetValue<uint32_t>();
 
 	// Content preview
 	node.peek = struct_value[6].GetValue<string>();
@@ -254,7 +254,7 @@ void ASTType::ParseFile(const string &source_code, TSParser *parser) {
 			stack.pop_back();
 
 			// Calculate descendant count by summing children + their descendants
-			int32_t descendant_count = 0;
+			uint32_t descendant_count = 0;
 			int64_t current_node_id = nodes[entry.node_index].node_id;
 
 			for (const auto &node : nodes) {

@@ -163,13 +163,15 @@ SELECT (SELECT content FROM read_blob('test/data/python/unicode.py'))
 true
 
 # A file far larger than DuckDB's string-inlining threshold and than one
-# vector: 60 000 bytes, 50 001 nodes, written as one BLOB in one row. Built
+# vector: 120 000 bytes, 100 001 nodes, written as one BLOB in one row. Built
 # here so the test is hermetic.
+#
+# The node count is deliberately above 65 536: until #212 was fixed this file
+# was REFUSED, because the completeness guard reads root.descendant_count and
+# that value wrapped (100 000 - 65 536 = 34 464). The size is the regression
+# test -- do not lower it.
 statement ok
-COPY (SELECT encode(repeat('x = 1' || chr(10), 10000)) AS b) TO '__TEST_DIR__/big.py' (FORMAT blob);
-
-statement ok
-COPY (SELECT encode(repeat('x = 1' || chr(10), 20000)) AS b) TO '__TEST_DIR__/huge.py' (FORMAT blob);
+COPY (SELECT encode(repeat('x = 1' || chr(10), 20000)) AS b) TO '__TEST_DIR__/big.py' (FORMAT blob);
 
 statement ok
 COPY (FROM read_ast('__TEST_DIR__/big.py', source := 'full', peek := 'none'))
@@ -180,42 +182,26 @@ SELECT (SELECT octet_length(content) FROM read_blob('__TEST_DIR__/rt_big.py')),
        (SELECT content FROM read_blob('__TEST_DIR__/big.py'))
      = (SELECT content FROM read_blob('__TEST_DIR__/rt_big.py'));
 ----
-60000	true
+120000	true
 
 # ---------------------------------------------------------------------------
-# PINNED UPSTREAM LIMIT, found while writing this file: `descendant_count` is
-# computed as a uint32 and then stored through a uint16 field
-# (ast_type.hpp: `legacy_descendant_count = static_cast<uint16_t>(...)`,
-# emitted into the UINTEGER column), so it WRAPS at 65 536. Measured: a tree of
-# 100 001 nodes reports root.descendant_count = 34 464, which is
-# 100 000 - 65 536.
-#
-# The splice's completeness guard is `row count = root.descendant_count + 1`,
-# so every file whose AST exceeds 65 536 nodes is REFUSED - loudly, with the
-# "not a complete tree" message, which is the wrong diagnosis for the right
-# reason. Byte-exactness is never silently lost; a correct file is rejected.
-# This is pre-existing and affects ast_unparse_exact* identically (047's
-# 176-file sweep did not reach a file that large).
-#
-# Pinned here rather than worked around so that a fix makes this fail where the
-# premise is written down. IF THIS STARTS FAILING: the overflow was fixed -
-# delete this block and raise the 10 000 above to 20 000.
+# #212, the premise the block above used to pin as a limit: the completeness
+# guard reads root.descendant_count, which was stored through a uint16 and
+# wrapped at 65 536. Measured before the fix on this exact fixture:
+# root.descendant_count = 34 464 = 100 000 - 65 536, so the COPY above was
+# refused with "is not a complete tree" -- the right behaviour for the wrong
+# reason. The round trip above is now the end-to-end proof; this is the direct
+# statement of the value it depends on.
 query III
 SELECT count(*) AS n_rows,
-       (SELECT descendant_count FROM read_ast('__TEST_DIR__/huge.py', source := 'full', peek := 'none')
+       (SELECT descendant_count FROM read_ast('__TEST_DIR__/big.py', source := 'full', peek := 'none')
         WHERE depth = 0) AS root_dc,
-       count(*) - 1 - 65536 = (SELECT descendant_count
-                               FROM read_ast('__TEST_DIR__/huge.py', source := 'full', peek := 'none')
-                               WHERE depth = 0) AS wraps_at_65536
-FROM read_ast('__TEST_DIR__/huge.py', source := 'full', peek := 'none');
+       count(*) - 1 = (SELECT descendant_count
+                       FROM read_ast('__TEST_DIR__/big.py', source := 'full', peek := 'none')
+                       WHERE depth = 0) AS root_spans_whole_file
+FROM read_ast('__TEST_DIR__/big.py', source := 'full', peek := 'none');
 ----
-100001	34464	true
-
-statement error
-COPY (FROM read_ast('__TEST_DIR__/huge.py', source := 'full', peek := 'none'))
-TO '__TEST_DIR__/rt_huge.py' (FORMAT ast);
-----
-is not a complete tree
+100001	100000	true
 
 # An empty source file is NOT the same thing as no rows (section 4j): it parses
 # to one root node and is reproduced as a 0-byte file.

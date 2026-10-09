@@ -247,7 +247,7 @@ out, so no template vocabulary is required. Templates become necessary when the
 sink must write a tree for which no file can supply bytes — `ast_patch` output
 re-written in place, say — and that is a different feature, not half of this one.
 
-## Incidental finding — `descendant_count` wraps at 65 536
+## Incidental finding — `descendant_count` wraps at 65 536 (#212, FIXED 2026-10-09)
 
 `descendant_count` is computed as a `uint32` and then stored through
 `AstNode::legacy_descendant_count`, a `uint16`
@@ -263,6 +263,31 @@ Byte-exactness is never silently lost; a correct file is rejected. Pre-existing,
 and it affects `ast_unparse_exact*` identically (`047`'s 176-file sweep did not
 reach a file that large). Pinned in `test/sql/ast_copy_format.test` §2 so that a
 fix fails where the premise is written down.
+
+**Fixed.** The four legacy mirrors were widened to `uint32`, which is what every
+emitted column already declared on the SQL side; nothing but the C++ field width
+was ever the limit. Two sibling truncations surfaced in the same pass and were
+measured on the pre-fix binary before being fixed:
+
+| field | mirror | fixture | before → after |
+|---|---|---|---|
+| `descendant_count` | `uint16` | 100 001-node tree | 34 464 → **100 000** |
+| `children_count` | `uint16` | 70 000 sibling statements | 4 464 → **70 000** |
+| `depth` / `node_depth` | `uint8` | 3 000-term expression | 255 → **3 003** |
+
+`start_column`/`end_column` had the same `uint16` mirror and no user-visible
+symptom: `read_ast` emits columns from the `uint32` `source_*` fields, and
+`parse_ast_list`'s FULL branch is unreachable from SQL. Widened anyway.
+
+The serious half was never the refusal — it was that `node_id BETWEEN x AND
+x + descendant_count`, the O(1) subtree idiom `CLAUDE.md` recommends, returned
+**34 465 of 100 001 rows with no error**. `ast_unparse_exact*` and this writer
+were the only consumers that failed loudly.
+
+`§2`'s pin is now the positive assertion (`root_dc = 100 000`) plus a byte-exact
+round trip of that same 100 001-node file; `ast_unparse_exact.test` §5b still
+refuses a genuine filtered subset, which is the control that the guard was not
+merely loosened. Regression test: `test/sql/bugs/issue_212_count_field_widths.test`.
 
 ## Cross-line compatibility (issue #213)
 

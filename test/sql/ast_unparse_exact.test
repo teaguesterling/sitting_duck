@@ -501,6 +501,20 @@ SELECT * FROM ast_unparse_exact_from('py_shallow', 'test/data/unparse_leaf_text/
 ----
 is not a complete tree
 
+# 5b-bis. #212: that same guard reads root.descendant_count, which was stored
+#     through a uint16 and wrapped at 65 536 -- so a COMPLETE tree bigger than
+#     that was refused with 5b's message, the right behaviour for the wrong
+#     reason. 100 001 nodes; the root used to report 34 464. 5b above is the
+#     control that the guard still refuses a genuine subset.
+statement ok
+COPY (SELECT encode(repeat('x = 1' || chr(10), 20000)) AS b) TO '__TEST_DIR__/i212_unparse.py' (FORMAT blob);
+
+query II
+SELECT length(source), source = repeat(E'x = 1\n', 20000)
+FROM ast_unparse_exact('__TEST_DIR__/i212_unparse.py');
+----
+120000	true
+
 # 5c. More than one language in the table: no single textual answer.
 statement ok
 CREATE TABLE multi_lang AS
