@@ -264,11 +264,35 @@ and it affects `ast_unparse_exact*` identically (`047`'s 176-file sweep did not
 reach a file that large). Pinned in `test/sql/ast_copy_format.test` §2 so that a
 fix fails where the premise is written down.
 
+## Cross-line compatibility (issue #213)
+
+The first version compiled on the pinned v1.5.6 and **not** on the
+`v2.0-cyanoptera` canary — five breaks, three of them families the repo had
+already solved. Recorded in `docs/development/duckdb-version-compatibility.md`:
+
+- **family A** (`string` → `Identifier`) on `BoundStatement::names` and on
+  `CopyInfo::options`' keys — absorbed with `IdentString()`. Writing a key back
+  needs nothing, because `Identifier`'s constructor from a string *literal* is
+  implicit by design.
+- **family F** (`Parser` has no zero-argument constructor; `ParserOptions()` is
+  private) — absorbed with `DefaultParserOptions()`.
+- **family H, new**: `CommonTableExpressionInfo::query` (a `SelectStatement`)
+  became `query_node` (a `QueryNode`) — absorbed with `SetCTEQuery()`.
+
+`IdentString` and `DefaultParserOptions` were **moved** out of
+`duckdb_adapter.cpp`'s anonymous namespace into the new
+`src/include/duckdb_parser_compat.hpp` rather than copied, so there is one
+probe per upstream change. Verified with a two-line `-fsyntax-only` sweep plus
+a v1.5.6 **control** sweep at both `-std=c++11` and `-std=c++17`: all five
+breaks were cyanoptera-only, none a harness artifact, and
+`ast_source_bytes_function.cpp` needed no shim at all.
+
 ## Files
 
 | file | what |
 |---|---|
 | `src/ast_copy_function.cpp` | the `plan` rewrite, option validation, the node-column check |
+| `src/include/duckdb_parser_compat.hpp` | the shared parser shims (families A, F, H) |
 | `src/ast_source_bytes_function.cpp` | `ast_source_bytes(path)` |
 | `test/sql/ast_copy_format.test` | 140 assertions |
 | `API_REFERENCE.md` | `COPY … (FORMAT ast)` and `ast_source_bytes` |
