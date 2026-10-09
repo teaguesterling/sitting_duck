@@ -123,14 +123,23 @@ comments next to each symbol — this table is the index, not a copy.
 | `Compat{Unary,Binary}ExecuteWithNulls` | `duckdb_compat.hpp` | `ExecuteWithNulls` removed (`987ea2c409`); null-emitting overload takes `std::optional` | `#if` |
 | `DUCKDB_SCALAR_BIND_PARAMS` / `_CONTEXT` / `_ARGS` | `duckdb_compat.hpp` | Scalar bind signature collapsed into `BindScalarFunctionInput &` | `#if` |
 | `SetValueCasted` | `duckdb_compat.hpp` | `SetValue`'s fallback cast stopped seeing extension-registered casts | n/a (always) |
-| `QualifiedNameTag`, `SchemaNameTag`, `TableAccessorTag`, `Create*EntryName`, `IdentString` | `duckdb_adapter.cpp` | `CreateInfo` & friends: public name fields → `Get<Entry>Name()`; `BaseTableRef::table_name` → `Table()` | 3 |
-| `DefaultParserOptions` | `duckdb_adapter.cpp` | `ParserOptions()` default ctor made private; `Parser` lost its zero-arg ctor | 3 |
+| `QualifiedNameTag`, `SchemaNameTag`, `TableAccessorTag`, `Create*EntryName` | `duckdb_adapter.cpp` | `CreateInfo` & friends: public name fields → `Get<Entry>Name()`; `BaseTableRef::table_name` → `Table()` | 3 |
+| `IdentString` | `duckdb_parser_compat.hpp` | `string` → `Identifier` wherever upstream names a SQL identifier. **Moved out of `duckdb_adapter.cpp` 2026-10-09** when a second consumer appeared (`BoundStatement::names`, `CopyInfo::options` keys) | 2 |
+| `DefaultParserOptions`, `HasBuiltinParserOptions` | `duckdb_parser_compat.hpp` | `ParserOptions()` default ctor made private; `Parser` lost its zero-arg ctor. **Moved out of `duckdb_adapter.cpp` 2026-10-09**, same reason | 3 |
+| `SetCTEQuery`, `HasCTEQueryNode` | `duckdb_parser_compat.hpp` | `CommonTableExpressionInfo::query` (a `SelectStatement`) → `query_node` (a `QueryNode`) — **family H**, new 2026-10-09 | 3 |
 | `DeclareNamedParameters`, `ExtendNamedParameters`, `FindNamedParameter`, `NamedParamMap` | `named_parameter_compat.hpp` | `TableFunction::named_parameters` removed → `GetSignature().WithTypedKwargs(...)`; bind map retyped `case_insensitive_map_t<Value>` → `named_argument_map_t` (keyed by `Identifier`) | 4 |
 | `ArgumentTypesOf`, `GetArgumentTypes` | `function_doc_helper.hpp` | `SimpleFunction::arguments` removed → `GetSignature().GetParameters()[i].GetType()`; set elements became `shared_ptr<const F>` | 3 |
 
-The parser-object accessors live in `duckdb_adapter.cpp` rather than `duckdb_compat.hpp` on
-purpose: they would drag ten `parser/parsed_data` headers into a header that fourteen
-translation units include, and that adapter is their only consumer.
+The **heavyweight** parser-object accessors live in `duckdb_adapter.cpp` rather than
+`duckdb_compat.hpp` on purpose: they would drag ten `parser/parsed_data` headers into a header
+that fourteen translation units include, and that adapter is their only consumer.
+
+`src/include/duckdb_parser_compat.hpp` is the middle ground, added 2026-10-09: the parser shims
+with **more than one** consumer, costing three parser includes in the two translation units that
+want them rather than in all fourteen. `IdentString` and `DefaultParserOptions` were lifted into
+it from `duckdb_adapter.cpp` when `COPY … TO (FORMAT ast)` hit the same two families. They were
+**moved, not copied** — a second copy of a compat probe is how these drift, and they drift
+silently, because the partial backports make "is this v2.0?" a question per accessor.
 
 ### Discovery-order cross-reference
 
@@ -145,6 +154,7 @@ The session notes name break "families" by discovery order. Mapping, for anyone 
 | E | `SimpleFunction::arguments` removed | PR #175 (`114920e`, `8568563`); PR #177 relaxed the matching test |
 | F | `Parser` / `ParserOptions` default construction | PR #192 / `0c49b2c` |
 | G | Cross-line drift in the `duckdb` language — deparser, parse-tree and bind-time; *no* build break | tracker bug #041 |
+| H | `CommonTableExpressionInfo::query` → `query_node` | issue #213 (`COPY … TO (FORMAT ast)`, `045`/#174) |
 
 !!! note "The families are fleet-wide; the shims are per-repo"
     These families describe upstream DuckDB changes, so they bite several extensions — but each
@@ -179,6 +189,38 @@ A probe, not an `#if`, because `ParserOptions` exists on both lines and only the
 Upstream landing window, recorded from the session that hit it and **not verifiable from this
 tree**: between 2026-10-03 16:39 UTC and 2026-10-05 04:36 UTC on `v2.0-cyanoptera`. A canary
 green before that window was stale, not safe.
+
+## Family H: where a CTE keeps its query
+
+Discovered 2026-10-09 by the `v2.0-cyanoptera` canary on `src/ast_copy_function.cpp`
+(issue #213), and the only one of that build's five breaks with no existing shim.
+
+| | Member | Holds |
+|---|---|---|
+| v1.5.6 | `unique_ptr<SelectStatement> query` | a statement wrapping the node |
+| DuckDB v2.0 | `unique_ptr<QueryNode> query_node` | the node, directly |
+
+v2.0 **deleted `query`**, so assigning it is a hard error rather than a deprecation. Two things
+make this one easy to misdiagnose:
+
+- **`SelectStatement` still appears in that header on v2.0**, in a
+  `CommonTableExpressionInfo(unique_ptr<SelectStatement>, unique_ptr<QueryNode>)` constructor
+  and in `GetQueryForSerialization()`, both for deserialization compatibility. A grep for the
+  type finds hits on both lines; only the *member* moved.
+- `aliases` changed type in the same struct (`vector<string>` → `vector<Identifier>`), which is
+  family A, not this. Anything touching CTE aliases needs `IdentString` as well.
+
+Shimmed with a probe (`SetCTEQuery` in `duckdb_parser_compat.hpp`), not an `#if`, by the rule
+above: both `SelectStatement` and `QueryNode` exist on both lines, so no absent **type** is
+named at template-definition time, and only the spelling of "the CTE's root query" differs. The
+probe aims at the v2.0-only member — `query_node` — never at the one being replaced.
+
+One wrinkle worth keeping: the v1.5 branch's `make_uniq<SelectStatement>()` is a
+**non-dependent** expression inside the template, so it is checked when the template is
+*defined*, not when it is instantiated. It is valid on both lines (v2.0's `SelectStatement` is
+still default-constructible with a public `node`; it is just no longer what a CTE holds), which
+is the only reason that branch can name it at all. Had v2.0 also sealed `SelectStatement`, this
+would have had to become an `#if`.
 
 ## Cross-line drift in the `duckdb` language
 

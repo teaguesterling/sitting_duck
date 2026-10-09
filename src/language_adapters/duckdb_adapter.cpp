@@ -1,5 +1,6 @@
 #include "duckdb_adapter.hpp"
 #include "duckdb_compat.hpp"
+#include "duckdb_parser_compat.hpp"
 #include "unified_ast_backend_impl.hpp"
 #include "semantic_types.hpp"
 #include "duckdb/common/exception.hpp"
@@ -93,16 +94,10 @@ struct HasTableAccessor<T, decltype(void(std::declval<const T &>().Table()))> : 
 
 typedef HasTableAccessor<BaseTableRef> TableAccessorTag;
 
-// The getters return a plain `string` on v1.5.6 and an `Identifier` on v2.0.
-// Exact-match overload resolution prefers the non-template for a string, so each
-// line compiles against whichever shape the pinned DuckDB has.
-inline string IdentString(const string &name) {
-	return name;
-}
-template <class IDENTIFIER>
-string IdentString(const IDENTIFIER &identifier) {
-	return identifier.GetIdentifierName();
-}
+// IdentString() -- the string-vs-Identifier shim the getters below need -- now
+// lives in src/include/duckdb_parser_compat.hpp, because COPY (FORMAT ast) hit
+// the same family on BoundStatement::names and CopyInfo::options. It is shared
+// rather than copied: a second copy of a compat probe is how these drift.
 
 // Tag dispatch rather than `if constexpr`: this extension compiles at C++11 on
 // Linux (see CMakeLists.txt). Only the selected overload is instantiated, so the
@@ -182,48 +177,10 @@ string BaseTableName(const REF &ref, std::false_type) {
 	return ref.table_name;
 }
 
-// WHY A PARSER NEEDS OPTIONS HANDED TO IT ON v2.0.
-// v1.5 declares `explicit Parser(ParserOptions options = ParserOptions())`, so a
-// bare `make_uniq<Parser>()` works. v2.0 made ParserOptions' default constructor
-// PRIVATE (friending only ClientContext) and added ParserOptions::Builtin() as the
-// explicit configuration for parsing without one, leaving Parser with no
-// zero-argument constructor at all.
-//
-// This is not a cosmetic rename. Builtin() installs
-// CompiledGrammar::DefaultGrammar(), and v2.0's Parser::GetGrammar() throws
-// InternalException("ParserOptions requires a compiled grammar") when the options
-// carry none. Had upstream left the default constructor public we would have built
-// cleanly and then failed at parse time; the private constructor is what turns that
-// into a build error instead.
-//
-// A probe rather than #if, by the rule above: ParserOptions is present on BOTH
-// lines and only the spelling of "the default options" differs, which is exactly
-// what a probe absorbs. (Contrast named_parameter_compat.hpp, where the v2.0
-// spelling names a type that does not exist on v1.5 and no probe can hide that.)
-template <class T, class = void>
-struct HasBuiltinParserOptions : std::false_type {};
-template <class T>
-struct HasBuiltinParserOptions<T, decltype(void(T::Builtin()))> : std::true_type {};
-
-typedef HasBuiltinParserOptions<ParserOptions> BuiltinParserOptionsTag;
-
-// Both overloads are templates on purpose: a non-template is type-checked whether
-// it is called or not, and each body names something the other line lacks.
-template <class OPTIONS>
-OPTIONS DefaultParserOptionsImpl(std::true_type) {
-	return OPTIONS::Builtin();
-}
-template <class OPTIONS>
-OPTIONS DefaultParserOptionsImpl(std::false_type) {
-	return OPTIONS();
-}
-
-//! The options to construct a Parser with when there is no ClientContext to take
-//! them from. Both lines accept `Parser(const ParserOptions &)`, so this is the
-//! only part of constructing a context-free parser that differs between them.
-inline ParserOptions DefaultParserOptions() {
-	return DefaultParserOptionsImpl<ParserOptions>(BuiltinParserOptionsTag());
-}
+// DefaultParserOptions() -- the family-F shim for constructing a Parser with no
+// ClientContext -- also lives in src/include/duckdb_parser_compat.hpp now, for
+// the same reason: COPY (FORMAT ast) parses a rewrite template and needs it too.
+// The rationale (why Builtin() is not cosmetic) travelled with it.
 
 } // namespace
 

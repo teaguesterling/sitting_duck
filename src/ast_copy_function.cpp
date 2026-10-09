@@ -95,6 +95,7 @@
 // ============================================================================
 
 #include "duckdb.hpp"
+#include "duckdb_parser_compat.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/copy_function.hpp"
@@ -175,7 +176,15 @@ void CheckNodeColumns(Binder &binder, const QueryNode &user_query) {
 	try {
 		auto node_copy = user_query.Copy();
 		auto inspector = Binder::CreateBinder(binder.context, binder);
-		names = inspector->Bind(*node_copy).names;
+		// BoundStatement::names is vector<string> on v1.5.6 and
+		// vector<Identifier> on v2.0, so the containers cannot be assigned to
+		// one another; map elementwise through IdentString() (which is also the
+		// opt-in that Identifier's deliberately-explicit conversion to string
+		// requires). See docs/development/duckdb-version-compatibility.md,
+		// family A.
+		for (auto &bound_name : inspector->Bind(*node_copy).names) {
+			names.push_back(IdentString(bound_name));
+		}
 	} catch (...) {
 		return;
 	}
@@ -271,7 +280,14 @@ BoundStatement AstCopyPlan(Binder &binder, CopyStatement &stmt) {
 	string file_path_arg = "NULL";
 	vector<string> overrides;
 	for (auto &option : info.options) {
-		auto lower = StringUtil::Lower(option.first);
+		// CopyInfo::options is case_insensitive_map_t<vector<Value>> on v1.5.6
+		// and identifier_map_t<vector<Value>> on v2.0, so the key is a `string`
+		// or an `Identifier`. IdentString() absorbs both (family A). Writing a
+		// key back needs no shim: Identifier's constructor from a string
+		// LITERAL is implicit by design, so `options["use_tmp_file"]` below
+		// compiles on both lines.
+		auto option_name = IdentString(option.first);
+		auto lower = StringUtil::Lower(option_name);
 		if (lower == "language") {
 			auto value = SingleStringOption("language", option.second);
 			language_arg = SqlLiteral(value);
@@ -281,7 +297,7 @@ BoundStatement AstCopyPlan(Binder &binder, CopyStatement &stmt) {
 			file_path_arg = SqlLiteral(value);
 			overrides.push_back("FILE_PATH '" + value + "'");
 		} else {
-			RejectOption(option.first);
+			RejectOption(option_name);
 		}
 	}
 	auto override_note =
@@ -322,7 +338,13 @@ BoundStatement AstCopyPlan(Binder &binder, CopyStatement &stmt) {
 	// 3. Parse the rewrite template and move the user's query into its CTE. The
 	//    user's query node is never serialised back to SQL text: a ToString()
 	//    round trip would be a second, lossy parser of its own.
-	Parser parser;
+	// v2.0 removed Parser's zero-argument constructor and made ParserOptions'
+	// default constructor private; DefaultParserOptions() resolves to
+	// ParserOptions::Builtin() there and ParserOptions() here (family F). The
+	// options go through a named local because `Parser parser(X());` is the most
+	// vexing parse — it would declare a function.
+	auto parser_options = DefaultParserOptions();
+	Parser parser(parser_options);
 	parser.ParseQuery(BuildRewriteSQL(language_arg, file_path_arg, override_note));
 	D_ASSERT(parser.statements.size() == 1);
 	auto &rewritten = parser.statements[0]->Cast<CopyStatement>();
@@ -331,8 +353,11 @@ BoundStatement AstCopyPlan(Binder &binder, CopyStatement &stmt) {
 	if (cte_entry == cte_map.end()) {
 		throw InternalException("COPY (FORMAT ast): rewrite template lost its node CTE");
 	}
-	cte_entry->second->query = make_uniq<SelectStatement>();
-	cte_entry->second->query->node = std::move(info.select_statement);
+	// v1.5.6 holds the CTE's query as a SelectStatement wrapping the node; v2.0
+	// holds the QueryNode directly and deleted the `query` member. SetCTEQuery()
+	// absorbs that (family H — new, recorded in
+	// docs/development/duckdb-version-compatibility.md).
+	SetCTEQuery(*cte_entry->second, std::move(info.select_statement));
 
 	// 4. Graft the rewritten select onto the ORIGINAL statement, which the
 	//    caller owns and keeps alive for the whole query, and hand it to the

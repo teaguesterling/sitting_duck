@@ -71,8 +71,8 @@ vector<string> DuckDBAdapter::GetAliases() const {
 
 void DuckDBAdapter::InitializeParser() const {
 	// NOTE: this file is not in CMakeLists.txt. The bare make_uniq<Parser>() below does
-	// not compile on DuckDB v2.0; see DefaultParserOptions() in duckdb_adapter.cpp for
-	// the fix, should this ever be revived.
+	// not compile on DuckDB v2.0; see DefaultParserOptions() in
+	// src/include/duckdb_parser_compat.hpp for the fix, should this ever be revived.
 	std::call_once(parser_init_flag_, [this]() { const_cast<DuckDBAdapter *>(this)->parser_ = make_uniq<Parser>(); });
 }
 
