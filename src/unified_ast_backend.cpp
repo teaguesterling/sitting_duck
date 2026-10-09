@@ -165,6 +165,18 @@ void UnifiedASTBackend::PopulateSemanticFields(ASTNode &node, const LanguageAdap
 		// STRUCTURED FIELDS: Set semantic info in context
 		node.semantic_type = config->semantic_type;
 		node.universal_flags = config->flags;
+
+		// Issue #208: an unnamed tree-sitter node is a grammar token sharing a
+		// type string with its named twin (ruby `class`); it can neither bind a
+		// name nor open a scope. Kept in step with the live, templated path in
+		// PopulateSemanticFieldsTemplated(), which is authoritative — note this
+		// legacy entry point has no callers and still lacks that function's
+		// punctuation (#009) and bare-parameter (#64) derivations.
+		if (!ts_node_is_named(ts_node) &&
+		    (node.universal_flags & (ASTNodeFlags::NAME_ROLE_MASK | ASTNodeFlags::IS_SCOPE)) != 0) {
+			node.universal_flags &= static_cast<uint8_t>(~(ASTNodeFlags::NAME_ROLE_MASK | ASTNodeFlags::IS_SCOPE));
+			node.universal_flags |= ASTNodeFlags::IS_SYNTAX_ONLY;
+		}
 	} else {
 		// Fallback: use PARSER_CONSTRUCT for unknown types
 		node.semantic_type = SemanticTypes::PARSER_CONSTRUCT;

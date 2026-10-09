@@ -1,0 +1,121 @@
+# name: test/sql/bugs/issue_208_209_duplicate_decls_and_call_targets.test
+# group: [bugs]
+
+# Issue #208: a DEF_TYPE raw_type is NOT a unique key. A tree-sitter grammar
+# uses the same type STRING for a named rule and for the anonymous keyword
+# token that introduces it (ruby `class` is both the class-definition rule and
+# the bare `class` leaf; python `lambda` likewise). The adapter's node_configs
+# is an unordered_map keyed by that string, so both nodes received the
+# DEFINITION's config and the bare keyword counted as an extra definition --
+# two class definitions in a one-class file.
+#
+# Issue #209: object_creation_expression (java), function_call (lua, dot form)
+# and constructor_invocation (kotlin) each DECLARE FIND_CALL_TARGET and did not
+# bind, so `.call#X` silently missed every java constructor call. Same family
+# as #88/#91, which fixed php's identically-shaped node.
+#
+# Row-pinned per the #83/#91 convention: matched rows assert name + line, not
+# just COUNT(*).
+
+require sitting_duck
+
+# =============================================================================
+# Section 1 (#208): a keyword token is not a definition
+# =============================================================================
+
+# The headline wrong answer from #208. simple.rb declares exactly one class.
+query I
+SELECT count(*) FROM read_ast('test/data/ruby/simple.rb')
+WHERE is_class_definition(semantic_type) AND NOT is_syntax_only(flags);
+----
+1
+
+# Both `class` nodes are still in the tree -- the fix does not delete the
+# keyword token, it stops the token claiming to BE the definition. The named
+# rule keeps its name and its definition role; the anonymous keyword leaf
+# (children_count 0) is syntax-only and binds no name.
+query IIIII
+SELECT type, name, children_count, is_syntax_only(flags), is_name_definition(flags)
+FROM read_ast('test/data/ruby/simple.rb')
+WHERE type = 'class'
+ORDER BY start_line, node_id;
+----
+class	Person	4	false	true
+class	(empty)	0	true	false
+
+# Same shape in python, which has only ONE declaration for `lambda` -- so this
+# half of #208 is not about duplicate rows at all, it is about raw_type not
+# being unique. The bare `lambda` keyword was carrying NAME_DEFINITION|IS_SCOPE.
+query IIIII
+SELECT type, children_count, is_syntax_only(flags), is_name_definition(flags), start_line
+FROM read_ast('test/data/comprehensive_python_test.py')
+WHERE type = 'lambda'
+ORDER BY start_line, node_id;
+----
+lambda	4	false	true	75
+lambda	0	true	false	75
+
+# =============================================================================
+# Section 2 (#209): declared FIND_CALL_TARGET binds
+# =============================================================================
+
+# java: every constructor call carries its type name as the callee. Before the
+# fix all three were <UNNAMED>, including the generic one.
+query III
+SELECT type, name, start_line
+FROM read_ast('test/data/languages/java/Test.java')
+WHERE type = 'object_creation_expression'
+ORDER BY start_line, node_id;
+----
+object_creation_expression	Test	40
+object_creation_expression	ArrayList	43
+object_creation_expression	IllegalArgumentException	63
+
+# ...which is what makes the selector in the #209 report non-empty.
+query II
+SELECT name, start_line
+FROM ast_select('test/data/languages/java/Test.java', '.call#Test')
+ORDER BY start_line;
+----
+Test	40
+
+# Legitimately-empty twin (#89 convention): a constructor that is not called
+# returns 0 rows without erroring, because java's call nodes ARE named now.
+query I
+SELECT COUNT(*) FROM ast_select('test/data/languages/java/Test.java', '.call#zz_absent_ctor');
+----
+0
+
+# lua: dotted module calls bind the bare callee, matching what the colon form
+# (method_index_expression, fixed by #91) already did.
+query III
+SELECT type, name, start_line
+FROM read_ast('test/data/lua/simple.lua')
+WHERE type = 'function_call' AND name IN ('floor', 'create', 'yield')
+ORDER BY start_line, node_id;
+----
+function_call	create	94
+function_call	yield	95
+function_call	floor	101
+
+# kotlin: the superclass constructor call binds, like the ordinary call beside
+# it (fixture committed by #207 -- `: Base(n)` on line 21 was <UNNAMED>).
+query III
+SELECT type, name, start_line
+FROM read_ast('test/data/conformance/kotlin_constructors.kt')
+WHERE type IN ('constructor_invocation', 'call_expression')
+ORDER BY start_line, node_id;
+----
+constructor_invocation	Base	21
+call_expression	Base	24
+call_expression	Derived	25
+
+# php regression guard: #91's object_creation_expression fix still names the
+# constructor, and still through the `name` child rather than the new
+# type-name path.
+query II
+SELECT type, name
+FROM parse_ast('<?php $w = new Widget(1); ?>', 'php')
+WHERE type = 'object_creation_expression';
+----
+object_creation_expression	Widget
