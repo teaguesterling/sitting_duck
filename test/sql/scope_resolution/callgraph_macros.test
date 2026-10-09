@@ -298,3 +298,97 @@ SELECT count(*) FROM ast_select('test/data/callgraph/anon_scope.py',
     'function_definition#calls_twice:calls(twice_target)');
 ----
 1
+
+# =============================================================================
+# DEFINITION AND SCOPE COUNTS — the gap #214 exposed in this file
+# =============================================================================
+# Everything above asserts over CALLS and caller attribution and deliberately
+# says nothing about definition counts. That is exactly why all 186 assertions
+# above survived #214, a change that provably moved `.fn` on both of these
+# fixtures. The gap is closed here, in the file that found it.
+#
+# WHAT #214 DID (verified against a pre-#214 binary, both directions):
+# a raw tree-sitter type string is not a unique key — `def` names both the
+# function-definition rule and the anonymous keyword token that introduces it,
+# so the keyword leaf inherited the DEFINITION's config and counted as a second
+# definition. #214 clears NAME_ROLE and IS_SCOPE on unnamed grammar tokens and
+# marks them IS_SYNTAX_ONLY.
+#
+# WHY THESE NUMBERS ARE RIGHT, not merely current: callgraph_direct.py contains
+# exactly three functions a human would name — outer, the lambda inner, and
+# nested. `.fn` returned 4 before #214 and returns 3 now, so 4 was wrong. That
+# agreement with a reading of the source is the oracle here, not the measurement.
+#
+# ALL FIVE ASSERTIONS BELOW HELD A DIFFERENT VALUE PRE-#214, measured against a
+# pre-#214 binary — so none of them is vacuous, and the demonstration is a real
+# code change rather than a synthetic perturbation:
+#       .fn anon_scope.py           12  ->  10
+#       .fn callgraph_direct.py      4  ->   3
+#       flag row (4 cols)   11 8 3 3  ->  11 10 1 1
+#       surviving definition   3 rows  ->   1 row   (line 42 was counted TWICE,
+#                                                    once for the rule node and
+#                                                    once for its keyword leaf)
+#       direct contrast          2  1  ->   3  0
+# Independently, making the named lambda `bound` anonymous moves the flag row to
+# 12 10 2 2 and the surviving-definition query to 2 rows.
+#
+# COUPLED TO #214 AND #215 — these may legitimately move again. The counts are
+# sensitive to the anonymous-token rule, which #214 deliberately scoped narrowly
+# (it does NOT make "unnamed implies syntax-only" universal, because that would
+# flip operator tokens that prune('syntax') would then delete). #215 tracks the
+# remaining type-string collisions — 19 of them — and needs namedness in the
+# config key to fix. A change there could move these legitimately. If one of
+# these four fails, check #215 before assuming a regression.
+
+# `.fn` counts one node per function, not one per function plus its keyword leaf.
+# anon_scope.py: 8 `def` functions + 2 lambdas (one anonymous, one named `bound`).
+query I
+SELECT count(*) FROM ast_select('test/data/callgraph/anon_scope.py', '.fn');
+----
+10
+
+# callgraph_direct.py: outer, the lambda `inner`, nested. Was 4 before #214.
+query I
+SELECT count(*) FROM ast_select('test/data/python/callgraph_direct.py', '.fn');
+----
+3
+
+# The flag-level view of the same thing. NOTE the metric: "def/lambda-typed nodes
+# whose NAME FIELD is empty" is NOT tree-sitter namedness — the genuine anonymous
+# lambda is a `named: true` RULE node that simply has no name to infer, which is
+# why it is counted here and yet correctly keeps its definition role.
+#
+# 11 such nodes in anon_scope.py: 10 are syntax-only keyword tokens (8 `def`,
+# 2 `lambda`), and exactly 1 is a real definition — the anonymous lambda at
+# line 42, which is also still a scope. Before #214 the def-role count was 3,
+# because the two `lambda` keyword leaves were counted as definitions too.
+query IIII
+SELECT
+    count(*) AS empty_named_def_or_lambda,
+    count(*) FILTER (is_syntax_only(flags)) AS syntax_only,
+    count(*) FILTER (is_name_definition(flags)) AS still_a_definition,
+    count(*) FILTER (is_scope(flags)) AS still_a_scope
+FROM read_ast('test/data/callgraph/anon_scope.py')
+WHERE type IN ('def', 'lambda') AND name = '';
+----
+11	10	1	1
+
+# The surviving definition is the anonymous lambda, identified positionally so a
+# future change cannot satisfy this by keeping some *other* node's role.
+query II
+SELECT type, start_line FROM read_ast('test/data/callgraph/anon_scope.py')
+WHERE type IN ('def', 'lambda') AND name = '' AND is_name_definition(flags);
+----
+lambda	42
+
+# The contrast that makes the rule legible: in callgraph_direct.py EVERY lambda
+# is named (`inner` is inferred from its assignment), so after #214 nothing with
+# an empty name retains a definition role there — 3 syntax-only, 0 definitions.
+query II
+SELECT
+    count(*) FILTER (is_syntax_only(flags)) AS syntax_only,
+    count(*) FILTER (is_name_definition(flags)) AS still_a_definition
+FROM read_ast('test/data/python/callgraph_direct.py')
+WHERE type IN ('def', 'lambda') AND name = '';
+----
+3	0
