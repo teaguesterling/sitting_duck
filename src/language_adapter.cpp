@@ -455,6 +455,24 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		auto is_argument_container = [](const string &t) {
 			return t == "argument_list" || t == "arguments" || t == "call_suffix" || t == "value_arguments";
 		};
+		// Constructor callee anatomy (issue #209). A `new T(...)` /
+		// `: Base(n)` call names a TYPE, so its callee leaf is a type-name
+		// node rather than an identifier node, and it is frequently wrapped:
+		//   java   object_creation_expression -> type_identifier
+		//                                     -> generic_type > type_identifier
+		//                                     -> generic_type > scoped_type_identifier > type_identifier
+		//   kotlin constructor_invocation     -> user_type > type_identifier
+		// These stay OUT of is_callee_identifier on purpose and are only
+		// consulted by the new-expression fallback at the end of this case:
+		// the simple-call and member-call paths scan SIBLINGS, where a type
+		// node must never be allowed to outrank the real callee.
+		auto is_constructor_type_name = [](const string &t) {
+			return t == "type_identifier" || t == "constructor_name";
+		};
+		auto is_type_name_wrapper = [](const string &t) {
+			return t == "generic_type" || t == "scoped_type_identifier" || t == "user_type" ||
+			       t == "simple_user_type";
+		};
 		// Rightmost identifier-like descendant of n, preferring later children
 		// (the method name in a member chain is the last leaf: obj.a().b -> b).
 		// Never descends into argument containers. Depth-bounded for safety.
@@ -473,6 +491,31 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 					continue;
 				}
 				string r = find_rightmost_identifier(c, depth + 1);
+				if (!r.empty()) {
+					return r;
+				}
+			}
+			return "";
+		};
+		// Rightmost type-name leaf under a constructor's type expression.
+		// `type_arguments` is skipped so `new Map<String, Integer>()` cannot be
+		// named after a type argument, and the rightmost-first walk makes
+		// `new a.b.C()` name C rather than a.
+		std::function<string(TSNode, int)> find_constructor_type_name = [&](TSNode n, int depth) -> string {
+			if (depth > 6) {
+				return "";
+			}
+			uint32_t cc = ts_node_child_count(n);
+			for (int i = static_cast<int>(cc) - 1; i >= 0; i--) {
+				TSNode c = ts_node_child(n, static_cast<uint32_t>(i));
+				string ct = ts_node_type(c);
+				if (is_argument_container(ct) || ct == "type_arguments") {
+					continue;
+				}
+				if (is_constructor_type_name(ct) || is_callee_identifier(ct)) {
+					return ExtractNodeText(c, content);
+				}
+				string r = find_constructor_type_name(c, depth + 1);
 				if (!r.empty()) {
 					return r;
 				}
@@ -514,7 +557,14 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		    first_child_type == "field_access" || first_child_type == "scoped_identifier" ||
 		    first_child_type == "qualified_identifier" || first_child_type == "navigation_expression" ||
 		    first_child_type == "member_access_expression" || first_child_type == "method_index_expression" ||
-		    first_child_type == "variable_name") {
+		    first_child_type == "dot_index_expression" || first_child_type == "variable_name") {
+			// Lua dot-form calls (`math.floor(x)`) land here via
+			// dot_index_expression, which the colon form's
+			// method_index_expression twin already covered (#209). Both resolve
+			// through the rightmost-identifier fallback below, so both name the
+			// bare callee (`floor`, `render`) — the convention #91 established
+			// for every other member call.
+			//
 			// Java method_invocation has a special structure: the method name is a sibling
 			// of field_access, not inside it. E.g., System.out.println():
 			//   method_invocation -> field_access("System.out"), ".", identifier("println"), argument_list
@@ -559,6 +609,20 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 				}
 				if (is_callee_identifier(child_type)) {
 					return ExtractNodeText(child, content);
+				}
+				// #209: the constructor shapes PHP's `name` child covered
+				// incidentally and java/kotlin did not. java
+				// object_creation_expression names a type_identifier (or wraps
+				// it in generic_type / scoped_type_identifier); kotlin
+				// constructor_invocation wraps it in user_type.
+				if (is_constructor_type_name(child_type)) {
+					return ExtractNodeText(child, content);
+				}
+				if (is_type_name_wrapper(child_type)) {
+					string type_name = find_constructor_type_name(child, 0);
+					if (!type_name.empty()) {
+						return type_name;
+					}
 				}
 			}
 		}

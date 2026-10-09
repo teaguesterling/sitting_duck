@@ -561,6 +561,33 @@ void PopulateSemanticFieldsTemplated(ASTNode &node, const AdapterType *adapter, 
 			node.universal_flags |= ASTNodeFlags::IS_SYNTAX_ONLY;
 		}
 
+		// Issue #208: a raw_type is NOT a unique key across a tree-sitter
+		// grammar. The same type STRING names both a rule and the anonymous
+		// keyword token that introduces it — ruby `class` is the
+		// class-definition rule AND the bare `class` leaf (node-types.json
+		// lists it twice, `named: true` and `named: false`). node_configs is
+		// keyed by that string alone, so both nodes get the DEFINITION's
+		// config, and the keyword leaf was counting as a second class
+		// definition in a one-class file.
+		//
+		// An unnamed node is a grammar token: it has no children and no
+		// fields, so it cannot introduce a name and cannot open a scope. Where
+		// the config claims it does, the claim belongs to the token's named
+		// twin. Clear the role, and mark the token for what it is.
+		//
+		// Deliberately narrow. "Unnamed implies syntax-only" would also flip
+		// operator tokens (python `is`/`not`, declared with no flags), which
+		// `prune('syntax')` would then silently delete — a taxonomy-wide change
+		// neither #208 nor this fix is about. Keywords whose named twin carries
+		// no role flags (ruby `if`, `while`, ...) are therefore still left
+		// inheriting the statement's semantic type; fixing those needs
+		// namedness in the config key, which is tracked on #208.
+		if (!ts_node_is_named(ts_node) &&
+		    (node.universal_flags & (ASTNodeFlags::NAME_ROLE_MASK | ASTNodeFlags::IS_SCOPE)) != 0) {
+			node.universal_flags &= static_cast<uint8_t>(~(ASTNodeFlags::NAME_ROLE_MASK | ASTNodeFlags::IS_SCOPE));
+			node.universal_flags |= ASTNodeFlags::IS_SYNTAX_ONLY;
+		}
+
 		// NAME_ROLE (definition vs declaration vs reference) is set
 		// explicitly in each language's .def file via the flags column.
 

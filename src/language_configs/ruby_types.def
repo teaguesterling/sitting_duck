@@ -581,6 +581,37 @@ DEF_TYPE("assignment_operator", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
  *
  * Ruby keywords are reserved and cannot be used as identifiers.
  * They are classified by their semantic function with the IS_KEYWORD flag.
+ *
+ * ## Issue #208 — only keywords with NO colliding named rule belong here
+ *
+ * A tree-sitter raw_type is not a unique key. The ruby grammar uses the same
+ * type STRING for a named rule and for the anonymous keyword token that
+ * introduces it: `class`, `module`, `if`, `unless`, `case`, `when`, `while`,
+ * `until`, `for`, `begin`, `rescue`, `ensure`, `return`, `break`, `next`,
+ * `redo`, `retry` and `yield` each exist twice in node-types.json, once with
+ * `named: true` (the statement) and once with `named: false` (the token).
+ * `node_configs` is an `unordered_map` keyed by that string and built from an
+ * initializer list, where the FIRST entry for a key wins — so a keyword row
+ * for one of those names was silently discarded by the loader and never had
+ * any effect. Those 18 rows have been removed, along with the `super` and
+ * `singleton_method` rows that re-declared an already-declared NAMED node,
+ * and the `raise` row for a node type the grammar does not produce at all.
+ *
+ * What classifies the anonymous token instead: PopulateSemanticFieldsTemplated
+ * derives it. An unnamed node cannot introduce a name and cannot open a scope,
+ * so where the surviving config claims it does (`class`, `module`:
+ * NAME_DEFINITION | IS_SCOPE) the engine clears that role and sets
+ * IS_SYNTAX_ONLY. That is what stops the bare `class` token counting as a
+ * second class definition in a one-class file.
+ *
+ * Still open (tracked on #208): a keyword token whose colliding named rule
+ * carries no role flags — `if`, `while`, `begin`, ... — has nothing for the
+ * engine to contradict, so it still inherits the statement's semantic type.
+ * Expressing those needs namedness in the config key (a separate anonymous
+ * table), which is a bigger change than this fix.
+ *
+ * The rows below are keyword-only type strings with no colliding named rule.
+ * Before adding one, check node-types.json for a `named: true` twin.
  * @{
  */
 
@@ -590,20 +621,14 @@ DEF_TYPE("assignment_operator", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
  */
 DEF_TYPE("def", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("end", ORGANIZATION_BLOCK, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("class", DEFINITION_CLASS, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("module", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 /** @} */
 
 /**
  * @name Conditional Keywords
  * @{
  */
-DEF_TYPE("if", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("unless", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("else", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("elsif", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("case", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("when", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("then", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 /** @} */
 
@@ -611,40 +636,8 @@ DEF_TYPE("then", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
  * @name Loop Keywords
  * @{
  */
-DEF_TYPE("while", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("until", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("for", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("in", OPERATOR_COMPARISON, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("do", ORGANIZATION_BLOCK, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-/** @} */
-
-/**
- * @name Exception Keywords
- * @{
- */
-DEF_TYPE("begin", ERROR_TRY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("rescue", ERROR_CATCH, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("ensure", ERROR_FINALLY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("raise", ERROR_THROW, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-/** @} */
-
-/**
- * @name Jump Keywords
- * @{
- */
-DEF_TYPE("return", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("break", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("next", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("redo", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("retry", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-/** @} */
-
-/**
- * @name Special Keywords
- * @{
- */
-DEF_TYPE("yield", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("super", COMPUTATION_CALL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 /** @} */
 
 /**
@@ -897,9 +890,6 @@ DEF_TYPE("heredoc_body", LITERAL_STRING, NONE, NONE, 0)
  * @brief Alternative method definition forms
  * @{
  */
-
-/// @brief Singleton method (class method form)
-DEF_TYPE("singleton_method", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Method alias
 DEF_TYPE("alias_method", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
