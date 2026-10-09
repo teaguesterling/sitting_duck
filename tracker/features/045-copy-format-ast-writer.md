@@ -213,9 +213,31 @@ override reintroduces a second spelling, and the macro already normalises it.
 ## Destination integrity
 
 Every guard fires *after* the destination would have been opened, so the sink
-forces `USE_TMP_FILE true`. Measured over all fourteen refusals: the destination
-does not exist afterwards, no `tmp_*` file is stranded, and a pre-existing
-destination still holds its original bytes.
+forces `USE_TMP_FILE true` for a file destination. Measured over all fourteen
+refusals: the destination does not exist afterwards, no `tmp_*` file is
+stranded, and a pre-existing destination still holds its original bytes. The
+same mechanism makes **in-place rewriting** (`TO` the file that was parsed) safe
+— the splice has read every byte it needs before the rename — and that is
+asserted.
+
+Two destinations are special, and both were nearly missed:
+
+* **Remote (`s3://`, `https://`, …) is REFUSED at bind time.** DuckDB's `COPY`
+  binder discards `use_tmp_file` *unconditionally* for a remote path
+  (`bind_copy.cpp`: `if (is_remote_file) { use_tmp_file = false; }`), so the
+  forced `true` would be silently dropped and a refusal would leave a 0-byte
+  object. A 0-byte S3 object looks exactly as authoritative as a 0-byte file,
+  which is the thing this feature exists to prevent — so rather than document a
+  guarantee that quietly does not hold there, the sink refuses and names the
+  explicit `FORMAT blob` alternative.
+* **`/dev/stdout` is written WITHOUT a temporary file**, matching the same
+  special case DuckDB's binder makes: it is a stream with nothing to truncate,
+  and `/dev/tmp_stdout` is nonsense. Verified: it pipes the reconstructed source
+  out verbatim.
+
+`PREPARE`/`EXECUTE` were verified with a parameterised input path and two
+different arguments, which also exercises the node-column check binding the
+user's query (with its `$1`) a second time.
 
 ## 4b part 2 is NOT needed for this
 

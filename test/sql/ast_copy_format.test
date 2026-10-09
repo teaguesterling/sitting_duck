@@ -97,6 +97,23 @@ SELECT (SELECT content FROM read_blob('test/data/unparse_leaf_text/sample.py'))
 ----
 true
 
+# Writing back over the file that was parsed - the shape every
+# parse-patch-write-back workflow takes. It is safe because the sink writes
+# through a temporary file and renames: the splice has read every byte it needs
+# before the destination is touched.
+statement ok
+COPY (SELECT encode('x = 1' || chr(10)) AS b) TO '__TEST_DIR__/inplace.py' (FORMAT blob);
+
+statement ok
+COPY (FROM read_ast('__TEST_DIR__/inplace.py', source := 'full', peek := 'none'))
+TO '__TEST_DIR__/inplace.py' (FORMAT ast);
+
+query II
+SELECT octet_length(content), content = encode('x = 1' || chr(10))
+FROM read_blob('__TEST_DIR__/inplace.py');
+----
+6	true
+
 # =============================================================================
 # 2. The law, per language
 # =============================================================================
@@ -511,13 +528,31 @@ COPY (FROM py_full) TO '__TEST_DIR__/parts' (FORMAT ast, PARTITION_BY (file_path
 ----
 writes exactly ONE file
 
-# 5f. USE_TMP_FILE is always on, and saying so beats silently overriding it.
+# 5f. USE_TMP_FILE is the sink's to decide, and saying so beats silently
+#     overriding it. (Forced on for a file destination; off for '/dev/stdout',
+#     a stream with nothing to truncate.)
 statement error
 COPY (FROM py_full) TO '__TEST_DIR__/opt.py' (FORMAT ast, USE_TMP_FILE false);
 ----
-always sets it
+not supported because FORMAT ast decides it
 
-# 5g. An unknown option is named, not ignored.
+# 5g. A remote destination is refused. DuckDB's COPY binder discards
+#     USE_TMP_FILE unconditionally for a remote path, so the object would be
+#     created before any guard ran and a refusal would leave a 0-byte object -
+#     which looks exactly as authoritative as a 0-byte file. (No network access
+#     is needed to assert this: the refusal is at bind time, before any
+#     filesystem is consulted, and it fires whether or not httpfs is loaded.)
+statement error
+COPY (FROM py_full) TO 's3://bucket/out.py' (FORMAT ast);
+----
+is a remote destination, which this writer refuses
+
+statement error
+COPY (FROM py_full) TO 'https://example.com/out.py' (FORMAT ast);
+----
+is a remote destination, which this writer refuses
+
+# 5h. An unknown option is named, not ignored.
 statement error
 COPY (FROM py_full) TO '__TEST_DIR__/opt.py' (FORMAT ast, FLAVOUR 'vanilla');
 ----

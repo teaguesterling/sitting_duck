@@ -594,7 +594,7 @@ original spec) belong to the normalising unparser and are **rejected**:
 byte-exact output has no layout left to choose. `PARTITION_BY`,
 `PER_THREAD_OUTPUT`, `FILE_SIZE_BYTES`, `FILENAME_PATTERN` and `FILE_EXTENSION`
 are rejected because one parse means one file. `USE_TMP_FILE` is rejected
-because `FORMAT ast` always sets it — see below.
+because `FORMAT ast` decides it — see below.
 
 **It errors rather than guessing (issue #89).** Every condition in
 `ast_unparse_exact`'s table above applies unchanged, because this *is* that
@@ -610,12 +610,34 @@ set of guards in the codebase. Four refusals are specific to the sink:
 | the destination cannot be opened | DuckDB's own IO error, raised before any of the above |
 
 **A refusal leaves no file, and does not truncate an existing one.** Every guard
-above fires *after* the destination would have been opened, so the sink always
-writes through a temporary file (this is why `USE_TMP_FILE` is not accepted:
-turning it off would trade the guarantee for nothing). Measured: after each of
-the fourteen refusals in `test/sql/ast_copy_format.test`, the destination does
-not exist, no temporary file is left behind, and a pre-existing destination
-still holds its original bytes.
+above fires *after* the destination would have been opened, so the sink writes
+through a temporary file and renames (this is why `USE_TMP_FILE` is not
+accepted: turning it off would trade the guarantee for nothing). Measured:
+after each of the fourteen refusals in `test/sql/ast_copy_format.test`, the
+destination does not exist, no temporary file is left behind, and a pre-existing
+destination still holds its original bytes.
+
+The same mechanism makes **writing back over the file that was parsed** safe —
+the splice has read every byte it needs before the destination is touched:
+
+```sql
+COPY (FROM read_ast('x.py', source := 'full')) TO 'x.py' (FORMAT ast);  -- in place
+```
+
+**A remote destination is refused.** DuckDB's `COPY` binder discards
+`USE_TMP_FILE` unconditionally for a remote path, so an `s3://` or `https://`
+object would be created before any guard ran and a refusal would leave a 0-byte
+object — which looks exactly as authoritative as a 0-byte file. Write locally
+and upload, or accept the risk explicitly with
+`COPY (SELECT encode(source) FROM ast_unparse_exact('<path>')) TO 's3://…' (FORMAT blob)`.
+
+**`/dev/stdout` works** and is the one destination written without a temporary
+file (it is a stream; there is nothing to truncate):
+`COPY (FROM read_ast('x.py', source := 'full')) TO '/dev/stdout' (FORMAT ast)`
+pipes the reconstructed source out verbatim.
+
+`PREPARE` / `EXECUTE` work, including a parameterised input path
+(`PREPARE p AS COPY (FROM read_ast($1, source := 'full')) TO 'out' (FORMAT ast)`).
 
 **`COPY ... FROM ... (FORMAT ast)`** — the read direction — is not implemented;
 `read_ast()` is that direction.

@@ -95,6 +95,7 @@
 // ============================================================================
 
 #include "duckdb.hpp"
+#include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/copy_function.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
@@ -153,10 +154,11 @@ void RejectOption(const string &option) {
 	}
 	if (lower == "use_tmp_file") {
 		throw BinderException(
-		    "COPY ... TO ... (FORMAT ast): option USE_TMP_FILE is not supported because FORMAT ast always sets it. "
-		    "Every validation guard fires after the destination would have been opened, so writing through a "
-		    "temporary file is what keeps a refusal from leaving a truncated or empty file where source code was "
-		    "asked for.");
+		    "COPY ... TO ... (FORMAT ast): option USE_TMP_FILE is not supported because FORMAT ast decides it. Every "
+		    "validation guard fires after the destination would have been opened, so a file destination is always "
+		    "written through a temporary file — that is what keeps a refusal from leaving a truncated or empty file "
+		    "where source code was asked for. '/dev/stdout' is the one exception: it is a stream with nothing to "
+		    "truncate, so no temporary file is used there.");
 	}
 	throw BinderException("COPY ... TO ... (FORMAT ast): unrecognized option %s. Supported options are LANGUAGE "
 	                      "('<language>', an override for the inferred `language` column) and FILE_PATH ('<path>', a "
@@ -290,6 +292,24 @@ BoundStatement AstCopyPlan(Binder &binder, CopyStatement &stmt) {
 	                             "carries several, not a selector that may come up empty.",
 	                             StringUtil::Join(overrides, " and "));
 
+	// A remote destination cannot be protected, so it is refused rather than
+	// quietly downgraded. DuckDB's own COPY binder discards use_tmp_file
+	// UNCONDITIONALLY for a remote path (bind_copy.cpp: `if (is_remote_file)
+	// { use_tmp_file = false; }`), which means the object would be created
+	// before any guard runs and a refusal would leave a 0-byte object behind.
+	// A 0-byte S3 object looks exactly as authoritative as a 0-byte file, which
+	// is the thing this whole feature exists to avoid.
+	if (FileSystem::IsRemoteFile(info.file_path)) {
+		throw BinderException(
+		    "COPY ... TO ... (FORMAT ast): '%s' is a remote destination, which this writer refuses. Every "
+		    "byte-exactness guard fires after the destination would have been opened, so FORMAT ast relies on "
+		    "writing through a temporary file and renaming — and DuckDB's COPY disables temporary files for remote "
+		    "paths unconditionally, so a refusal would leave a 0-byte object where source code was asked for. Write "
+		    "locally and upload, or accept that risk explicitly:\n"
+		    "  COPY (SELECT encode(source) FROM ast_unparse_exact('<path>')) TO '%s' (FORMAT blob)",
+		    info.file_path, info.file_path);
+	}
+
 	if (!info.select_statement) {
 		// Binder::Bind(CopyStatement &) synthesizes SELECT * FROM <table> before
 		// reaching here, so this is defensive only.
@@ -322,10 +342,18 @@ BoundStatement AstCopyPlan(Binder &binder, CopyStatement &stmt) {
 	info.format = "blob";
 	info.is_format_auto_detected = false;
 	info.options.clear();
-	// Always write through a temporary file: every guard above fires after the
+	// Write through a temporary file: every guard above fires after the
 	// destination would have been opened, and a refusal must not leave a
-	// truncated or 0-byte file where source code was asked for.
-	info.options["use_tmp_file"] = {Value::BOOLEAN(true)};
+	// truncated or 0-byte file where source code was asked for. This is also
+	// what makes writing back over the file that was parsed safe — the splice
+	// has read every byte it needs before the rename happens.
+	//
+	// '/dev/stdout' is excluded, matching the same special case DuckDB's COPY
+	// binder makes: it is a stream, there is nothing to truncate, and the
+	// temporary path would be the nonsensical '/dev/tmp_stdout'.
+	if (info.file_path != "/dev/stdout") {
+		info.options["use_tmp_file"] = {Value::BOOLEAN(true)};
+	}
 
 	return binder.Bind(stmt.Cast<SQLStatement>());
 }
