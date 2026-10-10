@@ -62,6 +62,49 @@ Metric: byte-equivalent generated tables + green full suite + a sync CI check. N
 **All of (a)–(e) are done; the metric was met.** Deliverable 2 of M1 is complete; 1, 3, 4
 and 5 remain.
 
+## Conformance kit baseline — recorded 2026-10-09
+
+`scripts/conformance_kit.sh` **exits 3** on a clean tree, because four checks
+genuinely fail. Nothing in the repo said so until now, which made the kit
+unusable as a gate: a reader could not tell a new failure from an expected one.
+The baseline is the gate.
+
+Run: `bash scripts/conformance_kit.sh --binary build/release/duckdb`
+Scan: 3876 `DEF_TYPE` entries from 59 files, 31 languages; 27 languages, 67 fixtures.
+
+```
+TOTALS ok=183 FAIL=4 dirty=1 void=12 UNDECL=5 n/a=11 | languages=27
+```
+
+The four FAILs, all pre-existing and none caused by the kit:
+
+| language | check | detail |
+|---|---|---|
+| kotlin | NATIVE-DECL | 4 of 6 function defs take parameters in source, **0 delivered** |
+| lua | NATIVE-DECL | 12 of 14 function defs take parameters in source, **0 delivered** |
+| sql | NATIVE-DECL | 2 of 2 function defs take parameters in source, **0 delivered** |
+| typescript | NATIVE-ABST | 1 of 214 NONE-declared nodes carries native payload |
+
+The NATIVE-DECL trio is one shape: the `.def` declares a function-shaped
+native strategy and the extractor delivers nothing, so the declaration is
+unbacked. NATIVE-ABST's single typescript row is the opposite direction — a
+node declared NONE that carries payload anyway.
+
+Also expected, and neither pass nor fail:
+
+- **`duckdb`: 5 × UNDECL.** The adapter wraps DuckDB's own parser and ships no
+  `.def`, so no declaration source can answer. A result, not a harness
+  problem (#197).
+- **`kotlin` PARSE: dirty.** 1 ERROR/MISSING node of 799; `simple.kt:1`
+  quarantined. The language is still judged on the rest.
+- **12 × void.** No fixture, no clean fixture, or the corpus does not exercise
+  the capability. Never read as a pass.
+
+A new FAIL, a new UNDECL, or a count that moves without an explanation in this
+table is a regression. A control that stops firing voids the run outright —
+`CONTROLS OK` is a precondition for reading the matrix at all, and the kit
+exits 4 rather than 3 when one does not fire.
+
 ## Sequencing (RFC M1→M4)
 M1 contract (here) → M2 in-tree core/ + languages/<lang>/ layout, macro split (→ v2.0.0-alpha)
 → M3 repo split via git filter-repo (→ v2.0.0) → M4 capabilities (WASM, splice/rewrite +
