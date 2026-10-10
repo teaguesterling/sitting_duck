@@ -18,9 +18,13 @@ namespace duckdb {
 // TypeScript Adapter implementation
 //==============================================================================
 
+// Included twice (#215): once with DEF_TYPE live for the named rules, once with
+// DEF_TYPE_ANON live for the anonymous tokens that share their type string.
+// See LanguageAdapter::GetAnonNodeConfigs() and ruby_types.def.
 #define DEF_TYPE(raw_type, semantic_type, name_strat, native_strat, flags)                                             \
 	{raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat,                                \
 	                      NativeExtractionStrategy::native_strat, flags)},
+#define DEF_TYPE_ANON(raw_type, semantic_type, name_strat, native_strat, flags)
 
 const unordered_map<string, NodeConfig> TypeScriptAdapter::node_configs = {
 // TypeScript-specific type definitions (includes JavaScript as base)
@@ -28,6 +32,19 @@ const unordered_map<string, NodeConfig> TypeScriptAdapter::node_configs = {
 };
 
 #undef DEF_TYPE
+#undef DEF_TYPE_ANON
+
+#define DEF_TYPE(raw_type, semantic_type, name_strat, native_strat, flags)
+#define DEF_TYPE_ANON(raw_type, semantic_type, name_strat, native_strat, flags)                                        \
+	{raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat,                                \
+	                      NativeExtractionStrategy::native_strat, flags)},
+
+const unordered_map<string, NodeConfig> TypeScriptAdapter::node_configs_anon = {
+#include "../language_configs/typescript_types.def"
+};
+
+#undef DEF_TYPE
+#undef DEF_TYPE_ANON
 
 string TypeScriptAdapter::GetLanguageName() const {
 	return "typescript";
@@ -132,6 +149,10 @@ bool TypeScriptAdapter::IsPublicNode(TSNode node, const string &content) const {
 
 const unordered_map<string, NodeConfig> &TypeScriptAdapter::GetNodeConfigs() const {
 	return node_configs;
+}
+
+const unordered_map<string, NodeConfig> &TypeScriptAdapter::GetAnonNodeConfigs() const {
+	return node_configs_anon;
 }
 
 ParsingFunction TypeScriptAdapter::GetParsingFunction() const {

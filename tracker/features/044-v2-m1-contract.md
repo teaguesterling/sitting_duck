@@ -70,7 +70,14 @@ unusable as a gate: a reader could not tell a new failure from an expected one.
 The baseline is the gate.
 
 Run: `bash scripts/conformance_kit.sh --binary build/release/duckdb`
-Scan: 3876 `DEF_TYPE` entries from 59 files, 31 languages; 27 languages, 67 fixtures.
+Scan: 3873 `DEF_TYPE` entries from 59 files, 31 languages; 27 languages, 67 fixtures.
+
+> The scan was 3876 when first recorded. #215 converted three typescript
+> `DEF_TYPE` entries to `DEF_TYPE_ANON`, and the scanner's
+> `/DEF_TYPE[ \t]*\(/` does not match `DEF_TYPE_ANON(` -- so the kit neither
+> trips over the new macro nor sees the 27 anonymous declarations it adds.
+> Making `DECL-UNIQUE` namedness-aware (a seventh column, `named`, in the key)
+> is the follow-up; until then the anonymous table is outside the gate.
 
 ```
 TOTALS ok=183 FAIL=4 dirty=1 void=12 UNDECL=5 n/a=11 | languages=27

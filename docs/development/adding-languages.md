@@ -267,6 +267,41 @@ DEF_TYPE(")", PARSER_SYNTAX, NONE, NONE, 0)
     Adding a *language* normally needs no spec change — the existing taxonomy is
     meant to be universal. Reach for the spec only when no existing type fits.
 
+!!! warning "A node type name is not a unique key: `DEF_TYPE_ANON` (#215)"
+
+    A tree-sitter grammar can use **one type string for two different symbols** —
+    ruby `if` is both the if-statement rule (`named: true`) and the bare `if`
+    keyword that introduces it (`named: false`). `node_configs` is an
+    `unordered_map` keyed on that string, so a single `DEF_TYPE` entry classifies
+    **both**, and the keyword token is emitted as a second if-statement.
+
+    Declare the anonymous half with `DEF_TYPE_ANON`, in the same `.def` file:
+
+    ```cpp
+    DEF_TYPE("if", FLOW_CONDITIONAL, NONE, NONE, 0)
+    DEF_TYPE_ANON("if", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+    ```
+
+    Keep the same semantic type — a bare `if` is still conditional flow, and
+    `.flow` should still reach it — and add `IS_SYNTAX_ONLY`, which is what tells
+    the token from the construct for `prune('syntax')` and the class selectors.
+    Name and native strategies are `NONE`: an unnamed node has no children, so
+    every `FIND_*`/`FIRST_CHILD` strategy returns `""` anyway.
+
+    An adapter whose `.def` uses `DEF_TYPE_ANON` includes the file **twice**, once
+    with each macro live — see `src/language_adapters/ruby_adapter.cpp`, and
+    override `GetAnonNodeConfigs()`. An adapter with no `DEF_TYPE_ANON` entries
+    needs neither: the base class returns an empty map.
+
+    **Do not hand-maintain the list.** Run
+    `scripts/audit_anon_token_collisions.py`: it derives the colliding type
+    strings from `parser.c`'s `ts_symbol_metadata[]`, reports which ones are
+    already covered (declared syntax-only, or handled by the `#208` engine rule
+    that strips a name/scope claim from an unnamed node), prints the
+    `DEF_TYPE_ANON` line each gap needs with `--emit`, and exits nonzero on a gap.
+    Re-run it after a grammar submodule bump — which strings collide is a property
+    of the grammar and changes when the grammar does.
+
 **Semantic Type Hierarchy** (generated from `spec/taxonomy/taxonomy.yaml`; read the
 current list in `src/include/semantic_types.hpp`):
 

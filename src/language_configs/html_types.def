@@ -350,3 +350,19 @@ DEF_TYPE("name", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
 
 /** @} */ // end html_parser_errors
+
+// =============================================================================
+// ANONYMOUS TOKENS (#215)
+// =============================================================================
+// node-types.json lists each of these type strings twice -- `named: true` for
+// the rule above and `named: false` for the bare token that introduces it --
+// and `node_configs` is keyed on the string alone, so without a separate
+// declaration the token is emitted as a second instance of the construct.
+// DEF_TYPE_ANON declares the anonymous half: same semantic type, plus
+// IS_SYNTAX_ONLY, which is what tells the token from the construct.
+// See src/language_configs/ruby_types.def for the full rationale and
+// scripts/audit_anon_token_collisions.py for the derivation. Do not
+// hand-maintain.
+
+/// @brief The literal `DOCTYPE` token inside the doctype node
+DEF_TYPE_ANON("doctype", METADATA_DIRECTIVE, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)

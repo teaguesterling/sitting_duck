@@ -52,6 +52,24 @@ public:
 		return (it != configs.end()) ? &it->second : nullptr;
 	}
 
+	// Namedness-aware lookup (#215). A raw_type is NOT a unique key across a
+	// tree-sitter grammar: node-types.json can list the same string twice,
+	// `named: true` for a rule and `named: false` for the anonymous token that
+	// introduces it -- ruby `if` is both the if-statement and the bare `if`
+	// keyword. GetNodeConfigs() holds the NAMED declaration; the anonymous one
+	// lives in GetAnonNodeConfigs() for the languages that declare it, and
+	// falls through to the named table otherwise, which is the common case.
+	const NodeConfig *GetNodeConfig(const string &node_type, bool named) const {
+		if (!named) {
+			const auto &anon = GetAnonNodeConfigs();
+			auto it = anon.find(node_type);
+			if (it != anon.end()) {
+				return &it->second;
+			}
+		}
+		return GetNodeConfig(node_type);
+	}
+
 	// Get parser (lazy initialization) - made public for registry access
 	TSParser *GetParser() const {
 		if (!parser_wrapper_) {
@@ -71,6 +89,15 @@ public:
 	// Pure virtual method to get the static node configs map - each adapter implements this
 	// Made public for template function access (performance optimization)
 	virtual const unordered_map<string, NodeConfig> &GetNodeConfigs() const = 0;
+
+	// ANONYMOUS-token declarations (#215), keyed by the same raw_type string.
+	// Defaults to empty so an adapter whose grammar has no colliding type --
+	// most of them -- needs no change at all. Public for the same reason as
+	// GetNodeConfigs(): the hot loop hoists it past the virtual call.
+	virtual const unordered_map<string, NodeConfig> &GetAnonNodeConfigs() const {
+		static const unordered_map<string, NodeConfig> none;
+		return none;
+	}
 
 protected:
 	// Owned parser instance - created once per adapter
@@ -171,6 +198,7 @@ public:
 	bool IsPublicNode(TSNode node, const string &content) const override;
 	ParsingFunction GetParsingFunction() const override;
 	const unordered_map<string, NodeConfig> &GetNodeConfigs() const override;
+	const unordered_map<string, NodeConfig> &GetAnonNodeConfigs() const override;
 
 protected:
 	void InitializeParser() const override;
@@ -178,6 +206,7 @@ protected:
 
 private:
 	static const unordered_map<string, NodeConfig> node_configs;
+	static const unordered_map<string, NodeConfig> node_configs_anon;
 };
 
 // SQL language adapter
@@ -229,6 +258,7 @@ public:
 	bool IsPublicNode(TSNode node, const string &content) const override;
 	ParsingFunction GetParsingFunction() const override;
 	const unordered_map<string, NodeConfig> &GetNodeConfigs() const override;
+	const unordered_map<string, NodeConfig> &GetAnonNodeConfigs() const override;
 
 protected:
 	void InitializeParser() const override;
@@ -236,6 +266,7 @@ protected:
 
 private:
 	static const unordered_map<string, NodeConfig> node_configs;
+	static const unordered_map<string, NodeConfig> node_configs_anon;
 };
 
 class MarkdownAdapter : public LanguageAdapter {
@@ -288,6 +319,7 @@ public:
 	bool IsPublicNode(TSNode node, const string &content) const override;
 	ParsingFunction GetParsingFunction() const override;
 	const unordered_map<string, NodeConfig> &GetNodeConfigs() const override;
+	const unordered_map<string, NodeConfig> &GetAnonNodeConfigs() const override;
 
 protected:
 	void InitializeParser() const override;
@@ -295,6 +327,7 @@ protected:
 
 private:
 	static const unordered_map<string, NodeConfig> node_configs;
+	static const unordered_map<string, NodeConfig> node_configs_anon;
 };
 #endif
 
@@ -308,6 +341,7 @@ public:
 	bool IsPublicNode(TSNode node, const string &content) const override;
 	ParsingFunction GetParsingFunction() const override;
 	const unordered_map<string, NodeConfig> &GetNodeConfigs() const override;
+	const unordered_map<string, NodeConfig> &GetAnonNodeConfigs() const override;
 
 protected:
 	void InitializeParser() const override;
@@ -315,6 +349,7 @@ protected:
 
 private:
 	static const unordered_map<string, NodeConfig> node_configs;
+	static const unordered_map<string, NodeConfig> node_configs_anon;
 };
 
 class JSONAdapter : public LanguageAdapter {
@@ -365,6 +400,7 @@ public:
 	bool IsPublicNode(TSNode node, const string &content) const override;
 	ParsingFunction GetParsingFunction() const override;
 	const unordered_map<string, NodeConfig> &GetNodeConfigs() const override;
+	const unordered_map<string, NodeConfig> &GetAnonNodeConfigs() const override;
 
 protected:
 	void InitializeParser() const override;
@@ -372,6 +408,7 @@ protected:
 
 private:
 	static const unordered_map<string, NodeConfig> node_configs;
+	static const unordered_map<string, NodeConfig> node_configs_anon;
 };
 
 class CSSAdapter : public LanguageAdapter {
@@ -483,6 +520,7 @@ public:
 	bool IsPublicNode(TSNode node, const string &content) const override;
 	ParsingFunction GetParsingFunction() const override;
 	const unordered_map<string, NodeConfig> &GetNodeConfigs() const override;
+	const unordered_map<string, NodeConfig> &GetAnonNodeConfigs() const override;
 
 protected:
 	void InitializeParser() const override;
@@ -490,6 +528,7 @@ protected:
 
 private:
 	static const unordered_map<string, NodeConfig> node_configs;
+	static const unordered_map<string, NodeConfig> node_configs_anon;
 };
 
 // C# language adapter
@@ -563,6 +602,7 @@ public:
 	bool IsPublicNode(TSNode node, const string &content) const override;
 	ParsingFunction GetParsingFunction() const override;
 	const unordered_map<string, NodeConfig> &GetNodeConfigs() const override;
+	const unordered_map<string, NodeConfig> &GetAnonNodeConfigs() const override;
 
 protected:
 	void InitializeParser() const override;
@@ -570,6 +610,7 @@ protected:
 
 private:
 	static const unordered_map<string, NodeConfig> node_configs;
+	static const unordered_map<string, NodeConfig> node_configs_anon;
 };
 
 // TOML adapter - configuration file format
@@ -624,6 +665,7 @@ public:
 	bool IsPublicNode(TSNode node, const string &content) const override;
 	ParsingFunction GetParsingFunction() const override;
 	const unordered_map<string, NodeConfig> &GetNodeConfigs() const override;
+	const unordered_map<string, NodeConfig> &GetAnonNodeConfigs() const override;
 
 protected:
 	void InitializeParser() const override;
@@ -631,6 +673,7 @@ protected:
 
 private:
 	static const unordered_map<string, NodeConfig> node_configs;
+	static const unordered_map<string, NodeConfig> node_configs_anon;
 };
 
 // Immutable description of a runtime-registered (dlopen'd) tree-sitter grammar.

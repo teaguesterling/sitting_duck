@@ -657,3 +657,23 @@ DEF_TYPE("metavariable", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
 DEF_TYPE("outer_doc_comment_marker", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
 DEF_TYPE("shebang", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
 DEF_TYPE("string_content", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+
+// =============================================================================
+// ANONYMOUS TOKENS (#215)
+// =============================================================================
+// node-types.json lists each of these type strings twice -- `named: true` for
+// the rule above and `named: false` for the bare token that introduces it --
+// and `node_configs` is keyed on the string alone, so without a separate
+// declaration the token is emitted as a second instance of the construct.
+// DEF_TYPE_ANON declares the anonymous half: same semantic type, plus
+// IS_SYNTAX_ONLY, which is what tells the token from the construct.
+// See src/language_configs/ruby_types.def for the full rationale and
+// scripts/audit_anon_token_collisions.py for the derivation. Do not
+// hand-maintain.
+
+/// @brief Bare `lifetime` token, not the lifetime parameter.
+/// NOTE: parser.c lists an anonymous `lifetime` symbol, but no fixture in this
+/// tree produces one -- `'a`, `'static` and `for<'a>` all parse to the NAMED
+/// rule. Declared because the symbol table is the authority on what the
+/// grammar can emit; inert until something emits it.
+DEF_TYPE_ANON("lifetime", TYPE_GENERIC, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)

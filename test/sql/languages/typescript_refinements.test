@@ -140,23 +140,28 @@ new_expression	COMPUTATION_CALL
 # LITERAL REFINEMENTS
 # =============================================================================
 
-# Test: Number literals should be LITERAL_NUMBER
-query IT
-SELECT type, semantic_type_to_string(semantic_type) as sem_type
+# Test: `number` and `string` are TWO node types sharing one name (#215).
+#
+# These were `WHERE type = 'number' LIMIT 1` with no ORDER BY, asserting
+# LITERAL_NUMBER. They passed for the wrong reason: the FIRST `number` node in
+# this fixture is `age: number;` on line 6 -- a TYPE ANNOTATION, not a literal
+# -- and before #215 the type keyword inherited the literal's classification,
+# because node_configs is keyed on the type string alone and this file's own
+# TYPE_PRIMITIVE declaration for `number` was dead (shadowed by
+# javascript_types.def; see #222).
+#
+# Both halves are now asserted, so neither can drift back and no row is
+# selected by document order.
+query ITTI
+SELECT type, semantic_type_to_string(semantic_type) AS sem_type, is_syntax_only(flags) AS syntax, count(*) AS n
 FROM read_ast('test/data/typescript_test.ts', context := 'native')
-WHERE type = 'number'
-LIMIT 1;
+WHERE type IN ('number', 'string')
+GROUP BY ALL ORDER BY type, sem_type;
 ----
-number	LITERAL_NUMBER
-
-# Test: String literals should be LITERAL_STRING
-query IT
-SELECT type, semantic_type_to_string(semantic_type) as sem_type
-FROM read_ast('test/data/typescript_test.ts', context := 'native')
-WHERE type = 'string'
-LIMIT 1;
-----
-string	LITERAL_STRING
+number	LITERAL_NUMBER	false	10
+number	TYPE_PRIMITIVE	true	20
+string	LITERAL_STRING	false	9
+string	TYPE_PRIMITIVE	true	29
 
 # =============================================================================
 # CONTROL FLOW REFINEMENTS
