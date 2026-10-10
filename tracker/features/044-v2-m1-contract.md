@@ -70,7 +70,7 @@ unusable as a gate: a reader could not tell a new failure from an expected one.
 The baseline is the gate.
 
 Run: `bash scripts/conformance_kit.sh --binary build/release/duckdb`
-Scan: 3817 `DEF_TYPE` entries from 59 files, 31 languages; 27 languages, 67 fixtures.
+Scan: 3791 `DEF_TYPE` entries from 59 files, 31 languages; 27 languages, 67 fixtures.
 
 > **Scan count history.** 3876 when first recorded -> 3873 (#215 converted three
 > typescript `DEF_TYPE` entries to `DEF_TYPE_ANON`, and the scanner's
@@ -79,31 +79,40 @@ Scan: 3817 `DEF_TYPE` entries from 59 files, 31 languages; 27 languages, 67 fixt
 > (#222 deleted 56 typescript entries that were byte-identical duplicates of
 > javascript ones and therefore dead under the initialiser list's first-wins
 > rule). Making `DECL-UNIQUE` namedness-aware, and making the `.def` scan follow
-> `#include`s, are both follow-ups; until then the anonymous table and the
-> shadowing are outside the gate.
+> `#include`s, are both follow-ups; until then the anonymous table is outside
+> the gate. The shadowing itself is now gated by
+> `scripts/audit_shadowed_declarations.py`, and **3817 -> 3791** is #222 part 2
+> deleting the last 26 dead declarations (17 in typescript, 9 in javascript for
+> node types the JavaScript grammar cannot emit).
 >
-> typescript's `NATIVE-ABST` denominator moved 214 -> 124 in the same change:
-> the kit reads the `.def` file rather than the include chain, so deleting dead
-> duplicates shrinks what it counts. The single leaking node is unchanged, and
-> the correction on #221 explains what it actually is.
+> typescript's `NATIVE-ABST` denominator moved 214 -> 124 in that change (the
+> kit reads the `.def` file rather than the include chain, so deleting dead
+> duplicates shrinks what it counts), and the row disappeared entirely in part 2
+> once the dead `variable_declarator NONE` line was gone.
 
 ```
-TOTALS ok=183 FAIL=4 dirty=1 void=12 UNDECL=5 n/a=11 | languages=27
+TOTALS ok=184 FAIL=3 dirty=1 void=12 UNDECL=5 n/a=11 | languages=27
 ```
 
-The four FAILs, all pre-existing and none caused by the kit:
+The three FAILs, all pre-existing and none caused by the kit:
 
 | language | check | detail |
 |---|---|---|
 | kotlin | NATIVE-DECL | 4 of 6 function defs take parameters in source, **0 delivered** |
 | lua | NATIVE-DECL | 12 of 14 function defs take parameters in source, **0 delivered** |
 | sql | NATIVE-DECL | 2 of 2 function defs take parameters in source, **0 delivered** |
-| typescript | NATIVE-ABST | 1 of 124 NONE-declared nodes carries native payload |
 
 The NATIVE-DECL trio is one shape: the `.def` declares a function-shaped
 native strategy and the extractor delivers nothing, so the declaration is
-unbacked. NATIVE-ABST's single typescript row is the opposite direction — a
-node declared NONE that carries payload anyway.
+unbacked. Tracked as #220.
+
+There was a fourth FAIL — `typescript NATIVE-ABST`, a node declared NONE that
+carried payload anyway. It is **gone as of #222 part 2**, and it was never an
+engine fault: the kit was reading `typescript_types.def`'s dead
+`variable_declarator NONE` while javascript's `VARIABLE_WITH_TYPE` was the
+declaration in force. Deleting the dead line removed the contradiction at its
+source. Filed as #221, closed as a wrong diagnosis, and now structurally
+impossible for that node.
 
 Also expected, and neither pass nor fail:
 

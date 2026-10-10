@@ -219,7 +219,7 @@ DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 /**
  * @brief Augmented assignment: `a += b`, `a *= b`, etc.
  */
-DEF_TYPE("augmented_assignment_expression", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
+DEF_TYPE("augmented_assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::COMPOUND, NONE, NONE, 0)
 
 /**
  * @brief Update expression: `a++`, `++a`, `a--`, `--a`
@@ -405,7 +405,6 @@ DEF_TYPE("pair", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, 
 /**
  * @brief Property assignment in object literal
  */
-DEF_TYPE("property_assignment", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, FIND_IDENTIFIER, NONE, 0)
 
 /**
  * @brief Computed property name: `[expr]: value`
@@ -462,22 +461,20 @@ DEF_TYPE("switch_body", ORGANIZATION_BLOCK | SemanticRefinements::Organization::
 /**
  * @brief Switch case: `case value:`
  */
-DEF_TYPE("switch_case", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("switch_case", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 
 /**
  * @brief Case clause in switch
  */
-DEF_TYPE("case_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
 
 /**
  * @brief Switch default: `default:`
  */
-DEF_TYPE("switch_default", FLOW_CONDITIONAL, NONE, NONE, 0)
+DEF_TYPE("switch_default", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 
 /**
  * @brief Default clause in switch
  */
-DEF_TYPE("default_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
 
 /**
  * @brief Conditional expression: `a ? b : c`
@@ -759,17 +756,14 @@ DEF_TYPE("rest_parameter", PATTERN_COLLECT, FIND_IDENTIFIER, NONE, 0)
 /**
  * @brief Required parameter (TypeScript, but used in JS parsing)
  */
-DEF_TYPE("required_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /**
  * @brief Method signature (declaration only)
  */
-DEF_TYPE("method_signature", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DECLARATION)
 
 /**
  * @brief Property signature (declaration only)
  */
-DEF_TYPE("property_signature", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DECLARATION)
 
 /** @} */ // end javascript_parameters
 
@@ -834,7 +828,7 @@ DEF_TYPE("while", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("do", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @brief switch keyword */
-DEF_TYPE("switch", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("switch", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @brief case keyword */
 DEF_TYPE("case", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -846,10 +840,10 @@ DEF_TYPE("default", FLOW_CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("return", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @brief break keyword */
-DEF_TYPE("break", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("break", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @brief continue keyword */
-DEF_TYPE("continue", FLOW_JUMP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE("continue", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @brief async keyword */
 DEF_TYPE("async", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -1189,15 +1183,6 @@ DEF_TYPE("...", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
  * constructs or JSDoc annotations.
  * @{
  */
-
-/** @brief Type annotation */
-DEF_TYPE("type_annotation", TYPE_REFERENCE, NONE, NONE, 0)
-
-/** @brief Type identifier */
-DEF_TYPE("type_identifier", TYPE_REFERENCE, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
-
-/** @brief Predefined type */
-DEF_TYPE("predefined_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
 
 /** @brief Non-null expression */
 DEF_TYPE("non_null_expression", TYPE_REFERENCE, NONE, NONE, 0)

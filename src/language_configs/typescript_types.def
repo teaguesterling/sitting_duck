@@ -352,9 +352,6 @@ DEF_TYPE("protected", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEY
 /** @brief Readonly modifier for properties */
 DEF_TYPE("readonly", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-/** @brief Static modifier for class members */
-DEF_TYPE("static", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
 /** @brief Abstract modifier for classes/methods */
 DEF_TYPE("abstract", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
@@ -412,9 +409,6 @@ DEF_TYPE("import_type_clause", EXTERNAL_IMPORT, NONE, NONE, 0)
 /** @brief Export type clause: `export type { ... }` */
 DEF_TYPE("export_type_clause", EXTERNAL_EXPORT, NONE, NONE, 0)
 
-/** @brief Import specifier: individual import binding */
-DEF_TYPE("import_specifier", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_CONSTITUENT)
-
 /** @brief CommonJS require import: `import x = require("module")` */
 DEF_TYPE("import_require_clause", EXTERNAL_IMPORT, NONE, NONE, 0)
 
@@ -467,9 +461,6 @@ DEF_TYPE("implements_clause", TYPE_REFERENCE, NONE, NONE, 0)
 /** @brief Extends clause: `extends BaseClass` */
 DEF_TYPE("extends_clause", TYPE_REFERENCE, NONE, NONE, 0)
 
-/** @brief Class body block */
-DEF_TYPE("class_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
-
 /** @brief Interface body block */
 DEF_TYPE("interface_body", ORGANIZATION_BLOCK, NONE, NONE, 0)
 
@@ -509,27 +500,6 @@ DEF_TYPE("instantiation_expression", COMPUTATION_CALL, NONE, NONE, 0)
  * @{
  */
 
-/** @brief Switch statement */
-DEF_TYPE("switch", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/** @brief Switch default (fallback case) */
-DEF_TYPE("switch_default", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
-
-/** @brief Default clause in switch */
-DEF_TYPE("default_clause", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
-
-/** @brief Switch case: `case value:` */
-DEF_TYPE("switch_case", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
-
-/** @brief Case clause in switch */
-DEF_TYPE("case_clause", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
-
-/** @brief Break statement */
-DEF_TYPE("break", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/** @brief Continue statement */
-DEF_TYPE("continue", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
 /** @} */ // end typescript_control
 
 /**
@@ -545,9 +515,6 @@ DEF_TYPE("continue", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE
  * @brief Destructuring patterns for arrays and objects
  * @{
  */
-
-/** @brief Variable declarator: `name = value` */
-DEF_TYPE("variable_declarator", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @} */ // end typescript_patterns
 
@@ -577,9 +544,6 @@ DEF_TYPE("declare", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @brief keyof operator in type context */
 DEF_TYPE("keyof", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/** @brief typeof operator in type context */
-DEF_TYPE("typeof", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @brief infer keyword in conditional types */
 DEF_TYPE("infer", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -662,9 +626,6 @@ DEF_TYPE("meta", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 /** @brief Template literal type span */
 DEF_TYPE("template_literal_type_span", LITERAL_STRING, NONE, NONE, 0)
 
-/** @brief Property assignment in object literal */
-DEF_TYPE("property_assignment", LITERAL_STRUCTURED, FIND_IDENTIFIER, NONE, 0)
-
 /** @} */ // end typescript_literals
 
 /**
@@ -673,14 +634,8 @@ DEF_TYPE("property_assignment", LITERAL_STRUCTURED, FIND_IDENTIFIER, NONE, 0)
  * @{
  */
 
-/** @brief Optional chain expression */
-DEF_TYPE("optional_chain", COMPUTATION_ACCESS, NONE, NONE, 0)
-
 /** @brief Optional type indicator in ternary */
 DEF_TYPE("?:", OPERATOR_LOGICAL, NONE, NONE, 0)
-
-/** @brief Augmented assignment: `+=`, `-=`, etc. */
-DEF_TYPE("augmented_assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::COMPOUND, NONE, NONE, 0)
 
 /** @} */ // end typescript_operators
 
@@ -697,12 +652,6 @@ DEF_TYPE("augmented_assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefine
  * @brief Syntactic punctuation tokens
  * @{
  */
-
-/** @brief Generic type angle bracket open */
-DEF_TYPE("<", PARSER_DELIMITER, NONE, NONE, 0)
-
-/** @brief Generic type angle bracket close */
-DEF_TYPE(">", PARSER_DELIMITER, NONE, NONE, 0)
 
 /** @} */ // end typescript_punctuation
 
