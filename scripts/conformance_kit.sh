@@ -196,10 +196,10 @@ declarations come from):
                expected message); one that is merely not satisfied returns 0
                rows cleanly.
   DECL-UNIQUE  one node type, one declaration. A raw_type declared twice with
-               conflicting semantic type or strategies silently loses one of
-               them to the node_configs map, so what the module does depends on
-               insertion order rather than on anything written down. Agreeing
-               duplicates are reported, not failed.
+               conflicting semantic type, strategies OR FLAGS silently loses
+               one of them to the node_configs map, so what the module does
+               depends on insertion order rather than on anything written
+               down. Agreeing duplicates are reported, not failed.
   DECL-RUNTIME declaration integrity: an overridden or def-derived capability
                must not contradict what ast_type_map() shows at run time.
 
@@ -381,8 +381,8 @@ done < <(run_sql "
 ")
 
 # ---- 2b. DEF-DERIVED: native extraction, from the DEF_TYPE tables -----------
-# Emits <language>\t<node_type>\t<name_strategy>\t<native_strategy>\t<semantic_type>,
-# one row per DEF_TYPE entry, for the whole scanned tree. Parsed from the
+# Emits <language>\t<node_type>\t<name_strategy>\t<native_strategy>\t<semantic_type>
+# \t<flags>, one row per DEF_TYPE entry, for the whole scanned tree. Parsed from the
 # RIGHT: the last four comma-separated fields are semantic_type, name_strategy,
 # native_strategy, flags, and none of those four can contain a comma -- whereas
 # the quoted raw_type CAN (DEF_TYPE(",", PARSER_PUNCTUATION, ...) is a real
@@ -418,17 +418,19 @@ for pattern in "${def_sources[@]}"; do
                 raw = f[1]
                 for (i = 2; i <= n - 4; i++) raw = raw "," f[i]
                 gsub(/^[ \t]*"|"[ \t]*$/, "", raw)
-                nm = f[n-2]; nat = f[n-1]; sem = f[n-3]
+                nm = f[n-2]; nat = f[n-1]; sem = f[n-3]; fl = f[n]
                 gsub(/^[ \t]+|[ \t]+$/, "", nm)
                 gsub(/^[ \t]+|[ \t]+$/, "", nat)
                 gsub(/^[ \t]+|[ \t]+$/, "", sem)
+                gsub(/^[ \t]+|[ \t]+$/, "", fl)
                 gsub(/[ \t]*\|[ \t]*/, "|", sem)
+                gsub(/[ \t]*\|[ \t]*/, "|", fl)
                 # The macro definition itself (DEF_TYPE(raw_type, semantic_type,
                 # name_strat, native_strat, flags)) looks like an entry; its
                 # raw_type is the unquoted parameter name, so the quote strip
                 # above leaves it as-is and this catches it.
                 if (raw == "raw_type") next
-                printf "%s\t%s\t%s\t%s\t%s\n", lang, raw, nm, nat, sem
+                printf "%s\t%s\t%s\t%s\t%s\t%s\n", lang, raw, nm, nat, sem, fl
             }
         ' "${f}" >>"${def_table}"
     done
@@ -799,7 +801,7 @@ check_native_absent() {
             FROM read_csv('$(sql_quote "${tbl}")', delim := '\t', header := false,
                           columns := {'column1': 'VARCHAR', 'column2': 'VARCHAR',
                                       'column3': 'VARCHAR', 'column4': 'VARCHAR',
-                                      'column5': 'VARCHAR'})
+                                      'column5': 'VARCHAR', 'column6': 'VARCHAR'})
             WHERE column1 = '$(sql_quote "${lang}")'
             GROUP BY column2
             HAVING count(DISTINCT column4) = 1 AND any_value(column4) = 'NONE'
@@ -1054,7 +1056,8 @@ check_no_empty() {
 # invisible at run time because ast_type_map() reports only the survivor.
 #
 # Duplicates that AGREE are harmless redundancy and are reported, not failed.
-# Only a CONFLICTING duplicate fails.
+# Only a CONFLICTING duplicate fails -- and "agree" means every column of the
+# declaration, flags included (#216).
 #
 # table_override (arg 2) lets the negative control plant a conflicting
 # duplicate and run this function over it.
@@ -1068,12 +1071,23 @@ check_decl_unique() {
     out=$(awk -F'\t' -v l="${lang}" '
         $1 == l {
             n[$2]++
-            # The variant key covers the SEMANTIC TYPE as well as both
-            # strategies: dart declares `type_alias` as DEFINITION_CLASS at
-            # dart_types.def:109 and TYPE_REFERENCE at :682, and a key over
-            # strategies alone would have missed a pair that differed only in
-            # what the node IS.
-            key = $3 "|" $4 "|" $5
+            # The variant key must cover EVERY column of the declaration, not
+            # a subset -- a key over a subset scores agreement it has not
+            # verified, and the loader drops a declaration regardless of which
+            # column the two differ in. Two columns were learned the hard way:
+            #
+            #   semantic_type -- dart declares `type_alias` as DEFINITION_CLASS
+            #     at dart_types.def:109 and TYPE_REFERENCE at :682, a pair that
+            #     differs only in what the node IS.
+            #   flags (#216) -- ruby declared `begin`, `rescue`, `ensure`,
+            #     `raise` and `yield` twice, differing only in IS_KEYWORD. Five
+            #     real duplicates scored `ok` here while the loader dropped one
+            #     of each: exactly the combination that let the class in #208
+            #     accumulate unnoticed.
+            #
+            # SUBSEP rather than "|" as the joiner, because the flags column
+            # legitimately CONTAINS "|" (IS_KEYWORD|IS_PUNCTUATION).
+            key = $3 SUBSEP $4 SUBSEP $5 SUBSEP $6
             if (!($2 SUBSEP key in seen)) { seen[$2 SUBSEP key] = 1; variants[$2]++ }
         }
         END {
@@ -1329,7 +1343,7 @@ fi
 # the DECLARATION table -- the input this check reads -- and run the real
 # check: it has to see the payload leak onto NONE-declared node types.
 planted_def="${workdir}/planted_def.tsv"
-awk -F'\t' 'BEGIN{OFS="\t"} $1=="python" {print $1,$2,$3,"NONE",$5}' "${def_table}" >"${planted_def}"
+awk -F'\t' 'BEGIN{OFS="\t"} $1=="python" {print $1,$2,$3,"NONE",$5,$6}' "${def_table}" >"${planted_def}"
 if [ -s "${planted_def}" ] && [ -n "${corpus_files[python]+x}" ]; then
     r=$(check_native_absent python "${planted_def}")
     cv="${r%%$'\t'*}"
@@ -1381,7 +1395,7 @@ awk -F'\t' 'BEGIN{OFS="\t"} $1=="python"' "${def_table}" >"${planted_dup}"
 if [ -s "${planted_dup}" ]; then
     baseline_dup=$(check_decl_unique python "${planted_dup}")
     awk -F'\t' 'BEGIN{OFS="\t"} $1=="python" && $2=="function_definition" {
-        print $1, $2, $3, ($4 == "NONE" ? "FUNCTION_WITH_PARAMS" : "NONE"); exit
+        print $1, $2, $3, ($4 == "NONE" ? "FUNCTION_WITH_PARAMS" : "NONE"), $5, $6; exit
     }' "${planted_dup}" >>"${planted_dup}"
     r=$(check_decl_unique python "${planted_dup}")
     cv="${r%%$'\t'*}"
@@ -1395,6 +1409,34 @@ elif [ "${def_rows}" -eq 0 ]; then
     control_note "DECL-UNIQUE" skipped "" "no DEF_TYPE source scanned; DECL-UNIQUE is UNDECL everywhere"
 else
     control_note "DECL-UNIQUE" notfired "python def rows" "missing"
+fi
+
+# --- DECL-UNIQUE/flags: plant a duplicate differing ONLY in flags -----------
+# #216. The control above flips the native strategy, which the pre-#216 key
+# already covered -- so it fired while five real ruby duplicates differing only
+# in IS_KEYWORD scored `ok`. This is the control the gap needed: same
+# raw_type, same semantic type, same both strategies, different flags. If the
+# key ever loses the flags column again, THIS control stops firing and the run
+# is VOID rather than quietly green.
+planted_dupflags="${workdir}/planted_dupflags.tsv"
+awk -F'\t' 'BEGIN{OFS="\t"} $1=="python"' "${def_table}" >"${planted_dupflags}"
+if [ -s "${planted_dupflags}" ]; then
+    baseline_dupflags=$(check_decl_unique python "${planted_dupflags}")
+    awk -F'\t' 'BEGIN{OFS="\t"} $1=="python" && $2=="function_definition" {
+        print $1, $2, $3, $4, $5, ($6 == "IS_KEYWORD" ? "IS_PUNCTUATION" : "IS_KEYWORD"); exit
+    }' "${planted_dupflags}" >>"${planted_dupflags}"
+    r=$(check_decl_unique python "${planted_dupflags}")
+    cv="${r%%$'\t'*}"
+    if [ "${cv}" = "FAIL" ] && [ "${baseline_dupflags%%$'\t'*}" = "ok" ]; then
+        control_note "DECL-UNIQ-FLAGS" fired "duplicate differing only in flags" "${r#*$'\t'}"
+    else
+        control_note "DECL-UNIQ-FLAGS" notfired "duplicate differing only in flags" \
+            "baseline ${baseline_dupflags%%$'\t'*}, planted ${cv}: ${r#*$'\t'}"
+    fi
+elif [ "${def_rows}" -eq 0 ]; then
+    control_note "DECL-UNIQ-FLAGS" skipped "" "no DEF_TYPE source scanned; DECL-UNIQUE is UNDECL everywhere"
+else
+    control_note "DECL-UNIQ-FLAGS" notfired "python def rows" "missing"
 fi
 
 # --- DECL-RUNTIME: a false declaration must be caught -----------------------
