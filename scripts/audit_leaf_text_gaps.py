@@ -154,7 +154,12 @@ def unescape_c(s: str) -> str:
     """Decode the C string escapes tree-sitter emits in ts_symbol_names."""
     out: list[str] = []
     i = 0
-    simple = {"n": "\n", "t": "\t", "r": "\r", "0": "\0", "\\": "\\", '"': '"', "'": "'"}
+    # `\?` is a valid C escape for `?`, and the .def files use it deliberately:
+    # "?\?" avoids a trigraph warning while naming the `??` node type. Without
+    # it, every nullish-coalescing operator reads as a different raw_type than
+    # the grammar emits.
+    simple = {"n": "\n", "t": "\t", "r": "\r", "0": "\0", "\\": "\\",
+              '"': '"', "'": "'", "?": "?", "a": "\a", "b": "\b", "f": "\f", "v": "\v"}
     while i < len(s):
         if s[i] == "\\" and i + 1 < len(s):
             nxt = s[i + 1]

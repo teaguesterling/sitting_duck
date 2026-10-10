@@ -19,17 +19,35 @@ lines of its own, and conformance ``NATIVE-ABST`` reported a payload "leak" on
 ``variable_declarator`` that was really javascript's ``VARIABLE_WITH_TYPE``
 doing its job (see the correction on #221).
 
-What this script does, and why it has a baseline
-------------------------------------------------
+What this script does
+---------------------
 A shadowed entry that is byte-identical to the one shadowing it is harmless
 duplication. A shadowed entry that DIFFERS is dead code that also documents
-something untrue. 56 of the identical ones were deleted when this script was
-written; 23 differing ones remain, listed in ``KNOWN_DIFFERING`` below, because
-choosing a winner needs a per-entry decision -- and the better declaration is
-not always the shadowing file's.
+something untrue.
 
-So this exits nonzero only on a **new** shadowed-and-differing entry. Resolving
-one of the known ones means deleting it from the ``.def`` and from the list.
+All 79 are now resolved, so ``KNOWN_DIFFERING`` is empty and ANY shadowed and
+differing declaration fails. The 56 identical ones were deleted first (#228);
+the 23 differing ones went four ways (#222 part 2), and the split is worth
+keeping in mind before adding to that baseline again:
+
+* 6 were JavaScript **omissions**, not TypeScript refinements -- a JS ``switch``
+  is multiway and a JS ``break`` is a BREAK jump. Promoted into
+  ``javascript_types.def``, which fixes both languages. Refinements live in the
+  low 2 bits and ``base_type`` masks them, so no selector changed.
+* 6 were node types the JavaScript grammar cannot emit at all
+  (``method_signature``, ``property_signature``, ``required_parameter``,
+  ``predefined_type``, ``type_annotation``, ``type_identifier``). JavaScript's
+  entry was unreachable, so deleting it lets TypeScript's richer one -- five
+  native strategies TypeScript had been silently not using -- take effect.
+* 8 resolved as "JavaScript was already right", including ``variable_declarator``,
+  whose TypeScript entry added a MUTABLE refinement that is wrong for ``const``
+  while dropping the VARIABLE_WITH_TYPE native strategy that works.
+* 3 (``case_clause``, ``default_clause``, ``property_assignment``) were declared
+  in BOTH files and exist in NEITHER grammar's symbol table. Deleted from both.
+
+If a new entry has to be allowed temporarily, add it to ``KNOWN_DIFFERING`` with
+a reason -- but prefer resolving it, because every one of the 79 turned out to
+have a right answer.
 """
 
 from __future__ import annotations
@@ -57,31 +75,7 @@ FIELDS = ("semantic_type", "name_strategy", "native_strategy", "flags")
 # roughly five of them (variable_declarator, import_specifier, class_body,
 # property_assignment, optional_chain) are cases where JAVASCRIPT'S entry is the
 # richer one, so a blanket "let the deriving file win" would be a regression.
-KNOWN_DIFFERING = {
-    ("typescript", "<"),
-    ("typescript", ">"),
-    ("typescript", "augmented_assignment_expression"),
-    ("typescript", "break"),
-    ("typescript", "case_clause"),
-    ("typescript", "class_body"),
-    ("typescript", "continue"),
-    ("typescript", "default_clause"),
-    ("typescript", "import_specifier"),
-    ("typescript", "method_signature"),
-    ("typescript", "optional_chain"),
-    ("typescript", "predefined_type"),
-    ("typescript", "property_assignment"),
-    ("typescript", "property_signature"),
-    ("typescript", "required_parameter"),
-    ("typescript", "static"),
-    ("typescript", "switch"),
-    ("typescript", "switch_case"),
-    ("typescript", "switch_default"),
-    ("typescript", "type_annotation"),
-    ("typescript", "type_identifier"),
-    ("typescript", "typeof"),
-    ("typescript", "variable_declarator"),
-}
+KNOWN_DIFFERING: set[tuple[str, str]] = set()
 
 
 def first_decls(path: pathlib.Path, token: str = "DEF_TYPE(") -> dict[str, tuple[str, ...]]:

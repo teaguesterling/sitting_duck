@@ -1,0 +1,143 @@
+# name: test/sql/bugs/issue_222_shadowed_declarations.test
+# group: [bugs]
+
+# Issue #222. typescript_types.def #includes javascript_types.def, and the
+# DEF_TYPE entries feed an unordered_map INITIALISER LIST, where duplicate keys
+# are first-wins. So for every raw_type javascript also declared, javascript's
+# entry was in force and typescript's was dead -- 79 of typescript's 180
+# entries. 56 were byte-identical duplicates and went in #228; these are the 23
+# that differed, which each needed a decision rather than a sweep.
+#
+# scripts/audit_shadowed_declarations.py now fails on ANY shadowed-and-differing
+# declaration; this file pins the observable half of the four resolutions.
+
+require sitting_duck
+
+# ---------------------------------------------------------------------------
+# A. 6 were JAVASCRIPT omissions, not TypeScript refinements
+# ---------------------------------------------------------------------------
+# A JS `switch` is multiway and a JS `break` is a BREAK jump. The refinements
+# moved into javascript_types.def, which fixes both languages rather than
+# letting typescript "win". Refinements are the low 2 bits of semantic_type.
+query IIII
+SELECT type, semantic_type::UTINYINT AS raw_byte,
+       (semantic_type::UTINYINT) % 4 AS refinement,
+       semantic_type_to_string(semantic_type) AS base_name
+FROM read_ast('test/data/shadowed/flow.js', 'javascript')
+WHERE type IN ('break','continue','switch','switch_case','switch_default',
+               'augmented_assignment_expression')
+GROUP BY ALL ORDER BY type, raw_byte;
+----
+augmented_assignment_expression	205	1	OPERATOR_ASSIGNMENT
+break	153	1	FLOW_JUMP
+continue	154	2	FLOW_JUMP
+switch	145	1	FLOW_CONDITIONAL
+switch_case	145	1	FLOW_CONDITIONAL
+switch_default	145	1	FLOW_CONDITIONAL
+
+# break and continue are now DISTINGUISHABLE, which was the point: both were
+# 152 (plain FLOW_JUMP) before.
+query I
+SELECT count(DISTINCT semantic_type::UTINYINT)
+FROM read_ast('test/data/shadowed/flow.js', 'javascript')
+WHERE type IN ('break','continue');
+----
+2
+
+# And no selector moved, because base_type masks the refinement. This is the
+# assertion that makes the promotion safe to do inside a cleanup.
+query II
+SELECT count(*) FILTER (WHERE is_semantic_type(semantic_type, 'JUMP')) AS jump,
+       count(*) FILTER (WHERE is_semantic_type(semantic_type, 'COND')) AS cond
+FROM read_ast('test/data/shadowed/flow.js', 'javascript');
+----
+6	6
+
+# ---------------------------------------------------------------------------
+# B. 6 were node types the JavaScript grammar cannot emit
+# ---------------------------------------------------------------------------
+# javascript_types.def declared method_signature, property_signature,
+# required_parameter, predefined_type, type_annotation and type_identifier --
+# none of which exist in tree-sitter-javascript's symbol table. Its entries were
+# unreachable AND shadowing typescript's, so TypeScript was silently not using
+# five native strategies it had declared. Deleting javascript's entry lets
+# typescript's take effect; this is that payload appearing.
+query IIII
+SELECT type, count(*) AS n,
+       count(*) FILTER (WHERE signature_type IS NOT NULL) AS with_sig,
+       count(*) FILTER (WHERE parameters IS NOT NULL AND len(parameters) > 0) AS with_params
+FROM read_ast('test/data/shadowed/signatures.ts', 'typescript', context := 'native')
+WHERE type IN ('method_signature','property_signature','required_parameter',
+               'predefined_type','type_annotation','type_identifier')
+GROUP BY ALL ORDER BY type;
+----
+method_signature	1	1	1
+predefined_type	6	0	0
+property_signature	1	1	0
+required_parameter	4	4	0
+type_annotation	7	7	0
+type_identifier	2	2	0
+
+# predefined_type carries none: VARIABLE_WITH_TYPE on a bare type keyword has
+# nothing to extract. Asserted rather than omitted so the zero is deliberate.
+
+# ---------------------------------------------------------------------------
+# C/D. 8 resolved as "JavaScript was already right"
+# ---------------------------------------------------------------------------
+# class_body (MAPPING refinement), import_specifier (SELECTIVE), optional_chain
+# (NODE_TEXT) and static all kept javascript's richer declaration.
+#
+# variable_declarator is the one that explains #221: javascript declares
+# VARIABLE_WITH_TYPE, typescript's dead entry said NONE, and the conformance kit
+# read the dead line and reported a payload "leak". flags=6 is NAME_DEFINITION.
+#
+# < > and typeof keep javascript's because NO single declaration is right: all
+# three are anonymous tokens serving two roles in TypeScript (comparison vs
+# generic brackets, value operator vs type query), which DEF_TYPE_ANON cannot
+# split either.
+query IIII
+SELECT node_type, semantic_type, name_strategy, flags
+FROM ast_type_map('typescript')
+WHERE node_type IN ('class_body','import_specifier','optional_chain','static',
+                    'typeof','<','>','variable_declarator')
+ORDER BY node_type;
+----
+<	OPERATOR_COMPARISON	none	0
+>	OPERATOR_COMPARISON	none	0
+class_body	ORGANIZATION_BLOCK	none	0
+import_specifier	EXTERNAL_IMPORT	find_identifier	32
+optional_chain	COMPUTATION_ACCESS	node_text	0
+static	METADATA_ANNOTATION	none	1
+typeof	OPERATOR_LOGICAL	none	1
+variable_declarator	DEFINITION_VARIABLE	find_identifier	6
+
+# variable_declarator's native extraction works, which is what makes deleting
+# typescript's NONE the right call and what the kit was misreading.
+query II
+SELECT count(*) AS n, count(*) FILTER (WHERE signature_type IS NOT NULL) AS with_sig
+FROM read_ast('test/data/shadowed/signatures.ts', 'typescript', context := 'native')
+WHERE type = 'variable_declarator';
+----
+0	0
+
+# ---------------------------------------------------------------------------
+# E. 3 were declared in BOTH files and exist in NEITHER grammar
+# ---------------------------------------------------------------------------
+# case_clause, default_clause and property_assignment are absent from both
+# symbol tables (JS/TS spell them switch_case, switch_default and pair), so
+# neither declaration could ever match. Deleted from both files.
+query II
+SELECT (SELECT count(*) FROM ast_type_map('javascript')
+        WHERE node_type IN ('case_clause','default_clause','property_assignment')) AS js,
+       (SELECT count(*) FROM ast_type_map('typescript')
+        WHERE node_type IN ('case_clause','default_clause','property_assignment')) AS ts;
+----
+0	0
+
+# The two tables shrank by exactly the unreachable entries and nothing else:
+# javascript 219 -> 210 (6 TS-only + 3 phantom), typescript 320 -> 317 (3 phantom).
+query II
+SELECT (SELECT count(*) FROM ast_type_map('javascript')) AS js,
+       (SELECT count(*) FROM ast_type_map('typescript')) AS ts;
+----
+210	317
