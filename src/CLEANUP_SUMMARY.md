@@ -24,7 +24,9 @@
 ## Current State
 
 ### Active C++ Files
-- Core functionality: `ast_parser.cpp`, `ast_type.cpp`, `duckdb_ast_extension.cpp`
+- Core functionality: `ast_type.cpp`, `sitting_duck_extension.cpp`
+  (this line named `ast_parser.cpp` and `duckdb_ast_extension.cpp`; the first was
+  deleted as dead code in #196, the second was renamed long before that)
 - Table functions: `read_ast_function.cpp`, `read_ast_objects_hybrid.cpp`
 - Macro loading: `ast_sql_macros.cpp` (current), `ast_sql_macros_loader.cpp` (new)
 

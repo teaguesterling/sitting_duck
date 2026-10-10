@@ -62,10 +62,14 @@ WHERE ast_contains_pattern(ast, '(TODO|FIXME|HACK)');
 
 ### 5. Cross-Language Consistency
 ```sql
--- Are our language handlers implemented consistently?
+-- Are our language adapters implemented consistently?
+-- NB: this example used read_ast_objects('src/language_handler.cpp'). Both are
+-- gone -- the objects API was dropped from EXTENSION_SOURCES, and
+-- language_handler.cpp was deleted as dead code in #196. Rewritten against
+-- read_ast and the adapters that are actually built.
 WITH handlers AS (
-    SELECT * FROM read_ast_objects('src/language_handler.cpp')
-    WHERE class_name LIKE '%LanguageHandler'
+    SELECT * FROM read_ast('src/language_adapters/*_adapter.cpp')
+    WHERE name LIKE '%Adapter'
 )
 SELECT 
     class_name,

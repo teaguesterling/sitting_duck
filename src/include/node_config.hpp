@@ -61,6 +61,12 @@ struct NodeConfig {
 
 // Universal flags for orthogonal node properties
 //
+// The authoritative layout is spec/taxonomy/taxonomy.yaml; the constants below
+// are GENERATED from it into the marked block. This prose restates the layout
+// for readers and sits OUTSIDE that block, so it is the one part of this file
+// that can drift from the spec (#196). Change the spec, regenerate, then fix
+// this comment to match -- nothing checks it.
+//
 // Layout (8 bits):
 //   Bit 0:   IS_SYNTAX_ONLY  (0x01) — pure syntax token (keyword, punctuation)
 //   Bit 1-2: NAME_ROLE       — 2-bit enum for name-binding role

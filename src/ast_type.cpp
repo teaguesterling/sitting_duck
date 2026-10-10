@@ -404,32 +404,6 @@ unique_ptr<ASTType> ASTType::Deserialize(const Value &value) {
 	return ast;
 }
 
-// Taxonomy implementation functions
-uint64_t ASTNode::GenerateSemanticID(ASTKind kind, uint8_t universal_flags, uint8_t super_type, uint8_t parser_type,
-                                     uint8_t arity, uint16_t primary_hash, uint16_t parent_hash) {
-	uint64_t semantic_id = 0;
-
-	// Byte 0: Universal flags (0-3) + KIND (4-7)
-	semantic_id |= (universal_flags & 0x0F);
-	semantic_id |= ((static_cast<uint8_t>(kind) & 0x0F) << 4);
-
-	// Byte 1: Super type (0-1) + Parser type (2-4) + Arity (5-7)
-	semantic_id |= ((static_cast<uint64_t>(super_type) & 0x03) << 8);
-	semantic_id |= ((static_cast<uint64_t>(parser_type) & 0x07) << 10);
-	semantic_id |= ((static_cast<uint64_t>(arity) & 0x07) << 13);
-
-	// Bytes 2-3: Future context (16 bits reserved)
-	// Currently unused, set to 0
-
-	// Bytes 4-5: Primary unique hash (16 bits)
-	semantic_id |= (static_cast<uint64_t>(primary_hash) << 32);
-
-	// Bytes 6-7: Parent unique hash (16 bits)
-	semantic_id |= (static_cast<uint64_t>(parent_hash) << 48);
-
-	return semantic_id;
-}
-
 void ASTNode::UpdateTaxonomyFields() {
 	// Simplified for now - we're removing the complex KIND taxonomy
 	// Just clear the fields since we're not using them yet
