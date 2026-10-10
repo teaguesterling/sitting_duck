@@ -70,14 +70,22 @@ unusable as a gate: a reader could not tell a new failure from an expected one.
 The baseline is the gate.
 
 Run: `bash scripts/conformance_kit.sh --binary build/release/duckdb`
-Scan: 3873 `DEF_TYPE` entries from 59 files, 31 languages; 27 languages, 67 fixtures.
+Scan: 3817 `DEF_TYPE` entries from 59 files, 31 languages; 27 languages, 67 fixtures.
 
-> The scan was 3876 when first recorded. #215 converted three typescript
-> `DEF_TYPE` entries to `DEF_TYPE_ANON`, and the scanner's
-> `/DEF_TYPE[ \t]*\(/` does not match `DEF_TYPE_ANON(` -- so the kit neither
-> trips over the new macro nor sees the 27 anonymous declarations it adds.
-> Making `DECL-UNIQUE` namedness-aware (a seventh column, `named`, in the key)
-> is the follow-up; until then the anonymous table is outside the gate.
+> **Scan count history.** 3876 when first recorded -> 3873 (#215 converted three
+> typescript `DEF_TYPE` entries to `DEF_TYPE_ANON`, and the scanner's
+> `/DEF_TYPE[ \t]*\(/` does not match `DEF_TYPE_ANON(`, so the kit neither trips
+> over the new macro nor sees the 27 anonymous declarations it adds) -> **3817**
+> (#222 deleted 56 typescript entries that were byte-identical duplicates of
+> javascript ones and therefore dead under the initialiser list's first-wins
+> rule). Making `DECL-UNIQUE` namedness-aware, and making the `.def` scan follow
+> `#include`s, are both follow-ups; until then the anonymous table and the
+> shadowing are outside the gate.
+>
+> typescript's `NATIVE-ABST` denominator moved 214 -> 124 in the same change:
+> the kit reads the `.def` file rather than the include chain, so deleting dead
+> duplicates shrinks what it counts. The single leaking node is unchanged, and
+> the correction on #221 explains what it actually is.
 
 ```
 TOTALS ok=183 FAIL=4 dirty=1 void=12 UNDECL=5 n/a=11 | languages=27
@@ -90,7 +98,7 @@ The four FAILs, all pre-existing and none caused by the kit:
 | kotlin | NATIVE-DECL | 4 of 6 function defs take parameters in source, **0 delivered** |
 | lua | NATIVE-DECL | 12 of 14 function defs take parameters in source, **0 delivered** |
 | sql | NATIVE-DECL | 2 of 2 function defs take parameters in source, **0 delivered** |
-| typescript | NATIVE-ABST | 1 of 214 NONE-declared nodes carries native payload |
+| typescript | NATIVE-ABST | 1 of 124 NONE-declared nodes carries native payload |
 
 The NATIVE-DECL trio is one shape: the `.def` declares a function-shaped
 native strategy and the extractor delivers nothing, so the declaration is
