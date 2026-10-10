@@ -16,15 +16,32 @@ namespace duckdb {
 // Kotlin Adapter implementation
 //==============================================================================
 
+// Included twice (#215): once with DEF_TYPE live for the named rules, once with
+// DEF_TYPE_ANON live for the anonymous tokens that share their type string.
+// See LanguageAdapter::GetAnonNodeConfigs() and ruby_types.def.
 #define DEF_TYPE(raw_type, semantic_type, name_strat, native_strat, flags)                                             \
 	{raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat,                                \
 	                      NativeExtractionStrategy::native_strat, flags)},
+#define DEF_TYPE_ANON(raw_type, semantic_type, name_strat, native_strat, flags)
 
 const unordered_map<string, NodeConfig> KotlinAdapter::node_configs = {
 #include "../language_configs/kotlin_types.def"
 };
 
 #undef DEF_TYPE
+#undef DEF_TYPE_ANON
+
+#define DEF_TYPE(raw_type, semantic_type, name_strat, native_strat, flags)
+#define DEF_TYPE_ANON(raw_type, semantic_type, name_strat, native_strat, flags)                                        \
+	{raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat,                                \
+	                      NativeExtractionStrategy::native_strat, flags)},
+
+const unordered_map<string, NodeConfig> KotlinAdapter::node_configs_anon = {
+#include "../language_configs/kotlin_types.def"
+};
+
+#undef DEF_TYPE
+#undef DEF_TYPE_ANON
 
 string KotlinAdapter::GetLanguageName() const {
 	return "kotlin";
@@ -145,6 +162,10 @@ bool KotlinAdapter::IsPublicNode(TSNode node, const string &content) const {
 
 const unordered_map<string, NodeConfig> &KotlinAdapter::GetNodeConfigs() const {
 	return node_configs;
+}
+
+const unordered_map<string, NodeConfig> &KotlinAdapter::GetAnonNodeConfigs() const {
+	return node_configs_anon;
 }
 
 ParsingFunction KotlinAdapter::GetParsingFunction() const {

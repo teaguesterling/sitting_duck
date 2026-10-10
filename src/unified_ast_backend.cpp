@@ -158,8 +158,9 @@ ASTResult UnifiedASTBackend::ParseToASTResult(const string &content, const strin
 
 void UnifiedASTBackend::PopulateSemanticFields(ASTNode &node, const LanguageAdapter *adapter, TSNode ts_node,
                                                const string &content) {
-	// Get node configuration (virtual call)
-	const NodeConfig *config = adapter->GetNodeConfig(node.type_raw);
+	// Get node configuration (virtual call). Namedness-aware (#215), to stay in
+	// step with the templated path below.
+	const NodeConfig *config = adapter->GetNodeConfig(node.type_raw, ts_node_is_named(ts_node));
 
 	if (config) {
 		// STRUCTURED FIELDS: Set semantic info in context

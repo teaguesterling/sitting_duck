@@ -1,0 +1,5 @@
+type Query {
+  hello: String
+}
+
+directive @cached on FIELD_DEFINITION

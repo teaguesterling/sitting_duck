@@ -687,10 +687,10 @@ DEF_TYPE("new", COMPUTATION_CALL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("boolean", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @brief string type */
-DEF_TYPE("string", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE_ANON("string", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
 
 /** @brief number type */
-DEF_TYPE("number", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE_ANON("number", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
 
 /** @brief bigint type */
 DEF_TYPE("bigint", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -699,7 +699,7 @@ DEF_TYPE("bigint", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("symbol", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @brief object type (non-primitive) */
-DEF_TYPE("object", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+DEF_TYPE_ANON("object", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
 
 /** @brief any type (opt-out of type checking) */
 DEF_TYPE("any", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -855,3 +855,16 @@ DEF_TYPE("\"", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
 
 /** @} */ // end typescript_errors
+
+// ANONYMOUS TOKENS (#215). `string`, `number` and `object` above were declared
+// here as TYPE_PRIMITIVE and were DEAD: javascript_types.def is #included at
+// the top of this file and declares the same three strings as literals, and an
+// unordered_map initialiser list is first-wins, so javascript's entries won and
+// ast_type_map('typescript') reported LITERAL_STRING for `string`. They are
+// moved to the anonymous table, which is the declaration they were always
+// describing -- in `let s: string`, `string` is the anonymous type keyword,
+// while the named `string` rule is the literal "x". See
+// scripts/audit_anon_token_collisions.py.
+//
+// NOTE: 82 of this file's 183 DEF_TYPE entries are shadowed the same way.
+// Tracked separately; only the three colliding ones are in scope for #215.

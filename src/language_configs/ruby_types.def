@@ -1124,3 +1124,65 @@ DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
 // Derived, not hand-written. Regenerate after a grammar bump with:
 //   scripts/audit_leaf_text_gaps.py
 DEF_TYPE("uninterpreted", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+
+// =============================================================================
+// ANONYMOUS KEYWORD TOKENS (#215)
+// =============================================================================
+// A raw_type is not a unique key across a tree-sitter grammar. ruby's
+// node-types.json lists each of these strings TWICE -- `named: true` for the
+// statement rule above, and `named: false` for the bare keyword token that
+// introduces it. `node_configs` is an unordered_map keyed on the string alone,
+// so both nodes used to receive the statement's config and every `if` keyword
+// counted as a second if-statement:
+//
+//   SELECT count(*) FROM read_ast('x.rb')
+//   WHERE semantic_type_to_string(semantic_type) LIKE 'FLOW_%'
+//     AND NOT is_syntax_only(flags);        -- double-counted before this block
+//
+// DEF_TYPE_ANON declares the anonymous twin separately. It keeps the same
+// semantic type -- a bare `if` is still conditional flow, and `.flow` should
+// still reach it -- and adds IS_SYNTAX_ONLY, which is what distinguishes the
+// token from the construct and what `prune('syntax')` and the class selectors
+// read. That is exactly the shape ruby's already-correct keyword entries have
+// (`do`, `else`, `elsif`, `then`, `in` carry IS_KEYWORD, which IS bit 0).
+//
+// Only the 17 types whose named declaration carries NEITHER a syntax bit NOR a
+// name/scope flag are listed. The others are already covered: 6 by the #208
+// engine rule (which fires on a name/scope claim an unnamed node cannot
+// honour) and the rest by declaring IS_KEYWORD outright. Derived with
+// scripts/audit_anon_token_collisions.py -- do not hand-maintain.
+
+/// @brief Bare `if` keyword, not the if-statement
+DEF_TYPE_ANON("if", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `unless` keyword
+DEF_TYPE_ANON("unless", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `case` keyword
+DEF_TYPE_ANON("case", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `when` keyword
+DEF_TYPE_ANON("when", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `while` keyword
+DEF_TYPE_ANON("while", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `until` keyword
+DEF_TYPE_ANON("until", FLOW_LOOP | SemanticRefinements::Loop::CONDITIONAL, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `for` keyword
+DEF_TYPE_ANON("for", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `return` keyword
+DEF_TYPE_ANON("return", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `break` keyword
+DEF_TYPE_ANON("break", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `next` keyword
+DEF_TYPE_ANON("next", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `redo` keyword
+DEF_TYPE_ANON("redo", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `retry` keyword
+DEF_TYPE_ANON("retry", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `yield` keyword
+DEF_TYPE_ANON("yield", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `begin` keyword
+DEF_TYPE_ANON("begin", ERROR_TRY, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `rescue` keyword
+DEF_TYPE_ANON("rescue", ERROR_CATCH, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `ensure` keyword
+DEF_TYPE_ANON("ensure", ERROR_FINALLY, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
+/// @brief Bare `nil` keyword
+DEF_TYPE_ANON("nil", LITERAL_ATOMIC, NONE, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)

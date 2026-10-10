@@ -137,6 +137,10 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 
 	// Hoist GetNodeConfigs outside the hot loop - huge performance optimization!
 	const auto &node_configs = adapter->GetNodeConfigs();
+	// And the anonymous-token table (#215), hoisted for the same reason. Empty
+	// for every language whose grammar has no colliding type string, which the
+	// lookup below checks before touching it.
+	const auto &anon_node_configs = adapter->GetAnonNodeConfigs();
 
 	vector<StackEntry> stack;
 	stack.push_back({root, -1, 0, 0, false, 0});
@@ -310,7 +314,8 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 			// Populate semantic type and other fields - pass configs to avoid virtual call
 			// Only populate semantic fields based on config.context level
 			if (config.context >= ContextLevel::NODE_TYPES_ONLY) {
-				PopulateSemanticFieldsTemplated(ast_node, adapter, entry.node, content, node_configs, config);
+				PopulateSemanticFieldsTemplated(ast_node, adapter, entry.node, content, node_configs,
+				                                anon_node_configs, config);
 
 				// Set IS_EXPORTED on name-binding nodes (declarations AND definitions).
 				// NAME_DECLARATION (0x04) bitmask matches both DECLARATION and DEFINITION
@@ -541,10 +546,28 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 template <typename AdapterType>
 void PopulateSemanticFieldsTemplated(ASTNode &node, const AdapterType *adapter, TSNode ts_node, const string &content,
                                      const unordered_map<string, NodeConfig> &node_configs,
+                                     const unordered_map<string, NodeConfig> &anon_node_configs,
                                      const ExtractionConfig &config) {
+	const bool node_is_named = ts_node_is_named(ts_node);
+
 	// Direct hash lookup - no virtual calls!
-	auto config_it = node_configs.find(node.type_raw);
-	const NodeConfig *node_config = (config_it != node_configs.end()) ? &config_it->second : nullptr;
+	//
+	// #215: an UNNAMED node is looked up in the anonymous table first, because
+	// a raw_type is not a unique key -- ruby `if` is both the if-statement rule
+	// and the bare `if` token, and node-types.json lists it twice. The
+	// `.empty()` guard keeps the common case (a grammar with no colliding
+	// type) at one extra branch and no second hash of the string.
+	const NodeConfig *node_config = nullptr;
+	if (!node_is_named && !anon_node_configs.empty()) {
+		auto anon_it = anon_node_configs.find(node.type_raw);
+		if (anon_it != anon_node_configs.end()) {
+			node_config = &anon_it->second;
+		}
+	}
+	if (!node_config) {
+		auto config_it = node_configs.find(node.type_raw);
+		node_config = (config_it != node_configs.end()) ? &config_it->second : nullptr;
+	}
 
 	if (node_config) {
 		// STRUCTURED FIELDS: Set semantic info in context
@@ -578,11 +601,15 @@ void PopulateSemanticFieldsTemplated(ASTNode &node, const AdapterType *adapter, 
 		// Deliberately narrow. "Unnamed implies syntax-only" would also flip
 		// operator tokens (python `is`/`not`, declared with no flags), which
 		// `prune('syntax')` would then silently delete — a taxonomy-wide change
-		// neither #208 nor this fix is about. Keywords whose named twin carries
-		// no role flags (ruby `if`, `while`, ...) are therefore still left
-		// inheriting the statement's semantic type; fixing those needs
-		// namedness in the config key, which is tracked on #208.
-		if (!ts_node_is_named(ts_node) &&
+		// neither #208 nor this fix is about.
+		//
+		// KEPT after #215 rather than retired. #215 gives the remaining
+		// keywords an explicit anonymous declaration, so for those this rule
+		// no longer has anything to do -- but it still covers a collision no
+		// .def declares, including in the four grammars whose node-types.json
+		// this tree cannot read (fsharp, haskell, julia, scala). Removing it in
+		// the same change would make any regression unattributable.
+		if (!node_is_named &&
 		    (node.universal_flags & (ASTNodeFlags::NAME_ROLE_MASK | ASTNodeFlags::IS_SCOPE)) != 0) {
 			node.universal_flags &= static_cast<uint8_t>(~(ASTNodeFlags::NAME_ROLE_MASK | ASTNodeFlags::IS_SCOPE));
 			node.universal_flags |= ASTNodeFlags::IS_SYNTAX_ONLY;

@@ -17,15 +17,34 @@ namespace duckdb {
 // Ruby Adapter implementation
 //==============================================================================
 
+// ruby_types.def carries BOTH tables (#215): DEF_TYPE for the named rules and
+// DEF_TYPE_ANON for the anonymous keyword tokens that share their type string.
+// The file is included twice, once with each macro live and the other expanded
+// to nothing, so the two declarations of a colliding type sit next to each
+// other in one file instead of in two that can drift apart.
 #define DEF_TYPE(raw_type, semantic_type, name_strat, native_strat, flags)                                             \
 	{raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat,                                \
 	                      NativeExtractionStrategy::native_strat, flags)},
+#define DEF_TYPE_ANON(raw_type, semantic_type, name_strat, native_strat, flags)
 
 const unordered_map<string, NodeConfig> RubyAdapter::node_configs = {
 #include "../language_configs/ruby_types.def"
 };
 
 #undef DEF_TYPE
+#undef DEF_TYPE_ANON
+
+#define DEF_TYPE(raw_type, semantic_type, name_strat, native_strat, flags)
+#define DEF_TYPE_ANON(raw_type, semantic_type, name_strat, native_strat, flags)                                        \
+	{raw_type, NodeConfig(SemanticTypes::semantic_type, ExtractionStrategy::name_strat,                                \
+	                      NativeExtractionStrategy::native_strat, flags)},
+
+const unordered_map<string, NodeConfig> RubyAdapter::node_configs_anon = {
+#include "../language_configs/ruby_types.def"
+};
+
+#undef DEF_TYPE
+#undef DEF_TYPE_ANON
 
 string RubyAdapter::GetLanguageName() const {
 	return "ruby";
@@ -108,6 +127,10 @@ bool RubyAdapter::IsPublicNode(TSNode node, const string &content) const {
 
 const unordered_map<string, NodeConfig> &RubyAdapter::GetNodeConfigs() const {
 	return node_configs;
+}
+
+const unordered_map<string, NodeConfig> &RubyAdapter::GetAnonNodeConfigs() const {
+	return node_configs_anon;
 }
 
 ParsingFunction RubyAdapter::GetParsingFunction() const {

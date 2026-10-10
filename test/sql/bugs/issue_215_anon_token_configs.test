@@ -1,0 +1,198 @@
+# name: test/sql/bugs/issue_215_anon_token_configs.test
+# group: [bugs]
+
+# Issue #215: a raw_type is not a unique key across a tree-sitter grammar. The
+# same type STRING can name both a rule and the anonymous token that
+# introduces it -- ruby `if` is the if-statement AND the bare `if` keyword, and
+# parser.c's symbol table lists both. node_configs is an unordered_map keyed on
+# that string alone, so the keyword token inherited the construct's
+# classification and every construct was counted twice.
+#
+# #208 fixed the arms where the config made a claim an unnamed node cannot
+# honour (it binds a name, it opens a scope): the engine strips the role. It
+# could not help where the named declaration carries no such flag, because
+# there was nothing to contradict. That is this issue.
+#
+# The fix declares the anonymous half separately (DEF_TYPE_ANON, a second map
+# per adapter). The declaration keeps the construct's semantic type -- a bare
+# `if` is still conditional flow and `.flow` should still reach it -- and adds
+# IS_SYNTAX_ONLY, which is what tells the token from the construct for
+# prune('syntax') and the class selectors.
+#
+# Scope, derived by scripts/audit_anon_token_collisions.py from parser.c's
+# ts_symbol_metadata[] (not from node-types.json, which four grammars in this
+# tree do not ship): 60 declared collisions, of which 26 were already covered
+# (declared syntax-only outright) and 7 by the #208 rule. The remaining 27 are
+# declared here, across 7 languages. The script exits nonzero on a new gap.
+
+require sitting_duck
+
+# ---------------------------------------------------------------------------
+# 1. ruby: the issue's own query
+# ---------------------------------------------------------------------------
+
+# 16 real control-flow constructs. Before the fix this returned 32 -- each
+# construct plus its keyword token -- and the 16 extra rows were all leaves.
+# Measured with the anonymous table emptied and the engine change left in
+# place, so the declarations are what moved it, not a side effect.
+query II
+SELECT count(*) AS flow_not_syntax,
+       count(*) FILTER (WHERE children_count = 0) AS keyword_tokens_counted
+FROM read_ast('test/data/anon_tokens/collide.rb', 'ruby')
+WHERE semantic_type_to_string(semantic_type) LIKE 'FLOW_%' AND NOT is_syntax_only(flags);
+----
+16	0
+
+# The split, type by type: every colliding type must produce a construct that
+# is NOT syntax and a token that IS, both keeping the same semantic type. One
+# row per type with both halves present proves the two declarations are live
+# and that neither leaked into the other.
+query I
+SELECT count(*) FROM (
+  SELECT type
+  FROM read_ast('test/data/anon_tokens/collide.rb', 'ruby')
+  WHERE type IN ('if','unless','case','when','while','until','for','return','break',
+                 'next','redo','retry','begin','rescue','ensure','yield')
+  GROUP BY type
+  HAVING count(*) FILTER (WHERE children_count > 0 AND NOT is_syntax_only(flags)) >= 1
+     AND count(*) FILTER (WHERE children_count = 0 AND     is_syntax_only(flags)) >= 1
+     AND count(*) FILTER (WHERE children_count = 0 AND NOT is_syntax_only(flags))  = 0
+     AND count(DISTINCT semantic_type) = 1
+);
+----
+15
+
+# `unless` appears in this fixture only as its keyword token -- `break unless x`
+# parses the construct as `unless_modifier` -- which is why the 16 types above
+# yield 15 rows with both halves. Asserted separately rather than dropped, so
+# the count above stays an exact number. `nil` has both halves and is listed
+# here because its named rule is a LITERAL, not control flow.
+query II
+SELECT count(*) FILTER (WHERE type = 'unless' AND is_syntax_only(flags)) AS unless_token,
+       count(*) FILTER (WHERE type = 'nil' AND children_count = 0) AS nil_tokens
+FROM read_ast('test/data/anon_tokens/collide.rb', 'ruby');
+----
+1	2
+
+# The construct half must NOT have been touched: `prune('syntax')` has to keep
+# every if-statement.
+query II
+SELECT count(*) AS if_nodes,
+       count(*) FILTER (WHERE NOT is_syntax_only(flags)) AS if_statements
+FROM read_ast('test/data/anon_tokens/collide.rb', 'ruby')
+WHERE type = 'if';
+----
+5	1
+
+# ---------------------------------------------------------------------------
+# 2. The other six languages
+# ---------------------------------------------------------------------------
+
+# dart: `true`/`false` -- the named boolean literal rule and the keyword token
+# inside it.
+query III
+SELECT type, children_count = 0 AS is_token, is_syntax_only(flags) AS syn
+FROM read_ast('test/data/anon_tokens/collide.dart', 'dart')
+WHERE type IN ('true', 'false') ORDER BY type, is_token;
+----
+false	false	false
+false	true	true
+true	false	false
+true	true	true
+
+# graphql: `type` is both the type reference and the `type` keyword of a type
+# definition; `directive` likewise.
+query III
+SELECT type, children_count = 0 AS is_token, is_syntax_only(flags) AS syn
+FROM read_ast('test/data/anon_tokens/collide.graphql', 'graphql')
+WHERE type IN ('type', 'directive') ORDER BY type, is_token;
+----
+directive	true	true
+type	false	false
+type	true	true
+
+# html: the `DOCTYPE` token inside the doctype node.
+query III
+SELECT type, children_count = 0 AS is_token, is_syntax_only(flags) AS syn
+FROM read_ast('test/data/anon_tokens/collide.html', 'html')
+WHERE type = 'doctype' ORDER BY is_token;
+----
+doctype	false	false
+doctype	true	true
+
+# kotlin: `annotation class` -- the construct and the `annotation` keyword.
+query III
+SELECT type, children_count = 0 AS is_token, is_syntax_only(flags) AS syn
+FROM read_ast('test/data/anon_tokens/collide.kt', 'kotlin')
+WHERE type = 'annotation' ORDER BY is_token;
+----
+annotation	false	false
+annotation	true	true
+
+# php: `float` and `string` as type keywords in a signature are the anonymous
+# tokens; `null` in `$c = null` is the NAMED literal rule and must stay
+# non-syntax, which is the control that the anon table is not consulted for a
+# named node.
+query III
+SELECT type, is_syntax_only(flags) AS syn, count(*) AS n
+FROM read_ast('test/data/anon_tokens/collide.php', 'php')
+WHERE type IN ('float', 'string', 'null') GROUP BY ALL ORDER BY type;
+----
+float	true	2
+null	false	2
+string	true	1
+
+# typescript: the sharpest case. typescript_types.def declared `string`,
+# `number` and `object` as TYPE_PRIMITIVE, and those three declarations were
+# DEAD -- javascript_types.def is #included at the top of the file and declares
+# the same strings as literals, and an unordered_map initialiser list is
+# first-wins, so `ast_type_map('typescript')` reported LITERAL_STRING for
+# `string`. Moving them to the anonymous table is both the #215 fix and the
+# resurrection of the declaration that was always intended: in `let s: string`,
+# `string` is the type keyword, while the named `string` rule is "x".
+query III
+SELECT type, semantic_type_to_string(semantic_type) AS sem, is_syntax_only(flags) AS syn
+FROM read_ast('test/data/anon_tokens/collide.ts', 'typescript')
+WHERE type IN ('string', 'number', 'object') ORDER BY type, sem;
+----
+number	LITERAL_NUMBER	false
+number	TYPE_PRIMITIVE	true
+object	LITERAL_STRUCTURED	false
+object	TYPE_PRIMITIVE	true
+string	LITERAL_STRING	false
+string	TYPE_PRIMITIVE	true
+
+# ---------------------------------------------------------------------------
+# 3. The anonymous table must not be consulted for a named node
+# ---------------------------------------------------------------------------
+
+# A language with NO anonymous declarations must be unchanged, and the #208
+# engine rule must still be doing its job there. python declares 4 collisions,
+# all of them already covered before this change: `lambda` by the #208 rule
+# (its named declaration claims NAME_DEFINITION, which an unnamed node cannot
+# honour), `await`/`yield` by declaring IS_KEYWORD outright. python has no
+# DEF_TYPE_ANON entry and no second map, so these rows are the control that the
+# fix did not quietly become load-bearing for cases the engine rule covers.
+query IIII
+SELECT type, children_count = 0 AS is_token, is_syntax_only(flags) AS syn, count(*) AS n
+FROM read_ast('test/data/python/lambdas.py', 'python')
+WHERE type = 'lambda' GROUP BY ALL ORDER BY is_token;
+----
+lambda	false	false	5
+lambda	true	true	5
+
+# Every language still parses and classifies: a smoke row per fixture, so a
+# broken second include pass cannot pass this file by returning no rows.
+query II
+SELECT count(*) AS languages, sum(n) > 0 AS any_nodes FROM (
+  SELECT 'rb' AS f, count(*) AS n FROM read_ast('test/data/anon_tokens/collide.rb', 'ruby')
+  UNION ALL SELECT 'dart', count(*) FROM read_ast('test/data/anon_tokens/collide.dart', 'dart')
+  UNION ALL SELECT 'graphql', count(*) FROM read_ast('test/data/anon_tokens/collide.graphql', 'graphql')
+  UNION ALL SELECT 'html', count(*) FROM read_ast('test/data/anon_tokens/collide.html', 'html')
+  UNION ALL SELECT 'kt', count(*) FROM read_ast('test/data/anon_tokens/collide.kt', 'kotlin')
+  UNION ALL SELECT 'php', count(*) FROM read_ast('test/data/anon_tokens/collide.php', 'php')
+  UNION ALL SELECT 'rs', count(*) FROM read_ast('test/data/anon_tokens/collide.rs', 'rust')
+  UNION ALL SELECT 'ts', count(*) FROM read_ast('test/data/anon_tokens/collide.ts', 'typescript')
+) WHERE n > 0;
+----
+8	true
