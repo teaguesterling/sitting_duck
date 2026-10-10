@@ -1,0 +1,12 @@
+# a comment
+name: sitting_duck
+version: 2.0.0
+tags: [ast, duckdb]
+nested:
+  key: value
+  list:
+    - one
+    - two
+flag: true
+count: 42
+empty: null

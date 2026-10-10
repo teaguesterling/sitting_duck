@@ -160,6 +160,15 @@ generate_parser() {
         log_info "  -> Copied scanner.c"
     fi
 
+    # A C++ external scanner. tree-sitter allows only ONE scanner file, so a
+    # C++ scanner that wants to be split #includes its other .cc files
+    # directly (yaml's scanner.cc includes schema.generated.cc), which means
+    # every .cc in src/ has to come along -- the include is by relative path.
+    if [ "$has_scanner" = "true" ] && [ -f "src/scanner.cc" ]; then
+        find "src" -maxdepth 1 -name "*.cc" -type f -exec cp {} "$output_path/" \;
+        log_info "  -> Copied scanner.cc and any .cc it includes"
+    fi
+
     # Copy any additional .h files from src/ (e.g., tag.h for HTML)
     # These are grammar-specific headers included by scanner.c
     local header_count=$(find "src" -maxdepth 1 -name "*.h" -type f 2>/dev/null | wc -l)
@@ -191,6 +200,14 @@ generate_parser() {
 
 # Main grammar list with their configurations
 # Format: grammar_name:subdir:has_scanner
+#
+# NOT LISTED: yaml. Its grammar.js post-processes the output of grammar() --
+# `module.exports = global_alias(global_alias(module.exports, {...}))` -- and
+# under tree-sitter 0.26 / Node 18 that reads `grammar_json.rules` as undefined
+# and throws. So this script cannot regenerate it, and
+# generated_parsers/tree-sitter-yaml/ holds the parser the grammar shipped
+# (ABI 13, with a C++ scanner). See #233; the .cc handling above is in place for
+# when that is fixed, or for the next C++ scanner.
 GRAMMARS=(
     "c:tree-sitter-c:false"
     "cpp:tree-sitter-cpp:true"

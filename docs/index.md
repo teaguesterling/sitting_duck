@@ -1,6 +1,6 @@
 # Sitting Duck
 
-**Query source code with SQL.** CSS selectors, pattern matching, scope-aware call graphs — across 27 languages.
+**Query source code with SQL.** CSS selectors, pattern matching, scope-aware call graphs — across 28 languages.
 
 ```sql
 -- Functions that call execute() but have no error handling
@@ -30,7 +30,7 @@ SELECT name FROM ast_select('src/**/*.py',
 SELECT name FROM ast_select('src/**/*.py', '.func#validate::callers');
 ```
 
-~80 semantic aliases (`.func`, `.class`, `.call`, `.loop`, `.if`, `.namespace`, ...) work identically across all 27 languages. [Full selector reference →](reference/css-selectors.md)
+~80 semantic aliases (`.func`, `.class`, `.call`, `.loop`, `.if`, `.namespace`, ...) work identically across all 28 languages. [Full selector reference →](reference/css-selectors.md)
 
 ### Pattern matching by example
 
@@ -122,7 +122,7 @@ SELECT * FROM ast_select_from('ast', '.func:has(return_statement)');
 SELECT * FROM ast_select_from('ast', '.class:named');
 ```
 
-## 27 Languages
+## 28 Languages
 
 | Category | Languages |
 |----------|-----------|

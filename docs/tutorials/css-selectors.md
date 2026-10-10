@@ -44,7 +44,7 @@ SELECT name, start_line
 FROM ast_select('test/data/python/sample_app.py', '.func');
 ```
 
-Same results, but `.func` works across all 27 languages. If you later scan Java or TypeScript files, the same selector works without changes.
+Same results, but `.func` works across all 28 languages. If you later scan Java or TypeScript files, the same selector works without changes.
 
 Find all class definitions:
 

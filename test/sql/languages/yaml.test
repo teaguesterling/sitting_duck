@@ -1,0 +1,114 @@
+# name: test/sql/languages/yaml.test
+# group: [languages]
+
+# yaml was half-wired for a long time (#227): the adapter, the YAMLAdapter class
+# declaration and a 43-entry yaml_types.def all existed, while yaml appeared
+# nowhere in cmake/BuiltinLanguages.cmake, had no generated parser, and had its
+# two extension mappings commented out in ast_file_utils.cpp. It was neither
+# dead code nor a working language.
+#
+# Three things had to be true before it could be wired in, and none of them was
+# obvious from the files that existed:
+#
+#  1. yaml's parser is ABI 13, not 15 like every other grammar here. The runtime
+#     loads it (TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION is 13) but the
+#     COMPILE needs the ABI-13 tree_sitter/parser.h it shipped with, because the
+#     generated code uses TSFieldMapSlice, which the current header dropped.
+#     CMakeLists gives those two sources their own include dir.
+#  2. Its external scanner is C++ (scanner.cc, #including schema.generated.cc --
+#     tree-sitter permits only one scanner file), the only one in the tree.
+#  3. yaml_types.def declared ORGANIZATION_SCOPE, which is not a semantic type,
+#     so the table did not compile at all.
+
+require sitting_duck
+
+# ---------------------------------------------------------------------------
+# 1. Registered, with both extensions
+# ---------------------------------------------------------------------------
+query IIII
+SELECT language, extensions, parser_type, node_type_count > 0
+FROM ast_supported_languages() WHERE language = 'yaml';
+----
+yaml	[yaml, yml]	tree-sitter	true
+
+# ---------------------------------------------------------------------------
+# 2. It parses, cleanly
+# ---------------------------------------------------------------------------
+query II
+SELECT count(*) > 100 AS parsed, count(*) FILTER (WHERE type = 'ERROR') AS errors
+FROM read_ast('test/data/yaml/*.yaml');
+----
+true	0
+
+# ---------------------------------------------------------------------------
+# 3. Every node type is classified except the two wrappers
+# ---------------------------------------------------------------------------
+# `flow_node` and `block_node` are deliberately undeclared: each wraps a child
+# that carries the actual value, and those children ARE declared, so declaring
+# the wrapper too would make `.str` and `.map` match both and double-count every
+# value in the file. yaml_types.def says so where someone would otherwise
+# "fix" it. Anything ELSE falling back to PARSER_CONSTRUCT is a gap.
+query II
+SELECT type, count(*) AS n
+FROM read_ast('test/data/yaml/*.yaml')
+WHERE semantic_type_to_string(semantic_type) = 'PARSER_CONSTRUCT'
+GROUP BY ALL ORDER BY type;
+----
+block_node	8
+flow_node	46
+
+# ---------------------------------------------------------------------------
+# 4. The declarations added in #227 carry their text
+# ---------------------------------------------------------------------------
+# Each was derived from parsing features.yaml, not guessed. `block_scalar`
+# replaces `literal_scalar` and `folded_scalar`, which this grammar never emits:
+# it spells both `|` and `>` scalars as `block_scalar`, so those two entries had
+# never matched anything.
+query III
+SELECT type, semantic_type_to_string(semantic_type) AS sem, count(*) AS n
+FROM read_ast('test/data/yaml/features.yaml')
+WHERE type IN ('block_scalar','anchor_name','alias_name','tag_handle','tag_prefix','yaml_version')
+GROUP BY ALL ORDER BY type;
+----
+alias_name	NAME_IDENTIFIER	1
+anchor_name	NAME_IDENTIFIER	1
+block_scalar	LITERAL_STRING	2
+tag_handle	METADATA_ANNOTATION	1
+tag_prefix	METADATA_ANNOTATION	1
+yaml_version	LITERAL_NUMBER	1
+
+# An anchor DEFINES a name and an alias REFERENCES one, which is the whole
+# reason to split them.
+query IIII
+SELECT type, name, is_name_definition(flags) AS defines, is_name_reference(flags) AS refs
+FROM read_ast('test/data/yaml/features.yaml')
+WHERE type IN ('anchor_name','alias_name') ORDER BY type;
+----
+alias_name	defaults	false	true
+anchor_name	defaults	true	false
+
+# The removed entries really are absent from this grammar's output.
+query I
+SELECT count(*) FROM read_ast('test/data/yaml/*.yaml')
+WHERE type IN ('literal_scalar','folded_scalar','directive','block_scalar_header',
+               'block_chomping_indicator','block_indentation_indicator');
+----
+0
+
+# ---------------------------------------------------------------------------
+# 5. Selectors work on it
+# ---------------------------------------------------------------------------
+# `comments` is a reserved word in DuckDB, hence the n_ prefixes.
+query III
+SELECT count(*) FILTER (WHERE is_semantic_type(semantic_type, 'STR')) AS n_str,
+       count(*) FILTER (WHERE is_semantic_type(semantic_type, 'NUM')) AS n_num,
+       count(*) FILTER (WHERE is_semantic_type(semantic_type, 'COMMENT')) AS n_com
+FROM read_ast('test/data/yaml/features.yaml');
+----
+39	7	1
+
+# Extension detection, both spellings, through the same path a glob uses.
+query I
+SELECT count(*) > 0 FROM read_ast('test/data/yaml/simple.yaml');
+----
+true

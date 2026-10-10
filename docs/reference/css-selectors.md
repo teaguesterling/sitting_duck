@@ -15,7 +15,7 @@ FROM ast_select('src/**/*.py',
 
 Type selectors come in two forms — `.semantic` (cross-language aliases) and tree-sitter node types (language-specific, matched **exactly**; use `[type^=X]` for prefix matching). See [Node Type Selectors](node-type-selectors.md) for details.
 
-Semantic types provide ~80 aliases like `.func`, `.if`, `.loop` that work identically across all 27 languages. See [Semantic Type Aliases](semantic-aliases.md) for the full table.
+Semantic types provide ~80 aliases like `.func`, `.if`, `.loop` that work identically across all 28 languages. See [Semantic Type Aliases](semantic-aliases.md) for the full table.
 
 ## `#name` — Name Filter
 

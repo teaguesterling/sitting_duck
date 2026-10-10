@@ -244,7 +244,7 @@ The `qualified_name` field is populated for all named definition nodes across al
 - Available at `context := 'normalized'` and above (not just `native`)
 - **Unique within a file** — explicit `index` field disambiguates same-name collisions within a scope
 - Excludes `file_path` — use `USING (file_path, qualified_name)` for cross-file joins
-- Language-agnostic format (same semantic type values across all 27 languages)
+- Language-agnostic format (same semantic type values across all 28 languages)
 - Queryable structurally via DuckDB list/struct functions: `len()`, `list_filter()`, `list_transform()`, `qualified_name[-1].name`, etc.
 - `ast_qualified_name_as_string()` renders the list as a bracket string for display, logging, or LIKE-style matching
 

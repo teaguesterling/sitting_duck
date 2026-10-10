@@ -254,10 +254,19 @@ def parse_parser_c(path: Path) -> SymbolTable:
     current_key: str | None = None
 
     for line in lines:
-        if line.startswith("enum ts_symbol_identifiers {"):
+        # Two spellings, because not every committed parser.c comes from the
+        # same tree-sitter. ABI 15 emits `enum ts_symbol_identifiers {` and
+        # `static const char * const ts_symbol_names[]`; the ABI-13 era (yaml,
+        # the one grammar this tree cannot regenerate) emits a bare `enum {` and
+        # a non-const `static const char *ts_symbol_names[]`. Without both, the
+        # parse comes up empty and the language is silently invisible to every
+        # audit built on this function.
+        if line.startswith("enum ts_symbol_identifiers {") or line.rstrip() == "enum {":
             section = "enum"
             continue
-        if line.startswith("static const char * const ts_symbol_names[] = {"):
+        if line.startswith("static const char * const ts_symbol_names[] = {") or line.startswith(
+            "static const char *ts_symbol_names[] = {"
+        ):
             section = "names"
             continue
         if line.startswith("static const TSSymbolMetadata ts_symbol_metadata[] = {"):

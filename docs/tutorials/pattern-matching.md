@@ -674,7 +674,7 @@ ORDER BY return_count DESC;
 
 ### Cross-Language Semantics: One Query, All Languages
 
-grep needs `class\s+\w+:` for Python, `class\s+\w+\s*\{` for JavaScript, `type\s+\w+\s+struct` for Go. Semantic types handle all 27 languages with one predicate:
+grep needs `class\s+\w+:` for Python, `class\s+\w+\s*\{` for JavaScript, `type\s+\w+\s+struct` for Go. Semantic types handle all 28 languages with one predicate:
 
 ```sql
 SELECT name, language, start_line, file_path
