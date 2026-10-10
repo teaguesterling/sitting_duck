@@ -11,40 +11,17 @@
 
 namespace duckdb {
 
-// KIND Taxonomy Constants
-enum class ASTKind : uint8_t {
-	// Data & Structure (00xx)
-	LITERAL = 0, // 0000: Raw constants and primitive values
-	NAME = 1,    // 0001: Identifiers and name references
-	PATTERN = 2, // 0010: Structured data patterns and matching
-	TYPE = 3,    // 0011: Type expressions and references
-
-	// Computation (01xx)
-	OPERATOR = 4,    // 0100: Pure computational operations
-	COMPUTATION = 5, // 0101: Complex expressions and invocations
-	TRANSFORM = 6,   // 0110: Data transformation and queries
-	DEFINITION = 7,  // 0111: Introduction of named entities
-
-	// Control & Effects (10xx)
-	EXECUTION = 8,       // 1000: Side-effect causing operations
-	FLOW_CONTROL = 9,    // 1001: Program control flow and branching
-	ERROR_HANDLING = 10, // 1010: Exception management
-	ORGANIZATION = 11,   // 1011: Structural containers and scope
-
-	// Meta & External (11xx)
-	METADATA = 12,        // 1100: Annotations and code metadata
-	EXTERNAL = 13,        // 1101: Dependencies and external interfaces
-	PARSER_SPECIFIC = 14, // 1110: Language-specific constructs
-	RESERVED = 15         // 1111: Reserved for future use
-};
-
-// Universal Flags - orthogonal properties that apply across semantic types
-enum class ASTFlagValues : uint8_t {
-	IS_KEYWORD = 0x01, // Reserved language keywords (def, class, if, for, etc.)
-	IS_PUBLIC = 0x02,  // Externally visible/accessible (public, export, etc.)
-	IS_UNSAFE = 0x04,  // Unsafe operations (Rust unsafe, C pointers, inline asm)
-	RESERVED = 0x08    // Reserved for future orthogonal properties
-};
+// NOTE (#196): `ASTKind` and `ASTFlagValues` used to live here -- a SECOND,
+// contradictory encoding of the semantic taxonomy. ASTKind numbered Data &
+// Structure at 00xx and Computation at 01xx; semantic_types.hpp (which the
+// taxonomy spec generates and ast_type_map() publishes) numbers META_EXTERNAL
+// 00, DATA_STRUCTURE 01, CONTROL_EFFECTS 10, COMPUTATION 11. ASTFlagValues put
+// IS_PUBLIC at bit 1, where ASTNodeFlags has half of the 2-bit NAME_ROLE.
+//
+// Both were dead: ASTFlagValues had zero references anywhere, and ASTKind's
+// only users were two translation units the build does not compile plus one
+// never-called function. Deleted rather than reconciled. The taxonomy lives in
+// spec/taxonomy/taxonomy.yaml -> semantic_types.hpp and node_config.hpp.
 
 // Extraction Level Enums for Structured Extraction
 enum class ContextLevel : uint8_t {
@@ -337,30 +314,13 @@ struct ASTNode {
 	Value ToValue() const;
 	static ASTNode FromValue(const Value &value);
 
-	// Helper methods for node_id (semantic identity)
-	static constexpr uint8_t GetKIND(uint64_t node_id) {
-		return (node_id & 0xF0) >> 4;
-	}
-	static constexpr uint8_t GetUniversalFlags(uint64_t node_id) {
-		return node_id & 0x0F;
-	}
-	static constexpr bool IsKeyword(uint64_t node_id) {
-		return node_id & 0x01;
-	}
-	static constexpr bool IsPunctuation(uint64_t node_id) {
-		return node_id & 0x02;
-	}
-	static constexpr bool IsBuiltin(uint64_t node_id) {
-		return node_id & 0x04;
-	}
-	static constexpr bool IsPublic(uint64_t node_id) {
-		return node_id & 0x08;
-	}
-
-	// Taxonomy generation functions
-	static uint64_t GenerateSemanticID(ASTKind kind, uint8_t universal_flags, uint8_t super_type = 0,
-	                                   uint8_t parser_type = 0, uint8_t arity = 0, uint16_t primary_hash = 0,
-	                                   uint16_t parent_hash = 0);
+	// NOTE (#196): six constexpr decoders (GetKIND, GetUniversalFlags,
+	// IsKeyword, IsPunctuation, IsBuiltin, IsPublic) and GenerateSemanticID
+	// used to live here, treating node_id as a packed semantic identity.
+	// node_id is a sequential depth-first index
+	// (`ast_node.node_id = entry.node_index`), so they decoded bits of a
+	// counter. All were uncalled. The real predicates are
+	// SemanticTypes::IsPunctuation(semantic_type) and the ASTNodeFlags bits.
 
 	static uint8_t BinArityFibonacci(uint32_t count) {
 		// Fibonacci sequence binning: 0, 1, 2, 3, 4-5, 6-8, 9-13, 14+
@@ -381,44 +341,6 @@ struct ASTNode {
 		return 7;     // 111 (14+)
 	}
 
-	static string GetKindName(ASTKind kind) {
-		switch (kind) {
-		case ASTKind::LITERAL:
-			return "LITERAL";
-		case ASTKind::NAME:
-			return "NAME";
-		case ASTKind::PATTERN:
-			return "PATTERN";
-		case ASTKind::TYPE:
-			return "TYPE";
-		case ASTKind::OPERATOR:
-			return "OPERATOR";
-		case ASTKind::COMPUTATION:
-			return "COMPUTATION";
-		case ASTKind::TRANSFORM:
-			return "TRANSFORM";
-		case ASTKind::DEFINITION:
-			return "DEFINITION";
-		case ASTKind::EXECUTION:
-			return "EXECUTION";
-		case ASTKind::FLOW_CONTROL:
-			return "FLOW_CONTROL";
-		case ASTKind::ERROR_HANDLING:
-			return "ERROR_HANDLING";
-		case ASTKind::ORGANIZATION:
-			return "ORGANIZATION";
-		case ASTKind::METADATA:
-			return "METADATA";
-		case ASTKind::EXTERNAL:
-			return "EXTERNAL";
-		case ASTKind::PARSER_SPECIFIC:
-			return "PARSER_SPECIFIC";
-		case ASTKind::RESERVED:
-			return "RESERVED";
-		default:
-			return "UNKNOWN";
-		}
-	}
 	void UpdateTaxonomyFields();
 };
 
