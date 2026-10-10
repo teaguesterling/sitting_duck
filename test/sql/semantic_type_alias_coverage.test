@@ -5,10 +5,12 @@
 #
 # WHY THIS EXISTS
 # ---------------
-# `.func`, `.call`, `.access`, `.loop`, ... resolve through the is_semantic_type()
-# alias cascade in src/semantic_type_functions.cpp. That cascade is ~100 aliases of
-# hand-written `pattern == "X" -> bitmask` branches; a wrong constant makes an alias
-# select the wrong node set SILENTLY (it still returns rows, just the wrong ones).
+# `.func`, `.call`, `.access`, `.loop`, ... resolve through is_semantic_type()
+# against the SEMANTIC_ALIASES table in src/include/semantic_aliases.hpp -- 108
+# `alias -> (code, mask)` rows. (It was a hand-written if/else cascade in
+# src/semantic_type_functions.cpp until #188 turned it into data; this comment
+# said so for longer than it was true.) A wrong constant makes an alias select
+# the wrong node set SILENTLY -- it still returns rows, just the wrong ones.
 # Peers hit exactly that: `.access` matched arithmetic/logical operators instead of
 # member-access nodes because it used COMPUTATION (0xC0) where it meant
 # COMPUTATION_NODE (0xD0).
@@ -38,12 +40,13 @@ LOAD sitting_duck;
 # (kind-level alias); 'quad' = top-level COMPUTATION quadrant.
 # =============================================================================
 
-query I
-WITH codes AS (
-  SELECT c::UTINYINT AS code, semantic_type_to_string(c::UTINYINT) AS name
-  FROM range(0,256,4) t(c)
-),
-aliases(alias, match, fam) AS (VALUES
+# The expected list lives in a temp table so that the oracle below and the
+# COMPLETENESS gate after it read the same 108 rows. It used to be an inline CTE,
+# which meant nothing could check that the list still covered every alias the
+# extension actually publishes: adding an alias and forgetting its row here left
+# the new alias silently unguarded while this file still passed.
+statement ok
+CREATE TEMP TABLE expected_aliases(alias, match, fam) AS SELECT * FROM (VALUES
   ('FUNCTION','exact','DEFINITION_FUNCTION'),('FUNC','exact','DEFINITION_FUNCTION'),
   ('FN','exact','DEFINITION_FUNCTION'),('METHOD','exact','DEFINITION_FUNCTION'),
   ('CALL','exact','COMPUTATION_CALL'),('INVOKE','exact','COMPUTATION_CALL'),
@@ -96,9 +99,34 @@ aliases(alias, match, fam) AS (VALUES
   ('COMMENT','exact','METADATA_COMMENT'),
   ('METADATA','prefix','METADATA_'),('META','prefix','METADATA_'),
   ('ACCESS','prefix','COMPUTATION_')
+) t(alias, match, fam);
+
+# COMPLETENESS. ast_semantic_aliases() publishes the live SEMANTIC_ALIASES table
+# (src/include/semantic_aliases.hpp). Every alias it publishes must appear above,
+# and nothing above may name an alias that no longer exists. This is a set
+# comparison, not a count, so a rename cancelling out an addition is still caught.
+#
+# It is NOT circular: the published table supplies only the alias NAMES, while
+# the expected family (`fam`) stays hand-written, and the oracle below derives
+# actual behaviour from semantic_type_to_string() -- a third, independent path.
+query III
+SELECT (SELECT count(*) FROM ast_semantic_aliases()) AS published,
+       (SELECT count(*) FROM expected_aliases) AS expected,
+       (SELECT count(*) FROM (
+           (SELECT alias FROM ast_semantic_aliases() EXCEPT SELECT alias FROM expected_aliases)
+           UNION ALL
+           (SELECT alias FROM expected_aliases EXCEPT SELECT alias FROM ast_semantic_aliases())
+       )) AS not_in_both;
+----
+108	108	0
+
+query I
+WITH codes AS (
+  SELECT c::UTINYINT AS code, semantic_type_to_string(c::UTINYINT) AS name
+  FROM range(0,256,4) t(c)
 )
 SELECT count(*)
-FROM aliases a CROSS JOIN codes c
+FROM expected_aliases a CROSS JOIN codes c
 WHERE is_semantic_type(c.code, a.alias) <>
       CASE a.match
         WHEN 'exact'  THEN c.name = a.fam
