@@ -147,12 +147,6 @@ DEF_TYPE("single_quote_scalar", LITERAL_STRING, NODE_TEXT, NONE, 0)
 /// @brief Double-quoted scalar - `"value"`
 DEF_TYPE("double_quote_scalar", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
-/// @brief Literal scalar - `|` block (preserves newlines)
-DEF_TYPE("literal_scalar", LITERAL_STRING, NODE_TEXT, NONE, 0)
-
-/// @brief Folded scalar - `>` block (folds newlines)
-DEF_TYPE("folded_scalar", LITERAL_STRING, NODE_TEXT, NONE, 0)
-
 /** @} */ // end yaml_scalars
 
 // ============================================================================
@@ -223,9 +217,6 @@ DEF_TYPE("alias", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)
  * - `%TAG !prefix! uri` - tag shorthand
  * @{
  */
-
-/// @brief Generic directive - `%DIRECTIVE`
-DEF_TYPE("directive", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
 
 /// @brief YAML directive - `%YAML 1.2`
 DEF_TYPE("yaml_directive", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
@@ -330,15 +321,6 @@ DEF_TYPE("...", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
  * @{
  */
 
-/// @brief Block scalar header - `|2-` modifiers
-DEF_TYPE("block_scalar_header", ORGANIZATION_SCOPE, NONE, NONE, 0)
-
-/// @brief Chomping indicator - `-` or `+`
-DEF_TYPE("block_chomping_indicator", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-
-/// @brief Indentation indicator - explicit indent level
-DEF_TYPE("block_indentation_indicator", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-
 /** @} */ // end yaml_block_indicators
 
 // ============================================================================
@@ -355,3 +337,55 @@ DEF_TYPE("block_indentation_indicator", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 DEF_TYPE("ERROR", PARSER_SYNTAX, NODE_TEXT, NONE, 0)
 
 /** @} */ // end yaml_parser_errors
+
+// =============================================================================
+// Added when yaml was wired into the build (#227)
+// =============================================================================
+// Every entry below is a node type this grammar demonstrably emits and that no
+// declaration covered, so it was falling back to PARSER_CONSTRUCT. Derived from
+// parsing test/data/yaml/features.yaml, not guessed.
+//
+// `block_scalar` replaces the `literal_scalar` and `folded_scalar` entries that
+// were removed above: this grammar spells BOTH `|` and `>` scalars as
+// `block_scalar`, so those two declarations had never matched anything.
+
+/// @brief Block scalar body - both `|` (literal) and `>` (folded) forms
+DEF_TYPE("block_scalar", LITERAL_STRING, NODE_TEXT, NONE, 0)
+
+/// @brief Anchor name - the identifier introduced by `&name`
+DEF_TYPE("anchor_name", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_DEFINITION)
+
+/// @brief Alias name - the identifier referenced by `*name`
+DEF_TYPE("alias_name", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
+
+/// @brief Tag handle in a `%TAG` directive, e.g. `!ex!`
+DEF_TYPE("tag_handle", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
+
+/// @brief Tag prefix in a `%TAG` directive, e.g. `tag:example.com,2024:`
+DEF_TYPE("tag_prefix", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
+
+/// @brief Double-quote delimiter
+DEF_TYPE("\"", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
+
+/// @brief Anchor sigil `&`
+DEF_TYPE("&", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief Alias sigil `*`
+DEF_TYPE("*", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
+
+/// @brief The version in a `%YAML 1.2` directive
+DEF_TYPE("yaml_version", LITERAL_NUMBER, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
+
+// DELIBERATELY NOT DECLARED: `flow_node` and `block_node`.
+//
+// They are pure wrappers -- every one of them has a child that carries the
+// actual value (a scalar, a mapping, a sequence), and those children ARE
+// declared. Declaring the wrapper too would make `.str` and `.map` match both
+// the wrapper and its content, double-counting every value in the file. They
+// are 31 of the 155 nodes in features.yaml, so this is the single biggest
+// classification decision in this file; it is a decision, not an omission.
+//
+// Also undeclared: `directive_name` and `directive_parameter`. They are in the
+// grammar's symbol table but neither fixture here produces one, so they are
+// reachable by something this corpus does not exercise. Left alone rather than
+// guessed at.

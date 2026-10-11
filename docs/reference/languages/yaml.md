@@ -2,16 +2,6 @@
 
 > YAML data format node type mappings for AST semantic extraction
 
-> **Note: YAML support is currently disabled.** The tree-sitter YAML grammar's
-> self-modifying structure is incompatible with the tree-sitter CLI used to
-> generate parsers, so the YAML adapter is not built in: there is no
-> `sitting_duck_language(yaml ...)` declaration in `cmake/BuiltinLanguages.cmake`,
-> which is what drives registration. `src/language_adapters/yaml_adapter.cpp` and
-> the `YAMLAdapter` class therefore exist but are never compiled or registered.
-> This page documents the intended
-> node-type mappings (`src/language_configs/yaml_types.def`) for when the
-> grammar issue is resolved; `read_ast` does not accept `'yaml'` today.
-
 ## Node Categories
 
 - [Document Structure](#document-structure)
@@ -74,8 +64,6 @@ Scalar styles: - Plain: unquoted `value` - Single-quoted: `'value'` - Double-quo
 | `plain_scalar` | LITERAL_STRING | NODE_TEXT | Plain scalar - unquoted value |
 | `single_quote_scalar` | LITERAL_STRING | NODE_TEXT | Single-quoted scalar - `'value'` |
 | `double_quote_scalar` | LITERAL_STRING | NODE_TEXT | Double-quoted scalar - `"value"` |
-| `literal_scalar` | LITERAL_STRING | NODE_TEXT | Literal scalar - `|` block (preserves newlines) |
-| `folded_scalar` | LITERAL_STRING | NODE_TEXT | Folded scalar - `>` block (folds newlines) |
 
 ## Typed Values
 
@@ -110,7 +98,6 @@ Directive types: - `%YAML 1.2` - version specification - `%TAG !prefix! uri` - t
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `directive` | METADATA_DIRECTIVE | NODE_TEXT | Generic directive - `%DIRECTIVE` |
 | `yaml_directive` | METADATA_DIRECTIVE | NODE_TEXT | YAML directive - `%YAML 1.2` |
 | `tag_directive` | METADATA_DIRECTIVE | NODE_TEXT | Tag directive - `%TAG !prefix! uri` |
 | `reserved_directive` | METADATA_DIRECTIVE | NODE_TEXT | Reserved directive - future use |
@@ -156,12 +143,6 @@ Literal/folded scalar modifiers
 
 Block scalar modifiers: - Chomping: `-` strip, `+` keep trailing newlines - Indentation: explicit indent level
 
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `block_scalar_header` | ORGANIZATION_SCOPE | NONE | Block scalar header - `|2-` modifiers |
-| `block_chomping_indicator` | METADATA_ANNOTATION | NODE_TEXT | Chomping indicator - `-` or `+` |
-| `block_indentation_indicator` | METADATA_ANNOTATION | NODE_TEXT | Indentation indicator - explicit indent level |
-
 ## Parser Error Handling
 
 Parser error nodes
@@ -169,6 +150,19 @@ Parser error nodes
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `ERROR` | PARSER_SYNTAX | NODE_TEXT | Parse error node |
+
+## Other Node Types
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `block_scalar` | LITERAL_STRING | NODE_TEXT | Block scalar body - both `|` (literal) and `>` (folded) forms |
+| `anchor_name` | NAME_IDENTIFIER | NODE_TEXT | Anchor name - the identifier introduced by `&name` |
+| `alias_name` | NAME_IDENTIFIER | NODE_TEXT | Alias name - the identifier referenced by `*name` |
+| `tag_handle` | METADATA_ANNOTATION | NODE_TEXT | Tag handle in a `%TAG` directive, e.g. `!ex!` |
+| `tag_prefix` | METADATA_ANNOTATION | NODE_TEXT | Tag prefix in a `%TAG` directive, e.g. `tag:example.com,2024:` |
+| `&` | PARSER_PUNCTUATION | NODE_TEXT | Anchor sigil `&` |
+| `*` | PARSER_PUNCTUATION | NODE_TEXT | Alias sigil `*` |
+| `yaml_version` | LITERAL_NUMBER | NODE_TEXT | The version in a `%YAML 1.2` directive |
 
 ---
 

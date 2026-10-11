@@ -284,6 +284,24 @@ if(USING_PREGENERATED_PARSERS)
     include_directories("${PREGENERATED_PARSERS_DIR}")
 endif()
 
+# yaml is the one grammar whose parser is ABI 13 rather than 15, and an ABI-13
+# parser.c needs the ABI-13 tree_sitter/parser.h it shipped with -- it uses
+# TSFieldMapSlice, which the current header does not define. The include above
+# resolves <tree_sitter/parser.h> to the modern header for every language, which
+# is right for the other 27 and wrong for this one, so yaml's two parser sources
+# get their own src/ prepended. The runtime loads any language at or above
+# TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION (13), so an ABI-13 language is
+# supported; it is the COMPILE that needs its own header.
+#
+# This stops being necessary the day the grammar can be regenerated -- see #233.
+set(SD_YAML_PARSER_DIR "${PARSER_SOURCE_DIR}/tree-sitter-yaml/src")
+if(EXISTS "${SD_YAML_PARSER_DIR}/tree_sitter/parser.h")
+    set_source_files_properties(
+        "${SD_YAML_PARSER_DIR}/parser.c"
+        "${SD_YAML_PARSER_DIR}/scanner.cc"
+        PROPERTIES INCLUDE_DIRECTORIES "${SD_YAML_PARSER_DIR}")
+endif()
+
 set(EXTENSION_SOURCES
     src/sitting_duck_extension.cpp
     src/language_adapter.cpp

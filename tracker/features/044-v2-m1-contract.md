@@ -70,7 +70,7 @@ unusable as a gate: a reader could not tell a new failure from an expected one.
 The baseline is the gate.
 
 Run: `bash scripts/conformance_kit.sh --binary build/release/duckdb`
-Scan: 3791 `DEF_TYPE` entries from 59 files, 31 languages; 27 languages, 67 fixtures.
+Scan: 3794 `DEF_TYPE` entries from 59 files, 31 languages; **28** languages, 69 fixtures.
 
 > **Scan count history.** 3876 when first recorded -> 3873 (#215 converted three
 > typescript `DEF_TYPE` entries to `DEF_TYPE_ANON`, and the scanner's
@@ -91,7 +91,7 @@ Scan: 3791 `DEF_TYPE` entries from 59 files, 31 languages; 27 languages, 67 fixt
 > once the dead `variable_declarator NONE` line was gone.
 
 ```
-TOTALS ok=184 FAIL=3 dirty=1 void=12 UNDECL=5 n/a=11 | languages=27
+TOTALS ok=189 FAIL=3 dirty=1 void=13 UNDECL=5 n/a=13 | languages=28
 ```
 
 The three FAILs, all pre-existing and none caused by the kit:
@@ -123,6 +123,16 @@ Also expected, and neither pass nor fail:
   quarantined. The language is still judged on the rest.
 - **12 × void.** No fixture, no clean fixture, or the corpus does not exercise
   the capability. Never read as a pass.
+
+**yaml joined the matrix in #227** (`languages=27 -> 28`, `ok 184 -> 189`, two more
+fixtures, `void 12 -> 13` and `n/a 11 -> 13`). It had existed as an adapter, a
+`YAMLAdapter` declaration and a 43-entry `.def` for a long time while being
+absent from `cmake/BuiltinLanguages.cmake`. Its rows are `ok` on PARSE,
+NATIVE-ABST, NO-EMPTY, DECL-UNIQUE and DECL-RUNTIME; `n/a` on the two
+call-naming checks and `void` on RAW-JOIN, because YAML has no calls -- which is
+the capability gating working rather than a gap. `def scan` moved 3791 -> 3794
+because its `.def` went from 43 entries to 46: six declared node types this
+grammar cannot emit were removed, and nine it does emit were added.
 
 A new FAIL, a new UNDECL, or a count that moves without an explanation in this
 table is a regression. A control that stops firing voids the run outright —

@@ -132,7 +132,7 @@ Selectors resolve types at three levels of specificity:
 ### 1. Semantic aliases (`.class` selectors)
 
 ```sql
--- .func matches DEFINITION_FUNCTION across all 27 languages
+-- .func matches DEFINITION_FUNCTION across all 28 languages
 SELECT * FROM ast_select('src/**/*.*', '.func');
 ```
 

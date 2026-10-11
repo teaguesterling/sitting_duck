@@ -23,7 +23,7 @@
 # intent -- the test should fail when the finding is fixed, not quietly keep
 # passing.
 #
-# KNOWN LIMITATION: the totals below (27 registered languages, 26 with
+# KNOWN LIMITATION: the totals below (28 registered languages, 27 with
 # declarations, the per-strategy language counts) are pinned for the DEFAULT
 # build. cmake/BuiltinLanguages.cmake supports subset builds via
 # -DSITTING_DUCK_LANGUAGES / -DSITTING_DUCK_EXCLUDE_LANGUAGES (groundwork for
@@ -36,19 +36,19 @@
 #
 # RUNTIME-REGISTERED LANGUAGES ARE EXCLUDED THROUGHOUT, and the reason is worth
 # writing down because this file got it wrong once. The first revision asserted
-#     SELECT count(*) FROM ast_supported_languages()  ----  27
+#     SELECT count(*) FROM ast_supported_languages()  ----  28
 # which passed everywhere except the one CI job that sets
 # SITTING_DUCK_TEST_GRAMMAR_DIR. That job runs
 # test/sql/dynamic_languages/register_language*.test, which register a grammar
 # at run time; registration is PROCESS-GLOBAL, so by the time this file ran the
-# answer was 28. Every other leg require-env-skips those four files, which is
+# answer was 29. Every other leg require-env-skips those four files, which is
 # why it was green locally and green on 21 of 22 legs.
 #
 # The irony is the lesson: the kit's central principle is "take the language
 # list from the runtime, never a hardcoded array" -- and then this test
 # hardcoded the count. So the fix is not a looser count.
 #
-# `>= 27` is NOT acceptable here (see #202, filed over `COUNT(*) >= 0`
+# `>= 28` is NOT acceptable here (see #202, filed over `COUNT(*) >= 0`
 # assertions that pass for every possible result): it would still pass if a
 # language silently DISAPPEARED, which is the regression this file exists to
 # catch. Replacing a brittle assertion with an unfalsifiable one is a net loss.
@@ -77,7 +77,7 @@ INSERT INTO __builtin_expected VALUES
     ('bash'), ('c'), ('cpp'), ('csharp'), ('css'), ('dart'), ('duckdb'), ('go'),
     ('graphql'), ('hcl'), ('html'), ('java'), ('javascript'), ('json'),
     ('kotlin'), ('lua'), ('markdown'), ('php'), ('python'), ('r'), ('ruby'),
-    ('rust'), ('sql'), ('swift'), ('toml'), ('typescript'), ('zig');
+    ('rust'), ('sql'), ('swift'), ('toml'), ('typescript'), ('yaml'), ('zig');
 
 # GUARD, and the reason the next two assertions are not vacuous: a typo that
 # emptied the pinned table would make "nothing disappeared" trivially true.
@@ -86,7 +86,7 @@ INSERT INTO __builtin_expected VALUES
 query I
 SELECT count(*) FROM __builtin_expected;
 ----
-27
+28
 
 # THE assertion that replaces the hardcoded total. Exact set, both directions:
 # a dropped or renamed built-in fails it, an unexpected built-in fails it, and a
@@ -122,6 +122,7 @@ sql
 swift
 toml
 typescript
+yaml
 zig
 
 # Stated separately because it is the thing that must never pass vacuously:
@@ -194,14 +195,14 @@ SELECT count(*) FROM (DESCRIBE __tm) WHERE column_name LIKE '%native%';
 # anywhere the runtime can see.
 # =============================================================================
 
-# Of the 27 built-ins, 26 contribute declaration rows. Counted over the pinned
+# Of the 28 built-ins, 27 contribute declaration rows. Counted over the pinned
 # set rather than over ast_supported_languages(), so a runtime registration --
 # which contributes rows iff it was given a config -- cannot move it.
 query I
 SELECT count(DISTINCT language) FROM ast_type_map()
 WHERE language IN (SELECT language FROM __builtin_expected);
 ----
-26
+27
 
 query I
 SELECT count(*) FROM ast_type_map('duckdb');
@@ -272,7 +273,7 @@ true
 # Restricted to the pinned built-in set. A runtime grammar registered WITH a
 # config contributes its own node types (test/data/dynamic_grammars/
 # jsond_types.json declares FIRST_CHILD and NODE_TEXT strategies), which
-# unfiltered adds a `first_child` row and bumps node_text/none to 27.
+# unfiltered adds a `first_child` row and bumps node_text/none to 28.
 query II
 SELECT name_strategy, count(DISTINCT language) FROM ast_type_map()
 WHERE language IN (SELECT language FROM __builtin_expected)
@@ -283,6 +284,6 @@ find_assignment_target	13
 find_call_target	18
 find_identifier	21
 find_in_declarator	2
-find_property	3
-node_text	26
-none	26
+find_property	4
+node_text	27
+none	27

@@ -492,7 +492,7 @@ ORDER BY file_path, start_line;
 
 ### 1. Use Semantic Types for Cross-Language Analysis
 ```sql
--- Works across all 27 languages
+-- Works across all 28 languages
 SELECT * FROM read_ast('**/*.*') WHERE semantic_type = 'DEFINITION_FUNCTION';
 
 -- Language-specific types only match one grammar

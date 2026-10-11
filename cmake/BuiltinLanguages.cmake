@@ -124,6 +124,15 @@ sitting_duck_language(dart DartAdapter TS
     ADAPTER src/language_adapters/dart_adapter.cpp
     PARSERS tree-sitter-dart/src/parser.c tree-sitter-dart/src/scanner.c)
 
+# yaml's parser is ABI 13 (the runtime's TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION),
+# not 15 like the rest, and its external scanner is C++ (scanner.cc, which
+# #includes schema.generated.cc -- tree-sitter allows only one scanner file).
+# Both are fine to compile and load; see scripts/generate_all_parsers.sh for why
+# this grammar cannot currently be regenerated (#233).
+sitting_duck_language(yaml YAMLAdapter TS
+    ADAPTER src/language_adapters/yaml_adapter.cpp
+    PARSERS tree-sitter-yaml/src/parser.c tree-sitter-yaml/src/scanner.cc)
+
 #############################
 # Selection & validation
 #############################

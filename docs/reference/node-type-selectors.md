@@ -14,7 +14,7 @@ if_statement       -- exactly if_statement
 
 ### Dotted selectors (`.semantic`) — Cross-language, broadest
 
-Match by semantic category. Works identically across all 27 languages:
+Match by semantic category. Works identically across all 28 languages:
 
 ```sql
 .func              -- all function definitions (any language)

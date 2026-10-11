@@ -28,3 +28,4 @@ graphql:tree-sitter-graphql
 toml:tree-sitter-toml
 zig:tree-sitter-zig
 dart:tree-sitter-dart
+yaml:tree-sitter-yaml

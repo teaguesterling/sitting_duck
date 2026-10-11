@@ -112,3 +112,5 @@ zig	../zig/sample.zig
 dart	../unparse_leaf_text/sample.dart
 dart	../dart/anonymous_functions.dart
 dart	../languages/dart/Inheritance.dart
+yaml	../yaml/simple.yaml
+yaml	../yaml/features.yaml

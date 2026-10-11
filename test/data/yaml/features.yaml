@@ -1,0 +1,21 @@
+%YAML 1.2
+%TAG !ex! tag:example.com,2024:
+---
+# anchors, aliases and tags
+defaults: &defaults
+  retries: 3
+  timeout: 30
+service:
+  <<: *defaults
+  name: !ex!svc "api"
+  block: |
+    first line
+    second line
+  folded: >
+    folded onto
+    one line
+  flow: { a: 1, b: [2, 3] }
+  flag: true
+  nothing: null
+  ratio: 1.5
+...
