@@ -11,7 +11,7 @@
 # Neither of them can prove that filter does anything, because in every CI leg
 # but one there is no runtime-registered language to exclude. That is how the
 # original bug shipped: capability_declarations.test asserted
-#     SELECT count(*) FROM ast_supported_languages()  ----  27
+#     SELECT count(*) FROM ast_supported_languages()  ----  28
 # which is correct in 21 of 22 legs and wrong in the one job that sets
 # SITTING_DUCK_TEST_GRAMMAR_DIR, because registration is PROCESS-GLOBAL and
 # test/sql/dynamic_languages/register_language*.test had already added one.
@@ -49,7 +49,7 @@ INSERT INTO __builtin_expected VALUES
     ('bash'), ('c'), ('cpp'), ('csharp'), ('css'), ('dart'), ('duckdb'), ('go'),
     ('graphql'), ('hcl'), ('html'), ('java'), ('javascript'), ('json'),
     ('kotlin'), ('lua'), ('markdown'), ('php'), ('python'), ('r'), ('ruby'),
-    ('rust'), ('sql'), ('swift'), ('toml'), ('typescript'), ('zig');
+    ('rust'), ('sql'), ('swift'), ('toml'), ('typescript'), ('yaml'), ('zig');
 
 # Register WITH a config: that is the worse case for the other two files,
 # because a configured grammar contributes node types and therefore shows up in
@@ -160,14 +160,15 @@ sql
 swift
 toml
 typescript
+yaml
 zig
 
-# capability_declarations.test: 26 of the 27 built-ins carry declarations.
+# capability_declarations.test: 27 of the 28 built-ins carry declarations.
 query I
 SELECT count(DISTINCT language) FROM ast_type_map()
 WHERE language IN (SELECT language FROM __builtin_expected);
 ----
-26
+27
 
 # capability_declarations.test: duckdb is still the ONLY built-in with none.
 query I
