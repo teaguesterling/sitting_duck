@@ -129,7 +129,7 @@ true
 # -----------------------------------------------------------------------------
 
 # capability_declarations.test: the exact built-in set.
-query I
+query T
 SELECT language FROM ast_supported_languages()
 WHERE parser_type <> 'tree-sitter (dynamic)'
 ORDER BY language;
