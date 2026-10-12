@@ -93,9 +93,6 @@ DEF_TYPE("function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Func
 /// @brief Anonymous function - `function(...) end` as expression
 DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
-/// @brief Local function - `local function name(...) end`
-DEF_TYPE("local_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
-
 /// @brief Parameter list - function parameters
 DEF_TYPE("parameters", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
@@ -148,9 +145,6 @@ DEF_TYPE("method_index_expression", COMPUTATION_CALL | SemanticRefinements::Call
 /// @brief Variable declaration (global)
 DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
-/// @brief Local variable declaration - `local x = value`
-DEF_TYPE("local_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
-
 /// @brief Assignment statement - `x = value` or `a, b = 1, 2`
 DEF_TYPE("assignment_statement", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, FIND_IDENTIFIER, NONE, 0)
 
@@ -184,9 +178,6 @@ DEF_TYPE("table_constructor", LITERAL_STRUCTURED | SemanticRefinements::Structur
 
 /// @brief Field in table - `key = value` or `[expr] = value`
 DEF_TYPE("field", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
-
-/// @brief Field list in table constructor
-DEF_TYPE("field_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
 
 /** @} */ // end lua_tables
 
@@ -485,7 +476,6 @@ DEF_TYPE("::", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
  * @{
  */
 
-DEF_TYPE("break", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("do", ORGANIZATION_BLOCK, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("else", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("elseif", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)

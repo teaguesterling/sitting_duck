@@ -145,15 +145,6 @@ DEF_TYPE("function", DEFINITION_FUNCTION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 /// @brief Method declaration - function inside class/trait
 DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, CUSTOM, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
-/// @brief Constructor - `__construct()`
-DEF_TYPE("constructor_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NODE_TEXT, CONSTRUCTOR_DEFINITION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
-
-/// @brief Destructor - `__destruct()`
-DEF_TYPE("destructor_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NODE_TEXT, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
-
-/// @brief Anonymous function - `function($x) use ($y) { }`
-DEF_TYPE("anonymous_function_creation_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
-
 /// @brief Arrow function - `fn($x) => $x * 2` (PHP 7.4+)
 DEF_TYPE("arrow_function", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
@@ -234,9 +225,6 @@ DEF_TYPE("intersection_type", TYPE_COMPOSITE, NONE, NONE, 0)
 
 /// @brief Primitive type - `int`, `string`, `bool`, etc.
 DEF_TYPE("primitive_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
-
-/// @brief Array type hint - `array`
-DEF_TYPE("array_type", TYPE_COMPOSITE, NODE_TEXT, NONE, 0)
 
 /** @} */ // end php_types
 

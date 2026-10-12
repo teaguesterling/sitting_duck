@@ -295,9 +295,6 @@ DEF_TYPE("try_expression", ERROR_TRY, NONE, NONE, 0)
 /// @brief Catch expression - `value catch |err| handler`
 DEF_TYPE("catch_expression", ERROR_CATCH, NONE, NONE, 0)
 
-/// @brief Orelse expression - `optional orelse default`
-DEF_TYPE("orelse_expression", FLOW_CONDITIONAL, NONE, NONE, 0)
-
 /** @} */ // end zig_errors
 
 // ============================================================================
@@ -488,9 +485,6 @@ DEF_TYPE("struct_initializer", LITERAL_STRUCTURED | SemanticRefinements::Structu
 /// @brief Anonymous struct initializer
 DEF_TYPE("anonymous_struct_initializer", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NONE, NONE, 0)
 
-/// @brief Array initializer - `.{ value, value }`
-DEF_TYPE("array_initializer", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
-
 /// @brief Initializer list
 DEF_TYPE("initializer_list", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NONE, NONE, 0)
 
@@ -537,12 +531,6 @@ DEF_TYPE("asm_output", METADATA_ANNOTATION, NONE, NONE, 0)
 
 /// @brief Comment
 DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
-
-/// @brief Line comment - `// comment`
-DEF_TYPE("line_comment", METADATA_COMMENT, NONE, NONE, 0)
-
-/// @brief Doc comment - `/// documentation`
-DEF_TYPE("doc_comment", METADATA_COMMENT, NONE, NONE, 0)
 
 /** @} */ // end zig_comments
 

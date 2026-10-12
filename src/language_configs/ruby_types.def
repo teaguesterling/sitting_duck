@@ -131,9 +131,6 @@ DEF_TYPE("assignment", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTA
 /// @brief Compound assignment - `var += value`, `var ||= default`
 DEF_TYPE("operator_assignment", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
-/// @brief Multiple/parallel assignment - `a, b = 1, 2` or `a, b = arr`
-DEF_TYPE("multiple_assignment", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, NONE, NONE, ASTNodeFlags::NAME_DEFINITION)
-
 /// @brief Constant definition - `CONSTANT = value` (uppercase names)
 DEF_TYPE("constant", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, NODE_TEXT, NONE, ASTNodeFlags::NAME_DEFINITION)
 
@@ -157,12 +154,6 @@ DEF_TYPE("constant", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTA
 
 /// @brief Function-style call - `method(args)`
 DEF_TYPE("call", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
-
-/// @brief Method call on object - `obj.method(args)`
-DEF_TYPE("method_call", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
-
-/// @brief Chained method call - `obj.method1.method2`
-DEF_TYPE("chained_call", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 
 /// @brief Array/hash element access - `arr[index]` or `hash[key]`
 DEF_TYPE("element_reference", COMPUTATION_ACCESS, NONE, NONE, 0)
@@ -189,9 +180,6 @@ DEF_TYPE("element_reference", COMPUTATION_ACCESS, NONE, NONE, 0)
 
 /// @brief Local variable or method name
 DEF_TYPE("identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::NAME_REFERENCE)
-
-/// @brief Constant identifier - uppercase names
-DEF_TYPE("constant_identifier", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
 /// @brief Instance variable - `@name`
 DEF_TYPE("instance_variable", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
@@ -249,9 +237,6 @@ DEF_TYPE("string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_T
 
 /// @brief Character literal - `?a`
 DEF_TYPE("character", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
-
-/// @brief Symbol - `:name` immutable interned string
-DEF_TYPE("symbol", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 
 /// @brief Simple symbol - unquoted symbol `:name`
 DEF_TYPE("simple_symbol", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
@@ -432,9 +417,6 @@ DEF_TYPE("rescue", ERROR_CATCH, NONE, NONE, 0)
 /// @brief Ensure clause - always executed (like finally)
 DEF_TYPE("ensure", ERROR_FINALLY, NONE, NONE, 0)
 
-/// @brief Raise statement - throws exception
-DEF_TYPE("raise", ERROR_THROW, NONE, NONE, 0)
-
 /** @} */ // end ruby_exceptions
 
 // ============================================================================
@@ -466,9 +448,6 @@ DEF_TYPE("do_block", ORGANIZATION_BLOCK, NONE, ARROW_FUNCTION, 0)
 /// @brief Lambda - `-> { }` or `lambda { }`
 DEF_TYPE("lambda", COMPUTATION_CLOSURE, NONE, ARROW_FUNCTION, 0)
 
-/// @brief Proc - `proc { }` or `Proc.new { }`
-DEF_TYPE("proc", COMPUTATION_CLOSURE, NONE, ARROW_FUNCTION, 0)
-
 /** @} */ // end ruby_blocks
 
 // ============================================================================
@@ -488,24 +467,6 @@ DEF_TYPE("proc", COMPUTATION_CLOSURE, NONE, ARROW_FUNCTION, 0)
  * - `prepend Module` - insert module before class in method chain
  * @{
  */
-
-/// @brief Require - loads library from load path
-DEF_TYPE("require", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief Require relative - loads file relative to current
-DEF_TYPE("require_relative", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief Load - loads and re-evaluates file
-DEF_TYPE("load", EXTERNAL_IMPORT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief Include - mixes in module as instance methods
-DEF_TYPE("include", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief Extend - mixes in module as class methods
-DEF_TYPE("extend", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief Prepend - inserts module before class in method chain
-DEF_TYPE("prepend", EXTERNAL_IMPORT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @} */ // end ruby_imports
 
@@ -565,9 +526,6 @@ DEF_TYPE("binary", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 
 /// @brief Unary expression - single operand operation
 DEF_TYPE("unary", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-
-/// @brief Assignment operator node
-DEF_TYPE("assignment_operator", OPERATOR_ASSIGNMENT, NONE, NONE, 0)
 
 /** @} */ // end ruby_operators
 
@@ -662,7 +620,6 @@ DEF_TYPE("not", OPERATOR_LOGICAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
  */
 
 DEF_TYPE("\"", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE("'", PARSER_DELIMITER, NONE, NONE, 0)
 DEF_TYPE(",", PARSER_PUNCTUATION, NONE, NONE, 0)
 DEF_TYPE(".", PARSER_PUNCTUATION, NONE, NONE, 0)
 DEF_TYPE(":", PARSER_PUNCTUATION, NONE, NONE, 0)
@@ -813,29 +770,11 @@ DEF_TYPE("in_clause", FLOW_LOOP, NONE, NONE, 0)
 /// @brief Bare symbol - unquoted symbol
 DEF_TYPE("bare_symbol", LITERAL_STRING, NODE_TEXT, NONE, 0)
 
-/// @brief Parameter list
-DEF_TYPE("parameter_list", ORGANIZATION_LIST, NONE, NONE, 0)
-
 /// @brief Block parameters - `|x, y|`
 DEF_TYPE("block_parameters", ORGANIZATION_LIST, NONE, NONE, 0)
 
 /// @brief Parenthesized statements
 DEF_TYPE("parenthesized_statements", ORGANIZATION_BLOCK, NONE, NONE, 0)
-
-/// @brief Elsif clause
-DEF_TYPE("elsif_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
-
-/// @brief Else clause
-DEF_TYPE("else_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
-
-/// @brief Rescue clause
-DEF_TYPE("rescue_clause", ERROR_CATCH, NONE, NONE, 0)
-
-/// @brief Ensure clause
-DEF_TYPE("ensure_clause", ERROR_FINALLY, NONE, NONE, 0)
-
-/// @brief When clause in case statement
-DEF_TYPE("when_clause", FLOW_CONDITIONAL, NONE, NONE, 0)
 
 /** @} */ // end ruby_constructs
 
@@ -860,9 +799,6 @@ DEF_TYPE("splat_argument", PATTERN_COLLECT, NONE, NONE, 0)
 
 /// @brief Hash splat argument - `**kwargs` in call
 DEF_TYPE("hash_splat_argument", PATTERN_COLLECT, NONE, NONE, 0)
-
-/// @brief Keyword splat - `**options`
-DEF_TYPE("keyword_splat", PATTERN_COLLECT, NONE, NONE, 0)
 
 /// @brief String interpolation - `#{expr}`
 DEF_TYPE("interpolation", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUENT)
@@ -890,9 +826,6 @@ DEF_TYPE("heredoc_body", LITERAL_STRING, NONE, NONE, 0)
  * @brief Alternative method definition forms
  * @{
  */
-
-/// @brief Method alias
-DEF_TYPE("alias_method", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /// @brief Undef - removes method definition
 DEF_TYPE("undef", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -929,10 +862,6 @@ DEF_TYPE("superclass", TYPE_REFERENCE, FIND_IDENTIFIER, NONE, 0)
  * @{
  */
 
-DEF_TYPE("private", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("protected", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("public", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
 /** @} */ // end ruby_access
 
 // ============================================================================
@@ -944,18 +873,6 @@ DEF_TYPE("public", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
  * @brief Ruby magic constants and variables
  * @{
  */
-
-/// @brief Current file path
-DEF_TYPE("__FILE__", NAME_SCOPED, NODE_TEXT, NONE, 0)
-
-/// @brief Current line number
-DEF_TYPE("__LINE__", NAME_SCOPED, NODE_TEXT, NONE, 0)
-
-/// @brief Current directory
-DEF_TYPE("__dir__", NAME_SCOPED, NODE_TEXT, NONE, 0)
-
-/// @brief Current encoding
-DEF_TYPE("__ENCODING__", NAME_SCOPED, NODE_TEXT, NONE, 0)
 
 /** @} */ // end ruby_special_vars
 
@@ -979,20 +896,11 @@ DEF_TYPE("__ENCODING__", NAME_SCOPED, NODE_TEXT, NONE, 0)
 /// @brief Case match expression - `case ... in`
 DEF_TYPE("case_match", PATTERN_MATCH, NONE, NONE, 0)
 
-/// @brief In pattern - pattern matching clause
-DEF_TYPE("in_pattern", PATTERN_MATCH, NONE, NONE, 0)
-
-/// @brief Variable pattern - captures value in pattern
-DEF_TYPE("variable_pattern", PATTERN_DESTRUCTURE, FIND_IDENTIFIER, NONE, 0)
-
 /// @brief Array pattern - `[a, b, c]`
 DEF_TYPE("array_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
 
 /// @brief Hash pattern - `{key:}`
 DEF_TYPE("hash_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
-
-/// @brief Rest pattern - `*rest`
-DEF_TYPE("rest_pattern", PATTERN_COLLECT, NONE, NONE, 0)
 
 /// @brief Keyword pattern
 DEF_TYPE("keyword_pattern", PATTERN_MATCH, NONE, NONE, 0)
@@ -1012,21 +920,6 @@ DEF_TYPE("alternative_pattern", PATTERN_MATCH, NONE, NONE, 0)
  * @{
  */
 
-/// @brief attr_reader - generates getter methods
-DEF_TYPE("attr_reader", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief attr_writer - generates setter methods
-DEF_TYPE("attr_writer", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief attr_accessor - generates getter and setter methods
-DEF_TYPE("attr_accessor", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief define_method - dynamically defines instance method
-DEF_TYPE("define_method", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
-
-/// @brief define_singleton_method - dynamically defines class method
-DEF_TYPE("define_singleton_method", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
-
 /** @} */ // end ruby_meta
 
 // ============================================================================
@@ -1039,9 +932,6 @@ DEF_TYPE("define_singleton_method", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, 
  * @{
  */
 
-DEF_TYPE("word_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("symbol_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
-DEF_TYPE("regex_literal", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("hash_key_symbol", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("bare_string", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("delimited_symbol", LITERAL_STRING, NODE_TEXT, NONE, 0)

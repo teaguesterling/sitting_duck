@@ -141,9 +141,6 @@ DEF_TYPE("unset_command", DEFINITION_VARIABLE | SemanticRefinements::Variable::M
 /// @brief Generic command - wrapper for command structures
 DEF_TYPE("command", COMPUTATION_CALL, NONE, NONE, 0)
 
-/// @brief Simple command - direct command invocation with arguments
-DEF_TYPE("simple_command", EXECUTION_STATEMENT, FIND_IDENTIFIER, NONE, 0)
-
 /// @brief Pipeline - commands connected via `|` for stream processing
 DEF_TYPE("pipeline", EXECUTION_STATEMENT, NONE, NONE, 0)
 
@@ -192,18 +189,6 @@ DEF_TYPE("for_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE,
 /// @brief C-style for loop - `for ((i=0; i<n; i++)); do ...; done`
 DEF_TYPE("c_style_for_statement", FLOW_LOOP | SemanticRefinements::Loop::COUNTER, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
-/// @brief Break statement - exit from enclosing loop
-DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
-
-/// @brief Continue statement - skip to next loop iteration
-DEF_TYPE("continue_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
-
-/// @brief Return statement - exit function with status code
-DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
-
-/// @brief Exit statement - terminate script with status code
-DEF_TYPE("exit_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
-
 /// @brief Else clause - alternative branch in if statement
 DEF_TYPE("else_clause", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
 
@@ -249,9 +234,6 @@ DEF_TYPE("expansion", COMPUTATION_ACCESS, NONE, NONE, 0)
 /// @brief Simple expansion - basic `$var` reference
 DEF_TYPE("simple_expansion", COMPUTATION_ACCESS, NODE_TEXT, NONE, 0)
 
-/// @brief String expansion - expansion within quoted string
-DEF_TYPE("string_expansion", COMPUTATION_ACCESS, NONE, NONE, 0)
-
 /// @brief Arithmetic expansion - `$((expression))`
 DEF_TYPE("arithmetic_expansion", COMPUTATION_EXPRESSION, NONE, NONE, 0)
 
@@ -284,9 +266,6 @@ DEF_TYPE("string", LITERAL_STRING | SemanticRefinements::String::TEMPLATE, NODE_
 
 /// @brief Single-quoted string - literal, no expansion
 DEF_TYPE("raw_string", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
-
-/// @brief ANSI-C quoted string - `$'...'` with escape sequences
-DEF_TYPE("ansii_c_string", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 
 /// @brief String concatenation - adjacent strings combined
 DEF_TYPE("concatenation", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
@@ -618,17 +597,6 @@ DEF_TYPE("in", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 /// @brief function keyword - optional function declaration prefix
 DEF_TYPE("function", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
-/// @brief return keyword - exit function with status
-DEF_TYPE("return", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief break keyword - exit loop
-DEF_TYPE("break", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief continue keyword - next loop iteration
-DEF_TYPE("continue", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief exit keyword - terminate script
-DEF_TYPE("exit", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 /** @} */
 
 /**

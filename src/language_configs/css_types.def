@@ -300,9 +300,6 @@ DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
  * @{
  */
 
-/// @brief Media feature name - `min-width`, `orientation`
-DEF_TYPE("media_feature_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
-
 /// @brief Feature name - generic feature identifier
 DEF_TYPE("feature_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
@@ -343,9 +340,6 @@ DEF_TYPE("keyframe_block", ORGANIZATION_BLOCK, CUSTOM, NONE, 0)
  * - Usage: `var(--custom-property)`
  * @{
  */
-
-/// @brief Variable name - `--custom-property`
-DEF_TYPE("variable_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
 
 /// @brief PostCSS statement - preprocessor directive
 DEF_TYPE("postcss_statement", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
@@ -520,24 +514,6 @@ DEF_TYPE("@namespace", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEY
  * @{
  */
 
-/// @brief Pixels unit - `px`
-DEF_TYPE("px", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-
-/// @brief Root em unit - `rem`
-DEF_TYPE("rem", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-
-/// @brief Em unit - `em`
-DEF_TYPE("em", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-
-/// @brief Percentage unit - `%`
-DEF_TYPE("%", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-
-/// @brief Viewport height unit - `vh`
-DEF_TYPE("vh", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-
-/// @brief Viewport width unit - `vw`
-DEF_TYPE("vw", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-
 /** @} */ // end css_units
 
 // ============================================================================
@@ -550,24 +526,6 @@ DEF_TYPE("vw", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
  * @{
  */
 
-/// @brief Important declaration - `!important`
-DEF_TYPE("!important", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-
-/// @brief Inherit value - inherit from parent
-DEF_TYPE("inherit", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief Initial value - use initial value
-DEF_TYPE("initial", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief Unset value - reset to natural value
-DEF_TYPE("unset", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief None value - disable property
-DEF_TYPE("none", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief Auto value - automatic calculation
-DEF_TYPE("auto", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
 /** @} */ // end css_special_values
 
 // ============================================================================
@@ -579,27 +537,6 @@ DEF_TYPE("auto", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
  * @brief Built-in CSS function keywords
  * @{
  */
-
-/// @brief var() function - custom property reference
-DEF_TYPE("var", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief calc() function - mathematical calculation
-DEF_TYPE("calc", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief url() function - resource reference
-DEF_TYPE("url", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief rgb() function - RGB color
-DEF_TYPE("rgb", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief rgba() function - RGB color with alpha
-DEF_TYPE("rgba", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief hsl() function - HSL color
-DEF_TYPE("hsl", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief hsla() function - HSL color with alpha
-DEF_TYPE("hsla", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @} */ // end css_function_names
 

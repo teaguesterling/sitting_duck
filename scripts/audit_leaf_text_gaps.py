@@ -381,7 +381,32 @@ def iter_macro_arglists(text: str, token: str = DEF_TYPE_TOKEN):
 
 
 # Leading `"raw_type"` of a DEF_TYPE argument list.
-RAW_TYPE_RE = re.compile(r'^\s*"((?:[^"\\]|\\.)*)"\s*$')
+#
+# ONE OR MORE adjacent string literals, because C concatenates them and
+# clang-format splits long ones. src/language_adapters/sql_adapter.cpp really
+# contains
+#
+#     DEF_TYPE("keyword_"
+#              "commit", EXECUTION_STATEMENT, ...)
+#
+# which is the raw_type `keyword_commit`. A single-literal pattern does not
+# match that argument at all, so the WHOLE ENTRY was skipped -- seven of them in
+# sql (keyword_commit, keyword_conflict, keyword_interval, keyword_sequence,
+# keyword_uuid, window_clause, op_unary_minus). Use raw_type_from_arg() rather
+# than reading group(1), which holds the un-joined fragments.
+RAW_TYPE_RE = re.compile(r'^\s*((?:"(?:[^"\\]|\\.)*"\s*)+)$')
+_STRING_LITERAL_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
+
+
+def raw_type_from_arg(arg: str) -> str | None:
+    """The raw_type a DEF_TYPE first argument denotes, or None if it is not a
+    string literal (the macro definition's own `raw_type` parameter, say).
+
+    Concatenates adjacent literals the way the C compiler does.
+    """
+    if not RAW_TYPE_RE.match(arg):
+        return None
+    return "".join(unescape_c(m.group(1)) for m in _STRING_LITERAL_RE.finditer(arg))
 
 
 # A .def file may pull in another language's table wholesale:
@@ -454,10 +479,9 @@ def parse_def_strategies(path: Path) -> tuple[dict[str, str], list[Path]]:
         args = split_top_level_commas(arglist)
         if len(args) < 3:
             continue
-        m = RAW_TYPE_RE.match(args[0])
-        if not m:
+        raw_type = raw_type_from_arg(args[0])
+        if raw_type is None:
             continue
-        raw_type = unescape_c(m.group(1))
         # args = [raw_type, semantic_type, name_strategy, native_strategy, flags]
         strategies.setdefault(raw_type, args[2].strip())
     return strategies, sources

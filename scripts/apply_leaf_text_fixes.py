@@ -63,7 +63,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from audit_leaf_text_gaps import (  # noqa: E402
     DEF_TYPE_TOKEN,
-    RAW_TYPE_RE,
+    raw_type_from_arg,
     REPO_ROOT,
     audit_language,
     collect_def_sources,
@@ -189,7 +189,7 @@ def find_def_type_spans(text: str):
 
         arglist = text[start:j]
         args = split_top_level_commas(arglist)
-        m = RAW_TYPE_RE.match(args[0]) if args else None
+        raw_m = raw_type_from_arg(args[0]) if args else None
         if m:
             yield unescape_c(m.group(1)), start, j
         i = j + 1
