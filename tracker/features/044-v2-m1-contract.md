@@ -70,7 +70,15 @@ unusable as a gate: a reader could not tell a new failure from an expected one.
 The baseline is the gate.
 
 Run: `bash scripts/conformance_kit.sh --binary build/release/duckdb`
-Scan: 3794 `DEF_TYPE` entries from 59 files, 31 languages; **28** languages, 69 fixtures.
+Scan: 3492 `DEF_TYPE` entries from 59 files, 31 languages; **28** languages, 69 fixtures.
+
+> **Two scanners, two numbers, neither wrong.** The kit's own `.def` scan is
+> line-oriented and reports **3492**; `scripts/audit_unreachable_declarations.py`
+> handles the two things clang-format does to `src/language_adapters/sql_adapter.cpp`
+> — several `DEF_TYPE` calls per line, and a long `raw_type` split across adjacent
+> string literals that C concatenates — and reports **3698**. The second number is
+> the one that equals what the extension actually loads: `SELECT count(*) FROM
+> ast_type_map()` is 3698 exactly. Quote whichever you mean, and say which.
 
 > **Scan count history.** 3876 when first recorded -> 3873 (#215 converted three
 > typescript `DEF_TYPE` entries to `DEF_TYPE_ANON`, and the scanner's
@@ -80,7 +88,9 @@ Scan: 3794 `DEF_TYPE` entries from 59 files, 31 languages; **28** languages, 69 
 > javascript ones and therefore dead under the initialiser list's first-wins
 > rule). Making `DECL-UNIQUE` namedness-aware, and making the `.def` scan follow
 > `#include`s, are both follow-ups; until then the anonymous table is outside
-> the gate. The shadowing itself is now gated by
+> the gate. **3817 -> 3794 -> 3492**: yaml's wiring (#227) added its `.def` to the
+> scan, then #232 deleted 315 declarations for node types no grammar can emit.
+> The shadowing itself is now gated by
 > `scripts/audit_shadowed_declarations.py`, and **3817 -> 3791** is #222 part 2
 > deleting the last 26 dead declarations (17 in typescript, 9 in javascript for
 > node types the JavaScript grammar cannot emit).
