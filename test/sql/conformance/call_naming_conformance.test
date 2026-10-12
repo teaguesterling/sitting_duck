@@ -65,7 +65,7 @@ bash	3	0
 c	4	3
 cpp	5	3
 csharp	2	2
-css	8	8
+css	1	1
 dart	3	3
 go	2	2
 graphql	1	1
@@ -77,13 +77,21 @@ lua	2	2
 php	4	4
 python	1	1
 r	2	2
-ruby	5	5
-rust	4	4
-sql	5	5
+ruby	3	3
+rust	3	3
+sql	4	4
 swift	2	2
 typescript	4	2
 zig	2	2
 
+# FOUR COUNTS SHRANK IN #232, and the shrink is the point: css 8 -> 1,
+# ruby 5 -> 3, rust 4 -> 3, sql 5 -> 4. Those languages declared
+# call-semantic node types their grammars cannot emit -- css declared seven
+# (`calc`, `hsl`, `hsla`, `rgb`, ... as COMPUTATION_CALL) and the css grammar
+# has no such symbols. The vocabulary this gate reads was inflated by
+# declarations that could never match a node, which is exactly the failure
+# mode #232 is about: an unreachable declaration reads as a capability.
+#
 # bash is the #91 exception made explicit: it HAS call-semantic node types and
 # declares naming for none of them, so it is `n/a`, not a failure.
 query I

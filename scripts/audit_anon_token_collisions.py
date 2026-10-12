@@ -68,7 +68,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from audit_leaf_text_gaps import (  # noqa: E402
     PARSERS_DIR,
-    RAW_TYPE_RE,
+    raw_type_from_arg,
     iter_macro_arglists,
     parse_parser_c,
     preprocess_def,
@@ -116,10 +116,9 @@ def parse_decls(path: Path, token: str) -> dict[str, Decl]:
         args = split_top_level_commas(arglist)
         if len(args) < 5:
             continue
-        m = RAW_TYPE_RE.match(args[0])
-        if not m:
+        raw = raw_type_from_arg(args[0])
+        if raw is None:
             continue
-        raw = unescape_c(m.group(1))
         out.setdefault(
             raw,
             Decl(args[1].strip(), args[2].strip(), args[3].strip(), args[4].strip()),

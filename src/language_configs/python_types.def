@@ -63,7 +63,6 @@
  * @{
  */
 DEF_TYPE("function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
-DEF_TYPE("async_function_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, ASYNC_FUNCTION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 /** @} */
 
 /**
@@ -167,8 +166,6 @@ DEF_TYPE("interpolation", LITERAL_STRING, NONE, NONE, ASTNodeFlags::IS_CONSTITUE
 DEF_TYPE("escape_interpolation", LITERAL_STRING, NODE_TEXT, NONE, 0)
 DEF_TYPE("format_specifier", LITERAL_STRING, NONE, NONE, 0)
 DEF_TYPE("format_expression", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("conversion", LITERAL_STRING, NONE, NONE, 0)
-DEF_TYPE("interpolation_conversion", LITERAL_STRING, NONE, NONE, 0)
 
 // Numeric literals
 DEF_TYPE("integer", LITERAL_NUMBER | SemanticRefinements::Number::INTEGER, NODE_TEXT, NONE, 0)
@@ -324,7 +321,6 @@ DEF_TYPE("generator_expression", TRANSFORM_QUERY | SemanticRefinements::Query::N
  */
 DEF_TYPE("decorator", NAME_ATTRIBUTE, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("decorated_definition", METADATA_ANNOTATION, NONE, NONE, 0)
-DEF_TYPE("as_clause", METADATA_ANNOTATION, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("global_statement", METADATA_ANNOTATION, NONE, NONE, 0)
 DEF_TYPE("nonlocal_statement", METADATA_ANNOTATION, NONE, NONE, 0)
 /** @} */
@@ -348,13 +344,11 @@ DEF_TYPE("class_pattern", PATTERN_MATCH, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("keyword_pattern", PATTERN_MATCH, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("complex_pattern", PATTERN_MATCH, NONE, NONE, 0)
 DEF_TYPE("union_pattern", PATTERN_MATCH, NONE, NONE, 0)
-DEF_TYPE("value_pattern", PATTERN_MATCH, NONE, NONE, 0)
 DEF_TYPE("pattern_list", PATTERN_DESTRUCTURE, NONE, NONE, 0)
 DEF_TYPE("as_pattern_target", PATTERN_DESTRUCTURE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 DEF_TYPE("as_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
 DEF_TYPE("tuple_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
 DEF_TYPE("list_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
-DEF_TYPE("attribute_pattern", PATTERN_DESTRUCTURE, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("list_splat_pattern", PATTERN_COLLECT, NODE_TEXT, NONE, ASTNodeFlags::NAME_DEFINITION)
 DEF_TYPE("dictionary_splat_pattern", PATTERN_COLLECT, NODE_TEXT, NONE, ASTNodeFlags::NAME_DEFINITION)
 DEF_TYPE("list_splat", PATTERN_COLLECT, NONE, NONE, 0)
@@ -374,9 +368,6 @@ DEF_TYPE("splat_pattern", PATTERN_COLLECT, NONE, NONE, 0)
  * by convention. `super()` provides parent class access.
  * @{
  */
-DEF_TYPE("self", NAME_SCOPED, NODE_TEXT, NONE, 0)
-DEF_TYPE("super", NAME_SCOPED, NODE_TEXT, NONE, 0)
-DEF_TYPE("cls", NAME_SCOPED, NODE_TEXT, NONE, 0)
 /** @} */
 
 // =============================================================================

@@ -187,7 +187,6 @@ DEF_TYPE("enum_variant", DEFINITION_VARIABLE | SemanticRefinements::Variable::FI
  * @{
  */
 DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTION, FIND_CALL_TARGET, FUNCTION_CALL, 0)
-DEF_TYPE("method_call_expression", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 DEF_TYPE("macro_invocation", COMPUTATION_CALL | SemanticRefinements::Call::MACRO, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 DEF_TYPE("field_expression", COMPUTATION_ACCESS, FIND_IDENTIFIER, NONE, 0)
 DEF_TYPE("index_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
@@ -305,7 +304,6 @@ DEF_TYPE("match_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
 DEF_TYPE("tuple_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
 DEF_TYPE("struct_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
 DEF_TYPE("reference_pattern", PATTERN_DESTRUCTURE, NONE, NONE, 0)
-DEF_TYPE("wildcard_pattern", PATTERN_COLLECT, NODE_TEXT, NONE, 0)
 DEF_TYPE("range_pattern", PATTERN_COLLECT, NONE, NONE, 0)
 /** @} */
 
@@ -338,7 +336,6 @@ DEF_TYPE("pointer_type", TYPE_REFERENCE, NONE, NONE, 0)
 DEF_TYPE("tuple_type", TYPE_COMPOSITE, NONE, NONE, 0)
 DEF_TYPE("array_type", TYPE_COMPOSITE, NONE, NONE, 0)
 DEF_TYPE("function_type", TYPE_COMPOSITE, NONE, NONE, 0)
-DEF_TYPE("trait_object_type", TYPE_COMPOSITE, NONE, NONE, 0)
 
 // Generics and lifetimes
 DEF_TYPE("generic_type", TYPE_GENERIC, NONE, NONE, 0)
@@ -524,13 +521,11 @@ DEF_TYPE("await", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Modifier keywords
 DEF_TYPE("pub", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("mut", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("unsafe", EXECUTION_STATEMENT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Type system keywords
 DEF_TYPE("where", TYPE_GENERIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("dyn", TYPE_COMPOSITE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("Self", TYPE_REFERENCE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Other keywords
 DEF_TYPE("as", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)

@@ -132,9 +132,6 @@ DEF_TYPE("repeat_statement", FLOW_LOOP | SemanticRefinements::Loop::INFINITE, NO
  * @{
  */
 
-/// @brief Return statement - `return(value)`
-DEF_TYPE("return", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
 /// @brief Break statement - exits loop
 DEF_TYPE("break", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
@@ -354,21 +351,6 @@ DEF_TYPE("nan", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
  * @{
  */
 
-/// @brief Vector - atomic vector
-DEF_TYPE("vector", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NONE, 0)
-
-/// @brief List - heterogeneous list
-DEF_TYPE("list", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NONE, 0)
-
-/// @brief Data frame - rectangular data
-DEF_TYPE("data_frame", LITERAL_STRUCTURED | SemanticRefinements::Structured::MAPPING, NODE_TEXT, NONE, 0)
-
-/// @brief Matrix - 2D array
-DEF_TYPE("matrix", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NONE, 0)
-
-/// @brief Array - N-dimensional array
-DEF_TYPE("array", LITERAL_STRUCTURED | SemanticRefinements::Structured::SEQUENCE, NODE_TEXT, NONE, 0)
-
 /** @} */ // end r_structured
 
 // ============================================================================
@@ -530,9 +512,6 @@ DEF_TYPE("^", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 /// @brief Power (alternate) - `**`
 DEF_TYPE("**", OPERATOR_ARITHMETIC, NONE, NONE, 0)
 
-/// @brief Modulo - `%%`
-DEF_TYPE("%", OPERATOR_ARITHMETIC, NONE, NONE, 0)
-
 /** @} */ // end r_arithmetic
 
 // ============================================================================
@@ -681,12 +660,6 @@ DEF_TYPE("]]", PARSER_DELIMITER, NONE, NONE, 0)
 
 /// @brief Comma
 DEF_TYPE("comma", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
-
-/// @brief Single quote
-DEF_TYPE("'", PARSER_DELIMITER, NONE, NONE, 0)
-
-/// @brief Double quote
-DEF_TYPE("\"", PARSER_DELIMITER, NONE, NONE, 0)
 
 /// @brief Backslash
 DEF_TYPE("\\", PARSER_PUNCTUATION, NONE, NONE, 0)

@@ -136,8 +136,19 @@ SELECT (SELECT count(*) FROM ast_type_map('javascript')
 
 # The two tables shrank by exactly the unreachable entries and nothing else:
 # javascript 219 -> 210 (6 TS-only + 3 phantom), typescript 320 -> 317 (3 phantom).
+#
+# #232 moved them again, by deleting every remaining declaration for a raw_type
+# the grammar has no symbol for: javascript 210 -> 201 (-9), typescript
+# 317 -> 293 (-24). Those two deltas are a cross-check on #232's sibling rule
+# rather than new numbers to take on trust. 14 javascript raw_types are absent
+# from javascript's symbol table, but 5 of them (`?.`,
+# `non_null_expression`, `optional_parameter`, `type_arguments`,
+# `type_assertion`) are reachable in TYPESCRIPT, which shares the file -- so 9
+# are deletable, not 14. Symmetrically, 26 typescript raw_types are absent from
+# typescript's table and 2 (`field_definition`, `html_character_reference`) are
+# reachable in javascript, so 24 are deletable. 9 + 5 = 14 and 24 + 2 = 26.
 query II
 SELECT (SELECT count(*) FROM ast_type_map('javascript')) AS js,
        (SELECT count(*) FROM ast_type_map('typescript')) AS ts;
 ----
-210	317
+201	293

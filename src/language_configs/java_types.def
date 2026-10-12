@@ -120,7 +120,6 @@ DEF_TYPE("record_declaration", DEFINITION_CLASS | SemanticRefinements::Class::RE
 DEF_TYPE("method_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 DEF_TYPE("constructor_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, CONSTRUCTOR_DEFINITION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 DEF_TYPE("static_initializer", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, NONE, NONE, ASTNodeFlags::IS_SCOPE)
-DEF_TYPE("instance_initializer", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 DEF_TYPE("lambda_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 /** @} */
 
@@ -308,7 +307,6 @@ DEF_TYPE("character_literal", LITERAL_STRING | SemanticRefinements::String::LITE
 
 // Conditional statements
 DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
-DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 DEF_TYPE("switch_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 
 // Loop statements
@@ -387,7 +385,6 @@ DEF_TYPE("@", NAME_ATTRIBUTE, NODE_TEXT, NONE, 0)
  * @{
  */
 DEF_TYPE("modifiers", METADATA_ANNOTATION, NONE, NONE, 0)
-DEF_TYPE("modifier", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 /** @} */
 
 // =============================================================================
@@ -554,7 +551,6 @@ DEF_TYPE("]", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE("{", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE("}", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE("\"", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
-DEF_TYPE("'", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 DEF_TYPE(",", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 DEF_TYPE(";", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
 DEF_TYPE(".", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)

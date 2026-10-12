@@ -80,19 +80,16 @@ DEF_TYPE("function_declarator", DEFINITION_FUNCTION | SemanticRefinements::Funct
 /**
  * @brief Method definition in class body
  */
-DEF_TYPE("method_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Constructor: `ClassName(params) : initializers { body }`
  * Uses CONSTRUCTOR refinement
  */
-DEF_TYPE("constructor_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Destructor: `~ClassName() { body }`
  * Uses CONSTRUCTOR refinement (cleanup counterpart)
  */
-DEF_TYPE("destructor_definition", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Lambda expression: `[captures](params) { body }`
@@ -364,7 +361,6 @@ DEF_TYPE("qualified_identifier", NAME_QUALIFIED, NODE_TEXT, VARIABLE_WITH_TYPE, 
 /**
  * @brief Scoped identifier in scope resolution
  */
-DEF_TYPE("scoped_identifier", NAME_SCOPED, NODE_TEXT, NONE, 0)
 
 /**
  * @brief Operator name for overloading: `operator+`
@@ -411,22 +407,18 @@ DEF_TYPE("sized_type_specifier", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
 /**
  * @brief Struct type reference
  */
-DEF_TYPE("struct_type", TYPE_COMPOSITE, NONE, NONE, 0)
 
 /**
  * @brief Union type reference
  */
-DEF_TYPE("union_type", TYPE_COMPOSITE, NONE, NONE, 0)
 
 /**
  * @brief Pointer type: `Type*`
  */
-DEF_TYPE("pointer_type", TYPE_REFERENCE, NONE, NONE, 0)
 
 /**
  * @brief Reference type: `Type&` (lvalue) or `Type&&` (rvalue)
  */
-DEF_TYPE("reference_type", TYPE_REFERENCE, NONE, NONE, 0)
 
 /**
  * @brief Template type: `Template<Args>`
@@ -682,7 +674,6 @@ DEF_TYPE("co_await_expression", FLOW_SYNC, NONE, NONE, 0)
 /**
  * @brief co_yield expression: `co_yield value`
  */
-DEF_TYPE("co_yield_expression", FLOW_SYNC, NONE, NONE, 0)
 
 /**
  * @brief co_return statement: `co_return value;`
@@ -884,7 +875,6 @@ DEF_TYPE("preproc_ifdef", METADATA_DIRECTIVE, NONE, NONE, 0)
 /**
  * @brief #ifndef directive
  */
-DEF_TYPE("preproc_ifndef", METADATA_DIRECTIVE, NONE, NONE, 0)
 
 /**
  * @brief #if directive
@@ -1354,12 +1344,6 @@ DEF_TYPE("#elif", METADATA_DIRECTIVE, NONE, NONE, 0)
 
 /** @brief #endif directive */
 DEF_TYPE("#endif", METADATA_DIRECTIVE, NONE, NONE, 0)
-
-/** @brief #undef directive */
-DEF_TYPE("#undef", METADATA_DIRECTIVE, NONE, NONE, 0)
-
-/** @brief #pragma directive */
-DEF_TYPE("#pragma", METADATA_DIRECTIVE, NONE, NONE, 0)
 
 /** @} */ // end cpp_preproc_tokens
 

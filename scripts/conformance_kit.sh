@@ -798,7 +798,25 @@ check_native_absent() {
     if ! out=$(run_sql "
         WITH decl AS (
             SELECT column2 AS node_type
+            -- quote := '' DISABLES quote processing, which this table needs.
+            -- It is a TSV of code tokens, and 21 rows carry a raw_type that
+            -- contains a double quote (cpp, css and others declare it as a
+            -- delimiter). With the default quote character the reader treats
+            -- the first of those as an opening quote and consumes everything up
+            -- to the next one as one field, so the parse succeeds or fails on
+            -- whether that count happens to be EVEN. It was even until #232
+            -- deleted an unreachable one; then NATIVE-ABST went void for 27 of
+            -- 28 languages at once, reporting a CSV error on a well-formed line
+            -- 2000 rows after the actual cause.
+            --
+            -- void is never read as a pass, so this failed safe rather than
+            -- silently. But it cost the check its whole coverage, and it had
+            -- been one declaration away from doing that at any time.
+            --
+            -- NB this comment is inside a double-quoted shell string: no
+            -- backticks, no backslashes.
             FROM read_csv('$(sql_quote "${tbl}")', delim := '\t', header := false,
+                          quote := '',
                           columns := {'column1': 'VARCHAR', 'column2': 'VARCHAR',
                                       'column3': 'VARCHAR', 'column4': 'VARCHAR',
                                       'column5': 'VARCHAR', 'column6': 'VARCHAR'})

@@ -223,15 +223,6 @@ DEF_TYPE("template_type", TYPE_COMPOSITE, NONE, NONE, 0)
 /** @brief Generic literal type */
 DEF_TYPE("literal_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
 
-/** @brief String literal type: `"specific-string"` */
-DEF_TYPE("string_literal_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
-
-/** @brief Number literal type: `42` as a type */
-DEF_TYPE("number_literal_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
-
-/** @brief Boolean literal type: `true` or `false` as a type */
-DEF_TYPE("boolean_literal_type", TYPE_PRIMITIVE, NODE_TEXT, NONE, 0)
-
 /** @} */ // end typescript_literal_types
 
 /**
@@ -276,9 +267,6 @@ DEF_TYPE("infer_type", TYPE_REFERENCE, NONE, NONE, 0)
 /** @brief Mapped type clause: `[K in Keys]` */
 DEF_TYPE("mapped_type_clause", TYPE_REFERENCE, NONE, NONE, 0)
 
-/** @brief Indexed access type: `T[K]` */
-DEF_TYPE("indexed_access_type", TYPE_REFERENCE, NONE, NONE, 0)
-
 /** @brief Parenthesized type: `(Type)` for grouping */
 DEF_TYPE("parenthesized_type", TYPE_REFERENCE, NONE, NONE, 0)
 
@@ -304,12 +292,6 @@ DEF_TYPE("flow_maybe_type", TYPE_REFERENCE, NONE, NONE, 0)
  * @brief Built-in type operators for type manipulation
  * @{
  */
-
-/** @brief typeof type: `typeof variable` in type context */
-DEF_TYPE("typeof_type", TYPE_REFERENCE, NONE, NONE, 0)
-
-/** @brief keyof type: `keyof T` */
-DEF_TYPE("keyof_type", TYPE_REFERENCE, NONE, NONE, 0)
 
 /** @brief readonly type modifier */
 DEF_TYPE("readonly_type", TYPE_REFERENCE, NONE, NONE, 0)
@@ -377,20 +359,11 @@ DEF_TYPE("global", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 /** @brief Ambient declaration: `declare ...` */
 DEF_TYPE("ambient_declaration", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
-/** @brief Declaration list */
-DEF_TYPE("declaration_list", ORGANIZATION_LIST, NONE, NONE, 0)
-
 /** @brief Enum declaration: `enum Name { ... }` */
 DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @brief Enum member assignment: `Member = value` */
 DEF_TYPE("enum_assignment", DEFINITION_VARIABLE | SemanticRefinements::Variable::IMMUTABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
-
-/** @brief Module declaration (external): `module "name" { }` */
-DEF_TYPE("module_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
-
-/** @brief Namespace declaration: `namespace Name { }` */
-DEF_TYPE("namespace_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @brief Internal module (namespace alias) */
 DEF_TYPE("internal_module", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
@@ -403,17 +376,8 @@ DEF_TYPE("internal_module", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFla
  * @{
  */
 
-/** @brief Import type clause: `import type { ... }` */
-DEF_TYPE("import_type_clause", EXTERNAL_IMPORT, NONE, NONE, 0)
-
-/** @brief Export type clause: `export type { ... }` */
-DEF_TYPE("export_type_clause", EXTERNAL_EXPORT, NONE, NONE, 0)
-
 /** @brief CommonJS require import: `import x = require("module")` */
 DEF_TYPE("import_require_clause", EXTERNAL_IMPORT, NONE, NONE, 0)
-
-/** @brief External module reference in require */
-DEF_TYPE("external_module_reference", EXTERNAL_IMPORT, NONE, NONE, 0)
 
 /** @} */ // end typescript_imports
 
@@ -445,9 +409,6 @@ DEF_TYPE("abstract_class_declaration", DEFINITION_CLASS | SemanticRefinements::C
 
 /** @brief Abstract method signature in abstract class */
 DEF_TYPE("abstract_method_signature", DEFINITION_FUNCTION | SemanticRefinements::Function::REGULAR, FIND_IDENTIFIER, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DECLARATION)
-
-/** @brief Parameter property: constructor parameter with modifier */
-DEF_TYPE("parameter_property", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /** @brief Public field definition in class body */
 DEF_TYPE("public_field_definition", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
@@ -577,9 +538,6 @@ DEF_TYPE_ANON("string", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_SYNTAX
 /** @brief number type */
 DEF_TYPE_ANON("number", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_SYNTAX_ONLY)
 
-/** @brief bigint type */
-DEF_TYPE("bigint", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
 /** @brief symbol type */
 DEF_TYPE("symbol", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
@@ -622,9 +580,6 @@ DEF_TYPE("meta", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
  * @brief String, template, and regex literals
  * @{
  */
-
-/** @brief Template literal type span */
-DEF_TYPE("template_literal_type_span", LITERAL_STRING, NONE, NONE, 0)
 
 /** @} */ // end typescript_literals
 

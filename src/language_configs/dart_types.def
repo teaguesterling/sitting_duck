@@ -250,9 +250,6 @@ DEF_TYPE("super_formal_parameter", DEFINITION_VARIABLE | SemanticRefinements::Va
  * @{
  */
 
-/// @brief Variable declaration - `var x = value`
-DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
-
 /// @brief Local variable declaration
 DEF_TYPE("local_variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 

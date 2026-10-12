@@ -134,20 +134,8 @@ DEF_TYPE("subscript_declaration", DEFINITION_FUNCTION | SemanticRefinements::Fun
 /// @brief Class declaration - reference type with inheritance
 DEF_TYPE("class_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
-/// @brief Struct declaration - value type, copied on assignment
-DEF_TYPE("struct_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
-
-/// @brief Actor declaration - concurrency-safe reference type
-DEF_TYPE("actor_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
-
-/// @brief Enum declaration - value type with cases
-DEF_TYPE("enum_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
-
 /// @brief Protocol declaration - interface/trait
 DEF_TYPE("protocol_declaration", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
-
-/// @brief Extension - adds members to existing type
-DEF_TYPE("extension_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end swift_classes
 
@@ -170,9 +158,6 @@ DEF_TYPE("extension_declaration", DEFINITION_CLASS | SemanticRefinements::Class:
 
 /// @brief Property declaration - class/struct property
 DEF_TYPE("property_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::FIELD, CUSTOM, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
-
-/// @brief Variable declaration - local or global `let`/`var`
-DEF_TYPE("variable_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUTABLE, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION)
 
 /// @brief Function parameter
 DEF_TYPE("parameter", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
@@ -222,12 +207,6 @@ DEF_TYPE("guard_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional:
 /// @brief Switch statement - exhaustive pattern matching
 DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 
-/// @brief Case item in switch
-DEF_TYPE("case_item", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
-
-/// @brief Default case in switch
-DEF_TYPE("default_case", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
-
 /** @} */ // end swift_control
 
 // ============================================================================
@@ -258,9 +237,6 @@ DEF_TYPE("repeat_while_statement", FLOW_LOOP | SemanticRefinements::Loop::CONDIT
 /// @brief Do block - `do { }` for scoping or error handling
 DEF_TYPE("do_statement", FLOW_SYNC, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
-/// @brief Defer statement - executes when scope exits
-DEF_TYPE("defer_statement", FLOW_SYNC, NONE, NONE, 0)
-
 /** @} */ // end swift_loops
 
 // ============================================================================
@@ -280,21 +256,6 @@ DEF_TYPE("defer_statement", FLOW_SYNC, NONE, NONE, 0)
  * @{
  */
 
-/// @brief Break statement - exits loop or switch
-DEF_TYPE("break_statement", FLOW_JUMP | SemanticRefinements::Jump::BREAK, NONE, NONE, 0)
-
-/// @brief Continue statement - skips to next iteration
-DEF_TYPE("continue_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
-
-/// @brief Fallthrough statement - explicit switch case fallthrough
-DEF_TYPE("fallthrough_statement", FLOW_JUMP | SemanticRefinements::Jump::CONTINUE, NONE, NONE, 0)
-
-/// @brief Return statement - exits function with value
-DEF_TYPE("return_statement", FLOW_JUMP | SemanticRefinements::Jump::RETURN, NONE, NONE, 0)
-
-/// @brief Throw statement - raises error
-DEF_TYPE("throw_statement", ERROR_THROW, NONE, NONE, 0)
-
 /** @} */ // end swift_jumps
 
 // ============================================================================
@@ -313,20 +274,8 @@ DEF_TYPE("call_expression", COMPUTATION_CALL | SemanticRefinements::Call::FUNCTI
 /// @brief Postfix expression - method calls, subscripts
 DEF_TYPE("postfix_expression", COMPUTATION_CALL | SemanticRefinements::Call::METHOD, FIND_CALL_TARGET, FUNCTION_CALL, 0)
 
-/// @brief Binary expression - arithmetic, comparison, logical
-DEF_TYPE("binary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NONE, NONE, 0)
-
-/// @brief Unary expression - `-x`, `!x`
-DEF_TYPE("unary_expression", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NONE, NONE, 0)
-
 /// @brief Ternary expression - `condition ? true : false`
 DEF_TYPE("ternary_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
-
-/// @brief Assignment - `x = value`
-DEF_TYPE("assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::SIMPLE, NONE, NONE, 0)
-
-/// @brief Compound assignment - `x += value`
-DEF_TYPE("compound_assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinements::Assignment::COMPOUND, NONE, NONE, 0)
 
 /** @} */ // end swift_expressions
 
@@ -342,12 +291,6 @@ DEF_TYPE("compound_assignment_expression", OPERATOR_ASSIGNMENT | SemanticRefinem
 
 /// @brief Navigation expression - `obj.property`
 DEF_TYPE("navigation_expression", COMPUTATION_ACCESS, FIND_IDENTIFIER, NONE, 0)
-
-/// @brief Member access - dot access
-DEF_TYPE("member_access_expression", COMPUTATION_ACCESS, FIND_IDENTIFIER, NONE, 0)
-
-/// @brief Subscript expression - `arr[index]`
-DEF_TYPE("subscript_expression", COMPUTATION_ACCESS, NONE, NONE, 0)
 
 /** @} */ // end swift_access
 
@@ -378,19 +321,8 @@ DEF_TYPE("real_literal", LITERAL_NUMBER | SemanticRefinements::Number::FLOAT, NO
 /// @brief Boolean literal - `true` or `false`
 DEF_TYPE("boolean_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
-/// @brief String literal - `"text"`
-DEF_TYPE("string_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
 DEF_TYPE("line_str_text", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
 DEF_TYPE("multi_line_str_text", LITERAL_STRING, NODE_TEXT, NONE, ASTNodeFlags::IS_CONSTITUENT)
-
-/// @brief Multiline string literal - `"""..."""`
-DEF_TYPE("multiline_string_literal", LITERAL_STRING | SemanticRefinements::String::RAW, NODE_TEXT, NONE, 0)
-
-/// @brief Character literal
-DEF_TYPE("character_literal", LITERAL_STRING | SemanticRefinements::String::LITERAL, NODE_TEXT, NONE, 0)
-
-/// @brief Nil literal - typed null
-DEF_TYPE("nil_literal", LITERAL_ATOMIC, NODE_TEXT, NONE, 0)
 
 /** @} */ // end swift_literals
 
@@ -473,9 +405,6 @@ DEF_TYPE("tuple_type", TYPE_COMPOSITE, NODE_TEXT, NONE, 0)
 /// @brief Await expression - `await asyncCall()`
 DEF_TYPE("await_expression", FLOW_SYNC, NONE, NONE, 0)
 
-/// @brief Async keyword
-DEF_TYPE("async_keyword", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
 /** @} */ // end swift_concurrency
 
 // ============================================================================
@@ -498,9 +427,6 @@ DEF_TYPE("async_keyword", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 /// @brief Try expression - `try throwingFunction()`
 DEF_TYPE("try_expression", ERROR_TRY, FIND_IDENTIFIER, FUNCTION_CALL, 0)
 
-/// @brief Catch clause - handles error
-DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
-
 /** @} */ // end swift_errors
 
 // ============================================================================
@@ -521,9 +447,6 @@ DEF_TYPE("catch_clause", ERROR_CATCH, NONE, NONE, 0)
 
 /// @brief Lambda/closure literal
 DEF_TYPE("lambda_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
-
-/// @brief Closure expression
-DEF_TYPE("closure_expression", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, FIND_ASSIGNMENT_TARGET, ARROW_FUNCTION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end swift_closures
 
@@ -596,15 +519,6 @@ DEF_TYPE("multiline_comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
 /// @brief Custom operator
 DEF_TYPE("custom_operator", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NODE_TEXT, NONE, 0)
 
-/// @brief Prefix operator
-DEF_TYPE("prefix_operator", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NODE_TEXT, NONE, 0)
-
-/// @brief Postfix operator
-DEF_TYPE("postfix_operator", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::UNARY, NODE_TEXT, NONE, 0)
-
-/// @brief Infix operator
-DEF_TYPE("infix_operator", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic::BINARY, NODE_TEXT, NONE, 0)
-
 /** @} */ // end swift_operators
 
 // ============================================================================
@@ -619,9 +533,6 @@ DEF_TYPE("infix_operator", OPERATOR_ARITHMETIC | SemanticRefinements::Arithmetic
 
 /// @brief Statements block
 DEF_TYPE("statements", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
-
-/// @brief Code block - `{ }`
-DEF_TYPE("code_block", ORGANIZATION_BLOCK | SemanticRefinements::Organization::SEQUENTIAL, NONE, NONE, 0)
 
 /// @brief Capture list - `[weak self]` in closures
 DEF_TYPE("capture_list", ORGANIZATION_LIST | SemanticRefinements::Organization::COLLECTION, NONE, NONE, 0)
@@ -703,8 +614,6 @@ DEF_TYPE("var", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("break", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("case", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("continue", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("default", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("defer", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("do", FLOW_SYNC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("else", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("fallthrough", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -715,7 +624,6 @@ DEF_TYPE("in", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("repeat", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("return", FLOW_JUMP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("switch", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("where", FLOW_CONDITIONAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 /** @} */
 
@@ -724,15 +632,11 @@ DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
  * @{
  */
 DEF_TYPE("as", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("catch", ERROR_CATCH, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("is", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("nil", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("rethrows", ERROR_THROW, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("super", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("self", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("Self", TYPE_PRIMITIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("throw", ERROR_THROW, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("throws", ERROR_THROW, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("try", ERROR_TRY, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -759,18 +663,6 @@ DEF_TYPE("actor", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
  * @{
  */
 
-/// @brief Generic parameter clause - `<T, U>`
-DEF_TYPE("generic_parameter_clause", TYPE_GENERIC, NONE, NONE, 0)
-
-/// @brief Generic where clause - `where T: Equatable`
-DEF_TYPE("generic_where_clause", TYPE_GENERIC, NONE, NONE, 0)
-
-/// @brief Conformance requirement - `T: Protocol`
-DEF_TYPE("conformance_requirement", TYPE_GENERIC, NONE, NONE, 0)
-
-/// @brief Same type requirement - `T == U`
-DEF_TYPE("same_type_requirement", TYPE_GENERIC, NONE, NONE, 0)
-
 /** @} */ // end swift_generics
 
 // ============================================================================
@@ -782,12 +674,6 @@ DEF_TYPE("same_type_requirement", TYPE_GENERIC, NONE, NONE, 0)
  * @brief Swift metaprogramming features
  * @{
  */
-
-/// @brief Property wrapper type - `@Published`, `@State`
-DEF_TYPE("property_wrapper_type", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
-
-/// @brief Result builder - `@ViewBuilder`
-DEF_TYPE("result_builder", METADATA_ANNOTATION, NODE_TEXT, NONE, 0)
 
 /** @} */ // end swift_wrappers
 

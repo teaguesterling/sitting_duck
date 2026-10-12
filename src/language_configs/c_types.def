@@ -192,7 +192,6 @@ DEF_TYPE("enum_specifier", DEFINITION_CLASS | SemanticRefinements::Class::ENUM, 
 /**
  * @brief Typedef: `typedef old_type new_name;`
  */
-DEF_TYPE("typedef_declaration", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Type definition (alternate form)
@@ -267,7 +266,6 @@ DEF_TYPE("function_declarator", TYPE_COMPOSITE, FIND_IDENTIFIER, NONE, 0)
 /**
  * @brief Abstract declarator (type without name)
  */
-DEF_TYPE("abstract_declarator", TYPE_COMPOSITE, NONE, NONE, 0)
 
 /**
  * @brief Parenthesized declarator: `(*name)`
@@ -1115,12 +1113,6 @@ DEF_TYPE("#elif", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
 
 /** @brief #endif directive */
 DEF_TYPE("#endif", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
-
-/** @brief #undef directive */
-DEF_TYPE("#undef", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
-
-/** @brief #pragma directive */
-DEF_TYPE("#pragma", METADATA_DIRECTIVE, NODE_TEXT, NONE, 0)
 
 /** @} */ // end c_preproc_tokens
 

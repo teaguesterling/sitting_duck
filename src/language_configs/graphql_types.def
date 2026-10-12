@@ -580,9 +580,6 @@ DEF_TYPE("{", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 /// @brief Closing brace - `}`
 DEF_TYPE("}", PARSER_DELIMITER, NODE_TEXT, NONE, 0)
 
-/// @brief Comma - `,`
-DEF_TYPE(",", PARSER_PUNCTUATION, NODE_TEXT, NONE, 0)
-
 /** @} */ // end gql_punctuation
 
 // ============================================================================
@@ -650,9 +647,6 @@ DEF_TYPE("true", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /// @brief False keyword
 DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/// @brief Null keyword
-DEF_TYPE("null", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @} */ // end gql_keywords
 

@@ -1,0 +1,107 @@
+# name: test/sql/bugs/issue_232_unreachable_declarations.test
+# group: [bugs]
+
+# Issue #232: 322 DEF_TYPE entries declared a raw_type the grammar's symbol
+# table does not contain, so they could never match a node. 315 were deleted;
+# the other 7 are explained below.
+#
+# An unreachable declaration is worse than dead code, because it reads as a
+# decision. #222 is the proof: typescript declared `string` as TYPE_PRIMITIVE
+# and it had never run, and a dead `variable_declarator NONE` line made the
+# conformance kit report a payload "leak" (#221) by comparing the engine against
+# a declaration the compiler discards. Both cost real investigation.
+#
+# The clearest instances are not renames but a category error -- someone
+# declared the LANGUAGE's vocabulary instead of the GRAMMAR's node types:
+#
+#   css     var, calc, url, rgb, rgba, hsl, hsla   declared COMPUTATION_CALL
+#   html    a, div, body, head, href, id, alt, ... declared as node types
+#   swift   binary_expression, assignment_expression, break_statement, ...
+#
+# The css grammar emits `function_name` and `call_expression`; it has no `calc`
+# symbol. The html grammar emits `element`, `start_tag`, `attribute_name`; it has
+# no `div`. Those declarations describe the language as a person reads it.
+#
+# scripts/audit_unreachable_declarations.py is the gate: it derives the set from
+# parser.c's ts_symbol_names[] and exits nonzero on a new one. This file pins
+# what that gate cannot see from SQL.
+
+require sitting_duck
+
+# ---------------------------------------------------------------------------
+# 1. The deleted declarations are gone from the published table
+# ---------------------------------------------------------------------------
+# A sample across the three shapes: a category error (css function names), a
+# rename (go's line_comment -> comment), and an entry for a construct the
+# grammar spells differently (lua's break -> break_statement).
+query I
+SELECT count(*) FROM ast_type_map()
+WHERE (language = 'css' AND node_type IN ('var','calc','url','rgb','rgba','hsl','hsla'))
+   OR (language = 'html' AND node_type IN ('a','div','body','head','href','id','alt'))
+   OR (language = 'swift' AND node_type IN ('binary_expression','assignment_expression'))
+   OR (language = 'go' AND node_type IN ('line_comment','block_comment'))
+   OR (language = 'lua' AND node_type IN ('break','field_list'))
+   OR (language = 'ruby' AND node_type IN ('alias_method','attr_accessor',''''));
+----
+0
+
+# css's call vocabulary was SEVEN unreachable entries plus one real one. The
+# one that survives is the node the grammar actually emits.
+query II
+SELECT node_type, semantic_type FROM ast_type_map('css')
+WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL') ORDER BY node_type;
+----
+call_expression	COMPUTATION_CALL
+
+# ---------------------------------------------------------------------------
+# 2. The 7 that were NOT deleted, and why
+# ---------------------------------------------------------------------------
+# typescript_types.def #includes javascript_types.def, so a single entry is
+# seen by two languages with two different grammars. A raw_type absent from one
+# symbol table can be perfectly reachable in the other, and deleting it from
+# the shared file to satisfy the first BREAKS the second.
+#
+# I did exactly that on the first attempt -- javascript lost `field_definition`
+# and `html_character_reference`, both of which it can emit -- and the
+# ast_type_map row count is what caught it. So reachability is decided over
+# every language that SEES a declaration, not per language.
+#
+# Five are TypeScript constructs declared in javascript's file; two are
+# JavaScript constructs that typescript inherits. All seven must stay.
+query II
+SELECT language, count(*) AS kept FROM ast_type_map()
+WHERE (language = 'javascript' AND node_type IN ('?.','non_null_expression','optional_parameter',
+                                                 'type_arguments','type_assertion'))
+   OR (language = 'typescript' AND node_type IN ('field_definition','html_character_reference'))
+GROUP BY 1 ORDER BY 1;
+----
+javascript	5
+typescript	2
+
+# And they are reachable where it matters: typescript emits the five.
+query I
+SELECT count(*) > 0 FROM read_ast('test/data/shadowed/signatures.ts', 'typescript')
+WHERE type IN ('type_annotation','required_parameter');
+----
+true
+
+# ---------------------------------------------------------------------------
+# 3. Nothing that CAN be emitted lost its declaration
+# ---------------------------------------------------------------------------
+# The regression this change could plausibly cause is deleting a live
+# declaration, which shows up as a node falling back to PARSER_CONSTRUCT.
+# Checked over every language fixture that the conformance corpus covers: a
+# count, not a spot check, so a single over-deletion fails here.
+query I
+SELECT count(*) FROM (
+  SELECT type FROM read_ast('test/data/python/*.py', 'python', ignore_errors := true)
+  WHERE semantic_type_to_string(semantic_type) = 'PARSER_CONSTRUCT'
+  UNION
+  SELECT type FROM read_ast('test/data/css/*.css', 'css', ignore_errors := true)
+  WHERE semantic_type_to_string(semantic_type) = 'PARSER_CONSTRUCT'
+  UNION
+  SELECT type FROM read_ast('test/data/go/*.go', 'go', ignore_errors := true)
+  WHERE semantic_type_to_string(semantic_type) = 'PARSER_CONSTRUCT'
+) WHERE type IN ('var','calc','url','rgb','rgba','hsl','hsla','line_comment','block_comment');
+----
+0

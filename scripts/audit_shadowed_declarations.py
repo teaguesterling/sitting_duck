@@ -60,7 +60,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from audit_leaf_text_gaps import (  # noqa: E402
-    RAW_TYPE_RE,
+    raw_type_from_arg,
     iter_macro_arglists,
     split_top_level_commas,
     unescape_c,
@@ -85,10 +85,9 @@ def first_decls(path: pathlib.Path, token: str = "DEF_TYPE(") -> dict[str, tuple
         args = split_top_level_commas(arglist)
         if len(args) < 5:
             continue
-        m = RAW_TYPE_RE.match(args[0])
-        if not m:
+        raw = raw_type_from_arg(args[0])
+        if raw is None:
             continue
-        raw = unescape_c(m.group(1))
         if raw == "raw_type":
             continue
         out.setdefault(raw, tuple(a.strip() for a in args[1:5]))

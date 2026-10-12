@@ -252,7 +252,6 @@ DEF_TYPE("literal_element", LITERAL_STRUCTURED | SemanticRefinements::Structured
 
 // Conditional statements
 DEF_TYPE("if_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::BINARY, NONE, NONE, 0)
-DEF_TYPE("switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 DEF_TYPE("expression_switch_statement", FLOW_CONDITIONAL, NONE, NONE, 0)
 DEF_TYPE("type_switch_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
 DEF_TYPE("select_statement", FLOW_CONDITIONAL | SemanticRefinements::Conditional::MULTIWAY, NONE, NONE, 0)
@@ -402,8 +401,6 @@ DEF_TYPE("field_declaration_list", ORGANIZATION_LIST | SemanticRefinements::Orga
 /// Doc comments precede declarations and use line comment style.
 /// @{
 DEF_TYPE("comment", METADATA_COMMENT, NODE_TEXT, NONE, 0)
-DEF_TYPE("line_comment", METADATA_COMMENT, NONE, NONE, 0)
-DEF_TYPE("block_comment", METADATA_COMMENT, NONE, NONE, 0)
 /** @} */
 
 // =============================================================================

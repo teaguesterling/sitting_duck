@@ -90,7 +90,6 @@ DEF_TYPE("method_definition", DEFINITION_FUNCTION | SemanticRefinements::Functio
  * @brief Async function: `async function name(params) { ... }`
  * Returns Promise; can use await inside
  */
-DEF_TYPE("async_function_declaration", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_IDENTIFIER, ASYNC_FUNCTION, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Generator function expression: `function*(params) { ... }`
@@ -108,7 +107,6 @@ DEF_TYPE("generator_function_declaration", DEFINITION_FUNCTION | SemanticRefinem
  * @brief Async generator expression: `async function*(params) { ... }`
  * Anonymous async generator assigned to variable
  */
-DEF_TYPE("async_generator_function", DEFINITION_FUNCTION | SemanticRefinements::Function::ASYNC, FIND_ASSIGNMENT_TARGET, FUNCTION_WITH_PARAMS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /** @} */ // end javascript_functions
 
@@ -135,7 +133,6 @@ DEF_TYPE("class_declaration", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METH
  * @brief Class expression: `const C = class { ... }`
  * Anonymous or named class as expression
  */
-DEF_TYPE("class_expression", DEFINITION_CLASS, FIND_IDENTIFIER, CLASS_WITH_METHODS, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief Class body block containing methods and fields
@@ -479,7 +476,6 @@ DEF_TYPE("switch_default", FLOW_CONDITIONAL | SemanticRefinements::Conditional::
 /**
  * @brief Conditional expression: `a ? b : c`
  */
-DEF_TYPE("conditional_expression", FLOW_CONDITIONAL | SemanticRefinements::Conditional::TERNARY, NONE, NONE, 0)
 
 /**
  * @brief C-style for loop: `for (init; cond; update) { ... }`
@@ -494,7 +490,6 @@ DEF_TYPE("for_in_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NO
 /**
  * @brief For-of loop: `for (item of iterable) { ... }`
  */
-DEF_TYPE("for_of_statement", FLOW_LOOP | SemanticRefinements::Loop::ITERATOR, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 
 /**
  * @brief While loop: `while (cond) { ... }`
@@ -657,12 +652,10 @@ DEF_TYPE("export_clause", EXTERNAL_EXPORT, NONE, NONE, 0)
 /**
  * @brief Default import: `import Name from "module"`
  */
-DEF_TYPE("import_default_specifier", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, FIND_IDENTIFIER, NONE, 0)
 
 /**
  * @brief Default export: `export default ...`
  */
-DEF_TYPE("export_default_declaration", EXTERNAL_EXPORT, NONE, NONE, 0)
 
 /**
  * @brief Namespace import: `import * as name from "module"`
@@ -751,7 +744,6 @@ DEF_TYPE("optional_parameter", DEFINITION_VARIABLE | SemanticRefinements::Variab
 /**
  * @brief Rest parameter: `...params`
  */
-DEF_TYPE("rest_parameter", PATTERN_COLLECT, FIND_IDENTIFIER, NONE, 0)
 
 /**
  * @brief Required parameter (TypeScript, but used in JS parsing)
@@ -898,9 +890,6 @@ DEF_TYPE("get", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @brief set keyword for setters */
 DEF_TYPE("set", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
-
-/** @brief constructor keyword */
-DEF_TYPE("constructor", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, FIND_IDENTIFIER, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @brief of keyword in for-of */
 DEF_TYPE("of", OPERATOR_COMPARISON, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
