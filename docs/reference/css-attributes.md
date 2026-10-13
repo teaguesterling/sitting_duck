@@ -66,19 +66,28 @@ SELECT name FROM ast_select('src/**/*', '.func[language=python]');
 SELECT name FROM ast_select('src/*.py', '[semantic=DEFINITION_FUNCTION]');
 ```
 
-**`[semantic=X]` is not the same as `.X`.** An attribute filters by *value*, so
-it matches every node carrying that semantic type — including **syntax-only
-keyword tokens**. A class selects by *kind*, and skips syntax-only tokens and
-constituents so that each construct is returned once. On
-`for (const x of items) {}`:
+**`[semantic=X]` and `.X` are synonyms.** Both skip syntax-only keyword tokens
+and constituents, so each construct is returned once. They used to disagree —
+`[semantic=FLOW_LOOP]` also returned the `for` and `of` keyword tokens that
+`.loop` skipped — which was a bug (#243), not a distinction.
 
-| selector | matches |
-|---|---|
-| `.loop` | the `for_in_statement` construct |
-| `[semantic=FLOW_LOOP]` | that construct **and** the `for` and `of` keyword tokens |
+```sql
+-- These two are the same query
+SELECT name FROM ast_select('src/*.py', '[semantic=DEFINITION_FUNCTION]');
+SELECT name FROM ast_select('src/*.py', '.DEFINITION_FUNCTION');
+```
 
-Use the class when you want constructs, the attribute when you want every node
-with that type. [Semantic Classes](semantic-classes.md) lists the classes.
+Prefer the class form, which also has short aliases (`.fn`, `.loop`, `.str`) —
+[Semantic Classes](semantic-classes.md) lists them. The attribute form is still
+useful inside a compound selector where you want to be explicit about the
+vocabulary, e.g. `[type^=call][semantic=COMPUTATION_CALL]`.
+
+**To select a keyword token itself**, use `[type=X]`, which matches on the raw
+tree-sitter node type and is unfiltered: `[type=of]` returns the `of` keyword
+that `[semantic=FLOW_LOOP]` deliberately skips. For wholly unfiltered access to
+semantic types, query `read_ast` directly with the scalar
+`is_semantic_type(semantic_type, 'FLOW_LOOP')` — the selector layer is the
+construct layer.
 
 ## Native Extraction Attributes
 

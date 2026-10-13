@@ -1,0 +1,286 @@
+# name: test/sql/bugs/issue_243_semantic_attribute_guard.test
+# description: #243 -- [semantic=X] matches the same node set as .X, and the #89 call-name guard decides over that set
+# group: [bugs]
+
+# TWO BUGS, ONE CAUSE. src/sql_macros/css_selectors.sql resolved a semantic type
+# against a node in 17 places; 12 excluded syntax-only tokens and constituents
+# and 5 did not. The class filter was guarded, the `[semantic=...]` attribute
+# filter was not, and neither was the clause that decides whether to raise the
+# #89 "no call carries a name" error.
+#
+# This is root-cause theme 5 of tracker/features/042-selectors-correctness-plan.md
+# verbatim -- "Divergent match paths. One selector, several code paths,
+# inconsistent results" -- and the fix is the one #133 already applied to
+# :has/:not: guard the node being matched.
+#
+# WHY THIS FILE IS SHAPED AS AN EQUIVALENCE RATHER THAN AS COUNTS. The bug was
+# two spellings of one query disagreeing, so the assertion that captures it is
+# `.X` = `[semantic=X]`, not a magic number for either side. 042's theme 6 says
+# why: "Count-based tests are fragile. Magic-number expectations encode whatever
+# the engine did, bug or not". The counts are asserted too, but only after the
+# equivalence, and with a non-vacuity guard so that "both return 0" cannot pass
+# for the wrong reason.
+
+require sitting_duck
+
+# =============================================================================
+# A. THE HEADLINE: the two documented spellings now agree.
+# =============================================================================
+# docs/reference/semantic-classes.md: "Any semantic type name is a valid class".
+# docs/reference/css-attributes.md documents [semantic=DEFINITION_FUNCTION].
+# Nothing said they differ, and they did.
+#
+# lua's and/or/not are OPERATOR_LOGICAL (taxonomy.yaml names them) and all three
+# are IS_KEYWORD. Before: class 0, attribute 3.
+
+query II
+SELECT
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/logical.lua', '.OPERATOR_LOGICAL'))      AS via_class,
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/logical.lua', '[semantic=OPERATOR_LOGICAL]')) AS via_attribute;
+----
+0	0
+
+# NON-VACUITY for the pair above: 0 = 0 is also what a broken selector returns.
+# The three tokens ARE there, they ARE OPERATOR_LOGICAL, and they ARE
+# syntax-only -- which is exactly why neither path should return them.
+query II
+SELECT count(*) AS logical_keyword_tokens,
+       count(*) FILTER (WHERE is_syntax_only(flags)) AS syntax_only
+FROM read_ast('test/data/keyword_operators/logical.lua')
+WHERE type IN ('and','or','not') AND is_semantic_type(semantic_type, 'LOGICAL');
+----
+3	3
+
+# And [type=X] is unaffected -- it is the raw-token path, and still the way to
+# select a keyword by node type. This is the escape hatch the guard leaves open,
+# asserted so that "the fix made keyword tokens unreachable" is false.
+query I
+SELECT count(*) FROM ast_select('test/data/keyword_operators/logical.lua', '[type=and]');
+----
+1
+
+# =============================================================================
+# B. THE EQUIVALENCE, over a spread of semantic types.
+# =============================================================================
+# Stronger than any single pair: for each semantic type, the class spelling and
+# the attribute spelling must return the same count. 042's theme 6 is why this
+# is a comparison rather than two magic numbers -- "Count-based tests are
+# fragile. Magic-number expectations encode whatever the engine did, bug or not".
+#
+# The selector argument must be a LITERAL (ast_select binds it at plan time, so
+# `'.' || t.semantic_type` raises "The function only supports literals as
+# parameters"), which is why these are enumerated rather than joined against
+# ast_type_map().
+#
+# THE EQUIVALENCE WAS MEASURED OVER ALL 20 semantic types present in this
+# fixture, and all 20 agree -- including 17 NAME_IDENTIFIER, 6
+# OPERATOR_ARITHMETIC, 3 each of COMPUTATION_CALL / EXECUTION_STATEMENT /
+# OPERATOR_ASSIGNMENT / OPERATOR_COMPARISON / ORGANIZATION_BLOCK /
+# ORGANIZATION_LIST, and the three types whose every node is syntax-only
+# (PARSER_DELIMITER, PARSER_PUNCTUATION, TYPE_REFERENCE) at 0 on both sides.
+# Only SIX are pinned here: each ast_select call re-parses both the file and the
+# selector, so 40 of them is too slow for CI. The six cover every shape the
+# guard can hit:
+#
+#   FLOW_LOOP         constructs AND syntax-only keyword tokens (for, of)
+#   TYPE_REFERENCE    syntax-only tokens ONLY (the two typeof) -> both 0
+#   OPERATOR_LOGICAL  non-syntax tokens (! and &&) -> guard must NOT drop them
+#   COMPUTATION_CALL  ordinary constructs
+#   NAME_IDENTIFIER   the largest class in the file
+#   PARSER_DELIMITER  syntax-only ONLY -> both 0
+
+query III
+SELECT 'COMPUTATION_CALL' AS st,
+       (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.COMPUTATION_CALL')) AS via_class,
+       (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=COMPUTATION_CALL]')) AS via_attr
+UNION ALL
+SELECT 'FLOW_LOOP',
+       (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.FLOW_LOOP')),
+       (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=FLOW_LOOP]'))
+UNION ALL
+SELECT 'NAME_IDENTIFIER',
+       (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.NAME_IDENTIFIER')),
+       (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=NAME_IDENTIFIER]'))
+UNION ALL
+SELECT 'OPERATOR_LOGICAL',
+       (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.OPERATOR_LOGICAL')),
+       (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=OPERATOR_LOGICAL]'))
+UNION ALL
+SELECT 'PARSER_DELIMITER',
+       (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.PARSER_DELIMITER')),
+       (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=PARSER_DELIMITER]'))
+UNION ALL
+SELECT 'TYPE_REFERENCE',
+       (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.TYPE_REFERENCE')),
+       (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=TYPE_REFERENCE]'))
+ORDER BY 1;
+----
+COMPUTATION_CALL	3	3
+FLOW_LOOP	2	2
+NAME_IDENTIFIER	17	17
+OPERATOR_LOGICAL	2	2
+PARSER_DELIMITER	0	0
+TYPE_REFERENCE	0	0
+
+# The two zero rows are the guard working, not an empty file: those types ARE
+# present, and every node carrying them is syntax-only. Without this the pair
+# `0 0` would be indistinguishable from "neither path found anything".
+query III
+SELECT semantic_type::VARCHAR AS st,
+       count(*) AS nodes,
+       count(*) FILTER (WHERE is_syntax_only(flags)) AS syntax_only
+FROM read_ast('test/data/keyword_operators/roles.js')
+WHERE semantic_type::VARCHAR IN ('TYPE_REFERENCE','PARSER_DELIMITER')
+GROUP BY 1 ORDER BY 1;
+----
+PARSER_DELIMITER	22	22
+TYPE_REFERENCE	2	2
+
+# And OPERATOR_LOGICAL is the control in the other direction: `!` and `&&` are
+# NOT syntax-only, so the guard must leave them alone. A guard that dropped
+# everything would make every row above 0 and still satisfy the equivalence.
+query II
+SELECT type, is_syntax_only(flags) AS syn
+FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=OPERATOR_LOGICAL]')
+ORDER BY type;
+----
+!	false
+&&	false
+
+# =============================================================================
+# C. The #231 tokens, which is how this was found.
+# =============================================================================
+# `of` is FLOW_LOOP and syntax-only; `typeof` is TYPE_REFERENCE and syntax-only.
+# Before this fix [semantic=FLOW_LOOP] returned 5 on this file (the two
+# for_in_statement constructs plus `for` x2 and `of`) while .loop returned 2,
+# and [semantic=TYPE_REFERENCE] returned the two typeof tokens while .type
+# returned nothing.
+
+query IIII
+SELECT
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.loop'))                   AS loop_class,
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=FLOW_LOOP]'))    AS loop_attr,
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.type'))                   AS type_class,
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=TYPE_REFERENCE]')) AS type_attr;
+----
+2	2	0	0
+
+# The constructs are still matched -- the guard removed keyword tokens, not the
+# two for-loops. Without this, `2 2` above could mean the loops vanished too.
+query I
+SELECT DISTINCT type FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=FLOW_LOOP]');
+----
+for_in_statement
+
+# =============================================================================
+# D. THE SILENT EMPTY, which is why this was fixed rather than documented.
+# =============================================================================
+# css_selectors.sql decides whether to raise the #89 "no call carries a name"
+# error. Unguarded, it decided over a node set the selector cannot match.
+#
+# There are 9 syntax-only CALL-semantic node types and 5 carry a name strategy:
+# c `offsetof`, java `new`, ruby `defined?`, sql `cast` and `keyword_cast`. So a
+# keyword token satisfied "some call has a name" even though no selector could
+# ever return it.
+
+# The fixture's two CALL nodes: the keyword carries a name, the construct does
+# not. `offsetof_expression`'s name is the EMPTY STRING rather than NULL, which
+# is why the guard clause tests `name IS NOT NULL AND name != ''` -- a NULL-only
+# check would have read this node as named and the bug would survive the fix.
+query III
+SELECT type, name, is_syntax_only(flags) AS syn
+FROM read_ast('test/data/selector_guards/only_offsetof.c')
+WHERE is_semantic_type(semantic_type, 'CALL')
+ORDER BY type;
+----
+offsetof	offsetof	true
+offsetof_expression	(empty)	false
+
+# `.call` matches the construct and skips the keyword -- it always did, and that
+# is the node set the error decision must now agree with.
+query I
+SELECT count(*) FROM ast_select('test/data/selector_guards/only_offsetof.c', '.call');
+----
+1
+
+# THE BUG: the only matchable call node has no name, so `.call#anything` can
+# never match, and #89 says that must raise rather than return a silent empty.
+# Before this fix it returned 0 rows.
+statement error
+SELECT count(*) FROM ast_select('test/data/selector_guards/only_offsetof.c', '.call#nosuch');
+----
+but no call node in this source carries a callee name
+
+# NEGATIVE CONTROL for that error: the same selector shape must NOT raise on a
+# source whose calls DO carry names, or the guard would have turned a silent
+# empty into a spurious error -- an equally bad outcome, and one this error's
+# own history (#88/#89) warns about.
+query I
+SELECT count(*) FROM ast_select('test/data/call_extraction/calls.c', '.call#nosuchfunction');
+----
+0
+
+query I
+SELECT count(*) > 0 FROM ast_select('test/data/call_extraction/calls.c', '.call');
+----
+true
+
+# =============================================================================
+# E. :is-scope was audited and deliberately left alone.
+# =============================================================================
+# Three of the five unguarded sites are inside :is-scope, conjoined with
+# is_scope(a.flags). They are unreachable for syntax-only nodes because NO
+# declared node type sets both bits -- measured, not assumed, and asserted here
+# so that adding such a declaration later turns this into a visible failure
+# rather than a silent new divergence.
+query I
+SELECT count(*) FROM ast_type_map() WHERE is_syntax AND is_scope;
+----
+0
+
+# The same for constituents: nothing is both a constituent and a scope.
+query I
+SELECT count(*) FROM ast_type_map() WHERE is_scope AND (flags & 32) <> 0;
+----
+0
+
+# =============================================================================
+# F. THE ESCAPE HATCH IS REAL, AND THE GUARD COMPOSES.
+# =============================================================================
+# docs/reference/css-attributes.md now tells users that to select a keyword
+# token they should use `[type=X]`. That promise is only worth making if it is
+# measured, so it is measured here rather than inferred from reading the macro.
+#
+# `[type=X]` is an EXACT match and reaches syntax-only tokens: it returns the
+# two `for` keyword tokens and NOT the two for_in_statement constructs. Prefix
+# matching is opt-in via `^=`, which is the #151 distinction.
+query I
+SELECT DISTINCT type FROM ast_select('test/data/keyword_operators/roles.js', '[type=for]');
+----
+for
+
+query I
+SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '[type=for]');
+----
+2
+
+query I
+SELECT DISTINCT type FROM ast_select('test/data/keyword_operators/roles.js', '[type^=for]') ORDER BY 1;
+----
+for
+for_in_statement
+
+# WHY the hatch survives the guard, stated as a measurement rather than as a
+# claim about short-circuiting: a type-only selector carries no semantic filter,
+# so neither guard is in play. Add a semantic filter to the SAME selector and
+# the guard applies -- the syntax-only `for` is rejected even though its type
+# matches. This is also the proof that the fix composes rather than only
+# working on a bare `[semantic=X]`.
+query IIII
+SELECT
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '[type=for][semantic=FLOW_LOOP]'))                 AS kw_plus_semantic,
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '[type=for_in_statement][semantic=FLOW_LOOP]'))    AS construct_plus_semantic,
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.loop[type=for]'))                                AS kw_plus_class,
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.loop[type=for_in_statement]'))                   AS construct_plus_class;
+----
+0	2	0	2

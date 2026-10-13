@@ -1214,9 +1214,23 @@ CREATE OR REPLACE MACRO ast_select_from(
                                WHERE nh.not_has_name IS NOT NULL
                                  AND UPPER(nh.not_has_class) IN ('CALL', 'INVOKE', 'COMPUTATION_CALL'))
                 )
-                AND EXISTS (SELECT 1 FROM ast WHERE is_semantic_type(semantic_type, 'CALL'))
+                -- Decide over the node set a class selector can actually MATCH
+                -- (#243). Unguarded, these two EXISTS clauses counted syntax-only
+                -- keyword tokens, and 5 of the 9 syntax-only CALL node types carry a
+                -- name strategy (c `offsetof`, java `new`, ruby `defined?`, sql
+                -- `cast`/`keyword_cast`). So a file whose only NAMED call node was
+                -- such a keyword satisfied "some call has a name", this error stayed
+                -- silent, and `.call#foo` returned a silent empty -- the exact thing
+                -- #89 forbids and this message exists to prevent. Two lines of C with
+                -- `offsetof` and no ordinary call reproduced it.
+                AND EXISTS (SELECT 1 FROM ast
+                            WHERE is_semantic_type(semantic_type, 'CALL')
+                              AND NOT is_syntax_only(flags)
+                              AND NOT is_constituent(flags))
                 AND NOT EXISTS (SELECT 1 FROM ast
                                 WHERE is_semantic_type(semantic_type, 'CALL')
+                                  AND NOT is_syntax_only(flags)
+                                  AND NOT is_constituent(flags)
                                   AND name IS NOT NULL AND name != '')
                 THEN error(
                     'ast_select: the selector binds a name to call nodes (e.g. .call#foo) '
@@ -1650,7 +1664,18 @@ CREATE OR REPLACE MACRO ast_select_from(
                                 WHEN '$=' THEN a.type LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.type = ac.attr_value END
             WHEN ac.attr_name = 'language' THEN a.language = ac.attr_value
-            WHEN ac.attr_name = 'semantic' THEN is_semantic_type(a.semantic_type, UPPER(ac.attr_value))
+            -- [semantic=X] matches the SAME node set as the class `.X` (#243).
+            -- docs/reference/semantic-classes.md says any semantic type name is a
+            -- valid class, so `.OPERATOR_LOGICAL` and `[semantic=OPERATOR_LOGICAL]`
+            -- are two documented spellings of one query; they must not disagree.
+            -- Without these two predicates they did: on `local ok = a and b or not c`
+            -- the class returned 0 and the attribute returned 3, the difference being
+            -- lua's syntax-only `and`/`or`/`not` keyword tokens. Same guard the class
+            -- filter uses above and the one #133 added to :has/:not.
+            WHEN ac.attr_name = 'semantic' THEN
+                is_semantic_type(a.semantic_type, UPPER(ac.attr_value))
+                AND NOT is_syntax_only(a.flags)
+                AND NOT is_constituent(a.flags)
 
             -- Native extraction: modifiers array
             WHEN ac.attr_name = 'modifier' THEN
