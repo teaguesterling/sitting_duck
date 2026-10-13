@@ -596,7 +596,11 @@ DEF_TYPE("inout", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD
 DEF_TYPE("internal", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("let", DEFINITION_VARIABLE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("open", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
-DEF_TYPE("operator", OPERATOR_ARITHMETIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+// `operator` DECLARES an operator (parent: operator_declaration); it is not
+// itself an arithmetic operator (#231). cpp_types.def says DEFINITION_FUNCTION
+// for the same keyword doing the same job. Kotlin's `operator` stays
+// METADATA_ANNOTATION because there it is a MODIFIER on a fun declaration.
+DEF_TYPE("operator", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("private", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("protocol", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("public", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -631,7 +635,11 @@ DEF_TYPE("while", FLOW_LOOP, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
  * @name Expression Keywords
  * @{
  */
-DEF_TYPE("as", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+// A cast is not a comparison (#231). Single-role in Swift: the `as` token only
+// appears under as_operator. Unified with typescript_types.def's `as`.
+// (`as!` and `as?` are separate, UNDECLARED tokens -- a declaration gap, not
+// this misclassification.)
+DEF_TYPE("as", TYPE_REFERENCE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("false", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("is", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("nil", LITERAL_ATOMIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)

@@ -17,7 +17,7 @@
 #   MAJOR — a code or bit meaning changed (breaks stored semantic_type bytes)
 #   MINOR — a name, flag, or strategy was added
 #   PATCH — documentation only
-taxonomy_spec_version: 1.0.0
+taxonomy_spec_version: 1.0.1
 
 # 8-bit semantic type encoding. Byte layout: [ ss kk tt ll ]
 #   ss = super_kind         (bits 6-7)  4 super kinds
@@ -226,6 +226,48 @@ semantic_types:
     kind: TYPE
     offset: 0x0C
     description: "generic/template types"
+  # -------------------------------------------------------------------------
+  # KEYWORD OPERATORS (#231)
+  # -------------------------------------------------------------------------
+  # The four OPERATOR types below are the whole operator family: the kind has
+  # exactly four slots and all four are taken. There is no OPERATOR_UNARY and
+  # there cannot be one without a MAJOR bump -- all 64 base codes are
+  # allocated, the only free codes (RESERVED_FUTURE1..4) sit under the
+  # META_EXTERNAL super_kind, and the language_specific refinement bits are
+  # masked out of base-type comparison, so a refinement cannot move a token
+  # between families.
+  #
+  # Word-shaped operator keywords are therefore classified against the types
+  # that exist, by this rule:
+  #
+  #   1. If a type's description below NAMES the keyword, that is the answer.
+  #      OPERATOR_LOGICAL names and/or/not; OPERATOR_COMPARISON names is/in/
+  #      not in. Those are not judgement calls.
+  #   2. A keyword that is part of a CONSTRUCT takes the construct's type, not
+  #      an operator type: loop `in`/`of` -> FLOW_LOOP, `await` -> FLOW_SYNC,
+  #      a media-query modifier -> METADATA_DIRECTIVE.
+  #   3. A type query, cast or type assertion -> TYPE_REFERENCE. This covers
+  #      `typeof`, cast `as`, and TypeScript's keyof/infer/satisfies/asserts.
+  #      A keyword that BINDS A NAME rather than asserting a type is NOT a cast
+  #      (Python's `as`), and a type TEST yielding a boolean is a comparison
+  #      per rule 1 (`is`, `instanceof`).
+  #   4. A keyword that DECLARES an operator -> DEFINITION_FUNCTION (C++ and
+  #      Swift `operator`). A MODIFIER on a declaration -> METADATA_ANNOTATION
+  #      (Kotlin `operator`).
+  #   5. Otherwise it is an operator, by what it does to its operands:
+  #      `sizeof` yields a number -> OPERATOR_ARITHMETIC.
+  #
+  # One anonymous token often serves two roles and only one declaration can
+  # win (TypeScript `typeof`, Kotlin/Rust `as`). Pick the type that is right
+  # for one role and no worse than the alternatives for the other.
+  #
+  # These tokens are nearly all IS_SYNTAX_ONLY, which matters for how far a
+  # reclassification reaches. A CLASS selector (`.logical`) cannot match them:
+  # css_selectors.sql resolves a class filter in one place and guards it with
+  # `AND NOT is_syntax_only(a.flags)`. An ATTRIBUTE selector (`[semantic=...]`)
+  # CAN: it is resolved with no such guard. So reclassifying a keyword token
+  # changes semantic_type output, scalar filters over read_ast, and
+  # `[semantic=...]` matches, and leaves `.class` matches alone.
   - name: OPERATOR_ARITHMETIC
     kind: OPERATOR
     offset: 0x00

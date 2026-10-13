@@ -28,6 +28,13 @@ require sitting_duck
 # The declaration table, pinned. This is the capability gate every assertion
 # below is derived from, so it is pinned first: a change here changes what the
 # kit demands of whom, and that should never happen silently.
+#
+# rust went 3 -> 2 in #231: `as` was declared COMPUTATION_CALL with a node_text
+# name strategy, so a CAST keyword was counted as a call-semantic type that
+# extracts a callee name. It is now TYPE_REFERENCE. The drop is the point --
+# rust's declared call-naming capability was inflated by one token that is not
+# a call. No other language moved, because `as` was the only one of #231's nine
+# reclassified declarations that was in the CALL family.
 # Columns: language, call-semantic node types, of which name-extracting.
 #
 # RUNTIME-REGISTERED LANGUAGES ARE EXCLUDED. The one CI job that sets
@@ -78,7 +85,7 @@ php	4	4
 python	1	1
 r	2	2
 ruby	3	3
-rust	3	3
+rust	2	2
 sql	4	4
 swift	2	2
 typescript	4	2

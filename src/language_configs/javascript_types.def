@@ -867,8 +867,16 @@ DEF_TYPE("catch", ERROR_CATCH, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 /** @brief finally keyword */
 DEF_TYPE("finally", ERROR_FINALLY, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
-/** @brief typeof operator/keyword */
-DEF_TYPE("typeof", OPERATOR_LOGICAL, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+/**
+ * @brief typeof operator/keyword -- a unary TYPE QUERY, not a logical operator (#231)
+ *
+ * `typeof x` yields a string naming a type; in TypeScript the same anonymous
+ * token also spells the type query `type T = typeof x`. One declaration must
+ * cover both positions. OPERATOR_LOGICAL was wrong for both; TYPE_REFERENCE is
+ * right for the type position and defensible for the value position, so it
+ * dominates. Consistent with typescript's own keyof/infer/satisfies/asserts.
+ */
+DEF_TYPE("typeof", TYPE_REFERENCE, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @brief delete operator/keyword */
 DEF_TYPE("delete", EXECUTION_STATEMENT, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
@@ -891,8 +899,18 @@ DEF_TYPE("get", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 /** @brief set keyword for setters */
 DEF_TYPE("set", METADATA_ANNOTATION, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
-/** @brief of keyword in for-of */
-DEF_TYPE("of", OPERATOR_COMPARISON, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
+/**
+ * @brief of keyword in for-of -- part of the loop construct (#231)
+ *
+ * Single-role: the `of` token only ever appears under for_in_statement (which
+ * is how tree-sitter-javascript spells both for-in and for-of). Loop `in` is
+ * FLOW_LOOP in bash, hcl, lua, r, rust and swift, so this now agrees.
+ *
+ * Note `in` is NOT changed: it is dual-role here (for_in_statement AND
+ * binary_expression), and OPERATOR_COMPARISON is what taxonomy.yaml prescribes
+ * for the comparison form.
+ */
+DEF_TYPE("of", FLOW_LOOP, NONE, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /** @} */ // end javascript_keywords
 

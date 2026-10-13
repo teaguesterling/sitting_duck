@@ -350,7 +350,7 @@ Parser error nodes
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `as` | OPERATOR_COMPARISON | NODE_TEXT |  |
+| `as` | TYPE_REFERENCE | NODE_TEXT |  |
 | `class` | DEFINITION_CLASS | NODE_TEXT |  |
 | `companion` | DEFINITION_CLASS | NODE_TEXT |  |
 | `constructor` | DEFINITION_FUNCTION | NODE_TEXT |  |

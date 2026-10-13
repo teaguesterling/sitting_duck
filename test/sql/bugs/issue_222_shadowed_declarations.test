@@ -91,10 +91,18 @@ type_identifier	2	2	0
 # VARIABLE_WITH_TYPE, typescript's dead entry said NONE, and the conformance kit
 # read the dead line and reported a payload "leak". flags=6 is NAME_DEFINITION.
 #
-# < > and typeof keep javascript's because NO single declaration is right: all
-# three are anonymous tokens serving two roles in TypeScript (comparison vs
-# generic brackets, value operator vs type query), which DEF_TYPE_ANON cannot
-# split either.
+# < and > keep javascript's because NO single declaration is right: both are
+# anonymous tokens serving two roles in TypeScript (comparison vs generic
+# brackets), which DEF_TYPE_ANON cannot split either.
+#
+# typeof had the same dual-role shape (value operator vs type query) and #222
+# kept javascript's OPERATOR_LOGICAL for the same reason. #231 then settled it:
+# the dual role is real, but OPERATOR_LOGICAL was wrong for BOTH roles, and
+# TYPE_REFERENCE is right for the type query and defensible for the value form
+# -- which is what typescript's entry said before #222 deleted it as dead. So
+# the expected value here is TYPE_REFERENCE, not a reversal of #222's
+# first-wins finding: javascript's declaration is still the one in force, it is
+# just no longer misclassified.
 query IIII
 SELECT node_type, semantic_type, name_strategy, flags
 FROM ast_type_map('typescript')
@@ -108,7 +116,7 @@ class_body	ORGANIZATION_BLOCK	none	0
 import_specifier	EXTERNAL_IMPORT	find_identifier	32
 optional_chain	COMPUTATION_ACCESS	node_text	0
 static	METADATA_ANNOTATION	none	1
-typeof	OPERATOR_LOGICAL	none	1
+typeof	TYPE_REFERENCE	none	1
 variable_declarator	DEFINITION_VARIABLE	find_identifier	6
 
 # variable_declarator's native extraction works, which is what makes deleting

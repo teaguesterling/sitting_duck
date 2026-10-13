@@ -312,7 +312,7 @@ Remaining CSS constructs
 |-----------|---------------|-----------------|-------------|
 | `keyword_query` | METADATA_DIRECTIVE | NODE_TEXT | Keyword query - media type query |
 | `unary_query` | OPERATOR_LOGICAL | NONE | Unary query - negated media query |
-| `only` | OPERATOR_LOGICAL | NODE_TEXT | Only keyword - media query modifier |
+| `only` | METADATA_DIRECTIVE | NODE_TEXT | Only keyword - media query modifier, matching its sibling keyword_query (#231) |
 | `keyframes_name` | NAME_IDENTIFIER | NODE_TEXT | Keyframes name - animation identifier |
 | `*=` | OPERATOR_ASSIGNMENT | NONE | Substring match operator - `*=` |
 | `at_keyword` | METADATA_DIRECTIVE | NODE_TEXT | At keyword - generic at-rule identifier |

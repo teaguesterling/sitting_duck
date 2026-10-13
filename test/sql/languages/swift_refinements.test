@@ -523,14 +523,16 @@ LIMIT 1;
 ----
 custom_operator	OPERATOR_ARITHMETIC
 
-# Test: as keyword should be OPERATOR_COMPARISON
+# Test: as keyword should be TYPE_REFERENCE -- a cast, not a comparison (#231).
+# Single-role in Swift: the `as` token only appears under as_operator, so the
+# LIMIT 1 here cannot pick a different role than the one being asserted.
 query IT
 SELECT type, semantic_type_to_string(semantic_type) as sem_type
 FROM read_ast('test/data/swift/simple.swift')
 WHERE type = 'as'
 LIMIT 1;
 ----
-as	OPERATOR_COMPARISON
+as	TYPE_REFERENCE
 
 # =============================================================================
 # LITERAL REFINEMENTS

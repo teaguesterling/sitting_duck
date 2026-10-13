@@ -576,7 +576,12 @@ DEF_TYPE("where", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD
  * @name Definition Keywords
  * @{
  */
-DEF_TYPE("as", OPERATOR_COMPARISON, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+// A cast is not a comparison (#231). Dual-role here -- the same anonymous token
+// spells the cast (as_expression) and the import alias (import_alias) -- so one
+// declaration covers both, the #215 collision shape inside a single anonymous
+// role. TYPE_REFERENCE dominates: right for the cast, no worse than
+// OPERATOR_COMPARISON for the alias. Unified with typescript_types.def.
+DEF_TYPE("as", TYPE_REFERENCE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("class", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("companion", DEFINITION_CLASS, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("constructor", DEFINITION_FUNCTION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
