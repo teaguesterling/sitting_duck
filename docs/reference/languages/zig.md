@@ -76,10 +76,10 @@ Zig function features: - `fn name(params) ReturnType { }` - `pub fn name(params)
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_declaration` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Function declaration - `fn name(params) Type { }` |
+| `function_declaration` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Function declaration - `fn name(params) Type { }` |
 | `function_signature` | TYPE_COMPOSITE | NONE | Function signature - return type and parameters |
-| `parameters` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Parameters - `(param1, param2)` |
-| `parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER | Parameter - function parameter |
+| `parameters` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Parameters - `(param1, param2)` |
+| `parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER | Parameter - function parameter |
 
 ## Type Definitions
 
@@ -89,11 +89,11 @@ Zig type system: - `struct { }` - struct type - `enum { }` - enumeration - `unio
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `struct_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Struct declaration - `const S = struct { }` |
-| `enum_declaration` | DEFINITION_CLASS | Class::ENUM | FIND_IDENTIFIER | Enum declaration - `const E = enum { }` |
-| `union_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Union declaration - `const U = union { }` |
-| `opaque_declaration` | DEFINITION_CLASS | Class::ABSTRACT | FIND_IDENTIFIER | Opaque declaration - for C interop |
-| `error_set_declaration` | DEFINITION_CLASS | Class::ENUM | FIND_IDENTIFIER | Error set declaration - `const E = error { }` |
+| `struct_declaration` | DEFINITION_CLASS \| Class::REGULAR | CUSTOM | Struct declaration - `const S = struct { }` |
+| `enum_declaration` | DEFINITION_CLASS \| Class::ENUM | CUSTOM | Enum declaration - `const E = enum { }` |
+| `union_declaration` | DEFINITION_CLASS \| Class::REGULAR | CUSTOM | Union declaration - `const U = union { }` |
+| `opaque_declaration` | DEFINITION_CLASS \| Class::ABSTRACT | CUSTOM | Opaque declaration - for C interop |
+| `error_set_declaration` | DEFINITION_CLASS \| Class::ENUM | CUSTOM | Error set declaration - `const E = error { }` |
 
 ## Variable Declarations
 
@@ -103,10 +103,10 @@ Zig variable declarations: - `var name: Type = value` - mutable variable - `cons
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `variable_declaration` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Variable declaration - `var` or `const` |
-| `comptime_declaration` | DEFINITION_VARIABLE | Variable::IMMUTABLE | FIND_IDENTIFIER | Comptime declaration - compile-time variable |
-| `test_declaration` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Test declaration - `test "name" { }` |
-| `using_namespace_declaration` | EXTERNAL_IMPORT | Import::MODULE | NONE | Using namespace declaration - `usingnamespace @import("...")` |
+| `variable_declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Variable declaration - `var` or `const` |
+| `comptime_declaration` | DEFINITION_VARIABLE \| Variable::IMMUTABLE | FIND_IDENTIFIER | Comptime declaration - compile-time variable |
+| `test_declaration` | DEFINITION_FUNCTION \| Function::REGULAR | CUSTOM | Test declaration - `test "name" { }` |
+| `using_namespace_declaration` | EXTERNAL_IMPORT \| Import::MODULE | NONE | Using namespace declaration - `usingnamespace @import("...")` |
 
 ## Expressions
 
@@ -115,11 +115,11 @@ Zig expression types
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `expression` | ORGANIZATION_BLOCK | NONE | Expression - general expression |
-| `binary_expression` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Binary expression - `a + b`, `a == b` |
-| `unary_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE | Unary expression - `-a`, `!a` |
-| `assignment_expression` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE | Assignment expression - `a = b` |
-| `call_expression` | COMPUTATION_CALL | Call::FUNCTION | FIND_CALL_TARGET | Call expression - `function(args)` |
-| `builtin_function` | COMPUTATION_CALL | Call::FUNCTION | NODE_TEXT | Builtin function - `@builtin(args)` |
+| `binary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Binary expression - `a + b`, `a == b` |
+| `unary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE | Unary expression - `-a`, `!a` |
+| `assignment_expression` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | NONE | Assignment expression - `a = b` |
+| `call_expression` | COMPUTATION_CALL \| Call::FUNCTION | FIND_CALL_TARGET | Call expression - `function(args)` |
+| `builtin_function` | COMPUTATION_CALL \| Call::FUNCTION | NODE_TEXT | Builtin function - `@builtin(args)` |
 | `field_expression` | COMPUTATION_ACCESS | NONE | Field expression - `struct.field` |
 | `index_expression` | COMPUTATION_ACCESS | NONE | Index expression - `array[index]` |
 | `dereference_expression` | COMPUTATION_ACCESS | NONE | Dereference expression - `ptr.*` |
@@ -133,14 +133,14 @@ Zig control flow: - `if (cond) body else body` - `switch (value) { cases... }` -
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if_statement` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | If statement - `if (cond) body` |
-| `for_statement` | FLOW_LOOP | Loop::ITERATOR | NONE | For statement - `for (items) |item| body` |
-| `while_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | While statement - `while (cond) body` |
-| `switch_expression` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | Switch expression - `switch (value) { }` |
-| `switch_case` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | Switch case - `pattern => body` |
-| `break_expression` | FLOW_JUMP | Jump::BREAK | NONE | Break expression - `break` or `break :label value` |
-| `continue_expression` | FLOW_JUMP | Jump::CONTINUE | NONE | Continue expression - `continue` |
-| `return_expression` | FLOW_JUMP | Jump::RETURN | NONE | Return expression - `return value` |
+| `if_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | If statement - `if (cond) body` |
+| `for_statement` | FLOW_LOOP \| Loop::ITERATOR | NONE | For statement - `for (items) \|item\| body` |
+| `while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | While statement - `while (cond) body` |
+| `switch_expression` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Switch expression - `switch (value) { }` |
+| `switch_case` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Switch case - `pattern => body` |
+| `break_expression` | FLOW_JUMP \| Jump::BREAK | NONE | Break expression - `break` or `break :label value` |
+| `continue_expression` | FLOW_JUMP \| Jump::CONTINUE | NONE | Continue expression - `continue` |
+| `return_expression` | FLOW_JUMP \| Jump::RETURN | NONE | Return expression - `return value` |
 
 ## Async/Await
 
@@ -165,8 +165,7 @@ Zig error handling: - `try expr` - unwrap error union or return error - `catch` 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `try_expression` | ERROR_TRY | NONE | Try expression - `try value` |
-| `catch_expression` | ERROR_CATCH | NONE | Catch expression - `value catch |err| handler` |
-| `orelse_expression` | FLOW_CONDITIONAL | NONE | Orelse expression - `optional orelse default` |
+| `catch_expression` | ERROR_CATCH | NONE | Catch expression - `value catch \|err\| handler` |
 
 ## Defer Statements
 
@@ -224,12 +223,12 @@ Zig literals: - Integers: `42`, `0xFF`, `0b1010`, `1_000` - Floats: `3.14`, `1e1
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `integer` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT | Integer literal |
-| `float` | LITERAL_NUMBER | Number::FLOAT | NODE_TEXT | Float literal |
-| `string` | LITERAL_STRING | String::LITERAL | NODE_TEXT | String literal |
-| `string_content` | LITERAL_STRING | String::LITERAL | NODE_TEXT | String content |
-| `multiline_string` | LITERAL_STRING | String::RAW | NODE_TEXT | Multiline string - `\\string\\` |
-| `character` | LITERAL_STRING | String::LITERAL | NODE_TEXT | Character literal - `'a'` |
+| `integer` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Integer literal |
+| `float` | LITERAL_NUMBER \| Number::FLOAT | NODE_TEXT | Float literal |
+| `string` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | String literal |
+| `string_content` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | String content |
+| `multiline_string` | LITERAL_STRING \| String::RAW | NODE_TEXT | Multiline string - `\\string\\` |
+| `character` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | Character literal - `'a'` |
 | `boolean` | LITERAL_ATOMIC | NODE_TEXT | Boolean literal - `true` or `false` |
 
 ## Blocks and Statements
@@ -238,10 +237,10 @@ Code blocks and statements
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `block` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Block - `{ statements }` |
-| `block_expression` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Block expression - block that returns value |
-| `statement` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Statement |
-| `labeled_statement` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | FIND_IDENTIFIER | Labeled statement - `label: statement` |
+| `block` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Block - `{ statements }` |
+| `block_expression` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Block expression - block that returns value |
+| `statement` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Statement |
+| `labeled_statement` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | FIND_IDENTIFIER | Labeled statement - `label: statement` |
 
 ## Initializers
 
@@ -249,11 +248,10 @@ Struct and array initializers
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `struct_initializer` | LITERAL_STRUCTURED | Structured::MAPPING | NONE | Struct initializer - `.{ .field = value }` |
-| `anonymous_struct_initializer` | LITERAL_STRUCTURED | Structured::MAPPING | NONE | Anonymous struct initializer |
-| `array_initializer` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE | Array initializer - `.{ value, value }` |
-| `initializer_list` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE | Initializer list |
-| `arguments` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Arguments - function call arguments |
+| `struct_initializer` | LITERAL_STRUCTURED \| Structured::MAPPING | NONE | Struct initializer - `.{ .field = value }` |
+| `anonymous_struct_initializer` | LITERAL_STRUCTURED \| Structured::MAPPING | NONE | Anonymous struct initializer |
+| `initializer_list` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE | Initializer list |
+| `arguments` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Arguments - function call arguments |
 
 ## Assembly
 
@@ -273,9 +271,7 @@ Zig comment styles: - `// line comment` - `/// doc comment` - No block comments 
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `comment` | METADATA_COMMENT | NONE | Comment |
-| `line_comment` | METADATA_COMMENT | NONE | Line comment - `// comment` |
-| `doc_comment` | METADATA_COMMENT | NONE | Doc comment - `/// documentation` |
+| `comment` | METADATA_COMMENT | NODE_TEXT | Comment |
 
 ## Keywords
 
@@ -368,7 +364,7 @@ Zig operators
 | `or` | OPERATOR_LOGICAL | NODE_TEXT | Logical OR - `or` |
 | `!` | OPERATOR_LOGICAL | NODE_TEXT | Logical NOT - `!` |
 | `&` | OPERATOR_ARITHMETIC | NODE_TEXT | Bitwise AND - `&` |
-| `|` | OPERATOR_ARITHMETIC | NODE_TEXT | Bitwise OR - `|` |
+| `\|` | OPERATOR_ARITHMETIC | NODE_TEXT | Bitwise OR - `\|` |
 | `^` | OPERATOR_ARITHMETIC | NODE_TEXT | Bitwise XOR - `^` |
 | `~` | OPERATOR_ARITHMETIC | NODE_TEXT | Bitwise NOT - `~` |
 | `<<` | OPERATOR_ARITHMETIC | NODE_TEXT | Left shift - `<<` |
@@ -381,6 +377,13 @@ Parser error nodes
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `ERROR` | PARSER_SYNTAX | NODE_TEXT | Parse error node |
+
+## Other Node Types
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `character_content` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `escape_sequence` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

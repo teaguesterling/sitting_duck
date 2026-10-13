@@ -169,7 +169,6 @@ Media query features: - `min-width`, `max-width` - viewport dimensions - `orient
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `media_feature_name` | NAME_IDENTIFIER | NODE_TEXT | Media feature name - `min-width`, `orientation` |
 | `feature_name` | NAME_IDENTIFIER | NODE_TEXT | Feature name - generic feature identifier |
 
 ## Keyframes
@@ -191,7 +190,6 @@ Custom property syntax: - Definition: `--custom-property: value;` - Usage: `var(
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `variable_name` | NAME_IDENTIFIER | NODE_TEXT | Variable name - `--custom-property` |
 | `postcss_statement` | METADATA_DIRECTIVE | NODE_TEXT | PostCSS statement - preprocessor directive |
 
 ## Layout Values
@@ -237,7 +235,7 @@ CSS selector name tokens
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `class_name` | NAME_IDENTIFIER | NODE_TEXT | Class name - name portion of `.classname` |
-| `string_content` | LITERAL_STRING | NONE | String content - text inside quotes |
+| `string_content` | LITERAL_STRING | NODE_TEXT | String content - text inside quotes |
 
 ## Operators and Combinators
 
@@ -268,41 +266,13 @@ CSS measurement unit tokens
 
 Unit categories: - Absolute: `px`, `cm`, `mm`, `in`, `pt`, `pc` - Relative: `em`, `rem`, `%` - Viewport: `vh`, `vw`, `vmin`, `vmax`
 
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `px` | METADATA_ANNOTATION | NODE_TEXT | Pixels unit - `px` |
-| `rem` | METADATA_ANNOTATION | NODE_TEXT | Root em unit - `rem` |
-| `em` | METADATA_ANNOTATION | NODE_TEXT | Em unit - `em` |
-| `%` | METADATA_ANNOTATION | NODE_TEXT | Percentage unit - `%` |
-| `vh` | METADATA_ANNOTATION | NODE_TEXT | Viewport height unit - `vh` |
-| `vw` | METADATA_ANNOTATION | NODE_TEXT | Viewport width unit - `vw` |
-
 ## Special Values
 
 CSS keyword values
 
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `!important` | METADATA_ANNOTATION | NODE_TEXT | Important declaration - `!important` |
-| `inherit` | LITERAL_ATOMIC | NODE_TEXT | Inherit value - inherit from parent |
-| `initial` | LITERAL_ATOMIC | NODE_TEXT | Initial value - use initial value |
-| `unset` | LITERAL_ATOMIC | NODE_TEXT | Unset value - reset to natural value |
-| `none` | LITERAL_ATOMIC | NODE_TEXT | None value - disable property |
-| `auto` | LITERAL_ATOMIC | NODE_TEXT | Auto value - automatic calculation |
-
 ## CSS Function Names
 
 Built-in CSS function keywords
-
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `var` | COMPUTATION_CALL | NODE_TEXT | var() function - custom property reference |
-| `calc` | COMPUTATION_CALL | NODE_TEXT | calc() function - mathematical calculation |
-| `url` | COMPUTATION_CALL | NODE_TEXT | url() function - resource reference |
-| `rgb` | COMPUTATION_CALL | NODE_TEXT | rgb() function - RGB color |
-| `rgba` | COMPUTATION_CALL | NODE_TEXT | rgba() function - RGB color with alpha |
-| `hsl` | COMPUTATION_CALL | NODE_TEXT | hsl() function - HSL color |
-| `hsla` | COMPUTATION_CALL | NODE_TEXT | hsla() function - HSL color with alpha |
 
 ## String and Escape Sequences
 
@@ -310,7 +280,7 @@ CSS string-related tokens
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `escape_sequence` | LITERAL_STRING | NONE | Escape sequence - `\n`, `\u0041` |
+| `escape_sequence` | LITERAL_STRING | NODE_TEXT | Escape sequence - `\n`, `\u0041` |
 
 ## Attribute Selector Components
 
@@ -358,6 +328,13 @@ Parser error nodes
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `ERROR` | PARSER_SYNTAX | NODE_TEXT | Parse error node |
+
+## Other Node Types
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `important_value` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `js_comment` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

@@ -80,7 +80,7 @@ Swift import types: - `import Module` - import entire module - `import Module.Su
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `import_declaration` | EXTERNAL_IMPORT | Import::MODULE | FIND_IDENTIFIER | Import declaration - `import Foundation` |
+| `import_declaration` | EXTERNAL_IMPORT \| Import::MODULE | FIND_IDENTIFIER | Import declaration - `import Foundation` |
 
 ## Function Definitions
 
@@ -90,10 +90,10 @@ Swift function features: - `func name(param: Type) -> ReturnType` - External/int
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_declaration` | DEFINITION_FUNCTION | Function::REGULAR | CUSTOM | Function declaration - `func name(params) -> Type { }` |
-| `init_declaration` | DEFINITION_FUNCTION | Function::CONSTRUCTOR | CUSTOM | Initializer - `init(params) { }` |
-| `deinit_declaration` | DEFINITION_FUNCTION | Function::CONSTRUCTOR | CUSTOM | Deinitializer - `deinit { }` (destructor) |
-| `subscript_declaration` | DEFINITION_FUNCTION | Function::REGULAR | CUSTOM | Subscript declaration - `subscript(index: Int) -> Element` |
+| `function_declaration` | DEFINITION_FUNCTION \| Function::REGULAR | CUSTOM | Function declaration - `func name(params) -> Type { }` |
+| `init_declaration` | DEFINITION_FUNCTION \| Function::CONSTRUCTOR | CUSTOM | Initializer - `init(params) { }` |
+| `deinit_declaration` | DEFINITION_FUNCTION \| Function::CONSTRUCTOR | CUSTOM | Deinitializer - `deinit { }` (destructor) |
+| `subscript_declaration` | DEFINITION_FUNCTION \| Function::REGULAR | CUSTOM | Subscript declaration - `subscript(index: Int) -> Element` |
 
 ## Class and Type Definitions
 
@@ -103,12 +103,8 @@ Swift type kinds: - `class` - reference type with inheritance - `struct` - value
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `class_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Class declaration - reference type with inheritance |
-| `struct_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Struct declaration - value type, copied on assignment |
-| `actor_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Actor declaration - concurrency-safe reference type |
-| `enum_declaration` | DEFINITION_CLASS | Class::ENUM | FIND_IDENTIFIER | Enum declaration - value type with cases |
-| `protocol_declaration` | DEFINITION_CLASS | Class::ABSTRACT | FIND_IDENTIFIER | Protocol declaration - interface/trait |
-| `extension_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Extension - adds members to existing type |
+| `class_declaration` | DEFINITION_CLASS \| Class::REGULAR | FIND_IDENTIFIER | Class declaration - reference type with inheritance |
+| `protocol_declaration` | DEFINITION_CLASS \| Class::ABSTRACT | FIND_IDENTIFIER | Protocol declaration - interface/trait |
 
 ## Variable and Property Declarations
 
@@ -118,9 +114,8 @@ Swift variable declarations: - `let` - immutable (constant) - `var` - mutable - 
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `property_declaration` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER | Property declaration - class/struct property |
-| `variable_declaration` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Variable declaration - local or global `let`/`var` |
-| `parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER | Function parameter |
+| `property_declaration` | DEFINITION_VARIABLE \| Variable::FIELD | CUSTOM | Property declaration - class/struct property |
+| `parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER | Function parameter |
 
 ## Type Definitions
 
@@ -128,8 +123,8 @@ Type aliases and associated types
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `typealias_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Type alias - `typealias Name = ExistingType` |
-| `associatedtype_declaration` | DEFINITION_CLASS | Class::ABSTRACT | FIND_IDENTIFIER | Associated type - protocol type placeholder |
+| `typealias_declaration` | DEFINITION_CLASS \| Class::REGULAR | FIND_IDENTIFIER | Type alias - `typealias Name = ExistingType` |
+| `associatedtype_declaration` | DEFINITION_CLASS \| Class::ABSTRACT | FIND_IDENTIFIER | Associated type - protocol type placeholder |
 
 ## Control Flow
 
@@ -139,11 +134,9 @@ Swift control flow features: - `if let` for optional binding - `guard let` for e
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if_statement` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | If statement - `if condition { }` |
-| `guard_statement` | FLOW_CONDITIONAL | Conditional::GUARD | NONE | Guard statement - early exit `guard condition else { return }` |
-| `switch_statement` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | Switch statement - exhaustive pattern matching |
-| `case_item` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | Case item in switch |
-| `default_case` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | Default case in switch |
+| `if_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | If statement - `if condition { }` |
+| `guard_statement` | FLOW_CONDITIONAL \| Conditional::GUARD | NONE | Guard statement - early exit `guard condition else { return }` |
+| `switch_statement` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Switch statement - exhaustive pattern matching |
 
 ## Loop Constructs
 
@@ -153,11 +146,10 @@ Swift loops: - `for item in collection` - iterate over Sequence - `for i in 0..<
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `for_statement` | FLOW_LOOP | Loop::ITERATOR | NONE | For-in loop - `for item in collection` |
-| `while_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | While loop - `while condition { }` |
-| `repeat_while_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | Repeat-while loop - `repeat { } while condition` |
+| `for_statement` | FLOW_LOOP \| Loop::ITERATOR | NONE | For-in loop - `for item in collection` |
+| `while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | While loop - `while condition { }` |
+| `repeat_while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | Repeat-while loop - `repeat { } while condition` |
 | `do_statement` | FLOW_SYNC | NONE | Do block - `do { }` for scoping or error handling |
-| `defer_statement` | FLOW_SYNC | NONE | Defer statement - executes when scope exits |
 
 ## Jump Statements
 
@@ -165,27 +157,15 @@ Control flow transfer
 
 Swift jump statements: - `break` - exit loop or switch - `continue` - skip to next iteration - `fallthrough` - explicit fallthrough in switch - `return` - exit function with value - `throw` - raise error
 
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `break_statement` | FLOW_JUMP | Jump::BREAK | NONE | Break statement - exits loop or switch |
-| `continue_statement` | FLOW_JUMP | Jump::CONTINUE | NONE | Continue statement - skips to next iteration |
-| `fallthrough_statement` | FLOW_JUMP | Jump::CONTINUE | NONE | Fallthrough statement - explicit switch case fallthrough |
-| `return_statement` | FLOW_JUMP | Jump::RETURN | NONE | Return statement - exits function with value |
-| `throw_statement` | ERROR_THROW | NONE | Throw statement - raises error |
-
 ## Expressions
 
 Operators and expression types
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `call_expression` | COMPUTATION_CALL | Call::FUNCTION | FIND_CALL_TARGET | Function call - `function(args)` |
-| `postfix_expression` | COMPUTATION_CALL | Call::METHOD | FIND_CALL_TARGET | Postfix expression - method calls, subscripts |
-| `binary_expression` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Binary expression - arithmetic, comparison, logical |
-| `unary_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE | Unary expression - `-x`, `!x` |
-| `ternary_expression` | FLOW_CONDITIONAL | Conditional::TERNARY | NONE | Ternary expression - `condition ? true : false` |
-| `assignment_expression` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE | Assignment - `x = value` |
-| `compound_assignment_expression` | OPERATOR_ASSIGNMENT | Assignment::COMPOUND | NONE | Compound assignment - `x += value` |
+| `call_expression` | COMPUTATION_CALL \| Call::FUNCTION | FIND_CALL_TARGET | Function call - `function(args)` |
+| `postfix_expression` | COMPUTATION_CALL \| Call::METHOD | FIND_CALL_TARGET | Postfix expression - method calls, subscripts |
+| `ternary_expression` | FLOW_CONDITIONAL \| Conditional::TERNARY | NONE | Ternary expression - `condition ? true : false` |
 
 ## Member Access
 
@@ -194,8 +174,6 @@ Property and element access
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `navigation_expression` | COMPUTATION_ACCESS | FIND_IDENTIFIER | Navigation expression - `obj.property` |
-| `member_access_expression` | COMPUTATION_ACCESS | FIND_IDENTIFIER | Member access - dot access |
-| `subscript_expression` | COMPUTATION_ACCESS | NONE | Subscript expression - `arr[index]` |
 
 ## Literals
 
@@ -205,13 +183,11 @@ Swift literals: - Integers: `42`, `0xFF`, `0b1010`, `0o755` - Floats: `3.14`, `1
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `integer_literal` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT | Integer literal |
-| `real_literal` | LITERAL_NUMBER | Number::FLOAT | NODE_TEXT | Float literal |
+| `integer_literal` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Integer literal |
+| `real_literal` | LITERAL_NUMBER \| Number::FLOAT | NODE_TEXT | Float literal |
 | `boolean_literal` | LITERAL_ATOMIC | NODE_TEXT | Boolean literal - `true` or `false` |
-| `string_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT | String literal - `"text"` |
-| `multiline_string_literal` | LITERAL_STRING | String::RAW | NODE_TEXT | Multiline string literal - `"""..."""` |
-| `character_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT | Character literal |
-| `nil_literal` | LITERAL_ATOMIC | NODE_TEXT | Nil literal - typed null |
+| `line_str_text` | LITERAL_STRING | NODE_TEXT |  |
+| `multi_line_str_text` | LITERAL_STRING | NODE_TEXT |  |
 
 ## Collection Literals
 
@@ -219,9 +195,9 @@ Array, dictionary, and tuple literals
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `array_literal` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE | Array literal - `[1, 2, 3]` |
-| `dictionary_literal` | LITERAL_STRUCTURED | Structured::MAPPING | NONE | Dictionary literal - `["key": value]` |
-| `tuple_expression` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE | Tuple expression - `(a, b, c)` |
+| `array_literal` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE | Array literal - `[1, 2, 3]` |
+| `dictionary_literal` | LITERAL_STRUCTURED \| Structured::MAPPING | NONE | Dictionary literal - `["key": value]` |
+| `tuple_expression` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE | Tuple expression - `(a, b, c)` |
 
 ## Identifiers and Types
 
@@ -248,7 +224,6 @@ Swift concurrency features: - `async` functions that can suspend - `await` to wa
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `await_expression` | FLOW_SYNC | NONE | Await expression - `await asyncCall()` |
-| `async_keyword` | FLOW_SYNC | NODE_TEXT | Async keyword |
 
 ## Error Handling
 
@@ -259,7 +234,6 @@ Swift error handling: - `throw` to raise errors (must conform to Error) - `try` 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `try_expression` | ERROR_TRY | FIND_IDENTIFIER | Try expression - `try throwingFunction()` |
-| `catch_clause` | ERROR_CATCH | NONE | Catch clause - handles error |
 
 ## Closures and Lambdas
 
@@ -269,8 +243,7 @@ Swift closures: - `{ (params) -> Return in body }` - Trailing closure syntax - S
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `lambda_literal` | DEFINITION_FUNCTION | Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Lambda/closure literal |
-| `closure_expression` | DEFINITION_FUNCTION | Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Closure expression |
+| `lambda_literal` | DEFINITION_FUNCTION \| Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Lambda/closure literal |
 
 ## Attributes and Modifiers
 
@@ -303,10 +276,7 @@ Swift supports custom operator definitions: - prefix: `prefix func -(x: T)` - in
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `custom_operator` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NODE_TEXT | Custom operator |
-| `prefix_operator` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NODE_TEXT | Prefix operator |
-| `postfix_operator` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NODE_TEXT | Postfix operator |
-| `infix_operator` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NODE_TEXT | Infix operator |
+| `custom_operator` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NODE_TEXT | Custom operator |
 
 ## Code Organization
 
@@ -314,9 +284,8 @@ Blocks and structural elements
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `statements` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Statements block |
-| `code_block` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Code block - `{ }` |
-| `capture_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Capture list - `[weak self]` in closures |
+| `statements` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Statements block |
+| `capture_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Capture list - `[weak self]` in closures |
 
 ## Punctuation and Delimiters
 
@@ -374,21 +343,9 @@ Swift has declaration keywords, statement keywords, expression keywords, and con
 
 Generic type parameters and constraints
 
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `generic_parameter_clause` | TYPE_GENERIC | NONE | Generic parameter clause - `<T, U>` |
-| `generic_where_clause` | TYPE_GENERIC | NONE | Generic where clause - `where T: Equatable` |
-| `conformance_requirement` | TYPE_GENERIC | NONE | Conformance requirement - `T: Protocol` |
-| `same_type_requirement` | TYPE_GENERIC | NONE | Same type requirement - `T == U` |
-
 ## Property Wrappers and Result Builders
 
 Swift metaprogramming features
-
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `property_wrapper_type` | METADATA_ANNOTATION | NODE_TEXT | Property wrapper type - `@Published`, `@State` |
-| `result_builder` | METADATA_ANNOTATION | NODE_TEXT | Result builder - `@ViewBuilder` |
 
 ## Parser Error Handling
 
@@ -405,8 +362,6 @@ Parser error nodes
 | `break` | FLOW_JUMP | NODE_TEXT |  |
 | `case` | FLOW_CONDITIONAL | NODE_TEXT |  |
 | `continue` | FLOW_JUMP | NODE_TEXT |  |
-| `default` | FLOW_CONDITIONAL | NODE_TEXT |  |
-| `defer` | FLOW_SYNC | NODE_TEXT |  |
 | `do` | FLOW_SYNC | NODE_TEXT |  |
 | `else` | FLOW_CONDITIONAL | NODE_TEXT |  |
 | `fallthrough` | FLOW_JUMP | NODE_TEXT |  |
@@ -417,24 +372,32 @@ Parser error nodes
 | `repeat` | FLOW_LOOP | NODE_TEXT |  |
 | `return` | FLOW_JUMP | NODE_TEXT |  |
 | `switch` | FLOW_CONDITIONAL | NODE_TEXT |  |
-| `where` | FLOW_CONDITIONAL | NODE_TEXT |  |
 | `while` | FLOW_LOOP | NODE_TEXT |  |
 | `as` | OPERATOR_COMPARISON | NODE_TEXT |  |
-| `catch` | ERROR_CATCH | NODE_TEXT |  |
 | `false` | LITERAL_ATOMIC | NODE_TEXT |  |
 | `is` | OPERATOR_COMPARISON | NODE_TEXT |  |
 | `nil` | LITERAL_ATOMIC | NODE_TEXT |  |
-| `rethrows` | ERROR_THROW | NODE_TEXT |  |
 | `super` | NAME_IDENTIFIER | NODE_TEXT |  |
 | `self` | NAME_IDENTIFIER | NODE_TEXT |  |
-| `Self` | TYPE_PRIMITIVE | NODE_TEXT |  |
-| `throw` | ERROR_THROW | NODE_TEXT |  |
 | `throws` | ERROR_THROW | NODE_TEXT |  |
 | `true` | LITERAL_ATOMIC | NODE_TEXT |  |
 | `try` | ERROR_TRY | NODE_TEXT |  |
 | `await` | FLOW_SYNC | NODE_TEXT |  |
 | `async` | FLOW_SYNC | NODE_TEXT |  |
 | `actor` | DEFINITION_CLASS | NODE_TEXT |  |
+| `bin_literal` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `catch_keyword` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `default_keyword` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `hex_literal` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `oct_literal` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `raw_str_continuing_indicator` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `raw_str_end_part` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `raw_str_interpolation_start` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `raw_str_part` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `statement_label` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `throw_keyword` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `where_keyword` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `wildcard_pattern` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

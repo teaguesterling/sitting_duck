@@ -70,7 +70,7 @@ Bash supports two function syntaxes: - POSIX style: `name() { commands; }` - Bas
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_definition` | DEFINITION_FUNCTION | FIND_IDENTIFIER | Function definition - both POSIX `name()` and Bash `function name` styles |
+| `function_definition` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Function definition - both POSIX `name()` and Bash `function name` styles |
 
 ## Variable Declarations and Assignments
 
@@ -80,9 +80,9 @@ Bash variables: - No explicit type declarations (everything is a string internal
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `variable_assignment` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Variable assignment - `name=value` or `name+=value` |
-| `declaration_command` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Declaration command - `declare`, `local`, `readonly`, `typeset`, `export` |
-| `unset_command` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Unset command - removes variable or function definition |
+| `variable_assignment` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Variable assignment - `name=value` or `name+=value` |
+| `declaration_command` | DEFINITION_VARIABLE \| Variable::MUTABLE | CUSTOM | Declaration command - `declare`, `local`, `readonly`, `typeset`, `export` |
+| `unset_command` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Unset command - removes variable or function definition |
 
 ## Commands and Execution
 
@@ -92,11 +92,10 @@ Command execution in Bash: - Simple commands: `command arg1 arg2` - Pipelines: `
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `command` | EXECUTION_STATEMENT | FIND_IDENTIFIER | Generic command - wrapper for command structures |
-| `simple_command` | EXECUTION_STATEMENT | FIND_IDENTIFIER | Simple command - direct command invocation with arguments |
-| `pipeline` | EXECUTION_STATEMENT | NONE | Pipeline - commands connected via `|` for stream processing |
-| `command_substitution` | COMPUTATION_CALL | NONE | Command substitution - `$(cmd)` captures command output as string |
-| `process_substitution` | COMPUTATION_CALL | NONE | Process substitution - `<(cmd)` or `>(cmd)` provides file descriptor |
+| `command` | COMPUTATION_CALL | NONE | Generic command - wrapper for command structures |
+| `pipeline` | EXECUTION_STATEMENT | NONE | Pipeline - commands connected via `\|` for stream processing |
+| `command_substitution` | COMPUTATION_CALL \| Call::FUNCTION | NONE | Command substitution - `$(cmd)` captures command output as string |
+| `process_substitution` | COMPUTATION_CALL \| Call::FUNCTION | NONE | Process substitution - `<(cmd)` or `>(cmd)` provides file descriptor |
 
 ## Control Flow
 
@@ -106,18 +105,14 @@ Bash control structures: - `if`/`then`/`elif`/`else`/`fi` - conditional branchin
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if_statement` | FLOW_CONDITIONAL | NONE | If statement - `if cmd; then ...; fi` |
-| `case_statement` | FLOW_CONDITIONAL | NONE | Case statement - pattern matching `case $var in pattern) ...; esac` |
-| `while_statement` | FLOW_LOOP | NONE | While loop - `while cmd; do ...; done` |
-| `for_statement` | FLOW_LOOP | NONE | For loop - `for var in list; do ...; done` |
-| `c_style_for_statement` | FLOW_LOOP | NONE | C-style for loop - `for ((i=0; i<n; i++)); do ...; done` |
-| `break_statement` | FLOW_JUMP | NONE | Break statement - exit from enclosing loop |
-| `continue_statement` | FLOW_JUMP | NONE | Continue statement - skip to next loop iteration |
-| `return_statement` | FLOW_JUMP | NONE | Return statement - exit function with status code |
-| `exit_statement` | FLOW_JUMP | NONE | Exit statement - terminate script with status code |
-| `else_clause` | FLOW_CONDITIONAL | NONE | Else clause - alternative branch in if statement |
-| `elif_clause` | FLOW_CONDITIONAL | NONE | Elif clause - chained conditional in if statement |
-| `case_item` | FLOW_CONDITIONAL | NONE | Case item - individual pattern match in case statement |
+| `if_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | If statement - `if cmd; then ...; fi` |
+| `case_statement` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Case statement - pattern matching `case $var in pattern) ...; esac` |
+| `while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | While loop - `while cmd; do ...; done` |
+| `for_statement` | FLOW_LOOP \| Loop::ITERATOR | NONE | For loop - `for var in list; do ...; done` |
+| `c_style_for_statement` | FLOW_LOOP \| Loop::COUNTER | NONE | C-style for loop - `for ((i=0; i<n; i++)); do ...; done` |
+| `else_clause` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | Else clause - alternative branch in if statement |
+| `elif_clause` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | Elif clause - chained conditional in if statement |
+| `case_item` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Case item - individual pattern match in case statement |
 
 ## Expansions and Substitutions
 
@@ -129,7 +124,6 @@ Bash expansion order (important for understanding behavior): 1. Brace expansion:
 |-----------|---------------|-----------------|-------------|
 | `expansion` | COMPUTATION_ACCESS | NONE | Complex expansion - `${var}` with modifiers |
 | `simple_expansion` | COMPUTATION_ACCESS | NODE_TEXT | Simple expansion - basic `$var` reference |
-| `string_expansion` | COMPUTATION_ACCESS | NONE | String expansion - expansion within quoted string |
 | `arithmetic_expansion` | COMPUTATION_EXPRESSION | NONE | Arithmetic expansion - `$((expression))` |
 | `brace_expression` | COMPUTATION_EXPRESSION | NONE | Brace expression - `{a,b,c}` or `{1..10}` |
 
@@ -141,10 +135,9 @@ Bash quoting mechanisms: - Double quotes (`""`): Allow variable/command expansio
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `string` | LITERAL_STRING | NODE_TEXT | Double-quoted string - allows expansion inside |
-| `raw_string` | LITERAL_STRING | NODE_TEXT | Single-quoted string - literal, no expansion |
-| `ansii_c_string` | LITERAL_STRING | NODE_TEXT | ANSI-C quoted string - `$'...'` with escape sequences |
-| `concatenation` | LITERAL_STRING | NODE_TEXT | String concatenation - adjacent strings combined |
+| `string` | LITERAL_STRING \| String::TEMPLATE | NODE_TEXT | Double-quoted string - allows expansion inside (template-like) |
+| `raw_string` | LITERAL_STRING \| String::RAW | NODE_TEXT | Single-quoted string - literal, no expansion |
+| `concatenation` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | String concatenation - adjacent strings combined |
 
 ## Numbers and Arrays
 
@@ -154,8 +147,8 @@ Bash numeric handling: - All variables are strings, converted to integers for ar
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `number` | LITERAL_NUMBER | NODE_TEXT | Numeric literal - integers for arithmetic context |
-| `array` | LITERAL_STRUCTURED | NONE | Array literal - `(elem1 elem2 elem3)` |
+| `number` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Numeric literal - integers for arithmetic context |
+| `array` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE | Array literal - `(elem1 elem2 elem3)` |
 
 ## Identifiers and Variables
 
@@ -177,9 +170,9 @@ Redirection operators: - `>` - write stdout to file (truncate) - `>>` - append s
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `file_redirect` | EXTERNAL_IMPORT | NODE_TEXT | File redirect - `>`, `<`, `>>`, `2>`, etc. |
-| `heredoc_redirect` | EXTERNAL_IMPORT | NODE_TEXT | Here document - `<<EOF ... EOF` |
-| `herestring_redirect` | EXTERNAL_IMPORT | NODE_TEXT | Here string - `<<<string` |
+| `file_redirect` | EXECUTION_STATEMENT | NONE | File redirect - `>`, `<`, `>>`, `2>`, etc. |
+| `heredoc_redirect` | EXECUTION_STATEMENT | NONE | Here document - `<<EOF ... EOF` |
+| `herestring_redirect` | EXECUTION_STATEMENT | NONE | Here string - `<<<string` |
 
 ## Comments
 
@@ -197,9 +190,9 @@ Bash grouping mechanisms: - `( commands )` - subshell (new process, isolated env
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `subshell` | ORGANIZATION_BLOCK | NONE | Subshell - commands in `()` run in child process |
-| `compound_statement` | ORGANIZATION_BLOCK | NONE | Compound statement - command group in `{}` |
-| `do_group` | ORGANIZATION_BLOCK | NONE | Do group - loop body between `do` and `done` |
+| `subshell` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Subshell - commands in `()` run in child process |
+| `compound_statement` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Compound statement - command group in `{}` |
+| `do_group` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Do group - loop body between `do` and `done` |
 
 ## Test Expressions and Conditions
 
@@ -210,9 +203,9 @@ Test command forms: - `test expr` - POSIX test command - `[ expr ]` - synonym fo
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `test_command` | COMPUTATION_EXPRESSION | NONE | Test command - `[ ]` or `[[ ]]` conditional expression |
-| `binary_expression` | OPERATOR_COMPARISON | NONE | Binary expression - two-operand test (e.g., `$a -eq $b`) |
-| `unary_expression` | OPERATOR_LOGICAL | NONE | Unary expression - single-operand test (e.g., `-f file`) |
-| `postfix_expression` | OPERATOR_ARITHMETIC | NONE | Postfix expression - increment/decrement in arithmetic |
+| `binary_expression` | OPERATOR_COMPARISON \| Comparison::RELATIONAL | NONE | Binary expression - two-operand test (e.g., `$a -eq $b`) |
+| `unary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE | Unary expression - single-operand test (e.g., `-f file`) |
+| `postfix_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE | Postfix expression - increment/decrement in arithmetic |
 | `parenthesized_expression` | COMPUTATION_EXPRESSION | NONE | Parenthesized expression - grouped expression `(expr)` |
 
 ## Operators and Punctuation
@@ -224,9 +217,9 @@ Control operators: - `&&` - AND list (run next if previous succeeds) - `||` - OR
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `&&` | OPERATOR_LOGICAL | NODE_TEXT | AND operator - `cmd1 && cmd2` (run cmd2 if cmd1 succeeds) |
-| `||` | OPERATOR_LOGICAL | NODE_TEXT | OR operator - `cmd1 || cmd2` (run cmd2 if cmd1 fails) |
-| `|` | PARSER_PUNCTUATION | NODE_TEXT | Pipe operator - connect stdout to stdin |
-| `&` | OPERATOR_ARITHMETIC | NODE_TEXT | Background operator - run command asynchronously |
+| `\|\|` | OPERATOR_LOGICAL | NODE_TEXT | OR operator - `cmd1 \|\| cmd2` (run cmd2 if cmd1 fails) |
+| `\|` | PARSER_PUNCTUATION | NODE_TEXT | Pipe operator - connect stdout to stdin |
+| `&` | EXECUTION_STATEMENT | NODE_TEXT | Background operator - run command asynchronously |
 | `;` | PARSER_PUNCTUATION | NODE_TEXT | Semicolon - command separator |
 | `;;` | PARSER_PUNCTUATION | NODE_TEXT | Double semicolon - case pattern terminator |
 | `(` | PARSER_DELIMITER | NODE_TEXT | Left parenthesis - subshell or grouping |
@@ -272,14 +265,20 @@ Parser error nodes
 | `done` | FLOW_LOOP | NODE_TEXT | done keyword - ends loop body |
 | `in` | FLOW_LOOP | NODE_TEXT | in keyword - list separator in for loop |
 | `function` | DEFINITION_FUNCTION | NODE_TEXT | function keyword - optional function declaration prefix |
-| `return` | FLOW_JUMP | NODE_TEXT | return keyword - exit function with status |
-| `break` | FLOW_JUMP | NODE_TEXT | break keyword - exit loop |
-| `continue` | FLOW_JUMP | NODE_TEXT | continue keyword - next loop iteration |
-| `exit` | FLOW_JUMP | NODE_TEXT | exit keyword - terminate script |
-| `local` | DEFINITION_VARIABLE | NODE_TEXT | local keyword - function-scoped variable |
-| `declare` | DEFINITION_VARIABLE | NODE_TEXT | declare keyword - variable declaration with attributes |
-| `readonly` | DEFINITION_VARIABLE | NODE_TEXT | readonly keyword - immutable variable declaration |
-| `export` | DEFINITION_VARIABLE | NODE_TEXT | export keyword - export variable to environment |
+| `local` | DEFINITION_VARIABLE \| Variable::MUTABLE | NODE_TEXT | local keyword - function-scoped variable |
+| `declare` | DEFINITION_VARIABLE \| Variable::MUTABLE | NODE_TEXT | declare keyword - variable declaration with attributes |
+| `readonly` | DEFINITION_VARIABLE \| Variable::IMMUTABLE | NODE_TEXT | readonly keyword - immutable variable declaration |
+| `export` | DEFINITION_VARIABLE \| Variable::MUTABLE | NODE_TEXT | export keyword - export variable to environment |
+| `ansi_c_string` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `extglob_pattern` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `file_descriptor` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `heredoc_body` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `heredoc_content` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `heredoc_end` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `heredoc_start` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `regex` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `string_content` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `test_operator` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

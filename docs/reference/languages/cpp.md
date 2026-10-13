@@ -40,12 +40,9 @@ C++ has regular functions, member functions (methods), constructors, destructors
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_definition` | DEFINITION_FUNCTION | Function::REGULAR | FIND_QUALIFIED_IDENTIFIER | Function definition: `ReturnType name(params) { body }` |
-| `function_declarator` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Function declarator (forward declaration): `ReturnType name(params);` |
-| `method_definition` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Method definition in class body |
-| `constructor_definition` | DEFINITION_FUNCTION | Function::CONSTRUCTOR | FIND_IDENTIFIER | Constructor: `ClassName(params) : initializers { body }` |
-| `destructor_definition` | DEFINITION_FUNCTION | Function::CONSTRUCTOR | FIND_IDENTIFIER | Destructor: `~ClassName() { body }` |
-| `lambda_expression` | DEFINITION_FUNCTION | Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Lambda expression: `[captures](params) { body }` |
+| `function_definition` | DEFINITION_FUNCTION \| Function::REGULAR | CUSTOM | Function definition: `ReturnType name(params) { body }` |
+| `function_declarator` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Function declarator (forward declaration): `ReturnType name(params);` |
+| `lambda_expression` | DEFINITION_FUNCTION \| Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Lambda expression: `[captures](params) { body }` |
 | `template_function` | DEFINITION_FUNCTION | FIND_IDENTIFIER | Template function definition |
 | `template_method` | DEFINITION_FUNCTION | FIND_IDENTIFIER | Template method definition |
 | `preproc_function_def` | DEFINITION_FUNCTION | FIND_IDENTIFIER | Preprocessor function-like macro |
@@ -73,10 +70,10 @@ Variable, parameter, and field declarations
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `declaration` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Variable declaration: `Type name = value;` |
-| `parameter_declaration` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER | Function parameter: `Type name` in parameter list |
+| `declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Variable declaration: `Type name = value;` |
+| `parameter_declaration` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER | Function parameter: `Type name` in parameter list |
 | `optional_parameter_declaration` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Optional parameter with default: `Type name = default` |
-| `field_declaration` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER | Field declaration in class: `Type name;` |
+| `field_declaration` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER | Field declaration in class: `Type name;` |
 | `init_declarator` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Initializing declarator: `name = value` in declaration |
 | `enumerator` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Enumerator: `NAME` or `NAME = value` in enum |
 | `alias_declaration` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Type alias: `using Name = Type;` |
@@ -96,13 +93,13 @@ Call expressions and operators
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `call_expression` | COMPUTATION_CALL | Call::FUNCTION | FIND_CALL_TARGET | Function call: `func(args)` |
-| `new_expression` | COMPUTATION_CALL | Call::CONSTRUCTOR | FIND_CALL_TARGET | Constructor call: `new Type(args)` |
-| `delete_expression` | COMPUTATION_CALL | Call::FUNCTION | FIND_CALL_TARGET | Destructor call: `delete ptr` or `delete[] ptr` |
-| `binary_expression` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Binary expression: `a + b`, `a * b`, etc. |
-| `unary_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE | Unary expression: `!a`, `-a`, `*ptr`, `&var` |
-| `assignment_expression` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE | Assignment expression: `a = b` |
-| `update_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE | Update expression: `a++`, `++a`, `a--`, `--a` |
+| `call_expression` | COMPUTATION_CALL \| Call::FUNCTION | FIND_CALL_TARGET | Function call: `func(args)` |
+| `new_expression` | COMPUTATION_CALL \| Call::CONSTRUCTOR | FIND_CALL_TARGET | Constructor call: `new Type(args)` |
+| `delete_expression` | COMPUTATION_CALL \| Call::FUNCTION | FIND_CALL_TARGET | Destructor call: `delete ptr` or `delete[] ptr` |
+| `binary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Binary expression: `a + b`, `a * b`, etc. |
+| `unary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE | Unary expression: `!a`, `-a`, `*ptr`, `&var` |
+| `assignment_expression` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | NONE | Assignment expression: `a = b` |
+| `update_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE | Update expression: `a++`, `++a`, `a--`, `--a` |
 | `cast_expression` | COMPUTATION_EXPRESSION | NONE | Cast expression: `(Type)expr` or C++ casts |
 | `parenthesized_expression` | COMPUTATION_EXPRESSION | NONE | Parenthesized expression: `(expr)` |
 | `expression_statement` | EXECUTION_STATEMENT | NONE | Expression statement: expression used as statement |
@@ -127,10 +124,9 @@ Names and qualified names
 | `field_identifier` | NAME_IDENTIFIER | NODE_TEXT | Field identifier in member access |
 | `namespace_identifier` | NAME_QUALIFIED | NODE_TEXT | Namespace identifier: `std`, `boost`, etc. |
 | `qualified_identifier` | NAME_QUALIFIED | NODE_TEXT | Qualified identifier: `Namespace::Name` |
-| `scoped_identifier` | NAME_SCOPED | NODE_TEXT | Scoped identifier in scope resolution |
 | `operator_name` | NAME_IDENTIFIER | NODE_TEXT | Operator name for overloading: `operator+` |
 | `destructor_name` | NAME_IDENTIFIER | NODE_TEXT | Destructor name: `~ClassName` |
-| `this` | NAME_SCOPED | NONE | this pointer reference |
+| `this` | NAME_SCOPED | NODE_TEXT | this pointer reference |
 
 ## Type System
 
@@ -141,12 +137,8 @@ Type specifiers, references, and templates
 | `primitive_type` | TYPE_PRIMITIVE | NODE_TEXT | Primitive type: int, char, float, double, void, bool |
 | `type_identifier` | TYPE_PRIMITIVE | NODE_TEXT | Type identifier: user-defined type name |
 | `sized_type_specifier` | TYPE_PRIMITIVE | NODE_TEXT | Sized type specifier: `long int`, `unsigned char`, etc. |
-| `struct_type` | TYPE_COMPOSITE | NONE | Struct type reference |
-| `union_type` | TYPE_COMPOSITE | NONE | Union type reference |
-| `pointer_type` | TYPE_REFERENCE | NONE | Pointer type: `Type*` |
-| `reference_type` | TYPE_REFERENCE | NONE | Reference type: `Type&` (lvalue) or `Type&&` (rvalue) |
 | `template_type` | TYPE_GENERIC | NONE | Template type: `Template<Args>` |
-| `auto` | TYPE_GENERIC | NONE | Auto type inference (C++11) |
+| `auto` | TYPE_GENERIC | NODE_TEXT | Auto type inference (C++11) |
 | `type_descriptor` | TYPE_COMPOSITE | NONE | Type descriptor in expressions |
 | `reference_declarator` | TYPE_REFERENCE | FIND_IDENTIFIER | Reference declarator: `&name` or `&&name` |
 | `pointer_declarator` | TYPE_COMPOSITE | FIND_IDENTIFIER | Pointer declarator: `*name` |
@@ -164,15 +156,15 @@ String, number, and structured literals
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `string_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT | String literal: `"hello"` |
-| `raw_string_literal` | LITERAL_STRING | String::RAW | NODE_TEXT | Raw string literal: `R"(content)"` |
-| `char_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT | Character literal: `'a'` |
-| `number_literal` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT | Number literal: 42, 3.14, 0xFF |
+| `string_literal` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | String literal: `"hello"` |
+| `raw_string_literal` | LITERAL_STRING \| String::RAW | NODE_TEXT | Raw string literal: `R"(content)"` |
+| `char_literal` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | Character literal: `'a'` |
+| `number_literal` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Number literal: 42, 3.14, 0xFF |
 | `true` | LITERAL_ATOMIC | NODE_TEXT | Boolean true |
 | `false` | LITERAL_ATOMIC | NODE_TEXT | Boolean false |
 | `nullptr` | LITERAL_ATOMIC | NODE_TEXT | Null pointer: nullptr |
 | `null` | LITERAL_ATOMIC | NODE_TEXT | Null pointer (C-style) |
-| `initializer_list` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE | Initializer list: `{ values }` |
+| `initializer_list` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE | Initializer list: `{ values }` |
 | `compound_literal_expression` | LITERAL_STRUCTURED | NONE | Compound literal expression |
 | `string_content` | LITERAL_STRING | NODE_TEXT | String content (inside quotes) |
 | `escape_sequence` | LITERAL_STRING | NODE_TEXT | Escape sequence: `\n`, `\t`, etc. |
@@ -187,20 +179,20 @@ Conditionals, loops, and jumps
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if_statement` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | If statement: `if (cond) stmt` |
+| `if_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | If statement: `if (cond) stmt` |
 | `else_clause` | FLOW_CONDITIONAL | NONE | Else clause in if statement |
-| `switch_statement` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | Switch statement: `switch (expr) { cases }` |
+| `switch_statement` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Switch statement: `switch (expr) { cases }` |
 | `case_statement` | FLOW_CONDITIONAL | NONE | Case statement: `case value:` |
-| `conditional_expression` | FLOW_CONDITIONAL | Conditional::TERNARY | NONE | Conditional/ternary expression: `cond ? then : else` |
+| `conditional_expression` | FLOW_CONDITIONAL \| Conditional::TERNARY | NONE | Conditional/ternary expression: `cond ? then : else` |
 | `condition_clause` | FLOW_CONDITIONAL | NONE | Condition clause in control statements |
-| `for_statement` | FLOW_LOOP | Loop::COUNTER | NONE | C-style for loop: `for (init; cond; update)` |
-| `for_range_loop` | FLOW_LOOP | Loop::ITERATOR | NONE | Range-based for loop (C++11): `for (auto x : container)` |
-| `while_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | While loop: `while (cond) stmt` |
-| `do_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | Do-while loop: `do stmt while (cond);` |
-| `return_statement` | FLOW_JUMP | Jump::RETURN | NONE | Return statement: `return expr;` |
-| `break_statement` | FLOW_JUMP | Jump::BREAK | NONE | Break statement: `break;` |
-| `continue_statement` | FLOW_JUMP | Jump::CONTINUE | NONE | Continue statement: `continue;` |
-| `goto_statement` | FLOW_JUMP | Jump::GOTO | NONE | Goto statement: `goto label;` |
+| `for_statement` | FLOW_LOOP \| Loop::COUNTER | NONE | C-style for loop: `for (init; cond; update)` |
+| `for_range_loop` | FLOW_LOOP \| Loop::ITERATOR | NONE | Range-based for loop (C++11): `for (auto x : container)` |
+| `while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | While loop: `while (cond) stmt` |
+| `do_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | Do-while loop: `do stmt while (cond);` |
+| `return_statement` | FLOW_JUMP \| Jump::RETURN | NONE | Return statement: `return expr;` |
+| `break_statement` | FLOW_JUMP \| Jump::BREAK | NONE | Break statement: `break;` |
+| `continue_statement` | FLOW_JUMP \| Jump::CONTINUE | NONE | Continue statement: `continue;` |
+| `goto_statement` | FLOW_JUMP \| Jump::GOTO | NONE | Goto statement: `goto label;` |
 
 ## Coroutines (C++20)
 
@@ -209,7 +201,6 @@ Coroutine expressions and statements
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `co_await_expression` | FLOW_SYNC | NONE | co_await expression: `co_await awaitable` |
-| `co_yield_expression` | FLOW_SYNC | NONE | co_yield expression: `co_yield value` |
 | `co_return_statement` | FLOW_SYNC | NONE | co_return statement: `co_return value;` |
 
 ## Exception Handling
@@ -277,13 +268,12 @@ Preprocessor and metadata
 |-----------|---------------|-----------------|-------------|
 | `preproc_def` | METADATA_DIRECTIVE | NONE | Object-like macro definition |
 | `preproc_ifdef` | METADATA_DIRECTIVE | NONE | #ifdef directive |
-| `preproc_ifndef` | METADATA_DIRECTIVE | NONE | #ifndef directive |
 | `preproc_if` | METADATA_DIRECTIVE | NONE | #if directive |
 | `preproc_else` | METADATA_DIRECTIVE | NONE | #else directive |
 | `preproc_call` | METADATA_DIRECTIVE | NONE | Preprocessor macro call |
-| `preproc_directive` | METADATA_DIRECTIVE | NONE | Generic preprocessor directive |
-| `preproc_arg` | METADATA_DIRECTIVE | NONE | Preprocessor argument |
-| `comment` | METADATA_COMMENT | NONE | Comment: line or block style |
+| `preproc_directive` | METADATA_DIRECTIVE | NODE_TEXT | Generic preprocessor directive |
+| `preproc_arg` | METADATA_DIRECTIVE | NODE_TEXT | Preprocessor argument |
+| `comment` | METADATA_COMMENT | NODE_TEXT | Comment: line or block style |
 
 ## Punctuation
 
@@ -319,7 +309,7 @@ Simple and compound assignment
 | `/=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `%=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `&=` | OPERATOR_ASSIGNMENT | NONE |  |
-| `|=` | OPERATOR_ASSIGNMENT | NONE |  |
+| `\|=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `^=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `<<=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `>>=` | OPERATOR_ASSIGNMENT | NONE |  |
@@ -349,7 +339,7 @@ Mathematical and bitwise operators
 | `/` | OPERATOR_ARITHMETIC | NONE |  |
 | `%` | OPERATOR_ARITHMETIC | NONE |  |
 | `&` | OPERATOR_ARITHMETIC | NONE |  |
-| `|` | OPERATOR_ARITHMETIC | NONE |  |
+| `\|` | OPERATOR_ARITHMETIC | NONE |  |
 | `^` | OPERATOR_ARITHMETIC | NONE |  |
 | `~` | OPERATOR_ARITHMETIC | NONE |  |
 | `<<` | OPERATOR_ARITHMETIC | NONE |  |
@@ -364,7 +354,7 @@ Boolean operators
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `&&` | OPERATOR_LOGICAL | NONE | Boolean operators |
-| `||` | OPERATOR_LOGICAL | NONE |  |
+| `\|\|` | OPERATOR_LOGICAL | NONE |  |
 | `!` | OPERATOR_LOGICAL | NONE |  |
 
 ## Member Access Operators
@@ -452,8 +442,6 @@ Preprocessor directive keywords
 | `#else` | METADATA_DIRECTIVE | NONE |  |
 | `#elif` | METADATA_DIRECTIVE | NONE |  |
 | `#endif` | METADATA_DIRECTIVE | NONE |  |
-| `#undef` | METADATA_DIRECTIVE | NONE |  |
-| `#pragma` | METADATA_DIRECTIVE | NONE |  |
 
 ## Parser Errors
 
@@ -462,6 +450,15 @@ Error nodes from parsing
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `ERROR` | PARSER_SYNTAX | NONE | Error nodes from parsing |
+
+## Other Node Types
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `literal_suffix` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `ms_restrict_modifier` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `ms_signed_ptr_modifier` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `ms_unsigned_ptr_modifier` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

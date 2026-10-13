@@ -51,11 +51,11 @@ Every Go file starts with a package clause. The `main` package is special as it 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `source_file` | DEFINITION_MODULE | NONE | Package declarations and import statements |
-| `package_clause` | DEFINITION_MODULE | FIND_IDENTIFIER |  |
+| `package_clause` | DEFINITION_MODULE | CUSTOM |  |
 | `package_identifier` | NAME_IDENTIFIER | NODE_TEXT |  |
-| `import_declaration` | EXTERNAL_IMPORT | Import::MODULE | NONE |  |
-| `import_spec` | EXTERNAL_IMPORT | Import::MODULE | NODE_TEXT |  |
-| `import_spec_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE |  |
+| `import_declaration` | EXTERNAL_IMPORT \| Import::MODULE | NONE |  |
+| `import_spec` | EXTERNAL_IMPORT \| Import::MODULE | NODE_TEXT |  |
+| `import_spec_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE |  |
 
 ## Function Definitions
 
@@ -65,9 +65,9 @@ Go distinguishes between: - `function_declaration`: Package-level functions - `m
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_declaration` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Functions, methods, and function literals |
-| `method_declaration` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER |  |
-| `func_literal` | DEFINITION_FUNCTION | Function::LAMBDA | NONE |  |
+| `function_declaration` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Functions, methods, and function literals |
+| `method_declaration` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER |  |
+| `func_literal` | DEFINITION_FUNCTION \| Function::LAMBDA | FIND_ASSIGNMENT_TARGET |  |
 | `method_elem` | DEFINITION_FUNCTION | FIND_IDENTIFIER |  |
 
 ## Type Definitions
@@ -80,8 +80,8 @@ Go uses composition over inheritance: - `struct_type`: Product types with fields
 |-----------|---------------|-----------------|-------------|
 | `type_declaration` | EXECUTION_DECLARATION | FIND_IDENTIFIER | Struct and interface definitions |
 | `type_spec` | EXECUTION_DECLARATION | FIND_IDENTIFIER |  |
-| `struct_type` | DEFINITION_CLASS | Class::REGULAR | NONE |  |
-| `interface_type` | DEFINITION_CLASS | Class::ABSTRACT | NONE |  |
+| `struct_type` | DEFINITION_CLASS \| Class::REGULAR | NONE |  |
+| `interface_type` | DEFINITION_CLASS \| Class::ABSTRACT | NONE |  |
 
 ## Variable Declarations
 
@@ -91,15 +91,15 @@ Go has several variable declaration forms: - `var x int`: Explicit var declarati
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `var_declaration` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Variable and constant declarations |
-| `var_spec` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER |  |
-| `var_spec_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE |  |
-| `const_declaration` | DEFINITION_VARIABLE | Variable::IMMUTABLE | FIND_IDENTIFIER |  |
-| `const_spec` | DEFINITION_VARIABLE | Variable::IMMUTABLE | FIND_IDENTIFIER |  |
-| `short_var_declaration` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER |  |
-| `parameter_declaration` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER |  |
-| `variadic_parameter_declaration` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER |  |
-| `field_declaration` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER |  |
+| `var_declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Variable and constant declarations |
+| `var_spec` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER |  |
+| `var_spec_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE |  |
+| `const_declaration` | DEFINITION_VARIABLE \| Variable::IMMUTABLE | FIND_IDENTIFIER |  |
+| `const_spec` | DEFINITION_VARIABLE \| Variable::IMMUTABLE | FIND_IDENTIFIER |  |
+| `short_var_declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER |  |
+| `parameter_declaration` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER |  |
+| `variadic_parameter_declaration` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER |  |
+| `field_declaration` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER |  |
 
 ## Function Calls and Access
 
@@ -109,7 +109,7 @@ Go uses `selector_expression` for both field access and method calls. The FIND_P
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `call_expression` | COMPUTATION_CALL | Call::FUNCTION | FIND_CALL_TARGET | Function calls, method calls, and field/index access |
+| `call_expression` | COMPUTATION_CALL \| Call::FUNCTION | FIND_CALL_TARGET | Function calls, method calls, and field/index access |
 | `type_conversion_expression` | COMPUTATION_CALL | FIND_CALL_TARGET |  |
 | `selector_expression` | COMPUTATION_ACCESS | FIND_PROPERTY |  |
 | `index_expression` | COMPUTATION_ACCESS | NONE |  |
@@ -136,21 +136,21 @@ Go literals include: - Numeric: int, float, imaginary (complex numbers!) - Strin
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `int_literal` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT | Numeric, string, and composite literals |
-| `float_literal` | LITERAL_NUMBER | Number::FLOAT | NODE_TEXT |  |
-| `imaginary_literal` | LITERAL_NUMBER | Number::COMPLEX | NODE_TEXT |  |
-| `interpreted_string_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT |  |
-| `raw_string_literal` | LITERAL_STRING | String::RAW | NODE_TEXT |  |
-| `rune_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT |  |
-| `interpreted_string_literal_content` | LITERAL_STRING | NONE |  |
-| `escape_sequence` | LITERAL_STRING | NONE |  |
+| `int_literal` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Numeric, string, and composite literals |
+| `float_literal` | LITERAL_NUMBER \| Number::FLOAT | NODE_TEXT |  |
+| `imaginary_literal` | LITERAL_NUMBER \| Number::COMPLEX | NODE_TEXT |  |
+| `interpreted_string_literal` | LITERAL_STRING \| String::LITERAL | NODE_TEXT |  |
+| `raw_string_literal` | LITERAL_STRING \| String::RAW | NODE_TEXT |  |
+| `rune_literal` | LITERAL_STRING \| String::LITERAL | NODE_TEXT |  |
+| `interpreted_string_literal_content` | LITERAL_STRING | NODE_TEXT |  |
+| `escape_sequence` | LITERAL_STRING | NODE_TEXT |  |
 | `nil` | LITERAL_ATOMIC | NODE_TEXT |  |
 | `true` | LITERAL_ATOMIC | NODE_TEXT |  |
 | `false` | LITERAL_ATOMIC | NODE_TEXT |  |
 | `iota` | LITERAL_ATOMIC | NODE_TEXT |  |
-| `composite_literal` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE |  |
-| `literal_value` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE |  |
-| `literal_element` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE |  |
+| `composite_literal` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE |  |
+| `literal_value` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE |  |
+| `literal_element` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE |  |
 
 ## Control Flow
 
@@ -160,20 +160,19 @@ Go control flow: - `if`: Binary conditional (can include init statement) - `for`
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if_statement` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | Conditionals, loops, and jump statements |
-| `switch_statement` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE |  |
+| `if_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | Conditionals, loops, and jump statements |
 | `expression_switch_statement` | FLOW_CONDITIONAL | NONE |  |
-| `type_switch_statement` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE |  |
-| `select_statement` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE |  |
+| `type_switch_statement` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE |  |
+| `select_statement` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE |  |
 | `expression_case` | FLOW_CONDITIONAL | NONE |  |
 | `default_case` | FLOW_CONDITIONAL | NONE |  |
-| `for_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE |  |
+| `for_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE |  |
 | `for_clause` | FLOW_LOOP | NONE |  |
-| `range_clause` | FLOW_LOOP | Loop::ITERATOR | NONE |  |
-| `return_statement` | FLOW_JUMP | Jump::RETURN | NONE |  |
-| `break_statement` | FLOW_JUMP | Jump::BREAK | NONE |  |
-| `continue_statement` | FLOW_JUMP | Jump::CONTINUE | NONE |  |
-| `goto_statement` | FLOW_JUMP | Jump::GOTO | NONE |  |
+| `range_clause` | FLOW_LOOP \| Loop::ITERATOR | NONE |  |
+| `return_statement` | FLOW_JUMP \| Jump::RETURN | NONE |  |
+| `break_statement` | FLOW_JUMP \| Jump::BREAK | NONE |  |
+| `continue_statement` | FLOW_JUMP \| Jump::CONTINUE | NONE |  |
+| `goto_statement` | FLOW_JUMP \| Jump::GOTO | NONE |  |
 
 ## Concurrency Constructs
 
@@ -218,9 +217,9 @@ Go operators: - Standard arithmetic: `+`, `-`, `*`, `/`, `%` - Bitwise: `&`, `|`
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `binary_expression` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Arithmetic, logical, comparison, and assignment operators |
-| `unary_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE |  |
-| `assignment_statement` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE |  |
+| `binary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Arithmetic, logical, comparison, and assignment operators |
+| `unary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE |  |
+| `assignment_statement` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | NONE |  |
 | `parenthesized_expression` | COMPUTATION_EXPRESSION | NONE |  |
 
 ## Statements
@@ -240,11 +239,11 @@ Blocks, lists, and organizational nodes
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `block` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Blocks, lists, and organizational nodes |
-| `expression_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE |  |
-| `argument_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE |  |
-| `parameter_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE |  |
-| `field_declaration_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE |  |
+| `block` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Blocks, lists, and organizational nodes |
+| `expression_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE |  |
+| `argument_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE |  |
+| `parameter_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE |  |
+| `field_declaration_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE |  |
 
 ## Comments
 
@@ -252,9 +251,7 @@ Line and block comments
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `comment` | METADATA_COMMENT | NONE | Line and block comments |
-| `line_comment` | METADATA_COMMENT | NONE |  |
-| `block_comment` | METADATA_COMMENT | NONE |  |
+| `comment` | METADATA_COMMENT | NODE_TEXT | Line and block comments |
 
 ## Patterns
 
@@ -309,7 +306,7 @@ Individual operator symbols
 | `-=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `*=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `/=` | OPERATOR_ASSIGNMENT | NONE |  |
-| `|=` | OPERATOR_ASSIGNMENT | NONE |  |
+| `\|=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `&^=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `+` | OPERATOR_ARITHMETIC | NONE |  |
 | `-` | OPERATOR_ARITHMETIC | NONE |  |
@@ -317,7 +314,7 @@ Individual operator symbols
 | `/` | OPERATOR_ARITHMETIC | NONE |  |
 | `%` | OPERATOR_ARITHMETIC | NONE |  |
 | `&` | OPERATOR_ARITHMETIC | NONE |  |
-| `|` | OPERATOR_ARITHMETIC | NONE |  |
+| `\|` | OPERATOR_ARITHMETIC | NONE |  |
 | `^` | OPERATOR_ARITHMETIC | NONE |  |
 | `<<` | OPERATOR_ARITHMETIC | NONE |  |
 | `>>` | OPERATOR_ARITHMETIC | NONE |  |
@@ -331,7 +328,7 @@ Individual operator symbols
 | `>` | OPERATOR_COMPARISON | NONE |  |
 | `>=` | OPERATOR_COMPARISON | NONE |  |
 | `&&` | OPERATOR_LOGICAL | NONE |  |
-| `||` | OPERATOR_LOGICAL | NONE |  |
+| `\|\|` | OPERATOR_LOGICAL | NONE |  |
 | `!` | OPERATOR_LOGICAL | NONE |  |
 
 ## Punctuation
@@ -359,6 +356,13 @@ Error nodes from failed parsing
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `ERROR` | PARSER_SYNTAX | NODE_TEXT | Error nodes from failed parsing |
+
+## Other Node Types
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `blank_identifier` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `raw_string_literal_content` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

@@ -56,7 +56,6 @@ HTML document structure: - `<!DOCTYPE html>` - document type declaration - `<htm
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `document` | DEFINITION_MODULE | NONE | Document root - complete HTML document |
-| `fragment` | DEFINITION_MODULE | NONE | Fragment - partial HTML content |
 | `doctype` | METADATA_DIRECTIVE | NODE_TEXT | DOCTYPE declaration - `<!DOCTYPE html>` |
 
 ## Elements
@@ -87,7 +86,6 @@ HTML attributes: - `name="value"` - quoted value - `name=value` - unquoted value
 | `attribute_name` | NAME_IDENTIFIER | NODE_TEXT | Attribute name - the attribute identifier |
 | `attribute_value` | LITERAL_STRING | NODE_TEXT | Attribute value - the value part |
 | `quoted_attribute_value` | LITERAL_STRING | NODE_TEXT | Quoted attribute value - `"value"` |
-| `unquoted_attribute_value` | LITERAL_STRING | NODE_TEXT | Unquoted attribute value - `value` |
 
 ## Text and Content
 
@@ -99,8 +97,6 @@ Text content and special constructs
 | `raw_text` | LITERAL_STRING | NODE_TEXT | Raw text - text in script/style elements |
 | `comment` | METADATA_COMMENT | NODE_TEXT | Comment - `<!-- comment -->` |
 | `entity` | LITERAL_STRING | NODE_TEXT | Entity - character reference like `&nbsp;` |
-| `cdata_section` | LITERAL_STRING | NODE_TEXT | CDATA section - `<![CDATA[...]]>` |
-| `processing_instruction` | METADATA_DIRECTIVE | NODE_TEXT | Processing instruction - `<?target data?>` |
 
 ## Error Nodes
 
@@ -114,10 +110,6 @@ Parser error constructs
 ## DOCTYPE Components
 
 DOCTYPE declaration parts
-
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `doctype_name` | NAME_IDENTIFIER | NODE_TEXT | DOCTYPE name - `html` in `<!DOCTYPE html>` |
 
 ## Punctuation and Delimiters
 
@@ -138,39 +130,9 @@ Frequently used HTML element names
 
 These tag names are handled by the generic `tag_name` type, but are included for explicit recognition and IS_KEYWORD flagging.
 
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `html` | NAME_IDENTIFIER | NODE_TEXT | HTML root element |
-| `head` | NAME_IDENTIFIER | NODE_TEXT | Head element - metadata container |
-| `body` | NAME_IDENTIFIER | NODE_TEXT | Body element - content container |
-| `title` | NAME_IDENTIFIER | NODE_TEXT | Title element - document title |
-| `meta` | NAME_IDENTIFIER | NODE_TEXT | Meta element - metadata |
-| `link` | NAME_IDENTIFIER | NODE_TEXT | Link element - external resource |
-| `script` | NAME_IDENTIFIER | NODE_TEXT | Script element name |
-| `style` | NAME_IDENTIFIER | NODE_TEXT | Style element name |
-| `div` | NAME_IDENTIFIER | NODE_TEXT | Div element - generic container |
-| `span` | NAME_IDENTIFIER | NODE_TEXT | Span element - inline container |
-| `p` | NAME_IDENTIFIER | NODE_TEXT | Paragraph element |
-| `a` | NAME_IDENTIFIER | NODE_TEXT | Anchor element - hyperlink |
-| `img` | NAME_IDENTIFIER | NODE_TEXT | Image element |
-| `input` | NAME_IDENTIFIER | NODE_TEXT | Input element - form input |
-| `form` | NAME_IDENTIFIER | NODE_TEXT | Form element |
-| `table` | NAME_IDENTIFIER | NODE_TEXT | Table element |
-
 ## Common HTML Attributes
 
 Frequently used attribute names
-
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `id` | NAME_IDENTIFIER | NODE_TEXT | ID attribute - `id="value"` |
-| `class` | NAME_IDENTIFIER | NODE_TEXT | Class attribute - `class="value"` |
-| `src` | NAME_IDENTIFIER | NODE_TEXT | Source attribute - `src="url"` |
-| `href` | NAME_IDENTIFIER | NODE_TEXT | Href attribute - `href="url"` |
-| `alt` | NAME_IDENTIFIER | NODE_TEXT | Alt attribute - `alt="text"` |
-| `type` | NAME_IDENTIFIER | NODE_TEXT | Type attribute - `type="value"` |
-| `value` | NAME_IDENTIFIER | NODE_TEXT | Value attribute - `value="value"` |
-| `name` | NAME_IDENTIFIER | NODE_TEXT | Name attribute - `name="value"` |
 
 ## Parser Error Handling
 

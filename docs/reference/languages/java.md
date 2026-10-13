@@ -55,7 +55,7 @@ Java organizes code into packages. The `program` node represents the entire comp
 |-----------|---------------|-----------------|-------------|
 | `program` | DEFINITION_MODULE | NONE | Package declarations and import statements |
 | `package_declaration` | DEFINITION_MODULE | FIND_IDENTIFIER |  |
-| `import_declaration` | EXTERNAL_IMPORT | Import::MODULE | NODE_TEXT |  |
+| `import_declaration` | EXTERNAL_IMPORT \| Import::MODULE | NODE_TEXT |  |
 
 ## Class and Type Definitions
 
@@ -65,11 +65,11 @@ Java's type system includes: - `class`: Regular classes (REGULAR refinement) - `
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `class_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Classes, interfaces, enums, annotations, and records |
-| `interface_declaration` | DEFINITION_CLASS | Class::ABSTRACT | FIND_IDENTIFIER |  |
-| `enum_declaration` | DEFINITION_CLASS | Class::ENUM | FIND_IDENTIFIER |  |
-| `annotation_type_declaration` | DEFINITION_CLASS | Class::ABSTRACT | FIND_IDENTIFIER |  |
-| `record_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER |  |
+| `class_declaration` | DEFINITION_CLASS \| Class::REGULAR | FIND_IDENTIFIER | Classes, interfaces, enums, annotations, and records |
+| `interface_declaration` | DEFINITION_CLASS \| Class::ABSTRACT | FIND_IDENTIFIER |  |
+| `enum_declaration` | DEFINITION_CLASS \| Class::ENUM | FIND_IDENTIFIER |  |
+| `annotation_type_declaration` | DEFINITION_CLASS \| Class::ABSTRACT | FIND_IDENTIFIER |  |
+| `record_declaration` | DEFINITION_CLASS \| Class::REGULAR | FIND_IDENTIFIER |  |
 
 ## Method and Constructor Definitions
 
@@ -79,11 +79,10 @@ Java methods are always inside classes. Constructors are special methods that in
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `method_declaration` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Methods, constructors, and initializer blocks |
-| `constructor_declaration` | DEFINITION_FUNCTION | Function::CONSTRUCTOR | FIND_IDENTIFIER |  |
-| `static_initializer` | DEFINITION_FUNCTION | Function::REGULAR | NONE |  |
-| `instance_initializer` | DEFINITION_FUNCTION | Function::REGULAR | NONE |  |
-| `lambda_expression` | DEFINITION_FUNCTION | Function::LAMBDA | FIND_ASSIGNMENT_TARGET |  |
+| `method_declaration` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Methods, constructors, and initializer blocks |
+| `constructor_declaration` | DEFINITION_FUNCTION \| Function::CONSTRUCTOR | FIND_IDENTIFIER |  |
+| `static_initializer` | DEFINITION_FUNCTION \| Function::REGULAR | NONE |  |
+| `lambda_expression` | DEFINITION_FUNCTION \| Function::LAMBDA | FIND_ASSIGNMENT_TARGET |  |
 
 ## Field and Variable Declarations
 
@@ -93,13 +92,13 @@ Java variables are mutable by default. The `final` modifier makes them immutable
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `field_declaration` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER | Fields, local variables, and parameters |
-| `local_variable_declaration` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER |  |
-| `variable_declarator` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER |  |
-| `formal_parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER |  |
-| `spread_parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER |  |
-| `catch_formal_parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER |  |
-| `enum_constant` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER |  |
+| `field_declaration` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IN_DECLARATOR | Fields, local variables, and parameters |
+| `local_variable_declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IN_DECLARATOR |  |
+| `variable_declarator` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER |  |
+| `formal_parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER |  |
+| `spread_parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER |  |
+| `catch_formal_parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER |  |
+| `enum_constant` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER |  |
 
 ## Method Calls and Access
 
@@ -109,8 +108,8 @@ Java call expressions: - `method_invocation`: Calling methods on objects (METHOD
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `method_invocation` | COMPUTATION_CALL | Call::METHOD | FIND_CALL_TARGET | Method invocations, object creation, and field access |
-| `object_creation_expression` | COMPUTATION_CALL | Call::CONSTRUCTOR | FIND_CALL_TARGET |  |
+| `method_invocation` | COMPUTATION_CALL \| Call::METHOD | FIND_CALL_TARGET | Method invocations, object creation, and field access |
+| `object_creation_expression` | COMPUTATION_CALL \| Call::CONSTRUCTOR | FIND_CALL_TARGET |  |
 | `method_reference` | COMPUTATION_ACCESS | NODE_TEXT |  |
 | `field_access` | COMPUTATION_ACCESS | FIND_IDENTIFIER |  |
 | `array_access` | COMPUTATION_ACCESS | NONE |  |
@@ -142,11 +141,11 @@ Java operators include: - Arithmetic: `+`, `-`, `*`, `/`, `%`, bitwise, shifts -
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `assignment_expression` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE | Arithmetic, logical, comparison, and assignment operators |
-| `binary_expression` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE |  |
-| `unary_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE |  |
-| `update_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE |  |
-| `ternary_expression` | FLOW_CONDITIONAL | Conditional::TERNARY | NONE |  |
+| `assignment_expression` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | NONE | Arithmetic, logical, comparison, and assignment operators |
+| `binary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE |  |
+| `unary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE |  |
+| `update_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE |  |
+| `ternary_expression` | FLOW_CONDITIONAL \| Conditional::TERNARY | NONE |  |
 | `parenthesized_expression` | COMPUTATION_EXPRESSION | NONE |  |
 
 ## Identifiers
@@ -166,18 +165,18 @@ Java numeric literals can have various bases: - Decimal: `123` - Hexadecimal: `0
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `decimal_integer_literal` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT | Numeric, string, and boolean literals |
-| `hex_integer_literal` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT |  |
-| `octal_integer_literal` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT |  |
-| `binary_integer_literal` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT |  |
-| `decimal_floating_point_literal` | LITERAL_NUMBER | Number::FLOAT | NODE_TEXT |  |
-| `hex_floating_point_literal` | LITERAL_NUMBER | Number::FLOAT | NODE_TEXT |  |
+| `decimal_integer_literal` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Numeric, string, and boolean literals |
+| `hex_integer_literal` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT |  |
+| `octal_integer_literal` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT |  |
+| `binary_integer_literal` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT |  |
+| `decimal_floating_point_literal` | LITERAL_NUMBER \| Number::FLOAT | NODE_TEXT |  |
+| `hex_floating_point_literal` | LITERAL_NUMBER \| Number::FLOAT | NODE_TEXT |  |
 | `true` | LITERAL_ATOMIC | NODE_TEXT |  |
 | `false` | LITERAL_ATOMIC | NODE_TEXT |  |
 | `null_literal` | LITERAL_ATOMIC | NODE_TEXT |  |
-| `string_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT |  |
-| `string_fragment` | LITERAL_STRING | String::LITERAL | NODE_TEXT |  |
-| `character_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT |  |
+| `string_literal` | LITERAL_STRING \| String::LITERAL | NODE_TEXT |  |
+| `string_fragment` | LITERAL_STRING \| String::LITERAL | NODE_TEXT |  |
+| `character_literal` | LITERAL_STRING \| String::LITERAL | NODE_TEXT |  |
 
 ## Control Flow
 
@@ -187,17 +186,16 @@ Java control flow constructs: - `if`/`else`: Binary conditional - `switch`: Mult
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if_statement` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | Conditionals, loops, and jump statements |
-| `switch_statement` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE |  |
-| `switch_expression` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE |  |
-| `while_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE |  |
-| `do_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE |  |
-| `for_statement` | FLOW_LOOP | Loop::COUNTER | NONE |  |
-| `enhanced_for_statement` | FLOW_LOOP | Loop::ITERATOR | NONE |  |
-| `break_statement` | FLOW_JUMP | Jump::BREAK | NONE |  |
-| `continue_statement` | FLOW_JUMP | Jump::CONTINUE | NONE |  |
-| `return_statement` | FLOW_JUMP | Jump::RETURN | NONE |  |
-| `yield_statement` | FLOW_JUMP | Jump::RETURN | NONE |  |
+| `if_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | Conditionals, loops, and jump statements |
+| `switch_expression` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE |  |
+| `while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE |  |
+| `do_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE |  |
+| `for_statement` | FLOW_LOOP \| Loop::COUNTER | NONE |  |
+| `enhanced_for_statement` | FLOW_LOOP \| Loop::ITERATOR | NONE |  |
+| `break_statement` | FLOW_JUMP \| Jump::BREAK | NONE |  |
+| `continue_statement` | FLOW_JUMP \| Jump::CONTINUE | NONE |  |
+| `return_statement` | FLOW_JUMP \| Jump::RETURN | NONE |  |
+| `yield_statement` | FLOW_JUMP \| Jump::RETURN | NONE |  |
 
 ## Exception Handling
 
@@ -236,7 +234,6 @@ Java modifiers control visibility and behavior: - Access: `public`, `private`, `
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `modifiers` | METADATA_ANNOTATION | NONE | Access modifiers and other modifier keywords |
-| `modifier` | METADATA_ANNOTATION | NODE_TEXT |  |
 
 ## Comments
 
@@ -253,13 +250,13 @@ Blocks, lists, and organizational nodes
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `block` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Blocks, lists, and organizational nodes |
+| `block` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Blocks, lists, and organizational nodes |
 | `class_body` | ORGANIZATION_BLOCK | NONE |  |
 | `interface_body` | ORGANIZATION_BLOCK | NONE |  |
 | `enum_body` | ORGANIZATION_BLOCK | NONE |  |
 | `constructor_body` | ORGANIZATION_BLOCK | NONE |  |
-| `argument_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE |  |
-| `formal_parameters` | ORGANIZATION_LIST | Organization::COLLECTION | NONE |  |
+| `argument_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE |  |
+| `formal_parameters` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE |  |
 | `expression_statement` | EXECUTION_STATEMENT | NONE |  |
 
 ## Keywords
@@ -309,7 +306,7 @@ Individual operator symbols
 | `/=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `%=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `&=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
-| `|=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
+| `\|=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `^=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `<<=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `>>=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
@@ -327,7 +324,7 @@ Individual operator symbols
 | `/` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `%` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `&` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
-| `|` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
+| `\|` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `^` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `~` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `<<` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
@@ -336,7 +333,7 @@ Individual operator symbols
 | `++` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `--` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `&&` | OPERATOR_LOGICAL | NODE_TEXT |  |
-| `||` | OPERATOR_LOGICAL | NODE_TEXT |  |
+| `\|\|` | OPERATOR_LOGICAL | NODE_TEXT |  |
 | `!` | OPERATOR_LOGICAL | NODE_TEXT |  |
 | `?` | FLOW_CONDITIONAL | NODE_TEXT |  |
 | `::` | COMPUTATION_ACCESS | NODE_TEXT |  |
@@ -353,11 +350,17 @@ Delimiters, separators, and syntax markers
 | `]` | PARSER_DELIMITER | NODE_TEXT |  |
 | `{` | PARSER_DELIMITER | NODE_TEXT |  |
 | `}` | PARSER_DELIMITER | NODE_TEXT |  |
-| `'` | PARSER_DELIMITER | NODE_TEXT |  |
 | `,` | PARSER_PUNCTUATION | NODE_TEXT |  |
 | `;` | PARSER_PUNCTUATION | NODE_TEXT |  |
 | `.` | PARSER_PUNCTUATION | NODE_TEXT |  |
 | `:` | PARSER_PUNCTUATION | NODE_TEXT |  |
+
+## Other Node Types
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `escape_sequence` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `underscore_pattern` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

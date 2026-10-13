@@ -132,7 +132,7 @@ YAML syntax tokens
 | `]` | PARSER_DELIMITER | NODE_TEXT | Closing bracket - flow sequence `]` |
 | `{` | PARSER_DELIMITER | NODE_TEXT | Opening brace - flow mapping `{` |
 | `}` | PARSER_DELIMITER | NODE_TEXT | Closing brace - flow mapping `}` |
-| `|` | PARSER_PUNCTUATION | NODE_TEXT | Pipe - literal scalar indicator `|` |
+| `\|` | PARSER_PUNCTUATION | NODE_TEXT | Pipe - literal scalar indicator `\|` |
 | `>` | PARSER_PUNCTUATION | NODE_TEXT | Greater than - folded scalar indicator `>` |
 | `---` | PARSER_DELIMITER | NODE_TEXT | Document start marker - `---` |
 | `...` | PARSER_DELIMITER | NODE_TEXT | Document end marker - `...` |
@@ -155,7 +155,7 @@ Parser error nodes
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `block_scalar` | LITERAL_STRING | NODE_TEXT | Block scalar body - both `|` (literal) and `>` (folded) forms |
+| `block_scalar` | LITERAL_STRING | NODE_TEXT | Block scalar body - both `\|` (literal) and `>` (folded) forms |
 | `anchor_name` | NAME_IDENTIFIER | NODE_TEXT | Anchor name - the identifier introduced by `&name` |
 | `alias_name` | NAME_IDENTIFIER | NODE_TEXT | Alias name - the identifier referenced by `*name` |
 | `tag_handle` | METADATA_ANNOTATION | NODE_TEXT | Tag handle in a `%TAG` directive, e.g. `!ex!` |

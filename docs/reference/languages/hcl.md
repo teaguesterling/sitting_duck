@@ -192,7 +192,7 @@ Splat types: - Attribute: `list.*.attr` - Full: `list[*].attr`
 | `splat` | COMPUTATION_ACCESS | NONE | Splat expression container |
 | `attr_splat` | COMPUTATION_ACCESS | NONE | Attribute splat - `.*` |
 | `full_splat` | COMPUTATION_ACCESS | NONE | Full splat - `[*]` |
-| `ellipsis` | PARSER_SYNTAX | NONE | Ellipsis - `...` |
+| `ellipsis` | PARSER_SYNTAX | NODE_TEXT | Ellipsis - `...` |
 
 ## Template Expressions
 
@@ -204,12 +204,12 @@ Template syntax: - Interpolation: `${expression}` - Directive: `%{if cond}...%{e
 |-----------|---------------|-----------------|-------------|
 | `template_expr` | LITERAL_STRING | NONE | Template expression container |
 | `quoted_template` | LITERAL_STRING | NONE | Quoted template - `"...${...}..."` |
-| `quoted_template_start` | PARSER_DELIMITER | NONE | Quoted template start - opening `"` |
-| `quoted_template_end` | PARSER_DELIMITER | NONE | Quoted template end - closing `"` |
+| `quoted_template_start` | PARSER_DELIMITER | NODE_TEXT | Quoted template start - opening `"` |
+| `quoted_template_end` | PARSER_DELIMITER | NODE_TEXT | Quoted template end - closing `"` |
 | `template_literal` | LITERAL_STRING | NODE_TEXT | Template literal - static text |
 | `template_interpolation` | COMPUTATION_CALL | NONE | Template interpolation - `${expr}` |
-| `template_interpolation_start` | PARSER_DELIMITER | NONE | Interpolation start - `${` |
-| `template_interpolation_end` | PARSER_DELIMITER | NONE | Interpolation end - `}` |
+| `template_interpolation_start` | PARSER_DELIMITER | NODE_TEXT | Interpolation start - `${` |
+| `template_interpolation_end` | PARSER_DELIMITER | NODE_TEXT | Interpolation end - `}` |
 
 ## Template Directives
 
@@ -220,8 +220,8 @@ Directive syntax: - If: `%{if cond}...%{else}...%{endif}` - For: `%{for x in lis
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `template_directive` | FLOW_CONDITIONAL | NONE | Template directive container |
-| `template_directive_start` | PARSER_DELIMITER | NONE | Template directive start - `%{` |
-| `template_directive_end` | PARSER_DELIMITER | NONE | Template directive end - `}` |
+| `template_directive_start` | PARSER_DELIMITER | NODE_TEXT | Template directive start - `%{` |
+| `template_directive_end` | PARSER_DELIMITER | NODE_TEXT | Template directive end - `}` |
 | `template_if` | FLOW_CONDITIONAL | NONE | Template if block |
 | `template_if_intro` | FLOW_CONDITIONAL | NONE | Template if intro - `%{if cond}` |
 | `template_if_end` | FLOW_CONDITIONAL | NONE | Template if end - `%{endif}` |
@@ -229,7 +229,7 @@ Directive syntax: - If: `%{if cond}...%{else}...%{endif}` - For: `%{for x in lis
 | `template_for` | FLOW_LOOP | NONE | Template for block |
 | `template_for_start` | FLOW_LOOP | NONE | Template for start - `%{for ...}` |
 | `template_for_end` | FLOW_LOOP | NONE | Template for end - `%{endfor}` |
-| `strip_marker` | PARSER_SYNTAX | NONE | Strip marker - `~` |
+| `strip_marker` | PARSER_SYNTAX | NODE_TEXT | Strip marker - `~` |
 
 ## Heredocs
 
@@ -249,7 +249,7 @@ HCL comment syntax
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `comment` | METADATA_COMMENT | NONE | Comment |
+| `comment` | METADATA_COMMENT | NODE_TEXT | Comment |
 
 ## Arithmetic Operators
 
@@ -283,7 +283,7 @@ HCL logical operator tokens
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `&&` | OPERATOR_LOGICAL | NODE_TEXT | Logical and - `&&` |
-| `||` | OPERATOR_LOGICAL | NODE_TEXT | Logical or - `||` |
+| `\|\|` | OPERATOR_LOGICAL | NODE_TEXT | Logical or - `\|\|` |
 | `!` | OPERATOR_LOGICAL | NODE_TEXT | Logical not - `!` |
 
 ## Assignment Operators

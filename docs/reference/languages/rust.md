@@ -51,11 +51,11 @@ Rust organizes code into modules (`mod`) and external crates. The `source_file` 
 |-----------|---------------|-----------------|-------------|
 | `source_file` | DEFINITION_MODULE | NONE | Module structure and external crate declarations |
 | `mod_item` | DEFINITION_MODULE | FIND_IDENTIFIER |  |
-| `use_declaration` | EXTERNAL_IMPORT | Import::MODULE | NODE_TEXT |  |
-| `extern_crate_declaration` | EXTERNAL_IMPORT | Import::MODULE | FIND_IDENTIFIER |  |
-| `use_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE |  |
-| `use_as_clause` | EXTERNAL_IMPORT | Import::SELECTIVE | FIND_IDENTIFIER |  |
-| `use_wildcard` | EXTERNAL_IMPORT | Import::WILDCARD | NODE_TEXT |  |
+| `use_declaration` | EXTERNAL_IMPORT \| Import::MODULE | NODE_TEXT |  |
+| `extern_crate_declaration` | EXTERNAL_IMPORT \| Import::MODULE | FIND_IDENTIFIER |  |
+| `use_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE |  |
+| `use_as_clause` | EXTERNAL_IMPORT \| Import::SELECTIVE | FIND_IDENTIFIER |  |
+| `use_wildcard` | EXTERNAL_IMPORT \| Import::WILDCARD | NODE_TEXT |  |
 
 ## Function Definitions
 
@@ -65,10 +65,10 @@ Rust functions use `fn` keyword and always have bodies (except in trait definiti
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_item` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Functions, closures, and function signatures |
-| `closure_expression` | DEFINITION_FUNCTION | Function::LAMBDA | FIND_ASSIGNMENT_TARGET |  |
-| `function_signature_item` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER |  |
-| `macro_definition` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER |  |
+| `function_item` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Functions, closures, and function signatures |
+| `closure_expression` | DEFINITION_FUNCTION \| Function::LAMBDA | FIND_ASSIGNMENT_TARGET |  |
+| `function_signature_item` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER |  |
+| `macro_definition` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER |  |
 
 ## Type Definitions
 
@@ -78,11 +78,11 @@ Rust has several type definition constructs: - `struct`: Product types with name
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `struct_item` | DEFINITION_CLASS | Class::REGULAR | CUSTOM | Structs, enums, unions, traits, and type aliases |
-| `enum_item` | DEFINITION_CLASS | Class::ENUM | CUSTOM |  |
-| `union_item` | DEFINITION_CLASS | Class::REGULAR | CUSTOM |  |
-| `trait_item` | DEFINITION_CLASS | Class::ABSTRACT | CUSTOM |  |
-| `type_item` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER |  |
+| `struct_item` | DEFINITION_CLASS \| Class::REGULAR | CUSTOM | Structs, enums, unions, traits, and type aliases |
+| `enum_item` | DEFINITION_CLASS \| Class::ENUM | CUSTOM |  |
+| `union_item` | DEFINITION_CLASS \| Class::REGULAR | CUSTOM |  |
+| `trait_item` | DEFINITION_CLASS \| Class::ABSTRACT | CUSTOM |  |
+| `type_item` | DEFINITION_CLASS \| Class::REGULAR | FIND_IDENTIFIER |  |
 
 ## Implementation Blocks
 
@@ -92,8 +92,8 @@ Rust separates type definitions from their implementations. An `impl` block can 
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `impl_item` | DEFINITION_CLASS | Class::REGULAR | CUSTOM | Impl blocks and associated types |
-| `associated_type` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER |  |
+| `impl_item` | DEFINITION_CLASS \| Class::REGULAR | CUSTOM | Impl blocks and associated types |
+| `associated_type` | DEFINITION_CLASS \| Class::REGULAR | FIND_IDENTIFIER |  |
 
 ## Variable Declarations
 
@@ -103,12 +103,12 @@ Rust variables are immutable by default. The `mut` keyword makes them mutable. H
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `let_declaration` | DEFINITION_VARIABLE | Variable::IMMUTABLE | FIND_IDENTIFIER | Let bindings, constants, and statics |
-| `const_item` | DEFINITION_VARIABLE | Variable::IMMUTABLE | FIND_IDENTIFIER |  |
-| `static_item` | DEFINITION_VARIABLE | Variable::IMMUTABLE | FIND_IDENTIFIER |  |
-| `parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER |  |
-| `field_declaration` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER |  |
-| `enum_variant` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER |  |
+| `let_declaration` | DEFINITION_VARIABLE \| Variable::IMMUTABLE | FIND_IDENTIFIER | Let bindings, constants, and statics |
+| `const_item` | DEFINITION_VARIABLE \| Variable::IMMUTABLE | FIND_IDENTIFIER |  |
+| `static_item` | DEFINITION_VARIABLE \| Variable::IMMUTABLE | FIND_IDENTIFIER |  |
+| `parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER |  |
+| `field_declaration` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER |  |
+| `enum_variant` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER |  |
 
 ## Function Calls and Access
 
@@ -118,9 +118,8 @@ Rust distinguishes between function calls and method calls syntactically. Method
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `call_expression` | COMPUTATION_CALL | Call::FUNCTION | FIND_CALL_TARGET | Function calls, method calls, and field/index access |
-| `method_call_expression` | COMPUTATION_CALL | Call::METHOD | FIND_CALL_TARGET |  |
-| `macro_invocation` | COMPUTATION_CALL | Call::MACRO | FIND_CALL_TARGET |  |
+| `call_expression` | COMPUTATION_CALL \| Call::FUNCTION | FIND_CALL_TARGET | Function calls, method calls, and field/index access |
+| `macro_invocation` | COMPUTATION_CALL \| Call::MACRO | FIND_CALL_TARGET |  |
 | `field_expression` | COMPUTATION_ACCESS | FIND_IDENTIFIER |  |
 | `index_expression` | COMPUTATION_ACCESS | NONE |  |
 
@@ -146,15 +145,15 @@ Rust literals include numbers, strings, chars, and structured data. Raw strings 
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `integer_literal` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT | Numeric, string, and structured literals |
-| `float_literal` | LITERAL_NUMBER | Number::FLOAT | NODE_TEXT |  |
-| `string_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT |  |
-| `raw_string_literal` | LITERAL_STRING | String::RAW | NODE_TEXT |  |
-| `char_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT |  |
+| `integer_literal` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Numeric, string, and structured literals |
+| `float_literal` | LITERAL_NUMBER \| Number::FLOAT | NODE_TEXT |  |
+| `string_literal` | LITERAL_STRING \| String::LITERAL | NODE_TEXT |  |
+| `raw_string_literal` | LITERAL_STRING \| String::RAW | NODE_TEXT |  |
+| `char_literal` | LITERAL_STRING \| String::LITERAL | NODE_TEXT |  |
 | `boolean_literal` | LITERAL_ATOMIC | NODE_TEXT |  |
-| `array_expression` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE |  |
-| `tuple_expression` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE |  |
-| `struct_expression` | LITERAL_STRUCTURED | Structured::MAPPING | NONE |  |
+| `array_expression` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE |  |
+| `tuple_expression` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE |  |
+| `struct_expression` | LITERAL_STRUCTURED \| Structured::MAPPING | NONE |  |
 
 ## Control Flow
 
@@ -164,15 +163,15 @@ Rust control flow constructs are expressions that return values. The `match` exp
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if_expression` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | Conditionals, loops, and jump expressions |
-| `match_expression` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE |  |
+| `if_expression` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | Conditionals, loops, and jump expressions |
+| `match_expression` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE |  |
 | `match_arm` | FLOW_CONDITIONAL | NONE |  |
-| `while_expression` | FLOW_LOOP | Loop::CONDITIONAL | NONE |  |
-| `for_expression` | FLOW_LOOP | Loop::ITERATOR | NONE |  |
-| `loop_expression` | FLOW_LOOP | Loop::INFINITE | NONE |  |
-| `break_expression` | FLOW_JUMP | Jump::BREAK | NONE |  |
-| `continue_expression` | FLOW_JUMP | Jump::CONTINUE | NONE |  |
-| `return_expression` | FLOW_JUMP | Jump::RETURN | NONE |  |
+| `while_expression` | FLOW_LOOP \| Loop::CONDITIONAL | NONE |  |
+| `for_expression` | FLOW_LOOP \| Loop::ITERATOR | NONE |  |
+| `loop_expression` | FLOW_LOOP \| Loop::INFINITE | NONE |  |
+| `break_expression` | FLOW_JUMP \| Jump::BREAK | NONE |  |
+| `continue_expression` | FLOW_JUMP \| Jump::CONTINUE | NONE |  |
+| `return_expression` | FLOW_JUMP \| Jump::RETURN | NONE |  |
 
 ## Pattern Matching
 
@@ -186,7 +185,6 @@ Rust patterns appear in `let` bindings, `match` arms, and function parameters. T
 | `tuple_pattern` | PATTERN_DESTRUCTURE | NONE |  |
 | `struct_pattern` | PATTERN_DESTRUCTURE | NONE |  |
 | `reference_pattern` | PATTERN_DESTRUCTURE | NONE |  |
-| `wildcard_pattern` | PATTERN_COLLECT | NODE_TEXT |  |
 | `range_pattern` | PATTERN_COLLECT | NONE |  |
 
 ## Type System
@@ -203,7 +201,6 @@ Rust has a rich type system with generics, lifetimes, and trait bounds. Type cat
 | `tuple_type` | TYPE_COMPOSITE | NONE |  |
 | `array_type` | TYPE_COMPOSITE | NONE |  |
 | `function_type` | TYPE_COMPOSITE | NONE |  |
-| `trait_object_type` | TYPE_COMPOSITE | NONE |  |
 | `generic_type` | TYPE_GENERIC | NONE |  |
 | `type_parameters` | TYPE_GENERIC | NONE |  |
 | `type_parameter` | TYPE_GENERIC | FIND_IDENTIFIER |  |
@@ -221,11 +218,11 @@ Rust operators follow standard precedence rules. Range operators (`..`, `..=`) a
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `assignment_expression` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE | Arithmetic, logical, comparison, and assignment operators |
-| `compound_assignment_expr` | OPERATOR_ASSIGNMENT | Assignment::COMPOUND | NONE |  |
-| `binary_expression` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE |  |
-| `unary_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE |  |
-| `range_expression` | OPERATOR_ARITHMETIC | Arithmetic::RANGE | NONE |  |
+| `assignment_expression` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | NONE | Arithmetic, logical, comparison, and assignment operators |
+| `compound_assignment_expr` | OPERATOR_ASSIGNMENT \| Assignment::COMPOUND | NONE |  |
+| `binary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE |  |
+| `unary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE |  |
+| `range_expression` | OPERATOR_ARITHMETIC \| Arithmetic::RANGE | NONE |  |
 
 ## Blocks and Statements
 
@@ -280,11 +277,11 @@ These nodes organize other nodes into logical groups (parameters, arguments, fie
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `parameters` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Lists and organizational nodes |
-| `arguments` | ORGANIZATION_LIST | Organization::COLLECTION | NONE |  |
-| `closure_parameters` | ORGANIZATION_LIST | Organization::COLLECTION | NONE |  |
-| `field_declaration_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE |  |
-| `enum_variant_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE |  |
+| `parameters` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Lists and organizational nodes |
+| `arguments` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE |  |
+| `closure_parameters` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE |  |
+| `field_declaration_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE |  |
+| `enum_variant_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE |  |
 
 ## Keywords
 
@@ -321,11 +318,9 @@ Keywords are marked with IS_KEYWORD flag and get the same semantic type as the c
 | `async` | FLOW_SYNC | NODE_TEXT |  |
 | `await` | FLOW_SYNC | NODE_TEXT |  |
 | `pub` | METADATA_ANNOTATION | NODE_TEXT |  |
-| `mut` | METADATA_ANNOTATION | NODE_TEXT |  |
 | `unsafe` | EXECUTION_STATEMENT | NODE_TEXT |  |
 | `where` | TYPE_GENERIC | NODE_TEXT |  |
 | `dyn` | TYPE_COMPOSITE | NODE_TEXT |  |
-| `Self` | TYPE_REFERENCE | NODE_TEXT |  |
 | `as` | COMPUTATION_CALL | NODE_TEXT |  |
 | `ref` | PATTERN_DESTRUCTURE | NODE_TEXT |  |
 | `move` | COMPUTATION_EXPRESSION | NODE_TEXT |  |
@@ -345,7 +340,7 @@ Individual operator symbols
 | `/=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `%=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `&=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
-| `|=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
+| `\|=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `^=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `<<=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `>>=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
@@ -361,12 +356,12 @@ Individual operator symbols
 | `/` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `%` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `&` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
-| `|` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
+| `\|` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `^` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `<<` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `>>` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `&&` | OPERATOR_LOGICAL | NODE_TEXT |  |
-| `||` | OPERATOR_LOGICAL | NODE_TEXT |  |
+| `\|\|` | OPERATOR_LOGICAL | NODE_TEXT |  |
 | `!` | OPERATOR_LOGICAL | NODE_TEXT |  |
 | `->` | COMPUTATION_ACCESS | NODE_TEXT |  |
 | `::` | COMPUTATION_ACCESS | NODE_TEXT |  |
@@ -400,6 +395,18 @@ Error nodes from failed parsing
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `ERROR` | PARSER_SYNTAX | NODE_TEXT | Error nodes from failed parsing |
+
+## Other Node Types
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `doc_comment` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `escape_sequence` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `inner_doc_comment_marker` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `metavariable` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `outer_doc_comment_marker` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `shebang` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `string_content` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

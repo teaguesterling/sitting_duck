@@ -108,7 +108,7 @@ TOML comment syntax
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `comment` | METADATA_COMMENT | NONE | Comment - `# comment` |
+| `comment` | METADATA_COMMENT | NODE_TEXT | Comment - `# comment` |
 
 ## Punctuation
 

@@ -2,15 +2,6 @@
 
 > Haskell language node type mappings for AST semantic extraction
 
-> **Note: Haskell support is not built in.** There is no `haskell` entry in
-> `cmake/BuiltinLanguages.cmake` and no `HaskellAdapter` class in
-> `src/include/language_adapter.hpp`, so `haskell` is not among the languages
-> `ast_supported_languages()` reports, and `read_ast`/`parse_ast` reject it with
-> "Unsupported language: haskell". Only the semantic-type mapping
-> (`src/language_configs/haskell_types.def`) and this page exist — the adapter and
-> grammar wiring were never added. Treat this page as a design reference, not a
-> description of working behaviour.
-
 ## Language Characteristics
 
 - **Pure functional**: No side effects, referential transparency
@@ -98,7 +89,7 @@ Haskell type system: - `data Name = ...` - algebraic data type - `newtype Name =
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `data_type` | DEFINITION_CLASS | FIND_IDENTIFIER | Data type declaration - `data List a = Nil | Cons a (List a)` |
+| `data_type` | DEFINITION_CLASS | FIND_IDENTIFIER | Data type declaration - `data List a = Nil \| Cons a (List a)` |
 | `newtype` | DEFINITION_CLASS | FIND_IDENTIFIER | Newtype declaration - `newtype Age = Age Int` |
 | `type_alias` | DEFINITION_CLASS | FIND_IDENTIFIER | Type alias - `type String = [Char]` |
 | `class_declaration` | DEFINITION_CLASS | FIND_IDENTIFIER | Class declaration - `class Eq a where (==) :: a -> a -> Bool` |
@@ -125,7 +116,7 @@ Haskell control flow: - `if cond then a else b` - conditional (always requires e
 |-----------|---------------|-----------------|-------------|
 | `case` | FLOW_CONDITIONAL | NONE | Case expression - `case expr of { pattern -> body }` |
 | `if` | FLOW_CONDITIONAL | NONE | If expression - `if cond then a else b` |
-| `guard` | FLOW_CONDITIONAL | NONE | Guard - `| condition = expression` |
+| `guard` | FLOW_CONDITIONAL | NONE | Guard - `\| condition = expression` |
 
 ## Lambda Expressions
 

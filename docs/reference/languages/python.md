@@ -48,8 +48,7 @@ Python functions use FIND_IDENTIFIER to locate the function name which is a dire
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_definition` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Python function and method definitions |
-| `async_function_definition` | DEFINITION_FUNCTION | Function::ASYNC | FIND_IDENTIFIER |  |
+| `function_definition` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Python function and method definitions |
 
 ## Class Definitions
 
@@ -69,10 +68,10 @@ Python variables are always mutable (no const/final keyword). The refinements di
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `assignment` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Variable assignments and parameter declarations |
-| `typed_parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER |  |
-| `default_parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER |  |
-| `typed_default_parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER |  |
+| `assignment` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Variable assignments and parameter declarations |
+| `typed_parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER |  |
+| `default_parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER |  |
+| `typed_default_parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER |  |
 | `named_expression` | DEFINITION_VARIABLE | FIND_IDENTIFIER |  |
 
 ## Function Calls
@@ -83,7 +82,7 @@ FIND_CALL_TARGET handles both simple calls (`foo()`) and method calls (`obj.meth
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `call` | COMPUTATION_CALL | Call::FUNCTION | FIND_CALL_TARGET | Function and method invocation |
+| `call` | COMPUTATION_CALL \| Call::FUNCTION | FIND_CALL_TARGET | Function and method invocation |
 
 ## Operators and Expressions
 
@@ -121,27 +120,25 @@ Literals use NODE_TEXT to capture their textual representation. Structured liter
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `string` | LITERAL_STRING | String::LITERAL | NODE_TEXT | String, numeric, and structured literal values |
-| `string_content` | LITERAL_STRING | NONE |  |
+| `string` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | String, numeric, and structured literal values |
+| `string_content` | LITERAL_STRING | NODE_TEXT |  |
 | `concatenated_string` | LITERAL_STRING | NODE_TEXT |  |
-| `escape_sequence` | LITERAL_STRING | NONE |  |
+| `escape_sequence` | LITERAL_STRING | NODE_TEXT |  |
 | `interpolation` | LITERAL_STRING | NONE |  |
-| `escape_interpolation` | LITERAL_STRING | NONE |  |
+| `escape_interpolation` | LITERAL_STRING | NODE_TEXT |  |
 | `format_specifier` | LITERAL_STRING | NONE |  |
 | `format_expression` | LITERAL_STRING | NONE |  |
-| `conversion` | LITERAL_STRING | NONE |  |
-| `interpolation_conversion` | LITERAL_STRING | NONE |  |
-| `integer` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT |  |
-| `float` | LITERAL_NUMBER | Number::FLOAT | NODE_TEXT |  |
+| `integer` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT |  |
+| `float` | LITERAL_NUMBER \| Number::FLOAT | NODE_TEXT |  |
 | `true` | LITERAL_ATOMIC | NODE_TEXT |  |
 | `false` | LITERAL_ATOMIC | NODE_TEXT |  |
 | `none` | LITERAL_ATOMIC | NODE_TEXT |  |
 | `ellipsis` | LITERAL_ATOMIC | NODE_TEXT |  |
-| `list` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE |  |
-| `tuple` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE |  |
-| `dictionary` | LITERAL_STRUCTURED | Structured::MAPPING | NONE |  |
-| `pair` | LITERAL_STRUCTURED | Structured::MAPPING | NONE |  |
-| `set` | LITERAL_STRUCTURED | Structured::SET | NONE |  |
+| `list` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE |  |
+| `tuple` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE |  |
+| `dictionary` | LITERAL_STRUCTURED \| Structured::MAPPING | NONE |  |
+| `pair` | LITERAL_STRUCTURED \| Structured::MAPPING | NONE |  |
+| `set` | LITERAL_STRUCTURED \| Structured::SET | NONE |  |
 
 ## Control Flow
 
@@ -151,19 +148,19 @@ Python control flow uses refinements to distinguish between: - Binary conditiona
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if_statement` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | Conditional statements, loops, and jump statements |
+| `if_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | Conditional statements, loops, and jump statements |
 | `else_clause` | FLOW_CONDITIONAL | NONE |  |
 | `elif_clause` | FLOW_CONDITIONAL | NONE |  |
-| `conditional_expression` | FLOW_CONDITIONAL | Conditional::TERNARY | NONE |  |
-| `match_statement` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE |  |
-| `case_clause` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE |  |
-| `for_statement` | FLOW_LOOP | Loop::ITERATOR | NONE |  |
-| `while_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE |  |
+| `conditional_expression` | FLOW_CONDITIONAL \| Conditional::TERNARY | NONE |  |
+| `match_statement` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE |  |
+| `case_clause` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE |  |
+| `for_statement` | FLOW_LOOP \| Loop::ITERATOR | NONE |  |
+| `while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE |  |
 | `for_in_clause` | FLOW_LOOP | NONE |  |
 | `if_clause` | FLOW_CONDITIONAL | NONE |  |
-| `return_statement` | FLOW_JUMP | Jump::RETURN | NONE |  |
-| `break_statement` | FLOW_JUMP | Jump::BREAK | NONE |  |
-| `continue_statement` | FLOW_JUMP | Jump::CONTINUE | NONE |  |
+| `return_statement` | FLOW_JUMP \| Jump::RETURN | NONE |  |
+| `break_statement` | FLOW_JUMP \| Jump::BREAK | NONE |  |
+| `continue_statement` | FLOW_JUMP \| Jump::CONTINUE | NONE |  |
 
 ## Error Handling
 
@@ -209,7 +206,7 @@ Python's optional type system uses annotations that don't affect runtime behavio
 | `generic_type` | TYPE_GENERIC | NODE_TEXT |  |
 | `type_parameter` | TYPE_GENERIC | FIND_IDENTIFIER |  |
 | `->` | TYPE_REFERENCE | NONE |  |
-| `type_conversion` | TYPE_REFERENCE | NONE |  |
+| `type_conversion` | TYPE_REFERENCE | NODE_TEXT |  |
 
 ## Comprehensions and Generators
 
@@ -219,10 +216,10 @@ Python comprehensions are a distinct syntax for creating collections via iterati
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `list_comprehension` | TRANSFORM_QUERY | Query::SIMPLE | NONE | List/dict/set comprehensions and generator expressions |
-| `dictionary_comprehension` | TRANSFORM_QUERY | Query::SIMPLE | NONE |  |
-| `set_comprehension` | TRANSFORM_QUERY | Query::SIMPLE | NONE |  |
-| `generator_expression` | TRANSFORM_QUERY | Query::NESTED | NONE |  |
+| `list_comprehension` | TRANSFORM_QUERY \| Query::SIMPLE | NONE | List/dict/set comprehensions and generator expressions |
+| `dictionary_comprehension` | TRANSFORM_QUERY \| Query::SIMPLE | NONE |  |
+| `set_comprehension` | TRANSFORM_QUERY \| Query::SIMPLE | NONE |  |
+| `generator_expression` | TRANSFORM_QUERY \| Query::NESTED | NONE |  |
 
 ## Decorators and Metadata
 
@@ -234,7 +231,6 @@ Decorators are a form of metaprogramming that wrap functions/classes. The `decor
 |-----------|---------------|-----------------|-------------|
 | `decorator` | NAME_ATTRIBUTE | FIND_IDENTIFIER | Decorator syntax and annotation patterns |
 | `decorated_definition` | METADATA_ANNOTATION | NONE |  |
-| `as_clause` | METADATA_ANNOTATION | FIND_IDENTIFIER |  |
 | `global_statement` | METADATA_ANNOTATION | NONE |  |
 | `nonlocal_statement` | METADATA_ANNOTATION | NONE |  |
 
@@ -251,13 +247,11 @@ Python 3.10 introduced match/case statements with various pattern types: - PATTE
 | `keyword_pattern` | PATTERN_MATCH | FIND_IDENTIFIER |  |
 | `complex_pattern` | PATTERN_MATCH | NONE |  |
 | `union_pattern` | PATTERN_MATCH | NONE |  |
-| `value_pattern` | PATTERN_MATCH | NONE |  |
 | `pattern_list` | PATTERN_DESTRUCTURE | NONE |  |
 | `as_pattern_target` | PATTERN_DESTRUCTURE | FIND_IDENTIFIER |  |
 | `as_pattern` | PATTERN_DESTRUCTURE | NONE |  |
 | `tuple_pattern` | PATTERN_DESTRUCTURE | NONE |  |
 | `list_pattern` | PATTERN_DESTRUCTURE | NONE |  |
-| `attribute_pattern` | PATTERN_DESTRUCTURE | FIND_IDENTIFIER |  |
 | `list_splat_pattern` | PATTERN_COLLECT | NODE_TEXT |  |
 | `dictionary_splat_pattern` | PATTERN_COLLECT | NODE_TEXT |  |
 | `list_splat` | PATTERN_COLLECT | NONE |  |
@@ -269,12 +263,6 @@ Python 3.10 introduced match/case statements with various pattern types: - PATTE
 Self, super, and cls references
 
 Python uses `self` for instance references and `cls` for class references by convention. `super()` provides parent class access.
-
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `self` | NAME_SCOPED | NODE_TEXT | Self, super, and cls references |
-| `super` | NAME_SCOPED | NODE_TEXT |  |
-| `cls` | NAME_SCOPED | NODE_TEXT |  |
 
 ## Structural Elements
 
@@ -322,7 +310,7 @@ Comment nodes
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `comment` | METADATA_COMMENT | NONE | Comment nodes |
+| `comment` | METADATA_COMMENT | NODE_TEXT | Comment nodes |
 
 ## Keywords
 
@@ -334,14 +322,14 @@ Keywords are marked with IS_KEYWORD flag and get the same semantic type as the c
 |-----------|---------------|-----------------|-------------|
 | `def` | DEFINITION_FUNCTION | NONE | Python reserved words as syntax tokens |
 | `class` | DEFINITION_CLASS | NONE |  |
-| `lambda` | DEFINITION_FUNCTION | Function::LAMBDA | FIND_ASSIGNMENT_TARGET |  |
+| `lambda` | DEFINITION_FUNCTION \| Function::LAMBDA | FIND_ASSIGNMENT_TARGET |  |
 | `if` | FLOW_CONDITIONAL | NONE |  |
 | `else` | FLOW_CONDITIONAL | NONE |  |
 | `elif` | FLOW_CONDITIONAL | NONE |  |
 | `for` | FLOW_LOOP | NONE |  |
 | `while` | FLOW_LOOP | NONE |  |
-| `match` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE |  |
-| `case` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE |  |
+| `match` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE |  |
+| `case` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE |  |
 | `return` | FLOW_JUMP | NONE |  |
 | `break` | FLOW_JUMP | NONE |  |
 | `continue` | FLOW_JUMP | NONE |  |
@@ -379,7 +367,7 @@ Individual operator symbols
 | `//` | OPERATOR_ARITHMETIC | NONE |  |
 | `@` | OPERATOR_ARITHMETIC | NONE |  |
 | `&` | OPERATOR_ARITHMETIC | NONE |  |
-| `|` | OPERATOR_ARITHMETIC | NONE |  |
+| `\|` | OPERATOR_ARITHMETIC | NONE |  |
 | `^` | OPERATOR_ARITHMETIC | NONE |  |
 | `~` | OPERATOR_ARITHMETIC | NONE |  |
 | `<<` | OPERATOR_ARITHMETIC | NONE |  |
@@ -408,7 +396,7 @@ Individual operator symbols
 | `//=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `@=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `&=` | OPERATOR_ASSIGNMENT | NONE |  |
-| `|=` | OPERATOR_ASSIGNMENT | NONE |  |
+| `\|=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `^=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `<<=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `>>=` | OPERATOR_ASSIGNMENT | NONE |  |
@@ -430,12 +418,12 @@ Delimiters, separators, and syntax markers
 | `:` | PARSER_PUNCTUATION | NONE |  |
 | `;` | PARSER_PUNCTUATION | NONE |  |
 | `.` | PARSER_PUNCTUATION | NONE |  |
-| `string_start` | PARSER_PUNCTUATION | NONE |  |
-| `string_end` | PARSER_PUNCTUATION | NONE |  |
-| `keyword_separator` | PARSER_PUNCTUATION | NONE |  |
-| `chevron` | PARSER_PUNCTUATION | NONE |  |
-| `positional_separator` | PARSER_PUNCTUATION | NONE |  |
-| `line_continuation` | PARSER_SYNTAX | NONE |  |
+| `string_start` | PARSER_PUNCTUATION | NODE_TEXT |  |
+| `string_end` | PARSER_PUNCTUATION | NODE_TEXT |  |
+| `keyword_separator` | PARSER_PUNCTUATION | NODE_TEXT |  |
+| `chevron` | PARSER_PUNCTUATION | NODE_TEXT |  |
+| `positional_separator` | PARSER_PUNCTUATION | NODE_TEXT |  |
+| `line_continuation` | PARSER_SYNTAX | NODE_TEXT |  |
 
 ## Parse Errors
 

@@ -67,13 +67,13 @@ Kotlin function features: - `fun name(params): ReturnType { }` - named functions
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_declaration` | DEFINITION_FUNCTION | Function::REGULAR | CUSTOM | Function declaration - `fun name(params): Type { }` |
-| `anonymous_function` | DEFINITION_FUNCTION | Function::LAMBDA | NONE | Anonymous function - `fun(params) { }` |
-| `annotated_lambda` | DEFINITION_FUNCTION | Function::LAMBDA | NONE | Annotated lambda - lambda with annotations |
-| `lambda_literal` | DEFINITION_FUNCTION | Function::LAMBDA | NONE | Lambda literal - `{ params -> body }` |
-| `primary_constructor` | DEFINITION_FUNCTION | Function::CONSTRUCTOR | NONE | Primary constructor - in class header |
-| `secondary_constructor` | DEFINITION_FUNCTION | Function::CONSTRUCTOR | NONE | Secondary constructor - `constructor(params) { }` |
-| `constructor_invocation` | COMPUTATION_CALL | Call::CONSTRUCTOR | FIND_CALL_TARGET | Constructor invocation - `ClassName(args)` |
+| `function_declaration` | DEFINITION_FUNCTION \| Function::REGULAR | CUSTOM | Function declaration - `fun name(params): Type { }` |
+| `anonymous_function` | DEFINITION_FUNCTION \| Function::LAMBDA | NONE | Anonymous function - `fun(params) { }` |
+| `annotated_lambda` | DEFINITION_FUNCTION \| Function::LAMBDA | NONE | Annotated lambda - lambda with annotations |
+| `lambda_literal` | DEFINITION_FUNCTION \| Function::LAMBDA | NONE | Lambda literal - `{ params -> body }` |
+| `primary_constructor` | DEFINITION_FUNCTION \| Function::CONSTRUCTOR | NONE | Primary constructor - in class header |
+| `secondary_constructor` | DEFINITION_FUNCTION \| Function::CONSTRUCTOR | NONE | Secondary constructor - `constructor(params) { }` |
+| `constructor_invocation` | COMPUTATION_CALL \| Call::CONSTRUCTOR | FIND_CALL_TARGET | Constructor invocation - `ClassName(args)` |
 
 ## Class and Object Definitions
 
@@ -83,12 +83,11 @@ Kotlin class types: - `class` - regular class (final by default) - `open class` 
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `class_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Class declaration - `class Name(params) : Parent { }` |
-| `object_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Object declaration - singleton `object Name { }` |
-| `interface_declaration` | DEFINITION_CLASS | Class::ABSTRACT | FIND_IDENTIFIER | Interface declaration - `interface Name { }` |
-| `enum_class_body` | DEFINITION_CLASS | Class::ENUM | FIND_IDENTIFIER | Enum class body - enum entries and members |
-| `companion_object` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Companion object - `companion object { }` |
-| `anonymous_initializer` | DEFINITION_FUNCTION | Function::REGULAR | NONE | Anonymous initializer - `init { }` block |
+| `class_declaration` | DEFINITION_CLASS \| Class::REGULAR | FIND_IDENTIFIER | Class declaration - `class Name(params) : Parent { }` |
+| `object_declaration` | DEFINITION_CLASS \| Class::REGULAR | FIND_IDENTIFIER | Object declaration - singleton `object Name { }` |
+| `enum_class_body` | DEFINITION_CLASS \| Class::ENUM | FIND_IDENTIFIER | Enum class body - enum entries and members |
+| `companion_object` | DEFINITION_CLASS \| Class::REGULAR | FIND_IDENTIFIER | Companion object - `companion object { }` |
+| `anonymous_initializer` | DEFINITION_FUNCTION \| Function::REGULAR | NONE | Anonymous initializer - `init { }` block |
 
 ## Variable and Property Declarations
 
@@ -98,12 +97,11 @@ Kotlin variables: - `val` - immutable (like final in Java) - `var` - mutable - P
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `property_declaration` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER | Property declaration - `val`/`var` in class |
-| `variable_declaration` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Variable declaration - local `val`/`var` |
-| `multi_variable_declaration` | DEFINITION_VARIABLE | Variable::MUTABLE | NONE | Multi-variable declaration - destructuring `val (a, b) = pair` |
-| `parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER | Function parameter |
-| `class_parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER | Class constructor parameter |
-| `lambda_parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER | Lambda parameter |
+| `property_declaration` | DEFINITION_VARIABLE \| Variable::FIELD | CUSTOM | Property declaration - `val`/`var` in class |
+| `variable_declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Variable declaration - local `val`/`var` |
+| `multi_variable_declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | NONE | Multi-variable declaration - destructuring `val (a, b) = pair` |
+| `parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER | Function parameter |
+| `class_parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER | Class constructor parameter |
 
 ## Function Calls and Expressions
 
@@ -113,7 +111,7 @@ Kotlin call features: - Named arguments: `func(name = value)` - Default paramete
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `call_expression` | COMPUTATION_CALL | Call::FUNCTION | FIND_CALL_TARGET | Function/method call - `func(args)` or `obj.method(args)` |
+| `call_expression` | COMPUTATION_CALL \| Call::FUNCTION | FIND_CALL_TARGET | Function/method call - `func(args)` or `obj.method(args)` |
 | `navigation_expression` | COMPUTATION_ACCESS | NONE | Navigation expression - `obj.property` or `obj?.property` |
 | `indexing_expression` | COMPUTATION_ACCESS | NONE | Indexing expression - `arr[index]` |
 | `this_expression` | NAME_SCOPED | NODE_TEXT | This expression - reference to current instance |
@@ -127,7 +125,6 @@ Names and type references
 |-----------|---------------|-----------------|-------------|
 | `simple_identifier` | NAME_IDENTIFIER | NODE_TEXT | Simple identifier - variable, function, or class name |
 | `identifier` | NAME_IDENTIFIER | NODE_TEXT | Identifier node |
-| `import_identifier` | NAME_QUALIFIED | NODE_TEXT | Import identifier - qualified name in import |
 | `type_identifier` | TYPE_REFERENCE | NODE_TEXT | Type identifier - type name |
 
 ## Literals
@@ -138,17 +135,16 @@ Kotlin literals: - Integers: `123`, `123L`, `0x1F`, `0b1010` - Floats: `3.14`, `
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `integer_literal` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT | Integer literal - decimal, hex, or binary |
-| `hex_literal` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT | Hex literal - `0x1F` |
-| `bin_literal` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT | Binary literal - `0b1010` |
-| `real_literal` | LITERAL_NUMBER | Number::FLOAT | NODE_TEXT | Real/float literal - `3.14` or `3.14f` |
+| `integer_literal` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Integer literal - decimal, hex, or binary |
+| `hex_literal` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Hex literal - `0x1F` |
+| `bin_literal` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Binary literal - `0b1010` |
+| `real_literal` | LITERAL_NUMBER \| Number::FLOAT | NODE_TEXT | Real/float literal - `3.14` or `3.14f` |
 | `boolean_literal` | LITERAL_ATOMIC | NODE_TEXT | Boolean literal - `true` or `false` |
-| `character_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT | Character literal - `'a'` |
-| `string_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT | String literal - `"string"` or `"""raw"""` |
+| `character_literal` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | Character literal - `'a'` |
+| `string_literal` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | String literal - `"string"` or `"""raw"""` |
+| `character_escape_seq` | LITERAL_STRING | NODE_TEXT |  |
 | `null_literal` | LITERAL_ATOMIC | NODE_TEXT | Null literal |
-| `collection_literal` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE | Collection literal |
-| `array_literal` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE | Array literal - `arrayOf(...)` |
-| `list_literal` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE | List literal - `listOf(...)` |
+| `collection_literal` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE | Collection literal |
 
 ## Control Flow
 
@@ -158,9 +154,9 @@ Kotlin control flow: - `if` is an expression (returns value) - `when` is pattern
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if_expression` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | If expression - `if (cond) expr else expr` |
-| `when_expression` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | When expression - pattern matching `when (x) { ... }` |
-| `when_condition` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | When condition - individual case in when |
+| `if_expression` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | If expression - `if (cond) expr else expr` |
+| `when_expression` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | When expression - pattern matching `when (x) { ... }` |
+| `when_condition` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | When condition - individual case in when |
 | `try_expression` | ERROR_TRY | NONE | Try expression - exception handling |
 | `catch_block` | ERROR_CATCH | NONE | Catch block |
 | `finally_block` | ERROR_FINALLY | NONE | Finally block |
@@ -173,9 +169,9 @@ Kotlin loops: - `for (item in collection)` - iterate over anything with iterator
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `for_statement` | FLOW_LOOP | Loop::ITERATOR | NONE | For statement - `for (x in collection)` |
-| `while_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | While statement - `while (cond) { }` |
-| `do_while_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | Do-while statement - `do { } while (cond)` |
+| `for_statement` | FLOW_LOOP \| Loop::ITERATOR | NONE | For statement - `for (x in collection)` |
+| `while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | While statement - `while (cond) { }` |
+| `do_while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | Do-while statement - `do { } while (cond)` |
 
 ## Jump Statements
 
@@ -183,20 +179,9 @@ Control flow transfer
 
 Kotlin jumps: - `return` - exit function - `break` - exit loop - `continue` - skip iteration - Labeled: `return@label`, `break@loop`
 
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `return_expression` | FLOW_JUMP | Jump::RETURN | NONE | Return expression - `return value` |
-| `throw_expression` | ERROR_THROW | NONE | Throw expression - `throw Exception()` |
-| `break_expression` | FLOW_JUMP | Jump::BREAK | NONE | Break expression - exits loop |
-| `continue_expression` | FLOW_JUMP | Jump::CONTINUE | NONE | Continue expression - skips to next iteration |
-
 ## Coroutines
 
 Suspend functions and coroutine support
-
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `suspend_modifier` | FLOW_SYNC | NONE | Suspend modifier - marks function as suspendable |
 
 ## Module and Import
 
@@ -206,8 +191,8 @@ Package and import declarations
 |-----------|---------------|-----------------|-------------|
 | `source_file` | DEFINITION_MODULE | NONE | Source file - root node |
 | `package_header` | DEFINITION_MODULE | FIND_IDENTIFIER | Package header - `package com.example` |
-| `import_header` | EXTERNAL_IMPORT | Import::MODULE | FIND_IDENTIFIER | Import header - `import com.example.Class` |
-| `import_list` | EXTERNAL_IMPORT | Import::MODULE | NONE | Import list |
+| `import_header` | EXTERNAL_IMPORT \| Import::MODULE | FIND_IDENTIFIER | Import header - `import com.example.Class` |
+| `import_list` | EXTERNAL_IMPORT \| Import::MODULE | NONE | Import list |
 
 ## Type System
 
@@ -218,7 +203,6 @@ Kotlin type system: - Nullable types: `String?` - Platform types: `String!` (fro
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `type_alias` | DEFINITION_CLASS | FIND_IDENTIFIER | Type alias - `typealias Name = Type` |
-| `type_reference` | TYPE_REFERENCE | NONE | Type reference |
 | `user_type` | TYPE_REFERENCE | NONE | User type - class or interface type |
 | `nullable_type` | TYPE_REFERENCE | NONE | Nullable type - `Type?` |
 | `function_type` | TYPE_COMPOSITE | NONE | Function type - `(Params) -> Return` |
@@ -230,20 +214,18 @@ Kotlin operators and expressions
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `assignment` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE | Assignment - `=` |
-| `additive_expression` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Additive expression - `+`, `-` |
-| `multiplicative_expression` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Multiplicative expression - `*`, `/`, `%` |
+| `assignment` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | NONE | Assignment - `=` |
+| `additive_expression` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Additive expression - `+`, `-` |
+| `multiplicative_expression` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Multiplicative expression - `*`, `/`, `%` |
 | `comparison_expression` | OPERATOR_COMPARISON | NONE | Comparison expression - `<`, `>`, `<=`, `>=` |
 | `equality_expression` | OPERATOR_COMPARISON | NONE | Equality expression - `==`, `!=`, `===`, `!==` |
 | `conjunction_expression` | OPERATOR_LOGICAL | NONE | Conjunction expression - `&&` |
-| `disjunction_expression` | OPERATOR_LOGICAL | NONE | Disjunction expression - `||` |
-| `range_expression` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Range expression - `1..10` or `1..<10` |
-| `infix_expression` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Infix expression - `a to b` |
-| `prefix_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE | Prefix expression - `!`, `-`, `++` |
-| `postfix_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | FIND_IDENTIFIER | Postfix expression - `++`, `--`, `!!`, `?` |
+| `disjunction_expression` | OPERATOR_LOGICAL | NONE | Disjunction expression - `\|\|` |
+| `range_expression` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Range expression - `1..10` or `1..<10` |
+| `infix_expression` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Infix expression - `a to b` |
+| `prefix_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE | Prefix expression - `!`, `-`, `++` |
+| `postfix_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | FIND_IDENTIFIER | Postfix expression - `++`, `--`, `!!`, `?` |
 | `as_expression` | OPERATOR_COMPARISON | NONE | As expression - type cast `x as Type` |
-| `is_expression` | OPERATOR_COMPARISON | NONE | Is expression - type check `x is Type` |
-| `in_expression` | OPERATOR_COMPARISON | NONE | In expression - containment check `x in collection` |
 | `elvis_expression` | OPERATOR_LOGICAL | NONE | Elvis expression - `x ?: default` |
 
 ## Annotations and Metadata
@@ -262,8 +244,8 @@ Documentation and annotation
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `line_comment` | METADATA_COMMENT | NONE | Line comment - `// comment` |
-| `multiline_comment` | METADATA_COMMENT | NONE | Multiline comment - `/* comment */` |
+| `line_comment` | METADATA_COMMENT | NODE_TEXT | Line comment - `// comment` |
+| `multiline_comment` | METADATA_COMMENT | NODE_TEXT | Multiline comment - `/* comment */` |
 
 ## Keywords
 
@@ -275,9 +257,7 @@ Kotlin has hard keywords (always reserved) and soft keywords (reserved only in c
 |-----------|---------------|-----------------|-------------|
 | `abstract` | METADATA_ANNOTATION | NODE_TEXT | Kotlin reserved and modifier keywords |
 | `actual` | METADATA_ANNOTATION | NODE_TEXT |  |
-| `annotation` | METADATA_ANNOTATION | NODE_TEXT |  |
 | `by` | METADATA_ANNOTATION | NODE_TEXT |  |
-| `const` | DEFINITION_VARIABLE | NODE_TEXT |  |
 | `crossinline` | METADATA_ANNOTATION | NODE_TEXT |  |
 | `data` | METADATA_ANNOTATION | NODE_TEXT |  |
 | `delegate` | METADATA_ANNOTATION | NODE_TEXT |  |
@@ -298,7 +278,6 @@ Kotlin has hard keywords (always reserved) and soft keywords (reserved only in c
 | `private` | METADATA_ANNOTATION | NODE_TEXT |  |
 | `protected` | METADATA_ANNOTATION | NODE_TEXT |  |
 | `public` | METADATA_ANNOTATION | NODE_TEXT |  |
-| `reified` | METADATA_ANNOTATION | NODE_TEXT |  |
 | `sealed` | METADATA_ANNOTATION | NODE_TEXT |  |
 | `suspend` | FLOW_SYNC | NODE_TEXT |  |
 | `tailrec` | METADATA_ANNOTATION | NODE_TEXT |  |
@@ -311,16 +290,10 @@ Block and list structures
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `class_body` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Class body - content of class |
-| `block` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Block - statement block |
-| `lambda_literal` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Lambda literal body |
-| `function_body` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Function body |
-| `when_entry` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | When entry - case in when expression |
-| `parameter_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Parameter list |
-| `value_parameter_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Value parameter list |
-| `argument_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Argument list |
-| `type_parameter_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Type parameter list - generics |
-| `type_arguments` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Type arguments - generic arguments |
+| `class_body` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Class body - content of class |
+| `function_body` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Function body |
+| `when_entry` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | When entry - case in when expression |
+| `type_arguments` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Type arguments - generic arguments |
 
 ## Punctuation and Delimiters
 
@@ -348,7 +321,6 @@ Special Kotlin operators
 |-----------|---------------|-----------------|-------------|
 | `!!` | OPERATOR_LOGICAL | NODE_TEXT | Non-null assertion - `!!` |
 | `?:` | OPERATOR_LOGICAL | NODE_TEXT | Elvis operator - `?:` |
-| `?..` | OPERATOR_COMPARISON | NODE_TEXT | Safe navigation - `?.` |
 | `::` | COMPUTATION_ACCESS | NODE_TEXT | Member reference - `::` |
 | `@` | METADATA_ANNOTATION | NODE_TEXT | Annotation prefix |
 | `$` | LITERAL_STRING | NODE_TEXT | String interpolation - `$` |
@@ -412,7 +384,6 @@ Parser error nodes
 | `super` | NAME_SCOPED | NODE_TEXT |  |
 | `this` | NAME_SCOPED | NODE_TEXT |  |
 | `false` | LITERAL_ATOMIC | NODE_TEXT |  |
-| `null` | LITERAL_ATOMIC | NODE_TEXT |  |
 | `true` | LITERAL_ATOMIC | NODE_TEXT |  |
 | `+` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `-` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
@@ -430,10 +401,15 @@ Parser error nodes
 | `<=` | OPERATOR_COMPARISON | NODE_TEXT |  |
 | `>=` | OPERATOR_COMPARISON | NODE_TEXT |  |
 | `&&` | OPERATOR_LOGICAL | NODE_TEXT |  |
-| `||` | OPERATOR_LOGICAL | NODE_TEXT |  |
+| `\|\|` | OPERATOR_LOGICAL | NODE_TEXT |  |
 | `!` | OPERATOR_LOGICAL | NODE_TEXT |  |
 | `..` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
-| `..<` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
+| `label` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `property_modifier` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `reification_modifier` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `string_content` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `wildcard_import` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `interpolated_identifier` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 
