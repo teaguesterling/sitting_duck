@@ -329,7 +329,7 @@ Swift has declaration keywords, statement keywords, expression keywords, and con
 | `internal` | METADATA_ANNOTATION | NODE_TEXT |  |
 | `let` | DEFINITION_VARIABLE | NODE_TEXT |  |
 | `open` | METADATA_ANNOTATION | NODE_TEXT |  |
-| `operator` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
+| `operator` | DEFINITION_FUNCTION | NODE_TEXT |  |
 | `private` | METADATA_ANNOTATION | NODE_TEXT |  |
 | `protocol` | DEFINITION_CLASS | NODE_TEXT |  |
 | `public` | METADATA_ANNOTATION | NODE_TEXT |  |
@@ -373,7 +373,7 @@ Parser error nodes
 | `return` | FLOW_JUMP | NODE_TEXT |  |
 | `switch` | FLOW_CONDITIONAL | NODE_TEXT |  |
 | `while` | FLOW_LOOP | NODE_TEXT |  |
-| `as` | OPERATOR_COMPARISON | NODE_TEXT |  |
+| `as` | TYPE_REFERENCE | NODE_TEXT |  |
 | `false` | LITERAL_ATOMIC | NODE_TEXT |  |
 | `is` | OPERATOR_COMPARISON | NODE_TEXT |  |
 | `nil` | LITERAL_ATOMIC | NODE_TEXT |  |

@@ -1,0 +1,7 @@
+/* #231 fixture: only is a media-type modifier; and / not really are operators. */
+@media only screen and (min-width: 100px) {
+  a { color: red; }
+}
+@media not print {
+  a { color: blue; }
+}

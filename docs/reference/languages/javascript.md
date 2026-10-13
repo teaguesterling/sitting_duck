@@ -291,7 +291,7 @@ Reserved words and language keywords
 | `try` | ERROR_TRY | NONE |  |
 | `catch` | ERROR_CATCH | NONE |  |
 | `finally` | ERROR_FINALLY | NONE |  |
-| `typeof` | OPERATOR_LOGICAL | NONE |  |
+| `typeof` | TYPE_REFERENCE | NONE | typeof operator/keyword -- a unary TYPE QUERY, not a logical operator (#231) |
 | `delete` | EXECUTION_STATEMENT | NONE |  |
 | `with` | EXECUTION_STATEMENT | NONE |  |
 | `new` | COMPUTATION_CALL | NONE |  |
@@ -299,7 +299,7 @@ Reserved words and language keywords
 | `static` | METADATA_ANNOTATION | NONE |  |
 | `get` | METADATA_ANNOTATION | NONE |  |
 | `set` | METADATA_ANNOTATION | NONE |  |
-| `of` | OPERATOR_COMPARISON | NONE |  |
+| `of` | FLOW_LOOP | NONE | of keyword in for-of -- part of the loop construct (#231) |
 
 ## Punctuation
 

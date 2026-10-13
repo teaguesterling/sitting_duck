@@ -321,7 +321,7 @@ Keywords are marked with IS_KEYWORD flag and get the same semantic type as the c
 | `unsafe` | EXECUTION_STATEMENT | NODE_TEXT |  |
 | `where` | TYPE_GENERIC | NODE_TEXT |  |
 | `dyn` | TYPE_COMPOSITE | NODE_TEXT |  |
-| `as` | COMPUTATION_CALL | NODE_TEXT |  |
+| `as` | TYPE_REFERENCE | NODE_TEXT |  |
 | `ref` | PATTERN_DESTRUCTURE | NODE_TEXT |  |
 | `move` | COMPUTATION_EXPRESSION | NODE_TEXT |  |
 | `self` | NAME_IDENTIFIER | NODE_TEXT |  |

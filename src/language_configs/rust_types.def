@@ -528,7 +528,12 @@ DEF_TYPE("where", TYPE_GENERIC, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("dyn", TYPE_COMPOSITE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 // Other keywords
-DEF_TYPE("as", COMPUTATION_CALL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+// A cast is not a call (#231). Dual-role -- the same token spells the cast
+// (type_cast_expression) and the import rename (use_as_clause) -- so one
+// declaration covers both. TYPE_REFERENCE dominates: right for the cast, no
+// worse than COMPUTATION_CALL for the rename. Unified with
+// typescript_types.def and kotlin_types.def.
+DEF_TYPE("as", TYPE_REFERENCE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("ref", PATTERN_DESTRUCTURE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("move", COMPUTATION_EXPRESSION, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 DEF_TYPE("self", NAME_IDENTIFIER, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)

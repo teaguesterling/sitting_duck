@@ -66,6 +66,20 @@ SELECT name FROM ast_select('src/**/*', '.func[language=python]');
 SELECT name FROM ast_select('src/*.py', '[semantic=DEFINITION_FUNCTION]');
 ```
 
+**`[semantic=X]` is not the same as `.X`.** An attribute filters by *value*, so
+it matches every node carrying that semantic type — including **syntax-only
+keyword tokens**. A class selects by *kind*, and skips syntax-only tokens and
+constituents so that each construct is returned once. On
+`for (const x of items) {}`:
+
+| selector | matches |
+|---|---|
+| `.loop` | the `for_in_statement` construct |
+| `[semantic=FLOW_LOOP]` | that construct **and** the `for` and `of` keyword tokens |
+
+Use the class when you want constructs, the attribute when you want every node
+with that type. [Semantic Classes](semantic-classes.md) lists the classes.
+
 ## Native Extraction Attributes
 
 These query the rich metadata that Sitting Duck extracts from each node.

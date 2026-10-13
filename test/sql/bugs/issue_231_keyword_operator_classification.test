@@ -1,0 +1,408 @@
+# name: test/sql/bugs/issue_231_keyword_operator_classification.test
+# description: #231 -- keyword operators classified against the convention taxonomy.yaml already implies
+# group: [bugs]
+
+# #231 was filed as "typeof is OPERATOR_LOGICAL in javascript/typescript". The
+# issue is real but the diagnosis in the first comment I posted was wrong on its
+# central claim, and the correction is what makes this file's assertions
+# rule-application rather than taste:
+#
+#   spec/taxonomy/taxonomy.yaml ENUMERATES keyword operators in the semantic
+#   type descriptions themselves. OPERATOR_LOGICAL's description reads
+#   "&&, ||, !, and, or, not, ? :" and OPERATOR_COMPARISON's reads
+#   "==, !=, <, >, <=, >=, ===, is, in, not in".
+#
+# So `and`/`or`/`not`/`is`/`in` are prescribed by the spec and are already
+# compliant everywhere. What the spec had no rule for was the unary type-query /
+# cast / operator-declaration family, and #231 closed that by naming EXISTING
+# types -- see the KEYWORD OPERATORS block in taxonomy.yaml.
+#
+# No new semantic type was added, and none could be: all 64 base codes are
+# allocated, the OPERATOR kind is full at four, the only free codes
+# (RESERVED_FUTURE1..4) sit under the META_EXTERNAL super_kind so an operator
+# there would not match .computation, and the language_specific refinement bits
+# are masked out of base-type comparison. OPERATOR_UNARY is a MAJOR taxonomy
+# break; this was a minor release.
+#
+# WHY A ROW COUNT CANNOT SEE THIS CHANGE, and why this file is shaped the way it
+# is: these edits change semantic_type VALUES, not cardinality. ast_type_map()
+# has the same number of rows before and after. A before/after count comparison
+# returns "no difference" -- which is indistinguishable from "nothing was
+# applied". Every assertion below is therefore a VALUE assertion, stated in both
+# directions: the new classification is present AND the old one is gone.
+
+require sitting_duck
+
+# =============================================================================
+# A. The nine reclassified declarations.
+# =============================================================================
+# Stated as an exact set over the six affected languages. typeof and of are
+# declared once, in javascript_types.def, and typescript inherits them through
+# its #include -- so two languages each.
+
+query III
+SELECT language, node_type, semantic_type
+FROM ast_type_map()
+WHERE (language, node_type) IN (
+        ('javascript','typeof'), ('typescript','typeof'),
+        ('javascript','of'),     ('typescript','of'),
+        ('css','only'), ('swift','operator'),
+        ('rust','as'), ('kotlin','as'), ('swift','as'))
+ORDER BY language, node_type;
+----
+css	only	METADATA_DIRECTIVE
+javascript	of	FLOW_LOOP
+javascript	typeof	TYPE_REFERENCE
+kotlin	as	TYPE_REFERENCE
+rust	as	TYPE_REFERENCE
+swift	as	TYPE_REFERENCE
+swift	operator	DEFINITION_FUNCTION
+typescript	of	FLOW_LOOP
+typescript	typeof	TYPE_REFERENCE
+
+# GUARD: the set above has nine members, so none of the nine was silently
+# dropped from a .def rather than reclassified. Without this, a deleted
+# declaration would make the query above pass by returning fewer rows that all
+# happen to match.
+query I
+SELECT count(*) FROM ast_type_map()
+WHERE (language, node_type) IN (
+        ('javascript','typeof'), ('typescript','typeof'),
+        ('javascript','of'),     ('typescript','of'),
+        ('css','only'), ('swift','operator'),
+        ('rust','as'), ('kotlin','as'), ('swift','as'));
+----
+9
+
+# The other direction: NONE of the five reclassified tokens is in the OPERATOR
+# kind any more, in any language. This is the assertion that would have failed
+# before the fix, and it is phrased over the kind rather than the four exact
+# type names so that it cannot be satisfied by moving a token sideways within
+# the operator family.
+query I
+SELECT count(*) FROM ast_type_map()
+WHERE node_type IN ('typeof','of','only')
+   OR (language IN ('swift') AND node_type = 'operator')
+   OR (language IN ('rust','kotlin','swift') AND node_type = 'as');
+----
+9
+
+query I
+SELECT count(*) FROM ast_type_map()
+WHERE semantic_type LIKE 'OPERATOR_%'
+  AND ((language IN ('javascript','typescript') AND node_type IN ('typeof','of'))
+    OR (language = 'css' AND node_type = 'only')
+    OR (language = 'swift' AND node_type IN ('operator','as'))
+    OR (language IN ('rust','kotlin') AND node_type = 'as'));
+----
+0
+
+# =============================================================================
+# B. NEGATIVE CONTROLS -- the spec-sanctioned keywords did NOT move.
+# =============================================================================
+# taxonomy.yaml names and/or/not under OPERATOR_LOGICAL and is/in/not in under
+# OPERATOR_COMPARISON. Those are rule 1 of the convention, so they must be
+# exactly where they were. If a blanket "keyword operators are not operators"
+# edit had been applied, these are what it would have broken.
+
+query III
+SELECT language, node_type, semantic_type
+FROM ast_type_map()
+WHERE node_type IN ('and','or','not')
+ORDER BY language, node_type;
+----
+css	and	OPERATOR_LOGICAL
+lua	and	OPERATOR_LOGICAL
+lua	not	OPERATOR_LOGICAL
+lua	or	OPERATOR_LOGICAL
+python	and	OPERATOR_LOGICAL
+python	not	OPERATOR_LOGICAL
+python	or	OPERATOR_LOGICAL
+ruby	and	OPERATOR_LOGICAL
+ruby	not	OPERATOR_LOGICAL
+ruby	or	OPERATOR_LOGICAL
+zig	and	OPERATOR_LOGICAL
+zig	or	OPERATOR_LOGICAL
+
+# `in` stays OPERATOR_COMPARISON in the languages where the token also spells
+# the comparison, and FLOW_LOOP where it only ever introduces a loop. Both are
+# correct, and the split is the reason `of` could be fixed while `in` could not:
+# see section D.
+query III
+SELECT language, node_type, semantic_type
+FROM ast_type_map()
+WHERE node_type = 'in'
+ORDER BY language;
+----
+bash	in	FLOW_LOOP
+hcl	in	FLOW_LOOP
+javascript	in	OPERATOR_COMPARISON
+kotlin	in	OPERATOR_COMPARISON
+lua	in	FLOW_LOOP
+python	in	OPERATOR_COMPARISON
+r	in	FLOW_LOOP
+ruby	in	OPERATOR_COMPARISON
+rust	in	FLOW_LOOP
+swift	in	FLOW_LOOP
+typescript	in	OPERATOR_COMPARISON
+
+# `is` and `instanceof` are type TESTS yielding a boolean, which is a comparison
+# by rule 1 -- deliberately NOT swept into TYPE_REFERENCE with the casts.
+query III
+SELECT language, node_type, semantic_type
+FROM ast_type_map()
+WHERE node_type IN ('is','instanceof','is_not','not_in')
+ORDER BY language, node_type;
+----
+java	instanceof	OPERATOR_COMPARISON
+javascript	instanceof	OPERATOR_COMPARISON
+kotlin	is	OPERATOR_COMPARISON
+python	is	OPERATOR_COMPARISON
+sql	is_not	OPERATOR_COMPARISON
+sql	not_in	OPERATOR_COMPARISON
+swift	is	OPERATOR_COMPARISON
+typescript	instanceof	OPERATOR_COMPARISON
+typescript	is	TYPE_REFERENCE
+
+# =============================================================================
+# C. THE DELIBERATE EXCLUSIONS, asserted so they read as decisions.
+# =============================================================================
+# Each of these looks like a token #231 "missed". Each was considered and left
+# alone for a stated reason; pinning them means a later sweep has to argue with
+# a test rather than quietly change them.
+
+# python `as` covers `import x as y`, `with ... as f`, `except E as e` -- name
+# bindings, never a cast. TYPE_REFERENCE would be actively wrong here, so the
+# `as` unification deliberately stops short of python.
+query I
+SELECT semantic_type FROM ast_type_map('python') WHERE node_type = 'as';
+----
+METADATA_ANNOTATION
+
+# kotlin `operator` is a MODIFIER on a fun declaration; cpp's and swift's
+# `operator` IS the declaration. Same spelling, different jobs, different
+# answers -- correctly.
+query III
+SELECT language, node_type, semantic_type
+FROM ast_type_map()
+WHERE node_type = 'operator'
+ORDER BY language;
+----
+cpp	operator	DEFINITION_FUNCTION
+kotlin	operator	METADATA_ANNOTATION
+swift	operator	DEFINITION_FUNCTION
+
+# sizeof yields a NUMBER. Nothing in the repo contradicts OPERATOR_ARITHMETIC,
+# whose own description already covers unary `~`, and `alignof` is undeclared so
+# there is no sibling to be consistent with. Changing it would be output churn
+# with no defect behind it, so it was left -- by decision, recorded here.
+query III
+SELECT language, node_type, semantic_type
+FROM ast_type_map()
+WHERE node_type = 'sizeof'
+ORDER BY language;
+----
+c	sizeof	OPERATOR_ARITHMETIC
+cpp	sizeof	OPERATOR_ARITHMETIC
+
+# css `and` and `unary_query` stay in the operator family: inside a media query
+# those really are conjunction and negation. `only` was the lone outlier, which
+# is why it moved alone.
+query III
+SELECT language, node_type, semantic_type
+FROM ast_type_map('css')
+WHERE node_type IN ('and','unary_query','keyword_query','only')
+ORDER BY node_type;
+----
+css	and	OPERATOR_LOGICAL
+css	keyword_query	METADATA_DIRECTIVE
+css	only	METADATA_DIRECTIVE
+css	unary_query	OPERATOR_LOGICAL
+
+# =============================================================================
+# D. ROLE VERIFICATION -- why `of` could be fixed and `in` could not.
+# =============================================================================
+# `of` was not in the filed issue; it is the strongest finding in it, so it is
+# verified empirically rather than read off the grammar. tree-sitter-javascript
+# spells BOTH for-in and for-of as for_in_statement, so the question is whether
+# the `of` TOKEN ever appears anywhere else. It does not.
+
+query II
+SELECT p.type AS parent_type, count(*) AS n
+FROM read_ast('test/data/keyword_operators/roles.js') n
+JOIN read_ast('test/data/keyword_operators/roles.js') p ON n.parent_id = p.node_id
+WHERE n.type = 'of'
+GROUP BY 1 ORDER BY 1;
+----
+for_in_statement	1
+
+# `in`, by contrast, is genuinely dual-role in the same file: once under the
+# loop and once under a binary expression. One declaration must cover both, so
+# OPERATOR_COMPARISON (what the spec prescribes for the comparison form) stays.
+# This is the #215 collision shape inside a single anonymous role, which
+# DEF_TYPE_ANON cannot split.
+query II
+SELECT p.type AS parent_type, count(*) AS n
+FROM read_ast('test/data/keyword_operators/roles.js') n
+JOIN read_ast('test/data/keyword_operators/roles.js') p ON n.parent_id = p.node_id
+WHERE n.type = 'in'
+GROUP BY 1 ORDER BY 1;
+----
+binary_expression	1
+for_in_statement	1
+
+# typeof in TypeScript: the SAME anonymous token in the type-query position and
+# the value position, off one declaration. This is what #222 recorded as "no
+# single declaration is right" -- true, but OPERATOR_LOGICAL was wrong for both,
+# and TYPE_REFERENCE is right for the type query and defensible for the value
+# form, so it dominates.
+query II
+SELECT p.type AS parent_type, count(*) AS n
+FROM read_ast('test/data/keyword_operators/roles.ts') n
+JOIN read_ast('test/data/keyword_operators/roles.ts') p ON n.parent_id = p.node_id
+WHERE n.type = 'typeof'
+GROUP BY 1 ORDER BY 1;
+----
+type_query	1
+unary_expression	1
+
+# swift `operator` is single-role: it declares an operator.
+query II
+SELECT p.type AS parent_type, n.semantic_type
+FROM read_ast('test/data/keyword_operators/roles.swift') n
+JOIN read_ast('test/data/keyword_operators/roles.swift') p ON n.parent_id = p.node_id
+WHERE n.type = 'operator';
+----
+operator_declaration	DEFINITION_FUNCTION
+
+# kotlin and rust `as` ARE dual-role -- cast and import alias off one token.
+# TYPE_REFERENCE is right for the cast and no worse than what it replaced for
+# the alias, which is the whole argument for the change.
+query II
+SELECT p.type AS parent_type, n.semantic_type
+FROM read_ast('test/data/keyword_operators/roles.kt') n
+JOIN read_ast('test/data/keyword_operators/roles.kt') p ON n.parent_id = p.node_id
+WHERE n.type = 'as' ORDER BY 1;
+----
+as_expression	TYPE_REFERENCE
+import_alias	TYPE_REFERENCE
+
+query II
+SELECT p.type AS parent_type, n.semantic_type
+FROM read_ast('test/data/keyword_operators/roles.rs') n
+JOIN read_ast('test/data/keyword_operators/roles.rs') p ON n.parent_id = p.node_id
+WHERE n.type = 'as' ORDER BY 1;
+----
+type_cast_expression	TYPE_REFERENCE
+use_as_clause	TYPE_REFERENCE
+
+# =============================================================================
+# E. WHICH SELECTOR PATHS SEE THIS CHANGE, AND WHICH DO NOT.
+# =============================================================================
+# All nine reclassified declarations carry ASTNodeFlags::IS_KEYWORD, which IS
+# bit 0, IS_SYNTAX_ONLY -- the two are aliases for the same bit.
+query I
+SELECT count(*) FROM ast_type_map()
+WHERE is_syntax
+  AND ((language IN ('javascript','typescript') AND node_type IN ('typeof','of'))
+    OR (language = 'css' AND node_type = 'only')
+    OR (language = 'swift' AND node_type IN ('operator','as'))
+    OR (language IN ('rust','kotlin') AND node_type = 'as'));
+----
+9
+
+# CLASS selectors exclude syntax-only tokens. src/sql_macros/css_selectors.sql
+# resolves a class filter in exactly one place, and it is guarded:
+#
+#   AND (sp.class_filter IS NULL
+#        OR (is_semantic_type(a.semantic_type, UPPER(sp.class_filter))
+#            AND NOT is_syntax_only(a.flags)
+#            AND NOT is_constituent(a.flags)))
+#
+# So no `.class` can match any of the nine, before or after. `.type` returns
+# ZERO here even though the fixture contains two TYPE_REFERENCE nodes, and that
+# zero is the assertion: it is what makes the change invisible to class
+# selectors.
+query I
+SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.type');
+----
+0
+
+query I
+SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.logical');
+----
+2
+
+# ATTRIBUTE selectors DO see it. `[semantic=...]` is resolved at
+# css_selectors.sql:1653 with NO syntax-only guard:
+#
+#   WHEN ac.attr_name = 'semantic' THEN is_semantic_type(a.semantic_type, UPPER(ac.attr_value))
+#
+# so it matches keyword tokens like any other node. This is NOT a hypothetical:
+# the same fixture gives different answers through the two paths for the SAME
+# semantic type, and the gap is exactly the syntax-only keyword tokens.
+query I
+SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.loop');
+----
+2
+
+query II
+SELECT type, is_syntax_only(flags) AS syn
+FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=FLOW_LOOP]')
+ORDER BY type, syn;
+----
+for	true
+for	true
+for_in_statement	false
+for_in_statement	false
+of	true
+
+# `of` is in that list only because of this change, and `[semantic=TYPE_REFERENCE]`
+# matches the two typeof tokens for the same reason -- it returned nothing on
+# this fixture before, since nothing in it was TYPE_REFERENCE.
+query II
+SELECT type, semantic_type
+FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=TYPE_REFERENCE]')
+ORDER BY type;
+----
+typeof	TYPE_REFERENCE
+typeof	TYPE_REFERENCE
+
+# The same split, shown on OPERATOR_LOGICAL itself rather than inferred from
+# FLOW_LOOP. lua's `and`/`or`/`not` stay OPERATOR_LOGICAL (taxonomy.yaml names
+# them) and all three are IS_KEYWORD, so they are matched by the attribute path
+# and invisible to the class path. That is the mechanism by which
+# `[semantic=LOGICAL]` used to match `typeof` and no longer does -- measured
+# here on tokens that did not move, rather than inferred from a binary that no
+# longer exists.
+query I
+SELECT count(*) FROM ast_select('test/data/keyword_operators/logical.lua', '.logical');
+----
+0
+
+query II
+SELECT type, is_syntax_only(flags) AS syn
+FROM ast_select('test/data/keyword_operators/logical.lua', '[semantic=LOGICAL]')
+ORDER BY type;
+----
+and	true
+not	true
+or	true
+
+# So the honest summary, which the release note states: ast_type_map() values
+# change, scalar filters over read_ast change, `[semantic=...]` attribute
+# selectors change, and `.class` selectors do not.
+#
+# The scalar-filter half, stated as the before/after pair a row count could not
+# express -- same cardinality, different value:
+query I
+SELECT count(*) FROM read_ast('test/data/keyword_operators/roles.js')
+WHERE type = 'typeof' AND is_semantic_type(semantic_type, 'LOGICAL');
+----
+0
+
+query I
+SELECT count(*) FROM read_ast('test/data/keyword_operators/roles.js')
+WHERE type = 'typeof' AND is_semantic_type(semantic_type, 'TYPE');
+----
+2

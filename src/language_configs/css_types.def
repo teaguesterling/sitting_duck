@@ -619,8 +619,14 @@ DEF_TYPE("keyword_query", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_
 /// @brief Unary query - negated media query
 DEF_TYPE("unary_query", OPERATOR_LOGICAL, NONE, NONE, 0)
 
-/// @brief Only keyword - media query modifier
-DEF_TYPE("only", OPERATOR_LOGICAL, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
+/// @brief Only keyword - media query modifier, matching its sibling keyword_query (#231)
+///
+/// `@media only screen` means the same as `@media screen` -- `only` is a legacy
+/// modifier on the media type, combining and negating nothing, so it is not an
+/// operator. The media type it modifies is METADATA_DIRECTIVE above.
+/// `and` and `unary_query` stay OPERATOR_LOGICAL: in a media query those really
+/// are conjunction and negation.
+DEF_TYPE("only", METADATA_DIRECTIVE, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)
 
 /// @brief Keyframes name - animation identifier
 DEF_TYPE("keyframes_name", NAME_IDENTIFIER, NODE_TEXT, NONE, 0)
