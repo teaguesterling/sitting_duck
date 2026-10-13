@@ -96,7 +96,7 @@ Type kinds: - Object: `type Name { fields }` - Interface: `interface Name { fiel
 | `type_definition` | ORGANIZATION_BLOCK | NONE | Type definition container |
 | `object_type_definition` | DEFINITION_CLASS | CUSTOM | Object type - `type Name { }` |
 | `interface_type_definition` | DEFINITION_CLASS | CUSTOM | Interface type - `interface Name { }` |
-| `union_type_definition` | DEFINITION_CLASS | CUSTOM | Union type - `union Name = A | B` |
+| `union_type_definition` | DEFINITION_CLASS | CUSTOM | Union type - `union Name = A \| B` |
 | `enum_type_definition` | DEFINITION_CLASS | CUSTOM | Enum type - `enum Name { }` |
 | `input_object_type_definition` | DEFINITION_CLASS | CUSTOM | Input object type - `input Name { }` |
 | `scalar_type_definition` | DEFINITION_CLASS | CUSTOM | Scalar type - `scalar Name` |
@@ -175,7 +175,7 @@ GraphQL union and interface constructs
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `union_member_types` | ORGANIZATION_LIST | NONE | Union member types - `= Type1 | Type2` |
+| `union_member_types` | ORGANIZATION_LIST | NONE | Union member types - `= Type1 \| Type2` |
 | `implements_interfaces` | ORGANIZATION_LIST | NONE | Implements interfaces - `implements A & B` |
 
 ## Input Fields
@@ -274,7 +274,7 @@ GraphQL documentation constructs
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `description` | METADATA_COMMENT | NONE | Description - triple-quoted doc string |
-| `comment` | METADATA_COMMENT | NONE | Comment - `# comment` |
+| `comment` | METADATA_COMMENT | NODE_TEXT | Comment - `# comment` |
 
 ## Punctuation
 
@@ -286,7 +286,7 @@ GraphQL syntax tokens
 | `$` | PARSER_PUNCTUATION | NODE_TEXT | Dollar - variable prefix `$` |
 | `@` | PARSER_PUNCTUATION | NODE_TEXT | At sign - directive prefix `@` |
 | `&` | PARSER_PUNCTUATION | NODE_TEXT | Ampersand - interface separator `&` |
-| `|` | PARSER_PUNCTUATION | NODE_TEXT | Pipe - union separator `|` |
+| `\|` | PARSER_PUNCTUATION | NODE_TEXT | Pipe - union separator `\|` |
 | `=` | OPERATOR_ASSIGNMENT | NODE_TEXT | Equals - default value `=` |
 | `:` | PARSER_PUNCTUATION | NODE_TEXT | Colon - type separator `:` |
 | `...` | PARSER_PUNCTUATION | NODE_TEXT | Spread - `...` |
@@ -296,11 +296,12 @@ GraphQL syntax tokens
 | `]` | PARSER_DELIMITER | NODE_TEXT | Closing bracket - `]` |
 | `{` | PARSER_DELIMITER | NODE_TEXT | Opening brace - `{` |
 | `}` | PARSER_DELIMITER | NODE_TEXT | Closing brace - `}` |
-| `,` | PARSER_PUNCTUATION | NODE_TEXT | Comma - `,` |
 
 ## Keywords
 
 GraphQL reserved keywords
+
+Issue #208: a raw_type declared here must not already be declared above. `type` and `directive` were: the graphql grammar uses each string for both a named rule (`type` the type reference at @ref gql_type_refs, `directive` the directive usage at @ref gql_directives) and the anonymous keyword token, and `node_configs` is keyed by that string alone, so the keyword rows were silently dropped by the loader and have been removed. Before adding a keyword row, check node-types.json for a `named: true` twin.
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
@@ -309,7 +310,6 @@ GraphQL reserved keywords
 | `subscription` | DEFINITION_FUNCTION | NODE_TEXT | Subscription keyword |
 | `fragment` | DEFINITION_FUNCTION | NODE_TEXT | Fragment keyword |
 | `on` | PARSER_SYNTAX | NODE_TEXT | On keyword - type condition |
-| `type` | DEFINITION_CLASS | NODE_TEXT | Type keyword |
 | `interface` | DEFINITION_CLASS | NODE_TEXT | Interface keyword |
 | `union` | DEFINITION_CLASS | NODE_TEXT | Union keyword |
 | `enum` | DEFINITION_CLASS | NODE_TEXT | Enum keyword |
@@ -317,12 +317,10 @@ GraphQL reserved keywords
 | `scalar` | DEFINITION_CLASS | NODE_TEXT | Scalar keyword |
 | `schema` | DEFINITION_MODULE | NODE_TEXT | Schema keyword |
 | `extend` | PARSER_SYNTAX | NODE_TEXT | Extend keyword |
-| `directive` | METADATA_ANNOTATION | NODE_TEXT | Directive keyword |
 | `implements` | PARSER_SYNTAX | NODE_TEXT | Implements keyword |
 | `repeatable` | PARSER_SYNTAX | NODE_TEXT | Repeatable keyword |
 | `true` | LITERAL_ATOMIC | NODE_TEXT | True keyword |
 | `false` | LITERAL_ATOMIC | NODE_TEXT | False keyword |
-| `null` | LITERAL_ATOMIC | NODE_TEXT | Null keyword |
 
 ## Parser Error Handling
 
@@ -331,6 +329,12 @@ Parser error nodes
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `ERROR` | PARSER_SYNTAX | NODE_TEXT | Parse error node |
+
+## Other Node Types
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `comma` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

@@ -19,6 +19,9 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
 @dataclass
 class NodeType:
     """A single DEF_TYPE entry."""
@@ -191,6 +194,56 @@ def format_semantic_type(semantic_type: str) -> str:
     return sem
 
 
+def md_cell(text: str) -> str:
+    """Escape a value for use inside a markdown table cell.
+
+    A bare `|` ends the cell, so any value containing one shifts every
+    following column one place left and adds a cell to the row. Three columns
+    here can contain pipes, and all three did:
+
+      semantic_type  DEFINITION_FUNCTION | Function::REGULAR
+      raw_type       yaml declares `|` and `>` as node types
+      description    "Pipe - literal scalar indicator `|`"
+
+    Backticks do not help: GitHub-flavoured markdown splits on `|` inside code
+    spans too. Escaping is the only thing that works, and it renders as a
+    literal pipe. Before this fix, re-running the generator rewrote all 30
+    pages and corrupted 29 of them (#235) -- which is why the committed pages
+    had been unregenerable for as long as the .def files have carried
+    refinements.
+    """
+    return text.replace('|', '\\|')
+
+
+def check_tables(markdown: str, where: str) -> None:
+    """Fail if any table row has a different cell count from its header.
+
+    The bug this file had (#235) was silent: a `|` inside a cell produced a row
+    with one extra column, which still renders -- just with the description in
+    the Name Extraction slot. Nothing failed, so 29 pages sat corrupted-on-
+    regeneration for as long as the .def files carried refinements. A generator
+    you cannot run is not a generator, so it now refuses rather than emits.
+    """
+    header_cells = None
+    for lineno, line in enumerate(markdown.splitlines(), 1):
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            header_cells = None
+            continue
+        if set(stripped) <= set("|- "):   # the ---|--- separator row
+            continue
+        # Count UNESCAPED pipes only: `\|` is a literal pipe inside a cell, not
+        # a separator, so it must not be counted as one.
+        masked = stripped.replace("\\|", "\x00")
+        cells = len(masked.strip("|").split("|"))
+        if header_cells is None:
+            header_cells = cells
+        elif cells != header_cells:
+            raise SystemExit(
+                f"{where}: line {lineno} has {cells} cells, header has "
+                f"{header_cells} -- a value containing an unescaped '|'?\n  {line}")
+
+
 def generate_markdown(doc: LanguageDoc) -> str:
     """Generate markdown documentation for a language."""
     md = []
@@ -240,7 +293,8 @@ def generate_markdown(doc: LanguageDoc) -> str:
             for node in group.node_types:
                 sem_type = format_semantic_type(node.semantic_type)
                 brief = node.brief or ""
-                md.append(f"| `{node.raw_type}` | {sem_type} | {node.name_extraction} | {brief} |")
+                md.append(f"| `{md_cell(node.raw_type)}` | {md_cell(sem_type)} "
+                          f"| {md_cell(node.name_extraction)} | {md_cell(brief)} |")
 
             md.append("")
 
@@ -254,7 +308,8 @@ def generate_markdown(doc: LanguageDoc) -> str:
         for node in doc.ungrouped_types:
             sem_type = format_semantic_type(node.semantic_type)
             brief = node.brief or ""
-            md.append(f"| `{node.raw_type}` | {sem_type} | {node.name_extraction} | {brief} |")
+            md.append(f"| `{md_cell(node.raw_type)}` | {md_cell(sem_type)} "
+                      f"| {md_cell(node.name_extraction)} | {md_cell(brief)} |")
 
         md.append("")
 
@@ -265,6 +320,22 @@ def generate_markdown(doc: LanguageDoc) -> str:
     md.append("")
 
     return '\n'.join(md)
+
+
+def builtin_languages() -> list:
+    """The languages this build registers, from the authoritative declaration.
+
+    cmake/BuiltinLanguages.cmake is what drives registration, and its own
+    header says so. Reading it here means the index cannot drift from the
+    build -- which it had: the warning box below was hand-maintained, so
+    regenerating the index silently DELETED it (#235), and before that it
+    carried a language count that had to be edited by hand every time a
+    language was added.
+    """
+    cmake = REPO_ROOT / "cmake" / "BuiltinLanguages.cmake"
+    if not cmake.exists():
+        return []
+    return re.findall(r"^sitting_duck_language\((\w+)", cmake.read_text(), re.M)
 
 
 def generate_index(languages: list) -> str:
@@ -280,6 +351,43 @@ def generate_index(languages: list) -> str:
     md.append("- **Semantic Type**: Universal semantic classification")
     md.append("- **Name Extraction**: Strategy for extracting identifiers")
     md.append("- **Description**: What the node represents")
+
+    # Derived, not hand-written: which pages document a language the build does
+    # not register, and which registered languages have no page.
+    builtins = builtin_languages()
+    builtin_keys = {b.lower() for b in builtins}
+    # page stem -> display name, so the links read as the pages are titled
+    display = {def_name.replace('_types.def', ''): lang for lang, def_name in languages}
+    if builtins:
+        not_built = sorted(k for k in display if k not in builtin_keys)
+        no_page = sorted(b for b in builtins if b not in display)
+        if not_built:
+            n = len(not_built)
+            one = n == 1
+            md.append("")
+            md.append(f'!!! warning "{n} page{"" if one else "s"} here '
+                      f'document{"s" if one else ""} '
+                      f'{"a language that is" if one else "languages that are"} not built in"')
+            md.append("")
+            md.append(f"    `read_ast` / `parse_ast` accept **{len(builtins)}** languages. The")
+            md.append("    authoritative list is `cmake/BuiltinLanguages.cmake`, which this page")
+            md.append("    is generated from, so neither the count nor the list below can drift")
+            md.append("    from the build. `SELECT language FROM ast_supported_languages()`")
+            md.append("    reports what your build actually has.")
+            md.append("")
+            links = ", ".join(f"[{display[k]}]({k}.md)" for k in not_built)
+            md.append(f"    **{links} {'is' if one else 'are'} not among them.** Each has a")
+            md.append("    semantic-type mapping (`src/language_configs/<lang>_types.def`) and a")
+            md.append("    page here, but no adapter is built, so they error with \"Unsupported")
+            md.append("    language\". Those pages are design references.")
+            if no_page:
+                plural = len(no_page) != 1
+                md.append("")
+                md.append(f"    Conversely, {len(no_page)} **supported** "
+                          f"language{'s' if plural else ''} "
+                          f"ha{'ve' if plural else 's'} no page here: "
+                          + ", ".join(f"`{b}`" for b in no_page)
+                          + " (no `_types.def` to generate one from).")
     md.append("")
     md.append("## Languages")
     md.append("")
@@ -386,6 +494,7 @@ def main():
         try:
             doc = parse_def_file(def_file)
             markdown = generate_markdown(doc)
+            check_tables(markdown, def_file.name)
 
             # Write output
             output_file = output_dir / f"{def_file.stem.replace('_types', '')}.md"

@@ -62,7 +62,7 @@ Lua programs are called "chunks" - a sequence of statements. A chunk can be stor
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `chunk` | DEFINITION_MODULE | NONE | Chunk - root node representing the entire Lua script |
-| `block` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Block - sequence of statements in a scope |
+| `block` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Block - sequence of statements in a scope |
 
 ## Function Definitions
 
@@ -72,11 +72,10 @@ Lua function syntax: - Named: `function name(params) ... end` - Local: `local fu
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_declaration` | DEFINITION_FUNCTION | Function::REGULAR | CUSTOM | Named function declaration - `function name(...) end` |
-| `function_definition` | DEFINITION_FUNCTION | Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Anonymous function - `function(...) end` as expression |
-| `local_function_declaration` | DEFINITION_FUNCTION | Function::REGULAR | CUSTOM | Local function - `local function name(...) end` |
-| `parameters` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Parameter list - function parameters |
-| `return_statement` | FLOW_JUMP | Jump::RETURN | NONE | Return statement - `return expr, expr, ...` |
+| `function_declaration` | DEFINITION_FUNCTION \| Function::REGULAR | CUSTOM | Named function declaration - `function name(...) end` |
+| `function_definition` | DEFINITION_FUNCTION \| Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Anonymous function - `function(...) end` as expression |
+| `parameters` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Parameter list - function parameters |
+| `return_statement` | FLOW_JUMP \| Jump::RETURN | NONE | Return statement - `return expr, expr, ...` |
 
 ## Function Calls
 
@@ -86,9 +85,9 @@ Lua call syntax: - Function: `func(args)` or `func "string"` or `func {table}` -
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_call` | COMPUTATION_CALL | Call::FUNCTION | FIND_CALL_TARGET | Function call - `func(args)` |
-| `arguments` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Argument list |
-| `method_index_expression` | COMPUTATION_CALL | Call::METHOD | FIND_CALL_TARGET | Method call - `obj:method(args)` |
+| `function_call` | COMPUTATION_CALL \| Call::FUNCTION | FIND_CALL_TARGET | Function call - `func(args)` |
+| `arguments` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Argument list |
+| `method_index_expression` | COMPUTATION_CALL \| Call::METHOD | FIND_CALL_TARGET | Method call - `obj:method(args)` |
 
 ## Variable Declarations
 
@@ -98,11 +97,10 @@ Lua variable scoping: - Global by default (no keyword needed) - `local` for lexi
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `variable_declaration` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Variable declaration (global) |
-| `local_variable_declaration` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Local variable declaration - `local x = value` |
-| `assignment_statement` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | FIND_IDENTIFIER | Assignment statement - `x = value` or `a, b = 1, 2` |
-| `variable_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Variable list - left side of multiple assignment |
-| `expression_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Expression list - right side of multiple assignment |
+| `variable_declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Variable declaration (global) |
+| `assignment_statement` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | FIND_IDENTIFIER | Assignment statement - `x = value` or `a, b = 1, 2` |
+| `variable_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Variable list - left side of multiple assignment |
+| `expression_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Expression list - right side of multiple assignment |
 
 ## Table Constructs
 
@@ -112,9 +110,8 @@ Tables in Lua: - The only data structure (arrays, dictionaries, objects, modules
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `table_constructor` | LITERAL_STRUCTURED | Structured::MAPPING | NONE | Table constructor - `{...}` |
-| `field` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER | Field in table - `key = value` or `[expr] = value` |
-| `field_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Field list in table constructor |
+| `table_constructor` | LITERAL_STRUCTURED \| Structured::MAPPING | NONE | Table constructor - `{...}` |
+| `field` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER | Field in table - `key = value` or `[expr] = value` |
 
 ## Identifiers and References
 
@@ -135,7 +132,7 @@ Lua has simple literal types: - Numbers (double precision floats, integers in 5.
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `number` | LITERAL_NUMBER | NODE_TEXT | Number literal - integers and floats |
-| `string` | LITERAL_STRING | String::LITERAL | NODE_TEXT | String literal - `"..."`, `'...'`, or `[[...]]` |
+| `string` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | String literal - `"..."`, `'...'`, or `[[...]]` |
 | `true` | LITERAL_ATOMIC | NODE_TEXT | Boolean true |
 | `false` | LITERAL_ATOMIC | NODE_TEXT | Boolean false |
 | `nil` | LITERAL_ATOMIC | NODE_TEXT | Nil value - absence of value |
@@ -149,9 +146,9 @@ Lua conditionals: - `if ... then ... elseif ... then ... else ... end` - Only `f
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if_statement` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | If statement - `if ... then ... end` |
-| `elseif_statement` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | Elseif clause - `elseif ... then ...` |
-| `else_statement` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | Else clause - `else ...` |
+| `if_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | If statement - `if ... then ... end` |
+| `elseif_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | Elseif clause - `elseif ... then ...` |
+| `else_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | Else clause - `else ...` |
 
 ## Control Flow - Loops
 
@@ -162,11 +159,11 @@ Lua loop types: - `for i = start, stop, step do ... end` (numeric) - `for k, v i
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `for_statement` | FLOW_LOOP | NONE | For statement container |
-| `for_generic_clause` | FLOW_LOOP | Loop::ITERATOR | NONE | Generic for clause - `for k, v in iterator do` |
-| `for_numeric_clause` | FLOW_LOOP | Loop::COUNTER | NONE | Numeric for clause - `for i = 1, 10, 1 do` |
-| `while_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | While loop - `while ... do ... end` |
-| `repeat_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | Repeat loop - `repeat ... until ...` (do-while equivalent) |
-| `do_statement` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Do block - `do ... end` creates a scope |
+| `for_generic_clause` | FLOW_LOOP \| Loop::ITERATOR | NONE | Generic for clause - `for k, v in iterator do` |
+| `for_numeric_clause` | FLOW_LOOP \| Loop::COUNTER | NONE | Numeric for clause - `for i = 1, 10, 1 do` |
+| `while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | While loop - `while ... do ... end` |
+| `repeat_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | Repeat loop - `repeat ... until ...` (do-while equivalent) |
+| `do_statement` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Do block - `do ... end` creates a scope |
 
 ## Jump Statements
 
@@ -176,8 +173,8 @@ Lua jump statements: - `break` - exits innermost loop - `goto label` - jumps to 
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `break_statement` | FLOW_JUMP | Jump::BREAK | NONE | Break statement - exits loop |
-| `goto_statement` | FLOW_JUMP | Jump::GOTO | FIND_IDENTIFIER | Goto statement - jumps to label (Lua 5.2+) |
+| `break_statement` | FLOW_JUMP \| Jump::BREAK | NODE_TEXT | Break statement - exits loop |
+| `goto_statement` | FLOW_JUMP \| Jump::GOTO | FIND_IDENTIFIER | Goto statement - jumps to label (Lua 5.2+) |
 | `label_statement` | NAME_IDENTIFIER | FIND_IDENTIFIER | Label statement - `::label::` for goto target |
 
 ## Expressions
@@ -186,8 +183,8 @@ Operators and expression types
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `binary_expression` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Binary expression - arithmetic, comparison, logical, string concat |
-| `unary_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE | Unary expression - `-`, `not`, `#` (length) |
+| `binary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Binary expression - arithmetic, comparison, logical, string concat |
+| `unary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE | Unary expression - `-`, `not`, `#` (length) |
 | `parenthesized_expression` | ORGANIZATION_BLOCK | NONE | Parenthesized expression - `(expr)` |
 
 ## Comments and Metadata
@@ -243,8 +240,7 @@ Lua has 22 reserved keywords. They cannot be used as identifiers.
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `break` | FLOW_JUMP | NODE_TEXT | Lua reserved words |
-| `do` | ORGANIZATION_BLOCK | NODE_TEXT |  |
+| `do` | ORGANIZATION_BLOCK | NODE_TEXT | Lua reserved words |
 | `else` | FLOW_CONDITIONAL | NODE_TEXT |  |
 | `elseif` | FLOW_CONDITIONAL | NODE_TEXT |  |
 | `end` | ORGANIZATION_BLOCK | NODE_TEXT |  |
@@ -282,12 +278,17 @@ Parser error nodes
 | `or` | OPERATOR_LOGICAL | NODE_TEXT |  |
 | `not` | OPERATOR_LOGICAL | NODE_TEXT |  |
 | `&` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
-| `|` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
+| `\|` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `~` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `<<` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `>>` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `=` | OPERATOR_ASSIGNMENT | NODE_TEXT | Assignment operator |
 | `#` | OPERATOR_ARITHMETIC | NODE_TEXT | Length operator - `#table` or `#string` |
+| `comment_content` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `escape_sequence` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `hash_bang_line` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `string_content` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `[[` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

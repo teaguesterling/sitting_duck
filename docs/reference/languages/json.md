@@ -89,6 +89,12 @@ Parser error nodes
 |-----------|---------------|-----------------|-------------|
 | `ERROR` | PARSER_SYNTAX | NODE_TEXT | Parse error node |
 
+## Other Node Types
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `comment` | PARSER_CONSTRUCT | NODE_TEXT |  |
+
 ---
 
 *Generated from `json_types.def`*

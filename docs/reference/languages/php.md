@@ -60,12 +60,12 @@ PHP file structure: - `<?php` opens PHP mode (required for pure PHP files) - `na
 |-----------|---------------|-----------------|-------------|
 | `program` | DEFINITION_MODULE | NONE | Program root - represents the entire PHP file |
 | `php_tag` | PARSER_DELIMITER | NODE_TEXT | PHP opening/closing tags - `<?php`, `?>`, `<?=` |
-| `require_expression` | EXTERNAL_IMPORT | Import::MODULE | NODE_TEXT | Require - includes file, fatal error if not found |
-| `require_once_expression` | EXTERNAL_IMPORT | Import::MODULE | NODE_TEXT | Require once - includes file only once |
-| `include_expression` | EXTERNAL_IMPORT | Import::MODULE | NODE_TEXT | Include - includes file, warning if not found |
-| `include_once_expression` | EXTERNAL_IMPORT | Import::MODULE | NODE_TEXT | Include once - includes file only once |
+| `require_expression` | EXTERNAL_IMPORT \| Import::MODULE | NODE_TEXT | Require - includes file, fatal error if not found |
+| `require_once_expression` | EXTERNAL_IMPORT \| Import::MODULE | NODE_TEXT | Require once - includes file only once |
+| `include_expression` | EXTERNAL_IMPORT \| Import::MODULE | NODE_TEXT | Include - includes file, warning if not found |
+| `include_once_expression` | EXTERNAL_IMPORT \| Import::MODULE | NODE_TEXT | Include once - includes file only once |
 | `namespace_definition` | DEFINITION_MODULE | CUSTOM | Namespace definition - `namespace App\Models;` |
-| `namespace_use_declaration` | EXTERNAL_IMPORT | Import::MODULE | NODE_TEXT | Use declaration - imports classes, functions, or constants |
+| `namespace_use_declaration` | EXTERNAL_IMPORT \| Import::MODULE | NODE_TEXT | Use declaration - imports classes, functions, or constants |
 
 ## Class and Interface Definitions
 
@@ -75,10 +75,10 @@ PHP OOP features: - Classes with single inheritance - Interfaces for contracts (
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `class_declaration` | DEFINITION_CLASS | Class::REGULAR | CUSTOM | Class declaration - `class Name extends Parent implements Interface` |
-| `interface_declaration` | DEFINITION_CLASS | Class::ABSTRACT | CUSTOM | Interface declaration - `interface Name extends Other` |
-| `trait_declaration` | DEFINITION_CLASS | Class::ABSTRACT | FIND_IDENTIFIER | Trait declaration - reusable method collections |
-| `enum_declaration` | DEFINITION_CLASS | Class::ENUM | FIND_IDENTIFIER | Enum declaration - `enum Status: string { case Active = 'active'; }` |
+| `class_declaration` | DEFINITION_CLASS \| Class::REGULAR | CUSTOM | Class declaration - `class Name extends Parent implements Interface` |
+| `interface_declaration` | DEFINITION_CLASS \| Class::ABSTRACT | CUSTOM | Interface declaration - `interface Name extends Other` |
+| `trait_declaration` | DEFINITION_CLASS \| Class::ABSTRACT | FIND_IDENTIFIER | Trait declaration - reusable method collections |
+| `enum_declaration` | DEFINITION_CLASS \| Class::ENUM | FIND_IDENTIFIER | Enum declaration - `enum Status: string { case Active = 'active'; }` |
 
 ## Function and Method Definitions
 
@@ -88,13 +88,10 @@ PHP function features: - `function name(Type $param): ReturnType` - Optional par
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_definition` | DEFINITION_FUNCTION | Function::REGULAR | CUSTOM | Function definition - `function name($params) { }` |
+| `function_definition` | DEFINITION_FUNCTION \| Function::REGULAR | CUSTOM | Function definition - `function name($params) { }` |
 | `function` | DEFINITION_FUNCTION | NONE | Function keyword token |
-| `method_declaration` | DEFINITION_FUNCTION | Function::REGULAR | CUSTOM | Method declaration - function inside class/trait |
-| `constructor_declaration` | DEFINITION_FUNCTION | Function::CONSTRUCTOR | NODE_TEXT | Constructor - `__construct()` |
-| `destructor_declaration` | DEFINITION_FUNCTION | Function::CONSTRUCTOR | NODE_TEXT | Destructor - `__destruct()` |
-| `anonymous_function_creation_expression` | DEFINITION_FUNCTION | Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Anonymous function - `function($x) use ($y) { }` |
-| `arrow_function` | DEFINITION_FUNCTION | Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Arrow function - `fn($x) => $x * 2` (PHP 7.4+) |
+| `method_declaration` | DEFINITION_FUNCTION \| Function::REGULAR | CUSTOM | Method declaration - function inside class/trait |
+| `arrow_function` | DEFINITION_FUNCTION \| Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Arrow function - `fn($x) => $x * 2` (PHP 7.4+) |
 
 ## Variable and Property Declarations
 
@@ -104,14 +101,14 @@ PHP variable characteristics: - All variables prefixed with `$` - No explicit de
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `property_declaration` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER | Property declaration - class member variable |
-| `const_declaration` | DEFINITION_VARIABLE | Variable::IMMUTABLE | FIND_IDENTIFIER | Constant declaration - `const NAME = value;` |
-| `global_declaration` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Global variable declaration - `global $var;` |
-| `static_variable_declaration` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Static variable - `static $var = value;` |
-| `formal_parameters` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Formal parameters list |
-| `simple_parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER | Simple parameter - `Type $name` |
-| `variadic_parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER | Variadic parameter - `...$args` |
-| `property_promotion_parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER | Property promotion parameter - `public $name` in constructor |
+| `property_declaration` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER | Property declaration - class member variable |
+| `const_declaration` | DEFINITION_VARIABLE \| Variable::IMMUTABLE | FIND_IDENTIFIER | Constant declaration - `const NAME = value;` |
+| `global_declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Global variable declaration - `global $var;` |
+| `static_variable_declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Static variable - `static $var = value;` |
+| `formal_parameters` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Formal parameters list |
+| `simple_parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER | Simple parameter - `Type $name` |
+| `variadic_parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER | Variadic parameter - `...$args` |
+| `property_promotion_parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER | Property promotion parameter - `public $name` in constructor |
 
 ## Type System
 
@@ -123,10 +120,9 @@ PHP type system (evolved significantly in PHP 7-8): - Scalar types: `int`, `floa
 |-----------|---------------|-----------------|-------------|
 | `named_type` | TYPE_REFERENCE | NODE_TEXT | Named type reference - class, interface, or built-in type |
 | `optional_type` | TYPE_COMPOSITE | NONE | Optional/nullable type - `?Type` |
-| `union_type` | TYPE_COMPOSITE | NONE | Union type - `Type1|Type2` |
+| `union_type` | TYPE_COMPOSITE | NONE | Union type - `Type1\|Type2` |
 | `intersection_type` | TYPE_COMPOSITE | NONE | Intersection type - `Type1&Type2` |
 | `primitive_type` | TYPE_PRIMITIVE | NODE_TEXT | Primitive type - `int`, `string`, `bool`, etc. |
-| `array_type` | TYPE_COMPOSITE | NODE_TEXT | Array type hint - `array` |
 
 ## Expressions and Calls
 
@@ -136,18 +132,18 @@ PHP call types: - Function call: `function_name($args)` - Method call: `$obj->me
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_call_expression` | COMPUTATION_CALL | Call::FUNCTION | FIND_CALL_TARGET | Function call - `function_name($args)` |
-| `member_call_expression` | COMPUTATION_CALL | Call::METHOD | FIND_CALL_TARGET | Method call - `$obj->method($args)` |
-| `scoped_call_expression` | COMPUTATION_CALL | Call::METHOD | FIND_CALL_TARGET | Static call - `Class::method($args)` |
-| `object_creation_expression` | COMPUTATION_CALL | Call::CONSTRUCTOR | FIND_CALL_TARGET | Object creation - `new ClassName($args)` |
+| `function_call_expression` | COMPUTATION_CALL \| Call::FUNCTION | FIND_CALL_TARGET | Function call - `function_name($args)` |
+| `member_call_expression` | COMPUTATION_CALL \| Call::METHOD | FIND_CALL_TARGET | Method call - `$obj->method($args)` |
+| `scoped_call_expression` | COMPUTATION_CALL \| Call::METHOD | FIND_CALL_TARGET | Static call - `Class::method($args)` |
+| `object_creation_expression` | COMPUTATION_CALL \| Call::CONSTRUCTOR | FIND_CALL_TARGET | Object creation - `new ClassName($args)` |
 | `member_access_expression` | COMPUTATION_ACCESS | FIND_IDENTIFIER | Member access - `$obj->property` |
 | `subscript_expression` | COMPUTATION_ACCESS | NONE | Array subscript - `$arr[index]` |
-| `assignment_expression` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE | Assignment - `$var = value` |
-| `augmented_assignment_expression` | OPERATOR_ASSIGNMENT | Assignment::COMPOUND | NONE | Augmented assignment - `$var += value` |
-| `binary_expression` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Binary expression - arithmetic, comparison, logical |
-| `unary_op_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE | Unary expression - `!`, `-`, `++`, `--` |
-| `conditional_expression` | FLOW_CONDITIONAL | Conditional::TERNARY | NONE | Conditional/ternary expression - `$a ? $b : $c` |
-| `match_expression` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | Match expression - pattern matching (PHP 8+) |
+| `assignment_expression` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | NONE | Assignment - `$var = value` |
+| `augmented_assignment_expression` | OPERATOR_ASSIGNMENT \| Assignment::COMPOUND | NONE | Augmented assignment - `$var += value` |
+| `binary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Binary expression - arithmetic, comparison, logical |
+| `unary_op_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE | Unary expression - `!`, `-`, `++`, `--` |
+| `conditional_expression` | FLOW_CONDITIONAL \| Conditional::TERNARY | NONE | Conditional/ternary expression - `$a ? $b : $c` |
+| `match_expression` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Match expression - pattern matching (PHP 8+) |
 
 ## Identifiers and Literals
 
@@ -167,16 +163,16 @@ PHP control structures support alternative syntax for templates: - `if (...): ..
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if_statement` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | If statement - `if (...) { } elseif { } else { }` |
-| `switch_statement` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | Switch statement - `switch ($x) { case 1: ... }` |
-| `while_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | While loop - `while (...) { }` |
-| `do_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | Do-while loop - `do { } while (...);` |
-| `for_statement` | FLOW_LOOP | Loop::COUNTER | NONE | For loop - `for ($i = 0; $i < $n; $i++) { }` |
-| `foreach_statement` | FLOW_LOOP | Loop::ITERATOR | NONE | Foreach loop - `foreach ($arr as $key => $value) { }` |
-| `break_statement` | FLOW_JUMP | Jump::BREAK | NONE | Break statement - exits loop or switch |
-| `continue_statement` | FLOW_JUMP | Jump::CONTINUE | NONE | Continue statement - skips to next iteration |
-| `return_statement` | FLOW_JUMP | Jump::RETURN | NONE | Return statement - exits function with value |
-| `goto_statement` | FLOW_JUMP | Jump::GOTO | FIND_IDENTIFIER | Goto statement - jumps to label |
+| `if_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | If statement - `if (...) { } elseif { } else { }` |
+| `switch_statement` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Switch statement - `switch ($x) { case 1: ... }` |
+| `while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | While loop - `while (...) { }` |
+| `do_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | Do-while loop - `do { } while (...);` |
+| `for_statement` | FLOW_LOOP \| Loop::COUNTER | NONE | For loop - `for ($i = 0; $i < $n; $i++) { }` |
+| `foreach_statement` | FLOW_LOOP \| Loop::ITERATOR | NONE | Foreach loop - `foreach ($arr as $key => $value) { }` |
+| `break_statement` | FLOW_JUMP \| Jump::BREAK | NONE | Break statement - exits loop or switch |
+| `continue_statement` | FLOW_JUMP \| Jump::CONTINUE | NONE | Continue statement - skips to next iteration |
+| `return_statement` | FLOW_JUMP \| Jump::RETURN | NONE | Return statement - exits function with value |
+| `goto_statement` | FLOW_JUMP \| Jump::GOTO | FIND_IDENTIFIER | Goto statement - jumps to label |
 | `yield_expression` | FLOW_SYNC | NONE | Yield expression - generator yield |
 
 ## Exception Handling
@@ -236,16 +232,25 @@ Parser error nodes
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `integer` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT | Integer literal |
-| `float` | LITERAL_NUMBER | Number::FLOAT | NODE_TEXT | Floating-point literal |
-| `string` | LITERAL_STRING | String::LITERAL | NODE_TEXT | String literal - single or double quoted |
-| `encapsed_string` | LITERAL_STRING | String::TEMPLATE | NODE_TEXT | Encapsed string - double quoted with interpolation |
-| `heredoc` | LITERAL_STRING | String::RAW | NODE_TEXT | Heredoc string - `<<<EOF` |
-| `nowdoc` | LITERAL_STRING | String::RAW | NODE_TEXT | Nowdoc string - `<<<'EOF'` (no interpolation) |
-| `shell_command_expression` | LITERAL_STRING | String::TEMPLATE | NODE_TEXT | Shell command - backtick execution |
+| `integer` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Integer literal |
+| `float` | LITERAL_NUMBER \| Number::FLOAT | NODE_TEXT | Floating-point literal |
+| `string` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | String literal - single or double quoted |
+| `encapsed_string` | LITERAL_STRING \| String::TEMPLATE | NODE_TEXT | Encapsed string - double quoted with interpolation |
+| `heredoc` | LITERAL_STRING \| String::RAW | NODE_TEXT | Heredoc string - `<<<EOF` |
+| `nowdoc` | LITERAL_STRING \| String::RAW | NODE_TEXT | Nowdoc string - `<<<'EOF'` (no interpolation) |
+| `shell_command_expression` | LITERAL_STRING \| String::TEMPLATE | NODE_TEXT | Shell command - backtick execution |
 | `boolean` | LITERAL_ATOMIC | NODE_TEXT | Boolean literal - `true` or `false` |
 | `null` | LITERAL_ATOMIC | NODE_TEXT | Null literal |
-| `array_creation_expression` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE | Array creation - `[1, 2, 3]` or `array(...)` |
+| `array_creation_expression` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE | Array creation - `[1, 2, 3]` or `array(...)` |
+| `bottom_type` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `escape_sequence` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `heredoc_end` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `heredoc_start` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `nowdoc_string` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `php_end_tag` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `sentinel_error` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `string_content` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `var_modifier` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

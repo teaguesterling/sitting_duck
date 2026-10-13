@@ -38,7 +38,7 @@ C# using features: - `using Namespace;` - import namespace - `using static Class
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `using_directive` | EXTERNAL_IMPORT | Import::MODULE | FIND_IDENTIFIER | Using directive - `using System;` |
+| `using_directive` | EXTERNAL_IMPORT \| Import::MODULE | CUSTOM | Using directive - `using System;` or `using System.Collections.Generic;` |
 
 ## Method Definitions
 
@@ -48,11 +48,11 @@ C# method features: - `public Type Method(params) { }` - `ref` and `out` paramet
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `method_declaration` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Method declaration - class method |
-| `constructor_declaration` | DEFINITION_FUNCTION | Function::CONSTRUCTOR | FIND_IDENTIFIER | Constructor declaration - `ClassName(params) { }` |
-| `destructor_declaration` | DEFINITION_FUNCTION | Function::CONSTRUCTOR | FIND_IDENTIFIER | Destructor/finalizer - `~ClassName() { }` |
-| `operator_declaration` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Operator overload - `public static T operator+(T a, T b)` |
-| `lambda_expression` | DEFINITION_FUNCTION | Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Lambda expression - `(x) => x * 2` |
+| `method_declaration` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Method declaration - class method |
+| `constructor_declaration` | DEFINITION_FUNCTION \| Function::CONSTRUCTOR | FIND_IDENTIFIER | Constructor declaration - `ClassName(params) { }` |
+| `destructor_declaration` | DEFINITION_FUNCTION \| Function::CONSTRUCTOR | FIND_IDENTIFIER | Destructor/finalizer - `~ClassName() { }` |
+| `operator_declaration` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Operator overload - `public static T operator+(T a, T b)` |
+| `lambda_expression` | DEFINITION_FUNCTION \| Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Lambda expression - `(x) => x * 2` |
 
 ## Class and Type Definitions
 
@@ -62,11 +62,11 @@ C# type kinds: - `class` - reference type with single inheritance - `struct` - v
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `class_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Class declaration - reference type |
-| `struct_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Struct declaration - value type |
-| `interface_declaration` | DEFINITION_CLASS | Class::ABSTRACT | FIND_IDENTIFIER | Interface declaration - contract |
-| `enum_declaration` | DEFINITION_CLASS | Class::ENUM | FIND_IDENTIFIER | Enum declaration - enumeration |
-| `record_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Record declaration - immutable reference type (C# 9+) |
+| `class_declaration` | DEFINITION_CLASS \| Class::REGULAR | FIND_IDENTIFIER | Class declaration - reference type |
+| `struct_declaration` | DEFINITION_CLASS \| Class::REGULAR | FIND_IDENTIFIER | Struct declaration - value type |
+| `interface_declaration` | DEFINITION_CLASS \| Class::ABSTRACT | FIND_IDENTIFIER | Interface declaration - contract |
+| `enum_declaration` | DEFINITION_CLASS \| Class::ENUM | FIND_IDENTIFIER | Enum declaration - enumeration |
+| `record_declaration` | DEFINITION_CLASS \| Class::REGULAR | FIND_IDENTIFIER | Record declaration - immutable reference type (C# 9+) |
 
 ## Variable and Property Declarations
 
@@ -76,10 +76,10 @@ C# member types: - Fields: `private int _field;` - Properties: `public int Prope
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `field_declaration` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER | Field declaration - class field |
-| `property_declaration` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER | Property declaration - get/set accessor |
-| `variable_declaration` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Local variable declaration |
-| `parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER | Method parameter |
+| `field_declaration` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER | Field declaration - class field |
+| `property_declaration` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER | Property declaration - get/set accessor |
+| `variable_declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Local variable declaration |
+| `parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER | Method parameter |
 
 ## Function Calls and Expressions
 
@@ -87,8 +87,8 @@ Method invocations and expressions
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `invocation_expression` | COMPUTATION_CALL | Call::METHOD | FIND_CALL_TARGET | Method invocation - `obj.Method(args)` |
-| `object_creation_expression` | COMPUTATION_CALL | Call::CONSTRUCTOR | FIND_CALL_TARGET | Object creation - `new ClassName(args)` |
+| `invocation_expression` | COMPUTATION_CALL \| Call::METHOD | FIND_CALL_TARGET | Method invocation - `obj.Method(args)` |
+| `object_creation_expression` | COMPUTATION_CALL \| Call::CONSTRUCTOR | FIND_CALL_TARGET | Object creation - `new ClassName(args)` |
 
 ## Control Flow
 
@@ -98,8 +98,8 @@ C# control flow: - `if`/`else if`/`else` - standard conditional - `switch` with 
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if_statement` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | If statement - `if (cond) { }` |
-| `switch_statement` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | Switch statement - pattern matching |
+| `if_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | If statement - `if (cond) { }` |
+| `switch_statement` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Switch statement - pattern matching |
 
 ## Loop Constructs
 
@@ -109,10 +109,10 @@ C# loops: - `for (init; cond; incr)` - classic for - `foreach (var x in collecti
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `for_statement` | FLOW_LOOP | Loop::COUNTER | NONE | For statement - `for (int i = 0; i < n; i++)` |
-| `foreach_statement` | FLOW_LOOP | Loop::ITERATOR | NONE | Foreach statement - `foreach (var x in collection)` |
-| `while_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | While statement - `while (cond) { }` |
-| `do_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | Do statement - `do { } while (cond);` |
+| `for_statement` | FLOW_LOOP \| Loop::COUNTER | NONE | For statement - `for (int i = 0; i < n; i++)` |
+| `foreach_statement` | FLOW_LOOP \| Loop::ITERATOR | NONE | Foreach statement - `foreach (var x in collection)` |
+| `while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | While statement - `while (cond) { }` |
+| `do_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | Do statement - `do { } while (cond);` |
 
 ## Jump Statements
 
@@ -120,9 +120,9 @@ Control flow transfer
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `break_statement` | FLOW_JUMP | Jump::BREAK | NONE | Break statement - exits loop or switch |
-| `continue_statement` | FLOW_JUMP | Jump::CONTINUE | NONE | Continue statement - skips to next iteration |
-| `return_statement` | FLOW_JUMP | Jump::RETURN | NONE | Return statement - exits method with value |
+| `break_statement` | FLOW_JUMP \| Jump::BREAK | NONE | Break statement - exits loop or switch |
+| `continue_statement` | FLOW_JUMP \| Jump::CONTINUE | NONE | Continue statement - skips to next iteration |
+| `return_statement` | FLOW_JUMP \| Jump::RETURN | NONE | Return statement - exits method with value |
 | `throw_statement` | ERROR_THROW | NONE | Throw statement - raises exception |
 
 ## Error Handling
@@ -156,10 +156,11 @@ C# literals: - Integers: `42`, `0xFF`, `42L`, `42u` - Floats: `3.14`, `3.14f`, `
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `identifier` | NAME_IDENTIFIER | NODE_TEXT | Identifier - name |
-| `integer_literal` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT | Integer literal |
-| `real_literal` | LITERAL_NUMBER | Number::FLOAT | NODE_TEXT | Real/float literal |
-| `string_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT | String literal |
-| `character_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT | Character literal - `'a'` |
+| `predefined_type` | TYPE_PRIMITIVE | NODE_TEXT | Predefined type - `int`, `string`, `void`, `bool`, etc. |
+| `integer_literal` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Integer literal |
+| `real_literal` | LITERAL_NUMBER \| Number::FLOAT | NODE_TEXT | Real/float literal |
+| `string_literal` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | String literal |
+| `character_literal` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | Character literal - `'a'` |
 | `boolean_literal` | LITERAL_ATOMIC | NODE_TEXT | Boolean literal - `true` or `false` |
 | `null_literal` | LITERAL_ATOMIC | NODE_TEXT | Null literal |
 
@@ -178,6 +179,25 @@ Parser error nodes
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `ERROR` | PARSER_SYNTAX | NODE_TEXT | Parse error node |
+
+## Other Node Types
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `character_literal_content` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `discard` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `escape_sequence` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `interpolation_brace` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `interpolation_start` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `preproc_arg` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `raw_string_content` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `raw_string_end` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `raw_string_start` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `shebang_directive` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `string_content` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `string_literal_content` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `string_literal_encoding` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `verbatim_string_literal` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

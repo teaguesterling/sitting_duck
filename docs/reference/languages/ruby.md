@@ -88,9 +88,9 @@ Ruby method features: - `def name(args) ... end` for instance methods - `def sel
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `method` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Instance method definition - `def method_name(params) ... end` |
-| `singleton_method` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Singleton/class method - `def self.method_name` or `def obj.method_name` |
-| `alias` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Method alias - `alias new_name old_name` |
+| `method` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Instance method definition - `def method_name(params) ... end` |
+| `singleton_method` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Singleton/class method - `def self.method_name` or `def obj.method_name` |
+| `alias` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Method alias - `alias new_name old_name` |
 
 ## Variable and Constant Definitions
 
@@ -100,10 +100,9 @@ Ruby variable scopes (by naming convention): - `local` - local to current scope 
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `assignment` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Simple assignment - `var = value` |
-| `operator_assignment` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Compound assignment - `var += value`, `var ||= default` |
-| `multiple_assignment` | DEFINITION_VARIABLE | Variable::MUTABLE | NONE | Multiple/parallel assignment - `a, b = 1, 2` or `a, b = arr` |
-| `constant` | DEFINITION_VARIABLE | Variable::IMMUTABLE | NODE_TEXT | Constant definition - `CONSTANT = value` (uppercase names) |
+| `assignment` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Simple assignment - `var = value` |
+| `operator_assignment` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Compound assignment - `var += value`, `var \|\|= default` |
+| `constant` | DEFINITION_VARIABLE \| Variable::IMMUTABLE | NODE_TEXT | Constant definition - `CONSTANT = value` (uppercase names) |
 
 ## Expressions and Calls
 
@@ -113,9 +112,7 @@ Ruby method calls: - Parentheses optional: `puts "hello"` or `puts("hello")` - M
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `call` | COMPUTATION_CALL | Call::FUNCTION | FIND_CALL_TARGET | Function-style call - `method(args)` |
-| `method_call` | COMPUTATION_CALL | Call::METHOD | FIND_CALL_TARGET | Method call on object - `obj.method(args)` |
-| `chained_call` | COMPUTATION_CALL | Call::METHOD | FIND_CALL_TARGET | Chained method call - `obj.method1.method2` |
+| `call` | COMPUTATION_CALL \| Call::FUNCTION | FIND_CALL_TARGET | Function-style call - `method(args)` |
 | `element_reference` | COMPUTATION_ACCESS | NONE | Array/hash element access - `arr[index]` or `hash[key]` |
 
 ## Identifiers and Names
@@ -127,7 +124,6 @@ Ruby identifier conventions: - `snake_case` for methods and local variables - `C
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `identifier` | NAME_IDENTIFIER | NODE_TEXT | Local variable or method name |
-| `constant_identifier` | NAME_IDENTIFIER | NODE_TEXT | Constant identifier - uppercase names |
 | `instance_variable` | NAME_IDENTIFIER | NODE_TEXT | Instance variable - `@name` |
 | `class_variable` | NAME_IDENTIFIER | NODE_TEXT | Class variable - `@@name` |
 | `global_variable` | NAME_IDENTIFIER | NODE_TEXT | Global variable - `$name` |
@@ -140,10 +136,10 @@ Ruby literal types: - Numbers: integers, floats, rationals (`1/3r`), complex (`1
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `integer` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT | Integer literal - `42`, `1_000_000`, `0xFF` |
-| `float` | LITERAL_NUMBER | Number::FLOAT | NODE_TEXT | Floating-point literal - `3.14`, `1.0e10` |
-| `complex` | LITERAL_NUMBER | Number::COMPLEX | NODE_TEXT | Complex number - `1+2i` |
-| `rational` | LITERAL_NUMBER | Number::COMPLEX | NODE_TEXT | Rational number - `1/3r` |
+| `integer` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Integer literal - `42`, `1_000_000`, `0xFF` |
+| `float` | LITERAL_NUMBER \| Number::FLOAT | NODE_TEXT | Floating-point literal - `3.14`, `1.0e10` |
+| `complex` | LITERAL_NUMBER \| Number::COMPLEX | NODE_TEXT | Complex number - `1+2i` |
+| `rational` | LITERAL_NUMBER \| Number::COMPLEX | NODE_TEXT | Rational number - `1/3r` |
 
 ## Control Flow
 
@@ -153,12 +149,12 @@ Ruby control flow features: - `if`/`elsif`/`else`/`end` - standard conditional -
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | If statement - `if condition ... end` |
-| `unless` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | Unless statement - `unless condition ... end` (negated if) |
-| `case` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | Case statement - `case expr when pattern ... end` |
-| `when` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | When clause - pattern in case statement |
-| `if_modifier` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | If modifier - `expr if condition` |
-| `unless_modifier` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | Unless modifier - `expr unless condition` |
+| `if` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | If statement - `if condition ... end` |
+| `unless` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | Unless statement - `unless condition ... end` (negated if) |
+| `case` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Case statement - `case expr when pattern ... end` |
+| `when` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | When clause - pattern in case statement |
+| `if_modifier` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | If modifier - `expr if condition` |
+| `unless_modifier` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | Unless modifier - `expr unless condition` |
 
 ## Loop Constructs
 
@@ -168,11 +164,11 @@ Ruby loop constructs: - `while` - condition-based loop - `until` - negated while
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `while` | FLOW_LOOP | Loop::CONDITIONAL | NONE | While loop - `while condition ... end` |
-| `until` | FLOW_LOOP | Loop::CONDITIONAL | NONE | Until loop - `until condition ... end` (negated while) |
-| `for` | FLOW_LOOP | Loop::ITERATOR | NONE | For loop - `for x in collection ... end` |
-| `while_modifier` | FLOW_LOOP | Loop::CONDITIONAL | NONE | While modifier - `expr while condition` |
-| `until_modifier` | FLOW_LOOP | Loop::CONDITIONAL | NONE | Until modifier - `expr until condition` |
+| `while` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | While loop - `while condition ... end` |
+| `until` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | Until loop - `until condition ... end` (negated while) |
+| `for` | FLOW_LOOP \| Loop::ITERATOR | NONE | For loop - `for x in collection ... end` |
+| `while_modifier` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | While modifier - `expr while condition` |
+| `until_modifier` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | Until modifier - `expr until condition` |
 
 ## Jump Statements
 
@@ -182,11 +178,11 @@ Ruby jump statements: - `return` - exit method with value - `break` - exit loop 
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `return` | FLOW_JUMP | Jump::RETURN | NONE | Return statement - exits method with value |
-| `break` | FLOW_JUMP | Jump::BREAK | NONE | Break statement - exits loop or block |
-| `next` | FLOW_JUMP | Jump::CONTINUE | NONE | Next statement - skips to next iteration |
-| `redo` | FLOW_JUMP | Jump::CONTINUE | NONE | Redo statement - restarts current iteration |
-| `retry` | FLOW_JUMP | Jump::CONTINUE | NONE | Retry statement - restarts from begin block |
+| `return` | FLOW_JUMP \| Jump::RETURN | NONE | Return statement - exits method with value |
+| `break` | FLOW_JUMP \| Jump::BREAK | NONE | Break statement - exits loop or block |
+| `next` | FLOW_JUMP \| Jump::CONTINUE | NONE | Next statement - skips to next iteration |
+| `redo` | FLOW_JUMP \| Jump::CONTINUE | NONE | Redo statement - restarts current iteration |
+| `retry` | FLOW_JUMP \| Jump::CONTINUE | NONE | Retry statement - restarts from begin block |
 
 ## Exception Handling
 
@@ -199,7 +195,6 @@ Ruby exception handling: - `begin ... rescue ... ensure ... end` - `raise` to th
 | `begin` | ERROR_TRY | NONE | Begin block - starts exception handling region |
 | `rescue` | ERROR_CATCH | NONE | Rescue clause - catches exceptions |
 | `ensure` | ERROR_FINALLY | NONE | Ensure clause - always executed (like finally) |
-| `raise` | ERROR_THROW | NONE | Raise statement - throws exception |
 
 ## Blocks and Closures
 
@@ -209,10 +204,9 @@ Ruby closures: - Blocks: `{ |params| body }` or `do |params| body end` - Procs: 
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `block` | ORGANIZATION_BLOCK | NONE | Block - `{ |params| ... }` single-line form |
-| `do_block` | ORGANIZATION_BLOCK | NONE | Do block - `do |params| ... end` multi-line form |
+| `block` | ORGANIZATION_BLOCK | NONE | Block - `{ \|params\| ... }` single-line form |
+| `do_block` | ORGANIZATION_BLOCK | NONE | Do block - `do \|params\| ... end` multi-line form |
 | `lambda` | COMPUTATION_CLOSURE | NONE | Lambda - `-> { }` or `lambda { }` |
-| `proc` | COMPUTATION_CLOSURE | NONE | Proc - `proc { }` or `Proc.new { }` |
 
 ## Import Constructs
 
@@ -220,22 +214,13 @@ Ruby file loading mechanisms
 
 Ruby file loading: - `require 'lib'` - load from $LOAD_PATH (once) - `require_relative './file'` - load relative to current file - `load 'file.rb'` - always reload - `include Module` - mix in module methods as instance methods - `extend Module` - mix in module methods as class methods - `prepend Module` - insert module before class in method chain
 
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `require` | EXTERNAL_IMPORT | NONE | Require - loads library from load path |
-| `require_relative` | EXTERNAL_IMPORT | NONE | Require relative - loads file relative to current |
-| `load` | EXTERNAL_IMPORT | NONE | Load - loads and re-evaluates file |
-| `include` | EXTERNAL_IMPORT | FIND_IDENTIFIER | Include - mixes in module as instance methods |
-| `extend` | EXTERNAL_IMPORT | FIND_IDENTIFIER | Extend - mixes in module as class methods |
-| `prepend` | EXTERNAL_IMPORT | FIND_IDENTIFIER | Prepend - inserts module before class in method chain |
-
 ## Comments
 
 Documentation and annotation
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `comment` | METADATA_COMMENT | NONE | Comment - `# single line comment` |
+| `comment` | METADATA_COMMENT | NODE_TEXT | Comment - `# single line comment` |
 
 ## Special Ruby Constructs
 
@@ -246,7 +231,7 @@ Ruby special constructs: - `yield` - invoke passed block - `super` - call parent
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `yield` | FLOW_SYNC | NONE | Yield - invokes block passed to method |
-| `super` | COMPUTATION_CALL | NONE | Super - calls parent class method |
+| `super` | COMPUTATION_CALL | NODE_TEXT | Super - calls parent class method |
 | `self` | NAME_SCOPED | NODE_TEXT | Self - reference to current object |
 
 ## Operators
@@ -257,20 +242,17 @@ Ruby operators and expressions
 |-----------|---------------|-----------------|-------------|
 | `binary` | OPERATOR_ARITHMETIC | NONE | Binary expression - two operand operation |
 | `unary` | OPERATOR_ARITHMETIC | NONE | Unary expression - single operand operation |
-| `assignment_operator` | OPERATOR_ASSIGNMENT | NONE | Assignment operator node |
 
 ## Keywords
 
 Ruby reserved words with special meaning
 
-Ruby keywords are reserved and cannot be used as identifiers. They are classified by their semantic function with the IS_KEYWORD flag.
+Ruby keywords are reserved and cannot be used as identifiers. They are classified by their semantic function with the IS_KEYWORD flag. ## Issue #208 — only keywords with NO colliding named rule belong here A tree-sitter raw_type is not a unique key. The ruby grammar uses the same type STRING for a named rule and for the anonymous keyword token that introduces it: `class`, `module`, `if`, `unless`, `case`, `when`, `while`, `until`, `for`, `begin`, `rescue`, `ensure`, `return`, `break`, `next`, `redo`, `retry` and `yield` each exist twice in node-types.json, once with `named: true` (the statement) and once with `named: false` (the token). `node_configs` is an `unordered_map` keyed by that string and built from an initializer list, where the FIRST entry for a key wins — so a keyword row for one of those names was silently discarded by the loader and never had any effect. Those 18 rows have been removed, along with the `super` and `singleton_method` rows that re-declared an already-declared NAMED node, and the `raise` row for a node type the grammar does not produce at all. What classifies the anonymous token instead: PopulateSemanticFieldsTemplated derives it. An unnamed node cannot introduce a name and cannot open a scope, so where the surviving config claims it does (`class`, `module`: NAME_DEFINITION | IS_SCOPE) the engine clears that role and sets IS_SYNTAX_ONLY. That is what stops the bare `class` token counting as a second class definition in a one-class file. Still open (tracked on #208): a keyword token whose colliding named rule carries no role flags — `if`, `while`, `begin`, ... — has nothing for the engine to contradict, so it still inherits the statement's semantic type. Expressing those needs namedness in the config key (a separate anonymous table), which is a bigger change than this fix. The rows below are keyword-only type strings with no colliding named rule. Before adding one, check node-types.json for a `named: true` twin.
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `def` | DEFINITION_FUNCTION | NONE | Ruby reserved words with special meaning |
 | `end` | ORGANIZATION_BLOCK | NONE |  |
-| `class` | DEFINITION_CLASS | NONE |  |
-| `module` | DEFINITION_MODULE | NONE |  |
 
 ## Punctuation and Delimiters
 
@@ -278,8 +260,7 @@ Syntactic markers
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `'` | PARSER_DELIMITER | NONE | Syntactic markers |
-| `,` | PARSER_PUNCTUATION | NONE |  |
+| `,` | PARSER_PUNCTUATION | NONE | Syntactic markers |
 | `.` | PARSER_PUNCTUATION | NONE |  |
 | `:` | PARSER_PUNCTUATION | NONE |  |
 | `;` | PARSER_PUNCTUATION | NONE |  |
@@ -289,7 +270,7 @@ Syntactic markers
 | `]` | PARSER_DELIMITER | NONE |  |
 | `{` | PARSER_DELIMITER | NONE |  |
 | `}` | PARSER_DELIMITER | NONE |  |
-| `|` | PARSER_DELIMITER | NONE |  |
+| `\|` | PARSER_DELIMITER | NONE |  |
 
 ## Arithmetic Operators
 
@@ -318,7 +299,7 @@ Ruby has both symbolic and keyword logical operators: - `&&` / `and` - logical A
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `&&` | OPERATOR_LOGICAL | NONE | Boolean operators |
-| `||` | OPERATOR_LOGICAL | NONE |  |
+| `\|\|` | OPERATOR_LOGICAL | NONE |  |
 | `!` | OPERATOR_LOGICAL | NONE |  |
 
 ## Comparison Operators
@@ -356,12 +337,12 @@ Notable Ruby idioms: - `||=` - memoization: `@cached ||= expensive_computation` 
 | `%=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `**=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `&=` | OPERATOR_ASSIGNMENT | NONE |  |
-| `|=` | OPERATOR_ASSIGNMENT | NONE |  |
+| `\|=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `^=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `<<=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `>>=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `&&=` | OPERATOR_ASSIGNMENT | NONE |  |
-| `||=` | OPERATOR_ASSIGNMENT | NONE |  |
+| `\|\|=` | OPERATOR_ASSIGNMENT | NONE |  |
 
 ## Ruby-Specific Constructs
 
@@ -369,21 +350,15 @@ Additional Ruby AST nodes
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `string_content` | LITERAL_STRING | NONE | String content - text inside string literal |
+| `string_content` | LITERAL_STRING | NODE_TEXT | String content - text inside string literal |
 | `body_statement` | EXECUTION_STATEMENT | NONE | Body statement - method/class body |
 | `argument_list` | ORGANIZATION_LIST | NONE | Argument list - method call arguments |
 | `program` | DEFINITION_MODULE | NONE | Program root node |
 | `method_parameters` | ORGANIZATION_LIST | NONE | Method parameters |
 | `in_clause` | FLOW_LOOP | NONE | In clause - for loop iterator |
 | `bare_symbol` | LITERAL_STRING | NODE_TEXT | Bare symbol - unquoted symbol |
-| `parameter_list` | ORGANIZATION_LIST | NONE | Parameter list |
-| `block_parameters` | ORGANIZATION_LIST | NONE | Block parameters - `|x, y|` |
+| `block_parameters` | ORGANIZATION_LIST | NONE | Block parameters - `\|x, y\|` |
 | `parenthesized_statements` | ORGANIZATION_BLOCK | NONE | Parenthesized statements |
-| `elsif_clause` | FLOW_CONDITIONAL | NONE | Elsif clause |
-| `else_clause` | FLOW_CONDITIONAL | NONE | Else clause |
-| `rescue_clause` | ERROR_CATCH | NONE | Rescue clause |
-| `ensure_clause` | ERROR_FINALLY | NONE | Ensure clause |
-| `when_clause` | FLOW_CONDITIONAL | NONE | When clause in case statement |
 
 ## Advanced Ruby Constructs
 
@@ -395,9 +370,8 @@ Scope resolution, splat, and complex structures
 | `::` | COMPUTATION_ACCESS | NONE | Scope resolution operator `::` |
 | `splat_argument` | PATTERN_COLLECT | NONE | Splat argument - `*args` in call |
 | `hash_splat_argument` | PATTERN_COLLECT | NONE | Hash splat argument - `**kwargs` in call |
-| `keyword_splat` | PATTERN_COLLECT | NONE | Keyword splat - `**options` |
 | `interpolation` | LITERAL_STRING | NONE | String interpolation - `#{expr}` |
-| `escape_sequence` | LITERAL_STRING | NONE | Escape sequence in string |
+| `escape_sequence` | LITERAL_STRING | NODE_TEXT | Escape sequence in string |
 | `heredoc_beginning` | LITERAL_STRING | NODE_TEXT | Heredoc start marker |
 | `heredoc_end` | LITERAL_STRING | NODE_TEXT | Heredoc end marker |
 | `heredoc_body` | LITERAL_STRING | NONE | Heredoc body content |
@@ -408,8 +382,6 @@ Alternative method definition forms
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `singleton_method` | DEFINITION_FUNCTION | FIND_IDENTIFIER | Singleton method (class method form) |
-| `alias_method` | DEFINITION_FUNCTION | FIND_IDENTIFIER | Method alias |
 | `undef` | EXECUTION_STATEMENT | FIND_IDENTIFIER | Undef - removes method definition |
 
 ## Module and Class Constructs
@@ -426,22 +398,9 @@ Method visibility control
 
 Ruby access modifiers: - `public` - callable from anywhere (default) - `protected` - callable from same class or subclasses - `private` - callable only with implicit receiver (no `self.`)
 
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `private` | METADATA_ANNOTATION | NONE | Method visibility control |
-| `protected` | METADATA_ANNOTATION | NONE |  |
-| `public` | METADATA_ANNOTATION | NONE |  |
-
 ## Special Variables
 
 Ruby magic constants and variables
-
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `__FILE__` | NAME_SCOPED | NODE_TEXT | Current file path |
-| `__LINE__` | NAME_SCOPED | NODE_TEXT | Current line number |
-| `__dir__` | NAME_SCOPED | NODE_TEXT | Current directory |
-| `__ENCODING__` | NAME_SCOPED | NODE_TEXT | Current encoding |
 
 ## Pattern Matching
 
@@ -452,25 +411,14 @@ Pattern matching syntax: - `case expr in pattern ... end` - Variable binding: `i
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `case_match` | PATTERN_MATCH | NONE | Case match expression - `case ... in` |
-| `in_pattern` | PATTERN_MATCH | NONE | In pattern - pattern matching clause |
-| `variable_pattern` | PATTERN_DESTRUCTURE | FIND_IDENTIFIER | Variable pattern - captures value in pattern |
 | `array_pattern` | PATTERN_DESTRUCTURE | NONE | Array pattern - `[a, b, c]` |
 | `hash_pattern` | PATTERN_DESTRUCTURE | NONE | Hash pattern - `{key:}` |
-| `rest_pattern` | PATTERN_COLLECT | NONE | Rest pattern - `*rest` |
 | `keyword_pattern` | PATTERN_MATCH | NONE | Keyword pattern |
-| `alternative_pattern` | PATTERN_MATCH | NONE | Alternative pattern - `a | b` |
+| `alternative_pattern` | PATTERN_MATCH | NONE | Alternative pattern - `a \| b` |
 
 ## Metaprogramming Constructs
 
 Dynamic method and attribute generation
-
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `attr_reader` | METADATA_ANNOTATION | FIND_IDENTIFIER | attr_reader - generates getter methods |
-| `attr_writer` | METADATA_ANNOTATION | FIND_IDENTIFIER | attr_writer - generates setter methods |
-| `attr_accessor` | METADATA_ANNOTATION | FIND_IDENTIFIER | attr_accessor - generates getter and setter methods |
-| `define_method` | DEFINITION_FUNCTION | FIND_IDENTIFIER | define_method - dynamically defines instance method |
-| `define_singleton_method` | DEFINITION_FUNCTION | FIND_IDENTIFIER | define_singleton_method - dynamically defines class method |
 
 ## Additional Ruby Literals
 
@@ -478,14 +426,11 @@ Various literal forms
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `word_literal` | LITERAL_STRING | NODE_TEXT | Various literal forms |
-| `symbol_literal` | LITERAL_STRING | NODE_TEXT |  |
-| `regex_literal` | LITERAL_STRING | NODE_TEXT |  |
-| `hash_key_symbol` | LITERAL_STRING | NODE_TEXT |  |
+| `hash_key_symbol` | LITERAL_STRING | NODE_TEXT | Various literal forms |
 | `bare_string` | LITERAL_STRING | NODE_TEXT |  |
 | `delimited_symbol` | LITERAL_STRING | NODE_TEXT |  |
 | `chained_string` | LITERAL_STRING | NODE_TEXT |  |
-| `heredoc_content` | LITERAL_STRING | NONE |  |
+| `heredoc_content` | LITERAL_STRING | NODE_TEXT |  |
 
 ## Remaining Edge Cases
 
@@ -533,45 +478,27 @@ Parser error nodes
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `string` | LITERAL_STRING | String::LITERAL | NODE_TEXT | String literal - double or single quoted |
-| `character` | LITERAL_STRING | String::LITERAL | NODE_TEXT | Character literal - `?a` |
-| `symbol` | LITERAL_STRING | String::LITERAL | NODE_TEXT | Symbol - `:name` immutable interned string |
-| `simple_symbol` | LITERAL_STRING | String::LITERAL | NODE_TEXT | Simple symbol - unquoted symbol `:name` |
-| `regex` | LITERAL_STRING | String::REGEX | NODE_TEXT | Regular expression - `/pattern/flags` |
-| `string_array` | LITERAL_STRUCTURED | Structured::SEQUENCE | NODE_TEXT | String array literal - `%w[a b c]` |
-| `symbol_array` | LITERAL_STRUCTURED | Structured::SEQUENCE | NODE_TEXT | Symbol array literal - `%i[a b c]` |
+| `string` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | String literal - double or single quoted |
+| `character` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | Character literal - `?a` |
+| `simple_symbol` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | Simple symbol - unquoted symbol `:name` |
+| `regex` | LITERAL_STRING \| String::REGEX | NODE_TEXT | Regular expression - `/pattern/flags` |
+| `string_array` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NODE_TEXT | String array literal - `%w[a b c]` |
+| `symbol_array` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NODE_TEXT | Symbol array literal - `%i[a b c]` |
 | `array` | LITERAL_STRUCTURED | NONE | Array literal - `[1, 2, 3]` |
 | `hash` | LITERAL_STRUCTURED | NONE | Hash literal - `{key: value}` |
 | `range` | LITERAL_STRUCTURED | NONE | Range literal - `1..10` or `1...10` |
 | `true` | LITERAL_ATOMIC | NODE_TEXT | Boolean true |
 | `false` | LITERAL_ATOMIC | NODE_TEXT | Boolean false |
 | `nil` | LITERAL_ATOMIC | NODE_TEXT | Nil value - Ruby's null |
-| `if` | FLOW_CONDITIONAL | NONE |  |
-| `unless` | FLOW_CONDITIONAL | NONE |  |
 | `else` | FLOW_CONDITIONAL | NONE |  |
 | `elsif` | FLOW_CONDITIONAL | NONE |  |
-| `case` | FLOW_CONDITIONAL | NONE |  |
-| `when` | FLOW_CONDITIONAL | NONE |  |
 | `then` | FLOW_CONDITIONAL | NONE |  |
-| `while` | FLOW_LOOP | NONE |  |
-| `until` | FLOW_LOOP | NONE |  |
-| `for` | FLOW_LOOP | NONE |  |
 | `in` | OPERATOR_COMPARISON | NONE |  |
 | `do` | ORGANIZATION_BLOCK | NONE |  |
-| `begin` | ERROR_TRY | NONE |  |
-| `rescue` | ERROR_CATCH | NONE |  |
-| `ensure` | ERROR_FINALLY | NONE |  |
-| `raise` | ERROR_THROW | NONE |  |
-| `return` | FLOW_JUMP | NONE |  |
-| `break` | FLOW_JUMP | NONE |  |
-| `next` | FLOW_JUMP | NONE |  |
-| `redo` | FLOW_JUMP | NONE |  |
-| `retry` | FLOW_JUMP | NONE |  |
-| `yield` | FLOW_SYNC | NONE |  |
-| `super` | COMPUTATION_CALL | NONE |  |
 | `and` | OPERATOR_LOGICAL | NONE |  |
 | `or` | OPERATOR_LOGICAL | NONE |  |
 | `not` | OPERATOR_LOGICAL | NONE |  |
+| `uninterpreted` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

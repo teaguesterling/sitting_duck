@@ -66,15 +66,15 @@ The C preprocessor performs text substitution before compilation. These nodes re
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `preproc_include` | EXTERNAL_IMPORT | Import::MODULE | NODE_TEXT | #include directive: `#include <header.h>` or `#include "header.h"` |
-| `preproc_def` | DEFINITION_VARIABLE | Variable::IMMUTABLE | FIND_IDENTIFIER | Object-like macro: `#define NAME value` |
-| `preproc_function_def` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Function-like macro: `#define NAME(args) body` |
-| `preproc_call` | COMPUTATION_CALL | Call::MACRO | FIND_CALL_TARGET | Macro invocation: `MACRO(args)` |
-| `preproc_if` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | Conditional compilation: `#if condition` |
-| `preproc_ifdef` | FLOW_CONDITIONAL | Conditional::BINARY | FIND_IDENTIFIER | Conditional compilation: `#ifdef MACRO` |
-| `preproc_else` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | Conditional else: `#else` |
-| `preproc_elif` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | Conditional elif: `#elif condition` |
-| `preproc_params` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Preprocessor parameters in function-like macro |
+| `preproc_include` | EXTERNAL_IMPORT \| Import::MODULE | NODE_TEXT | #include directive: `#include <header.h>` or `#include "header.h"` |
+| `preproc_def` | DEFINITION_VARIABLE \| Variable::IMMUTABLE | FIND_IDENTIFIER | Object-like macro: `#define NAME value` |
+| `preproc_function_def` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Function-like macro: `#define NAME(args) body` |
+| `preproc_call` | COMPUTATION_CALL \| Call::MACRO | FIND_CALL_TARGET | Macro invocation: `MACRO(args)` |
+| `preproc_if` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | Conditional compilation: `#if condition` |
+| `preproc_ifdef` | FLOW_CONDITIONAL \| Conditional::BINARY | FIND_IDENTIFIER | Conditional compilation: `#ifdef MACRO` |
+| `preproc_else` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | Conditional else: `#else` |
+| `preproc_elif` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | Conditional elif: `#elif condition` |
+| `preproc_params` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Preprocessor parameters in function-like macro |
 | `preproc_arg` | METADATA_DIRECTIVE | NODE_TEXT | Preprocessor argument text |
 | `defined` | METADATA_DIRECTIVE | NODE_TEXT | defined() operator in preprocessor conditionals |
 | `preproc_defined` | METADATA_DIRECTIVE | NONE | Preprocessor defined check |
@@ -88,17 +88,16 @@ C distinguishes between declarations (prototypes) and definitions (implementatio
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_definition` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IN_DECLARATOR | Function definition: `type name(params) { body }` |
-| `declaration` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Variable/function declaration: `type name;` or `type name(params);` |
-| `struct_specifier` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Struct definition: `struct name { fields };` |
-| `union_specifier` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Union definition: `union name { fields };` |
-| `enum_specifier` | DEFINITION_CLASS | Class::ENUM | FIND_IDENTIFIER | Enum definition: `enum name { values };` |
-| `typedef_declaration` | DEFINITION_CLASS | Class::REGULAR | FIND_IDENTIFIER | Typedef: `typedef old_type new_name;` |
+| `function_definition` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IN_DECLARATOR | Function definition: `type name(params) { body }` |
+| `declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Variable/function declaration: `type name;` or `type name(params);` |
+| `struct_specifier` | DEFINITION_CLASS \| Class::REGULAR | FIND_IDENTIFIER | Struct definition: `struct name { fields };` |
+| `union_specifier` | DEFINITION_CLASS \| Class::REGULAR | FIND_IDENTIFIER | Union definition: `union name { fields };` |
+| `enum_specifier` | DEFINITION_CLASS \| Class::ENUM | FIND_IDENTIFIER | Enum definition: `enum name { values };` |
 | `type_definition` | DEFINITION_CLASS | FIND_IDENTIFIER | Type definition (alternate form) |
-| `field_declaration` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER | Field in struct/union: `type name;` |
-| `enumerator` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER | Enumerator: `NAME` or `NAME = value` in enum |
-| `parameter_declaration` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER | Function parameter: `type name` in parameter list |
-| `init_declarator` | DEFINITION_VARIABLE | Variable::MUTABLE | FIND_IDENTIFIER | Initializing declarator: `name = value` in declaration |
+| `field_declaration` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER | Field in struct/union: `type name;` |
+| `enumerator` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER | Enumerator: `NAME` or `NAME = value` in enum |
+| `parameter_declaration` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER | Function parameter: `type name` in parameter list |
+| `init_declarator` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Initializing declarator: `name = value` in declaration |
 
 ## Type Specifiers
 
@@ -114,7 +113,6 @@ C has primitive types, user-defined types, and compound types built with pointer
 | `pointer_declarator` | TYPE_COMPOSITE | FIND_IDENTIFIER | Pointer declarator: `*name` |
 | `array_declarator` | TYPE_COMPOSITE | FIND_IDENTIFIER | Array declarator: `name[size]` |
 | `function_declarator` | TYPE_COMPOSITE | FIND_IDENTIFIER | Function declarator: `name(params)` |
-| `abstract_declarator` | TYPE_COMPOSITE | NONE | Abstract declarator (type without name) |
 | `parenthesized_declarator` | TYPE_COMPOSITE | FIND_IDENTIFIER | Parenthesized declarator: `(*name)` |
 | `abstract_pointer_declarator` | TYPE_REFERENCE | NONE | Abstract pointer declarator |
 | `abstract_parenthesized_declarator` | TYPE_REFERENCE | NONE | Abstract parenthesized declarator |
@@ -130,20 +128,20 @@ Control flow and executable statements
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `compound_statement` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Compound statement (block): `{ statements }` |
+| `compound_statement` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Compound statement (block): `{ statements }` |
 | `labeled_statement` | EXECUTION_STATEMENT | FIND_IDENTIFIER | Labeled statement: `label: statement` |
 | `expression_statement` | EXECUTION_STATEMENT | NONE | Expression statement: `expression;` |
-| `if_statement` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | If statement: `if (cond) stmt` or `if (cond) stmt else stmt` |
+| `if_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | If statement: `if (cond) stmt` or `if (cond) stmt else stmt` |
 | `else_clause` | FLOW_CONDITIONAL | NONE | Else clause in if statement |
-| `switch_statement` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | Switch statement: `switch (expr) { cases }` |
-| `case_statement` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | Case statement: `case value: statements` |
-| `while_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | While loop: `while (cond) stmt` |
-| `for_statement` | FLOW_LOOP | Loop::COUNTER | NONE | For loop: `for (init; cond; update) stmt` |
-| `do_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | Do-while loop: `do stmt while (cond);` |
-| `goto_statement` | FLOW_JUMP | Jump::GOTO | FIND_IDENTIFIER | Goto statement: `goto label;` |
-| `continue_statement` | FLOW_JUMP | Jump::CONTINUE | NONE | Continue statement: `continue;` |
-| `break_statement` | FLOW_JUMP | Jump::BREAK | NONE | Break statement: `break;` |
-| `return_statement` | FLOW_JUMP | Jump::RETURN | NONE | Return statement: `return expr;` |
+| `switch_statement` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Switch statement: `switch (expr) { cases }` |
+| `case_statement` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Case statement: `case value: statements` |
+| `while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | While loop: `while (cond) stmt` |
+| `for_statement` | FLOW_LOOP \| Loop::COUNTER | NONE | For loop: `for (init; cond; update) stmt` |
+| `do_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | Do-while loop: `do stmt while (cond);` |
+| `goto_statement` | FLOW_JUMP \| Jump::GOTO | FIND_IDENTIFIER | Goto statement: `goto label;` |
+| `continue_statement` | FLOW_JUMP \| Jump::CONTINUE | NONE | Continue statement: `continue;` |
+| `break_statement` | FLOW_JUMP \| Jump::BREAK | NONE | Break statement: `break;` |
+| `return_statement` | FLOW_JUMP \| Jump::RETURN | NONE | Return statement: `return expr;` |
 
 ## Expressions
 
@@ -151,17 +149,17 @@ Computation, access, and operator expressions
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `call_expression` | COMPUTATION_CALL | Call::FUNCTION | FIND_CALL_TARGET | Function call: `func(args)` |
+| `call_expression` | COMPUTATION_CALL \| Call::FUNCTION | FIND_CALL_TARGET | Function call: `func(args)` |
 | `field_expression` | COMPUTATION_ACCESS | FIND_IDENTIFIER | Field access: `struct.field` or `struct->field` |
 | `subscript_expression` | COMPUTATION_ACCESS | NONE | Array subscript: `array[index]` |
-| `assignment_expression` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE | Assignment: `lvalue = rvalue` |
-| `binary_expression` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Binary expression: `a + b`, `a * b`, etc. |
-| `unary_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE | Unary expression: `!a`, `-a`, `*ptr`, `&var` |
-| `update_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE | Update expression: `a++`, `++a`, `a--`, `--a` |
+| `assignment_expression` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | NONE | Assignment: `lvalue = rvalue` |
+| `binary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Binary expression: `a + b`, `a * b`, etc. |
+| `unary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE | Unary expression: `!a`, `-a`, `*ptr`, `&var` |
+| `update_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE | Update expression: `a++`, `++a`, `a--`, `--a` |
 | `cast_expression` | COMPUTATION_EXPRESSION | NONE | Cast expression: `(type)expr` |
-| `sizeof_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE | Sizeof expression: `sizeof(type)` or `sizeof expr` |
-| `conditional_expression` | FLOW_CONDITIONAL | Conditional::TERNARY | NONE | Conditional/ternary expression: `cond ? then : else` |
-| `comma_expression` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Comma expression: `expr1, expr2` |
+| `sizeof_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE | Sizeof expression: `sizeof(type)` or `sizeof expr` |
+| `conditional_expression` | FLOW_CONDITIONAL \| Conditional::TERNARY | NONE | Conditional/ternary expression: `cond ? then : else` |
+| `comma_expression` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Comma expression: `expr1, expr2` |
 | `parenthesized_expression` | COMPUTATION_EXPRESSION | NONE | Parenthesized expression: `(expr)` |
 | `pointer_expression` | COMPUTATION_ACCESS | NONE | Pointer dereference or address-of |
 | `compound_literal_expression` | LITERAL_STRUCTURED | NONE | Compound literal: `(type){ initializers }` |
@@ -177,9 +175,9 @@ Names and constant values
 | `field_identifier` | NAME_IDENTIFIER | NODE_TEXT | Field identifier in struct access |
 | `statement_identifier` | NAME_IDENTIFIER | NODE_TEXT | Statement identifier (goto label) |
 | `number_literal` | LITERAL_NUMBER | NODE_TEXT | Number literal: 42, 3.14, 0xFF, etc. |
-| `char_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT | Character literal: 'a', '\n', etc. |
-| `string_literal` | LITERAL_STRING | String::LITERAL | NODE_TEXT | String literal: "hello" |
-| `concatenated_string` | LITERAL_STRING | String::LITERAL | NODE_TEXT | Concatenated string: "hello" "world" |
+| `char_literal` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | Character literal: 'a', '\n', etc. |
+| `string_literal` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | String literal: "hello" |
+| `concatenated_string` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | Concatenated string: "hello" "world" |
 | `string_content` | LITERAL_STRING | NODE_TEXT | String content (inside quotes) |
 | `escape_sequence` | LITERAL_STRING | NODE_TEXT | Escape sequence in string: \n, \t, etc. |
 | `character` | LITERAL_STRING | NODE_TEXT | Character content |
@@ -232,11 +230,11 @@ Lists and organizational nodes
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `initializer_pair` | PATTERN_DESTRUCTURE | FIND_PROPERTY | Designated initializer: `.field = value` or `[index] = value` |
-| `argument_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Function call argument list |
+| `argument_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Function call argument list |
 | `subscript_designator` | COMPUTATION_ACCESS | NONE | Array subscript in designator |
-| `initializer_list` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE | Initializer list: `{ values }` |
+| `initializer_list` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE | Initializer list: `{ values }` |
 | `field_designator` | PATTERN_DESTRUCTURE | FIND_PROPERTY | Field designator: `.field` |
-| `parameter_list` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Function parameter list |
+| `parameter_list` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Function parameter list |
 | `field_declaration_list` | ORGANIZATION_LIST | NONE | Field declaration list in struct/union |
 | `enumerator_list` | ORGANIZATION_LIST | NONE | Enumerator list in enum |
 | `declaration_list` | ORGANIZATION_LIST | NONE | Declaration list (multiple declarations) |
@@ -279,7 +277,7 @@ Simple and compound assignment
 | `/=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `%=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `&=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
-| `|=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
+| `\|=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `^=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `<<=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
 | `>>=` | OPERATOR_ASSIGNMENT | NODE_TEXT |  |
@@ -309,7 +307,7 @@ Mathematical and bitwise operators
 | `/` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `%` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `&` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
-| `|` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
+| `\|` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `^` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `~` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
 | `<<` | OPERATOR_ARITHMETIC | NODE_TEXT |  |
@@ -324,7 +322,7 @@ Boolean operators
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `&&` | OPERATOR_LOGICAL | NODE_TEXT | Boolean operators |
-| `||` | OPERATOR_LOGICAL | NODE_TEXT |  |
+| `\|\|` | OPERATOR_LOGICAL | NODE_TEXT |  |
 | `!` | OPERATOR_LOGICAL | NODE_TEXT |  |
 
 ## Member Access Operators
@@ -391,8 +389,6 @@ Preprocessor directive keywords
 | `#else` | METADATA_DIRECTIVE | NODE_TEXT |  |
 | `#elif` | METADATA_DIRECTIVE | NODE_TEXT |  |
 | `#endif` | METADATA_DIRECTIVE | NODE_TEXT |  |
-| `#undef` | METADATA_DIRECTIVE | NODE_TEXT |  |
-| `#pragma` | METADATA_DIRECTIVE | NODE_TEXT |  |
 
 ## GNU Extensions
 
@@ -421,6 +417,13 @@ Error nodes from parsing
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `ERROR` | PARSER_SYNTAX | NODE_TEXT | Error nodes from parsing |
+
+## Other Node Types
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `ms_signed_ptr_modifier` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `ms_unsigned_ptr_modifier` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

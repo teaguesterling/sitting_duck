@@ -2,15 +2,6 @@
 
 > F# language node type mappings for AST semantic extraction
 
-> **Note: F# support is not built in.** There is no `fsharp` entry in
-> `cmake/BuiltinLanguages.cmake` and no `FSharpAdapter` class in
-> `src/include/language_adapter.hpp`, so `fsharp` is not among the languages
-> `ast_supported_languages()` reports, and `read_ast`/`parse_ast` reject it with
-> "Unsupported language: fsharp". Only the semantic-type mapping
-> (`src/language_configs/fsharp_types.def`) and this page exist — the adapter and
-> grammar wiring were never added. Treat this page as a design reference, not a
-> description of working behaviour.
-
 ## Node Categories
 
 - [Program Structure](#program-structure)
@@ -71,7 +62,7 @@ F# type system: - `type Name = ...` - type definition - Records: `type Person = 
 |-----------|---------------|-----------------|-------------|
 | `type_declaration` | DEFINITION_CLASS | FIND_IDENTIFIER | Type declaration - general type definition |
 | `record_declaration` | DEFINITION_CLASS | FIND_IDENTIFIER | Record declaration - `type Person = { Name: string }` |
-| `union_declaration` | DEFINITION_CLASS | FIND_IDENTIFIER | Union declaration - discriminated union `type Option = Some | None` |
+| `union_declaration` | DEFINITION_CLASS | FIND_IDENTIFIER | Union declaration - discriminated union `type Option = Some \| None` |
 
 ## Variable Declarations
 
@@ -147,7 +138,7 @@ F# lambda syntax: - `fun x -> x + 1` - lambda expression - `fun x y -> x + y` - 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `lambda_expression` | DEFINITION_FUNCTION | NONE | Lambda expression - `fun x -> expr` |
-| `anon_record_expression` | DEFINITION_FUNCTION | NONE | Anonymous record expression - `{| Field = value |}` |
+| `anon_record_expression` | DEFINITION_FUNCTION | NONE | Anonymous record expression - `{\| Field = value \|}` |
 
 ## Identifiers and Literals
 

@@ -43,7 +43,6 @@ Heading types: - ATX: `# H1`, `## H2`, etc. (1-6 levels) - Setext: Underlined wi
 |-----------|---------------|-----------------|-------------|
 | `atx_heading` | ORGANIZATION_SECTION | CUSTOM | ATX heading - `# Heading` |
 | `setext_heading` | ORGANIZATION_SECTION | CUSTOM | Setext heading - underlined style |
-| `heading_content` | NAME_IDENTIFIER | NODE_TEXT | Heading content - text of heading |
 
 ## Lists
 
@@ -55,9 +54,6 @@ List types: - Unordered: `-`, `*`, `+` markers - Ordered: `1.` or `1)` markers -
 |-----------|---------------|-----------------|-------------|
 | `list` | ORGANIZATION_LIST | NONE | Generic list container |
 | `list_item` | ORGANIZATION_BLOCK | NONE | List item - single item in list |
-| `ordered_list` | ORGANIZATION_LIST | NONE | Ordered list - `1.`, `2.`, etc. |
-| `unordered_list` | ORGANIZATION_LIST | NONE | Unordered list - `-`, `*`, `+` |
-| `list_marker` | PARSER_DELIMITER | NODE_TEXT | List marker - the bullet/number |
 
 ## Code Blocks
 
@@ -67,10 +63,8 @@ Code types: - Fenced: ``` with optional language - Indented: 4-space prefix - In
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `code_fence` | ORGANIZATION_BLOCK | NONE | Code fence - ``` or ~~~ |
 | `fenced_code_block` | ORGANIZATION_BLOCK | CUSTOM | Fenced code block - ``` block |
 | `indented_code_block` | ORGANIZATION_BLOCK | NONE | Indented code block - 4-space indented |
-| `code_span` | LITERAL_STRING | NODE_TEXT | Code span - inline `` `code` `` |
 | `info_string` | METADATA_ANNOTATION | NODE_TEXT | Info string - language after ``` |
 | `language` | METADATA_ANNOTATION | NODE_TEXT | Language - extracted language name |
 
@@ -82,9 +76,6 @@ Link types: - Inline: `[text](url "title")` - Reference: `[text][ref]` - Definit
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `link` | COMPUTATION_ACCESS | CUSTOM | Link - `[text](url)` |
-| `image` | COMPUTATION_ACCESS | CUSTOM | Image - `![alt](url)` |
-| `link_text` | NAME_IDENTIFIER | NODE_TEXT | Link text - display text |
 | `link_title` | METADATA_ANNOTATION | NODE_TEXT | Link title - optional title |
 | `link_destination` | LITERAL_STRING | NODE_TEXT | Link destination - URL/path |
 | `link_reference_definition` | DEFINITION_VARIABLE | CUSTOM | Link reference definition - `[ref]: url` |
@@ -96,27 +87,11 @@ Markdown inline formatting
 
 Inline styles: - Emphasis: `*text*` or `_text_` - Strong: `**text**` or `__text__` - Code: `` `code` ``
 
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `emphasis` | METADATA_ANNOTATION | NODE_TEXT | Emphasis - `*italic*` |
-| `strong_emphasis` | METADATA_ANNOTATION | NODE_TEXT | Strong emphasis - `**bold**` |
-| `text` | LITERAL_STRING | NODE_TEXT | Text - plain text content |
-| `hard_line_break` | PARSER_DELIMITER | NONE | Hard line break - trailing spaces or `\` |
-| `soft_line_break` | PARSER_DELIMITER | NONE | Soft line break - single newline |
-
 ## Tables
 
 GitHub Flavored Markdown tables
 
 Table syntax: ``` | Header | Header | |--------|--------| | Cell   | Cell   | ```
-
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `table` | ORGANIZATION_CONTAINER | NONE | Table container |
-| `table_header` | ORGANIZATION_SECTION | NONE | Table header row |
-| `table_row` | ORGANIZATION_LIST | NONE | Table data row |
-| `table_cell` | LITERAL_STRING | NODE_TEXT | Table cell content |
-| `table_delimiter_row` | PARSER_DELIMITER | NONE | Table delimiter row - `|---|---|` |
 
 ## HTML Content
 
@@ -125,7 +100,6 @@ Embedded HTML in Markdown
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `html_block` | EXTERNAL_EMBED | NODE_TEXT | HTML block - standalone HTML |
-| `html_inline` | EXTERNAL_EMBED | NODE_TEXT | HTML inline - inline HTML tags |
 
 ## Metadata
 
@@ -133,7 +107,6 @@ Document metadata and structure
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `frontmatter` | METADATA_ANNOTATION | NODE_TEXT | Frontmatter - YAML/TOML metadata block |
 | `thematic_break` | PARSER_DELIMITER | NONE | Thematic break - `---`, `***`, `___` |
 
 ## Punctuation and Delimiters
@@ -161,7 +134,7 @@ Markdown syntax tokens
 | `+` | PARSER_PUNCTUATION | NONE | Plus - `+` |
 | `>` | PARSER_PUNCTUATION | NONE | Greater than - `>` |
 | `<` | PARSER_PUNCTUATION | NONE | Less than - `<` |
-| `|` | PARSER_DELIMITER | NONE | Pipe - `|` |
+| `\|` | PARSER_DELIMITER | NONE | Pipe - `\|` |
 | `!` | PARSER_PUNCTUATION | NONE | Exclamation - `!` |
 
 ## Markdown-Specific Constructs
@@ -170,16 +143,14 @@ Markdown structural elements
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `block_continuation` | ORGANIZATION_BLOCK | NONE | Block continuation - continued block |
+| `block_continuation` | ORGANIZATION_BLOCK | NODE_TEXT | Block continuation - continued block |
 | `inline` | LITERAL_STRING | NODE_TEXT | Inline content - inline text run |
 | `list_marker_minus` | PARSER_DELIMITER | NODE_TEXT | List marker minus - `-` |
-| `fenced_code_block_delimiter` | PARSER_DELIMITER | NONE | Fenced code block delimiter - ``` or ~~~ |
+| `fenced_code_block_delimiter` | PARSER_DELIMITER | NODE_TEXT | Fenced code block delimiter - ``` or ~~~ |
 | `list_marker_plus` | PARSER_DELIMITER | NODE_TEXT | List marker plus - `+` |
 | `list_marker_star` | PARSER_DELIMITER | NODE_TEXT | List marker star - `*` |
 | `list_marker_dot` | PARSER_DELIMITER | NODE_TEXT | List marker dot - ordered list dot |
 | `list_marker_parenthesis` | PARSER_DELIMITER | NODE_TEXT | List marker parenthesis - ordered list paren |
-| `emphasis_delimiter` | PARSER_DELIMITER | NODE_TEXT | Emphasis delimiter - `*` or `_` |
-| `strong_emphasis_delimiter` | PARSER_DELIMITER | NODE_TEXT | Strong emphasis delimiter - `**` or `__` |
 | `code_fence_content` | LITERAL_STRING | NONE | Code fence content - code inside fence |
 | `backslash_escape` | LITERAL_STRING | NONE | Backslash escape - `\*` |
 | `entity_reference` | LITERAL_STRING | NODE_TEXT | Entity reference - `&nbsp;` |
@@ -211,19 +182,9 @@ Task list syntax: - `- [ ]` unchecked - `- [x]` checked
 
 GFM strikethrough syntax
 
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `strikethrough` | METADATA_ANNOTATION | NODE_TEXT | Strikethrough - `~~text~~` |
-| `strikethrough_delimiter` | PARSER_DELIMITER | NODE_TEXT | Strikethrough delimiter - `~~` |
-
 ## Autolinks
 
 Automatic link detection
-
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `uri_autolink` | COMPUTATION_ACCESS | NODE_TEXT | URI autolink - `<https://example.com>` |
-| `email_autolink` | COMPUTATION_ACCESS | NODE_TEXT | Email autolink - `<email@example.com>` |
 
 ## Heading Markers
 
@@ -262,6 +223,14 @@ Parser error nodes
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `ERROR` | PARSER_SYNTAX | NODE_TEXT | Parse error node |
+
+## Other Node Types
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `atx_h6_marker` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `plus_metadata` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `setext_h2_underline` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

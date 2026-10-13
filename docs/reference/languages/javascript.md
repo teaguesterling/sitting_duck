@@ -61,14 +61,12 @@ JavaScript has multiple function syntaxes, each with different `this` binding an
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_declaration` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Named function declaration: `function name(params) { ... }` |
-| `arrow_function` | DEFINITION_FUNCTION | Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Arrow function: `(params) => expr` or `(params) => { ... }` |
-| `function_expression` | DEFINITION_FUNCTION | Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Function expression: `const f = function(params) { ... }` |
-| `method_definition` | DEFINITION_FUNCTION | Function::REGULAR | FIND_IDENTIFIER | Method definition in class or object: `methodName(params) { ... }` |
-| `async_function_declaration` | DEFINITION_FUNCTION | Function::ASYNC | FIND_IDENTIFIER | Async function: `async function name(params) { ... }` |
-| `generator_function` | DEFINITION_FUNCTION | Function::ASYNC | FIND_IDENTIFIER | Generator function: `function* name(params) { ... }` |
-| `generator_function_declaration` | DEFINITION_FUNCTION | Function::ASYNC | FIND_IDENTIFIER | Generator function declaration |
-| `async_generator_function` | DEFINITION_FUNCTION | Function::ASYNC | FIND_IDENTIFIER | Async generator: `async function* name(params) { ... }` |
+| `function_declaration` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Named function declaration: `function name(params) { ... }` |
+| `arrow_function` | DEFINITION_FUNCTION \| Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Arrow function: `(params) => expr` or `(params) => { ... }` |
+| `function_expression` | DEFINITION_FUNCTION \| Function::LAMBDA | FIND_ASSIGNMENT_TARGET | Function expression: `const f = function(params) { ... }` |
+| `method_definition` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_IDENTIFIER | Method definition in class or object: `methodName(params) { ... }` |
+| `generator_function` | DEFINITION_FUNCTION \| Function::ASYNC | FIND_ASSIGNMENT_TARGET | Generator function expression: `function*(params) { ... }` |
+| `generator_function_declaration` | DEFINITION_FUNCTION \| Function::ASYNC | FIND_IDENTIFIER | Generator function declaration: `function* name(params) { ... }` |
 
 ## Class Definitions
 
@@ -79,9 +77,8 @@ JavaScript classes provide cleaner syntax for constructor functions and prototyp
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `class_declaration` | DEFINITION_CLASS | FIND_IDENTIFIER | Class declaration: `class Name { ... }` |
-| `class_expression` | DEFINITION_CLASS | FIND_IDENTIFIER | Class expression: `const C = class { ... }` |
-| `class_body` | ORGANIZATION_BLOCK | Organization::MAPPING | NONE | Class body block containing methods and fields |
-| `field_definition` | DEFINITION_VARIABLE | Variable::FIELD | FIND_IDENTIFIER | Field definition in class: `fieldName = value;` |
+| `class_body` | ORGANIZATION_BLOCK \| Organization::MAPPING | NONE | Class body block containing methods and fields |
+| `field_definition` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER | Field definition in class: `fieldName = value;` |
 
 ## Variable Declarations
 
@@ -101,14 +98,14 @@ Call expressions and operators
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `call_expression` | COMPUTATION_CALL | Call::FUNCTION | FIND_CALL_TARGET | Function call: `func(args)` with FUNCTION refinement |
-| `new_expression` | COMPUTATION_CALL | Call::CONSTRUCTOR | FIND_CALL_TARGET | Constructor call: `new Class(args)` with CONSTRUCTOR refinement |
-| `binary_expression` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Binary expression: `a + b`, `a * b`, etc. |
-| `unary_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE | Unary expression: `!a`, `-a`, `typeof a` |
+| `call_expression` | COMPUTATION_CALL \| Call::FUNCTION | FIND_CALL_TARGET | Function call: `func(args)` with FUNCTION refinement |
+| `new_expression` | COMPUTATION_CALL \| Call::CONSTRUCTOR | FIND_CALL_TARGET | Constructor call: `new Class(args)` with CONSTRUCTOR refinement |
+| `binary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Binary expression: `a + b`, `a * b`, etc. |
+| `unary_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE | Unary expression: `!a`, `-a`, `typeof a` |
 | `assignment_expression` | OPERATOR_ASSIGNMENT | NONE | Assignment expression: `a = b` |
-| `augmented_assignment_expression` | OPERATOR_ASSIGNMENT | NONE | Augmented assignment: `a += b`, `a *= b`, etc. |
-| `update_expression` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE | Update expression: `a++`, `++a`, `a--`, `--a` |
-| `ternary_expression` | FLOW_CONDITIONAL | Conditional::TERNARY | NONE | Ternary/conditional expression: `a ? b : c` |
+| `augmented_assignment_expression` | OPERATOR_ASSIGNMENT \| Assignment::COMPOUND | NONE | Augmented assignment: `a += b`, `a *= b`, etc. |
+| `update_expression` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE | Update expression: `a++`, `++a`, `a--`, `--a` |
+| `ternary_expression` | FLOW_CONDITIONAL \| Conditional::TERNARY | NONE | Ternary/conditional expression: `a ? b : c` |
 | `sequence_expression` | COMPUTATION_EXPRESSION | NONE | Sequence expression: `a, b, c` (evaluates all, returns last) |
 | `parenthesized_expression` | COMPUTATION_EXPRESSION | NONE | Parenthesized expression: `(expr)` |
 | `expression_statement` | EXECUTION_STATEMENT | NONE | Expression statement: expression used as statement |
@@ -122,7 +119,7 @@ Property and element access expressions
 |-----------|---------------|-----------------|-------------|
 | `member_expression` | COMPUTATION_ACCESS | CUSTOM | Member access: `obj.property` |
 | `subscript_expression` | COMPUTATION_ACCESS | NONE | Subscript access: `obj[key]` |
-| `optional_chain` | COMPUTATION_ACCESS | NONE | Optional chaining: `obj?.property` |
+| `optional_chain` | COMPUTATION_ACCESS | NODE_TEXT | Optional chaining: `obj?.property` |
 
 ## Identifiers and References
 
@@ -147,17 +144,16 @@ Literal values: strings, numbers, booleans, structures
 | `string` | LITERAL_STRING | NODE_TEXT | String literal: `"string"` or `'string'` |
 | `template_string` | LITERAL_STRING | NODE_TEXT | Template string: `` `template ${expr}` `` |
 | `template_substitution` | LITERAL_STRING | NONE | Template substitution: `${expr}` inside template |
-| `string_fragment` | LITERAL_STRING | NONE | String fragment inside template |
-| `escape_sequence` | LITERAL_STRING | NONE | Escape sequence in string: `\n`, `\t`, etc. |
-| `number` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT | Number literal: integers and floats |
+| `string_fragment` | LITERAL_STRING | NODE_TEXT | String fragment inside template |
+| `escape_sequence` | LITERAL_STRING | NODE_TEXT | Escape sequence in string: `\n`, `\t`, etc. |
+| `number` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Number literal: integers and floats |
 | `true` | LITERAL_ATOMIC | NODE_TEXT | Boolean true |
 | `false` | LITERAL_ATOMIC | NODE_TEXT | Boolean false |
 | `null` | LITERAL_ATOMIC | NODE_TEXT | Null value |
 | `undefined` | LITERAL_ATOMIC | NODE_TEXT | Undefined value |
-| `array` | LITERAL_STRUCTURED | Structured::SEQUENCE | NONE | Array literal: `[a, b, c]` |
-| `object` | LITERAL_STRUCTURED | Structured::MAPPING | NONE | Object literal: `{ key: value }` |
-| `pair` | LITERAL_STRUCTURED | Structured::MAPPING | NONE | Key-value pair in object: `key: value` |
-| `property_assignment` | LITERAL_STRUCTURED | Structured::MAPPING | FIND_IDENTIFIER | Property assignment in object literal |
+| `array` | LITERAL_STRUCTURED \| Structured::SEQUENCE | NONE | Array literal: `[a, b, c]` |
+| `object` | LITERAL_STRUCTURED \| Structured::MAPPING | NONE | Object literal: `{ key: value }` |
+| `pair` | LITERAL_STRUCTURED \| Structured::MAPPING | NONE | Key-value pair in object: `key: value` |
 | `computed_property_name` | COMPUTATION_EXPRESSION | NONE | Computed property name: `[expr]: value` |
 | `regex` | LITERAL_STRING | NODE_TEXT | Regular expression literal: `/pattern/flags` |
 | `regex_pattern` | LITERAL_STRING | NODE_TEXT | Regex pattern content |
@@ -169,20 +165,16 @@ Conditionals, loops, and jumps
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if_statement` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | If statement: `if (cond) { ... }` |
+| `if_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | If statement: `if (cond) { ... }` |
 | `else_clause` | FLOW_CONDITIONAL | NONE | Else clause: `else { ... }` |
-| `switch_statement` | FLOW_CONDITIONAL | Conditional::MULTIWAY | NONE | Switch statement: `switch (expr) { ... }` |
-| `switch_body` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Switch body block |
-| `switch_case` | FLOW_CONDITIONAL | NONE | Switch case: `case value:` |
-| `case_clause` | FLOW_CONDITIONAL | NONE | Case clause in switch |
-| `switch_default` | FLOW_CONDITIONAL | NONE | Switch default: `default:` |
-| `default_clause` | FLOW_CONDITIONAL | NONE | Default clause in switch |
-| `conditional_expression` | FLOW_CONDITIONAL | Conditional::TERNARY | NONE | Conditional expression: `a ? b : c` |
-| `for_statement` | FLOW_LOOP | Loop::COUNTER | NONE | C-style for loop: `for (init; cond; update) { ... }` |
-| `for_in_statement` | FLOW_LOOP | Loop::ITERATOR | NONE | For-in loop: `for (key in obj) { ... }` |
-| `for_of_statement` | FLOW_LOOP | Loop::ITERATOR | NONE | For-of loop: `for (item of iterable) { ... }` |
-| `while_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | While loop: `while (cond) { ... }` |
-| `do_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | Do-while loop: `do { ... } while (cond);` |
+| `switch_statement` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Switch statement: `switch (expr) { ... }` |
+| `switch_body` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Switch body block |
+| `switch_case` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Switch case: `case value:` |
+| `switch_default` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE | Switch default: `default:` |
+| `for_statement` | FLOW_LOOP \| Loop::COUNTER | NONE | C-style for loop: `for (init; cond; update) { ... }` |
+| `for_in_statement` | FLOW_LOOP \| Loop::ITERATOR | NONE | For-in loop: `for (key in obj) { ... }` |
+| `while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | While loop: `while (cond) { ... }` |
+| `do_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | Do-while loop: `do { ... } while (cond);` |
 | `return_statement` | FLOW_JUMP | NONE | Return statement: `return value;` |
 | `break_statement` | FLOW_JUMP | NONE | Break statement: `break;` or `break label;` |
 | `continue_statement` | FLOW_JUMP | NONE | Continue statement: `continue;` or `continue label;` |
@@ -214,10 +206,10 @@ Blocks, modules, and organizational nodes
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `statement_block` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Statement block: `{ statements... }` |
+| `statement_block` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Statement block: `{ statements... }` |
 | `program` | DEFINITION_MODULE | NONE | Program root node |
-| `arguments` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Function arguments list |
-| `formal_parameters` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Formal parameters in function definition |
+| `arguments` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Function arguments list |
+| `formal_parameters` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Formal parameters in function definition |
 
 ## Module System
 
@@ -225,16 +217,14 @@ ES6 import/export declarations
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `import_statement` | EXTERNAL_IMPORT | Import::MODULE | NONE | Import statement: `import ... from "module"` |
+| `import_statement` | EXTERNAL_IMPORT \| Import::MODULE | NONE | Import statement: `import ... from "module"` |
 | `export_statement` | EXTERNAL_EXPORT | NONE | Export statement: `export ...` |
-| `import_specifier` | EXTERNAL_IMPORT | Import::SELECTIVE | FIND_IDENTIFIER | Import specifier: `{ name }` in import |
+| `import_specifier` | EXTERNAL_IMPORT \| Import::SELECTIVE | FIND_IDENTIFIER | Import specifier: `{ name }` in import |
 | `export_specifier` | EXTERNAL_EXPORT | FIND_IDENTIFIER | Export specifier: `{ name }` in export |
 | `import_clause` | EXTERNAL_IMPORT | NONE | Import clause in import statement |
 | `export_clause` | EXTERNAL_EXPORT | NONE | Export clause in export statement |
-| `import_default_specifier` | EXTERNAL_IMPORT | Import::MODULE | FIND_IDENTIFIER | Default import: `import Name from "module"` |
-| `export_default_declaration` | EXTERNAL_EXPORT | NONE | Default export: `export default ...` |
-| `namespace_import` | EXTERNAL_IMPORT | Import::WILDCARD | FIND_IDENTIFIER | Namespace import: `import * as name from "module"` |
-| `named_imports` | EXTERNAL_IMPORT | Import::SELECTIVE | NONE | Named imports: `{ a, b, c }` |
+| `namespace_import` | EXTERNAL_IMPORT \| Import::WILDCARD | FIND_IDENTIFIER | Namespace import: `import * as name from "module"` |
+| `named_imports` | EXTERNAL_IMPORT \| Import::SELECTIVE | NONE | Named imports: `{ a, b, c }` |
 | `import_attribute` | EXTERNAL_IMPORT | NONE | Import attribute (import assertions) |
 
 ## Destructuring Patterns
@@ -258,11 +248,7 @@ Parameter types in function definitions
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `optional_parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER | Optional parameter: `param = default` |
-| `rest_parameter` | PATTERN_COLLECT | FIND_IDENTIFIER | Rest parameter: `...params` |
-| `required_parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER | Required parameter (TypeScript, but used in JS parsing) |
-| `method_signature` | DEFINITION_FUNCTION | FIND_IDENTIFIER | Method signature (declaration only) |
-| `property_signature` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Property signature (declaration only) |
+| `optional_parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER | Optional parameter: `param = default` |
 
 ## Comments
 
@@ -270,7 +256,7 @@ Documentation and comments
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `comment` | METADATA_COMMENT | NONE | Comment: line or block style |
+| `comment` | METADATA_COMMENT | NODE_TEXT | Comment: line or block style |
 | `hash_bang_line` | METADATA_COMMENT | NODE_TEXT | Hash-bang line: `#!/usr/bin/env node` |
 
 ## Keywords
@@ -281,20 +267,20 @@ Reserved words and language keywords
 |-----------|---------------|-----------------|-------------|
 | `function` | DEFINITION_FUNCTION | NONE | Reserved words and language keywords |
 | `class` | DEFINITION_CLASS | NONE |  |
-| `const` | DEFINITION_VARIABLE | Variable::IMMUTABLE | NONE |  |
-| `let` | DEFINITION_VARIABLE | Variable::MUTABLE | NONE |  |
-| `var` | DEFINITION_VARIABLE | Variable::MUTABLE | NONE |  |
+| `const` | DEFINITION_VARIABLE \| Variable::IMMUTABLE | NONE |  |
+| `let` | DEFINITION_VARIABLE \| Variable::MUTABLE | NONE |  |
+| `var` | DEFINITION_VARIABLE \| Variable::MUTABLE | NONE |  |
 | `if` | FLOW_CONDITIONAL | NONE |  |
 | `else` | FLOW_CONDITIONAL | NONE |  |
 | `for` | FLOW_LOOP | NONE |  |
 | `while` | FLOW_LOOP | NONE |  |
 | `do` | FLOW_LOOP | NONE |  |
-| `switch` | FLOW_CONDITIONAL | NONE |  |
+| `switch` | FLOW_CONDITIONAL \| Conditional::MULTIWAY | NONE |  |
 | `case` | FLOW_CONDITIONAL | NONE |  |
 | `default` | FLOW_CONDITIONAL | NONE |  |
 | `return` | FLOW_JUMP | NONE |  |
-| `break` | FLOW_JUMP | NONE |  |
-| `continue` | FLOW_JUMP | NONE |  |
+| `break` | FLOW_JUMP \| Jump::BREAK | NONE |  |
+| `continue` | FLOW_JUMP \| Jump::CONTINUE | NONE |  |
 | `async` | FLOW_SYNC | NONE |  |
 | `await` | FLOW_SYNC | NONE |  |
 | `yield` | FLOW_SYNC | NONE |  |
@@ -313,7 +299,6 @@ Reserved words and language keywords
 | `static` | METADATA_ANNOTATION | NONE |  |
 | `get` | METADATA_ANNOTATION | NONE |  |
 | `set` | METADATA_ANNOTATION | NONE |  |
-| `constructor` | DEFINITION_FUNCTION | Function::CONSTRUCTOR | FIND_IDENTIFIER |  |
 | `of` | OPERATOR_COMPARISON | NONE |  |
 
 ## Punctuation
@@ -322,17 +307,17 @@ Syntactic punctuation tokens
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `(` | PARSER_PUNCTUATION | NONE | Syntactic punctuation tokens |
-| `)` | PARSER_PUNCTUATION | NONE |  |
-| `[` | PARSER_PUNCTUATION | NONE |  |
-| `]` | PARSER_PUNCTUATION | NONE |  |
-| `{` | PARSER_PUNCTUATION | NONE |  |
-| `}` | PARSER_PUNCTUATION | NONE |  |
+| `(` | PARSER_DELIMITER | NONE | Syntactic punctuation tokens |
+| `)` | PARSER_DELIMITER | NONE |  |
+| `[` | PARSER_DELIMITER | NONE |  |
+| `]` | PARSER_DELIMITER | NONE |  |
+| `{` | PARSER_DELIMITER | NONE |  |
+| `}` | PARSER_DELIMITER | NONE |  |
 | `:` | PARSER_PUNCTUATION | NONE |  |
-| `'` | PARSER_PUNCTUATION | NONE |  |
-| `,` | PARSER_DELIMITER | NONE |  |
-| `;` | PARSER_DELIMITER | NONE |  |
-| `.` | PARSER_DELIMITER | NONE |  |
+| `'` | PARSER_DELIMITER | NONE |  |
+| `,` | PARSER_PUNCTUATION | NONE |  |
+| `;` | PARSER_PUNCTUATION | NONE |  |
+| `.` | PARSER_PUNCTUATION | NONE |  |
 | ``` | PARSER_DELIMITER | NONE |  |
 | `${` | PARSER_DELIMITER | NONE |  |
 
@@ -342,21 +327,21 @@ Mathematical and bitwise operators
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `+` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Mathematical and bitwise operators |
-| `-` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE |  |
-| `*` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE |  |
-| `/` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE |  |
-| `%` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE |  |
-| `**` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE |  |
-| `&` | OPERATOR_ARITHMETIC | Arithmetic::BITWISE | NONE |  |
-| `|` | OPERATOR_ARITHMETIC | Arithmetic::BITWISE | NONE |  |
-| `^` | OPERATOR_ARITHMETIC | Arithmetic::BITWISE | NONE |  |
-| `~` | OPERATOR_ARITHMETIC | Arithmetic::BITWISE | NONE |  |
-| `<<` | OPERATOR_ARITHMETIC | Arithmetic::BITWISE | NONE |  |
-| `>>` | OPERATOR_ARITHMETIC | Arithmetic::BITWISE | NONE |  |
-| `>>>` | OPERATOR_ARITHMETIC | Arithmetic::BITWISE | NONE |  |
-| `++` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE |  |
-| `--` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE |  |
+| `+` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Mathematical and bitwise operators |
+| `-` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE |  |
+| `*` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE |  |
+| `/` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE |  |
+| `%` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE |  |
+| `**` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE |  |
+| `&` | OPERATOR_ARITHMETIC \| Arithmetic::BITWISE | NONE |  |
+| `\|` | OPERATOR_ARITHMETIC \| Arithmetic::BITWISE | NONE |  |
+| `^` | OPERATOR_ARITHMETIC \| Arithmetic::BITWISE | NONE |  |
+| `~` | OPERATOR_ARITHMETIC \| Arithmetic::BITWISE | NONE |  |
+| `<<` | OPERATOR_ARITHMETIC \| Arithmetic::BITWISE | NONE |  |
+| `>>` | OPERATOR_ARITHMETIC \| Arithmetic::BITWISE | NONE |  |
+| `>>>` | OPERATOR_ARITHMETIC \| Arithmetic::BITWISE | NONE |  |
+| `++` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE |  |
+| `--` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE |  |
 
 ## Logical Operators
 
@@ -365,7 +350,7 @@ Boolean and nullish operators
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `&&` | OPERATOR_LOGICAL | NONE | Boolean and nullish operators |
-| `||` | OPERATOR_LOGICAL | NONE |  |
+| `\|\|` | OPERATOR_LOGICAL | NONE |  |
 | `!` | OPERATOR_LOGICAL | NONE |  |
 | `?\?` | OPERATOR_LOGICAL | NONE |  |
 | `?` | OPERATOR_LOGICAL | NONE |  |
@@ -403,13 +388,13 @@ Simple and compound assignment
 | `%=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `**=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `&=` | OPERATOR_ASSIGNMENT | NONE |  |
-| `|=` | OPERATOR_ASSIGNMENT | NONE |  |
+| `\|=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `^=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `<<=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `>>=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `>>>=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `&&=` | OPERATOR_ASSIGNMENT | NONE |  |
-| `||=` | OPERATOR_ASSIGNMENT | NONE |  |
+| `\|\|=` | OPERATOR_ASSIGNMENT | NONE |  |
 | `?\?=` | OPERATOR_ASSIGNMENT | NONE |  |
 
 ## Modern Operators
@@ -429,10 +414,7 @@ These are included for compatibility when parsing TypeScript-like constructs or 
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `type_annotation` | TYPE_REFERENCE | NONE | TypeScript-style types that appear in JavaScript parsing |
-| `type_identifier` | TYPE_REFERENCE | NODE_TEXT |  |
-| `predefined_type` | TYPE_PRIMITIVE | NODE_TEXT |  |
-| `non_null_expression` | TYPE_REFERENCE | NONE |  |
+| `non_null_expression` | TYPE_REFERENCE | NONE | TypeScript-style types that appear in JavaScript parsing |
 | `type_arguments` | TYPE_GENERIC | NONE |  |
 | `type_assertion` | TYPE_REFERENCE | NONE |  |
 
@@ -443,6 +425,15 @@ Error nodes from parsing
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `ERROR` | PARSER_SYNTAX | NODE_TEXT | Error nodes from parsing |
+
+## Other Node Types
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `html_character_reference` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `html_comment` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `jsx_text` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `private_property_identifier` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 

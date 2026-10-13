@@ -69,7 +69,7 @@ R function features: - `name <- function(params) body` - standard definition - A
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `function_definition` | DEFINITION_FUNCTION | Function::REGULAR | FIND_ASSIGNMENT_TARGET | Function definition - `name <- function(params) body` |
+| `function_definition` | DEFINITION_FUNCTION \| Function::REGULAR | FIND_ASSIGNMENT_TARGET | Function definition - `name <- function(params) body` |
 | `function` | DEFINITION_FUNCTION | NONE | Function keyword - `function` keyword |
 
 ## Control Flow
@@ -80,7 +80,7 @@ R control flow: - `if (cond) expr` or `if (cond) expr else expr` - `ifelse(cond,
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `if_statement` | FLOW_CONDITIONAL | Conditional::BINARY | NONE | If statement - `if (cond) expr else expr` |
+| `if_statement` | FLOW_CONDITIONAL \| Conditional::BINARY | NONE | If statement - `if (cond) expr else expr` |
 
 ## Loop Constructs
 
@@ -90,9 +90,9 @@ R loops: - `for (x in seq) body` - for loop - `while (cond) body` - while loop -
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `for_statement` | FLOW_LOOP | Loop::ITERATOR | NONE | For statement - `for (x in seq) body` |
-| `while_statement` | FLOW_LOOP | Loop::CONDITIONAL | NONE | While statement - `while (cond) body` |
-| `repeat_statement` | FLOW_LOOP | Loop::INFINITE | NONE | Repeat statement - `repeat body` (infinite loop) |
+| `for_statement` | FLOW_LOOP \| Loop::ITERATOR | NONE | For statement - `for (x in seq) body` |
+| `while_statement` | FLOW_LOOP \| Loop::CONDITIONAL | NONE | While statement - `while (cond) body` |
+| `repeat_statement` | FLOW_LOOP \| Loop::INFINITE | NONE | Repeat statement - `repeat body` (infinite loop) |
 
 ## Jump Statements
 
@@ -102,9 +102,8 @@ R jump statements: - `return(value)` - exit function with value - `break` - exit
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `return` | FLOW_JUMP | Jump::RETURN | NONE | Return statement - `return(value)` |
-| `break` | FLOW_JUMP | Jump::BREAK | NONE | Break statement - exits loop |
-| `next` | FLOW_JUMP | Jump::CONTINUE | NONE | Next statement - skips to next iteration (like continue) |
+| `break` | FLOW_JUMP \| Jump::BREAK | NODE_TEXT | Break statement - exits loop |
+| `next` | FLOW_JUMP \| Jump::CONTINUE | NODE_TEXT | Next statement - skips to next iteration (like continue) |
 
 ## Keywords
 
@@ -128,7 +127,7 @@ R identifier conventions: - Variable names: `snake_case` or `period.case` - Func
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `identifier` | NAME_IDENTIFIER | NODE_TEXT | Identifier - name |
-| `parameter` | DEFINITION_VARIABLE | Variable::PARAMETER | FIND_IDENTIFIER | Parameter - function parameter |
+| `parameter` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER | Parameter - function parameter |
 
 ## Function Calls and Expressions
 
@@ -138,9 +137,9 @@ R call syntax: - `function(args)` - regular call - `x %op% y` - infix operator (
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `call` | COMPUTATION_CALL | Call::FUNCTION | FIND_CALL_TARGET | Call expression - `function(args)` |
-| `binary_operator` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Binary operator - `x + y`, `x %*% y` |
-| `unary_operator` | OPERATOR_ARITHMETIC | Arithmetic::UNARY | NONE | Unary operator - `-x`, `!x` |
+| `call` | COMPUTATION_CALL \| Call::FUNCTION | FIND_CALL_TARGET | Call expression - `function(args)` |
+| `binary_operator` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Binary operator - `x + y`, `x %*% y` |
+| `unary_operator` | OPERATOR_ARITHMETIC \| Arithmetic::UNARY | NONE | Unary operator - `-x`, `!x` |
 
 ## Data Access
 
@@ -163,10 +162,10 @@ R literals: - Integers: `42L` (L suffix required) - Doubles: `3.14`, `1e10`, `In
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `string` | LITERAL_STRING | String::LITERAL | NODE_TEXT | String literal |
-| `integer` | LITERAL_NUMBER | Number::INTEGER | NODE_TEXT | Integer literal - `42L` |
-| `float` | LITERAL_NUMBER | Number::FLOAT | NODE_TEXT | Float literal - `3.14` |
-| `complex` | LITERAL_NUMBER | Number::COMPLEX | NODE_TEXT | Complex literal - `1+2i` |
+| `string` | LITERAL_STRING \| String::LITERAL | NODE_TEXT | String literal |
+| `integer` | LITERAL_NUMBER \| Number::INTEGER | NODE_TEXT | Integer literal - `42L` |
+| `float` | LITERAL_NUMBER \| Number::FLOAT | NODE_TEXT | Float literal - `3.14` |
+| `complex` | LITERAL_NUMBER \| Number::COMPLEX | NODE_TEXT | Complex literal - `1+2i` |
 | `true` | LITERAL_ATOMIC | NODE_TEXT | Boolean TRUE |
 | `false` | LITERAL_ATOMIC | NODE_TEXT | Boolean FALSE |
 
@@ -194,14 +193,6 @@ Vectors, lists, and data frames
 
 R data structures: - `c(1, 2, 3)` - vector (atomic) - `list(a = 1, b = 2)` - heterogeneous list - `data.frame(...)` - rectangular data - `matrix(...)` - 2D array - `array(...)` - N-dimensional array
 
-| Node Type | Semantic Type | Name Extraction | Description |
-|-----------|---------------|-----------------|-------------|
-| `vector` | LITERAL_STRUCTURED | Structured::SEQUENCE | NODE_TEXT | Vector - atomic vector |
-| `list` | LITERAL_STRUCTURED | Structured::SEQUENCE | NODE_TEXT | List - heterogeneous list |
-| `data_frame` | LITERAL_STRUCTURED | Structured::MAPPING | NODE_TEXT | Data frame - rectangular data |
-| `matrix` | LITERAL_STRUCTURED | Structured::SEQUENCE | NODE_TEXT | Matrix - 2D array |
-| `array` | LITERAL_STRUCTURED | Structured::SEQUENCE | NODE_TEXT | Array - N-dimensional array |
-
 ## Special Constructs
 
 R-specific language features
@@ -212,7 +203,7 @@ R special constructs: - `...` - variadic arguments (dots) - `..1`, `..2` - acces
 |-----------|---------------|-----------------|-------------|
 | `dots` | PATTERN_COLLECT | NODE_TEXT | Dots - variadic arguments `...` |
 | `dot_dot_i` | PATTERN_COLLECT | NODE_TEXT | Dot-dot-i - `..1`, `..2`, etc. |
-| `special` | COMPUTATION_CALL | Call::FUNCTION | NODE_TEXT | Special operator - user-defined infix `%op%` |
+| `special` | COMPUTATION_CALL \| Call::FUNCTION | NODE_TEXT | Special operator - user-defined infix `%op%` |
 
 ## Organizational Structures
 
@@ -220,11 +211,11 @@ Program and expression structures
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `program` | ORGANIZATION_CONTAINER | Organization::HIERARCHICAL | NONE | Program - root node for R script |
-| `braced_expression` | ORGANIZATION_BLOCK | Organization::SEQUENTIAL | NONE | Braced expression - `{ ... }` |
+| `program` | ORGANIZATION_CONTAINER \| Organization::HIERARCHICAL | NONE | Program - root node for R script |
+| `braced_expression` | ORGANIZATION_BLOCK \| Organization::SEQUENTIAL | NONE | Braced expression - `{ ... }` |
 | `parenthesized_expression` | COMPUTATION_EXPRESSION | NONE | Parenthesized expression - `( ... )` |
-| `arguments` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Arguments - function call arguments |
-| `parameters` | ORGANIZATION_LIST | Organization::COLLECTION | NONE | Parameters - function parameters |
+| `arguments` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Arguments - function call arguments |
+| `parameters` | ORGANIZATION_LIST \| Organization::COLLECTION | NONE | Parameters - function parameters |
 | `argument` | ORGANIZATION_LIST | FIND_IDENTIFIER | Argument - single named argument |
 
 ## String Components
@@ -233,8 +224,8 @@ String literal parts
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `string_content` | LITERAL_STRING | NONE | String content - text inside string |
-| `escape_sequence` | LITERAL_STRING | NONE | Escape sequence - `\n`, `\t`, etc. |
+| `string_content` | LITERAL_STRING | NODE_TEXT | String content - text inside string |
+| `escape_sequence` | LITERAL_STRING | NODE_TEXT | Escape sequence - `\n`, `\t`, etc. |
 
 ## Comments
 
@@ -244,7 +235,7 @@ R comment style: - `# comment` - line comment (only comment type in R) - roxygen
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `comment` | METADATA_COMMENT | NONE | Comment - `# comment` |
+| `comment` | METADATA_COMMENT | NODE_TEXT | Comment - `# comment` |
 
 ## Assignment Operators
 
@@ -254,12 +245,12 @@ R assignment operators: - `<-` - standard assignment (preferred) - `=` - assignm
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `<-` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE | Left assignment - `x <- value` (preferred) |
-| `<<-` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE | Global assignment - `x <<- value` (modifies enclosing scope) |
-| `->` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE | Right assignment - `value -> x` |
-| `->>` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE | Right global assignment - `value ->> x` |
-| `=` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE | Equals assignment - `x = value` |
-| `:=` | OPERATOR_ASSIGNMENT | Assignment::SIMPLE | NONE | Walrus assignment - `:=` (data.table) |
+| `<-` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | NONE | Left assignment - `x <- value` (preferred) |
+| `<<-` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | NONE | Global assignment - `x <<- value` (modifies enclosing scope) |
+| `->` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | NONE | Right assignment - `value -> x` |
+| `->>` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | NONE | Right global assignment - `value ->> x` |
+| `=` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | NONE | Equals assignment - `x = value` |
+| `:=` | OPERATOR_ASSIGNMENT \| Assignment::SIMPLE | NONE | Walrus assignment - `:=` (data.table) |
 
 ## Arithmetic Operators
 
@@ -267,13 +258,12 @@ Mathematical operators
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `+` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Addition - `+` |
-| `-` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Subtraction - `-` |
-| `*` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Multiplication - `*` |
-| `/` | OPERATOR_ARITHMETIC | Arithmetic::BINARY | NONE | Division - `/` |
+| `+` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Addition - `+` |
+| `-` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Subtraction - `-` |
+| `*` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Multiplication - `*` |
+| `/` | OPERATOR_ARITHMETIC \| Arithmetic::BINARY | NONE | Division - `/` |
 | `^` | OPERATOR_ARITHMETIC | NONE | Power - `^` |
 | `**` | OPERATOR_ARITHMETIC | NONE | Power (alternate) - `**` |
-| `%` | OPERATOR_ARITHMETIC | NONE | Modulo - `%%` |
 
 ## Comparison Operators
 
@@ -298,8 +288,8 @@ R logical operators: - `&` - element-wise AND (vectorized) - `&&` - short-circui
 |-----------|---------------|-----------------|-------------|
 | `&` | OPERATOR_LOGICAL | NONE | Element-wise AND - `&` |
 | `&&` | OPERATOR_LOGICAL | NONE | Short-circuit AND - `&&` |
-| `|` | OPERATOR_LOGICAL | NONE | Element-wise OR - `|` |
-| `||` | OPERATOR_LOGICAL | NONE | Short-circuit OR - `||` |
+| `\|` | OPERATOR_LOGICAL | NONE | Element-wise OR - `\|` |
+| `\|\|` | OPERATOR_LOGICAL | NONE | Short-circuit OR - `\|\|` |
 | `!` | OPERATOR_LOGICAL | NONE | Logical NOT - `!` |
 
 ## R-Specific Operators
@@ -315,7 +305,7 @@ R special operators: - `::` - namespace access - `:::` - internal namespace acce
 | `@` | COMPUTATION_ACCESS | NONE | Slot access - `obj@slot` (S4) |
 | `$` | COMPUTATION_ACCESS | NONE | Element access - `obj$name` |
 | `:` | OPERATOR_ARITHMETIC | NONE | Sequence operator - `1:10` |
-| `|>` | OPERATOR_ARITHMETIC | NONE | Native pipe - `|>` (R 4.1+) |
+| `\|>` | OPERATOR_ARITHMETIC | NONE | Native pipe - `\|>` (R 4.1+) |
 | `~` | OPERATOR_ARITHMETIC | NONE | Formula operator - `y ~ x` |
 | `?` | METADATA_ANNOTATION | NONE | Help operator - `?topic` |
 
@@ -333,8 +323,7 @@ Syntax tokens
 | `]` | PARSER_DELIMITER | NONE | Right bracket |
 | `[[` | PARSER_DELIMITER | NONE | Double left bracket |
 | `]]` | PARSER_DELIMITER | NONE | Double right bracket |
-| `comma` | PARSER_PUNCTUATION | NONE | Comma |
-| `'` | PARSER_PUNCTUATION | NONE | Single quote |
+| `comma` | PARSER_PUNCTUATION | NODE_TEXT | Comma |
 | `\\` | PARSER_PUNCTUATION | NONE | Backslash |
 
 ## Type Suffixes
@@ -353,6 +342,13 @@ Parser error nodes
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `ERROR` | PARSER_SYNTAX | NODE_TEXT | Parse error node |
+
+## Other Node Types
+
+| Node Type | Semantic Type | Name Extraction | Description |
+|-----------|---------------|-----------------|-------------|
+| `string_close` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `string_open` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 
