@@ -26,6 +26,28 @@ SELECT typeof(semantic_type) FROM read_ast('file.py') LIMIT 1;
 
 The type stores values efficiently as UTINYINT internally while displaying as readable strings.
 
+**`ORDER BY semantic_type` sorts by code, not by name.** The underlying byte is
+`super_kind | kind | semantic_type | refinement`, so sorting follows the
+taxonomy rather than the alphabet — and the two disagree from the first row:
+
+```sql
+SELECT DISTINCT semantic_type FROM read_ast('file.js') ORDER BY semantic_type;
+-- PARSER_DELIMITER, PARSER_PUNCTUATION, METADATA_COMMENT, LITERAL_NUMBER, ...
+
+SELECT DISTINCT semantic_type::VARCHAR AS t FROM read_ast('file.js') ORDER BY t;
+-- COMPUTATION_CALL, COMPUTATION_EXPRESSION, DEFINITION_MODULE, ...
+```
+
+Cast to `VARCHAR` when you want alphabetical order, which is usually what is
+wanted. Sorting by code is useful when you want related types adjacent: every
+`OPERATOR_*` together, and a refined variant next to the type it refines.
+
+One consequence of the refinement bits living in the low two bits:
+`DISTINCT semantic_type` can return **more rows than**
+`DISTINCT semantic_type::VARCHAR`, because the cast collapses a refinement to
+its base name. `148` and `149` are both `FLOW_LOOP`; only the first is the
+unrefined form.
+
 ## Quick Reference
 
 | Code | Name | Description |

@@ -1,0 +1,228 @@
+# name: test/sql/bugs/issue_244_semantic_type_registered.test
+# description: #244 -- the SEMANTIC_TYPE alias is registered in the catalog, so ORDER BY on it works
+# group: [bugs]
+
+# `semantic_type` is a UTINYINT carrying the alias SEMANTIC_TYPE.
+# RegisterSemanticTypeLogicalType registered four CAST functions for that alias
+# and never the TYPE itself, so the alias rode along on values -- typeof() and
+# DESCRIBE both reported SEMANTIC_TYPE -- while the name could not be resolved
+# in the catalog. Anything that resolves it by name failed:
+#
+#   SELECT type FROM read_ast('f.js') ORDER BY semantic_type;
+#   -> Catalog Error: Type with name SEMANTIC_TYPE does not exist!
+#                     Did you mean "time_ns"?
+#
+# An ordinary query, failing with a message that points at nothing the user
+# wrote. The fix is one `loader.RegisterType(...)` before the casts, which is
+# exactly what duckdb/extension/json does (json_extension.cpp).
+#
+# WHY IT LOOKED INTERMITTENT, and why this file pins the plan shapes rather
+# than one query: only the FULL-SORT path needs the name. `LIMIT` plans top-N
+# instead and so dodged it; GROUP BY, max() and an explicit ::VARCHAR cast
+# never needed it. I first met this as a flaky environment, then as a
+# deterministic failure, and the difference was which of these I happened to
+# type. All of them are asserted below so a regression cannot hide behind a
+# plan change.
+
+require sitting_duck
+
+# =============================================================================
+# A. THE MECHANISM: the type is in the catalog.
+# =============================================================================
+# Asserted first because it is the cause, not the symptom -- if this row
+# disappears, every assertion below starts failing for a reason no longer
+# visible in them.
+
+query II
+SELECT type_name, type_category FROM duckdb_types() WHERE type_name = 'SEMANTIC_TYPE';
+----
+SEMANTIC_TYPE	NUMERIC
+
+# =============================================================================
+# B. THE REPRO, and every plan shape around it.
+# =============================================================================
+# The full sort -- this is what raised the Catalog Error.
+query I
+SELECT count(*) FROM (
+    SELECT type FROM read_ast('test/data/keyword_operators/roles.js') ORDER BY semantic_type
+);
+----
+105
+
+# An OUTER sort over a subquery, which also raised -- the alias survives the
+# subquery boundary, so moving the ORDER BY out did not avoid the name lookup.
+query I
+SELECT count(*) FROM (
+    SELECT st FROM (SELECT semantic_type AS st FROM read_ast('test/data/keyword_operators/roles.js'))
+    ORDER BY st
+);
+----
+105
+
+# GROUP BY + ORDER BY, the shape I originally hit.
+query II
+SELECT semantic_type::VARCHAR AS st, count(*) AS n
+FROM read_ast('test/data/keyword_operators/roles.js')
+GROUP BY semantic_type ORDER BY semantic_type LIMIT 2;
+----
+PARSER_DELIMITER	22
+PARSER_PUNCTUATION	6
+
+# The shapes that NEVER failed, pinned so the fix is not mistaken for having
+# changed them: top-N, aggregation, and the explicit cast.
+query I
+SELECT count(*) FROM (
+    SELECT type FROM read_ast('test/data/keyword_operators/roles.js') ORDER BY semantic_type LIMIT 5
+);
+----
+5
+
+query I
+SELECT max(semantic_type)::VARCHAR FROM read_ast('test/data/keyword_operators/roles.js');
+----
+DEFINITION_MODULE
+
+# The two STRUCT columns that EMBED SEMANTIC_TYPE in their field types
+# (scope.stack[].kind and qualified_name[].semantic_type) could not be sorted
+# either. Sorting a struct is rarely what you want, but it must not error.
+query I
+SELECT count(*) FROM (SELECT scope FROM read_ast('test/data/keyword_operators/roles.js') ORDER BY scope);
+----
+105
+
+query I
+SELECT count(*) FROM (SELECT qualified_name AS q FROM read_ast('test/data/keyword_operators/roles.js') ORDER BY q);
+----
+105
+
+# And the selector path, which returns the same column type.
+query I
+SELECT type FROM ast_select('test/data/keyword_operators/roles.js', '.call') ORDER BY semantic_type LIMIT 1;
+----
+call_expression
+
+# =============================================================================
+# C. WHAT THE ORDER ACTUALLY IS -- by taxonomy code, not by name.
+# =============================================================================
+# Now that the query works it answers a different question than most people
+# expect, so the order is pinned rather than left implicit. `semantic_type`
+# sorts by its raw byte, which is
+# super_kind | kind | semantic_type | refinement -- so the sequence follows
+# spec/taxonomy/taxonomy.yaml, NOT the alphabet.
+#
+# This sequence was derived from taxonomy.yaml independently and then compared
+# against the engine, rather than being copied out of the engine's output: the
+# base codes below are exactly
+#   super_kinds[super].code | kinds[kind].offset | semantic_types[t].offset
+# computed from the spec.
+#
+# REFINEMENTS SORT ADJACENT TO THEIR BASE, which is why there are more distinct
+# CODES here than distinct NAMES: the low 2 bits are a per-language refinement
+# and the VARCHAR cast collapses them to the base name. 149 is FLOW_LOOP with
+# refinement 1, and it renders as "FLOW_LOOP" like 148 does.
+query III
+SELECT DISTINCT semantic_type::UTINYINT AS code,
+       semantic_type::VARCHAR AS name,
+       (semantic_type::UTINYINT & 3) AS refinement
+FROM read_ast('test/data/keyword_operators/roles.js')
+ORDER BY code;
+----
+4	PARSER_DELIMITER	0
+8	PARSER_PUNCTUATION	0
+32	METADATA_COMMENT	0
+64	LITERAL_NUMBER	0
+68	LITERAL_STRING	0
+80	NAME_IDENTIFIER	0
+120	TYPE_REFERENCE	0
+128	EXECUTION_STATEMENT	0
+144	FLOW_CONDITIONAL	0
+148	FLOW_LOOP	0
+149	FLOW_LOOP	1
+176	ORGANIZATION_BLOCK	0
+181	ORGANIZATION_LIST	1
+192	OPERATOR_ARITHMETIC	0
+193	OPERATOR_ARITHMETIC	1
+196	OPERATOR_LOGICAL	0
+200	OPERATOR_COMPARISON	0
+204	OPERATOR_ASSIGNMENT	0
+208	COMPUTATION_CALL	0
+216	COMPUTATION_EXPRESSION	0
+244	DEFINITION_VARIABLE	0
+245	DEFINITION_VARIABLE	1
+252	DEFINITION_MODULE	0
+
+# THE CONTRAST, which is the practical point and what the docs now say: casting
+# to VARCHAR sorts alphabetically, and that is usually what someone writing
+# `ORDER BY semantic_type` wanted. By code the first entry is PARSER_DELIMITER;
+# by name it is COMPUTATION_CALL.
+query I
+SELECT DISTINCT semantic_type::VARCHAR AS n
+FROM read_ast('test/data/keyword_operators/roles.js')
+ORDER BY 1 LIMIT 3;
+----
+COMPUTATION_CALL
+COMPUTATION_EXPRESSION
+DEFINITION_MODULE
+
+# Stated as the inequality so neither side can drift into agreeing by accident:
+# the two orders disagree on their first element.
+query II
+SELECT (SELECT semantic_type::VARCHAR FROM read_ast('test/data/keyword_operators/roles.js')
+        ORDER BY semantic_type LIMIT 1)            AS first_by_code,
+       (SELECT semantic_type::VARCHAR FROM read_ast('test/data/keyword_operators/roles.js')
+        ORDER BY semantic_type::VARCHAR LIMIT 1)   AS first_by_name;
+----
+PARSER_DELIMITER	COMPUTATION_CALL
+
+# =============================================================================
+# D. NEGATIVE CONTROLS -- registering the type changed nothing else.
+# =============================================================================
+# The four casts that were already registered must behave exactly as before.
+# A type registration that broke them would be a worse bug than the one fixed.
+
+query I
+SELECT typeof(semantic_type) FROM read_ast('test/data/keyword_operators/roles.js') LIMIT 1;
+----
+SEMANTIC_TYPE
+
+query I
+SELECT 'DEFINITION_FUNCTION'::SEMANTIC_TYPE::UTINYINT;
+----
+240
+
+query I
+SELECT 244::UTINYINT::SEMANTIC_TYPE::VARCHAR;
+----
+DEFINITION_VARIABLE
+
+# The refinement-collapsing behaviour of the VARCHAR cast, which predates this
+# change and is what makes the code/name counts differ in section C.
+query I
+SELECT 149::UTINYINT::SEMANTIC_TYPE::VARCHAR;
+----
+FLOW_LOOP
+
+# DESCRIBE still reports the alias, so the declared output schema is unchanged.
+query I
+SELECT column_type FROM (DESCRIBE SELECT semantic_type FROM read_ast('test/data/keyword_operators/roles.js'));
+----
+SEMANTIC_TYPE
+
+# =============================================================================
+# E. THE NEW SURFACE this creates, asserted so it is a decision on record.
+# =============================================================================
+# A registered type is nameable in DDL. ExtensionLoader::RegisterType creates
+# the entry temporary + internal in the system catalog, so it is session-scoped
+# and vanishes with the extension -- the same property JSON's type has. Pinned
+# because it is the one thing the fix adds beyond making ORDER BY work.
+
+statement ok
+CREATE TABLE __st244(x SEMANTIC_TYPE);
+
+statement ok
+INSERT INTO __st244 VALUES ('DEFINITION_FUNCTION');
+
+query II
+SELECT x::VARCHAR, typeof(x) FROM __st244;
+----
+DEFINITION_FUNCTION	SEMANTIC_TYPE
