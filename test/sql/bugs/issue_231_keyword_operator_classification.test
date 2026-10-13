@@ -297,7 +297,7 @@ type_cast_expression	TYPE_REFERENCE
 use_as_clause	TYPE_REFERENCE
 
 # =============================================================================
-# E. WHICH SELECTOR PATHS SEE THIS CHANGE, AND WHICH DO NOT.
+# E. NO SELECTOR PATH SEES THIS CHANGE (and the one that used to).
 # =============================================================================
 # All nine reclassified declarations carry ASTNodeFlags::IS_KEYWORD, which IS
 # bit 0, IS_SYNTAX_ONLY -- the two are aliases for the same bit.
@@ -333,65 +333,66 @@ SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.logica
 ----
 2
 
-# ATTRIBUTE selectors DO see it. `[semantic=...]` is resolved at
-# css_selectors.sql:1653 with NO syntax-only guard:
-#
-#   WHEN ac.attr_name = 'semantic' THEN is_semantic_type(a.semantic_type, UPPER(ac.attr_value))
-#
-# so it matches keyword tokens like any other node. This is NOT a hypothetical:
-# the same fixture gives different answers through the two paths for the SAME
-# semantic type, and the gap is exactly the syntax-only keyword tokens.
+# ATTRIBUTE selectors used to see them, and no longer do. `[semantic=...]` was
+# resolved at css_selectors.sql:1653 with NO syntax-only guard, so it matched
+# keyword tokens like any other node -- two documented spellings of one query
+# returning different sets. #243 guarded it, so `.X` and `[semantic=X]` now
+# agree. The pairs are asserted here because #231 is what exposed the
+# divergence; the equivalence over EVERY semantic type in a fixture is verified
+# by test/sql/bugs/issue_243_semantic_attribute_guard.test.
+query IIII
+SELECT
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.loop'))                   AS loop_class,
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=FLOW_LOOP]'))    AS loop_attr,
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.type'))                   AS type_class,
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=TYPE_REFERENCE]')) AS type_attr;
+----
+2	2	0	0
+
+# NON-VACUITY: `of` IS in the tree, IS FLOW_LOOP and IS syntax-only -- which is
+# why neither path returns it. Without this, the matching counts above could
+# equally mean the reclassification never landed.
+query II
+SELECT semantic_type, is_syntax_only(flags) AS syn
+FROM read_ast('test/data/keyword_operators/roles.js')
+WHERE type = 'of';
+----
+FLOW_LOOP	true
+
+# ...and the two loop CONSTRUCTS are still matched, so the guard removed the
+# keyword tokens rather than everything.
 query I
-SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '.loop');
+SELECT DISTINCT type FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=FLOW_LOOP]');
 ----
-2
+for_in_statement
 
-query II
-SELECT type, is_syntax_only(flags) AS syn
-FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=FLOW_LOOP]')
-ORDER BY type, syn;
-----
-for	true
-for	true
-for_in_statement	false
-for_in_statement	false
-of	true
-
-# `of` is in that list only because of this change, and `[semantic=TYPE_REFERENCE]`
-# matches the two typeof tokens for the same reason -- it returned nothing on
-# this fixture before, since nothing in it was TYPE_REFERENCE.
-query II
-SELECT type, semantic_type
-FROM ast_select('test/data/keyword_operators/roles.js', '[semantic=TYPE_REFERENCE]')
-ORDER BY type;
-----
-typeof	TYPE_REFERENCE
-typeof	TYPE_REFERENCE
-
-# The same split, shown on OPERATOR_LOGICAL itself rather than inferred from
-# FLOW_LOOP. lua's `and`/`or`/`not` stay OPERATOR_LOGICAL (taxonomy.yaml names
-# them) and all three are IS_KEYWORD, so they are matched by the attribute path
-# and invisible to the class path. That is the mechanism by which
-# `[semantic=LOGICAL]` used to match `typeof` and no longer does -- measured
-# here on tokens that did not move, rather than inferred from a binary that no
-# longer exists.
+# ...and the raw-token path still reaches the keyword, so it is not unreachable.
 query I
-SELECT count(*) FROM ast_select('test/data/keyword_operators/logical.lua', '.logical');
+SELECT count(*) FROM ast_select('test/data/keyword_operators/roles.js', '[type=of]');
 ----
-0
+1
 
+# The same point on OPERATOR_LOGICAL itself rather than inferred from FLOW_LOOP.
+# lua's `and`/`or`/`not` stay OPERATOR_LOGICAL (taxonomy.yaml names them) and
+# all three are IS_KEYWORD. Both paths return nothing for them now; before #243
+# the attribute path returned all three.
 query II
-SELECT type, is_syntax_only(flags) AS syn
-FROM ast_select('test/data/keyword_operators/logical.lua', '[semantic=LOGICAL]')
-ORDER BY type;
+SELECT
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/logical.lua', '.logical'))           AS via_class,
+    (SELECT count(*) FROM ast_select('test/data/keyword_operators/logical.lua', '[semantic=LOGICAL]')) AS via_attribute;
 ----
-and	true
-not	true
-or	true
+0	0
+
+query I
+SELECT count(*) FROM read_ast('test/data/keyword_operators/logical.lua')
+WHERE type IN ('and','or','not') AND is_semantic_type(semantic_type, 'LOGICAL');
+----
+3
 
 # So the honest summary, which the release note states: ast_type_map() values
-# change, scalar filters over read_ast change, `[semantic=...]` attribute
-# selectors change, and `.class` selectors do not.
+# change and scalar filters over read_ast change. SELECTOR results do not --
+# `.class` never matched these tokens, and `[semantic=...]` no longer does
+# either, because #243 made the two paths agree.
 #
 # The scalar-filter half, stated as the before/after pair a row count could not
 # express -- same cardinality, different value:

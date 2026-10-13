@@ -3688,14 +3688,31 @@ CREATE OR REPLACE MACRO ast_select_from(
                                WHERE nh.not_has_name IS NOT NULL
                                  AND UPPER(nh.not_has_class) IN ('CALL', 'INVOKE', 'COMPUTATION_CALL'))
                 )
-                AND EXISTS (SELECT 1 FROM ast WHERE is_semantic_type(semantic_type, 'CALL'))
+                -- Decide over the node set a class selector can actually MATCH
+                -- (#243). Unguarded, these two EXISTS clauses counted syntax-only
+                -- keyword tokens, and 5 of the 9 syntax-only CALL node types carry a
+                -- name strategy (c `offsetof`, java `new`, ruby `defined?`, sql
+                -- `cast`/`keyword_cast`). So a file whose only NAMED call node was
+                -- such a keyword satisfied "some call has a name", this error stayed
+                -- silent, and `.call#foo` returned a silent empty -- the exact thing
+                -- #89 forbids and this message exists to prevent. Two lines of C with
+                -- `offsetof` and no ordinary call reproduced it.
+                AND EXISTS (SELECT 1 FROM ast
+                            WHERE is_semantic_type(semantic_type, 'CALL')
+                              AND NOT is_syntax_only(flags)
+                              AND NOT is_constituent(flags))
                 AND NOT EXISTS (SELECT 1 FROM ast
                                 WHERE is_semantic_type(semantic_type, 'CALL')
+                                  AND NOT is_syntax_only(flags)
+                                  AND NOT is_constituent(flags)
                                   AND name IS NOT NULL AND name != '')
                 THEN error(
                     'ast_select: the selector binds a name to call nodes (e.g. .call#foo) '
                     'but no call node in this source carries a callee name. Either the '
                     'grammar''s call nodes are not covered by callee-name extraction, or '
+
+)SQLMACRO"
+        R"SQLMACRO(
                     'the table was parsed without name extraction. Query the callee '
                     'structurally instead: join the call node''s children via parent_id '
                     '(see read_ast docs), and please report the language so extraction '
@@ -3716,9 +3733,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             JOIN sel_pseudo_elements pe ON pe.node_id = t.parent_id
         ),
         pseudo_element AS (
-
-)SQLMACRO"
-        R"SQLMACRO(
             SELECT (SELECT name FROM sel_pe_tag_names_ranked WHERE rn = 1) AS element_name
         ),
 
@@ -3951,6 +3965,9 @@ CREATE OR REPLACE MACRO ast_select_from(
 
         UNION ALL
 
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- Descendant combinator: A B
         SELECT a.*
         FROM ast a, sel_props sp
@@ -3970,9 +3987,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                 AND (sp.left_class IS NULL
                      OR (is_semantic_type(anc.semantic_type, UPPER(sp.left_class))
                          AND NOT is_syntax_only(anc.flags)))
-
-)SQLMACRO"
-        R"SQLMACRO(
                 AND (sp.left_id IS NULL OR anc.name = sp.left_id)
           )
 
@@ -4130,7 +4144,18 @@ CREATE OR REPLACE MACRO ast_select_from(
                                 WHEN '$=' THEN a.type LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.type = ac.attr_value END
             WHEN ac.attr_name = 'language' THEN a.language = ac.attr_value
-            WHEN ac.attr_name = 'semantic' THEN is_semantic_type(a.semantic_type, UPPER(ac.attr_value))
+            -- [semantic=X] matches the SAME node set as the class `.X` (#243).
+            -- docs/reference/semantic-classes.md says any semantic type name is a
+            -- valid class, so `.OPERATOR_LOGICAL` and `[semantic=OPERATOR_LOGICAL]`
+            -- are two documented spellings of one query; they must not disagree.
+            -- Without these two predicates they did: on `local ok = a and b or not c`
+            -- the class returned 0 and the attribute returned 3, the difference being
+            -- lua's syntax-only `and`/`or`/`not` keyword tokens. Same guard the class
+            -- filter uses above and the one #133 added to :has/:not.
+            WHEN ac.attr_name = 'semantic' THEN
+                is_semantic_type(a.semantic_type, UPPER(ac.attr_value))
+                AND NOT is_syntax_only(a.flags)
+                AND NOT is_constituent(a.flags)
 
             -- Native extraction: modifiers array
             WHEN ac.attr_name = 'modifier' THEN
@@ -4194,6 +4219,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             WHEN ac.attr_name = 'peek' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.peek LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '^=' THEN a.peek LIKE ac.attr_value_esc || '%' ESCAPE '\'
+
+)SQLMACRO"
+        R"SQLMACRO(
                                 WHEN '$=' THEN a.peek LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.peek = ac.attr_value END
 
@@ -4225,9 +4253,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- Standard CSS positional pseudo-classes
             WHEN 'first-child' THEN a.sibling_index = 0
             WHEN 'last-child' THEN NOT EXISTS (
-
-)SQLMACRO"
-        R"SQLMACRO(
                 SELECT 1 FROM ast sib
                 WHERE sib.parent_id = a.parent_id
                   AND sib.file_path = a.file_path
@@ -4424,6 +4449,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- scope.* struct with an optional #name; a bare tree-sitter type walks
             -- to the nearest enclosing ancestor of that type.
             --   :in-scope(function)   inside any function scope
+
+)SQLMACRO"
+        R"SQLMACRO(
             --   :in-scope(.fn#foo)    inside the function named foo   (workhorse)
             --   :in-scope(<type>)     inside the nearest ancestor of that type
             WHEN 'in-scope' THEN
@@ -4448,9 +4476,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                         THEN a.scope.module IS NOT NULL
                              AND (pc.pseudo_arg_name IS NULL OR EXISTS (
                                  SELECT 1 FROM ast s WHERE s.file_path = a.file_path
-
-)SQLMACRO"
-        R"SQLMACRO(
                                    AND s.node_id = a.scope.module AND s.name = pc.pseudo_arg_name))
                     -- bare tree-sitter type: nearest enclosing ancestor of that exact
                     -- type, excluding subtrees of a closer same-type ancestor
