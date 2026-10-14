@@ -273,8 +273,15 @@ WHERE children_count = 0 AND COALESCE(NULLIF(name, ''), type) <> peek;
 
 # The corpus must actually span the built-in tree-sitter languages, otherwise
 # the zero above could be vacuous.
+#
+# Pinned EXACTLY rather than as `>= 26`: a one-sided bound still passes if a
+# language silently disappears from the corpus, which is the regression this
+# guard exists to catch (#202's shape -- an assertion loose enough to pass for
+# more than one state of the world is not a measurement). 27 = every
+# tree-sitter language; `duckdb` is excluded by construction, see
+# ast_unparse_exact.test's NOT COVERED note.
 query I
-SELECT count(DISTINCT language) >= 26 FROM read_ast('test/data/unparse_leaf_text/*')
+SELECT count(DISTINCT language) = 27 FROM read_ast('test/data/unparse_leaf_text/*')
 WHERE children_count = 0;
 ----
 true

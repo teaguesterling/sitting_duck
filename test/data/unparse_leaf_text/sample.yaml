@@ -1,0 +1,22 @@
+# a comment
+name: world
+count: 42
+ratio: 3.5
+flag: true
+nothing: null
+list:
+  - 1
+  - two
+  - "three"
+nested: { key: value, n: 7 }
+block: |
+  a literal
+  block
+folded: >
+  a folded
+  block
+base: &anchor
+  a: 1
+merged:
+  <<: *anchor
+  b: 2  # trailing comment
