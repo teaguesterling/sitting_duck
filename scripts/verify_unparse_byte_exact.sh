@@ -10,7 +10,7 @@
 # WHY THIS EXISTS
 # ---------------
 # tracker/features/047-unparse-level4-coverage-and-templates.md records, as a
-# MEASURED result, that byte-identity held for none of the 26 corpus
+# MEASURED result, that byte-identity held for none of the corpus
 # languages: the rules-based `ast_unparse*` macros reconstruct source from node
 # types and names and never read a position column, so inter-token whitespace
 # is normalised. `ast_unparse_exact*` (src/sql_macros/ast_unparse.sql) closes
@@ -86,8 +86,8 @@ binary="${repo_root}/build/release/duckdb"
 extension=""
 quiet=0
 
-# One file per language. test/data/unparse_leaf_text/ is the 26-language corpus
-# 047's 4a built; the two extra fixtures are the ones that make byte-exactness
+# One file per language. test/data/unparse_leaf_text/ is the 27-language corpus
+# -- 26 from 047's 4a, plus yaml when it shipped as a built-in (#227); the two extra fixtures are the ones that make byte-exactness
 # non-trivial -- CRLF line endings together with multi-byte UTF-8, and
 # multi-byte UTF-8 with LF. Both are marked `-text` in .gitattributes so git
 # cannot normalize them into testing nothing.
@@ -117,7 +117,7 @@ Per file it also reports:
 A zero-byte file is counted as `trivial` and exempted from both.
 
 Globs are repo-relative (resolved against ${repo_root}).
-With no arguments, sweeps ${#DEFAULT_GLOBS[@]} globs covering 26 languages plus
+With no arguments, sweeps ${#DEFAULT_GLOBS[@]} globs covering 27 languages plus
 the CRLF and multi-byte fixtures.
 
 Options:

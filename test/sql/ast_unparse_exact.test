@@ -15,7 +15,7 @@
 # types and names, never read a position column, and normalise inter-token
 # whitespace - which is CONFORMANT below 'full', not a bug, and must not be
 # reported as one (#89). tracker 047 recorded, as a measured result, that
-# byte-identity therefore held for NONE of the 26 corpus languages.
+# byte-identity therefore held for NONE of the corpus languages.
 #
 # ast_unparse_exact* implements the first, by SPLICING the original bytes at
 # [start_byte, end_byte) rather than reconstructing anything:
@@ -25,8 +25,8 @@
 #         emit bytes [this leaf's start_byte,   this leaf's end_byte)     LEAF
 #     emit bytes [last leaf's end_byte, EOF)                             TAIL
 #
-# Section 2 below asserts the law for all 26 tree-sitter languages. Section 3
-# is the part that makes those 26 assertions worth anything: an equality
+# Section 2 below asserts the law for all 27 tree-sitter languages. Section 3
+# is the part that makes those 27 assertions worth anything: an equality
 # against the file is ALSO satisfied by a whole-file slice that ignores the
 # tree entirely, so sections 3 and 4 prove the pieces are load-bearing and
 # that the comparison can fail.
@@ -279,6 +279,13 @@ true
 query I
 SELECT encode(u.source) = b.content
 FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.ts') u, read_blob('test/data/unparse_leaf_text/sample.ts') b;
+----
+true
+
+# yaml
+query I
+SELECT encode(u.source) = b.content
+FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.yaml') u, read_blob('test/data/unparse_leaf_text/sample.yaml') b;
 ----
 true
 
@@ -616,7 +623,7 @@ have a NULL start_byte/end_byte
 # it off a legitimately EMPTY file - which also has max(end_byte) = 0 - is
 # `n_rows > 1`. That rests on a measured fact about the grammars, not on
 # anything this code controls: every tree-sitter language returns exactly ONE
-# node for empty input. Pinned here over all 26, so a grammar bump that
+# node for empty input. Pinned here over all 27, so a grammar bump that
 # produced a root PLUS an ERROR node for empty input (n_rows = 2, max_end = 0)
 # fails where the premise is stated, rather than by making ast_unparse_exact
 # error on every empty file of that language.
@@ -648,6 +655,7 @@ SELECT count(*) FROM (
   UNION ALL SELECT 'swift' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'swift', source := 'full', peek := 'none')
   UNION ALL SELECT 'toml' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'toml', source := 'full', peek := 'none')
   UNION ALL SELECT 'typescript' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'typescript', source := 'full', peek := 'none')
+  UNION ALL SELECT 'yaml' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'yaml', source := 'full', peek := 'none')
   UNION ALL SELECT 'zig' AS lang, count(*) AS n, max(end_byte) AS e FROM parse_ast('', 'zig', source := 'full', peek := 'none')
 ) WHERE n <> 1 OR e <> 0;
 ----
@@ -667,7 +675,7 @@ FROM ast_unparse_exact('test/data/unparse_leaf_text/sample.kt') u,
 ----
 true
 
-# language := resolves a 26-language table down to one file. The file_path
+# language := resolves a 27-language table down to one file. The file_path
 # column stays in the assertion on purpose: without it, `encode(source) =
 # content` would be satisfied by ANY file that happened to round-trip, and the
 # claim being tested is that language := picked the RIGHT one. Normalised
