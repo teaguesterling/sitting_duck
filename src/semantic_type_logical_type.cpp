@@ -78,6 +78,26 @@ void RegisterSemanticTypeLogicalType(ExtensionLoader &loader) {
 	// Get the SEMANTIC_TYPE logical type
 	auto semantic_type = SemanticTypeLogicalType();
 
+	// Register the TYPE ITSELF, not only its casts (#244).
+	//
+	// Without this the alias rides along on values -- typeof() and DESCRIBE both
+	// report SEMANTIC_TYPE -- but the name cannot be resolved in the catalog, so
+	// anything that looks it up by name fails. The full-sort path does:
+	//
+	//     SELECT type FROM read_ast('f.js') ORDER BY semantic_type;
+	//     -> Catalog Error: Type with name SEMANTIC_TYPE does not exist!
+	//
+	// which is an ordinary query failing with a message that points at nothing
+	// the user wrote. It looked intermittent because `LIMIT` plans top-N instead
+	// of a sort and so dodges it, as do GROUP BY, max() and an explicit
+	// ::VARCHAR cast -- none of which need the name.
+	//
+	// Registered BEFORE the casts, matching duckdb/extension/json's
+	// json_extension.cpp (type, then cast functions). ExtensionLoader::RegisterType
+	// creates the entry as temporary + internal in the system catalog, so it is
+	// session-scoped and disappears with the extension, exactly as JSON's does.
+	loader.RegisterType(SEMANTIC_TYPE_NAME, semantic_type);
+
 	// SEMANTIC_TYPE -> VARCHAR: Display the human-readable name
 	// Cost of 1 means it's nearly free (like JSON -> VARCHAR)
 	loader.RegisterCastFunction(semantic_type, LogicalType::VARCHAR, SemanticTypeToVarcharCast, 1);
