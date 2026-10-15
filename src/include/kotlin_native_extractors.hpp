@@ -78,31 +78,88 @@ public:
 		return params;
 	}
 
+	// #220: this dispatched on `function_value_parameter` and `vararg_parameter`,
+	// NEITHER OF WHICH EXISTS in tree-sitter-kotlin. Its symbol table carries
+	// `function_value_parameters` (the container, which the caller finds
+	// correctly), `parameter` and `class_parameter` -- and no singular
+	// `function_value_parameter` at all. So every kotlin function reported zero
+	// parameters while the extractor, the traits mapping and the .def
+	// declaration were all present and wired. Measured shape:
+	//
+	//     fun add(a: Int, b: Int = 2, vararg rest: String)
+	//
+	//     function_value_parameters
+	//       "("
+	//       parameter              -> simple_identifier(a), ":", user_type(Int)
+	//       ","
+	//       parameter              -> simple_identifier(b), ":", user_type(Int)
+	//       "="                    <- DEFAULT is a SIBLING of the parameter,
+	//       integer_literal(2)        not a child of it
+	//       ","
+	//       parameter_modifiers    <- `vararg` is a PRECEDING SIBLING,
+	//       parameter              -> simple_identifier(rest), ...
+	//       ")"
+	//
+	// So defaults and vararg cannot be read from inside `parameter`; they have
+	// to be tracked across the sibling walk. That is why this loop carries
+	// state rather than mapping each child independently.
 	static vector<ParameterInfo> ExtractKotlinParametersDirect(TSNode params_node, const string &content) {
 		vector<ParameterInfo> parameters;
 
+		if (ts_node_is_null(params_node)) {
+			return parameters;
+		}
 		uint32_t child_count = ts_node_child_count(params_node);
+		if (child_count > 1000) {
+			return parameters;
+		}
+
+		bool next_is_vararg = false;  // set by a preceding parameter_modifiers
+		bool expect_default = false;  // set by an `=` following a parameter
 
 		for (uint32_t i = 0; i < child_count; i++) {
 			TSNode child = ts_node_child(params_node, i);
+			if (ts_node_is_null(child)) {
+				continue;
+			}
 			const char *child_type = ts_node_type(child);
-
-			ParameterInfo param;
-			bool is_valid_param = false;
-
-			if (strcmp(child_type, "function_value_parameter") == 0) {
-				// Standard parameter: name: Type or name: Type = default
-				param = ExtractKotlinParameter(child, content);
-				is_valid_param = !param.name.empty();
-			} else if (strcmp(child_type, "vararg_parameter") == 0) {
-				// Vararg parameter: vararg args: Type
-				param = ExtractKotlinVarargParameter(child, content);
-				is_valid_param = !param.name.empty();
+			if (!child_type) {
+				continue;
 			}
 
-			if (is_valid_param) {
-				parameters.push_back(param);
+			if (strcmp(child_type, "parameter") == 0) {
+				ParameterInfo param = ExtractKotlinParameter(child, content);
+				if (!param.name.empty()) {
+					param.is_variadic = next_is_vararg;
+					parameters.push_back(param);
+				}
+				next_is_vararg = false;
+				expect_default = false;
+			} else if (strcmp(child_type, "parameter_modifiers") == 0) {
+				// `vararg` is the only modifier that changes the parameter's
+				// shape rather than its annotations; match on the text because
+				// the grammar does not give it its own node type.
+				uint32_t start = ts_node_start_byte(child);
+				uint32_t end = ts_node_end_byte(child);
+				if (end > start && end <= content.size()) {
+					next_is_vararg = content.substr(start, end - start).find("vararg") != string::npos;
+				}
+			} else if (strcmp(child_type, "=") == 0) {
+				expect_default = true;
+			} else if (expect_default) {
+				// The node after `=` is the default expression, and it belongs
+				// to the parameter most recently pushed.
+				if (!parameters.empty()) {
+					uint32_t start = ts_node_start_byte(child);
+					uint32_t end = ts_node_end_byte(child);
+					if (end > start && end <= content.size()) {
+						parameters.back().default_value = content.substr(start, end - start);
+						parameters.back().is_optional = true;
+					}
+				}
+				expect_default = false;
 			}
+			// "(" "," ")" fall through: punctuation, not parameters.
 		}
 
 		return parameters;
@@ -145,34 +202,6 @@ public:
 				uint32_t end = ts_node_end_byte(child);
 				if (start < content.length() && end <= content.length()) {
 					param.annotations = content.substr(start, end - start);
-				}
-			}
-		}
-
-		return param;
-	}
-
-	static ParameterInfo ExtractKotlinVarargParameter(TSNode node, const string &content) {
-		ParameterInfo param;
-		param.is_variadic = true;
-		param.annotations = "vararg";
-		uint32_t child_count = ts_node_child_count(node);
-
-		for (uint32_t i = 0; i < child_count; i++) {
-			TSNode child = ts_node_child(node, i);
-			const char *child_type = ts_node_type(child);
-
-			if (strcmp(child_type, "simple_identifier") == 0) {
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				if (start < content.length() && end <= content.length()) {
-					param.name = content.substr(start, end - start);
-				}
-			} else if (strcmp(child_type, "type") == 0 || strcmp(child_type, "user_type") == 0) {
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				if (start < content.length() && end <= content.length()) {
-					param.type = content.substr(start, end - start);
 				}
 			}
 		}
