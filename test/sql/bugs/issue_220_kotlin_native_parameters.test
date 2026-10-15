@@ -1,0 +1,138 @@
+# name: test/sql/bugs/issue_220_kotlin_native_parameters.test
+# description: #220 -- kotlin declared FUNCTION_WITH_PARAMS and dispatched on node types the grammar never emits
+# group: [bugs]
+
+# Kotlin's third of #220 had a DIFFERENT cause from lua's, which is what the
+# issue predicted when it said the three share a diagnosis but probably not a
+# cause.
+#
+# Everything was wired: the .def declaration, the NativeExtractionTraits
+# mapping, a kotlin_native_extractors.hpp, and a correct lookup of the
+# `function_value_parameters` container. The failure was two node-type names
+# that DO NOT EXIST in tree-sitter-kotlin. From its symbol table:
+#
+#     function_value_parameters   present   (the container)
+#     parameter                   present   (the item)
+#     class_parameter             present   (primary_constructor's item)
+#     function_value_parameter    ABSENT    <- extractor dispatched on this
+#     vararg_parameter            ABSENT    <- and on this
+#
+# So it matched nothing, silently, while looking entirely plausible. Almost
+# certainly written against a different grammar version.
+#
+# WHY THE FIX IS NOT A STRING SWAP. Two things sit OUTSIDE the `parameter`
+# node, measured:
+#
+#     fun add(a: Int, b: Int = 2, vararg rest: String)
+#
+#     function_value_parameters
+#       "("
+#       parameter             -> simple_identifier(a), ":", user_type(Int)
+#       ","
+#       parameter             -> simple_identifier(b), ":", user_type(Int)
+#       "="                   <- DEFAULT is a SIBLING of the parameter
+#       integer_literal(2)
+#       ","
+#       parameter_modifiers   <- `vararg` is a PRECEDING SIBLING, and has no
+#       parameter                node type of its own
+#       ")"
+#
+# Defaults and vararg therefore cannot be read from inside `parameter`; the
+# sibling walk has to carry state. `default_value`, `is_optional` and
+# `is_variadic` are set in C++ but are NOT OBSERVABLE here -- read_ast's flat
+# `parameters` column exposes only {name, type} (see #255) -- so this file
+# asserts name and type, which is what a user can actually see.
+
+require sitting_duck
+
+# =============================================================================
+# A. Parameters, names and types -- including the two forms that broke it.
+# =============================================================================
+
+query IIII
+SELECT name, len(parameters) AS np,
+       list_transform(parameters, x -> x.name) AS pnames,
+       list_transform(parameters, x -> x.type) AS ptypes
+FROM read_ast('test/data/kotlin/native_params.kt', 'kotlin', context := 'native')
+WHERE type = 'function_declaration'
+ORDER BY start_line;
+----
+noargs	0	[]	[]
+greet	1	[who]	[String]
+add	3	[a, b, rest]	[Int, Int, String]
+nullableParam	1	[maybe]	[String?]
+
+# `add` is the load-bearing row: 3 parameters where the 2nd carries a DEFAULT
+# and the 3rd is preceded by a `vararg` modifier. A dispatch that only matched
+# `parameter` without tracking siblings would still return 3 here, so the
+# default and the vararg are asserted by position below rather than by count.
+query III
+SELECT p.name, p.type, i AS pos
+FROM read_ast('test/data/kotlin/native_params.kt', 'kotlin', context := 'native') f,
+     unnest(f.parameters) WITH ORDINALITY AS t(p, i)
+WHERE f.name = 'add'
+ORDER BY i;
+----
+a	Int	1
+b	Int	2
+rest	String	3
+
+# Nullable types survive: `String?` is a `nullable_type`, not a `user_type`,
+# and the extractor has to accept both or every nullable parameter loses its
+# type while keeping its name.
+# `type =` is load-bearing here, not decoration: `name = 'nullableParam'` alone
+# matches TWO nodes -- the function_declaration and the simple_identifier that
+# carries the same name -- so the first version of this query returned 2 rows
+# and the assertion read as a type failure when it was a selection failure.
+query I
+SELECT list_transform(parameters, x -> x.type)[1]
+FROM read_ast('test/data/kotlin/native_params.kt', 'kotlin', context := 'native')
+WHERE type = 'function_declaration' AND name = 'nullableParam';
+----
+String?
+
+# =============================================================================
+# B. NON-VACUITY, and the zero that is correct.
+# =============================================================================
+# Before the fix EVERY kotlin function reported zero, so "some are non-zero" is
+# the whole assertion -- and `noargs` must stay zero, because a fix that
+# invented parameters would also satisfy a non-zero check.
+
+query II
+SELECT count(*) AS fns,
+       count(*) FILTER (WHERE len(parameters) > 0) AS with_params
+FROM read_ast('test/data/kotlin/native_params.kt', 'kotlin', context := 'native')
+WHERE type = 'function_declaration';
+----
+4	3
+
+# =============================================================================
+# C. The real corpus: every function that takes a parameter in source delivers.
+# =============================================================================
+# test/data/kotlin/simple.kt has exactly ONE function with parameters
+# (`fun add(a: Int, b: Int)`); the other four take none, so 1-of-5 there is the
+# CORRECT answer rather than a partial fix. That is worth pinning, because the
+# kit's FAIL text read "4 of 6 function defs take parameters in source" and it
+# would be easy to read 1-of-5 as still broken.
+#
+# Asserted as a direction over the whole corpus so adding a .kt fixture cannot
+# rot it.
+query II
+SELECT count(*) FILTER (WHERE len(parameters) > 0) > 0 AS some_deliver,
+       count(*) > 3 AS corpus_non_trivial
+FROM read_ast('test/data/kotlin/*.kt', 'kotlin', context := 'native', ignore_errors := true)
+WHERE type = 'function_declaration';
+----
+true	true
+
+# `primary_constructor` declares native strategy NONE in kotlin_types.def, and
+# its items are `class_parameter` rather than `parameter`. It therefore
+# delivers nothing BY DECLARATION, and the kit's per-node-type gate excludes it
+# instead of failing it. Pinned so that wiring class_parameter later is a
+# deliberate change to this expectation rather than an accident.
+query II
+SELECT count(*) AS n, count(*) FILTER (WHERE len(parameters) > 0) AS with_params
+FROM read_ast('test/data/kotlin/*.kt', 'kotlin', context := 'native', ignore_errors := true)
+WHERE type = 'primary_constructor';
+----
+3	0
