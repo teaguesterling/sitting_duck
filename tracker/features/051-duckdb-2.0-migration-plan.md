@@ -150,6 +150,57 @@ attribution is wrong". Both were wrong: the third possibility — honoured one
 layer down, so the step still reports as run — is what was happening. A ✓ on a
 step named `Test` is not evidence that tests ran.
 
+## 3b. The registry's own test phase is running ZERO tests, for everyone
+
+Measured 2026-10-15 while watching the registry build our rewritten #3065.
+
+The registry built `ref` (`b49238e`) against its own 2.0 target — `duckdb_version:
+b15358c3`, `duckdb_tag: v2.0.0-alpha46057`, `ci_tools_version: v2.0-cyanoptera`
+— and went green on `build / linux_amd64`, `windows_amd64`, `wasm_eh`
+(run 38799112177). **That is real compile evidence from the registry's own
+infrastructure, and it is the closest thing to a dry run of the 21st.**
+
+Its `Test` step is a no-op, and unlike ours it is not even deliberate:
+
+```
+all tests passed in 3s (156 skipped tests)
+Skipped tests (156):  require sitting_duck: 156
+ran tests: 0 passed, 156 skipped in 3s
+```
+
+Every one of the 156 test files skipped on `require sitting_duck` — the
+extension is not loadable in that unittest binary — and the harness printed
+**"all tests passed"**.
+
+**This is not specific to us, and it is new.** Comparing registry builds either
+side of #3079 (merged 15:42Z):
+
+| when | extension | result |
+|---|---|---|
+| 09:34Z, before | `anofox_decide` | `All tests passed (3523 assertions in 139 test cases)` |
+| 09:50Z, before | `altertable` | `All tests passed (34 skipped, 23 assertions in 10 test cases)` |
+| 16:45Z, after | `duck_hunt` | `ran tests: 0 passed, 61 skipped` — `require duck_hunt: 61` |
+| 20:05Z, after | `sitting_duck` | `ran tests: 0 passed, 156 skipped` — `require sitting_duck: 156` |
+
+So since the 2.0 migration **the community registry's build phase executes no
+tests for any extension and reports green.** Six days before v2.0.0 ships, and
+invisibly — the step is named `Test`, prints "all tests passed", and shows ✓.
+
+(The outer `Tests are skipped in this run...` line is unrelated and expected:
+`duckdb_extension.Makefile:207` sets `SKIP_TESTS=1` when `LINUX_CI_IN_DOCKER=0`,
+so the non-Docker invocation defers to the Docker one. The Docker one is the run
+quoted above.)
+
+### What this does to this plan
+
+**There is now no test evidence on the 2.0 line from any source**: not our v2.0
+leg (skips by design, §3), and not the registry's (skips by accident, here). So
+§5's options have to be decided on compile evidence plus `bugs/040`'s local
+measurements, and step 3 below — re-measuring 040 against `b15358c3` locally —
+is the *only* way to get a number. It is no longer a nice-to-have.
+
+Worth reporting upstream; it affects every extension in the registry, not us.
+
 ## 4. The constraint the repoint runs into
 
 `duckdb-pin`'s own rationale (fleet rule, 2026-09-13): the submodule is pinned
