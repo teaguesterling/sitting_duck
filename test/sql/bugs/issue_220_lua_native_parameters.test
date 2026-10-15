@@ -1,0 +1,187 @@
+# name: test/sql/bugs/issue_220_lua_native_parameters.test
+# description: #220 -- lua declares function-shaped native strategies and must actually deliver parameters
+# group: [bugs]
+
+# lua_types.def declared FUNCTION_WITH_PARAMS on `function_declaration` and
+# ARROW_FUNCTION on `function_definition`, and delivered NOTHING: 22 function
+# nodes, 0 parameters. The cause was not in either extractor, because lua had
+# no extractor at all -- it had no NativeExtractionTraits<LuaAdapter>
+# specialization, so it fell through to the default:
+#
+#     template <typename AdapterType>
+#     struct NativeExtractionTraits {
+#         template <NativeExtractionStrategy Strategy>
+#         using ExtractorType = NativeExtractor<Strategy>;   // -> NativeContext()
+#     };
+#
+# 19 adapters were specialized and lua was not, with no compile error and no
+# warning: the declaration surface (the .def) and the implementation surface (a
+# traits specialization) are unrelated, and nothing checked that they agree.
+# The conformance kit caught it as
+# `FAIL lua NATIVE-DECL  12 of 14 function defs take parameters in source, 0
+# delivered` -- the "declared capability with nothing behind it" class it
+# exists to find.
+#
+# WHY THIS FILE PINS THE ZEROS TOO. Two lua forms legitimately deliver no
+# parameters: a no-argument function, and the syntax-only `function` KEYWORD
+# token, which lua_types.def classifies DEFINITION_FUNCTION with IS_KEYWORD
+# (the same shape as swift's `func`). Before the fix EVERYTHING was zero, so a
+# test that only asserted "some things are non-zero" would pass on a partial
+# fix that still missed the no-arg and keyword cases for the wrong reason.
+# Asserting which rows are zero AND why is what separates the two.
+
+require sitting_duck
+
+# =============================================================================
+# A. Parameters are delivered, with the right names and arity.
+# =============================================================================
+
+query III
+SELECT name, len(parameters) AS np, list_transform(parameters, x -> x.name) AS pnames
+FROM read_ast('test/data/lua/native_params.lua', 'lua', context := 'native')
+WHERE type IN ('function_declaration', 'function_definition')
+ORDER BY start_line;
+----
+greet	1	[who]
+M.create	3	[name, value, ...]
+(empty)	2	[a, b]
+noargs	0	[]
+speak	0	[]
+
+# The anonymous form is the ARROW_FUNCTION path rather than
+# FUNCTION_WITH_PARAMS, so it is asserted separately: a fix that wired only the
+# named form would still satisfy a combined count.
+query II
+SELECT type, len(parameters) AS np
+FROM read_ast('test/data/lua/native_params.lua', 'lua', context := 'native')
+WHERE type = 'function_definition';
+----
+function_definition	2
+
+# =============================================================================
+# B. The variadic is captured as variadic, not as a parameter literally named "...".
+# =============================================================================
+# `...` is a `vararg_expression` child of `parameters`, not an `identifier`, so
+# it needs its own branch in the extractor -- without it, `...` would simply be
+# absent and M.create would report 2 parameters rather than 3.
+#
+# ASSERTED ON name/type ONLY, because is_variadic is NOT OBSERVABLE from SQL.
+# The extractor sets ParameterInfo.is_variadic = true for `...`, but the flat
+# `parameters` column that read_ast exposes is declared
+# `LIST(STRUCT(name VARCHAR, type VARCHAR))` at
+# src/unified_ast_backend.cpp:621, while three other declarations of the same
+# logical type (unified_ast_backend.cpp:444 and :544, ast_type.cpp:54 and :78)
+# carry all six ParameterInfo fields. The narrow one wins for read_ast, so
+# default_value, is_optional, is_variadic and annotations are written in C++
+# and unreachable from SQL. Filed separately; this file pins the behaviour as
+# it IS rather than as the struct suggests.
+#
+# lua sets no type and no default on any parameter -- the language has neither
+# annotations nor defaults in the parameter list -- so empty `type` here is the
+# correct answer, not a missing one.
+
+query II
+SELECT p.name, p.type
+FROM read_ast('test/data/lua/native_params.lua', 'lua', context := 'native') f,
+     unnest(f.parameters) AS t(p)
+WHERE f.name = 'M.create'
+ORDER BY p.name;
+----
+...	(empty)
+name	(empty)
+value	(empty)
+
+# =============================================================================
+# C. `local` is the one modifier lua has, and it is three levels up for the
+#    anonymous form.
+# =============================================================================
+# `local function greet()` carries `local` as a child of the declaration, but
+# `local anon = function()` keeps it on a variable_declaration THREE levels up:
+#
+#     variable_declaration        <- holds `local`
+#       local
+#       assignment_statement
+#         variable_list -> identifier(anon)
+#         "="
+#         expression_list
+#           function_definition   <- the node the extractor is handed
+#
+# The first version of this extractor checked only ts_node_parent(node) for
+# `variable_declaration`; the real parent is `expression_list`, so that branch
+# could never fire while its comment claimed it handled this form. Both forms
+# are asserted so the ancestor walk cannot regress to a parent check.
+
+query II
+SELECT name, modifiers
+FROM read_ast('test/data/lua/native_params.lua', 'lua', context := 'native')
+WHERE type IN ('function_declaration', 'function_definition')
+ORDER BY start_line;
+----
+greet	[local]
+M.create	[]
+(empty)	[local]
+noargs	[]
+speak	[]
+
+# =============================================================================
+# D. NON-VACUITY: the fixture really does contain functions taking parameters.
+# =============================================================================
+# Every assertion above would also be satisfiable by a fixture that parsed to
+# nothing. This states the denominator the kit's NATIVE-DECL gate uses: of the
+# function definitions here, how many take a parameter in source.
+
+query II
+SELECT count(*) AS function_defs,
+       count(*) FILTER (WHERE len(parameters) > 0) AS with_params
+FROM read_ast('test/data/lua/native_params.lua', 'lua', context := 'native')
+WHERE type IN ('function_declaration', 'function_definition');
+----
+5	3
+
+# =============================================================================
+# E. The zeros that are CORRECT, pinned with their reason.
+# =============================================================================
+# The syntax-only `function` keyword is DEFINITION_FUNCTION + IS_KEYWORD, so it
+# is counted among DEFINITION_FUNCTION nodes but can never carry parameters.
+# Before the fix this row was indistinguishable from the broken ones.
+
+query III
+SELECT type, is_syntax_only(flags) AS syn, len(parameters) AS np
+FROM read_ast('test/data/lua/native_params.lua', 'lua', context := 'native')
+WHERE type = 'function' AND is_syntax_only(flags)
+LIMIT 1;
+----
+function	true	0
+
+# And across the whole lua corpus, this is the issue's own reproduction query,
+# whose three rows read 0 / 0 / 0.
+#
+# ASSERTED AS A DIRECTION, NOT AS COUNTS. The first version of this block
+# pinned `function 12 / function_declaration 13 11 / function_definition 3 3`,
+# worked out by arithmetic from the pre-fix numbers plus this file's new
+# fixture. Two of those were wrong (16 and 10), and the real objection is not
+# that I mis-added: exact corpus counts rot the moment anyone adds a .lua
+# fixture, so the next person to do so gets a failure that says nothing about
+# parameter extraction. The property that matters is the one the kit's
+# NATIVE-DECL gate tests -- both declaration forms deliver, the keyword token
+# does not -- and it survives new fixtures.
+query III
+SELECT type,
+       count(*) FILTER (WHERE len(parameters) > 0) > 0 AS some_deliver,
+       count(*) FILTER (WHERE len(parameters) > 0) = 0 AS none_deliver
+FROM read_ast('test/data/lua/*.lua', 'lua', context := 'native', ignore_errors := true)
+WHERE semantic_type::VARCHAR LIKE 'DEFINITION_FUNCTION%'
+GROUP BY type ORDER BY type;
+----
+function	false	true
+function_declaration	true	false
+function_definition	true	false
+
+# NON-VACUITY for the directions above: the corpus has to contain enough of
+# each form for `some_deliver` to mean anything. Asserted as a lower bound
+# rather than an exact count for the same reason.
+query I
+SELECT count(*) >= 3 FROM read_ast('test/data/lua/*.lua', 'lua', ignore_errors := true)
+WHERE type IN ('function_declaration', 'function_definition');
+----
+true
