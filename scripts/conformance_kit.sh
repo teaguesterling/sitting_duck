@@ -858,7 +858,37 @@ check_native_absent() {
 # selector_b, when non-empty, is substituted for X on the ast_select side only:
 # that is the negative control, and it must make the comparison disagree.
 check_raw_join() {
-    local lang="$1" selector_b="${2-}" f callee out a b c d
+    local lang="$1" selector_b="${2-}" f callee out a b c d cap capval capsrc
+    # SAME CAPABILITY GATE AS CALL-NAMED, and for the same reason. This check
+    # compares the semantic view of a NAMED CALL against the raw tree, so a
+    # language that declares no call naming at all cannot be judged by it --
+    # "no named call in any fixture" is then inherent, not a corpus gap.
+    #
+    # Without this gate the two checks disagreed about the same fact: json,
+    # toml, yaml, markdown, html and bash each reported CALL-NAMED `n/a`
+    # ("does not declare call naming") and RAW-JOIN `void` ("no named call in
+    # any fixture") -- one cell saying "not applicable", the next saying
+    # "unexamined", about one language that simply has no named calls. 6 of the
+    # 13 voids in the recorded baseline were that, and a `void` reads as a
+    # question nobody has answered: tracker/features/049 records 4 voids that
+    # WERE a real gap in 2 languages, found only because someone finally read
+    # them as questions. Inflating that count with cells that can never apply
+    # hides the ones that can.
+    #
+    # What stays `void` after this is the honest residue: a language that DOES
+    # declare call naming but whose corpus contains no instance (dart declares
+    # it on constructor forms only; graphql on `fragment_spread`).
+    #
+    # ONLY the `0` branch, NOT CALL-NAMED's `?` -> UNDECL branch. The two checks
+    # need the declaration for different reasons: CALL-NAMED gates PER NODE TYPE
+    # and cannot run without knowing which types declare naming, while RAW-JOIN
+    # compares the RUNTIME semantic view against the raw tree and needs no .def
+    # at all. Copying the `?` branch here moved `duckdb` from ok to UNDECL --
+    # its RAW-JOIN had been running and passing, and the comment below calls it
+    # out as a deliberately supported case. Measured with that branch present:
+    # ok 189 -> 188, UNDECL 5 -> 6.
+    cap=$(resolve_cap "${lang}" call_names); capval="${cap%% *}"
+    [ "${capval}" = "0" ] && { printf 'n/a\tdoes not declare call naming (%s)' "${cap##* }"; return; }
     # ITERATE the clean fixtures. Stopping at the first one voided this check
     # for 10 of 27 languages, and at least two of those voids were false: hcl's
     # six named `function_call` nodes are in test/data/hcl/simple.tf while

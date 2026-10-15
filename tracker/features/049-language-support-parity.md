@@ -33,7 +33,8 @@ answer. Proposed, in increasing strength:
 ## Axis 1 — the conformance kit: 8 checks x 28 languages = 224 cells
 
 ```
-ok=189  n/a=13  void=13  UNDECL=5  FAIL=3  dirty=1
+ok=189  n/a=19  void=7  UNDECL=5  FAIL=3  dirty=1      (after row 5 below)
+ok=189  n/a=13  void=13 UNDECL=5  FAIL=3  dirty=1      (as first measured)
 ```
 
 A seven-way partition of the 28, which sums — stated that way on purpose,
@@ -96,11 +97,11 @@ So this axis is one language's problem, not a fleet-wide one.
 
 | # | Item | Issue | Size | Why this order |
 |---|---|---|---|---|
-| 1 | graphql: decide `field` = call or access | #250 | Hours | A recorded decision either way; if access stands, the kit cell becomes `n/a` and stops reading as an unexamined gap |
+| 1 | graphql: decide `field` = call or access | #250 | Hours | A recorded decision either way. **Correction:** this row originally said that if access stands the kit cell becomes `n/a`. It does not — graphql genuinely declares call naming on `fragment_spread`, so its `void` is a corpus gap wanting a fixture (row 4), not a reclassification. The `n/a` lever was elsewhere: RAW-JOIN had no capability gate at all, which row 5 fixed |
 | 2 | kotlin/lua/sql native strategies deliver no parameters | #220 | Days | The only cells that are outright **FAIL**. A module that declares a capability it lacks is the thing the kit exists to catch |
 | 3 | dart: ordinary calls unreachable to `.call` | #250 | Days | Needs a previous-sibling name strategy or a CUSTOM handler — the grammar puts the callee in a *sibling* of the arguments node, so no existing strategy reaches it |
 | 4 | Conformance fixtures for the remaining `void` cells | — | Hours | bash/css/html `NATIVE-DECL`, dart/graphql `RAW-JOIN`. A `void` cell is indistinguishable from an unexamined one, which is exactly how #250 survived |
-| 5 | Mark inherently-void cells `n/a` | — | Hours | json/toml/yaml/markdown `RAW-JOIN` can never apply. Leaving them `void` inflates the unknown count and hides the real ones |
+| 5 | Mark inherently-void cells `n/a` | — | Hours | **DONE.** `check_raw_join` had no capability gate, so json/toml/yaml/markdown/html/bash reported CALL-NAMED `n/a` and RAW-JOIN `void` about the same fact. Gated on the declared call-naming capability: **6 cells moved `void` → `n/a`**, totals `void=13 → 7` and `n/a=13 → 19`, still summing to 224 |
 | 6 | sql leaf-text `keyword_*` | `047`, `048` row 1 | Days | 210 of 212 gaps. Unparse works; the names do not |
 | 7 | `_refinements.test` for the 15 languages without one | #203-adjacent | Days | The level that catches misclassification rather than non-parsing |
 | 8 | csharp declaration coverage | — | Investigate | 57 declarations for a language of that size; may be fine, has not been checked |
