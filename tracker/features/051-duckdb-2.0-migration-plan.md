@@ -76,9 +76,16 @@ but this repo ships default=v1.5.6 next=v2.0-cyanoptera
 
 | commit | what it is | v2.0-cyanoptera build |
 |---|---|---|
-| `803b35b5` | the current registry ref | **green** — run 37157449013 (linux_amd64, wasm_eh, windows_amd64) |
-| `b49238e` | v1.16.0, what PR #3065 would ship | **green** — run 38566432103 (linux_amd64, windows_amd64, windows_amd64_mingw, wasm_eh) |
+| `803b35b5` | the current registry ref | **green on all 9 platforms** — run 37157449013 |
+| `b49238e` | v1.16.0, what PR #3065 ships | **green on all 9 platforms** — run 38566432103 |
 | `3bb6488` | main today | linux_amd64 green |
+
+The 9 are linux_amd64, linux_arm64, osx_amd64, osx_arm64, windows_amd64, windows_amd64_mingw, wasm_mvp, wasm_eh, wasm_threads — the full matrix, on both lines, at both registry-relevant
+refs. **Correction to an earlier claim of mine:** I reported the v2.0 leg as
+covering only 3-4 platforms with no osx/arm64/wasm_mvp/wasm_threads coverage.
+That came from reading one *pull_request* run's partial job list instead of
+measuring; push-to-main runs build the full matrix. The coverage gap I asserted
+does not exist.
 
 And the leg is testing the right line: **`b15358c3` is an ancestor of
 `v2.0-cyanoptera`** (`compare/b15358c3...v2.0-cyanoptera` → `behind_by = 0`,
@@ -252,14 +259,39 @@ sets `ref` **and** `ref_next` to `b49238e`. Under the schema in §1:
   which under the new keying is not what happens — v1.5.6 builds take
   `variegata` if present and `ref` otherwise.
 
-So #3065 should be rewritten as `ref: b49238e` + `variegata: b49238e`, dropping
-`ref_next`. That is a small edit to an open PR, and it is **the one externally
-visible action in this document**, so it waits for a go-ahead too.
+**DONE 2026-10-15** (Teague: "If the pr isn't merged yet, rewrite it. Make sure
+we have v1.5.6 and upcoming v2.0.0 covered"). #3065 was still open and now sets:
+
+```yaml
+repo:
+  github: teaguesterling/sitting_duck
+  ref:       b49238e...   # default build: the 2.0 line now, v2.0.0 once tagged
+  variegata: b49238e...   # v1.5.6 builds
+  ref_next:  b49238e...   # a prerelease that is none of the above
+```
+
+`ref_next` was **kept**, not dropped as this section first proposed. It cannot
+hijack the default build — `DUCKDB_LATEST_STABLE` is set to the same commit as
+the default (`build.yml:80`), so `DUCKDB_VERSION != DUCKDB_LATEST_STABLE` is
+false there — and keeping it means prerelease validation builds this release
+instead of printing "Skipping prerelease validation" if `build_next.yml` is
+re-enabled.
+
+Verified by transcribing `build.py:42-54` and running it against the descriptor.
+All six paths resolve to a commit: the default, v1.5.6 → `variegata`, v1.4.5
+(no `andium` → falls back to `ref`), a future prerelease → `ref_next`, and both
+post-v2.0.0-flip cases, where v1.5.6 keeps its own ref.
+
+Note `variegata` is read by `build.py:47` but **no extension in the registry
+uses it yet** — the migration is hours old. `andium`, the identical mechanism
+for v1.4.5, is in use (`urlpattern`) and is the precedent followed.
 
 ## 8. What I am NOT doing
 
 - Not repointing the submodule. Standing instruction, and §4.
-- Not editing the descriptor or PR #3065 yet.
+- ~~Not editing PR #3065.~~ **Done — §7.** The registry's own CI is now
+  building `ref` against the 2.0 line for the first time, which is the one piece
+  of evidence no sitting_duck run can produce.
 - Not landing a parse fix into the other nine repos — the *comparison* question
   should be settled once, not nine times, and a fleet of repos silently
   agreeing on a wrong assertion is worse than nine red checks with a known cause.
