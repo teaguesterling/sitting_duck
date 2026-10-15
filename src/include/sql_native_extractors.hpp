@@ -36,7 +36,22 @@ struct SQLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 		try {
 			string node_type = ts_node_type(node);
 
-			if (node_type == "create_table") {
+			// #220: `create_function` is the node type that DECLARES
+			// FUNCTION_WITH_PARAMS (sql_adapter.cpp:32), and it was the one node
+			// type this dispatch did not handle. It fell through all twelve
+			// branches into the generic else, which sets signature_type = "SQL"
+			// and clears parameters -- so every CREATE FUNCTION reported zero
+			// arguments while the declaration, the traits mapping and this
+			// extractor were all present and correct for other node types.
+			//
+			// Scoped to the FUNCTION_WITH_PARAMS specialization: the identical
+			// `create_table` dispatch also appears in CLASS_WITH_METHODS below,
+			// and only this one is reached for create_function.
+			if (node_type == "create_function") {
+				context.signature_type = ExtractCreateFunctionReturnType(node, content);
+				context.parameters = ExtractCreateFunctionArguments(node, content);
+				context.modifiers = ExtractCreateFunctionModifiers(node, content);
+			} else if (node_type == "create_table") {
 				context.signature_type = "TABLE";
 				context.parameters = ExtractTableColumns(node, content);
 				context.modifiers = ExtractTableModifiers(node, content);
@@ -204,6 +219,104 @@ struct SQLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 		return columns;
 	}
 
+	// CREATE FUNCTION f(name TYPE, ...) -- the DECLARATION form, where each
+	// argument carries a name AND a type. Measured shape:
+	//
+	//     create_function
+	//       keyword_create, keyword_function
+	//       object_reference(get_user_name)
+	//       function_arguments
+	//         "(" function_argument "," function_argument ")"
+	//       keyword_returns
+	//       varchar                       <- the return type
+	//       function_body
+	//
+	//     function_argument -> identifier(user_id), int(INTEGER)
+	//
+	// NOT the same as ExtractFunctionArguments below, which serves the CALL
+	// site: there an argument is an expression with no declared type, which is
+	// why that helper sets type = "" and comments "SQL function args don't have
+	// explicit types". True of a call, false of a declaration -- reusing it here
+	// would put "user_id INTEGER" in the NAME and leave the type empty.
+	//
+	// THE TYPE NODE'S OWN TYPE VARIES -- `int`, `decimal`, `varchar`, ... -- so
+	// it cannot be found by node name. Take the first `identifier` as the name
+	// and the first non-identifier child as the type.
+	static vector<ParameterInfo> ExtractCreateFunctionArguments(TSNode node, const string &content) {
+		vector<ParameterInfo> args;
+
+		TSNode arg_list = FindChildByType(node, "function_arguments");
+		if (ts_node_is_null(arg_list)) {
+			return args;
+		}
+		uint32_t child_count = ts_node_child_count(arg_list);
+		if (child_count > 1000) {
+			return args;
+		}
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(arg_list, i);
+			if (ts_node_is_null(child)) {
+				continue;
+			}
+			const char *child_type = ts_node_type(child);
+			if (!child_type || strcmp(child_type, "function_argument") != 0) {
+				continue; // "(" "," ")"
+			}
+
+			ParameterInfo info;
+			uint32_t gc = ts_node_child_count(child);
+			if (gc > 100) {
+				continue;
+			}
+			for (uint32_t j = 0; j < gc; j++) {
+				TSNode g = ts_node_child(child, j);
+				if (ts_node_is_null(g)) {
+					continue;
+				}
+				const char *gt = ts_node_type(g);
+				if (!gt) {
+					continue;
+				}
+				if (info.name.empty() && strcmp(gt, "identifier") == 0) {
+					info.name = ExtractNodeText(g, content);
+				} else if (info.type.empty() && strcmp(gt, "identifier") != 0) {
+					info.type = ExtractNodeText(g, content);
+				}
+			}
+			if (!info.name.empty()) {
+				args.push_back(info);
+			}
+		}
+		return args;
+	}
+
+	// The return type is the node AFTER `keyword_returns`, and like the argument
+	// types its own node type varies with the SQL type named.
+	static string ExtractCreateFunctionReturnType(TSNode node, const string &content) {
+		uint32_t child_count = ts_node_child_count(node);
+		if (child_count > 1000) {
+			return "";
+		}
+		bool seen_returns = false;
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			if (ts_node_is_null(child)) {
+				continue;
+			}
+			const char *child_type = ts_node_type(child);
+			if (!child_type) {
+				continue;
+			}
+			if (seen_returns) {
+				return ExtractNodeText(child, content);
+			}
+			if (strcmp(child_type, "keyword_returns") == 0) {
+				seen_returns = true;
+			}
+		}
+		return "";
+	}
+
 	static vector<ParameterInfo> ExtractFunctionArguments(TSNode node, const string &content) {
 		vector<ParameterInfo> args;
 
@@ -251,6 +364,40 @@ struct SQLNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 		}
 
 		return args;
+	}
+
+	// `CREATE OR REPLACE FUNCTION` is the modifier a CREATE FUNCTION can carry,
+	// and the grammar spells it as two separate keyword children rather than one
+	// node: keyword_create, keyword_or, keyword_replace, keyword_function. Both
+	// have to be present to report it, so `OR` alone in some other position
+	// cannot produce a false "OR REPLACE".
+	static vector<string> ExtractCreateFunctionModifiers(TSNode node, const string &content) {
+		vector<string> modifiers;
+
+		uint32_t child_count = ts_node_child_count(node);
+		if (child_count > 1000) {
+			return modifiers;
+		}
+		bool saw_or = false, saw_replace = false;
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			if (ts_node_is_null(child)) {
+				continue;
+			}
+			const char *child_type = ts_node_type(child);
+			if (!child_type) {
+				continue;
+			}
+			if (strcmp(child_type, "keyword_or") == 0) {
+				saw_or = true;
+			} else if (strcmp(child_type, "keyword_replace") == 0) {
+				saw_replace = true;
+			}
+		}
+		if (saw_or && saw_replace) {
+			modifiers.push_back("OR REPLACE");
+		}
+		return modifiers;
 	}
 
 	static vector<string> ExtractTableModifiers(TSNode node, const string &content) {

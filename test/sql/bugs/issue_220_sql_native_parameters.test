@@ -1,0 +1,129 @@
+# name: test/sql/bugs/issue_220_sql_native_parameters.test
+# description: #220 -- CREATE FUNCTION declares FUNCTION_WITH_PARAMS and was the one node type the sql dispatch omitted
+# group: [bugs]
+
+# The THIRD distinct cause in #220, completing the set the issue predicted when
+# it said the three FAILs "may well have three different causes":
+#
+#   lua     -- no extractor at all (no NativeExtractionTraits specialization)
+#   kotlin  -- extractor dispatched on node types the grammar never emits
+#   sql     -- extractor dispatched on TWELVE node types, none of them the one
+#              that declares the strategy
+#
+# `create_function` is what declares FUNCTION_WITH_PARAMS
+# (src/language_adapters/sql_adapter.cpp:32), and it was the single node type
+# missing from SQLNativeExtractor<FUNCTION_WITH_PARAMS>'s dispatch, which
+# handled create_table, create_view, function_call, window_function, four
+# *_statement forms, statement, binary_expression, term and list. So every
+# CREATE FUNCTION fell through into the generic else -- signature_type = "SQL",
+# parameters cleared -- while the declaration, the traits mapping and the
+# extractor were all present and working for other node types.
+#
+# WHY A SEPARATE ARGUMENT EXTRACTOR. The existing ExtractFunctionArguments
+# serves the CALL site, where an argument is an expression with no declared
+# type; it sets type = "" and says so in a comment. That is true of a call and
+# false of a declaration, so reusing it here would have put "user_id INTEGER"
+# in the NAME and left the type empty. Measured declaration shape:
+#
+#     create_function
+#       keyword_create, keyword_or, keyword_replace, keyword_function
+#       object_reference(calculate_total)
+#       function_arguments
+#         "(" function_argument "," function_argument ")"
+#       keyword_returns
+#       decimal                     <- the return type
+#       function_body
+#
+#     function_argument -> identifier(price), decimal(DECIMAL)
+#
+# The TYPE NODE'S OWN TYPE VARIES with the SQL type named -- `int`, `decimal`,
+# `varchar` -- so neither the argument types nor the return type can be found
+# by node name. Both are taken positionally.
+
+require sitting_duck
+
+# =============================================================================
+# A. Names, return types, argument names, argument types, modifiers.
+# =============================================================================
+# All five were empty or wrong before: parameters came back cleared and
+# signature_type was the literal string "SQL" from the generic else branch.
+
+query IIIIII
+SELECT name, signature_type, len(parameters) AS np,
+       list_transform(parameters, x -> x.name) AS pnames,
+       list_transform(parameters, x -> x.type) AS ptypes,
+       modifiers
+FROM read_ast('test/data/sql/create_function_example.sql', 'sql', context := 'native')
+WHERE type = 'create_function'
+ORDER BY start_line;
+----
+get_user_name	VARCHAR	1	[user_id]	[INTEGER]	[]
+calculate_total	DECIMAL	2	[price, quantity]	[DECIMAL, INTEGER]	[OR REPLACE]
+
+# signature_type must not be the literal "SQL" any more. That string was the
+# generic else branch's output, and it is the tell that create_function was
+# falling through: a fix that wired parameters but left signature_type alone
+# would still satisfy the parameter assertions above.
+query I
+SELECT count(*) FROM read_ast('test/data/sql/create_function_example.sql', 'sql', context := 'native')
+WHERE type = 'create_function' AND signature_type = 'SQL';
+----
+0
+
+# The argument TYPE is separate from its NAME. Reusing the call-site helper
+# would have produced name = 'user_id INTEGER' with an empty type, which passes
+# a bare "np = 1" check -- so name and type are asserted apart.
+query II
+SELECT p.name, p.type
+FROM read_ast('test/data/sql/create_function_example.sql', 'sql', context := 'native') f,
+     unnest(f.parameters) AS t(p)
+WHERE f.type = 'create_function' AND f.name = 'calculate_total'
+ORDER BY p.name;
+----
+price	DECIMAL
+quantity	INTEGER
+
+# =============================================================================
+# B. `OR REPLACE` needs BOTH keywords, so a stray OR cannot fake it.
+# =============================================================================
+# The grammar spells it as two separate keyword children rather than one node
+# (keyword_create, keyword_or, keyword_replace, keyword_function), so the
+# helper requires both. get_user_name has neither and must stay empty.
+
+query II
+SELECT name, modifiers
+FROM read_ast('test/data/sql/create_function_example.sql', 'sql', context := 'native')
+WHERE type = 'create_function'
+ORDER BY start_line;
+----
+get_user_name	[]
+calculate_total	[OR REPLACE]
+
+# =============================================================================
+# C. The other dispatch branches still work -- this change added a branch, and
+#    must not have reordered the ones below it.
+# =============================================================================
+# create_table and create_view are in the same if/else chain, immediately after
+# the new create_function branch. The identical `create_table` dispatch also
+# exists in the CLASS_WITH_METHODS specialization, so getting the scoping wrong
+# would show up here.
+
+query II
+SELECT type, signature_type
+FROM read_ast('test/data/sql/create_function_example.sql', 'sql', context := 'native')
+WHERE type IN ('create_table', 'create_view')
+ORDER BY type;
+----
+create_table	TABLE
+create_view	VIEW
+
+# =============================================================================
+# D. NON-VACUITY: the fixture really contains two CREATE FUNCTIONs with args.
+# =============================================================================
+
+query II
+SELECT count(*) AS n, count(*) FILTER (WHERE len(parameters) > 0) AS with_params
+FROM read_ast('test/data/sql/create_function_example.sql', 'sql', context := 'native')
+WHERE type = 'create_function';
+----
+2	2
