@@ -80,9 +80,14 @@ but this repo ships default=v1.5.6 next=v2.0-cyanoptera
 | `b49238e` | v1.16.0, what PR #3065 would ship | **green** — run 38566432103 (linux_amd64, windows_amd64, windows_amd64_mingw, wasm_eh) |
 | `3bb6488` | main today | linux_amd64 green |
 
+And the leg is testing the right line: **`b15358c3` is an ancestor of
+`v2.0-cyanoptera`** (`compare/b15358c3...v2.0-cyanoptera` → `behind_by = 0`,
+`ahead_by = 1340`), so the `v2.0-cyanoptera` CI leg builds a *descendant* of
+exactly the commit the registry builds. Compile-compat evidence here transfers.
+
 So **compiling is not the risk.** The v2.0 leg has existed since before the
 registry ref and is enforced by `duckdb-pin` (it fails if no job ships
-`DUCKDB_NEXT`).
+`DUCKDB_NEXT`). What is missing is any *test* evidence — see §3.
 
 ## 3. The actual blocker: bugs/040
 
@@ -99,18 +104,44 @@ upstream (`duckdb/duckdb#26036`), reproducing on both cyanoptera and duckdb
 main. It is a latency regression, not a correctness one — so it sails through
 builds and says nothing in a compile-only CI leg.
 
-### The open question that must be measured FIRST
+### RESOLVED: tests are NOT running on the v2.0 leg
 
-The workflow sets `skip_tests: true` on the v2.0 leg precisely because of this.
-**But on today's runs that leg's `Test` step ran and passed** — ✓, not skipped —
-in 40m06s against the v1.5.6 leg's 25m20s. Either `ci_tools_version: main` no
-longer honours `skip_tests`, or the bare-named/tuple-named job attribution is
-wrong. `gh run view --log --job=...` returned empty for both a fresh and an old
-job, so **this is unresolved and must not be assumed either way.**
+This looked like an open question and is not. On today's runs the v2.0 leg's
+`Test` step shows **✓ (ran, succeeded)** rather than `-` (skipped), in 40m06s
+against the v1.5.6 leg's 25m20s — which looked like `skip_tests: true` being
+ignored by `ci_tools_version: main`.
 
-If tests really do pass on the 2.0 line in 40 minutes, bugs/040's practical
-severity has changed and this whole migration gets much cheaper. If they do not,
-nothing below is viable yet. **Everything in §5 is gated on settling this.**
+It is honoured, just at a different layer. `_extension_distribution.yml@main`
+declares `skip_tests` (:138), exports it as `CI_SKIP_TESTS` (:234), and then runs
+the step **unconditionally** — `run: python3 extension-ci-tools/scripts/ci_phase.py test`
+— where `ci_phase.py:795` does the skipping:
+
+```python
+def test(self) -> None:
+    if self.enabled("CI_SKIP_TESTS"):
+        print("Tests skipped by workflow input.")
+        return
+```
+
+So the step runs a no-op and reports success. By contrast
+`@v1.5-variegata` gates the test steps in YAML
+(`if: ${{ ... inputs.skip_tests == false }}`, four sites), which is why the
+stable leg's behaviour reads differently.
+
+**Consequences:**
+
+- The 40m06s is build and setup. **No test has ever run against the 2.0 line
+  in this repo's CI.**
+- `bugs/040`'s status is **unchanged** — nothing here contradicts the 27×
+  measurement, and nothing here supports it either.
+- "Compiling is not the risk" (§2) stands, but it is *all* we have. There is
+  **zero** test evidence on the 2.0 line, which is a weaker position than a
+  green v2.0 leg suggests to anyone reading the check names.
+
+My first reading posed this as "either ci-tools ignores `skip_tests` or my job
+attribution is wrong". Both were wrong: the third possibility — honoured one
+layer down, so the step still reports as run — is what was happening. A ✓ on a
+step named `Test` is not evidence that tests ran.
 
 ## 4. The constraint the repoint runs into
 
@@ -133,9 +164,23 @@ single biggest reason not to rush it.
 
 ### A. Hold at v1.5.6 and add `variegata` (lowest risk)
 
-Add `variegata: <v1.5.6-good commit>` to the descriptor so v1.5.6 builds keep
-working, and let `ref` be built against the 2.0 line as the registry now does.
-No submodule change, no fleet coordination.
+Add `variegata:` to the descriptor so v1.5.6 builds keep working, and let `ref`
+be built against the 2.0 line as the registry now does. No submodule change, no
+fleet coordination.
+
+**Name the commit explicitly — this is where the option has a hole otherwise.**
+Under the schema in §1, omitting `variegata` makes a v1.5.6 build fall back to
+`ref`; so if `ref` moves to `b49238e`, the v1.5.6 artifact silently becomes a
+commit the registry never built against v1.5.6. The candidates:
+
+| commit | v1.5.6 evidence |
+|---|---|
+| `803b35b5` | what the registry currently ships and has built against v1.5.6 — the safe choice |
+| `b49238e` | v1.16.0; v1.5.6-green on this repo's own CI (full 9-platform stable leg), but never built by the registry |
+
+Recommend `variegata: b49238e` **if** #3065 lands (so v1.5.6 and the 2.0 line
+ship the same source, and the 141-commit backlog actually reaches users), and
+`variegata: 803b35b5` if it does not. Either way it must be stated, not defaulted.
 
 - Keeps a working v1.5.6 artifact.
 - Does **not** make the 2.0-line build good — it will compile and be slow
@@ -178,10 +223,10 @@ working. If the registry switches its default from the current SHA to the
 Each step gated; nothing proceeds on assumption.
 
 1. **Land PR #264** (parse fix). Done, open. Makes the check tell the truth.
-2. **Settle the `skip_tests` question** (§3). Dispatch one v2.0 run and capture
-   the log while it is live — `gh workflow run MainDistributionPipeline.yml`,
-   then read the job log immediately rather than after expiry. Determines
-   whether the suite passes on the 2.0 line at all.
+2. ~~Settle the `skip_tests` question.~~ **Done — §3.** Tests have never run on
+   the 2.0 line; `skip_tests: true` is honoured inside `ci_phase.py`. So the
+   remaining question is not "does CI tell us" but "what happens when we run
+   them", which is step 3.
 3. **Re-measure bugs/040 against `b15358c3` specifically** — not against
    cyanoptera's head, and not against the Oct-8 commit. The registry builds that
    exact commit, so that is the number that matters. `build/release-v2.0-cyanoptera`
@@ -227,8 +272,10 @@ visible action in this document**, so it waits for a go-ahead too.
 
 - Whether the suite passes on the 2.0 line (§3). **The gating unknown.**
 - Whether the registry's default stays a SHA or moves to the `v2.0.0` tag.
-- Whether `b15358c3` is on the cyanoptera line's history; a compare reported
-  cyanoptera 1340 commits ahead and 0 behind, which I could not reconcile with
-  a 2026-10-09 date and so am not relying on.
+- ~~Whether `b15358c3` is on the cyanoptera line's history.~~ **Resolved, and it
+  is good news — see §2.** `compare/BASE...HEAD` measures from the merge base, so
+  `behind_by = 0` means `b15358c3` is an *ancestor* of `v2.0-cyanoptera`, and
+  1340 is simply that branch's commits since. There was no inconsistency with the
+  Oct-9 date; I misread the API.
 - bugs/040's severity on `b15358c3` specifically — every existing measurement is
   against a different commit.
