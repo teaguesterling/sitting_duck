@@ -77,6 +77,8 @@ template <NativeExtractionStrategy Strategy>
 struct DartNativeExtractor;
 template <NativeExtractionStrategy Strategy>
 struct CSharpNativeExtractor;
+template <NativeExtractionStrategy Strategy>
+struct LuaNativeExtractor;
 
 // Language adapter traits - each adapter defines its extractor type
 template <typename AdapterType>
@@ -335,6 +337,18 @@ struct NativeExtractionTraits<RAdapter> {
 	using ExtractorType = RNativeExtractor<Strategy>;
 };
 
+// #220: lua declared five native strategies and had NO specialization here, so
+// it silently used the default above -- which returns an empty NativeContext.
+// `class LuaAdapter;` was already forward-declared above (and this header
+// already carried an IsBareNameDefinitionParent<LuaAdapter> specialization and
+// a comment naming lua's `parameters` node), so the adapter was anticipated
+// and only this mapping was missing.
+template <>
+struct NativeExtractionTraits<LuaAdapter> {
+	template <NativeExtractionStrategy Strategy>
+	using ExtractorType = LuaNativeExtractor<Strategy>;
+};
+
 template <>
 struct NativeExtractionTraits<BashAdapter> {
 	template <NativeExtractionStrategy Strategy>
@@ -544,3 +558,4 @@ string ExtractNodeText(TSNode node, const string &content);
 #include "html_native_extractors.hpp"
 #include "dart_native_extractors.hpp"
 #include "csharp_native_extractors.hpp"
+#include "lua_native_extractors.hpp"
