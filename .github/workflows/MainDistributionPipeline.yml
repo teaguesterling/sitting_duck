@@ -129,7 +129,29 @@ jobs:
           else
             body=$(cat "$f1")
             next_body=$(cat "$f2")
-            registry=$(printf '%s' "$body" | grep -m1 -o "inputs.duckdb_version || 'v[0-9][0-9.]*'" | grep -o "'v[0-9][0-9.]*'" | tr -d "'" || true)
+          # THE REGISTRY'S DEFAULT IS NOT ALWAYS A TAG, and on 2026-10-15 it stopped
+          # being one. duckdb/community-extensions#3079 ("2.0 Release Prep", merged
+          # 15:42Z) moved build.yml's default from the v1.5.6 tag to a pinned DuckDB
+          # commit, and it took three forms within four commits that morning:
+          #
+          #   9f37a3c4b  2026-09-28  'v1.5.6'                                   tag
+          #   9490a3eef  2026-10-15  'b15358c371'                   abbreviated SHA
+          #   6cf47deca  2026-10-15  'b15358c371daf10dad799a43b6167f6ccdce84d8' SHA
+          #
+          # and before all of those, dfee906af (2026-09-27) defaulted to a full SHA
+          # too -- 069cc9f9b5be..., which is exactly this repo's submodule pin. So a
+          # SHA default is not new, it is just not what the previous parse expected:
+          # `'v[0-9][0-9.]*'` matched none of the hex forms, the default came back
+          # empty, and this job failed on the UNPARSEABLE branch below rather than on
+          # the comparison -- hiding a real mismatch behind a parse error.
+          #
+          # Accept a v-tag (optionally with a -suffix, e.g. v2.0-cyanoptera or
+          # v2.0.0-alpha46057) OR a 7-to-40 character hex SHA. Anything else still
+          # falls through to the unparseable branch, which is the point: this check
+          # must fail when its model of the registry goes stale, not guess.
+          #
+          # Verified against every build.yml revision listed above before landing.
+            registry=$(printf '%s' "$body" | grep -m1 -oE "inputs\.duckdb_version \|\| '(v[0-9][0-9.]*(-[0-9A-Za-z.]+)?|[0-9a-f]{7,40})'" | grep -oE "(v[0-9][0-9.]*(-[0-9A-Za-z.]+)?|[0-9a-f]{7,40})" | head -1 || true)
             registry_next=$(printf '%s' "$next_body" | grep -m1 -o "duckdb_version: *'v[0-9][0-9.]*-[a-z]*'" | grep -o "'v[^']*'" | tr -d "'" || true)
             if [ -z "$registry" ] || [ -z "$registry_next" ]; then
               echo "::error::community-extensions at ${sha:-main} was fetched but build.yml/build_next.yml carry no recognisable duckdb_version (default='${registry}', next='${registry_next}'); this check's parse is wrong about the registry, fix the check"
