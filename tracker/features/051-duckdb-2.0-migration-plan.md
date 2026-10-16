@@ -199,7 +199,16 @@ leg (skips by design, §3), and not the registry's (skips by accident, here). So
 measurements, and step 3 below — re-measuring 040 against `b15358c3` locally —
 is the *only* way to get a number. It is no longer a nice-to-have.
 
-Worth reporting upstream; it affects every extension in the registry, not us.
+**Reported upstream: duckdb/community-extensions#3086.** Localised there to the
+ci-tools line bump: `extension-ci-tools@v2.0-cyanoptera` added
+`TEST_RUNNER := python3 ${DUCKDB_SRCDIR}/scripts/ci/run_tests.py`
+(`makefiles/duckdb_extension.Makefile:197-202`), so the same unittest binary is
+now driven through a worker-spawning wrapper instead of invoked directly, and
+`require <ext>` is no longer satisfied in the children. The same file notes the
+unittester "is currently dynamically linked by default", so the extension has to
+be loadable at run time rather than being statically present. Root cause not
+established — the fix may belong in `extension-ci-tools` or in duckdb's
+`run_tests.py`.
 
 ## 4. The constraint the repoint runs into
 
