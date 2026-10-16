@@ -50,8 +50,8 @@ require sitting_duck
 
 query IIIIII
 SELECT name, signature_type, len(parameters) AS np,
-       list_transform(parameters, x -> x.name) AS pnames,
-       list_transform(parameters, x -> x.type) AS ptypes,
+       list_transform(parameters, lambda x: x.name) AS pnames,
+       list_transform(parameters, lambda x: x.type) AS ptypes,
        modifiers
 FROM read_ast('test/data/sql/create_function_example.sql', 'sql', context := 'native')
 WHERE type = 'create_function'
