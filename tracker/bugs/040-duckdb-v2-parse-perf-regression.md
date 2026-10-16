@@ -356,3 +356,84 @@ checked before setup, after setup, and after all measurements. The cyanoptera
 side was built from an independent repository inside this worktree, with
 `d4c9dfd469f` fetched over a local path from the pre-existing cyanoptera
 worktree; no command in this session targeted the shared checkout's repository.
+
+---
+
+## RE-MEASUREMENT 2026-10-15 — against the commit the registry actually builds
+
+**The regression persists, slightly improved, and is still ship-blocking.** This
+is the first measurement against `b15358c371daf10dad799a43b6167f6ccdce84d8` —
+the DuckDB commit `duckdb/community-extensions`' `build.yml` has defaulted to
+since #3079 (merged 2026-10-15T15:42Z). Every previous figure in this file was
+taken against a different commit, so none of them described what the registry
+now ships.
+
+### Method — one variable
+
+Same sitting_duck source (`3bb6488`, merged main), same machine, same session,
+three runs each. Only the DuckDB underneath differs:
+
+| | DuckDB | `pragma_version()` |
+|---|---|---|
+| **A** | the repo's pinned submodule | `v1.5.6` / `069cc9f9b5` |
+| **B** | an **independent** clone in a scratch worktree, moved to the registry's commit | `v2.0.0-dev1` / `b15358c371` |
+
+The shared submodule pin was verified unchanged at `069cc9f9b5be…` before and
+after every step. B was built in
+`.claude/worktrees/agent-a86cfe6551d2f50cd`, whose `duckdb/` is a standalone
+repository, not the shared gitlink.
+
+Method validation: A reproduces this file's recorded 0.47 s/call exactly, so the
+harness measures the same thing the earlier sections did.
+
+### Result
+
+`ast_select_from('t','function_definition')` on a 110-row AST:
+
+| | A — v1.5.6 | B — b15358c3 |
+|---|---|---|
+| run 1 | 0.473 s | 11.384 s |
+| run 2 | 0.507 s | 11.105 s |
+| run 3 | 0.425 s | 11.331 s |
+| **mean** | **0.468 s** | **11.273 s** |
+
+**≈ 24× per call.** (Was ~27× against `d4c9dfd469f` on 2026-10-08: 13.0 s → 11.3 s,
+about a 13 % improvement and nowhere near a fix.)
+
+### Still planning, not execution
+
+`EXPLAIN` — binds and optimizes, does not execute:
+
+| | A — v1.5.6 | B — b15358c3 |
+|---|---|---|
+| `EXPLAIN ast_select_from(…)` | **0.581 s** | **72.211 s** |
+
+**≈ 124× for planning alone**, and CPU-bound in both (user ≈ real). This confirms
+the corrected diagnosis at the top of this file against the current commit.
+
+Note the shape earlier sections also recorded and did not explain: **`EXPLAIN` is
+slower than running the query** (72.2 s vs 11.3 s), as it was in September
+(~55 s vs ~15 s). Reproducible, unexplained; all three query runs were ~11.3 s
+so it is not session warming. Flagged rather than interpreted.
+
+### Status
+
+Unchanged: **open, ship-blocking for any "v2.0-compatible" claim.** The registry
+builds this commit today, so a user installing sitting_duck from the registry on
+the 2.0 line gets ~24× slower selectors and ~124× slower planning. Upstream
+`duckdb/duckdb#26036` has not reached this path.
+
+### Incidental finding, relevant to duckdb/community-extensions#3086
+
+Loading the extension by NAME in B fails with the version-keyed search path
+spelled out:
+
+```
+IO Error: Extension "/home/teague/.duckdb/extensions/b15358c371/linux_amd64/sitting_duck.duckdb_extension" not found.
+```
+
+The directory key is **`b15358c371`** — derived from the version string, which on
+this line is the commit. That is independent, local corroboration of the
+"version-keyed extension folder" candidate recorded in #3086 for why
+`require <ext>` skips every test in the registry's own builds. Measured here by
+accident; it is why the figures above load the extension by explicit path.
