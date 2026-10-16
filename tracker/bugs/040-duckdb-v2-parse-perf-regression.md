@@ -439,20 +439,32 @@ the key is the short git hash, not the version string.
 Followed up under an **isolated** `extension_directory` so nothing about this
 machine's state is involved: the lookup asks for
 `<dir>/b15358c371/linux_amd64/…`, and placing the built extension at exactly
-that key makes `LOAD sitting_duck` **by name** succeed (110 rows). The key is
-therefore confirmed by construction in both directions.
+that key makes `LOAD sitting_duck` **by name** succeed (110 rows).
 
-Next to the `extension folder b15358c371daf10dad799a43b6167f6ccdce84d8`
-(40 characters) that CI prints for this same commit, that is a 40-character
-install against a 10-character lookup. It is the route recorded in
-duckdb/community-extensions#3086 for why `require <ext>` skips every test in
-the registry's builds — **demonstrated for the autoload path, not traced in
-CI**, whose in-tree `unittest` binary is a different load path.
+Reading the extension's own metadata footer (8 × 32-byte fields) confirms why:
 
-Note this also refutes a framing I had put on #3086 myself: the discriminator is
-not "bare SHA". A leg on `duckdb_version: main` fails the same way, because
-`main` resolves to a dated dev string. The rule that fits every case is that
-`duckdb_version` must be a value the built binary reports back verbatim.
+```
+platform           len=11  'linux_amd64'
+duckdb_version     len=10  'b15358c371'
+extension_version  len=10  '3bb6488aea'
+abi_type           len= 3  'CPP'
+```
 
-Measured here by accident; it is why the figures above load the extension by
-explicit path.
+This build reports `library_version = v2.0.0-dev1`, which **contains `-dev`**, so
+`ExtensionHelper::GetVersionDirectoryName()` takes its `SourceID()` branch and
+demands the 10-character hash — exactly what the file carries. Match, loads.
+
+**This is the local half of duckdb/community-extensions#3086, whose root cause
+is now established end to end.** The version is capped at 32 bytes on write
+(`duckdb/scripts/append_metadata.cmake:47`, `SUBSTRING(… 0 32)`) and *not*
+capped on compare: for a version without `-dev`, the engine demands
+`NormalizeVersionTag(library_version)` — a `v` prefix plus the full string
+(`extension_install.cpp:28-33`) — and `extension.cpp:55-62` requires exact
+equality for the CPP ABI. So the registry's 40-character commit yields a 32-char
+stamp against a 41-char demand, confirmed in CI with both halves printed by the
+engine. A 15-character `v2.0-cyanoptera` fits and loads, which is why this
+repo's coverage leg runs tests at all.
+
+So the figures above are unaffected by that bug, and the two are independent:
+#3086 is why the registry's builds *report* zero tests; bugs/040 is why the
+extension is slow on the line the registry builds.
