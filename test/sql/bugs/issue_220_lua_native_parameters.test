@@ -37,7 +37,7 @@ require sitting_duck
 # =============================================================================
 
 query III
-SELECT name, len(parameters) AS np, list_transform(parameters, x -> x.name) AS pnames
+SELECT name, len(parameters) AS np, list_transform(parameters, lambda x: x.name) AS pnames
 FROM read_ast('test/data/lua/native_params.lua', 'lua', context := 'native')
 WHERE type IN ('function_declaration', 'function_definition')
 ORDER BY start_line;

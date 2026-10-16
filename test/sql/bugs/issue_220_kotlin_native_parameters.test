@@ -51,8 +51,8 @@ require sitting_duck
 
 query IIII
 SELECT name, len(parameters) AS np,
-       list_transform(parameters, x -> x.name) AS pnames,
-       list_transform(parameters, x -> x.type) AS ptypes
+       list_transform(parameters, lambda x: x.name) AS pnames,
+       list_transform(parameters, lambda x: x.type) AS ptypes
 FROM read_ast('test/data/kotlin/native_params.kt', 'kotlin', context := 'native')
 WHERE type = 'function_declaration'
 ORDER BY start_line;
@@ -85,7 +85,7 @@ rest	String	3
 # carries the same name -- so the first version of this query returned 2 rows
 # and the assertion read as a type failure when it was a selection failure.
 query I
-SELECT list_transform(parameters, x -> x.type)[1]
+SELECT list_transform(parameters, lambda x: x.type)[1]
 FROM read_ast('test/data/kotlin/native_params.kt', 'kotlin', context := 'native')
 WHERE type = 'function_declaration' AND name = 'nullableParam';
 ----
