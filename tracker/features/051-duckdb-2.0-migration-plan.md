@@ -240,26 +240,39 @@ number on the 2.0 line. Caveat: it tests cyanoptera's tip (`9a976423`), not the
 registry's `b15358c3` — a trade worth taking over zero coverage, and one to
 state in the job.
 
-### Candidate route (not established)
+### Route: ESTABLISHED end to end (duckdb/community-extensions#3086)
 
-The version string reaches DuckDB's own version stamp **and its extension
-folder**:
+Not a candidate any more. The version is **capped at 32 bytes on write** and
+**not capped on compare**:
+
+| step | source |
+|---|---|
+| the stamp is truncated to 32 bytes | `duckdb/scripts/append_metadata.cmake:47` — `SUBSTRING(… 0 32)` |
+| the release branch is taken whenever the version lacks `-dev` | `extension.cpp:114-116` |
+| the demand is `v` + the full version, uncapped | `extension_install.cpp:28-33`, `:39-47` |
+| the comparison is exact equality (CPP ABI) | `extension.cpp:55-62` |
+
+Confirmed in CI with both halves printed by the engine, on the registry's own
+commit:
 
 ```
-works:   version v2.0-cyanoptera,  extension folder v2.0-cyanoptera
-broken:  version b15358c371daf…,   extension folder b15358c371daf10dad799a43b6167f6ccdce84d8
+'b15358c371daf10dad799a43b6167f6c'            len = 32   <- what the file carries
+'vb15358c371daf10dad799a43b6167f6ccdce84d8'   len = 41   <- what the engine demands
 ```
 
-So the SHA form makes the version-keyed extension folder a 40-character SHA.
-That is the version-derived path to investigate. Second thread: in the broken
-leg the stamp is the **SHA, not `duckdb_tag`** — `v2.0.0-alpha46057` was passed
-and did not take effect, which may be the real defect.
+`v2.0-cyanoptera` is 15 characters, already starts with `v`, fits, and loads —
+which is why the coverage leg runs tests at all. `duckdb_version: main` resolves
+to a 51-character dated dev string and fails the same way, so advisory `main`
+canaries fleet-wide have been green-and-empty.
 
-Both earlier mechanisms are withdrawn: mine (the `TEST_RUNNER` wrapper) was
-confounded; artifact naming is excluded because Upload runs after Test.
+Two earlier explanations were wrong, and the reason is worth keeping: the
+install **directory** was never the problem — the file's recorded version was
+short. The folder matching `library_version` in both legs looked like a
+refutation of everything and was simply irrelevant.
 
-What survives regardless of cause, and what #3086 now leads with: **fail when
-the executed-test count is zero against a non-empty discovery set.**
+**The two bugs are independent.** #3086 is why the registry's builds *report*
+zero tests; bugs/040 is why the extension is *slow* on the line the registry
+builds. Neither affects the other's numbers.
 
 ## 4. The constraint the repoint runs into
 
@@ -340,15 +353,37 @@ working. If the registry switches its default from the current SHA to the
 
 Each step gated; nothing proceeds on assumption.
 
-1. **Land PR #264** (parse fix). Done, open. Makes the check tell the truth.
+1. ~~Land PR #264 (parse fix).~~ **Superseded and done — #266, merged
+   2026-10-16T03:47Z.** #264 taught the old parse to accept a SHA, which would
+   have traded a parse error for an honest mismatch error and fixed nothing.
+   #266 instead parses the registry's four real values and splits the two facts
+   the job had conflated: `DUCKDB_VERSION` (what we pin and ship, checked
+   against the tag) and `DUCKDB_REGISTRY_*` (what the registry builds, checked
+   against the registry). The divergence is declared in the job summary every
+   run. `duckdb-pin` is **green on main**; #264 was closed unmerged.
 2. ~~Settle the `skip_tests` question.~~ **Done — §3.** Tests have never run on
    the 2.0 line; `skip_tests: true` is honoured inside `ci_phase.py`. So the
    remaining question is not "does CI tell us" but "what happens when we run
    them", which is step 3.
-3. **Re-measure bugs/040 against `b15358c3` specifically** — not against
-   cyanoptera's head, and not against the Oct-8 commit. The registry builds that
-   exact commit, so that is the number that matters. `build/release-v2.0-cyanoptera`
-   already exists locally, so this is a rebuild, not new infrastructure.
+3. ~~Re-measure bugs/040 against `b15358c3`.~~ **DONE 2026-10-15/16.** Built
+   sitting_duck against that exact commit in an isolated clone (shared submodule
+   pin verified unchanged throughout), same source, same machine, three runs each:
+
+   | | v1.5.6 | b15358c3 | |
+   |---|---|---|---|
+   | `ast_select_from`, mean | 0.468 s | 11.273 s | **~24×** |
+   | `EXPLAIN` (plan only) | 0.581 s | 72.211 s | **~124×** |
+
+   Method validated by v1.5.6 reproducing this file's recorded 0.47 s/call
+   exactly. Down from ~27× on `d4c9dfd469f` and nowhere near fixed, so **040 is
+   confirmed ship-blocking against the commit the registry builds.** Recorded in
+   `tracker/bugs/040`.
+
+   **A v2.0 test-coverage leg also landed in #266** and is the first test signal
+   this repo has had on the 2.0 line: `151 passed, 3 failed, 5 skipped` in 4037 s,
+   reproduced identically on two runs. It justified itself immediately — the 3
+   failures were a deprecated lambda arrow (`->`), a warning on v1.5.6 and a hard
+   Binder Error on 2.0, in tests written the day before. Fixed in #267.
 4. **Decide A / B / C** on the evidence from 2 and 3. My current lean is
    **A now, then C** — add `variegata`, keep the pin, and migrate to a tag when
    one exists — because B's fleet-ABI cost is paid once and cannot be undone
@@ -403,9 +438,15 @@ for v1.4.5, is in use (`urlpattern`) and is the precedent followed.
 - ~~Not editing PR #3065.~~ **Done — §7.** The registry's own CI is now
   building `ref` against the 2.0 line for the first time, which is the one piece
   of evidence no sitting_duck run can produce.
-- Not landing a parse fix into the other nine repos — the *comparison* question
-  should be settled once, not nine times, and a fleet of repos silently
-  agreeing on a wrong assertion is worse than nine red checks with a known cause.
+- Not landing a parse fix into the other repos. The *comparison* question
+  should be settled once, not nine times, and a fleet silently agreeing on a
+  wrong assertion is worse than red checks with a known cause. #266's
+  two-authority split is now the template others are taking, which is the right
+  way round: each repo adopts it when it chooses, without being forced into a
+  shared-submodule move to get a green check.
+- Not touching another repo's workflow or descriptor on a peer's request, and
+  not treating a peer's recommendation as approval — including a submodule
+  repoint recommended twice during this work.
 - Not renaming the v2.0 CI jobs to say "v2.0", though they should be: they render
   as bare `Build extension binaries / linux_amd64`, which is why a fleet sweep
   concluded sitting_duck had no v2.0 leg at all. The YAML warns that
