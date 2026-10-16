@@ -199,16 +199,46 @@ leg (skips by design, §3), and not the registry's (skips by accident, here). So
 measurements, and step 3 below — re-measuring 040 against `b15358c3` locally —
 is the *only* way to get a number. It is no longer a nice-to-have.
 
-**Reported upstream: duckdb/community-extensions#3086.** Localised there to the
-ci-tools line bump: `extension-ci-tools@v2.0-cyanoptera` added
-`TEST_RUNNER := python3 ${DUCKDB_SRCDIR}/scripts/ci/run_tests.py`
-(`makefiles/duckdb_extension.Makefile:197-202`), so the same unittest binary is
-now driven through a worker-spawning wrapper instead of invoked directly, and
-`require <ext>` is no longer satisfied in the children. The same file notes the
-unittester "is currently dynamically linked by default", so the extension has to
-be loadable at run time rather than being statically present. Root cause not
-established — the fix may belong in `extension-ci-tools` or in duckdb's
-`run_tests.py`.
+**Reported upstream: duckdb/community-extensions#3086.**
+
+**MECHANISM WITHDRAWN.** I first localised this to the ci-tools line bump
+(`TEST_RUNNER := python3 run_tests.py`, `duckdb_extension.Makefile:197-202`).
+That attribution is not supported by my own evidence and I have retracted it
+upstream. The before/after varied **two** inputs at once — ci-tools
+`v1.5-variegata` → `v2.0-cyanoptera` *and* `duckdb_version` tag → bare SHA,
+both at #3079 — so it cannot attribute the regression to either. I presented a
+confounded comparison as a localisation.
+
+The **observation** is unaffected and is what matters: zero tests executed,
+reported as `all tests passed`.
+
+Leading hypothesis now, from a collaborator's tighter experiment on
+`duckdb_webbed` (same ci-tools, one input varied):
+
+```
+duckdb_version: v2.0-cyanoptera   -> ran tests: 123 passed, 0 skipped
+duckdb_version: b15358c371daf...  -> ran tests: 0 passed, 123 skipped
+```
+
+Two caveats I could not clear:
+
+- **Not reproduced.** The one completed webbed run I could read (38832481674)
+  had *both* legs on the SHA at 0 tests. The `123 passed` figure currently
+  appears as a comment in an in-flight PR, not in a run I could verify.
+- **The offered explanation is refuted.** It was attributed to the extension
+  being built under an artifact name the harness does not look for. In
+  `_extension_distribution.yml@main`, `duckdb_version` reaches only the upload
+  artifact name and ccache keys — and **Test runs before Upload** (job order
+  Build → Test → Upload), so the artifact name cannot affect whether
+  `require <ext>` resolves during the test phase.
+
+So the *input* may well be `duckdb_version`; the *route* is unidentified. A
+version-keyed extension install/autoload directory
+(`~/.duckdb/extensions/<version>/<platform>/`) is the obvious next place to
+look, untraced and not asserted.
+
+What survives regardless of cause, and what #3086 now leads with: **fail when
+the executed-test count is zero against a non-empty discovery set.**
 
 ## 4. The constraint the repoint runs into
 
