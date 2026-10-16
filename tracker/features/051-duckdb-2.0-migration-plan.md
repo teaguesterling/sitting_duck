@@ -212,30 +212,51 @@ confounded comparison as a localisation.
 The **observation** is unaffected and is what matters: zero tests executed,
 reported as `all tests passed`.
 
-Leading hypothesis now, from a collaborator's tighter experiment on
-`duckdb_webbed` (same ci-tools, one input varied):
+**Reproduced and verified by me** (both job logs read directly), in
+`teaguesterling/duckdb_webbed`, same workflow, same `ci_tools_version: main`:
+
+| | run / job | `DUCKDB_VERSION` | `DUCKDB_TAG` | result |
+|---|---|---|---|---|
+| works | 38803310505 / 116658916531 | `v2.0-cyanoptera` | *(empty)* | **123 passed, 0 skipped** |
+| broken | 38832481674 / 116754207824 | `b15358c371daf…` | `v2.0.0-alpha46057` | **0 passed, 123 skipped** |
+
+It is a **two-value** difference: the SHA form also sets `duckdb_tag`.
+
+I checked the trap before trusting the working leg — its repo pinned `duckdb` at
+`069cc9f9b5be` (v1.5.6) and "Checkout / DuckDB from calling workflow" is skipped
+in that job, so it might simply have built v1.5.6 and passed. It did not:
+`git -C duckdb checkout v2.0-cyanoptera`, and the build reports
+`git hash 9a97642349, version v2.0-cyanoptera`.
+
+### THE IMPORTANT CONSEQUENCE FOR US
+
+**Real test coverage on the 2.0 line is achievable today — 123 passing tests
+against cyanoptera, in a sibling repo, with a leg of exactly the shape we could
+add.** So §3's "no test evidence from any source" describes our *current*
+position, not a constraint. A non-shipping coverage leg at
+`duckdb_version: v2.0-cyanoptera` (branch form, no `duckdb_tag`), read as
+`ran tests: N passed` rather than check colour, is the route to a bugs/040
+number on the 2.0 line. Caveat: it tests cyanoptera's tip (`9a976423`), not the
+registry's `b15358c3` — a trade worth taking over zero coverage, and one to
+state in the job.
+
+### Candidate route (not established)
+
+The version string reaches DuckDB's own version stamp **and its extension
+folder**:
 
 ```
-duckdb_version: v2.0-cyanoptera   -> ran tests: 123 passed, 0 skipped
-duckdb_version: b15358c371daf...  -> ran tests: 0 passed, 123 skipped
+works:   version v2.0-cyanoptera,  extension folder v2.0-cyanoptera
+broken:  version b15358c371daf…,   extension folder b15358c371daf10dad799a43b6167f6ccdce84d8
 ```
 
-Two caveats I could not clear:
+So the SHA form makes the version-keyed extension folder a 40-character SHA.
+That is the version-derived path to investigate. Second thread: in the broken
+leg the stamp is the **SHA, not `duckdb_tag`** — `v2.0.0-alpha46057` was passed
+and did not take effect, which may be the real defect.
 
-- **Not reproduced.** The one completed webbed run I could read (38832481674)
-  had *both* legs on the SHA at 0 tests. The `123 passed` figure currently
-  appears as a comment in an in-flight PR, not in a run I could verify.
-- **The offered explanation is refuted.** It was attributed to the extension
-  being built under an artifact name the harness does not look for. In
-  `_extension_distribution.yml@main`, `duckdb_version` reaches only the upload
-  artifact name and ccache keys — and **Test runs before Upload** (job order
-  Build → Test → Upload), so the artifact name cannot affect whether
-  `require <ext>` resolves during the test phase.
-
-So the *input* may well be `duckdb_version`; the *route* is unidentified. A
-version-keyed extension install/autoload directory
-(`~/.duckdb/extensions/<version>/<platform>/`) is the obvious next place to
-look, untraced and not asserted.
+Both earlier mechanisms are withdrawn: mine (the `TEST_RUNNER` wrapper) was
+confounded; artifact naming is excluded because Upload runs after Test.
 
 What survives regardless of cause, and what #3086 now leads with: **fail when
 the executed-test count is zero against a non-empty discovery set.**
