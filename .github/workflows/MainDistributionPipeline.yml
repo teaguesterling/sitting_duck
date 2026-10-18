@@ -354,6 +354,15 @@ jobs:
       extension_name: sitting_duck
       skip_tests: true
 
+      # Make a skipped test run FAIL on this leg. `T` is the test pattern ci-tools
+      # hands run_tests.py (`T ?=` in duckdb_extension.Makefile, so an env var wins)
+      # and test_env_variables reaches `make test_release` via ci_phase.py.
+      # `--require sitting_duck` turns "could not load" into `require sitting_duck: FAILED`
+      # instead of a silent skip. Verified on ci-tools main against b15358c371d:
+      # present -> exit 0 "16 passed, 2 skipped"; hidden -> exit 2 "0 passed, 18 failed".
+      # Needs a ci_tools_version that HAS `T` (main / v2.0-cyanoptera); on
+      # v1.5-variegata the variable is silently ignored -- hence `make test-require`.
+      test_config: '{"test_env_variables": {"T": "--test-flags \"--require sitting_duck\" \"test/*\""}}'
   # THE ONLY SOURCE OF TEST EVIDENCE ON THE 2.0 LINE. Not an artifact source --
   # nothing here is shipped, and it is Linux-only to keep the cost down.
   #
@@ -412,6 +421,15 @@ jobs:
       exclude_archs: 'windows_amd64;windows_amd64_mingw;osx_amd64;osx_arm64;wasm_mvp;wasm_eh;wasm_threads;linux_arm64'
 
 
+      # Make a skipped test run FAIL on this leg. `T` is the test pattern ci-tools
+      # hands run_tests.py (`T ?=` in duckdb_extension.Makefile, so an env var wins)
+      # and test_env_variables reaches `make test_release` via ci_phase.py.
+      # `--require sitting_duck` turns "could not load" into `require sitting_duck: FAILED`
+      # instead of a silent skip. Verified on ci-tools main against b15358c371d:
+      # present -> exit 0 "16 passed, 2 skipped"; hidden -> exit 2 "0 passed, 18 failed".
+      # Needs a ci_tools_version that HAS `T` (main / v2.0-cyanoptera); on
+      # v1.5-variegata the variable is silently ignored -- hence `make test-require`.
+      test_config: '{"test_env_variables": {"T": "--test-flags \"--require sitting_duck\" \"test/*\""}}'
   duckdb-stable-build:
     name: Build extension binaries
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
