@@ -7322,4 +7322,34 @@ CREATE OR REPLACE MACRO ast_unparse_exact_code(source_code, language) AS TABLE
 )SQLMACRO"},
 };
 
+// Per-macro documentation, lifted from the `-- <name>: <summary>` banners and
+// `-- Usage:` blocks in src/sql_macros/*.sql. Macros without a banner naming
+// themselves are absent rather than guessed at -- see extract_macro_docs().
+struct EmbeddedMacroDoc {
+	const char *name;
+	const char *description;
+	std::vector<std::string> examples;
+};
+
+static const std::vector<EmbeddedMacroDoc> EMBEDDED_MACRO_DOCS = {
+    {"parse_ast_list_table", "Table-macro wrapper for parse_ast_list", {}},
+    {"ast_select_from", "the selector engine, operates on a pre-parsed AST table. The `source` parameter is a table name (string) resolved via query_table(). This separates parsing (expensive) from querying (cheap), enabling callers to parse once and query many times with different selectors", {"SELECT * FROM ast_select_from('my_ast', '.class:named');", "SELECT * FROM ast_select_from('my_ast', '.func:has(return_statement)');"}},
+    {"ast_select", "convenience wrapper that parses source files and then runs the selector engine. For one-off queries this is the simplest API. For repeated queries, use ast_select_from with a pre-parsed table", {}},
+    {"ast_selector_for", "node -> selector (\"Copy selector\", as in browser devtools)", {"SELECT * FROM ast_selector_for('my_ast', 'src/app.py', 42);"}},
+    {"ast_select_list", "nested form, one row per rule with matches packed as LIST", {}},
+    {"ast_exports", "Module-level definitions visible outside the file", {"SELECT * FROM ast_exports('src/**/*.py');", "SELECT name, type FROM ast_exports('src/*.go') WHERE name = upper(left(name, 1)) || right(name, -1);"}},
+    {"ast_imports", "Import statements with source module and imported names", {"SELECT * FROM ast_imports('src/**/*.py');", "SELECT source_module, imported_name FROM ast_imports('src/*.js');"}},
+    {"ast_resolve", "Resolve references to their definitions via scope chain", {"SELECT * FROM ast_resolve('src/main.py');", "SELECT r.ref_name, r.def_line, r.scope_hops FROM ast_resolve('src/*.py') r;"}},
+    {"ast_callees", "What does each function call?", {"SELECT * FROM ast_callees('src/**/*.py');", "SELECT caller, callee FROM ast_callees('src/*.py') WHERE caller = 'main';"}},
+    {"ast_callers", "Who calls a given function?", {"SELECT * FROM ast_callers('src/**/*.py');", "SELECT caller, callee FROM ast_callers('src/*.py') WHERE callee = 'execute';"}},
+    {"ast_find_references", "Find all uses of a symbol via scope-chain resolution", {"SELECT * FROM ast_find_references('src/**/*.py', 'process');", "SELECT * FROM ast_find_references('src/main.py', 'x') WHERE ref_kind = 'call';", "SELECT * FROM ast_find_references('src/*.py', 'Service', language := 'python');"}},
+    {"ast_to_blocks_from", "the converter engine, operates on a pre-parsed AST table (name resolved via query_table). Parse once with read_ast(..., peek := 'full'), convert many times with different styles", {}},
+    {"ast_to_blocks", "convenience wrapper that parses source files (with the peek := 'full' that complete bodies require) and delegates to the converter engine. Same CTE-delegation pattern as ast_select -> ast_select_from", {}},
+    {"ast_to_blocks_list", "one row per file with the blocks pre-aggregated into a LIST(duck_block) ready for consumers that take a whole document, e.g. duck_block_utils rendering:", {}},
+    {"ast_node_edit", "build a well-formed edit STRUCT from an AST row's location columns. `node` is any STRUCT/row with file_path, start_line, start_column, end_line, end_column — pass the table alias of a read_ast(...) scan directly. Expand to columns with unnest(...):", {"SELECT unnest(ast_node_edit(r, 'replace', 'renamed_fn'))", "SELECT unnest(ast_node_edit(r, 'replace', 'new_text'))"}},
+    {"ast_patch", "apply edit rows to their files, returning patched text", {"SELECT * FROM ast_patch('edits', 'src/main.py');"}},
+    {"ast_replace", "one-shot selector-driven replacement — match nodes with a CSS selector (the ast_select engine), replace each match's exact byte range with new_text, return the patched text per file", {}},
+    {"ast_unparse_exact_splice", "the shared core. You normally want `ast_unparse_exact(path)`; this is exposed because it is the one place the splice lives, and because it is useful on its own", {}},
+};
+
 } // namespace duckdb

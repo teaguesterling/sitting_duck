@@ -1,0 +1,76 @@
+# name: test/sql/bugs/issue_170_macro_descriptions.test
+# description: #170 — SQL macros carry a description and examples in duckdb_functions()
+# group: [bugs]
+
+# #170 asked for sitting_duck's functions to be discoverable from
+# duckdb_functions(), because that is the only surface an agent connected to a
+# database can read -- the README and the registry's extended_description are
+# not reachable from SQL. The C++-registered functions got descriptions and
+# examples. The 96 SQL macros got neither, and that half was never done.
+#
+# COVERAGE IS PARTIAL AND DELIBERATELY SO. A description is lifted only from a
+# `-- <name>: <summary>` banner that names the macro itself. Most comment blocks
+# in src/sql_macros/ are section headers covering a FAMILY ("AST-anchored source
+# patching: ast_node_edit / ast_patch / ..."), and attributing one of those to a
+# single macro would populate the field while misdescribing the function --
+# passing this test and failing its purpose. The remaining macros need a banner
+# written beside them; that is content work, tracked on #170.
+
+require sitting_duck
+
+# =============================================================================
+# The mechanism works: macros created through SQL carry documentation.
+# =============================================================================
+#
+# Stated as a floor rather than an exact count so that adding a banner to
+# another macro does not fail this file. The exact-value assertions below are
+# what pin the content.
+
+query I
+SELECT COUNT(*) >= 18 FROM duckdb_functions()
+WHERE function_type IN ('macro', 'table_macro')
+  AND description IS NOT NULL AND description <> '';
+----
+true
+
+# NON-VACUITY: before this change the answer was 0, so a floor of >= 18 is only
+# meaningful next to evidence that the number is not simply every macro. If
+# every macro were documented, the strictness above would have failed silently.
+query I
+SELECT COUNT(*) > 0 FROM duckdb_functions()
+WHERE function_type IN ('macro', 'table_macro') AND description IS NULL;
+----
+true
+
+# =============================================================================
+# Content: the description is the macro's own banner, not a neighbour's.
+# =============================================================================
+
+query II
+SELECT description, examples[1]
+FROM duckdb_functions() WHERE function_name = 'ast_exports' LIMIT 1;
+----
+Module-level definitions visible outside the file	SELECT * FROM ast_exports('src/**/*.py');
+
+# Examples are filtered to the ones that exercise THIS macro. A `Usage:` block
+# is often shared across a family, and before filtering `ast_selector_for`
+# inherited examples belonging to other macros in its block.
+query I
+SELECT bool_and(e LIKE '%ast_selector_for%')
+FROM (SELECT unnest(examples) AS e FROM duckdb_functions() WHERE function_name = 'ast_selector_for' LIMIT 1);
+----
+true
+
+# =============================================================================
+# Both macro kinds are reachable, not just table macros.
+# =============================================================================
+#
+# The lookup tries MACRO_ENTRY then TABLE_MACRO_ENTRY; if only one path worked,
+# the other kind would silently carry nothing.
+
+query I
+SELECT COUNT(DISTINCT function_type) FROM duckdb_functions()
+WHERE function_type IN ('macro', 'table_macro')
+  AND description IS NOT NULL AND description <> '';
+----
+2
