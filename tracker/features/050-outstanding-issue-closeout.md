@@ -199,17 +199,32 @@ promises them never ends.
 6. **Family A's remaining four** (#147, #148, #166, #149), each a separate fix.
 7. **Family B's remainder**, then **D**. **F** last. **G** not in this program.
 
-## Debts this triage created
+## Debts this triage created — BOTH RETRACTED, they did not exist
 
-- **#152 was closed on manual measurement with nothing pinning it.**
-  `callgraph_macros.test:81-93` covers `ast_callees`' lambda attribution, but the
-  `:called-by` / `:calls` selector results I closed it on are asserted nowhere.
-  Either add a selector-path regression test there or reopen #152.
-- **#165 likewise** — the four counts showing the class and bare-type forms of
-  `:has()` agree are pinned by no test.
+This section asserted that #152 and #165 were closed on measurements no test
+repeated. **Both claims were wrong**, and the retraction is kept rather than
+deleted because the error is more instructive than the original note.
 
-Both are small and belong with whatever change next touches the selector macros.
-Closing an issue on a measurement no test repeats is how it comes back.
+- **#152 was already pinned**, and had been for a month.
+  `test/sql/ast_select_pseudo_classes.test:329-358` asserts
+  `:called-by(outer)` = 1, `:called-by(inner)` = 1 and
+  `#outer:calls(helper2)` = 0 — the exact lambda-attribution results I closed
+  the issue on. They landed 2026-09-16 in `e9b8456`,
+  *"bound :called-by/:calls via scope.function; lambda-direct (#164, #152)"*.
+  So #152 was fixed **and** pinned in September; it had simply not been closed.
+- **#165 was already pinned too**, by 45 assertions using the `:has(<class>)`
+  form in `css_selectors_multilang.test`, including the class-vs-bare-type
+  equivalence at `:1027` — *"`type:has(.class)` … Must return the same set as
+  `.function:has(.call)` above"* — asserted **by name**, not merely by count.
+
+**How I got it wrong:** I searched for tests naming the *issues* and found none,
+and concluded the *behaviour* was unpinned. Those are different questions. The
+coverage existed under the names of the selectors, which is where it belongs —
+a regression test should be named for the behaviour it protects, not for the
+ticket that prompted it. My search was shaped by the ticket, so it missed it.
+
+The real lesson is the inverse of the one originally recorded here: before
+declaring a coverage gap, grep for the *behaviour*, not the issue number.
 
 ## Caveats
 
