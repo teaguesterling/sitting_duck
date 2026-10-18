@@ -212,10 +212,17 @@ deleted because the error is more instructive than the original note.
   the issue on. They landed 2026-09-16 in `e9b8456`,
   *"bound :called-by/:calls via scope.function; lambda-direct (#164, #152)"*.
   So #152 was fixed **and** pinned in September; it had simply not been closed.
-- **#165 was already pinned too**, by 45 assertions using the `:has(<class>)`
-  form in `css_selectors_multilang.test`, including the class-vs-bare-type
-  equivalence at `:1027` — *"`type:has(.class)` … Must return the same set as
+- **#165 was already pinned too**, by `:has()` assertions in
+  `css_selectors_multilang.test` — 63 uses of `:has(`, of which 16 use the
+  class form `:has(.class)` — including the class-vs-bare-type equivalence at
+  `:1027` — *"`type:has(.class)` … Must return the same set as
   `.function:has(.call)` above"* — asserted **by name**, not merely by count.
+
+  (Counts corrected before merge. This bullet first said "45 assertions", a
+  figure I never measured: `grep -cE ':has\(' ` gives 63 and
+  `grep -cE ':has\(\.'` gives 16. Nothing supports 45. A retraction carrying
+  its own invented number is the exact failure it was written about, which is
+  why the correction stays visible instead of being edited away.)
 
 **How I got it wrong:** I searched for tests naming the *issues* and found none,
 and concluded the *behaviour* was unpinned. Those are different questions. The
