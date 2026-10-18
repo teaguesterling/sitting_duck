@@ -49,6 +49,42 @@ struct CppNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 	}
 
 	// Public helper method accessible to other extractors
+	// Pulls the real name and type out of a C++ variadic parameter. Structural
+	// rather than a list of node names: the type is whatever precedes the
+	// variadic_declarator, and the name is the identifier inside it.
+	static ParameterInfo ExtractCppVariadicParameterDeclaration(TSNode node, const string &content) {
+		ParameterInfo param;
+		param.is_variadic = true;
+
+		auto text_of = [&content](TSNode n) -> string {
+			uint32_t start = ts_node_start_byte(n);
+			uint32_t end = ts_node_end_byte(n);
+			if (start < content.length() && end <= content.length()) {
+				return content.substr(start, end - start);
+			}
+			return string();
+		};
+
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			const char *child_type = ts_node_type(child);
+			if (strcmp(child_type, "variadic_declarator") == 0) {
+				uint32_t decl_count = ts_node_child_count(child);
+				for (uint32_t j = 0; j < decl_count; j++) {
+					TSNode decl_child = ts_node_child(child, j);
+					if (strcmp(ts_node_type(decl_child), "identifier") == 0) {
+						param.name = text_of(decl_child);
+					}
+				}
+			} else if (param.type.empty()) {
+				param.type = text_of(child) + "...";
+			}
+		}
+
+		return param;
+	}
+
 	static ParameterInfo ExtractParameterDeclaration(TSNode node, const string &content) {
 		ParameterInfo param;
 
@@ -462,12 +498,19 @@ private:
 				// Standard parameter: (Type param) or (Type param = default)
 				param = ExtractParameterDeclaration(child, content);
 				is_valid_param = !param.name.empty() || !param.type.empty();
-			} else if (strcmp(child_type, "variadic_parameter") == 0) {
-				// Variadic parameter: (...)
-				param.is_variadic = true;
-				param.name = "...";
-				param.type = "variadic";
-				is_valid_param = true;
+			} else if (strcmp(child_type, "variadic_parameter_declaration") == 0) {
+				// `Args... args` parses as
+				//   variadic_parameter_declaration
+				//     type_identifier        "Args"
+				//     variadic_declarator    "... args"
+				//       "..." , identifier   "args"
+				//
+				// The previous revision dispatched on "variadic_parameter", which is
+				// not in the tree-sitter-cpp symbol table at all, so this branch had
+				// never run; it also filled in the placeholders name="..." and
+				// type="variadic" rather than the real ones.
+				param = ExtractCppVariadicParameterDeclaration(child, content);
+				is_valid_param = !param.name.empty() || !param.type.empty();
 			}
 
 			if (is_valid_param) {

@@ -1,0 +1,84 @@
+# name: test/sql/bugs/issue_220_variadic_parameters.test
+# description: #220 — variadic parameters are extracted in go and cpp (dispatch was dead)
+# group: [bugs]
+
+# The derivation gate (#259) found the #220 shape alive in three more languages:
+# go, cpp and swift each had `else if (strcmp(child_type, "variadic_parameter"))`
+# calling a dedicated extractor, and "variadic_parameter" is in NONE of their
+# symbol tables. The branch could never be taken, so variadic parameters were
+# silently dropped -- no compile error, no warning, no failing test.
+#
+# Measured before the fix, on this fixture:
+#     Sum(nums ...int)                      -> 0 parameters
+#     Printf(format string, args ...T)      -> 1 parameter   (args missing)
+#     pack(Args... args)                    -> name "...", type "variadic"
+#
+# NOT asserted here: `is_variadic` itself. `parameters` is exposed to SQL as
+# STRUCT(name, type)[] only -- 2 of ParameterInfo's 6 fields, see #255 -- so the
+# flag is invisible from a query. These assertions pin the half that IS
+# observable: that the parameter appears at all, with its real name and type.
+
+require sitting_duck
+
+# =============================================================================
+# go — the dispatch named a node the grammar does not emit
+# =============================================================================
+# The real node is `variadic_parameter_declaration`. Sum's parameter was absent
+# entirely before the fix.
+
+query III
+SELECT name, len(parameters), list_transform(parameters, lambda p: p.name || ':' || p.type)::VARCHAR
+FROM read_ast('test/data/variadic/sample.go', context := 'native')
+WHERE type = 'function_declaration' ORDER BY name;
+----
+Plain	2	['a:int', 'b:string']
+Printf	2	['format:string', 'args:...interface{}']
+Sum	1	['nums:...int']
+
+# `args:...interface{}` is the case that the node-name fix ALONE would not have
+# caught: the extractor matched only `type_identifier` and `primitive_type`
+# (the latter also absent from the go grammar), so an interface-typed variadic
+# would have lost its type and then been dropped by the caller's
+# `!param.type.empty()` guard. The type is now taken structurally -- whatever
+# follows the `...` token.
+query I
+SELECT list_transform(parameters, lambda p: p.type)[2]
+FROM read_ast('test/data/variadic/sample.go', context := 'native')
+WHERE type = 'function_declaration' AND name = 'Printf';
+----
+...interface{}
+
+# =============================================================================
+# cpp — dispatch was dead AND the handler was a placeholder
+# =============================================================================
+# Before: name "...", type "variadic" -- constants, not the real identifiers,
+# and unreachable anyway. `Args... args` parses as
+#   variadic_parameter_declaration( type_identifier(Args), variadic_declarator(... args) )
+
+query III
+SELECT name, len(parameters), list_transform(parameters, lambda p: p.name || ':' || p.type)::VARCHAR
+FROM read_ast('test/data/variadic/sample.cpp', context := 'native')
+WHERE type = 'function_definition' ORDER BY name;
+----
+pack	1	['args:Args...']
+plain	2	['a:int', 'b:double']
+
+# =============================================================================
+# swift — there is no variadic node type at all
+# =============================================================================
+# `func sum(_ numbers: Int...)` parses as an ordinary `parameter` whose children
+# are simple_identifier simple_identifier ":" user_type "...", so the ellipsis is
+# a plain token. The old branch dispatched on a node that does not exist in the
+# grammar; it and its extractor are removed, and the token is detected instead.
+#
+# Only the non-regression is assertable here -- the flag it now sets is not
+# exposed to SQL (#255). What this pins is that removing the dead branch did not
+# disturb ordinary swift parameter extraction.
+
+query III
+SELECT name, len(parameters), list_transform(parameters, lambda p: p.name || ':' || p.type)::VARCHAR
+FROM read_ast('test/data/variadic/sample.swift', context := 'native')
+WHERE type = 'function_declaration' ORDER BY name;
+----
+plain	2	['a:Int', 'b:String']
+sum	1	['_ numbers:Int']
