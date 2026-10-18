@@ -228,6 +228,9 @@ CREATE OR REPLACE MACRO ast_qualified_name_as_string(qn) AS (
 
 -- Extract source code for an AST node given file_path, start_line, end_line
 -- Returns lines as a single newline-joined string
+-- ----------------------------------------------------------------------------
+-- ast_get_source: Raw source text for a line range of a file
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_get_source(file_path, start_line, end_line) AS (
     WITH file_content AS (
         SELECT string_split(content, E'\n') as lines
@@ -249,6 +252,9 @@ CREATE OR REPLACE MACRO ast_get_source(file_path, start_line, end_line) AS (
 );
 
 -- Get source with line numbers prefixed (useful for display)
+-- ----------------------------------------------------------------------------
+-- ast_get_source_numbered: Source text for a line range, each line prefixed with its number
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_get_source_numbered(file_path, start_line, end_line) AS (
     WITH file_content AS (
         SELECT string_split(content, E'\n') as lines
@@ -281,6 +287,9 @@ CREATE OR REPLACE MACRO ast_get_source_numbered(file_path, start_line, end_line)
 --   SELECT * FROM ast_source_of('src/**/*.py', 'process_payment');
 --   SELECT * FROM ast_source_of('src/**/*.py', 'MyClass', kind := 'class');
 --   SELECT * FROM ast_source_of('src/**/*.py', 'handler', language := 'python', kind := 'function');
+-- ----------------------------------------------------------------------------
+-- ast_source_of: Source text for matched nodes, keyed by file pattern
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_source_of(
     file_patterns,
     target_name,
@@ -359,6 +368,9 @@ CREATE OR REPLACE MACRO ast_source_of(
 -- =============================================================================
 
 -- Get a single line from a file
+-- ----------------------------------------------------------------------------
+-- ast_get_source_line: A single line of source text from a file
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_get_source_line(file_path, line_num) AS (
     WITH file_content AS (
         SELECT string_split(content, E'\n') as lines
@@ -381,12 +393,18 @@ CREATE OR REPLACE MACRO ast_get_source_line(file_path, line_num) AS (
 -- Get immediate children of a node
 -- Usage: SELECT * FROM ast_children(my_ast_table, parent_node_id)
 -- Note: First argument is a table name (string), second is the parent node_id
+-- ----------------------------------------------------------------------------
+-- ast_children: Direct children of a node in a parsed AST table
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_children(ast_table, parent_node_id) AS TABLE
     SELECT * FROM query_table(ast_table) WHERE parent_id = parent_node_id;
 
 -- Get arguments of a function call node
 -- Returns the actual argument nodes (excludes punctuation like parentheses and commas)
 -- Usage: SELECT * FROM ast_call_arguments(my_ast_table, call_node_id)
+-- ----------------------------------------------------------------------------
+-- ast_call_arguments: Argument nodes of a call, from its argument_list child
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
     WITH
         -- Find the argument_list child of the call node
@@ -422,6 +440,9 @@ CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
 -- full filter chain: is_definition(semantic_type) AND is_construct(flags) AND name != ''
 -- Using is_definition() alone will include keyword tokens (def, class, CREATE, etc.)
 -- as duplicates, since keywords share the semantic type of their parent construct.
+-- ----------------------------------------------------------------------------
+-- ast_definitions: Every definition (function, class, variable, module) in the source
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
     WITH ast AS (
         SELECT * FROM read_ast(source, language)
@@ -464,6 +485,9 @@ CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
 -- Optional `kind` filters to 'function'|'class'|'variable'|'module'|'type'|'other'.
 -- Usage: SELECT * FROM ast_resolve_entity('src/xml_utils.cpp', 'SecureNoExternalEntityLoader');
 --        SELECT * FROM ast_resolve_entity('src/app.py', 'run', kind := 'function');
+-- ----------------------------------------------------------------------------
+-- ast_resolve_entity: Find a named entity by name and optional kind, within one file
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_resolve_entity(path, entity_name, kind := NULL, language := NULL) AS TABLE
     WITH defs AS (
         SELECT
@@ -494,6 +518,9 @@ CREATE OR REPLACE MACRO ast_resolve_entity(path, entity_name, kind := NULL, lang
 -- Get all descendants of a node (entire subtree)
 -- Uses descendant_count for O(1) range-based lookup (nodes are in DFS pre-order)
 -- Usage: SELECT * FROM ast_descendants(my_ast_table, ancestor_node_id)
+-- ----------------------------------------------------------------------------
+-- ast_descendants: Every node beneath an ancestor, via its descendant_count range
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_descendants(ast_table, ancestor_node_id) AS TABLE
     WITH ancestor AS (
         SELECT node_id, descendant_count
@@ -508,6 +535,9 @@ CREATE OR REPLACE MACRO ast_descendants(ast_table, ancestor_node_id) AS TABLE
 -- Get ancestors of a node (path from node to root)
 -- Uses recursive CTE following parent_id upward
 -- Usage: SELECT * FROM ast_ancestors(my_ast_table, child_node_id)
+-- ----------------------------------------------------------------------------
+-- ast_ancestors: The ancestor chain from a node up to the root
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_ancestors(ast_table, child_node_id) AS TABLE
     WITH RECURSIVE ancestors AS (
         SELECT * FROM query_table(ast_table) WHERE node_id = child_node_id
@@ -521,6 +551,9 @@ CREATE OR REPLACE MACRO ast_ancestors(ast_table, child_node_id) AS TABLE
 
 -- Get sibling nodes (same parent, excluding self)
 -- Usage: SELECT * FROM ast_siblings(my_ast_table, target_node_id)
+-- ----------------------------------------------------------------------------
+-- ast_siblings: Nodes sharing a parent with the target node
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_siblings(ast_table, target_node_id) AS TABLE
     WITH target AS (
         SELECT parent_id FROM query_table(ast_table) WHERE node_id = target_node_id
@@ -537,6 +570,9 @@ CREATE OR REPLACE MACRO ast_siblings(ast_table, target_node_id) AS TABLE
 -- Find all nodes that contain a specific line
 -- Returns nodes ordered by specificity (smallest span first)
 -- Usage: SELECT * FROM ast_containing_line('src/main.py', 42)
+-- ----------------------------------------------------------------------------
+-- ast_containing_line: Nodes whose source span covers a given line number
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_containing_line(source, line_num, language := NULL) AS TABLE
     WITH ast AS (
         SELECT * FROM read_ast(source, language)
@@ -548,6 +584,9 @@ CREATE OR REPLACE MACRO ast_containing_line(source, line_num, language := NULL) 
 
 -- Get all nodes within a line range
 -- Usage: SELECT * FROM ast_in_range('src/main.py', 10, 20)
+-- ----------------------------------------------------------------------------
+-- ast_in_range: Nodes whose source span falls inside a line range
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_in_range(source, range_start, range_end, language := NULL) AS TABLE
     WITH ast AS (
         SELECT * FROM read_ast(source, language)
@@ -564,6 +603,9 @@ CREATE OR REPLACE MACRO ast_in_range(source, range_start, range_end, language :=
 -- This is essential for accurate complexity analysis - avoids double-counting
 -- nested function internals as part of the outer function's complexity.
 -- Usage: SELECT * FROM ast_function_scope(my_ast_table, function_node_id)
+-- ----------------------------------------------------------------------------
+-- ast_function_scope: Every node inside one function definition
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_function_scope(ast_table, func_node_id) AS TABLE
     WITH
         -- Get the function node itself
@@ -598,6 +640,9 @@ CREATE OR REPLACE MACRO ast_function_scope(ast_table, func_node_id) AS TABLE
 -- Returns the member definition nodes themselves, not their internal contents.
 -- Useful for class structure analysis without descending into method bodies.
 -- Usage: SELECT name, type FROM ast_class_members(my_ast_table, class_node_id)
+-- ----------------------------------------------------------------------------
+-- ast_class_members: Members declared directly inside one class
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_class_members(ast_table, class_node_id) AS TABLE
     WITH
         -- Get the class node
@@ -631,6 +676,9 @@ CREATE OR REPLACE MACRO ast_class_members(ast_table, class_node_id) AS TABLE
         SELECT 1 FROM all_defs other
         WHERE other.node_id != d.node_id
           AND d.node_id > other.node_id
+
+)SQLMACRO"
+        R"SQLMACRO(
           AND d.node_id <= other.node_id + other.descendant_count
     );
 
@@ -642,6 +690,9 @@ CREATE OR REPLACE MACRO ast_class_members(ast_table, class_node_id) AS TABLE
 -- Returns one row per function with complexity metrics.
 -- Uses function scope (excludes nested function internals) for accurate counts.
 -- Usage: SELECT * FROM ast_function_metrics('src/**/*.py') WHERE cyclomatic > 10
+-- ----------------------------------------------------------------------------
+-- ast_function_metrics: Per-function size and complexity: lines, return_count, conditionals, loops, cyclomatic
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_function_metrics(source, language := NULL) AS TABLE
     WITH
         ast AS (
@@ -694,9 +745,6 @@ CREATE OR REPLACE MACRO ast_function_metrics(source, language := NULL) AS TABLE
                 -- (if_statement, elif_clause, switch_statement, match_arm, etc.)
                 COUNT(CASE
                     WHEN is_conditional(n.semantic_type)
-
-)SQLMACRO"
-        R"SQLMACRO(
                      AND (n.type LIKE '%_statement' OR n.type LIKE '%_clause'
                           OR n.type LIKE '%_expression' OR n.type LIKE '%_arm'
                           OR n.type LIKE '%_case' OR n.type LIKE '%_branch')
@@ -747,6 +795,9 @@ CREATE OR REPLACE MACRO ast_function_metrics(source, language := NULL) AS TABLE
 -- Uses function scope (excludes nested function internals).
 -- Usage: SELECT * FROM ast_functions_containing('src/**/*.py', 'try_statement')
 -- Usage: SELECT * FROM ast_functions_containing('src/**/*.py', 'call') WHERE match_name = 'eval'
+-- ----------------------------------------------------------------------------
+-- ast_functions_containing: Functions that contain at least one node of a given type
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language := NULL) AS TABLE
     WITH
         ast AS (
@@ -822,6 +873,9 @@ CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language :
 -- Returns depth statistics for identifying deeply nested code.
 -- Uses function scope (excludes nested function internals).
 -- Usage: SELECT * FROM ast_nesting_analysis('src/**/*.py') WHERE max_depth > 5
+-- ----------------------------------------------------------------------------
+-- ast_nesting_analysis: Per-function nesting depth: max_depth, avg_depth, deep_nodes, total_nodes
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_nesting_analysis(source, language := NULL) AS TABLE
     WITH
         ast AS (
@@ -903,6 +957,9 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(source, language := NULL) AS TABLE
 -- Automated security concern detection
 -- Scans for common security anti-patterns across languages.
 -- Usage: SELECT * FROM ast_security_audit('src/**/*.py') WHERE risk_level = 'high'
+-- ----------------------------------------------------------------------------
+-- ast_security_audit: Risk-pattern findings per function: risk_category, risk_level, finding, matched_pattern
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_security_audit(source, language := NULL) AS TABLE
     WITH
         ast AS (
@@ -938,6 +995,9 @@ CREATE OR REPLACE MACRO ast_security_audit(source, language := NULL) AS TABLE
                 ('raw', 'SQL Injection', 'medium', 'Raw SQL query'),
                 ('rawQuery', 'SQL Injection', 'medium', 'Raw SQL query'),
                 -- File Operations (Medium Risk)
+
+)SQLMACRO"
+        R"SQLMACRO(
                 ('readFile', 'Path Traversal', 'medium', 'File read - verify path sanitization'),
                 ('writeFile', 'Path Traversal', 'medium', 'File write - verify path sanitization'),
                 ('unlink', 'Path Traversal', 'medium', 'File deletion - verify path sanitization'),
@@ -1019,11 +1079,11 @@ CREATE OR REPLACE MACRO ast_security_audit(source, language := NULL) AS TABLE
 -- Resolve nearest definition ancestor for each definition node
 -- Walks up parent_id, skipping organizational/structural nodes (e.g., blocks),
 -- until it finds an ancestor that is itself a definition.
-
-)SQLMACRO"
-        R"SQLMACRO(
 -- Returns (node_id, def_name, kind, parent_def_name, parent_def_kind, parent_def_node_id)
 -- Usage: SELECT * FROM ast_definition_parent('my_ast_table')
+-- ----------------------------------------------------------------------------
+-- ast_definition_parent: The nearest enclosing definition for every node in an AST table
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_definition_parent(ast_table) AS TABLE
     WITH RECURSIVE def_parent AS (
         -- Start: each definition node with its immediate parent
@@ -1068,6 +1128,9 @@ CREATE OR REPLACE MACRO ast_definition_parent(ast_table) AS TABLE
 -- Note: This is heuristic - cannot detect dynamic usage or cross-file references
 -- when analyzing a single file. Best used on entire codebase.
 -- Usage: SELECT * FROM ast_dead_code('src/**/*.py')
+-- ----------------------------------------------------------------------------
+-- ast_dead_code: Definitions with no reference elsewhere in the source, with the reason
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
     WITH
         ast AS (
@@ -1178,6 +1241,9 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
 -- Usage: SELECT * FROM ast_get_calls('src/main.py') WHERE call_type = 'method'
 -- See also: ast_callees/ast_callers in scope_resolution.sql for simpler
 -- caller/callee pairs without call-type classification.
+-- ----------------------------------------------------------------------------
+-- ast_get_calls: Call sites in the source, with the enclosing function
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
     WITH
         ast AS (
@@ -1253,6 +1319,9 @@ CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
 -- Returns aggregated caller→callee pairs with call counts.
 -- Usage: SELECT * FROM ast_call_graph('src/**/*.py') ORDER BY call_count DESC
 -- Usage: SELECT * FROM ast_call_graph('src/**/*.py') WHERE caller = 'main'
+-- ----------------------------------------------------------------------------
+-- ast_call_graph: Caller to callee edges derived from the call sites
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_call_graph(source, language := NULL) AS TABLE
     WITH
         raw_calls AS (
@@ -1460,6 +1529,9 @@ CREATE OR REPLACE MACRO pattern_has_recursive(pattern_str) AS
 
 -- Note: ast_pattern parses a CLEANED pattern (no %__X<rules>__% syntax)
 -- Use clean_pattern() before calling ast_pattern if you have extended wildcards
+-- ----------------------------------------------------------------------------
+-- ast_pattern: Parse a pattern string into its node sequence
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_pattern(pattern_str, language) AS TABLE
     WITH
         pattern_raw AS (
@@ -1515,6 +1587,9 @@ CREATE OR REPLACE MACRO ast_pattern(pattern_str, language) AS TABLE
 -- =============================================================================
 
 -- Note: Takes a CLEANED pattern string. Use clean_pattern() first for extended wildcards.
+-- ----------------------------------------------------------------------------
+-- ast_pattern_list: Parse a pattern string into a list of pattern tokens
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
     SELECT list({
         rel_depth: rel_depth,
@@ -1539,6 +1614,9 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
 
 -- Find AST nodes matching a pattern
 -- Usage:
+
+)SQLMACRO"
+        R"SQLMACRO(
 --   SELECT * FROM ast_match('src/**/*.py', 'my_func(__X__)');
 --   SELECT * FROM ast_match('src/main.py', 'my_func(__X__)', match_syntax := true);
 --   SELECT * FROM ast_match('src/**/*.py', '__F__(__X__)', match_by := 'semantic_type');
@@ -1547,12 +1625,12 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
 --   source       - File path or glob pattern to parse
 --   pattern_str  - Code pattern with __WILDCARDS__ (e.g., 'my_func(__X__)')
 --   language     - Language for parsing source and pattern (default: 'python')
-
-)SQLMACRO"
-        R"SQLMACRO(
 --   match_syntax - If true, punctuation must match exactly (default: false)
 --   match_by     - 'type' for tree-sitter types, 'semantic_type' for cross-language (default: 'type')
 --
+-- ----------------------------------------------------------------------------
+-- ast_match: Find nodes matching a structural pattern, with wildcard captures
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_match(
     source,
     pattern_str,
@@ -1785,6 +1863,9 @@ CREATE OR REPLACE MACRO ast_match(
                 t.node_id as captured_node_id,
                 t.type as captured_type,
                 t.name as captured_name,
+
+)SQLMACRO"
+        R"SQLMACRO(
                 t.peek as captured_peek,
                 t.start_line as captured_start_line,
                 t.end_line as captured_end_line
@@ -1798,9 +1879,6 @@ CREATE OR REPLACE MACRO ast_match(
                 AND CASE
                     WHEN p.pattern_has_recursive
                          AND p.rel_depth >= (SELECT depth FROM recursive_threshold)
-
-)SQLMACRO"
-        R"SQLMACRO(
                     THEN (t.depth::INTEGER - mc.candidate_depth::INTEGER) >= p.rel_depth::INTEGER
                     ELSE ABS((t.depth::INTEGER - mc.candidate_depth::INTEGER) - p.rel_depth::INTEGER) <= depth_fuzz
                 END
@@ -2094,6 +2172,9 @@ CREATE OR REPLACE MACRO ast_match(
         ),
 
         -- =====================================================================
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- Combine and aggregate all captures
         -- =====================================================================
 
@@ -2108,9 +2189,6 @@ CREATE OR REPLACE MACRO ast_match(
             FROM captures_variadic_empty
             UNION ALL
             SELECT candidate_file, candidate_root, capture_name, capture_list
-
-)SQLMACRO"
-        R"SQLMACRO(
             FROM captures_recursive_listed
             UNION ALL
             SELECT candidate_file, candidate_root, capture_name, capture_list
@@ -2260,6 +2338,9 @@ CREATE OR REPLACE MACRO ast_match(
 -- Since captures are now LIST-valued, use this to get the first (usually only)
 -- element for single wildcard captures.
 -- Usage: ast_capture(captures, 'X').name instead of captures['X'][1].name
+-- ----------------------------------------------------------------------------
+-- ast_capture: Pull one named capture out of a match captures map
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_capture(captures_map, capture_name) AS
     captures_map[capture_name][1];
 )SQLMACRO"},
@@ -2284,6 +2365,9 @@ CREATE OR REPLACE MACRO ast_capture(captures_map, capture_name) AS
 -- Uses descendant_count range-check for O(1) subtree membership.
 -- Usage: SELECT * FROM ast_has('src/**/*.py', 'function_definition', 'return_statement')
 -- Usage: SELECT * FROM ast_has('src/main.py', 'function_definition', 'call', 'execute')
+-- ----------------------------------------------------------------------------
+-- ast_has: Nodes of one type that contain a node of another type
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_has(
     source,
     ancestor_type,
@@ -2310,6 +2394,9 @@ CREATE OR REPLACE MACRO ast_has(
 -- Negation of ast_has: find ancestor nodes that do NOT contain a descendant type.
 -- Usage: SELECT * FROM ast_not_has('src/**/*.py', 'function_definition', 'return_statement')
 -- Usage: SELECT * FROM ast_not_has('src/main.py', 'function_definition', 'call', 'execute')
+-- ----------------------------------------------------------------------------
+-- ast_not_has: Nodes of one type that do NOT contain a node of another type
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_not_has(
     source,
     ancestor_type,
@@ -2338,6 +2425,9 @@ CREATE OR REPLACE MACRO ast_not_has(
 -- Uses descendant_count range-check for O(1) subtree membership.
 -- Usage: SELECT * FROM ast_inside('src/**/*.py', 'call', 'function_definition', 'load_sql')
 -- Usage: SELECT * FROM ast_inside('src/main.py', 'return_statement', 'function_definition')
+-- ----------------------------------------------------------------------------
+-- ast_inside: Nodes of one type that sit inside a node of another type
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_inside(
     source,
     descendant_type,
@@ -2366,6 +2456,9 @@ CREATE OR REPLACE MACRO ast_inside(
 -- Find sibling nodes that precede a node of a given type.
 -- Returns nodes that come before (lower sibling_index) a sibling of target_type.
 -- Usage: SELECT * FROM ast_precedes('src/**/*.py', 'comment', 'function_definition')
+-- ----------------------------------------------------------------------------
+-- ast_precedes: Nodes of one type that appear before a node of another type
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_precedes(
     source,
     node_type,
@@ -2392,6 +2485,9 @@ CREATE OR REPLACE MACRO ast_precedes(
 -- Find sibling nodes that follow a node of a given type.
 -- Returns nodes that come after (higher sibling_index) a sibling of target_type.
 -- Usage: SELECT * FROM ast_follows('src/**/*.py', 'expression_statement', 'function_definition')
+-- ----------------------------------------------------------------------------
+-- ast_follows: Nodes of one type that appear after a node of another type
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_follows(
     source,
     node_type,
@@ -2536,6 +2632,12 @@ CREATE OR REPLACE MACRO parse_ast_list_table(code, language) AS TABLE
 -- This separates parsing (expensive) from querying (cheap), enabling callers
 -- to parse once and query many times with different selectors.
 -- =============================================================================
+-- TODO(v2.0.0): slated for replacement by the C++ selector compiler.
+-- tracker/features/043 records the reason: on the DuckDB 2.0 line the cost is
+-- entirely in PLANNING this macro body (~52KB), not in executing it -- measured
+-- ~24x per call and ~124x for EXPLAIN alone, and PREPARE does not amortise it
+-- (tracker/bugs/040, upstream duckdb/duckdb#26036). A C++ implementation makes
+-- the macro body, and therefore the regression, moot.
 CREATE OR REPLACE MACRO ast_select_from(
     source,
     selector
@@ -2699,6 +2801,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- -- and in CSS it constrains that last step, not the pair.
         sel_pseudo_class_unwrap AS (
             SELECT c.node_id
+
+)SQLMACRO"
+        R"SQLMACRO(
             FROM sel c
             LEFT JOIN sel_arg_blocks a
               ON c.node_id > a.node_id
@@ -2707,9 +2812,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                              'sibling_selector', 'adjacent_sibling_selector')
               AND a.node_id IS NULL
               AND c.node_id > (SELECT node_id FROM sel_root_raw
-
-)SQLMACRO"
-        R"SQLMACRO(
                                WHERE type IN ('pseudo_class_selector', 'id_selector',
                                              'attribute_selector', 'class_selector'))
               AND c.node_id <= (SELECT node_id + descendant_count FROM sel_root_raw
@@ -2954,6 +3056,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- These precompute "first child of type X inside the args of pcs Y"
         -- relationships so the downstream CTEs can use flat LEFT JOINs instead
         -- of correlated LIMIT 1 scalar subqueries (which trip the planner bug
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- when ast_select is called with a column-valued selector).
         -- =====================================================================
 
@@ -2963,9 +3068,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                    a.node_id AS args_id,
                    a.descendant_count AS args_descendants
             FROM sel_pseudo_classes pcs
-
-)SQLMACRO"
-        R"SQLMACRO(
             JOIN sel_arg_blocks a ON a.parent_id = pcs.node_id
         ),
 
@@ -3239,15 +3341,15 @@ CREATE OR REPLACE MACRO ast_select_from(
                    true as negated
             FROM sel_pseudo_classes pcs
             JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
+
+)SQLMACRO"
+        R"SQLMACRO(
             -- The inner pseudo-class must be a direct child of :not()'s arguments
             JOIN sel_arg_blocks not_args ON not_args.node_id = pcs.parent_id
             JOIN sel_pseudo_classes not_pcs ON not_pcs.node_id = not_args.parent_id
             JOIN sel_class_names not_cn ON not_cn.parent_id = not_pcs.node_id AND not_cn.name = 'not'
             -- The enclosing :not() must be top-level
             JOIN sel_pcs_outside_any_args outside ON outside.pcs_id = not_pcs.node_id
-
-)SQLMACRO"
-        R"SQLMACRO(
             LEFT JOIN sel_pcs_first_tag_or_int ftoi ON ftoi.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_string     fstr ON fstr.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_class_name fcn  ON fcn.pcs_id = pcs.node_id
@@ -3471,6 +3573,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 WHEN EXISTS (
                     SELECT 1 FROM pseudo_classes pc
                     WHERE pc.pseudo_name = 'in-scope'
+
+)SQLMACRO"
+        R"SQLMACRO(
                       AND pc.pseudo_arg IS NULL AND pc.pseudo_arg_class IS NULL
                       AND pc.pseudo_arg_plain IS NULL
                 ) THEN error(
@@ -3478,9 +3583,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                     '(:in-scope(function)), a named scope (:in-scope(.fn#foo)), or a '
                     'node type (:in-scope(function_definition)). Use bare :is-scope to '
                     'select scope boundaries themselves.'
-
-)SQLMACRO"
-        R"SQLMACRO(
                 )
                 -- (c) a .class arg that isn't function/class/module is Tier 2 (#145).
                 WHEN EXISTS (
@@ -3703,6 +3805,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                               AND NOT is_constituent(flags))
                 AND NOT EXISTS (SELECT 1 FROM ast
                                 WHERE is_semantic_type(semantic_type, 'CALL')
+
+)SQLMACRO"
+        R"SQLMACRO(
                                   AND NOT is_syntax_only(flags)
                                   AND NOT is_constituent(flags)
                                   AND name IS NOT NULL AND name != '')
@@ -3710,9 +3815,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                     'ast_select: the selector binds a name to call nodes (e.g. .call#foo) '
                     'but no call node in this source carries a callee name. Either the '
                     'grammar''s call nodes are not covered by callee-name extraction, or '
-
-)SQLMACRO"
-        R"SQLMACRO(
                     'the table was parsed without name extraction. Query the callee '
                     'structurally instead: join the call node''s children via parent_id '
                     '(see read_ast docs), and please report the language so extraction '
@@ -3955,6 +4057,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                               'attribute_selector', 'pseudo_class_selector')
           AND (sp.type_filter IS NULL OR a.type = sp.type_filter)
           AND (sp.name_filter IS NULL OR a.name = sp.name_filter)
+
+)SQLMACRO"
+        R"SQLMACRO(
           AND (sp.class_filter IS NULL
                OR (is_semantic_type(a.semantic_type, UPPER(sp.class_filter))
                    AND NOT is_syntax_only(a.flags)
@@ -3965,9 +4070,6 @@ CREATE OR REPLACE MACRO ast_select_from(
 
         UNION ALL
 
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- Descendant combinator: A B
         SELECT a.*
         FROM ast a, sel_props sp
@@ -4211,6 +4313,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 CASE ac.attr_op WHEN '*=' THEN a.file_path LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '^=' THEN a.file_path LIKE ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '$=' THEN a.file_path LIKE '%' || ac.attr_value_esc ESCAPE '\'
+
+)SQLMACRO"
+        R"SQLMACRO(
                                 ELSE a.file_path = ac.attr_value END
             WHEN ac.attr_name = 'line' THEN
                 a.start_line = CAST(ac.attr_value AS INTEGER)
@@ -4219,9 +4324,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             WHEN ac.attr_name = 'peek' THEN
                 CASE ac.attr_op WHEN '*=' THEN a.peek LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '^=' THEN a.peek LIKE ac.attr_value_esc || '%' ESCAPE '\'
-
-)SQLMACRO"
-        R"SQLMACRO(
                                 WHEN '$=' THEN a.peek LIKE '%' || ac.attr_value_esc ESCAPE '\'
                                 ELSE a.peek = ac.attr_value END
 
@@ -4442,6 +4544,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                         AND pc.pseudo_arg NOT IN ('function', 'class', 'module')
                         AND a.type = pc.pseudo_arg)
                 )
+
+)SQLMACRO"
+        R"SQLMACRO(
                 AND (pc.pseudo_arg_name IS NULL OR a.name = pc.pseudo_arg_name)
 
             -- :in-scope — the node is CONTAINED WITHIN a scope (complement of
@@ -4449,9 +4554,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- scope.* struct with an optional #name; a bare tree-sitter type walks
             -- to the nearest enclosing ancestor of that type.
             --   :in-scope(function)   inside any function scope
-
-)SQLMACRO"
-        R"SQLMACRO(
             --   :in-scope(.fn#foo)    inside the function named foo   (workhorse)
             --   :in-scope(<type>)     inside the nearest ancestor of that type
             WHEN 'in-scope' THEN
@@ -4677,6 +4779,12 @@ CREATE OR REPLACE MACRO ast_select_from(
 -- the selector engine. For one-off queries this is the simplest API.
 -- For repeated queries, use ast_select_from with a pre-parsed table.
 -- =============================================================================
+-- TODO(v2.0.0): slated for replacement by the C++ selector compiler.
+-- tracker/features/043 records the reason: on the DuckDB 2.0 line the cost is
+-- entirely in PLANNING this macro body (~52KB), not in executing it -- measured
+-- ~24x per call and ~124x for EXPLAIN alone, and PREPARE does not amortise it
+-- (tracker/bugs/040, upstream duckdb/duckdb#26036). A C++ implementation makes
+-- the macro body, and therefore the regression, moot.
 CREATE OR REPLACE MACRO ast_select(
     source,
     selector,
@@ -4699,6 +4807,9 @@ CREATE OR REPLACE MACRO ast_select(
     -- copies each node's complete source text, so every ancestor of a match
     -- carries a copy of the matched region (roughly O(file_size x tree_depth)
     -- extracted text per file) — paid only when the selector filters on peek.
+
+)SQLMACRO"
+        R"SQLMACRO(
     -- NOTE for ast_select_rules (currently WIP, duckdb/duckdb#21890): a
     -- column-valued selector cannot fold this CASE at bind time; if the lateral
     -- dispatch is revived, it should pre-parse with peek := 'full' and use
@@ -4747,6 +4858,12 @@ CREATE OR REPLACE MACRO ast_select(
 --   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
 --   SELECT * FROM ast_selector_for('my_ast', 'src/app.py', 42);
 -- =============================================================================
+-- TODO(v2.0.0): slated for replacement by the C++ selector compiler.
+-- tracker/features/043 records the reason: on the DuckDB 2.0 line the cost is
+-- entirely in PLANNING this macro body (~52KB), not in executing it -- measured
+-- ~24x per call and ~124x for EXPLAIN alone, and PREPARE does not amortise it
+-- (tracker/bugs/040, upstream duckdb/duckdb#26036). A C++ implementation makes
+-- the macro body, and therefore the regression, moot.
 CREATE OR REPLACE MACRO ast_selector_for(
     source,
     target_file,
@@ -4982,6 +5099,15 @@ CREATE OR REPLACE MACRO ast_selector_for(
 -- still emit one row per rule with NULLs in the read_ast columns, preserving
 -- the invariant that N rules in produces N distinct rule_index values out.
 
+-- ----------------------------------------------------------------------------
+-- ast_select_rules: Run several CSS selector rules at once, one row per match
+-- ----------------------------------------------------------------------------
+-- TODO(v2.0.0): slated for replacement by the C++ selector compiler.
+-- tracker/features/043 records the reason: on the DuckDB 2.0 line the cost is
+-- entirely in PLANNING this macro body (~52KB), not in executing it -- measured
+-- ~24x per call and ~124x for EXPLAIN alone, and PREPARE does not amortise it
+-- (tracker/bugs/040, upstream duckdb/duckdb#26036). A C++ implementation makes
+-- the macro body, and therefore the regression, moot.
 CREATE OR REPLACE MACRO ast_select_rules(source, query, language := NULL) AS TABLE
     WITH
         -- Parse the entire query as CSS, one pass. Literal at bind time
@@ -5083,6 +5209,12 @@ CREATE OR REPLACE MACRO ast_select_rules(source, query, language := NULL) AS TAB
 -- rules that matched nothing get an empty list instead of a list containing
 -- a single null struct.
 
+-- TODO(v2.0.0): slated for replacement by the C++ selector compiler.
+-- tracker/features/043 records the reason: on the DuckDB 2.0 line the cost is
+-- entirely in PLANNING this macro body (~52KB), not in executing it -- measured
+-- ~24x per call and ~124x for EXPLAIN alone, and PREPARE does not amortise it
+-- (tracker/bugs/040, upstream duckdb/duckdb#26036). A C++ implementation makes
+-- the macro body, and therefore the regression, moot.
 CREATE OR REPLACE MACRO ast_select_list(source, query, language := NULL) AS TABLE
     SELECT rule_index,
            any_value(selector)     AS selector,
@@ -6475,6 +6607,9 @@ CREATE OR REPLACE MACRO ast_replace(source, selector, new_text, language := NULL
 -- tabs, 2spaces, 4spaces) and custom user rule tables via ast_unparse_custom.
 -- ============================================================================
 
+-- ----------------------------------------------------------------------------
+-- ast_unparse_from: Reconstruct source text from an AST table, using a formatting preset
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_from(ast_table, preset := '') AS TABLE (
   WITH ast AS (
     SELECT * FROM query_table(ast_table)
@@ -6570,6 +6705,9 @@ CREATE OR REPLACE MACRO ast_unparse_from(ast_table, preset := '') AS TABLE (
   GROUP BY file_path
 );
 
+-- ----------------------------------------------------------------------------
+-- ast_unparse: Reconstruct source text from a file path, using a formatting preset
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse(path, preset := '') AS TABLE (
   WITH ast AS (
     SELECT * FROM read_ast(path)
@@ -6665,6 +6803,9 @@ CREATE OR REPLACE MACRO ast_unparse(path, preset := '') AS TABLE (
   GROUP BY file_path
 );
 
+-- ----------------------------------------------------------------------------
+-- ast_unparse_code: Reconstruct source text from a code string, using a formatting preset
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_code(source_code, lang, preset := '') AS TABLE (
   WITH ast AS (
     SELECT * FROM parse_ast(source_code, lang)
@@ -6743,6 +6884,9 @@ CREATE OR REPLACE MACRO ast_unparse_code(source_code, lang, preset := '') AS TAB
         WHEN ptok IS NULL            THEN ''
         WHEN is_synthetic AND (ptok IN ('{', ';') OR tok IN ('}') OR (ptok = ':' AND indent > prev_indent))
           THEN chr(10) || repeat(indent_str, CASE WHEN tok IN ('}', ']', ')') THEN GREATEST(0, indent - 1)::BIGINT ELSE indent::BIGINT END)
+
+)SQLMACRO"
+        R"SQLMACRO(
         WHEN start_line > pel        THEN repeat(chr(10), (start_line - pel)::BIGINT) || repeat(indent_str, CASE WHEN tok IN ('}', ']', ')') THEN GREATEST(0, indent - 1)::BIGINT ELSE indent::BIGINT END)
         WHEN prev_tight_after OR tight_before THEN ''
         WHEN ptok IN ('"', '''', '`') AND typ IN ('string_content', 'string_fragment', 'escape_sequence') THEN ''
@@ -6750,9 +6894,6 @@ CREATE OR REPLACE MACRO ast_unparse_code(source_code, lang, preset := '') AS TAB
         WHEN ptyp IN ('string_content', 'string_fragment', 'escape_sequence') AND typ IN ('string_content', 'string_fragment', 'escape_sequence') THEN ''
         WHEN ptok IN ('"', '''', '`') AND tok IN ('"', '''', '`') THEN ''
         WHEN ptyp IN ('string_content', 'string_fragment', 'escape_sequence') AND tok = '${' THEN ''
-
-)SQLMACRO"
-        R"SQLMACRO(
         WHEN ptok = '}' AND typ IN ('string_content', 'string_fragment', 'escape_sequence') THEN ''
         WHEN tok IN ('(', '[') AND (ptyp IN ('identifier', 'type_identifier', 'field_identifier', 'primitive_type') OR ptok IN (')', ']')) THEN ''
         ELSE ' '
@@ -6763,6 +6904,9 @@ CREATE OR REPLACE MACRO ast_unparse_code(source_code, lang, preset := '') AS TAB
   GROUP BY file_path
 );
 
+-- ----------------------------------------------------------------------------
+-- ast_unparse_custom: Reconstruct source text using caller-supplied formatting rules
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_custom(ast_table, rules_table) AS TABLE (
   WITH ast AS (
     SELECT * FROM query_table(ast_table)
@@ -6991,6 +7135,9 @@ CREATE OR REPLACE MACRO ast_unparse_custom(ast_table, rules_table) AS TABLE (
 --                                -- (matched separator- and './'-insensitively;
 --                                --  see PATH MATCHING below)
 --                  cblob BLOB    -- that file's pristine bytes
+
+)SQLMACRO"
+        R"SQLMACRO(
 --                A relation rather than a path because DuckDB table functions
 --                (read_blob) accept only literal arguments — no per-row
 --                lateral paths. The same constraint `ast_patch` documents.
@@ -7005,9 +7152,6 @@ CREATE OR REPLACE MACRO ast_unparse_custom(ast_table, rules_table) AS TABLE (
 --                bytes themselves from a path; prefer them.
 --   language   — optional override / disambiguator (the law: inferred from the
 --                data, never required). Filters rows to that language.
-
-)SQLMACRO"
-        R"SQLMACRO(
 --   file_path  — optional scoping disambiguator for a multi-file table.
 --                Matched separator-insensitively, so the forward-slash spelling
 --                you handed read_ast works on Windows too.
@@ -7199,6 +7343,9 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
                                'normalising unparser, because returning normalised text where ' ||
                                'byte-exact text was asked for would be a silent wrong answer.')
                 WHEN s.n_rows > 0 AND (SELECT max(root_end) FROM __sdx_root)
+
+)SQLMACRO"
+        R"SQLMACRO(
                                       <> (SELECT max(nbytes) FROM __sdx_bytes)
                     THEN error('ast_unparse_exact: ''' || s.fp_lo || ''' is now ' ||
                                (SELECT max(nbytes) FROM __sdx_bytes)::VARCHAR || ' bytes but the ' ||
@@ -7210,9 +7357,6 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
                     THEN error('ast_unparse_exact: a node ends at byte ' ||
                                s.max_end::VARCHAR || ' but ''' || s.fp_lo || ''' is only ' ||
                                (SELECT max(nbytes) FROM __sdx_bytes)::VARCHAR || ' bytes — the ' ||
-
-)SQLMACRO"
-        R"SQLMACRO(
                                'file changed since it was parsed. Re-parse and unparse in ' ||
                                'one statement.')
                 WHEN EXISTS (SELECT 1 FROM __sdx_leaves WHERE start_byte < prev_end)
@@ -7272,6 +7416,9 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
 -- omitted, it is detected from the path exactly as read_ast does.
 -- A glob matching more than one file errors (see the section header).
 -- ----------------------------------------------------------------------------
+-- ----------------------------------------------------------------------------
+-- ast_unparse_exact: Reproduce a file byte-for-byte from its AST, or refuse — no normalising
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_exact(path, language := NULL) AS TABLE
     WITH __sdx_src AS (
         SELECT * FROM read_ast(path, language, source := 'full', peek := 'none')
@@ -7290,6 +7437,9 @@ CREATE OR REPLACE MACRO ast_unparse_exact(path, language := NULL) AS TABLE
 -- for read_ast. Beware the staleness window this opens: the file is read now,
 -- the table was parsed whenever it was parsed. The length guard catches a
 -- change of size and nothing else.
+-- ----------------------------------------------------------------------------
+-- ----------------------------------------------------------------------------
+-- ast_unparse_exact_from: Reproduce files byte-for-byte from an existing AST table
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_exact_from(ast_table, files,
                                                language := NULL,
@@ -7310,6 +7460,9 @@ CREATE OR REPLACE MACRO ast_unparse_exact_from(ast_table, files,
 --
 -- This goes beyond the law as stated (which is path-scoped) and is the cheapest
 -- way to test it: `ast_unparse_exact_code(s, l) = s` for any s that parses.
+-- ----------------------------------------------------------------------------
+-- ----------------------------------------------------------------------------
+-- ast_unparse_exact_code: Reproduce a code string byte-for-byte through a parse round-trip
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_exact_code(source_code, language) AS TABLE
     WITH __sdx_code_src AS (
@@ -7332,10 +7485,43 @@ struct EmbeddedMacroDoc {
 };
 
 static const std::vector<EmbeddedMacroDoc> EMBEDDED_MACRO_DOCS = {
+    {"ast_get_source", "Raw source text for a line range of a file", {}},
+    {"ast_get_source_numbered", "Source text for a line range, each line prefixed with its number", {}},
+    {"ast_source_of", "Source text for matched nodes, keyed by file pattern", {"SELECT * FROM ast_source_of('src/**/*.py', 'process_payment');", "SELECT * FROM ast_source_of('src/**/*.py', 'MyClass', kind := 'class');", "SELECT * FROM ast_source_of('src/**/*.py', 'handler', language := 'python', kind := 'function');"}},
+    {"ast_get_source_line", "A single line of source text from a file", {}},
+    {"ast_children", "Direct children of a node in a parsed AST table", {}},
+    {"ast_call_arguments", "Argument nodes of a call, from its argument_list child", {}},
+    {"ast_definitions", "Every definition (function, class, variable, module) in the source", {}},
+    {"ast_resolve_entity", "Find a named entity by name and optional kind, within one file", {"SELECT * FROM ast_resolve_entity('src/app.py', 'run', kind := 'function');"}},
+    {"ast_descendants", "Every node beneath an ancestor, via its descendant_count range", {}},
+    {"ast_ancestors", "The ancestor chain from a node up to the root", {}},
+    {"ast_siblings", "Nodes sharing a parent with the target node", {}},
+    {"ast_containing_line", "Nodes whose source span covers a given line number", {}},
+    {"ast_in_range", "Nodes whose source span falls inside a line range", {}},
+    {"ast_function_scope", "Every node inside one function definition", {}},
+    {"ast_class_members", "Members declared directly inside one class", {}},
+    {"ast_function_metrics", "Per-function size and complexity: lines, return_count, conditionals, loops, cyclomatic", {}},
+    {"ast_functions_containing", "Functions that contain at least one node of a given type", {}},
+    {"ast_nesting_analysis", "Per-function nesting depth: max_depth, avg_depth, deep_nodes, total_nodes", {}},
+    {"ast_security_audit", "Risk-pattern findings per function: risk_category, risk_level, finding, matched_pattern", {}},
+    {"ast_definition_parent", "The nearest enclosing definition for every node in an AST table", {}},
+    {"ast_dead_code", "Definitions with no reference elsewhere in the source, with the reason", {}},
+    {"ast_get_calls", "Call sites in the source, with the enclosing function", {}},
+    {"ast_call_graph", "Caller to callee edges derived from the call sites", {}},
+    {"ast_pattern", "Parse a pattern string into its node sequence", {}},
+    {"ast_pattern_list", "Parse a pattern string into a list of pattern tokens", {}},
+    {"ast_match", "Find nodes matching a structural pattern, with wildcard captures", {"SELECT * FROM ast_match('src/**/*.py', 'my_func(__X__)');", "SELECT * FROM ast_match('src/main.py', 'my_func(__X__)', match_syntax := true);", "SELECT * FROM ast_match('src/**/*.py', '__F__(__X__)', match_by := 'semantic_type');"}},
+    {"ast_capture", "Pull one named capture out of a match captures map", {}},
+    {"ast_has", "Nodes of one type that contain a node of another type", {}},
+    {"ast_not_has", "Nodes of one type that do NOT contain a node of another type", {}},
+    {"ast_inside", "Nodes of one type that sit inside a node of another type", {}},
+    {"ast_precedes", "Nodes of one type that appear before a node of another type", {}},
+    {"ast_follows", "Nodes of one type that appear after a node of another type", {}},
     {"parse_ast_list_table", "Table-macro wrapper for parse_ast_list", {}},
     {"ast_select_from", "the selector engine, operates on a pre-parsed AST table. The `source` parameter is a table name (string) resolved via query_table(). This separates parsing (expensive) from querying (cheap), enabling callers to parse once and query many times with different selectors", {"SELECT * FROM ast_select_from('my_ast', '.class:named');", "SELECT * FROM ast_select_from('my_ast', '.func:has(return_statement)');"}},
     {"ast_select", "convenience wrapper that parses source files and then runs the selector engine. For one-off queries this is the simplest API. For repeated queries, use ast_select_from with a pre-parsed table", {}},
     {"ast_selector_for", "node -> selector (\"Copy selector\", as in browser devtools)", {"SELECT * FROM ast_selector_for('my_ast', 'src/app.py', 42);"}},
+    {"ast_select_rules", "Run several CSS selector rules at once, one row per match", {}},
     {"ast_select_list", "nested form, one row per rule with matches packed as LIST", {}},
     {"ast_exports", "Module-level definitions visible outside the file", {"SELECT * FROM ast_exports('src/**/*.py');", "SELECT name, type FROM ast_exports('src/*.go') WHERE name = upper(left(name, 1)) || right(name, -1);"}},
     {"ast_imports", "Import statements with source module and imported names", {"SELECT * FROM ast_imports('src/**/*.py');", "SELECT source_module, imported_name FROM ast_imports('src/*.js');"}},
@@ -7349,7 +7535,14 @@ static const std::vector<EmbeddedMacroDoc> EMBEDDED_MACRO_DOCS = {
     {"ast_node_edit", "build a well-formed edit STRUCT from an AST row's location columns. `node` is any STRUCT/row with file_path, start_line, start_column, end_line, end_column — pass the table alias of a read_ast(...) scan directly. Expand to columns with unnest(...):", {"SELECT unnest(ast_node_edit(r, 'replace', 'renamed_fn'))", "SELECT unnest(ast_node_edit(r, 'replace', 'new_text'))"}},
     {"ast_patch", "apply edit rows to their files, returning patched text", {"SELECT * FROM ast_patch('edits', 'src/main.py');"}},
     {"ast_replace", "one-shot selector-driven replacement — match nodes with a CSS selector (the ast_select engine), replace each match's exact byte range with new_text, return the patched text per file", {}},
+    {"ast_unparse_from", "Reconstruct source text from an AST table, using a formatting preset", {}},
+    {"ast_unparse", "Reconstruct source text from a file path, using a formatting preset", {}},
+    {"ast_unparse_code", "Reconstruct source text from a code string, using a formatting preset", {}},
+    {"ast_unparse_custom", "Reconstruct source text using caller-supplied formatting rules", {}},
     {"ast_unparse_exact_splice", "the shared core. You normally want `ast_unparse_exact(path)`; this is exposed because it is the one place the splice lives, and because it is useful on its own", {}},
+    {"ast_unparse_exact", "Reproduce a file byte-for-byte from its AST, or refuse — no normalising", {}},
+    {"ast_unparse_exact_from", "Reproduce files byte-for-byte from an existing AST table", {}},
+    {"ast_unparse_exact_code", "Reproduce a code string byte-for-byte through a parse round-trip", {}},
 };
 
 } // namespace duckdb

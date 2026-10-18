@@ -124,7 +124,14 @@ def extract_macro_docs(sql_dir, sql_files):
                         cont = nxt[2:].strip()
                         if not cont or set(cont) <= set('=- '):
                             break
+                        # Stop at a section marker OR a maintainer note. A
+                        # `TODO(v2.0.0): ...` line sits under some banners to
+                        # record that the macro is slated for replacement by the
+                        # C++ selector compiler; that is roadmap, not something
+                        # an agent reading duckdb_functions() should be told.
                         if re.match(r'(Usage|Returns|Example)s?\s*:', cont, re.I):
+                            break
+                        if re.match(r'(TODO|FIXME|NOTE|XXX|WARNING)\b', cont, re.I):
                             break
                         parts.append(cont)
                     description = ' '.join(parts).strip().rstrip('.')

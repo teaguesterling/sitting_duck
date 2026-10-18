@@ -18,6 +18,9 @@
 -- Uses descendant_count range-check for O(1) subtree membership.
 -- Usage: SELECT * FROM ast_has('src/**/*.py', 'function_definition', 'return_statement')
 -- Usage: SELECT * FROM ast_has('src/main.py', 'function_definition', 'call', 'execute')
+-- ----------------------------------------------------------------------------
+-- ast_has: Nodes of one type that contain a node of another type
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_has(
     source,
     ancestor_type,
@@ -44,6 +47,9 @@ CREATE OR REPLACE MACRO ast_has(
 -- Negation of ast_has: find ancestor nodes that do NOT contain a descendant type.
 -- Usage: SELECT * FROM ast_not_has('src/**/*.py', 'function_definition', 'return_statement')
 -- Usage: SELECT * FROM ast_not_has('src/main.py', 'function_definition', 'call', 'execute')
+-- ----------------------------------------------------------------------------
+-- ast_not_has: Nodes of one type that do NOT contain a node of another type
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_not_has(
     source,
     ancestor_type,
@@ -72,6 +78,9 @@ CREATE OR REPLACE MACRO ast_not_has(
 -- Uses descendant_count range-check for O(1) subtree membership.
 -- Usage: SELECT * FROM ast_inside('src/**/*.py', 'call', 'function_definition', 'load_sql')
 -- Usage: SELECT * FROM ast_inside('src/main.py', 'return_statement', 'function_definition')
+-- ----------------------------------------------------------------------------
+-- ast_inside: Nodes of one type that sit inside a node of another type
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_inside(
     source,
     descendant_type,
@@ -100,6 +109,9 @@ CREATE OR REPLACE MACRO ast_inside(
 -- Find sibling nodes that precede a node of a given type.
 -- Returns nodes that come before (lower sibling_index) a sibling of target_type.
 -- Usage: SELECT * FROM ast_precedes('src/**/*.py', 'comment', 'function_definition')
+-- ----------------------------------------------------------------------------
+-- ast_precedes: Nodes of one type that appear before a node of another type
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_precedes(
     source,
     node_type,
@@ -126,6 +138,9 @@ CREATE OR REPLACE MACRO ast_precedes(
 -- Find sibling nodes that follow a node of a given type.
 -- Returns nodes that come after (higher sibling_index) a sibling of target_type.
 -- Usage: SELECT * FROM ast_follows('src/**/*.py', 'expression_statement', 'function_definition')
+-- ----------------------------------------------------------------------------
+-- ast_follows: Nodes of one type that appear after a node of another type
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_follows(
     source,
     node_type,

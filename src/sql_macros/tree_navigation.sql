@@ -9,12 +9,18 @@
 -- Get immediate children of a node
 -- Usage: SELECT * FROM ast_children(my_ast_table, parent_node_id)
 -- Note: First argument is a table name (string), second is the parent node_id
+-- ----------------------------------------------------------------------------
+-- ast_children: Direct children of a node in a parsed AST table
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_children(ast_table, parent_node_id) AS TABLE
     SELECT * FROM query_table(ast_table) WHERE parent_id = parent_node_id;
 
 -- Get arguments of a function call node
 -- Returns the actual argument nodes (excludes punctuation like parentheses and commas)
 -- Usage: SELECT * FROM ast_call_arguments(my_ast_table, call_node_id)
+-- ----------------------------------------------------------------------------
+-- ast_call_arguments: Argument nodes of a call, from its argument_list child
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
     WITH
         -- Find the argument_list child of the call node
@@ -50,6 +56,9 @@ CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
 -- full filter chain: is_definition(semantic_type) AND is_construct(flags) AND name != ''
 -- Using is_definition() alone will include keyword tokens (def, class, CREATE, etc.)
 -- as duplicates, since keywords share the semantic type of their parent construct.
+-- ----------------------------------------------------------------------------
+-- ast_definitions: Every definition (function, class, variable, module) in the source
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
     WITH ast AS (
         SELECT * FROM read_ast(source, language)
@@ -92,6 +101,9 @@ CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
 -- Optional `kind` filters to 'function'|'class'|'variable'|'module'|'type'|'other'.
 -- Usage: SELECT * FROM ast_resolve_entity('src/xml_utils.cpp', 'SecureNoExternalEntityLoader');
 --        SELECT * FROM ast_resolve_entity('src/app.py', 'run', kind := 'function');
+-- ----------------------------------------------------------------------------
+-- ast_resolve_entity: Find a named entity by name and optional kind, within one file
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_resolve_entity(path, entity_name, kind := NULL, language := NULL) AS TABLE
     WITH defs AS (
         SELECT
@@ -122,6 +134,9 @@ CREATE OR REPLACE MACRO ast_resolve_entity(path, entity_name, kind := NULL, lang
 -- Get all descendants of a node (entire subtree)
 -- Uses descendant_count for O(1) range-based lookup (nodes are in DFS pre-order)
 -- Usage: SELECT * FROM ast_descendants(my_ast_table, ancestor_node_id)
+-- ----------------------------------------------------------------------------
+-- ast_descendants: Every node beneath an ancestor, via its descendant_count range
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_descendants(ast_table, ancestor_node_id) AS TABLE
     WITH ancestor AS (
         SELECT node_id, descendant_count
@@ -136,6 +151,9 @@ CREATE OR REPLACE MACRO ast_descendants(ast_table, ancestor_node_id) AS TABLE
 -- Get ancestors of a node (path from node to root)
 -- Uses recursive CTE following parent_id upward
 -- Usage: SELECT * FROM ast_ancestors(my_ast_table, child_node_id)
+-- ----------------------------------------------------------------------------
+-- ast_ancestors: The ancestor chain from a node up to the root
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_ancestors(ast_table, child_node_id) AS TABLE
     WITH RECURSIVE ancestors AS (
         SELECT * FROM query_table(ast_table) WHERE node_id = child_node_id
@@ -149,6 +167,9 @@ CREATE OR REPLACE MACRO ast_ancestors(ast_table, child_node_id) AS TABLE
 
 -- Get sibling nodes (same parent, excluding self)
 -- Usage: SELECT * FROM ast_siblings(my_ast_table, target_node_id)
+-- ----------------------------------------------------------------------------
+-- ast_siblings: Nodes sharing a parent with the target node
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_siblings(ast_table, target_node_id) AS TABLE
     WITH target AS (
         SELECT parent_id FROM query_table(ast_table) WHERE node_id = target_node_id
@@ -165,6 +186,9 @@ CREATE OR REPLACE MACRO ast_siblings(ast_table, target_node_id) AS TABLE
 -- Find all nodes that contain a specific line
 -- Returns nodes ordered by specificity (smallest span first)
 -- Usage: SELECT * FROM ast_containing_line('src/main.py', 42)
+-- ----------------------------------------------------------------------------
+-- ast_containing_line: Nodes whose source span covers a given line number
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_containing_line(source, line_num, language := NULL) AS TABLE
     WITH ast AS (
         SELECT * FROM read_ast(source, language)
@@ -176,6 +200,9 @@ CREATE OR REPLACE MACRO ast_containing_line(source, line_num, language := NULL) 
 
 -- Get all nodes within a line range
 -- Usage: SELECT * FROM ast_in_range('src/main.py', 10, 20)
+-- ----------------------------------------------------------------------------
+-- ast_in_range: Nodes whose source span falls inside a line range
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_in_range(source, range_start, range_end, language := NULL) AS TABLE
     WITH ast AS (
         SELECT * FROM read_ast(source, language)
@@ -192,6 +219,9 @@ CREATE OR REPLACE MACRO ast_in_range(source, range_start, range_end, language :=
 -- This is essential for accurate complexity analysis - avoids double-counting
 -- nested function internals as part of the outer function's complexity.
 -- Usage: SELECT * FROM ast_function_scope(my_ast_table, function_node_id)
+-- ----------------------------------------------------------------------------
+-- ast_function_scope: Every node inside one function definition
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_function_scope(ast_table, func_node_id) AS TABLE
     WITH
         -- Get the function node itself
@@ -226,6 +256,9 @@ CREATE OR REPLACE MACRO ast_function_scope(ast_table, func_node_id) AS TABLE
 -- Returns the member definition nodes themselves, not their internal contents.
 -- Useful for class structure analysis without descending into method bodies.
 -- Usage: SELECT name, type FROM ast_class_members(my_ast_table, class_node_id)
+-- ----------------------------------------------------------------------------
+-- ast_class_members: Members declared directly inside one class
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_class_members(ast_table, class_node_id) AS TABLE
     WITH
         -- Get the class node
@@ -270,6 +303,9 @@ CREATE OR REPLACE MACRO ast_class_members(ast_table, class_node_id) AS TABLE
 -- Returns one row per function with complexity metrics.
 -- Uses function scope (excludes nested function internals) for accurate counts.
 -- Usage: SELECT * FROM ast_function_metrics('src/**/*.py') WHERE cyclomatic > 10
+-- ----------------------------------------------------------------------------
+-- ast_function_metrics: Per-function size and complexity: lines, return_count, conditionals, loops, cyclomatic
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_function_metrics(source, language := NULL) AS TABLE
     WITH
         ast AS (
@@ -372,6 +408,9 @@ CREATE OR REPLACE MACRO ast_function_metrics(source, language := NULL) AS TABLE
 -- Uses function scope (excludes nested function internals).
 -- Usage: SELECT * FROM ast_functions_containing('src/**/*.py', 'try_statement')
 -- Usage: SELECT * FROM ast_functions_containing('src/**/*.py', 'call') WHERE match_name = 'eval'
+-- ----------------------------------------------------------------------------
+-- ast_functions_containing: Functions that contain at least one node of a given type
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language := NULL) AS TABLE
     WITH
         ast AS (
@@ -447,6 +486,9 @@ CREATE OR REPLACE MACRO ast_functions_containing(source, target_type, language :
 -- Returns depth statistics for identifying deeply nested code.
 -- Uses function scope (excludes nested function internals).
 -- Usage: SELECT * FROM ast_nesting_analysis('src/**/*.py') WHERE max_depth > 5
+-- ----------------------------------------------------------------------------
+-- ast_nesting_analysis: Per-function nesting depth: max_depth, avg_depth, deep_nodes, total_nodes
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_nesting_analysis(source, language := NULL) AS TABLE
     WITH
         ast AS (
@@ -528,6 +570,9 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(source, language := NULL) AS TABLE
 -- Automated security concern detection
 -- Scans for common security anti-patterns across languages.
 -- Usage: SELECT * FROM ast_security_audit('src/**/*.py') WHERE risk_level = 'high'
+-- ----------------------------------------------------------------------------
+-- ast_security_audit: Risk-pattern findings per function: risk_category, risk_level, finding, matched_pattern
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_security_audit(source, language := NULL) AS TABLE
     WITH
         ast AS (
@@ -646,6 +691,9 @@ CREATE OR REPLACE MACRO ast_security_audit(source, language := NULL) AS TABLE
 -- until it finds an ancestor that is itself a definition.
 -- Returns (node_id, def_name, kind, parent_def_name, parent_def_kind, parent_def_node_id)
 -- Usage: SELECT * FROM ast_definition_parent('my_ast_table')
+-- ----------------------------------------------------------------------------
+-- ast_definition_parent: The nearest enclosing definition for every node in an AST table
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_definition_parent(ast_table) AS TABLE
     WITH RECURSIVE def_parent AS (
         -- Start: each definition node with its immediate parent
@@ -690,6 +738,9 @@ CREATE OR REPLACE MACRO ast_definition_parent(ast_table) AS TABLE
 -- Note: This is heuristic - cannot detect dynamic usage or cross-file references
 -- when analyzing a single file. Best used on entire codebase.
 -- Usage: SELECT * FROM ast_dead_code('src/**/*.py')
+-- ----------------------------------------------------------------------------
+-- ast_dead_code: Definitions with no reference elsewhere in the source, with the reason
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
     WITH
         ast AS (
@@ -800,6 +851,9 @@ CREATE OR REPLACE MACRO ast_dead_code(source, language := NULL) AS TABLE
 -- Usage: SELECT * FROM ast_get_calls('src/main.py') WHERE call_type = 'method'
 -- See also: ast_callees/ast_callers in scope_resolution.sql for simpler
 -- caller/callee pairs without call-type classification.
+-- ----------------------------------------------------------------------------
+-- ast_get_calls: Call sites in the source, with the enclosing function
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
     WITH
         ast AS (
@@ -875,6 +929,9 @@ CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
 -- Returns aggregated caller→callee pairs with call counts.
 -- Usage: SELECT * FROM ast_call_graph('src/**/*.py') ORDER BY call_count DESC
 -- Usage: SELECT * FROM ast_call_graph('src/**/*.py') WHERE caller = 'main'
+-- ----------------------------------------------------------------------------
+-- ast_call_graph: Caller to callee edges derived from the call sites
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_call_graph(source, language := NULL) AS TABLE
     WITH
         raw_calls AS (

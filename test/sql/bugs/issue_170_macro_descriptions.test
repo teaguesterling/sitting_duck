@@ -25,9 +25,12 @@ require sitting_duck
 # Stated as a floor rather than an exact count so that adding a banner to
 # another macro does not fail this file. The exact-value assertions below are
 # what pin the content.
+#
+# EVERY table macro is documented; the shortfall is entirely scalar macros,
+# which are the `is_*` semantic predicates and a handful of internal helpers.
 
 query I
-SELECT COUNT(*) >= 18 FROM duckdb_functions()
+SELECT COUNT(*) >= 58 FROM duckdb_functions()
 WHERE function_type IN ('macro', 'table_macro')
   AND description IS NOT NULL AND description <> '';
 ----
@@ -41,6 +44,31 @@ SELECT COUNT(*) > 0 FROM duckdb_functions()
 WHERE function_type IN ('macro', 'table_macro') AND description IS NULL;
 ----
 true
+
+# Every TABLE macro carries one. This is the half an agent actually calls to
+# get data back, so it is asserted exactly rather than as a floor.
+#
+# SCOPED TO sitting_duck's macros. An unscoped version of this assertion fails
+# at 4, and those four are DuckDB's own built-ins -- histogram,
+# histogram_values, duckdb_logs_parsed, duckdb_profiling_settings -- which live
+# in the `system` catalog and are not ours to document. Macros created by this
+# extension through a Connection land in the attached database instead.
+query I
+SELECT COUNT(*) FROM duckdb_functions()
+WHERE function_type = 'table_macro'
+  AND database_name <> 'system'
+  AND (description IS NULL OR description = '');
+----
+0
+
+# A maintainer note must never reach a description. Five selector macros carry
+# a `TODO(v2.0.0)` line recording that the C++ selector compiler supersedes
+# them; the extractor stops at TODO/FIXME/NOTE, and this proves it.
+query I
+SELECT COUNT(*) FROM duckdb_functions()
+WHERE function_type IN ('macro', 'table_macro') AND description LIKE '%TODO%';
+----
+0
 
 # =============================================================================
 # Content: the description is the macro's own banner, not a neighbour's.

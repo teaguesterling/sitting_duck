@@ -34,6 +34,12 @@
 --   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
 --   SELECT * FROM ast_selector_for('my_ast', 'src/app.py', 42);
 -- =============================================================================
+-- TODO(v2.0.0): slated for replacement by the C++ selector compiler.
+-- tracker/features/043 records the reason: on the DuckDB 2.0 line the cost is
+-- entirely in PLANNING this macro body (~52KB), not in executing it -- measured
+-- ~24x per call and ~124x for EXPLAIN alone, and PREPARE does not amortise it
+-- (tracker/bugs/040, upstream duckdb/duckdb#26036). A C++ implementation makes
+-- the macro body, and therefore the regression, moot.
 CREATE OR REPLACE MACRO ast_selector_for(
     source,
     target_file,

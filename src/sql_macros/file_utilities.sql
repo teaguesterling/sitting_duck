@@ -10,6 +10,9 @@
 
 -- Extract source code for an AST node given file_path, start_line, end_line
 -- Returns lines as a single newline-joined string
+-- ----------------------------------------------------------------------------
+-- ast_get_source: Raw source text for a line range of a file
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_get_source(file_path, start_line, end_line) AS (
     WITH file_content AS (
         SELECT string_split(content, E'\n') as lines
@@ -31,6 +34,9 @@ CREATE OR REPLACE MACRO ast_get_source(file_path, start_line, end_line) AS (
 );
 
 -- Get source with line numbers prefixed (useful for display)
+-- ----------------------------------------------------------------------------
+-- ast_get_source_numbered: Source text for a line range, each line prefixed with its number
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_get_source_numbered(file_path, start_line, end_line) AS (
     WITH file_content AS (
         SELECT string_split(content, E'\n') as lines
@@ -63,6 +69,9 @@ CREATE OR REPLACE MACRO ast_get_source_numbered(file_path, start_line, end_line)
 --   SELECT * FROM ast_source_of('src/**/*.py', 'process_payment');
 --   SELECT * FROM ast_source_of('src/**/*.py', 'MyClass', kind := 'class');
 --   SELECT * FROM ast_source_of('src/**/*.py', 'handler', language := 'python', kind := 'function');
+-- ----------------------------------------------------------------------------
+-- ast_source_of: Source text for matched nodes, keyed by file pattern
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_source_of(
     file_patterns,
     target_name,
@@ -141,6 +150,9 @@ CREATE OR REPLACE MACRO ast_source_of(
 -- =============================================================================
 
 -- Get a single line from a file
+-- ----------------------------------------------------------------------------
+-- ast_get_source_line: A single line of source text from a file
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_get_source_line(file_path, line_num) AS (
     WITH file_content AS (
         SELECT string_split(content, E'\n') as lines

@@ -73,6 +73,15 @@
 -- still emit one row per rule with NULLs in the read_ast columns, preserving
 -- the invariant that N rules in produces N distinct rule_index values out.
 
+-- ----------------------------------------------------------------------------
+-- ast_select_rules: Run several CSS selector rules at once, one row per match
+-- ----------------------------------------------------------------------------
+-- TODO(v2.0.0): slated for replacement by the C++ selector compiler.
+-- tracker/features/043 records the reason: on the DuckDB 2.0 line the cost is
+-- entirely in PLANNING this macro body (~52KB), not in executing it -- measured
+-- ~24x per call and ~124x for EXPLAIN alone, and PREPARE does not amortise it
+-- (tracker/bugs/040, upstream duckdb/duckdb#26036). A C++ implementation makes
+-- the macro body, and therefore the regression, moot.
 CREATE OR REPLACE MACRO ast_select_rules(source, query, language := NULL) AS TABLE
     WITH
         -- Parse the entire query as CSS, one pass. Literal at bind time
@@ -174,6 +183,12 @@ CREATE OR REPLACE MACRO ast_select_rules(source, query, language := NULL) AS TAB
 -- rules that matched nothing get an empty list instead of a list containing
 -- a single null struct.
 
+-- TODO(v2.0.0): slated for replacement by the C++ selector compiler.
+-- tracker/features/043 records the reason: on the DuckDB 2.0 line the cost is
+-- entirely in PLANNING this macro body (~52KB), not in executing it -- measured
+-- ~24x per call and ~124x for EXPLAIN alone, and PREPARE does not amortise it
+-- (tracker/bugs/040, upstream duckdb/duckdb#26036). A C++ implementation makes
+-- the macro body, and therefore the regression, moot.
 CREATE OR REPLACE MACRO ast_select_list(source, query, language := NULL) AS TABLE
     SELECT rule_index,
            any_value(selector)     AS selector,
