@@ -416,6 +416,37 @@ slower than running the query** (72.2 s vs 11.3 s), as it was in September
 (~55 s vs ~15 s). Reproducible, unexplained; all three query runs were ~11.3 s
 so it is not session warming. Flagged rather than interpreted.
 
+### NEW 2026-10-18: PREPARE stops amortizing on the 2.0 line
+
+The sharper characterisation, and it supersedes "planning is slow" as the thing
+to report upstream. Same fixture, same source, same machine:
+
+| | `PREPARE` | `EXECUTE` ×3 | amortizes? |
+|---|---|---|---|
+| **v1.5.6** | 0.343 s | 0.115 / 0.125 / 0.113 s | **yes — ~3× cheaper** |
+| **2.0 line** | 11.505 s | 11.450 / 11.322 / 11.399 s | **no — 0 % saved** |
+
+On v1.5.6 the cost is paid once at `PREPARE` and prepared execution is ~0.115 s.
+On the 2.0 line it is paid at `PREPARE` **and again on every `EXECUTE`**.
+
+Two consequences:
+
+1. **The standard mitigation does not work.** "Prepare once, execute many" is
+   what a verifier, an eval harness or an agent loop would reach for, and on
+   the 2.0 line it buys nothing.
+2. **It narrows the upstream cause.** If this were plan *construction*,
+   `PREPARE` would absorb it and `EXECUTE` would be cheap — as it is on v1.5.6.
+   Being paid again per execution means the expensive work is redone at
+   execution time rather than cached in the prepared statement. That is a more
+   specific claim for `duckdb/duckdb#26036` than "planning is slow", and it is
+   reproducible upstream without sitting_duck: any macro expanding to a plan of
+   this shape should show it.
+
+So the profiler split this file and #160 both record (~5.2 s planner / ~0.9 s
+optimizer) is now the wrong measurement to chase. The one that matters is
+**which phase runs again on `EXECUTE`.** Profile an `EXECUTE`, not a bare
+`SELECT`.
+
 ### Status
 
 Unchanged: **open, ship-blocking for any "v2.0-compatible" claim.** The registry
