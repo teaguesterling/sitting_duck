@@ -236,6 +236,34 @@ jobs:
             exit 1
           fi
 
+  # docs/reference/languages/*.md is GENERATED from src/language_configs/*_types.def
+  # by docs/scripts/generate_language_reference.py. Nothing in the build
+  # regenerates it, so a .def change without a regeneration ships a reference
+  # page that disagrees with the code.
+  #
+  # The input is checked as well as the output, and that order matters. The
+  # generator matches DEF_TYPE with a SINGLE-LINE regex
+  # (generate_language_reference.py:149), so an entry wrapped across two lines
+  # silently vanishes from the generated node-type table. PR #280 did exactly
+  # that and deleted the whole python comprehension table. A diff check alone
+  # cannot catch it, because regenerating and committing the table-less page
+  # makes the diff clean again.
+  language-reference-sync:
+    name: Generated language references in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every DEF_TYPE entry closes on its own line
+        run: python3 scripts/check_def_type_single_line.py
+      - name: Regenerate the language references from src/language_configs/*_types.def
+        run: python3 docs/scripts/generate_language_reference.py
+      - name: Verify the committed references match
+        run: |
+          if ! git diff --exit-code -- docs/reference/languages/; then
+            echo '::error file=docs/reference/languages/index.md::the generated language references are out of sync with src/language_configs/*_types.def. Run `python3 docs/scripts/generate_language_reference.py` and commit the regenerated pages alongside the .def change.'
+            exit 1
+          fi
+
   # Guard for issue #82: a from-source dev build (no OVERRIDE_GIT_DESCRIBE)
   # must produce an extension that LOADs in the bundled dev shell. During
   # sitting_duck's LoadInternal, core_functions is NOT available: sitting_duck
