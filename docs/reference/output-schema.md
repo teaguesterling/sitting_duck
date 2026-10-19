@@ -535,6 +535,31 @@ Unified scope information for each node. Replaces the pre-v1.7.4 `scope_id` and 
 | `scope.class` | BIGINT | Nearest enclosing class/struct/trait ancestor's node_id. NULL if not inside a class. |
 | `scope.module` | BIGINT | Nearest enclosing module/namespace ancestor's node_id. NULL if not inside a named module. |
 
+**What counts as a scope boundary.** A node is a scope boundary when its flags
+carry `IS_SCOPE`, which `is_scope(flags)` reports. Functions, classes and
+modules are the obvious ones. Two cases are worth knowing:
+
+- **Python comprehensions are scopes** (`list_comprehension`,
+  `set_comprehension`, `dictionary_comprehension`, `generator_expression`).
+  Python 3 evaluates a comprehension in its own scope, so `n` in
+  `[n for n in xs]` does not leak into the enclosing function. `scope.current`
+  for that `n` is the comprehension, not the function.
+- **Python `with` statements are not scopes.** The `with ... as h` alias
+  outlives the block, so `with_statement` deliberately carries no `IS_SCOPE`.
+
+`scope.current` can therefore be a node that is not a function, a class or a
+module. `scope.function`, `scope.class` and `scope.module` are narrower: each
+selects the nearest ancestor of **that semantic kind**, so a comprehension never
+appears in `scope.function` (a comprehension is `TRANSFORM_QUERY`). This is why
+the callgraph macros, which key on `scope.function`, attribute a call inside a
+comprehension to the enclosing function:
+
+```sql
+-- def f(xs): return [g(n) for n in xs]
+-- scope.current of the `n` binding  -> the list_comprehension node
+-- scope.function of the g(...) call -> f
+```
+
 **Scope stack** (populated on scope-boundary nodes only):
 
 | Field | Type | Description |
