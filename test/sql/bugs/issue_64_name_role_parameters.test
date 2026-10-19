@@ -1,0 +1,83 @@
+# name: test/sql/bugs/issue_64_name_role_parameters.test
+# description: #64 — function parameters are NAME_DEFINITION; references are not
+# group: [bugs]
+
+# #64 asks for a NAME_ROLE audit across the .def files, and names the symptom:
+# "parameters like `self`, `user_id` ... don't resolve because their defining
+# nodes aren't consistently marked with NAME_DEFINITION".
+#
+# The PARAMETER half of that is fixed. This file pins it so it stays fixed,
+# across three grammars with different parameter-list node types rather than
+# one, because the issue is about consistency ACROSS languages — a python-only
+# assertion would not notice a regression in rust.
+#
+# The ATTRIBUTE half of #64 is still open and is NOT asserted here; see the
+# issue for the measurement.
+
+require sitting_duck
+
+# =============================================================================
+# Every identifier directly under a parameter list binds a name.
+# =============================================================================
+#
+# Stated as "unmarked = 0" rather than "marked = N" so that adding a parameter
+# to a fixture cannot silently weaken it. The non-vacuity bound below is what
+# stops that zero from passing for the wrong reason (#202's shape).
+
+query I
+WITH t AS (
+    SELECT * FROM read_ast([
+        'test/data/python/simple.py',
+        'test/data/javascript/simple.js',
+        'test/data/rust/simple.rs'
+    ])
+),
+p AS (
+    SELECT c.flags
+    FROM t c JOIN t par ON c.parent_id = par.node_id AND c.file_path = par.file_path
+    WHERE par.type IN ('parameters', 'formal_parameters', 'parameter_list')
+      AND c.type IN ('identifier', 'simple_identifier', 'parameter', 'required_parameter')
+)
+SELECT COUNT(*) FILTER (WHERE NOT is_name_definition(flags)) FROM p;
+----
+0
+
+# NON-VACUITY: the query above must actually be looking at parameters. Without
+# this, a typo in the node-type lists makes the zero meaningless — which is the
+# failure mode #202 exists to catch.
+query III
+WITH t AS (
+    SELECT * FROM read_ast([
+        'test/data/python/simple.py',
+        'test/data/javascript/simple.js',
+        'test/data/rust/simple.rs'
+    ])
+),
+p AS (
+    SELECT c.language, c.flags
+    FROM t c JOIN t par ON c.parent_id = par.node_id AND c.file_path = par.file_path
+    WHERE par.type IN ('parameters', 'formal_parameters', 'parameter_list')
+      AND c.type IN ('identifier', 'simple_identifier', 'parameter', 'required_parameter')
+)
+SELECT language, COUNT(*), COUNT(*) FILTER (WHERE is_name_definition(flags))
+FROM p GROUP BY language ORDER BY language;
+----
+javascript	8	8
+python	4	4
+rust	6	6
+
+# =============================================================================
+# The complement: a NAME_DEFINITION flag that marked everything would satisfy
+# the assertions above. It must NOT mark plain references.
+# =============================================================================
+
+# `self` as a parameter is a definition; `self` inside `self.db` is not.
+# Both spellings exist in this fixture, so the flag has to discriminate.
+query II
+SELECT
+    COUNT(*) FILTER (WHERE is_name_definition(flags)),
+    COUNT(*) FILTER (WHERE is_name_reference(flags))
+FROM read_ast('test/data/python/sample_app.py')
+WHERE type = 'identifier' AND name = 'self';
+----
+15	28
