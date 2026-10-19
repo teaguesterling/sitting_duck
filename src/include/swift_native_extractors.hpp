@@ -87,19 +87,32 @@ public:
 				if (!param.name.empty()) {
 					params.push_back(param);
 				}
-			} else if (strcmp(child_type, "variadic_parameter") == 0) {
-				ParameterInfo param = ExtractSwiftVariadicParameter(child, content);
-				if (!param.name.empty()) {
-					params.push_back(param);
-				}
 			}
 		}
 
 		return params;
 	}
 
+	// Swift has NO variadic parameter node type. `func f(_ xs: Int...)` parses as
+	// an ordinary `parameter` whose children are
+	//   simple_identifier(_) simple_identifier(xs) ":" user_type(Int) "..."
+	// so the ellipsis is a plain child token. An earlier revision dispatched on a
+	// "variadic_parameter" node that is not in the tree-sitter-swift symbol table
+	// at all, so that branch -- and the extractor it called -- could never run.
+	// Detecting the token is the only correct way to spell this for swift.
+	static bool SwiftParameterIsVariadic(TSNode node) {
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			if (strcmp(ts_node_type(ts_node_child(node, i)), "...") == 0) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	static ParameterInfo ExtractSwiftParameter(TSNode node, const string &content) {
 		ParameterInfo param;
+		param.is_variadic = SwiftParameterIsVariadic(node);
 		uint32_t child_count = ts_node_child_count(node);
 
 		string external_name = "";
@@ -158,34 +171,6 @@ public:
 		return param;
 	}
 
-	static ParameterInfo ExtractSwiftVariadicParameter(TSNode node, const string &content) {
-		ParameterInfo param;
-		param.is_variadic = true;
-		uint32_t child_count = ts_node_child_count(node);
-
-		for (uint32_t i = 0; i < child_count; i++) {
-			TSNode child = ts_node_child(node, i);
-			const char *child_type = ts_node_type(child);
-
-			if (strcmp(child_type, "simple_identifier") == 0) {
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				if (start < content.length() && end <= content.length()) {
-					param.name = content.substr(start, end - start);
-				}
-			} else if (IsSwiftTypeNode(child_type)) {
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				if (start < content.length() && end <= content.length()) {
-					param.type = content.substr(start, end - start) + "...";
-				}
-			} else if (strcmp(child_type, "type_annotation") == 0) {
-				param.type = ExtractSwiftTypeAnnotation(child, content) + "...";
-			}
-		}
-
-		return param;
-	}
 
 	static string ExtractSwiftTypeAnnotation(TSNode node, const string &content) {
 		uint32_t child_count = ts_node_child_count(node);

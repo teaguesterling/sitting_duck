@@ -158,7 +158,7 @@ private:
 						parameters.push_back(param);
 					}
 				}
-			} else if (strcmp(child_type, "variadic_parameter") == 0) {
+			} else if (strcmp(child_type, "variadic_parameter_declaration") == 0) {
 				// Variadic parameter: ...Type
 				ParameterInfo param = ExtractGoVariadicParameter(child, content);
 				if (!param.type.empty()) {
@@ -229,6 +229,7 @@ private:
 	static ParameterInfo ExtractGoVariadicParameter(TSNode node, const string &content) {
 		ParameterInfo param;
 		param.is_variadic = true;
+		bool seen_ellipsis = false;
 		uint32_t child_count = ts_node_child_count(node);
 
 		for (uint32_t i = 0; i < child_count; i++) {
@@ -242,13 +243,22 @@ private:
 				if (start < content.length() && end <= content.length()) {
 					param.name = content.substr(start, end - start);
 				}
-			} else if (strcmp(child_type, "type_identifier") == 0 || strcmp(child_type, "primitive_type") == 0) {
-				// Variadic type (the ...Type becomes []Type)
+			} else if (seen_ellipsis) {
+				// STRUCTURAL, not a list of type node names. The grammar shape is
+				// `identifier? "..." type`, so whatever follows the ellipsis IS the
+				// type -- type_identifier, interface_type, qualified_type,
+				// pointer_type, slice_type and anything a future grammar adds.
+				// The previous revision matched only type_identifier and
+				// primitive_type, and primitive_type is not even in the go grammar,
+				// so `args ...interface{}` lost its type and was then dropped
+				// entirely by the `!param.type.empty()` guard at the call site.
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
 				if (start < content.length() && end <= content.length()) {
 					param.type = "..." + content.substr(start, end - start);
 				}
+			} else if (strcmp(child_type, "...") == 0) {
+				seen_ellipsis = true;
 			}
 		}
 
