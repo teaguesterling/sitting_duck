@@ -1,0 +1,111 @@
+# name: test/sql/bugs/issue_278_comprehension_scope.test
+# description: #278 — python comprehensions are scope boundaries; the loop variable must not leak
+# group: [bugs]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# ---------------------------------------------------------------------------
+# The flag itself, on all four comprehension forms.
+#
+# All four are asserted together on purpose. The issue was first measured on
+# list and dictionary comprehensions only; set comprehensions and generator
+# expressions share the defect and would have been left behind by a fix that
+# named just the two.
+# ---------------------------------------------------------------------------
+query TT
+SELECT type, is_scope(flags)
+FROM parse_ast('a = [n for n in xs]
+b = {n for n in xs}
+c = {k: v for k, v in xs}
+d = (n for n in xs)', 'python')
+WHERE type LIKE '%comprehension%' OR type = 'generator_expression'
+ORDER BY type;
+----
+dictionary_comprehension	1
+generator_expression	1
+list_comprehension	1
+set_comprehension	1
+
+# Non-vacuity: the query above must match exactly four nodes. Without this a
+# grammar rename would make the assertion pass on an empty result.
+query I
+SELECT COUNT(*)
+FROM parse_ast('a = [n for n in xs]
+b = {n for n in xs}
+c = {k: v for k, v in xs}
+d = (n for n in xs)', 'python')
+WHERE type LIKE '%comprehension%' OR type = 'generator_expression';
+----
+4
+
+# ---------------------------------------------------------------------------
+# Controls: is_scope() must still discriminate.
+#
+# `with_statement` is the deliberate counter-case. Python's `with` alias
+# outlives the block, so `with` is NOT a scope and must stay unmarked. If a
+# later change makes everything a scope, this row fails before anything else.
+# ---------------------------------------------------------------------------
+query TT
+SELECT type, is_scope(flags)
+FROM parse_ast('def f():
+    with open("p") as h:
+        pass', 'python')
+WHERE type IN ('function_definition', 'with_statement')
+ORDER BY type;
+----
+function_definition	1
+with_statement	0
+
+# ---------------------------------------------------------------------------
+# Behaviour: the loop variable binds INSIDE the comprehension.
+#
+# This is the point of the issue. `n` is a definition (that already worked);
+# what changes is that its nearest enclosing scope is the comprehension and
+# not the enclosing function, so it cannot resolve as a function-level name.
+# ---------------------------------------------------------------------------
+query T
+WITH a AS (SELECT * FROM parse_ast('def f(xs): return [g(n) for n in xs]', 'python'))
+SELECT s.type
+FROM a JOIN a AS s ON s.node_id = a.scope.current
+WHERE a.type = 'identifier' AND a.name = 'n' AND is_name_definition(a.flags);
+----
+list_comprehension
+
+# The binding itself is unchanged by this fix — exactly one `n` is a definition.
+# Pinned so that a regression in the scope change cannot silently unbind it.
+query I
+SELECT COUNT(*) FILTER (WHERE is_name_definition(flags))
+FROM parse_ast('def f(xs): return [g(n) for n in xs]', 'python')
+WHERE type = 'identifier' AND name = 'n';
+----
+1
+
+# ---------------------------------------------------------------------------
+# Regression guard: call attribution must NOT move.
+#
+# scope.function selects the nearest enclosing scope whose semantic type is
+# DEFINITION_FUNCTION. A comprehension is TRANSFORM_QUERY, so pushing it onto
+# the scope stack must leave scope.function pointing at `f`. ast_callers and
+# ast_callees key on scope.function, so if this row moves, the callgraph
+# macros have changed meaning.
+# ---------------------------------------------------------------------------
+query TT
+WITH a AS (SELECT * FROM parse_ast('def f(xs): return [g(n) for n in xs]', 'python'))
+SELECT fn.type, fn.name
+FROM a JOIN a AS fn ON fn.node_id = a.scope.function
+WHERE a.type = 'call';
+----
+function_definition	f
+
+# A comprehension nested in another comprehension stacks, rather than
+# collapsing to a single scope. Both inner names resolve to their own level.
+query I
+WITH a AS (SELECT * FROM parse_ast('r = [[y for y in row] for row in rows]', 'python'))
+SELECT COUNT(DISTINCT a.scope.current)
+FROM a
+WHERE a.type = 'identifier' AND a.name IN ('y', 'row') AND is_name_definition(a.flags);
+----
+2

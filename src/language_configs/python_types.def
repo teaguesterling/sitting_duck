@@ -298,12 +298,17 @@ DEF_TYPE("type_conversion", TYPE_REFERENCE, NODE_TEXT, NONE, 0)
  * iteration. They map to TRANSFORM_QUERY with refinements:
  * - SIMPLE: List/dict/set comprehensions `[x for x in items]`
  * - NESTED: Generator expressions `(x for x in items)`
+ *
+ * All four carry IS_SCOPE (#278): python 3 evaluates a comprehension in its own
+ * scope, so `n` in `[n for n in xs]` does not leak to the enclosing function.
+ * This moves scope.current and scope.stack, and deliberately not scope.function
+ * (a comprehension is TRANSFORM_QUERY, so the callgraph macros are unaffected).
  * @{
  */
-DEF_TYPE("list_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, 0)
-DEF_TYPE("dictionary_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, 0)
-DEF_TYPE("set_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, 0)
-DEF_TYPE("generator_expression", TRANSFORM_QUERY | SemanticRefinements::Query::NESTED, NONE, NONE, 0)
+DEF_TYPE("list_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
+DEF_TYPE("dictionary_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
+DEF_TYPE("set_comprehension", TRANSFORM_QUERY | SemanticRefinements::Query::SIMPLE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
+DEF_TYPE("generator_expression", TRANSFORM_QUERY | SemanticRefinements::Query::NESTED, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 /** @} */
 
 // =============================================================================
