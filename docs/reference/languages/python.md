@@ -212,7 +212,7 @@ Python's optional type system uses annotations that don't affect runtime behavio
 
 List/dict/set comprehensions and generator expressions
 
-Python comprehensions are a distinct syntax for creating collections via iteration. They map to TRANSFORM_QUERY with refinements: - SIMPLE: List/dict/set comprehensions `[x for x in items]` - NESTED: Generator expressions `(x for x in items)`
+Python comprehensions are a distinct syntax for creating collections via iteration. They map to TRANSFORM_QUERY with refinements: - SIMPLE: List/dict/set comprehensions `[x for x in items]` - NESTED: Generator expressions `(x for x in items)` All four carry IS_SCOPE (#278): python 3 evaluates a comprehension in its own scope, so `n` in `[n for n in xs]` does not leak to the enclosing function. This moves scope.current and scope.stack, and deliberately not scope.function (a comprehension is TRANSFORM_QUERY, so the callgraph macros are unaffected).
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
