@@ -222,6 +222,32 @@ WHERE is_function_definition(semantic_type)
 - Empty array `[]` for functions with no parameters
 - Parameter types may be NULL for dynamically-typed languages
 
+**Variadic parameters.** A variadic parameter appears in the array like any
+other, with the ellipsis carried in its `type`:
+
+```sql
+-- func mapped(args ...map[string]int) {}
+SELECT name, parameters
+FROM read_ast('main.go', context := 'native')
+WHERE is_function_definition(semantic_type) AND name = 'mapped';
+-- mapped  [{'name': args, 'type': '...map[string]int'}]
+```
+
+Before #220 was fixed, go, C++ and swift dropped variadic parameters entirely —
+the extractor dispatched on a node type none of those grammars emit, so a
+variadic parameter produced no entry at all. Current state per language:
+
+| language | state |
+|---|---|
+| go | complete — `...int`, `...interface{}`, `...*int`, `...[]byte`, `...map[string]int` all carry name and type |
+| C++ | the unqualified form `Args... args` only. `const Args&...`, `Args&&...` and `Args*...` are still wrong — see #283 |
+| swift | name and type are correct. Swift has no variadic node type, so the trailing `...` is detected as a token |
+
+There is no `is_variadic` field in this struct. `ParameterInfo` carries one
+internally, but the exposed struct is `name` and `type` only — see #255, which
+tracks widening it. So a query cannot currently distinguish `args ...int` from a
+parameter literally typed `...int`, other than by reading the `type` text.
+
 ---
 
 ### `modifiers`
