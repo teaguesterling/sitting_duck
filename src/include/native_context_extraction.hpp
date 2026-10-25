@@ -297,9 +297,63 @@ inline bool PythonIsMatchCaptureName(TSNode self, TSNode parent, const char *par
 	return std::strcmp(pattern_parent_type, "case_pattern") == 0 ||
 	       std::strcmp(pattern_parent_type, "keyword_pattern") == 0;
 }
+// #274 the containers a destructuring target nests in. list_splat_pattern and
+// dictionary_splat_pattern are deliberately absent: they already carry
+// NAME_DEFINITION themselves (python_types.def:357-358), so walking through one
+// would report its binding a second time.
+inline bool PythonIsPatternContainer(const char *node_type) {
+	return std::strcmp(node_type, "pattern_list") == 0 || std::strcmp(node_type, "tuple_pattern") == 0 ||
+	       std::strcmp(node_type, "list_pattern") == 0;
+}
+// #274 destructuring targets. `a, b = 1, 2` binds two names, and one node holds one
+// name, so the definition cannot live on the container -- it has to land on each leaf.
+// The leaves nest freely, `(c, d), e = (1, 2), 3`, and the whole stack must sit in the
+// `left` field: the grammar admits these same container types in `right`, where the
+// names are reads rather than bindings.
+//
+// At least ONE container is required between the name and the assignment. A bare
+// `x = 1` puts the identifier directly in `left`, and the `assignment` node already
+// carries NAME_DEFINITION under the name `x` (python_types.def:89) -- so a plain
+// "is this the left field" test would bind `x` twice.
+//
+// DELIBERATELY assignment only. for_statement and for_in_clause take the same three
+// containers in the same `left` field, so `for i, j in xs` is two strings away -- but
+// it is a different behaviour change from this issue's, on a fixture 14 test files
+// read, and it belongs in its own commit where a reviewer expects it. Their direct
+// single-identifier rule below is untouched.
+//
+// A subscript target, `arr[0], h = 1, 2`, needs no rule: `subscript` is declared with
+// flags 0, so the walker never offers it to this hook. Mutating an element binds no
+// name, which is the same judgement #273 makes for `arr[0] = 6`.
+inline bool PythonIsDestructuringTarget(TSNode self, TSNode parent, const char *parent_type) {
+	if (!PythonIsPatternContainer(parent_type)) {
+		return false;
+	}
+	TSNode node = parent;
+	// Bounded rather than open: this runs for every NAME_REFERENCE node in the file,
+	// and nesting past a handful of levels is not a destructuring target in practice.
+	for (int depth = 0; depth < 8; depth++) {
+		TSNode up = ts_node_parent(node);
+		if (ts_node_is_null(up)) {
+			return false;
+		}
+		const char *up_type = ts_node_type(up);
+		if (std::strcmp(up_type, "assignment") == 0) {
+			return ts_node_eq(node, ts_node_child_by_field_name(up, "left", 4));
+		}
+		if (!PythonIsPatternContainer(up_type)) {
+			return false;
+		}
+		node = up;
+	}
+	return false;
+}
 template <>
 inline bool IsBareNameDefinitionField<PythonAdapter>(TSNode self, TSNode parent, const char *parent_type) {
 	if (PythonIsMatchCaptureName(self, parent, parent_type)) {
+		return true;
+	}
+	if (PythonIsDestructuringTarget(self, parent, parent_type)) {
 		return true;
 	}
 	if (std::strcmp(parent_type, "for_statement") != 0 && std::strcmp(parent_type, "for_in_clause") != 0) {

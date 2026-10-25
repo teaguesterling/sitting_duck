@@ -1,0 +1,133 @@
+# name: test/sql/bugs/issue_274_destructuring_targets.test
+# description: #274 — destructuring assignment targets bind their names; non-targets do not
+# group: [bugs]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# ---------------------------------------------------------------------------
+# The canonical case, with the container row left visible.
+#
+# `a, b = 1, 2` binds two names. One node holds one name, so the definition
+# cannot live on `pattern_list`; it has to land on each leaf target.
+#
+# The `assignment` row below is the #276 duplicate: the container still claims
+# NAME_DEFINITION with no name, and ast_definitions() drops it through its
+# `name != ''` filter -- the name is an EMPTY STRING, not NULL, which is what
+# that filter keys on. It is pinned here deliberately rather than hidden, so
+# that the count changes visibly when #276 is fixed.
+# ---------------------------------------------------------------------------
+query TTI
+SELECT type, CASE WHEN name IS NULL THEN '<null>' WHEN name = '' THEN '<empty>' ELSE name END, COUNT(*)
+FROM parse_ast('a, b = 1, 2', 'python')
+WHERE is_name_definition(flags)
+GROUP BY 1, 2
+ORDER BY 1, 2;
+----
+assignment	<empty>	1
+identifier	a	1
+identifier	b	1
+
+# ---------------------------------------------------------------------------
+# Every target shape, in one snippet. The shapes differ in the container the
+# grammar puts around the targets, so a rule naming one still misses the rest:
+#
+#   a1, b1 = 1, 2          pattern_list
+#   (c1, d1), e1 = ..      tuple_pattern nested in pattern_list
+#   [f1, g1] = [1, 2]      list_pattern
+#   *h1, i1 = [1, 2, 3]    list_splat_pattern beside a bare target
+#
+# `h1` is the one that must NOT appear: `list_splat_pattern` already carries
+# NAME_DEFINITION from python_types.def:357, under the name `*h1`. Marking the
+# identifier inside it as well would report that binding twice.
+# ---------------------------------------------------------------------------
+query TI
+SELECT name, COUNT(*)
+FROM parse_ast('a1, b1 = 1, 2
+(c1, d1), e1 = (1, 2), 3
+[f1, g1] = [1, 2]
+*h1, i1 = [1, 2, 3]', 'python')
+WHERE type = 'identifier' AND is_name_definition(flags)
+GROUP BY name
+ORDER BY name;
+----
+a1	1
+b1	1
+c1	1
+d1	1
+e1	1
+f1	1
+g1	1
+i1	1
+
+# ---------------------------------------------------------------------------
+# What must stay a reference. These are the over-match cases, and each one is a
+# different reason:
+#
+#   y1 = p1, q1    p1/q1 are on the RIGHT — reads, not bindings. The grammar
+#                  admits pattern_list in `right`, so a parent-type rule
+#                  without field precision would bind them.
+#   arr[0], r1 =   `arr` is subscripted, not bound. Mutating an element binds
+#                  no name (#273 argues the same for `arr[0] = 6`).
+#   h2 in *h2      already bound by its list_splat_pattern parent, see above.
+# ---------------------------------------------------------------------------
+query TT
+SELECT name, is_name_definition(flags)
+FROM parse_ast('arr = [0]
+y1 = p1, q1
+arr[0], r1 = 1, 2
+*h2, s1 = [1, 2]', 'python')
+WHERE type = 'identifier' AND name IN ('p1', 'q1', 'h2')
+ORDER BY name;
+----
+h2	0
+p1	0
+q1	0
+
+# A bare target is unchanged, and this is the sharp edge of the fix. In
+# `x = 1` the identifier sits DIRECTLY in the assignment's `left` field, and
+# the `assignment` node already carries the definition under the name `x`. A
+# rule that only checked "is this the left field" would bind `x` twice. The
+# walk therefore requires at least one pattern container between the name and
+# the assignment.
+query TTI
+SELECT type, CASE WHEN name IS NULL THEN '<null>' WHEN name = '' THEN '<empty>' ELSE name END, COUNT(*)
+FROM parse_ast('x = 1', 'python')
+WHERE is_name_definition(flags)
+GROUP BY 1, 2
+ORDER BY 1, 2;
+----
+assignment	x	1
+
+# An attribute target binds under its full dotted text, which is what the
+# `attribute` node's NODE_TEXT strategy already produces. #273 proposes the
+# same spelling for the single-target form `self.db = conn`, so the two must
+# agree or one surface would report `self.db` and the other `db`.
+query TI
+SELECT name, COUNT(*)
+FROM parse_ast('class K:
+    def m(self, conn):
+        self.db, self.size = conn, 0', 'python')
+WHERE type = 'attribute' AND is_name_definition(flags)
+GROUP BY name
+ORDER BY name;
+----
+self.db	1
+self.size	1
+
+# The simple for target is UNCHANGED by this fix, and the iterable stays a
+# reference. `for i, j in xs` (a tuple target) still binds nothing: the walk is
+# deliberately limited to `assignment`, so the for-loop form is a separate
+# change. This row is the guard that narrowing the walk did not disturb the
+# single-identifier for-target rule that already existed.
+query TT
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF'
+                  WHEN is_name_reference(flags) THEN 'REF' ELSE '-' END
+FROM parse_ast('for xx in items: pass', 'python')
+WHERE type = 'identifier' AND name IN ('xx', 'items')
+ORDER BY name;
+----
+items	REF
+xx	DEF
