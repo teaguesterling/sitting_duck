@@ -2,8 +2,37 @@
 
 **Status:** PLAN ONLY — nothing in here has been executed
 **Created:** 2026-10-15
+**Updated:** 2026-10-25 — **DuckDB 2.0.0 shipped.** See §0.
 **Trigger:** the community registry moved to the 2.0 line today, not on the 21st
 **Blocks on:** a decision about `tracker/bugs/040`, and a fleet-wide ABI decision
+
+## 0. Update, 2026-10-25: the release landed and option C is now open
+
+Measured on 2026-10-25, from the GitHub API and the registry's own files at
+`community-extensions` commit `f13027e5`:
+
+- **`v2.0.0` IS tagged** in duckdb/duckdb, on 2026-10-20, at
+  `d54cbbe3df17e8e5ce68312f483b4155836112aa`. §1 below says it is not; that was
+  true when written and is now wrong. Corrected in place.
+- **The registry's default is the version STRING `v2.0.0` again**, not a bare
+  SHA. `DUCKDB_LATEST_STABLE: 'v2.0.0'`, and the commit moved to a separate
+  `duckdb_commit` input, which carries `d54cbbe3` — the release commit itself.
+- **No job asks for a v1.5.6 build any more.** `build_all.yml` has no
+  variegata leg, and `build_andium` (v1.4.5) is `if: false`. `build.py:47`
+  still routes `v1.5.6` to `variegata`, so the route exists with no caller.
+- Our descriptor is unaffected for availability: `ref` and `variegata` are the
+  same commit, `b49238e6`, and `ref` is what the default build reads. v1.16.0
+  is still built, now against v2.0.0.
+
+**What this does to the options in §5.** Option C's precondition is met, and the
+risk it carried ("the registry may keep a SHA default indefinitely") did not
+happen. C is now the least-work path rather than a wait. The submodule repoint
+it needs is still Teague's call and still contradicts a standing instruction, so
+nothing here is executed.
+
+The `duckdb-pin` CI job was repaired separately on 2026-10-25 for the shape
+change, not the migration: it had been parsing a commented-out `duckdb_tag`
+line and reporting it as a live registry value.
 
 > Teague asked for a plan including the submodule repoint. **The repoint
 > contradicts a standing instruction** ("never repoint the shared duckdb
@@ -22,8 +51,10 @@ local fork:
   (#26783)". Same literal at lines 78, 81, 111, 135, 159.
 - **`build_next.yml`'s `test_against_latest` job is now `if: false`.** The
   `ref_next` path is dead for the moment.
-- `v2.0.0` is **not tagged** in duckdb/duckdb yet (a compare against it 404s).
-  Branch `v2.0-cyanoptera` currently heads at `b9bfa2934e72`.
+- ~~`v2.0.0` is **not tagged** in duckdb/duckdb yet (a compare against it
+  404s). Branch `v2.0-cyanoptera` currently heads at `b9bfa2934e72`.~~
+  **Superseded 2026-10-25:** v2.0.0 was tagged on 2026-10-20 at `d54cbbe3`.
+  True as written on 2026-10-15; see §0.
 
 The registry's default build target therefore moved from a v1.5.6 tag to a
 2.0-line commit **six days before the announced date**.
@@ -338,16 +369,25 @@ Consequences, in order of how much they hurt:
    semantics need revisiting too.
 5. Every local build directory and every cached artifact becomes ABI-stale.
 
-### C. Wait for v2.0.0 to be tagged, then migrate to the tag
+### C. Migrate to the v2.0.0 tag — PRECONDITION NOW MET (2026-10-25)
 
-`v2.0.0` is not tagged yet. Migrating to a *tag* avoids §5-B-3 and §5-B-4
-entirely, because `duckdb-pin`'s existing tag-resolution assertion keeps
-working. If the registry switches its default from the current SHA to the
-`v2.0.0` tag once it exists, this is strictly less work than B.
+Migrating to a *tag* avoids §5-B-3 and §5-B-4 entirely, because `duckdb-pin`'s
+tag-resolution assertion keeps working. This was written as a wait. It is no
+longer a wait:
 
-- **Risk:** the registry may keep a SHA default indefinitely, in which case this
-  is waiting for something that never comes. Worth asking the registry
-  maintainers directly rather than inferring.
+- `v2.0.0` was tagged on 2026-10-20 at `d54cbbe3`.
+- The registry switched its default back to the version string `v2.0.0`, with
+  `duckdb_commit` carrying that same release commit.
+
+So this is now strictly less work than B, and the risk recorded below did not
+materialise.
+
+- **Risk, as recorded on 2026-10-15 and now closed:** ~~the registry may keep a
+  SHA default indefinitely, in which case this is waiting for something that
+  never comes.~~ It kept the SHA default for five days.
+- **Remaining cost:** the repoint itself, which contradicts the standing
+  instruction never to repoint the shared `duckdb` submodule pin, plus the
+  fleet-wide ABI question in §4. Both are decisions, not work.
 
 ## 6. Sequenced plan
 
