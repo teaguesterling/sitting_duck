@@ -6,6 +6,120 @@
 **Trigger:** the community registry moved to the 2.0 line today, not on the 21st
 **Blocks on:** a decision about `tracker/bugs/040`, and a fleet-wide ABI decision
 
+## 0-bis. Update, 2026-10-25 (later): the red v2.0 leg does NOT indict the tag
+
+**The `v2.0 test coverage` leg is red on every PR, and that red is upstream
+branch drift, not the release.** This is the measurement §3 said was missing.
+
+Three commits on one linear history, all compared through
+`gh api repos/duckdb/duckdb/compare/<base>...<head>` (no clone, no fetch, and
+no submodule change):
+
+| commit | what it is | our leg's result |
+|---|---|---|
+| `b6013f7aa2` | cyanoptera on 2026-10-19 | **158 passed, 5 skipped in 4161s** |
+| `d54cbbe3df` | **the `v2.0.0` TAG**, 19 commits later | not measured |
+| `bb5bdadda4` | cyanoptera on 2026-10-25 | **0 passed, 163 failed, 0 skipped in 3s** |
+
+`compare d54cbbe3df...bb5bdadda4` → `ahead_by=466, behind_by=0`.
+`compare b6013f7aa2...d54cbbe3df` → `ahead_by=19, behind_by=0`.
+
+**So the v2.0.0 tag sits 466 commits BEHIND the breakage, and only 19 commits
+ahead of a commit where the extension demonstrably worked.** The leg tracks a
+moving post-release development branch. Its red is evidence about cyanoptera's
+tip, and carries no verdict on the release.
+
+### Why "0 passed, 163 failed, 0 skipped" means "could not load"
+
+Not an inference. This leg was built to produce exactly that signature, and the
+A/B was verified before it was added — see the comment at
+`.github/workflows/MainDistributionPipeline.yml:511-519`: `--require
+sitting_duck` turns a silent skip into a failure; extension present gave
+`16 passed, 2 skipped`, hidden gave `0 passed, 18 failed`. The 2026-10-19 green
+is the positive control: 158 passed + 5 skipped = 163, and those 5 are the same
+`require-env SITTING_DUCK_TEST_GRAMMAR_DIR` tests that skip locally.
+
+I retracted this reading once as unmeasured, having forgotten the leg's own
+design. The retraction was wrong; the oracle above settles it.
+
+### The §3 mechanism does NOT explain this one
+
+§3's cause is the 32-byte version truncation versus an uncapped compare.
+`v2.0-cyanoptera` is 15 characters, fits, and loaded fine at `b6013f7aa2`. So
+this is a NEW failure in the 466 post-release commits, cause unknown. The log
+cannot say more: `duckdb/scripts/ci/run_tests.py` prints only each test's
+summary, with no per-test stderr.
+
+### Two consequences for this plan
+
+1. **The leg should pin `v2.0.0` now that the tag exists.** Tracking a branch
+   made it a drift detector for someone else's development tip, which is not
+   what §3 wanted it for. Changing it is a workflow edit plus a push, so it is
+   queued under the CI restriction.
+2. **Option C's risk is lower than the red suggested, but the 19-commit gap
+   between the last known-good commit and the tag is NOT measured.** Closing it
+   needs a local build against `d54cbbe3df`, which also yields the per-test
+   stderr CI withholds. That needs no CI and no repoint: build in a scratch
+   checkout, never the shared submodule, which stays at `069cc9f9` (v1.5.6).
+
+### RUNG 1 MEASURED, 2026-10-25: our source compiles clean against the v2.0.0 tag
+
+**106 of 106 translation units compile against `d54cbbe3df` with no errors.**
+This closes the compile half of the 19-commit gap above. It says nothing about
+loading or behaviour — those are rungs 2 to 4.
+
+Method, and why the result is trustworthy rather than vacuous:
+
+- Took the REAL compile commands from `build/release/compile_commands.json`
+  (the clean build of merged main `86e6f27`), repointed only the 21 duckdb
+  include paths, switched `-std=c++11` to `-std=c++17`, added `-fsyntax-only`.
+  Script: session scratchpad, `syntax_sweep.py`.
+- **The submodule was never touched.** DuckDB v2.0.0 was shallow-cloned to the
+  scratchpad; `git submodule status duckdb` stays `069cc9f9` (v1.5.6).
+  Verified after the sweep.
+- **Positive control:** the same sweep against the v1.5.6 submodule at
+  `-std=c++11` gives 106/106. The harness runs.
+- **Rewrite verified, not assumed:** all 21 rewritten `-I` paths resolve under
+  the scratch tree, and zero tokens still contain
+  `Projects/sitting_duck/duckdb/`. This was the measuring-one-tree-twice trap
+  and it was checked explicitly.
+- **Negative control, the one that matters:** a probe TU calling the removed
+  `UnaryExecutor::ExecuteWithNulls` directly, bypassing the shim, COMPILES
+  against v1.5.6 and FAILS against v2.0.0:
+
+      neg_control.cpp:8:24: error: 'ExecuteWithNulls' is not a member of
+      'duckdb::UnaryExecutor'
+
+  So the harness distinguishes the two trees and does detect a removed API. A
+  green sweep is therefore evidence, not an empty pass.
+
+Supporting measurement: `ExecuteWithNulls` appears in 3 header files under
+v1.5.6's `src/include/` and 0 under v2.0.0's. The probe headers the compat layer
+keys on (`common/vector/list_vector.hpp`, `common/vector/struct_vector.hpp`,
+`common/identifier.hpp`) are all PRESENT in v2.0.0, so the sweep exercised the
+new-API branches rather than the v1.5.x ones. The compat layer dispatches on
+`__has_include`, not on version macros, which is why pointing the include path
+at a different tree is a valid test at all.
+
+**What is still unmeasured for option C:** rungs 2 to 4 — whether the extension
+LOADS against v2.0.0, binds, and returns right answers. Rung 1 passing removes
+API drift as a blocker and leaves ABI and runtime as the open questions.
+
+### Already-mitigated break, recorded so it is not re-litigated
+
+A fleet notice flagged that v2.0.0 removed `UnaryExecutor::ExecuteWithNulls`.
+Our tree already shims it. `src/include/duckdb_compat.hpp:476-543` defines
+`CompatUnaryExecuteWithNulls` / `CompatBinaryExecuteWithNulls`, switching on
+`DUCKDB_HAS_NEW_VECTOR_HEADERS`, and names the removal commit `987ea2c409`. All
+four call sites go through the shim (`semantic_type_functions.cpp` ×3,
+`ast_source_bytes_function.cpp`, `semantic_type_logical_type.cpp`). Measured
+2026-10-25 by grep over `src/`.
+
+Also measured: `v2.0.0` is a LIGHTWEIGHT tag — `git ls-remote --tags` returns
+`refs/tags/v2.0.0` with no peeled `^{}` entry, exactly like `v1.5.6`. Any pin
+check that reads only the peeled form will read empty and must keep its
+fallback.
+
 ## 0. Update, 2026-10-25: the release landed and option C is now open
 
 Measured on 2026-10-25, from the GitHub API and the registry's own files at
