@@ -240,8 +240,68 @@ inline bool IsBareNameDefinitionField<RAdapter>(TSNode self, TSNode parent, cons
 // reassignment with `=`, and the field doesn't distinguish them (would risk a false DEF).
 // (These languages also specialize IsBareNameDefinitionParent for parameters; the walker
 // consults both, so a language can define parameter and for-target rules independently.)
+// #279 python match/case capture patterns. A `case` clause binds the bare names in
+// its pattern, and each pattern form wraps the bound name in a different node, so a
+// rule naming one form still misses the rest:
+//
+//   case [first, *rest]      case_pattern > dotted_name > identifier; splat_pattern > identifier
+//   case {"a": x, **extra}   the same two, under dict_pattern
+//   case Point(kw=0, y=y2)   keyword_pattern > dotted_name > identifier -- the VALUE binds
+//   case Point(px, py)       class_pattern > case_pattern > dotted_name > identifier
+//   case 1 | 2 as n2         as_pattern > identifier -- the alias
+//
+// A value pattern READS a name and binds nothing, so it must stay a reference:
+// `case Color.RED` is a dotted_name with two segments, and the class name in
+// `case Point(...)` is a dotted_name directly under class_pattern. `case _` has no
+// identifier child at all, so the wildcard needs no rule of its own.
+//
+// The mark lands on the identifier, not on the dotted_name that tree-sitter wraps a
+// bare capture in. Both carry the same text, so marking both would report one binding
+// twice, and every other name binding in this extension is an identifier.
+inline bool PythonIsMatchCaptureName(TSNode self, TSNode parent, const char *parent_type) {
+	// `*rest` / `**extra`: splat_pattern wraps the identifier directly, and admits
+	// nothing else (the attribute/subscript splat targets are list_splat_pattern and
+	// dictionary_splat_pattern, which already carry NAME_DEFINITION from the .def).
+	if (std::strcmp(parent_type, "splat_pattern") == 0) {
+		return true;
+	}
+	// `case 1 | 2 as n2`: the alias is a bare identifier child of as_pattern, and the
+	// matched value beside it is always wrapped in a case_pattern. OUTSIDE a match the
+	// same as_pattern node holds `except ValueError as e` and `with open(p) as h`,
+	// where the bare identifier is the exception type or the context expression -- a
+	// read -- and the bound target is its own as_pattern_target node, already a
+	// NAME_DEFINITION. Keying on the grandparent keeps this to match statements.
+	// (The grammar's `alias` field admits only as_pattern_target, so it does not
+	// select the match form's identifier and cannot be used here.)
+	if (std::strcmp(parent_type, "as_pattern") == 0) {
+		TSNode as_parent = ts_node_parent(parent);
+		return !ts_node_is_null(as_parent) && std::strcmp(ts_node_type(as_parent), "case_pattern") == 0;
+	}
+	if (std::strcmp(parent_type, "dotted_name") != 0) {
+		return false;
+	}
+	// A bare capture parses as a ONE-segment dotted_name: in pattern position `case NAME`
+	// is ambiguous with the value pattern `case Mod.NAME`, and tree-sitter resolves it
+	// toward the dotted form. More than one segment is that value pattern.
+	if (ts_node_named_child_count(parent) != 1) {
+		return false;
+	}
+	TSNode pattern_parent = ts_node_parent(parent);
+	if (ts_node_is_null(pattern_parent)) {
+		return false;
+	}
+	const char *pattern_parent_type = ts_node_type(pattern_parent);
+	// case_pattern covers list/tuple/mapping/class-positional capture position.
+	// keyword_pattern covers the VALUE of `y=y2`; the keyword NAME is a bare identifier
+	// child of keyword_pattern and never a dotted_name, so it is not reached here.
+	return std::strcmp(pattern_parent_type, "case_pattern") == 0 ||
+	       std::strcmp(pattern_parent_type, "keyword_pattern") == 0;
+}
 template <>
 inline bool IsBareNameDefinitionField<PythonAdapter>(TSNode self, TSNode parent, const char *parent_type) {
+	if (PythonIsMatchCaptureName(self, parent, parent_type)) {
+		return true;
+	}
 	if (std::strcmp(parent_type, "for_statement") != 0 && std::strcmp(parent_type, "for_in_clause") != 0) {
 		return false;
 	}

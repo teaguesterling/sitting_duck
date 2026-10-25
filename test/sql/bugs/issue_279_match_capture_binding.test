@@ -1,0 +1,137 @@
+# name: test/sql/bugs/issue_279_match_capture_binding.test
+# description: #279 — python match/case capture patterns bind names; value patterns do not
+# group: [bugs]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# ---------------------------------------------------------------------------
+# Every capture form in one snippet. The forms differ in the node that wraps
+# the bound name, so a fix that handles one can still miss the others:
+#
+#   [first, *rest]     case_pattern > dotted_name    and  splat_pattern
+#   {"a": x, **extra}  dict_pattern value            and  splat_pattern
+#   Point(kw=0, y=y2)  keyword_pattern VALUE         (kw and y are NOT bound)
+#   Point(px, py)      class_pattern > case_pattern
+#   Color.RED          a value pattern — binds nothing
+#   1 | 2 as n2        as_pattern alias
+#   _                  wildcard — binds nothing
+#
+# `x` appears twice in the snippet on purpose: once as a capture in the
+# mapping pattern, once as the keyword NAME `kw=` is NOT — see the second
+# query, which pins that a keyword name stays a reference.
+# ---------------------------------------------------------------------------
+
+# Each bound name appears exactly ONCE as a definition.
+#
+# The count matters as much as the names. A bare capture parses as
+# `dotted_name > identifier`, two nodes carrying the same text, and marking
+# both would give two definition rows for one binding. `items` and `point` are
+# the function's parameters, already bound before this issue; they are listed
+# here as a control that the rule did not disturb them.
+query TI
+SELECT name, COUNT(*)
+FROM parse_ast('def classify(items, point):
+    match items:
+        case [first, *rest]:
+            pass
+        case {"a": x, **extra}:
+            pass
+        case Point(kw=0, y=y2):
+            pass
+        case Point(px, py):
+            pass
+        case Color.RED:
+            pass
+        case 1 | 2 as n2:
+            pass
+        case _:
+            pass', 'python')
+WHERE type = 'identifier' AND is_name_definition(flags)
+GROUP BY name
+ORDER BY name;
+----
+extra	1
+first	1
+items	1
+n2	1
+point	1
+px	1
+py	1
+rest	1
+x	1
+y2	1
+
+# A value pattern reads a name; it binds nothing. `Point` and `Color.RED` name
+# things defined elsewhere, and `kw=` / `y=` are keyword NAMES in a class
+# pattern, not captures. If any of these flips to a definition, the rule has
+# stopped discriminating and every `case` would look like a binder.
+query TT
+SELECT name, is_name_definition(flags)
+FROM parse_ast('def classify(items, point):
+    match items:
+        case [first, *rest]:
+            pass
+        case {"a": x, **extra}:
+            pass
+        case Point(kw=0, y=y2):
+            pass
+        case Point(px, py):
+            pass
+        case Color.RED:
+            pass
+        case 1 | 2 as n2:
+            pass
+        case _:
+            pass', 'python')
+WHERE type = 'identifier' AND name IN ('Color', 'RED', 'Point', 'kw', 'y')
+ORDER BY name, start_line;
+----
+Color	0
+Point	0
+Point	0
+RED	0
+kw	0
+y	0
+
+# The definition lands on the `identifier`, not on the `dotted_name` wrapper
+# that tree-sitter puts around a bare capture name. Both carry the same text,
+# so this pins WHICH of the two is the binding site: every other name binding
+# in this extension is an identifier, and ast_definitions() rows stay one kind
+# of node. A non-zero count here means both were marked.
+query I
+SELECT COUNT(*)
+FROM parse_ast('def classify(items):
+    match items:
+        case [first, *rest]:
+            pass', 'python')
+WHERE type = 'dotted_name' AND is_name_definition(flags);
+----
+0
+
+# `case _:` binds nothing. The wildcard is the one case clause that must stay
+# empty, and it is the cheapest way for an over-broad rule to show itself.
+query I
+SELECT COUNT(*)
+FROM parse_ast('def classify(items):
+    match items:
+        case _:
+            pass', 'python')
+WHERE is_name_definition(flags) AND name NOT IN ('classify', 'items');
+----
+0
+
+# Non-vacuity for the wildcard query above: the snippet does parse to a match
+# statement with one case clause. Without this, a grammar rename would make the
+# zero above pass on an empty tree.
+query I
+SELECT COUNT(*)
+FROM parse_ast('def classify(items):
+    match items:
+        case _:
+            pass', 'python')
+WHERE type IN ('match_statement', 'case_clause');
+----
+2
