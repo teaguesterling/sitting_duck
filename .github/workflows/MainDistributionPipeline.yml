@@ -198,7 +198,7 @@ jobs:
             # grepped one of those comments and reported a live tag -- the check was
             # measuring what the registry had STOPPED doing. Full-line comments only;
             # no value read here carries a trailing comment, and stripping those
-            # would have to parse `${{ }}` to be safe.
+            # would have to parse an Actions expression to be safe.
             live1=$(mktemp); live2=$(mktemp)
             grep -vE '^[[:space:]]*#' "$f1" > "$live1" || true
             grep -vE '^[[:space:]]*#' "$f2" > "$live2" || true
@@ -206,7 +206,13 @@ jobs:
             # stable and default are parsed separately although both are v2.0.0:
             # they are different settings, and the registry has split them before.
             reg_stable=$(grep -m1 -o "DUCKDB_LATEST_STABLE: *'v[^']*'" "$live1" | grep -o "'v[^']*'" | tr -d "'" || true)
-            reg_default=$(grep -m1 -o "DUCKDB_VERSION: \${{ inputs.duckdb_version || 'v[^']*'" "$live1" | grep -o "'v[^']*'$" | tr -d "'" || true)
+            # NB: no pattern here may contain the sequence dollar-brace-brace.
+            # Actions expands its own expressions inside `run:` TEXTUALLY, before any
+            # shell sees the script, so such a pattern is evaluated as an expression
+            # and the workflow fails to load (measured: run 40229231724, "this run
+            # likely failed because of a workflow file issue"). Match the setting name
+            # and take the quoted version from the same line instead.
+            reg_default=$(grep -m1 "DUCKDB_VERSION:" "$live1" | grep -m1 -o "'v[^']*'" | tr -d "'" || true)
             reg_commit=$(grep -m1 -oE "duckdb_commit:.*'[0-9a-f]{40}'" "$live1" | grep -oE '[0-9a-f]{40}' || true)
             reg_tools=$(grep -m1 -o "inputs.ci_tools_version || '[^']*'" "$live1" | grep -o "'[^']*'$" | tr -d "'" || true)
             # build.py routes one DUCKDB_VERSION to each descriptor's `variegata`
