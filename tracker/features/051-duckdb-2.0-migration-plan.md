@@ -120,6 +120,99 @@ Also measured: `v2.0.0` is a LIGHTWEIGHT tag — `git ls-remote --tags` returns
 check that reads only the peeled form will read empty and must keep its
 fallback.
 
+
+### RUNGS 2-4 MEASURED, 2026-10-26: the extension loads AND passes at the tag
+
+**`ran tests: 160 passed, 5 skipped in 1347s` against `d54cbbe3df`.**
+
+This closes the ladder. The premise of §0-bis — that the v2.0 red was branch
+drift and not the release — is now confirmed by a full suite run at the tag,
+not by a compile sweep and an argument.
+
+Where it ran: PR #291 (`cb64b99b`), which pins the `duckdb-v2-test-coverage`
+leg to the literal `v2.0.0` instead of the drifting `v2.0-cyanoptera`. Run
+40249132196 attempt 2, job 121668718210, conclusion `success`.
+
+Verbatim, and the echo first, because a pin that silently resolves to a branch
+tip would invalidate everything below:
+
+    + git -C duckdb checkout v2.0.0
+    HEAD is now at d54cbbe3df1 Update MySQL to include rebind workaround (#27537)
+    Using prebuilt DuckDB archive: https://duckdb-staging.duckdb.org/d54cbbe3df/v2.0.0/.../duckdb-static-libs-linux-amd64.tar.gz
+    DUCKDB_PREBUILT_LIBRARY: .../extracted/libduckdb_static.a
+    [289/289] Linking CXX executable test/unittest
+    python3 ./duckdb/scripts/ci/run_tests.py ... --test-flags --require sitting_duck test/*
+    .................................................. [100%]
+    all tests passed in 1347s (5 skipped tests)
+    Skipped tests (5):
+    require-env SITTING_DUCK_TEST_GRAMMAR_DIR: 5
+    ran tests: 160 passed, 5 skipped in 1347s
+
+`d54cbbe3df` is the same commit rung 1 compiled 106/106 against. So rungs 1
+through 4 are measured at one commit, not at three different ones.
+
+Why this is positive evidence and not a green hole. §3b of this document is
+about a leg that reported green while running zero tests, so the standard here
+has to be higher than a checkmark:
+
+- 160 + 5 = 165 = EVERY `.test` file at `cb64b99b` (counted with
+  `git ls-tree -r --name-only | grep -c '\.test$'`). Nothing was left out.
+- `--require sitting_duck` is in the test flags. A could-not-load therefore
+  prints 165 FAILURES, not silence — that is the whole point of the guard, and
+  it is the exact signature the branch produced (§0-bis). It did not fire.
+- The 5 skips are named and env-gated: `require-env
+  SITTING_DUCK_TEST_GRAMMAR_DIR`. They are not unexplained.
+- A real build preceded the run (`[289/289] Linking`), against the extracted
+  v2.0.0 static library, and 1347s of real test execution followed.
+- Zero occurrences of `failed`, `FAIL` or `error:` in the whole 823KB log.
+- The log ALSO contains `Tests are skipped in this run...` further down. That
+  is a second, deliberate no-op `make test_release` before the upload phase.
+  The real result precedes it. Checked deliberately, because that line alone is
+  indistinguishable from the §3b failure mode.
+
+Unexplained, and flagged rather than averaged away: the positive control at
+`b6013f7aa2` measured 4161s for 158 passed / 5 skipped, while this run took
+1347s for 160 / 5 — a 3x difference in reported TEST time, not job time.
+Plausibly prebuilt-versus-source DuckDB, or runner variance. Not chased,
+because the conclusion does not rest on it.
+
+#### One detour worth recording: the first attempt's red was not v2.0.0 either
+
+Attempt 1 of the same job failed, and it would have been easy to read as "the
+tag is broken too". It died BEFORE compiling anything:
+
+    File ".../extension-ci-tools/scripts/ci_phase.py", line 700, in prepare_prebuilt_duckdb
+        for member in bundle.getmembers():
+    EOFError: Compressed file ended before the end-of-stream marker was reached
+
+The artifact on the server was intact, measured the same day: `content-length:
+33584665`, `etag: "853f9653b8aa460e28b106078f5205f1"`, local `md5sum` equal to
+that etag, `gzip -t` clean, 19 members, `last-modified` six days before the run
+and unchanged since. So the runner's copy was short.
+
+The mechanism is upstream and is worth knowing, because it will recur.
+`extension-ci-tools@main` downloads with no length comparison
+(`ci_phase.py:432-436`): a plain `urlopen`, then `shutil.copyfileobj`, then
+`temporary.replace(destination)`. The stdlib declines to raise on a short body
+— `/usr/lib/python3.12/http/client.py:531`:
+
+    n = self.fp.readinto(b)
+    if not n and b:
+        # Ideally, we would raise IncompleteRead if the content-length
+        # wasn't satisfied, but it might break compatibility.
+        self._close_conn()
+
+So a truncated download returns 0, reads as EOF, is promoted to the final
+filename as if complete, and surfaces 250 lines later as an EOFError naming
+neither the URL nor the size. Worse: the designed recovery — fall back to
+building DuckDB from source, with a clear message — sits six lines below, in an
+`except (OSError, urllib.error.URLError)` that nothing ever raises into.
+
+Consequence for this document: a red on the v2.0 leg must be read down to the
+step before it is attributed. Three different causes have now worn the same red
+checkmark on that one leg — branch drift (§0-bis), a truncated download, and
+`skip_tests` on an adjacent leg with a colliding job name.
+
 ## 0. Update, 2026-10-25: the release landed and option C is now open
 
 Measured on 2026-10-25, from the GitHub API and the registry's own files at
