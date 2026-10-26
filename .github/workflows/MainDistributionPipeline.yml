@@ -499,7 +499,34 @@ jobs:
     # Same gate as duckdb-next-build: once per PR, on push to main, and on dispatch.
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     with:
-      duckdb_version: v2.0-cyanoptera
+      # PINNED TO THE RELEASE, 2026-10-25. This leg tracked the cyanoptera
+      # BRANCH, which made it a drift detector for somebody else's development
+      # tip rather than a check on what we would ship. Measured that day:
+      #
+      #   b6013f7aa2  cyanoptera 2026-10-19  -> 158 passed, 5 skipped in 4161s
+      #        | 19 commits
+      #   d54cbbe3df  the v2.0.0 TAG
+      #        | 466 commits
+      #   bb5bdadda4  cyanoptera 2026-10-25  -> 0 passed, 163 failed, 0 skipped in 3s
+      #
+      # `gh api repos/duckdb/duckdb/compare/d54cbbe3df...bb5bdadda4` is
+      # ahead_by=466. So the breakage that reddened every PR is entirely AFTER
+      # the release, and this leg's red carried no verdict on v2.0.0. Pinning
+      # the tag is what makes a red here mean something again.
+      #
+      # Compile-drift coverage against the moving branch is NOT lost: it stays
+      # on duckdb-next-build, which keeps `duckdb_version: v2.0-cyanoptera`
+      # with skip_tests. The split is now: test the release, compile-check the
+      # branch, and ship v1.5.6.
+      #
+      # ci_tools_version stays `main` deliberately. The `--require` guard below
+      # is verified on main (see the test_config comment); v2.0-cyanoptera also
+      # has it, and matches DUCKDB_REGISTRY_TOOLS, but moving both values at
+      # once would leave a failure unattributable. Align it separately.
+      #
+      # The pin job permits this literal because it equals
+      # DUCKDB_REGISTRY_STABLE, and still finds DUCKDB_NEXT on duckdb-next-build.
+      duckdb_version: v2.0.0
       ci_tools_version: main
       extension_name: sitting_duck
       # Deliberately NO skip_tests: running the tests is the entire point.
