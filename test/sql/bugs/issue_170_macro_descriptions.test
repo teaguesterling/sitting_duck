@@ -29,6 +29,24 @@ require sitting_duck
 # EVERY table macro is documented; the shortfall is entirely scalar macros,
 # which are the `is_*` semantic predicates and a handful of internal helpers.
 
+# DIAGNOSTIC, and REMOVE IT once the Windows cause is known. Both Windows legs
+# fail the floor below and the whole rest of the suite passes -- 8826 of 8827
+# assertions -- so exactly one thing is wrong and this is it. What the boolean
+# cannot tell us is HOW short: sqllogictest prints `0` for the false, not the
+# count, so "fewer than 58" is all that leg has ever said. 57 and 0 are very
+# different bugs, and the fix depends on which.
+#
+# The clamp is what keeps this from adding brittleness. It returns 58 for ANY
+# count at or above the floor, so it is exactly as strict as the assertion that
+# follows and cannot fail when a new banner is written. On a short count it
+# fails and prints the real number.
+query I
+SELECT CASE WHEN COUNT(*) >= 58 THEN 58 ELSE COUNT(*) END FROM duckdb_functions()
+WHERE function_type IN ('macro', 'table_macro')
+  AND description IS NOT NULL AND description <> '';
+----
+58
+
 query I
 SELECT COUNT(*) >= 58 FROM duckdb_functions()
 WHERE function_type IN ('macro', 'table_macro')
