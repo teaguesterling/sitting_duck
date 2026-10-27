@@ -316,11 +316,14 @@ inline bool PythonIsPatternContainer(const char *node_type) {
 // carries NAME_DEFINITION under the name `x` (python_types.def:89) -- so a plain
 // "is this the left field" test would bind `x` twice.
 //
-// DELIBERATELY assignment only. for_statement and for_in_clause take the same three
-// containers in the same `left` field, so `for i, j in xs` is two strings away -- but
-// it is a different behaviour change from this issue's, on a fixture 14 test files
-// read, and it belongs in its own commit where a reviewer expects it. Their direct
-// single-identifier rule below is untouched.
+// #289 extends this to for_statement and for_in_clause. They take the same three
+// containers in the same `left` field, so `for i, j in xs` and `[u + w for u, w in xs]`
+// bind through the identical walk. The direct single-identifier rule below is still
+// what handles `for xx in items`, where no container sits between name and loop.
+//
+// Go's range_clause is deliberately NOT here, for a different reason: `:=` binds and
+// `=` reassigns, so the left leaves of a range clause are not unconditionally
+// definitions. That needs its own decision (#277), not this walk.
 //
 // A subscript target, `arr[0], h = 1, 2`, needs no rule: `subscript` is declared with
 // flags 0, so the walker never offers it to this hook. Mutating an element binds no
@@ -338,7 +341,8 @@ inline bool PythonIsDestructuringTarget(TSNode self, TSNode parent, const char *
 			return false;
 		}
 		const char *up_type = ts_node_type(up);
-		if (std::strcmp(up_type, "assignment") == 0) {
+		if (std::strcmp(up_type, "assignment") == 0 || std::strcmp(up_type, "for_statement") == 0 ||
+		    std::strcmp(up_type, "for_in_clause") == 0) {
 			return ts_node_eq(node, ts_node_child_by_field_name(up, "left", 4));
 		}
 		if (!PythonIsPatternContainer(up_type)) {

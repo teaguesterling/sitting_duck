@@ -1,0 +1,164 @@
+# name: test/sql/bugs/issue_289_for_tuple_targets.test
+# description: #289 — for-loop and comprehension tuple targets bind their names; the iterable does not
+# group: [bugs]
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# ---------------------------------------------------------------------------
+# The canonical case. `for i, j in pairs:` binds two names, and before #289
+# both leaves were NAME_REFERENCE: the rule tested `self == parent.left`, and
+# with a tuple target that field holds a `pattern_list`, which is declared with
+# flags 0 -- so the walker never offered it to the hook and the leaves inside
+# were never reached.
+#
+# Note what is ABSENT: there is no `for_statement` row. Unlike `assignment`
+# (python_types.def:89), `for_statement` does not carry NAME_DEFINITION itself,
+# so this shape has no #276 container duplicate to pin. The contrast is the
+# point -- issue_274's equivalent query has an `assignment <empty>` row here.
+#
+# `pairs` is the iterable. It is READ, not bound, and must stay absent.
+# ---------------------------------------------------------------------------
+query TTI
+SELECT type, CASE WHEN name IS NULL THEN '<null>' WHEN name = '' THEN '<empty>' ELSE name END, COUNT(*)
+FROM parse_ast('for i, j in pairs:
+    pass', 'python')
+WHERE is_name_definition(flags)
+GROUP BY 1, 2
+ORDER BY 1, 2;
+----
+identifier	i	1
+identifier	j	1
+
+# ---------------------------------------------------------------------------
+# The single-identifier form, unchanged by #289 and pinned so it stays that
+# way. `for xx in items` puts the identifier DIRECTLY in `left` with no
+# container between, which is the pre-existing direct rule in
+# IsBareNameDefinitionField<PythonAdapter>, not the destructuring walk.
+#
+# If a future change folds the two rules together, this is the assertion that
+# catches a double-bind: `xx` must appear ONCE.
+# ---------------------------------------------------------------------------
+query TTI
+SELECT type, CASE WHEN name IS NULL THEN '<null>' WHEN name = '' THEN '<empty>' ELSE name END, COUNT(*)
+FROM parse_ast('for xx in items:
+    pass', 'python')
+WHERE is_name_definition(flags)
+GROUP BY 1, 2
+ORDER BY 1, 2;
+----
+identifier	xx	1
+
+# ---------------------------------------------------------------------------
+# The comprehension form, via `for_in_clause`. This is the sharpest assertion
+# in the file, because the same two NAMES appear twice each in the source:
+#
+#   r = [u + w for u, w in pairs]
+#        ^^^^^         ^^^^        body reads, then loop target
+#
+# A rule that bound every `u` would report four definitions. The target binds
+# and the body does not, so each name appears EXACTLY ONCE below. The count is
+# what carries the intent -- an assertion on presence alone would pass while
+# over-binding.
+#
+# `assignment r` is the outer `r = [...]`, which is correct and unrelated.
+# ---------------------------------------------------------------------------
+query TTI
+SELECT type, CASE WHEN name IS NULL THEN '<null>' WHEN name = '' THEN '<empty>' ELSE name END, COUNT(*)
+FROM parse_ast('r = [u + w for u, w in pairs]', 'python')
+WHERE is_name_definition(flags)
+GROUP BY 1, 2
+ORDER BY 1, 2;
+----
+assignment	r	1
+identifier	u	1
+identifier	w	1
+
+# ---------------------------------------------------------------------------
+# Nested containers. `for (m, n), o in nested:` puts a `tuple_pattern` inside
+# the `pattern_list`, so the walk has to climb more than one level to reach the
+# `for_statement` and still land on its `left` field. All three leaves bind.
+# ---------------------------------------------------------------------------
+query TTI
+SELECT type, CASE WHEN name IS NULL THEN '<null>' WHEN name = '' THEN '<empty>' ELSE name END, COUNT(*)
+FROM parse_ast('for (m, n), o in nested:
+    pass', 'python')
+WHERE is_name_definition(flags)
+GROUP BY 1, 2
+ORDER BY 1, 2;
+----
+identifier	m	1
+identifier	n	1
+identifier	o	1
+
+# ---------------------------------------------------------------------------
+# The real-world shape, and the reason #289 was split out of #274: this is
+# `test/data/python/sample_app.py:112`, a fixture 14 test files read. The
+# method call on the iterable must not contribute a binding -- `data` and
+# `items` are both reads.
+# ---------------------------------------------------------------------------
+query TTI
+SELECT type, CASE WHEN name IS NULL THEN '<null>' WHEN name = '' THEN '<empty>' ELSE name END, COUNT(*)
+FROM parse_ast('for key, value in data.items():
+    pass', 'python')
+WHERE is_name_definition(flags)
+GROUP BY 1, 2
+ORDER BY 1, 2;
+----
+identifier	key	1
+identifier	value	1
+
+# ---------------------------------------------------------------------------
+# Go is DELIBERATELY unaffected, and this pins it.
+#
+# `for k, v := range xs` has the same tuple-target shape, but Go's
+# range_clause is excluded on purpose: `:=` binds while `=` reassigns, so the
+# left leaves are not unconditionally definitions. That needs its own decision
+# (#277), and #289 must not pre-empt it by making the walk language-blind.
+#
+# So `k` and `v` are absent below. When #277 is decided this expectation
+# CHANGES -- which is the intent: the test should fail at that moment and be
+# updated deliberately, rather than silently already agreeing.
+# ---------------------------------------------------------------------------
+query TTI
+SELECT type, CASE WHEN name IS NULL THEN '<null>' WHEN name = '' THEN '<empty>' ELSE name END, COUNT(*)
+FROM parse_ast('package m
+func f() { for k, v := range xs { _ = k; _ = v } }', 'go')
+WHERE is_name_definition(flags)
+GROUP BY 1, 2
+ORDER BY 1, 2;
+----
+function_declaration	f	1
+package_clause	m	1
+
+# ---------------------------------------------------------------------------
+# What #289 does NOT fix, pinned so the gap is visible rather than assumed.
+#
+# #288: the bare-name hook sets the NAME_ROLE FLAG, while ast_definitions()
+# filters on the definition-kind SEMANTIC TYPE. So a name the hook binds is
+# flagged as a definition and is still absent from the public macro.
+#
+# Measured on the committed fixture, for `key` and `value`:
+#
+#   line  21  key          #64's parameter hook   flag only   INVISIBLE
+#   line 112  key, value   #289's walk, above     flag only   INVISIBLE
+#   line 118  value        a real `assignment`    semantic    visible
+#
+# So three flag-definitions and one semantic-type definition. The assertion is
+# the GAP between the two columns, not either number on its own -- a count of
+# flagged names alone would pass while the macro returned nothing.
+#
+# When #288 is fixed, `visible` rises to 4 and this expectation changes
+# deliberately. The fixture is sample_app.py, which 14 test files read, so a
+# change to it will also surface here.
+# ---------------------------------------------------------------------------
+query II
+SELECT
+  (SELECT COUNT(*) FROM read_ast('test/data/python/sample_app.py', 'python')
+     WHERE type = 'identifier' AND name IN ('key', 'value') AND is_name_definition(flags)) AS flagged,
+  (SELECT COUNT(*) FROM ast_definitions('test/data/python/sample_app.py')
+     WHERE name IN ('key', 'value')) AS visible;
+----
+3	1
