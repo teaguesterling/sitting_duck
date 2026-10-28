@@ -29,63 +29,24 @@ require sitting_duck
 # EVERY table macro is documented; the shortfall is entirely scalar macros,
 # which are the `is_*` semantic predicates and a handful of internal helpers.
 
-# DIAGNOSTIC, and REMOVE IT once the Windows cause is known.
+# WHICH macros, by name, and not only how many. The floor below catches a
+# shortfall; this names the macro that caused it, and that difference is what
+# ended #170's Windows round. windows_amd64 described 57 of these 58, and this
+# query named the one it lost: ast_unparse_exact_splice.
 #
-# The clamp this replaces has answered its question. windows_amd64 reports 57,
-# not 0: run 40531642466, job 122331694305, `57 <> 58`. So the decoration loop
-# DOES run there, and 57 of the 58 documented macros carry a description.
-# Exactly one is lost. The same commit clears the floor of >= 58 on linux_amd64
-# and on osx_arm64; the clamp cannot report a number above 58, so ">= 58" is all
-# those legs say. windows_amd64_mingw was CANCELLED by fail-fast, and the two
-# cross-compiled legs (linux_arm64, osx_amd64) run no suite at all, so this
-# round measured two platforms and not five.
+# The cause was three layers upstream of the catalog. scripts/embed_sql_macros.py
+# read the .sql files with the locale's encoding, and cp1252 broke the em-dash
+# banner that a description is lifted from, so the macro never reached the
+# documentation table at all (fixed in 11bc83c; src/sql_macros/ast_unparse.sql:525).
 #
-# MEASURED locally against build/release on 2026-10-27: all 58 documented names
-# resolve to exactly ONE duckdb_functions() row each. So this is a count of
-# documented macros, not of overloads, and 57 means one macro and not one row.
+# The list is a floor on COVERAGE, not a census. Documenting a 59th macro does
+# not fail this file; add its name here when you do.
 #
-# These two queries name the macro. They also separate the two OBSERVABLE
-# states that can produce 57:
-#   1. the macro is absent from the catalog. src/ast_sql_macros.cpp:160 should
-#      make that impossible -- it throws InternalException on a miss, which
-#      would fail `require sitting_duck` and so fail all 166 files, not one
-#      assertion. The first query tests that reasoning instead of trusting it.
-#   2. the macro is present and its description came back NULL. More than one
-#      cause can do that, so naming the macro is what narrows it:
-#        - the entry carries MORE than one description, and
-#          duckdb/src/function/table/system/duckdb_functions.cpp:616
-#          GetFunctionDescriptionIndex then falls to its specificity search,
-#          which needs parameter_types to match the overload. Ours are empty,
-#          so it matches only a zero-argument macro.
-#        - the entry is REPLACED after the decoration loop, which drops the
-#          descriptions with it. src/ast_sql_macros.cpp:181 does exactly that
-#          to ast_dispatch_predicate, and duckdb_ast_register_short_names()
-#          re-registers the chain methods on demand.
+# A sibling query asserting these same names are REGISTERED came out with the
+# diagnostics. A described macro is necessarily present, so it tested nothing
+# this does not; the distinction it drew was a debugging one.
 #
-# Both queries pass by naming nothing, so neither can pass on silence.
-query I
-SELECT coalesce(string_agg(n, ' ' ORDER BY n), 'ALL 58 REGISTERED') FROM (VALUES
-  ('ast_ancestors'), ('ast_call_arguments'), ('ast_call_graph'), ('ast_callees'),
-  ('ast_callers'), ('ast_capture'), ('ast_children'), ('ast_class_members'),
-  ('ast_containing_line'), ('ast_dead_code'), ('ast_definition_parent'), ('ast_definitions'),
-  ('ast_descendants'), ('ast_exports'), ('ast_find_references'), ('ast_follows'),
-  ('ast_function_metrics'), ('ast_function_scope'), ('ast_functions_containing'), ('ast_get_calls'),
-  ('ast_get_source'), ('ast_get_source_line'), ('ast_get_source_numbered'), ('ast_has'),
-  ('ast_imports'), ('ast_in_range'), ('ast_inside'), ('ast_match'),
-  ('ast_nesting_analysis'), ('ast_node_edit'), ('ast_not_has'), ('ast_patch'),
-  ('ast_pattern'), ('ast_pattern_list'), ('ast_precedes'), ('ast_replace'),
-  ('ast_resolve'), ('ast_resolve_entity'), ('ast_security_audit'), ('ast_select'),
-  ('ast_select_from'), ('ast_select_list'), ('ast_select_rules'), ('ast_selector_for'),
-  ('ast_siblings'), ('ast_source_of'), ('ast_to_blocks'), ('ast_to_blocks_from'),
-  ('ast_to_blocks_list'), ('ast_unparse'), ('ast_unparse_code'), ('ast_unparse_custom'),
-  ('ast_unparse_exact'), ('ast_unparse_exact_code'), ('ast_unparse_exact_from'), ('ast_unparse_exact_splice'),
-  ('ast_unparse_from'), ('parse_ast_list_table')
-) t(n)
-WHERE n NOT IN (SELECT function_name FROM duckdb_functions()
-                WHERE function_type IN ('macro', 'table_macro'));
-----
-ALL 58 REGISTERED
-
+# It passes by naming nothing, so it cannot pass on silence.
 query I
 SELECT coalesce(string_agg(n, ' ' ORDER BY n), 'ALL 58 DESCRIBED') FROM (VALUES
   ('ast_ancestors'), ('ast_call_arguments'), ('ast_call_graph'), ('ast_callees'),
