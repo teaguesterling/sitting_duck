@@ -89,7 +89,17 @@ def extract_macro_docs(sql_dir, sql_files):
         path = os.path.join(sql_dir, sql_file)
         if not os.path.exists(path):
             continue
-        lines = open(path, 'r', errors='replace').read().splitlines()
+        # encoding='utf-8' is not optional. CMake runs this script at configure
+        # time on every platform, and open() without it uses the locale default:
+        # cp1252 on a Windows runner. The banner below separates the macro name
+        # from its summary with an em dash, and cp1252 turns that one character
+        # into three. The banner regex then fails, the macro silently loses its
+        # description, and only Windows is affected. MEASURED: #170, Windows job
+        # 122541581963 printed `described=57/57`, so the TABLE held 57 entries,
+        # and ast_unparse_exact_splice was not among them
+        # (src/sql_macros/ast_unparse.sql:525). Reproduced on Linux by forcing
+        # the cp1252 decode: 57 entries, same macro missing.
+        lines = open(path, 'r', encoding='utf-8', errors='replace').read().splitlines()
         for idx, line in enumerate(lines):
             m = MACRO_DEF_RE.search(line)
             if not m:
@@ -199,7 +209,7 @@ static const std::vector<std::pair<std::string, std::string>> EMBEDDED_SQL_MACRO
     for sql_file in sql_files:
         filepath = os.path.join(sql_dir, sql_file)
         if os.path.exists(filepath):
-            with open(filepath, 'r') as f:
+            with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
 
             # Verify content doesn't break our delimiter
@@ -251,7 +261,7 @@ static const std::vector<EmbeddedMacroDoc> EMBEDDED_MACRO_DOCS = {
 """
     print(f"  macro docs extracted: {len(docs)}")
 
-    with open(output_file, 'w') as f:
+    with open(output_file, 'w', encoding='utf-8') as f:
         f.write(header_content)
 
     print(f"Generated {output_file}")
@@ -260,7 +270,7 @@ static const std::vector<EmbeddedMacroDoc> EMBEDDED_MACRO_DOCS = {
     for sql_file in sql_files:
         filepath = os.path.join(sql_dir, sql_file)
         if os.path.exists(filepath):
-            with open(filepath, 'r') as f:
+            with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
             chunks = split_content(content)
             if len(chunks) > 1:
