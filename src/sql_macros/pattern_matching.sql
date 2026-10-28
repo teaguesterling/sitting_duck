@@ -189,6 +189,9 @@ CREATE OR REPLACE MACRO pattern_has_recursive(pattern_str) AS
 
 -- Note: ast_pattern parses a CLEANED pattern (no %__X<rules>__% syntax)
 -- Use clean_pattern() before calling ast_pattern if you have extended wildcards
+-- ----------------------------------------------------------------------------
+-- ast_pattern: Parse a pattern string into its node sequence
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_pattern(pattern_str, language) AS TABLE
     WITH
         pattern_raw AS (
@@ -244,6 +247,9 @@ CREATE OR REPLACE MACRO ast_pattern(pattern_str, language) AS TABLE
 -- =============================================================================
 
 -- Note: Takes a CLEANED pattern string. Use clean_pattern() first for extended wildcards.
+-- ----------------------------------------------------------------------------
+-- ast_pattern_list: Parse a pattern string into a list of pattern tokens
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
     SELECT list({
         rel_depth: rel_depth,
@@ -279,6 +285,9 @@ CREATE OR REPLACE MACRO ast_pattern_list(pattern_str, language) AS (
 --   match_syntax - If true, punctuation must match exactly (default: false)
 --   match_by     - 'type' for tree-sitter types, 'semantic_type' for cross-language (default: 'type')
 --
+-- ----------------------------------------------------------------------------
+-- ast_match: Find nodes matching a structural pattern, with wildcard captures
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_match(
     source,
     pattern_str,
@@ -980,5 +989,8 @@ CREATE OR REPLACE MACRO ast_match(
 -- Since captures are now LIST-valued, use this to get the first (usually only)
 -- element for single wildcard captures.
 -- Usage: ast_capture(captures, 'X').name instead of captures['X'][1].name
+-- ----------------------------------------------------------------------------
+-- ast_capture: Pull one named capture out of a match captures map
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_capture(captures_map, capture_name) AS
     captures_map[capture_name][1];

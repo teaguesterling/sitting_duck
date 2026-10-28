@@ -3,6 +3,10 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/main/connection.hpp"
 #include "duckdb/main/extension_helper.hpp"
+#include "duckdb/catalog/catalog.hpp"
+#include "duckdb/catalog/catalog_entry/function_entry.hpp"
+#include "duckdb/main/database_manager.hpp"
+#include "duckdb/main/client_context.hpp"
 #include "embedded_sql_macros.hpp"
 #include <sstream>
 #include <vector>
@@ -106,6 +110,70 @@ void RegisterASTSQLMacros(ExtensionLoader &loader) {
 			}
 			successful_statements++;
 		}
+	}
+
+	// #170: give the SQL macros a description and examples in duckdb_functions().
+	//
+	// The C++-registered functions have carried both since #170; the 96 SQL
+	// macros carried neither, which is the half that was never done. It matters
+	// because duckdb_functions() is the only surface an agent connected to a
+	// database can read -- the README and the registry's extended_description
+	// are not reachable from SQL.
+	//
+	// Macros created through a Connection land in the ATTACHED database
+	// (memory.main), not the system catalog, so the lookup uses the default
+	// catalog. Looking in Catalog::GetSystemCatalog finds nothing, and with
+	// OnEntryNotFound::RETURN_NULL that miss is silent.
+	//
+	// MacroCatalogEntry derives from FunctionEntry, whose `descriptions` vector
+	// is what duckdb_functions() reads (ExtractFunctionData), so decorating the
+	// entry after creation is enough -- the macros keep their SQL definitions.
+	{
+		auto &context = *conn->context;
+		context.RunFunctionInTransaction([&]() {
+			// Macros created through a Connection live in the ATTACHED database,
+			// not the system catalog.
+			auto &catalog = Catalog::GetCatalog(context, DatabaseManager::GetDefaultDatabase(context));
+			for (const auto &doc : EMBEDDED_MACRO_DOCS) {
+				// A macro is registered as exactly one of these two. The
+				// templated overload is the one that can return null -- the
+				// CatalogType overload throws, which would make "look for a
+				// scalar macro first" impossible.
+				// Use the CatalogType overload, not the templated GetEntry<T>: the
+				// template ODR-uses T::Name, which is not exported to extensions
+				// and fails at LINK time with an undefined reference to
+				// ScalarMacroCatalogEntry::Name.
+				optional_ptr<CatalogEntry> found =
+				    catalog.GetEntry(context, CatalogType::MACRO_ENTRY, DEFAULT_SCHEMA, doc.name,
+				                     OnEntryNotFound::RETURN_NULL);
+				if (!found) {
+					found = catalog.GetEntry(context, CatalogType::TABLE_MACRO_ENTRY, DEFAULT_SCHEMA, doc.name,
+					                         OnEntryNotFound::RETURN_NULL);
+				}
+				if (!found) {
+					// DERIVATION INVARIANT, not a soft failure: EMBEDDED_MACRO_DOCS
+					// is generated from the same .sql files that define the macros,
+					// so a documented macro that does not exist means the generator
+					// and the loader disagree. Throwing here is the same choice the
+					// taxonomy and embedded-header sync checks make -- a silent skip
+					// is how this class of bug stays invisible.
+					throw InternalException(
+					    "sitting_duck: documented macro '%s' is not in the catalog; "
+					    "EMBEDDED_MACRO_DOCS is out of sync with src/sql_macros/ "
+					    "(re-run scripts/embed_sql_macros.py)",
+					    doc.name);
+				}
+				FunctionDescription description;
+				description.description = doc.description;
+				// FunctionDescription::examples is a duckdb::vector; the generated
+				// table is a std::vector, so copy rather than assign.
+				for (const auto &example : doc.examples) {
+					description.examples.push_back(example);
+				}
+				description.categories.push_back("sitting_duck");
+				found->Cast<FunctionEntry>().descriptions.push_back(std::move(description));
+			}
+		});
 	}
 
 	// Register no-op stub for custom predicate dispatch.

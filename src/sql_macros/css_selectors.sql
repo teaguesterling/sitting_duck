@@ -74,6 +74,12 @@
 -- This separates parsing (expensive) from querying (cheap), enabling callers
 -- to parse once and query many times with different selectors.
 -- =============================================================================
+-- TODO(v2.0.0): slated for replacement by the C++ selector compiler.
+-- tracker/features/043 records the reason: on the DuckDB 2.0 line the cost is
+-- entirely in PLANNING this macro body (~52KB), not in executing it -- measured
+-- ~24x per call and ~124x for EXPLAIN alone, and PREPARE does not amortise it
+-- (tracker/bugs/040, upstream duckdb/duckdb#26036). A C++ implementation makes
+-- the macro body, and therefore the regression, moot.
 CREATE OR REPLACE MACRO ast_select_from(
     source,
     selector
@@ -2191,6 +2197,12 @@ CREATE OR REPLACE MACRO ast_select_from(
 -- the selector engine. For one-off queries this is the simplest API.
 -- For repeated queries, use ast_select_from with a pre-parsed table.
 -- =============================================================================
+-- TODO(v2.0.0): slated for replacement by the C++ selector compiler.
+-- tracker/features/043 records the reason: on the DuckDB 2.0 line the cost is
+-- entirely in PLANNING this macro body (~52KB), not in executing it -- measured
+-- ~24x per call and ~124x for EXPLAIN alone, and PREPARE does not amortise it
+-- (tracker/bugs/040, upstream duckdb/duckdb#26036). A C++ implementation makes
+-- the macro body, and therefore the regression, moot.
 CREATE OR REPLACE MACRO ast_select(
     source,
     selector,

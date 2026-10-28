@@ -6,6 +6,7 @@ Handles MSVC's 16KB string literal limit by splitting large files.
 """
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -39,6 +40,135 @@ def split_content(content, max_size=MAX_CHUNK_SIZE):
         chunks.append(current_chunk.rstrip('\n'))
 
     return chunks
+
+
+# -----------------------------------------------------------------------------
+# Macro documentation (#170)
+# -----------------------------------------------------------------------------
+# sitting_duck's 96 SQL macros reached duckdb_functions() with no description
+# and no examples, while its C++ functions had both. That is the half of #170
+# that was never done, and it matters because duckdb_functions() is the only
+# thing an agent connected to a database can read.
+#
+# The descriptions are NOT written here. They are lifted from the convention the
+# .sql files ALREADY use, so a macro's documentation lives beside the macro and
+# cannot drift from it:
+#
+#     -- =========================================================
+#     -- ast_callers: Who calls a given function?
+#     -- =========================================================
+#     --
+#     -- ...prose...
+#     --
+#     -- Usage:
+#     --   SELECT * FROM ast_callers('src/**/*.py');
+#
+#     CREATE OR REPLACE MACRO ast_callers(...)
+#
+# A `-- <name>: <summary>` banner becomes the description; indented lines under
+# `-- Usage:` become examples. DELIBERATELY STRICT: a macro without a banner
+# naming it gets no description rather than inheriting the nearest comment.
+# Several comment blocks are section headers covering a GROUP of macros
+# ("AST-anchored source patching: ast_node_edit / ast_patch / ..."), and
+# attributing those to one macro would populate the field while misdescribing
+# the function -- passing the metric and failing the purpose.
+
+MACRO_DEF_RE = re.compile(
+    r'CREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP\s+)?MACRO\s+([A-Za-z_][A-Za-z0-9_]*)', re.I)
+
+
+def _cpp_escape(text):
+    return text.replace('\\', '\\\\').replace('"', '\\"')
+
+
+def extract_macro_docs(sql_dir, sql_files):
+    """Return [(macro_name, description, [examples])] for macros that document themselves."""
+    docs = {}
+    order = []
+    for sql_file in sql_files:
+        path = os.path.join(sql_dir, sql_file)
+        if not os.path.exists(path):
+            continue
+        # encoding='utf-8' is not optional. CMake runs this script at configure
+        # time on every platform, and open() without it uses the locale default:
+        # cp1252 on a Windows runner. The banner below separates the macro name
+        # from its summary with an em dash, and cp1252 turns that one character
+        # into three. The banner regex then fails, the macro silently loses its
+        # description, and only Windows is affected. MEASURED: #170, Windows job
+        # 122541581963 printed `described=57/57`, so the TABLE held 57 entries,
+        # and ast_unparse_exact_splice was not among them
+        # (src/sql_macros/ast_unparse.sql:525). Reproduced on Linux by forcing
+        # the cp1252 decode: 57 entries, same macro missing.
+        lines = open(path, 'r', encoding='utf-8', errors='replace').read().splitlines()
+        for idx, line in enumerate(lines):
+            m = MACRO_DEF_RE.search(line)
+            if not m:
+                continue
+            name = m.group(1)
+            if name in docs:
+                continue
+
+            description = None
+            examples = []
+
+            # Look back over a bounded window: far enough to clear a prose block,
+            # short enough that an unrelated macro's banner cannot be claimed.
+            window = range(idx - 1, max(-1, idx - 80), -1)
+
+            for j in window:
+                stripped = lines[j].strip()
+                b = re.match(r'--\s*' + re.escape(name) + r'\s*[:\u2014-]\s*(.+)', stripped)
+                if b:
+                    summary = b.group(1).strip()
+                    # A banner naming several macros describes the group, not this one.
+                    if '/' in summary.split(':')[0]:
+                        break
+                    # Banners wrap. Join the continuation lines, or the description
+                    # ends mid-sentence ("convenience wrapper that parses source
+                    # files and then runs").
+                    parts = [summary]
+                    for k in range(j + 1, min(len(lines), j + 6)):
+                        nxt = lines[k].strip()
+                        if not nxt.startswith('--'):
+                            break
+                        cont = nxt[2:].strip()
+                        if not cont or set(cont) <= set('=- '):
+                            break
+                        # Stop at a section marker OR a maintainer note. A
+                        # `TODO(v2.0.0): ...` line sits under some banners to
+                        # record that the macro is slated for replacement by the
+                        # C++ selector compiler; that is roadmap, not something
+                        # an agent reading duckdb_functions() should be told.
+                        if re.match(r'(Usage|Returns|Example)s?\s*:', cont, re.I):
+                            break
+                        if re.match(r'(TODO|FIXME|NOTE|XXX|WARNING)\b', cont, re.I):
+                            break
+                        parts.append(cont)
+                    description = ' '.join(parts).strip().rstrip('.')
+                    break
+
+            for j in window:
+                if re.match(r'--\s*Usage\s*:', lines[j].strip(), re.I):
+                    for k in range(j + 1, idx):
+                        t = lines[k].strip()
+                        if not t.startswith('--'):
+                            continue
+                        t = t[2:].strip()
+                        if not t.upper().startswith(('SELECT', 'WITH', 'CREATE', 'FROM', 'COPY', 'PRAGMA')):
+                            continue
+                        # A Usage: block is often shared by a family of macros.
+                        # Keep only the lines that actually exercise THIS one,
+                        # otherwise ast_select_from inherits ast_select's examples.
+                        if name in t:
+                            examples.append(t)
+                    break
+
+            if description:
+                docs[name] = (description, examples)
+                order.append(name)
+
+    return [(n, docs[n][0], docs[n][1]) for n in order]
+
 
 def generate_header(sql_dir, output_file):
     """Generate C++ header with embedded SQL macros."""
@@ -79,7 +209,7 @@ static const std::vector<std::pair<std::string, std::string>> EMBEDDED_SQL_MACRO
     for sql_file in sql_files:
         filepath = os.path.join(sql_dir, sql_file)
         if os.path.exists(filepath):
-            with open(filepath, 'r') as f:
+            with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
 
             # Verify content doesn't break our delimiter
@@ -105,10 +235,33 @@ static const std::vector<std::pair<std::string, std::string>> EMBEDDED_SQL_MACRO
 
     header_content += """};
 
-} // namespace duckdb
 """
 
-    with open(output_file, 'w') as f:
+    # Documentation table (#170). Keyed by macro name, consumed by
+    # RegisterASTSQLMacros to decorate the catalog entries after creation.
+    docs = extract_macro_docs(sql_dir, sql_files)
+    header_content += """// Per-macro documentation, lifted from the `-- <name>: <summary>` banners and
+// `-- Usage:` blocks in src/sql_macros/*.sql. Macros without a banner naming
+// themselves are absent rather than guessed at -- see extract_macro_docs().
+struct EmbeddedMacroDoc {
+\tconst char *name;
+\tconst char *description;
+\tstd::vector<std::string> examples;
+};
+
+static const std::vector<EmbeddedMacroDoc> EMBEDDED_MACRO_DOCS = {
+"""
+    for name, description, examples in docs:
+        ex = ', '.join(f'"{_cpp_escape(e)}"' for e in examples)
+        header_content += f'    {{"{name}", "{_cpp_escape(description)}", {{{ex}}}}},\n'
+
+    header_content += """};
+
+} // namespace duckdb
+"""
+    print(f"  macro docs extracted: {len(docs)}")
+
+    with open(output_file, 'w', encoding='utf-8') as f:
         f.write(header_content)
 
     print(f"Generated {output_file}")
@@ -117,7 +270,7 @@ static const std::vector<std::pair<std::string, std::string>> EMBEDDED_SQL_MACRO
     for sql_file in sql_files:
         filepath = os.path.join(sql_dir, sql_file)
         if os.path.exists(filepath):
-            with open(filepath, 'r') as f:
+            with open(filepath, 'r', encoding='utf-8') as f:
                 content = f.read()
             chunks = split_content(content)
             if len(chunks) > 1:

@@ -10,6 +10,9 @@
 -- tabs, 2spaces, 4spaces) and custom user rule tables via ast_unparse_custom.
 -- ============================================================================
 
+-- ----------------------------------------------------------------------------
+-- ast_unparse_from: Reconstruct source text from an AST table, using a formatting preset
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_from(ast_table, preset := '') AS TABLE (
   WITH ast AS (
     SELECT * FROM query_table(ast_table)
@@ -105,6 +108,9 @@ CREATE OR REPLACE MACRO ast_unparse_from(ast_table, preset := '') AS TABLE (
   GROUP BY file_path
 );
 
+-- ----------------------------------------------------------------------------
+-- ast_unparse: Reconstruct source text from a file path, using a formatting preset
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse(path, preset := '') AS TABLE (
   WITH ast AS (
     SELECT * FROM read_ast(path)
@@ -200,6 +206,9 @@ CREATE OR REPLACE MACRO ast_unparse(path, preset := '') AS TABLE (
   GROUP BY file_path
 );
 
+-- ----------------------------------------------------------------------------
+-- ast_unparse_code: Reconstruct source text from a code string, using a formatting preset
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_code(source_code, lang, preset := '') AS TABLE (
   WITH ast AS (
     SELECT * FROM parse_ast(source_code, lang)
@@ -295,6 +304,9 @@ CREATE OR REPLACE MACRO ast_unparse_code(source_code, lang, preset := '') AS TAB
   GROUP BY file_path
 );
 
+-- ----------------------------------------------------------------------------
+-- ast_unparse_custom: Reconstruct source text using caller-supplied formatting rules
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_custom(ast_table, rules_table) AS TABLE (
   WITH ast AS (
     SELECT * FROM query_table(ast_table)
@@ -798,6 +810,9 @@ CREATE OR REPLACE MACRO ast_unparse_exact_splice(ast_table, blob_table,
 -- omitted, it is detected from the path exactly as read_ast does.
 -- A glob matching more than one file errors (see the section header).
 -- ----------------------------------------------------------------------------
+-- ----------------------------------------------------------------------------
+-- ast_unparse_exact: Reproduce a file byte-for-byte from its AST, or refuse — no normalising
+-- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_exact(path, language := NULL) AS TABLE
     WITH __sdx_src AS (
         SELECT * FROM read_ast(path, language, source := 'full', peek := 'none')
@@ -816,6 +831,9 @@ CREATE OR REPLACE MACRO ast_unparse_exact(path, language := NULL) AS TABLE
 -- for read_ast. Beware the staleness window this opens: the file is read now,
 -- the table was parsed whenever it was parsed. The length guard catches a
 -- change of size and nothing else.
+-- ----------------------------------------------------------------------------
+-- ----------------------------------------------------------------------------
+-- ast_unparse_exact_from: Reproduce files byte-for-byte from an existing AST table
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_exact_from(ast_table, files,
                                                language := NULL,
@@ -836,6 +854,9 @@ CREATE OR REPLACE MACRO ast_unparse_exact_from(ast_table, files,
 --
 -- This goes beyond the law as stated (which is path-scoped) and is the cheapest
 -- way to test it: `ast_unparse_exact_code(s, l) = s` for any s that parses.
+-- ----------------------------------------------------------------------------
+-- ----------------------------------------------------------------------------
+-- ast_unparse_exact_code: Reproduce a code string byte-for-byte through a parse round-trip
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_unparse_exact_code(source_code, language) AS TABLE
     WITH __sdx_code_src AS (
