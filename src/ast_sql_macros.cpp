@@ -8,7 +8,6 @@
 #include "duckdb/main/database_manager.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "embedded_sql_macros.hpp"
-#include <cstdio>
 #include <sstream>
 #include <vector>
 
@@ -175,74 +174,6 @@ void RegisterASTSQLMacros(ExtensionLoader &loader) {
 				found->Cast<FunctionEntry>().descriptions.push_back(std::move(description));
 			}
 		});
-	}
-
-	// DIAGNOSTIC (#170 on Windows), and REMOVE IT once the cause is known.
-	//
-	// windows_amd64 describes 57 of the 58 documented macros, and the one it
-	// loses is ast_unparse_exact_splice. MEASURED: run 40553595485, job
-	// 122381457035, `ast_unparse_exact_splice <> ALL 58 DESCRIBED`. The same
-	// commit describes all 58 on linux_amd64 and on this machine.
-	//
-	// duckdb_functions() reports NULL for an entry whose `descriptions` holds
-	// anything OTHER than exactly one element: with none, and with two or more,
-	// GetFunctionDescriptionIndex returns Invalid() and the row falls back to a
-	// default-constructed FunctionDescription
-	// (duckdb/src/function/table/system/duckdb_functions.cpp:616-643). It also
-	// rejects a single entry whose parameter_types is not empty. All three
-	// states print the same NULL, so SQL cannot tell them apart, and they have
-	// different causes and different fixes.
-	//
-	// This re-reads the catalog in a SECOND transaction, so it also catches a
-	// push that did not survive the commit of the first. It prints ONE line,
-	// always, with a number for every outcome, including the one where nothing
-	// is wrong. It does not throw: a throw at load time would fail all 161
-	// tests on the red leg and hide the number this round is for. The test file
-	// already keeps the leg red.
-	{
-		auto &context = *conn->context;
-		string anomalies;
-		string suspect = "ast_unparse_exact_splice=NOT_IN_DOCS";
-		idx_t described = 0;
-		context.RunFunctionInTransaction([&]() {
-			auto &catalog = Catalog::GetCatalog(context, DatabaseManager::GetDefaultDatabase(context));
-			for (const auto &doc : EMBEDDED_MACRO_DOCS) {
-				string kind = "macro";
-				optional_ptr<CatalogEntry> found =
-				    catalog.GetEntry(context, CatalogType::MACRO_ENTRY, DEFAULT_SCHEMA, doc.name,
-				                     OnEntryNotFound::RETURN_NULL);
-				if (!found) {
-					kind = "table_macro";
-					found = catalog.GetEntry(context, CatalogType::TABLE_MACRO_ENTRY, DEFAULT_SCHEMA, doc.name,
-					                         OnEntryNotFound::RETURN_NULL);
-				}
-				string line = string(doc.name) + " kind=";
-				if (!found) {
-					line += "absent size=-";
-					anomalies += " " + string(doc.name) + "=absent";
-				} else {
-					auto &descriptions = found->Cast<FunctionEntry>().descriptions;
-					line += kind + " size=" + to_string(descriptions.size());
-					if (descriptions.size() == 1) {
-						described++;
-						line += " param_types=" + to_string(descriptions[0].parameter_types.size()) +
-						        " desc_len=" + to_string(descriptions[0].description.size());
-					} else {
-						anomalies += " " + string(doc.name) + "=" + to_string(descriptions.size());
-					}
-				}
-				if (string(doc.name) == "ast_unparse_exact_splice") {
-					suspect = line;
-				}
-			}
-		});
-		string report = "sitting_duck DIAGNOSTIC (#170): described=" + to_string(described) + "/" +
-		                to_string(EMBEDDED_MACRO_DOCS.size()) + " | " + suspect + " | anomalies:" +
-		                (anomalies.empty() ? string(" none") : anomalies);
-		fprintf(stdout, "%s\n", report.c_str());
-		fflush(stdout);
-		fprintf(stderr, "%s\n", report.c_str());
-		fflush(stderr);
 	}
 
 	// Register no-op stub for custom predicate dispatch.
