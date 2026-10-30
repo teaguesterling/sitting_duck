@@ -1,6 +1,6 @@
 # Infrastructure Languages
 
-HCL (Terraform), JSON, TOML, and GraphQL support in Sitting Duck.
+HCL (Terraform), JSON, TOML, YAML, and GraphQL support in Sitting Duck.
 
 ## Language Nuances
 
@@ -19,6 +19,11 @@ Infrastructure languages are primarily data/configuration formats rather than pr
 
 - **HCL Blocks**: Terraform `resource`, `variable`, `module`, `output` blocks are detected as `ORGANIZATION_SECTION`.
 - **JSON/TOML**: Pure data formats with excellent structural parsing; no function/class concepts.
+- **YAML**: added in v1.16.0 as the 28th language, detected from `.yaml` and
+  `.yml`. Like JSON and TOML it is a data format, so it carries structure and
+  keys rather than function or class concepts. It has no row in the support
+  table above yet, because those ratings are editorial judgements and nobody
+  has made them for YAML.
 - **GraphQL Schemas**: Type definitions, fields, and operations are extracted with appropriate semantic types.
 - **GraphQL Fragment Spreads**: Uses `CUSTOM` native extraction strategy for `fragment_spread` nodes.
 

@@ -146,6 +146,7 @@ nav:
       - Enterprise: languages/enterprise.md
       - Infrastructure: languages/infrastructure.md
   - Releases:
+    - v1.16.0: releases/v1.16.0.md
     - v1.15.4: releases/v1.15.4.md
     - v1.15.3: releases/v1.15.3.md
     - v1.15.2: releases/v1.15.2.md
