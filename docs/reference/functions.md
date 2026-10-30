@@ -417,7 +417,9 @@ ast_unparse_rules(language VARCHAR) -> TABLE
 
 ## Function Discoverability via `duckdb_functions()`
 
-All Sitting Duck functions are registered with full metadata and can be discovered dynamically using DuckDB's built-in `duckdb_functions()`:
+Sitting Duck's C++ functions and its documented SQL macros carry metadata that
+DuckDB's built-in `duckdb_functions()` exposes, so an agent connected to a
+database can discover them without reading this page:
 
 ```sql
 -- List all Sitting Duck functions with descriptions and categories
@@ -426,6 +428,15 @@ FROM duckdb_functions()
 WHERE list_contains(categories, 'sitting_duck')
 ORDER BY function_name;
 ```
+
+Measured on v1.17.0, that query returns **110 rows**: 19 table functions and 33
+scalar functions from C++, plus 52 table macros and 6 scalar macros.
+
+**It does not return every macro.** 39 scalar macros carry no description yet,
+so they have no `FunctionDescription` for `duckdb_functions()` to report and the
+`categories` filter cannot see them. They are documented on this page and are
+callable; they are not yet self-describing. That coverage grows as a
+`-- <name>: <summary>` banner is written beside each one (#170).
 
 ---
 

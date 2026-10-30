@@ -1,6 +1,6 @@
 # Languages Overview
 
-Sitting Duck supports **27 programming languages** with full semantic analysis.
+Sitting Duck supports **28 programming languages** with full semantic analysis.
 
 ## Supported Languages
 
@@ -11,8 +11,8 @@ Sitting Duck supports **27 programming languages** with full semantic analysis.
 | **Scripting** | Python, Ruby, PHP, Lua, R, Bash |
 | **Enterprise** | Java, C#, Kotlin, Swift |
 | **Mobile** | Dart |
-| **Infrastructure** | HCL (Terraform), JSON, TOML, GraphQL |
-| **Documentation** | SQL, Markdown |
+| **Infrastructure** | HCL (Terraform), JSON, TOML, YAML, GraphQL |
+| **Documentation** | SQL, DuckDB SQL, Markdown |
 
 ## Language Detection
 
@@ -20,17 +20,17 @@ Languages are automatically detected from file extensions:
 
 | Extension(s) | Language |
 |--------------|----------|
-| `.py` | Python |
-| `.js`, `.jsx` | JavaScript |
+| `.py`, `.pyi`, `.pyw` | Python |
+| `.js`, `.jsx`, `.mjs` | JavaScript |
 | `.ts`, `.tsx` | TypeScript |
 | `.java` | Java |
 | `.go` | Go |
-| `.rs` | Rust |
+| `.rs`, `.rlib` | Rust |
 | `.c`, `.h` | C |
-| `.cpp`, `.hpp`, `.cc`, `.cxx` | C++ |
+| `.cpp`, `.cc`, `.cxx`, `.c++`, `.hpp`, `.hh`, `.hxx`, `.h++` | C++ |
 | `.cs` | C# |
-| `.rb` | Ruby |
-| `.php` | PHP |
+| `.rb`, `.ruby` | Ruby |
+| `.php`, `.php3`, `.php4`, `.php5`, `.phtml` | PHP |
 | `.swift` | Swift |
 | `.kt`, `.kts` | Kotlin |
 | `.lua` | Lua |
@@ -42,10 +42,15 @@ Languages are automatically detected from file extensions:
 | `.html`, `.htm` | HTML |
 | `.css` | CSS |
 | `.json` | JSON |
-| `.sh`, `.bash` | Bash |
-| `.tf`, `.hcl`, `.tfvars` | HCL |
-| `.graphql`, `.gql` | GraphQL |
+| `.yaml`, `.yml` | YAML |
 | `.toml` | TOML |
+| `.sh`, `.bash`, `.zsh` | Bash |
+| `.hcl`, `.tf`, `.tfvars` | HCL |
+| `.graphql`, `.gql` | GraphQL |
+
+The 28th language, `duckdb`, has no file-extension mapping: it is the DuckDB SQL
+dialect, reachable through `parse_ast(code, 'duckdb')` rather than through
+`read_ast()` detection.
 
 ## Query Available Languages
 
