@@ -173,6 +173,35 @@ native_extraction:
       declares: 14
       builtin: false
 
+  # The FINER form of the same defect, one level below `unmapped`. These
+  # languages DO have a traits mapping, so the check above is satisfied, but
+  # their extractor carries no specialization for the strategy named here -- so
+  # the language's OWN base template answers, and that returns an empty
+  # NativeContext exactly as the engine-wide default does. Every one of these is
+  # a compiled-in language.
+  #
+  # Two verified against the artifact rather than inferred: python
+  # `lambda a, b: a + b` and go `func(a int, b int) int` both return
+  # `parameters = []`, while python `foo(1, 2)` returns its arguments -- so the
+  # mechanism works and these declarations simply have nothing behind them.
+  #
+  # ARROW_FUNCTION dominates, in five languages at once, which is the tell that
+  # it is one omission repeated rather than five separate decisions. #220's lua
+  # fix is in here too: it implemented 2 of lua's 5 declared strategies, and
+  # the conformance kit only judged the function-shaped one.
+  #
+  # An entry leaves this list by gaining a specialization, or by the declaration
+  # changing to NONE where extraction was never intended. Not by widening it.
+  unimplemented:
+    - {language: go, strategy: ARROW_FUNCTION, declares: 1}
+    - {language: java, strategy: ARROW_FUNCTION, declares: 1}
+    - {language: lua, strategy: FUNCTION_CALL, declares: 2}
+    - {language: lua, strategy: VARIABLE_WITH_TYPE, declares: 1}
+    - {language: php, strategy: ARROW_FUNCTION, declares: 1}
+    - {language: python, strategy: ARROW_FUNCTION, declares: 1}
+    - {language: rust, strategy: ARROW_FUNCTION, declares: 1}
+    - {language: typescript, strategy: CONSTRUCTOR_DEFINITION, declares: 1}
+
 # Bare name-binding hooks (#64). A plain identifier is generically a
 # NAME_REFERENCE; in some parent contexts it introduces a name instead. Those
 # positions have no distinct wrapper node, so the rule cannot come from the .def

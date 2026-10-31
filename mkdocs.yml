@@ -173,6 +173,7 @@ nav:
   - Development:
     - Contributing: development/contributing.md
     - Adding Languages: development/adding-languages.md
+    - Reviewing a Language Module: development/language-module-review.md
     - Updating: development/updating.md
     - DuckDB Version Compatibility: development/duckdb-version-compatibility.md
   - Planning:

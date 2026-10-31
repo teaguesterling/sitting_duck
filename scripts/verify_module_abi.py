@@ -83,6 +83,12 @@ ADAPTER_HEADERS = [
 NOT_A_LANGUAGE = {"DynamicLanguageAdapter"}
 
 TRAITS = re.compile(r"struct\s+NativeExtractionTraits<\s*([A-Za-z_][A-Za-z0-9_]*)\s*>")
+# adapter -> the extractor template its traits specialization names
+TRAITS_TO_EXTRACTOR = re.compile(
+    r"struct\s+NativeExtractionTraits<\s*([A-Za-z_]\w*)\s*>\s*\{.*?using\s+ExtractorType\s*=\s*([A-Za-z_]\w*)<",
+    re.S)
+# a per-language extractor's specialization for one strategy
+EXTRACTOR_SPEC = re.compile(r"struct\s+([A-Za-z_]\w*NativeExtractor)<\s*NativeExtractionStrategy::([A-Z_]+)\s*>")
 HOOK = re.compile(r"\b(IsBareNameDefinition[A-Za-z]*)<\s*([A-Za-z_][A-Za-z0-9_]*)\s*>")
 CASE = re.compile(r"case\s+NativeExtractionStrategy::([A-Z_]+)\s*:")
 ADAPTER_CLASS = re.compile(r"class\s+([A-Za-z0-9_]+Adapter)\s*:\s*public\s+LanguageAdapter")
@@ -137,6 +143,16 @@ def locate(path, node_type):
         if "DEF_TYPE" in line and f'"{node_type}"' in line:
             return f"{path.name}:{lineno}"
     return path.name
+
+
+def specializations():
+    """{extractor template name: {strategy, ...}} over every extractor header."""
+    out = {}
+    for path in sorted((ROOT / "src" / "include").glob("*_native_extractors.hpp")):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for extractor, strategy in EXTRACTOR_SPEC.findall(text):
+            out.setdefault(extractor, set()).add(strategy)
+    return out
 
 
 def entry_count(language):
@@ -335,6 +351,47 @@ def main() -> int:
                 f"{language} is listed under `no_declaration_source`, but {entry_count(language)} "
                 f"DEF_TYPE entries are now readable for it")
 
+    # --- 6. per (language, strategy): a mapping is not an implementation ---
+    # A language with a traits mapping satisfies check 4 and can still answer
+    # with an empty context, because its OWN base template is the fallback. That
+    # is #220's shape one level down, and it is why #220's lua fix was partial:
+    # lua declares 5 strategies and specializes 2.
+    adapter_to_extractor = dict(TRAITS_TO_EXTRACTOR.findall(header))
+    spec_unimplemented = {(e["language"], e["strategy"]): e for e in native.get("unimplemented") or []}
+    specialized = specializations()
+    if not specialized:
+        print("::error::found 0 extractor specializations; the pattern is wrong, not the code")
+        return 1
+    pairs_checked = 0
+    for language, by_strategy in sorted(declared.items()):
+        adapter = adapter_for_language(language, adapters)
+        extractor = adapter_to_extractor.get(adapter)
+        if extractor is None:
+            continue  # no mapping at all: check 4's business, not this one
+        have = specialized.get(extractor, set())
+        for strategy, sites in sorted(by_strategy.items()):
+            pairs_checked += 1
+            if strategy in have:
+                continue
+            entry = spec_unimplemented.get((language, strategy))
+            if entry is None:
+                findings.append(
+                    f"{sites[0][1]} -- {language} declares {strategy} but {extractor} has no "
+                    f"specialization for it, so the language's own base template answers with an "
+                    f"empty NativeContext. Specialize it, declare it under "
+                    f"`native_extraction.unimplemented`, or change the declaration to NONE")
+            elif entry.get("declares") != len(sites):
+                findings.append(
+                    f"{language}/{strategy} is listed under `unimplemented` with declares: "
+                    f"{entry.get('declares')}, but {len(sites)} declarations are present")
+    for (language, strategy), entry in sorted(spec_unimplemented.items()):
+        adapter = adapter_for_language(language, adapters)
+        extractor = adapter_to_extractor.get(adapter)
+        if extractor and strategy in specialized.get(extractor, set()):
+            findings.append(
+                f"{language}/{strategy} is listed under `unimplemented`, but {extractor} now "
+                f"specializes it -- remove the entry")
+
     # --- hooks ---
     in_header = {}
     for hook, adapter in HOOK.findall(header):
@@ -355,7 +412,12 @@ def main() -> int:
           f"({len(spec_dispatched)} dispatched, {len(spec_reserved)} reserved), "
           f"{len(traits)} traits mappings over {len(adapters)} per-language adapters, "
           f"{total_declarations} non-NONE declarations in {len(declared)} languages, "
+          f"{pairs_checked} (language, strategy) pairs, "
           f"{sum(len(v) for v in in_header.values())} hook specializations")
+    if spec_unimplemented:
+        print(f"declared unimplemented: {len(spec_unimplemented)} pairs, "
+              f"{sum(e.get('declares', 0) for e in spec_unimplemented.values())} declarations "
+              f"-- see native_extraction.unimplemented")
     if spec_unmapped:
         print(f"declared unmapped: {len(spec_unmapped)} languages "
               f"({sum(1 for e in spec_unmapped.values() if e.get('builtin'))} compiled in) "
