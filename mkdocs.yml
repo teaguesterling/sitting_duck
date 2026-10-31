@@ -99,6 +99,7 @@ nav:
     - Pattern Matching: reference/pattern-matching.md
     - Analysis Macros: reference/analysis-macros.md
     - Utility Functions: reference/utility-functions.md
+    - Module ABI: reference/module-abi.md
     - Node Types by Language:
       - Overview: reference/languages/index.md
       - JavaScript: reference/languages/javascript.md

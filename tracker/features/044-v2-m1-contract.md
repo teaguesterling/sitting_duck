@@ -59,8 +59,94 @@ Plan for the slice:
   d. CI check "taxonomy tables in sync" (mirror "Embedded SQL macros header in sync").
   e. .def files keep referencing names; the spec is the single definition those names resolve to.
 Metric: byte-equivalent generated tables + green full suite + a sync CI check. No behavior change.
-**All of (a)–(e) are done; the metric was met.** Deliverable 2 of M1 is complete; 1, 3, 4
-and 5 remain.
+**All of (a)–(e) are done; the metric was met.** Deliverable 2 of M1 is complete.
+(That sentence used to end "1, 3, 4 and 5 remain" — see the M1 standing below, which
+supersedes it: 5 had already merged when it was written.)
+
+## M1 standing — measured 2026-10-30, after v1.17.0
+
+| # | Deliverable | State | Evidence |
+|---|---|---|---|
+| 1 | Module ABI | **DONE** | `spec/abi/module-abi.yaml` (ABI 1.0.0) + `docs/reference/module-abi.md` + `scripts/verify_module_abi.py`, CI job `module-abi-sync` |
+| 2 | Taxonomy spec | DONE | PR #195, `taxonomy-tables-sync` |
+| 3 | Conformance kit | **DONE in-tree; out-of-tree partial** | `ok=192 FAIL=0 dirty=1 void=7 UNDECL=5 n/a=19 \| languages=28`, all 9 negative controls `ok`, **exit 0** on `cee95ef`. The "exits 3 on a clean tree" baseline above is now stale: v1.17.0 fixed the three #220 NATIVE-DECL FAILs. The limit is one axis: the native-context checks are DEF-DERIVED and in-tree only, because `native_strategy` is not surfaced by `ast_type_map()` (kit:49–76). It matters less than it reads — a runtime config cannot declare native extraction at all, since `ParseLanguageConfigJSON` refuses `native_strategy` outright |
+| 4 | Trust-boundary doc | **DONE** | the "Trust boundary" section of `docs/reference/module-abi.md`, written with the contract as the RFC intended |
+| 5 | Merge #80 | DONE | `aee6656`, 2026-07-24 |
+
+M2 (`048` row 13) was gated on deliverable 1 stabilising. The gate now exists, so
+"stabilising" is measurable rather than a judgement: `module-abi-sync` fails on any
+drift between the spec and the sources.
+
+### The ABI is three contracts, not one
+
+Measured while writing it, and the reason the spec has three layers:
+
+- **Binary.** `register_language()` crosses the library boundary with ONE symbol,
+  `const TSLanguage *(*)()`, plus tree-sitter's own `ts_language_version()` range
+  check. No C++ type crosses it, because every `LanguageAdapter` method passes
+  `string`/`vector`/`unordered_map`/`unique_ptr`.
+- **Data.** Out-of-tree semantics arrive as JSON (`ParseLanguageConfigJSON` →
+  `DynamicLanguageAdapter`), which implements the whole source interface from data.
+  This is the layer a third-party module actually uses.
+- **Source.** `LanguageAdapter`'s 10 pure virtuals (compiler-enforced) plus the
+  template hooks that are NOT (below). In-tree only.
+
+### What the gate catches that nothing else did
+
+`verify_native_dispatch.py` iterates `*_native_extractors.hpp`, so a language with
+NO extractor header is absent from its input set and never judged. The conformance
+kit's NATIVE-DECL check judges only function-shaped strategies, so a declared
+`FUNCTION_CALL` or `CUSTOM` with no extractor is outside its matrix. #220's shape —
+a declared strategy with no `NativeExtractionTraits` mapping — fell between them.
+
+**Found by the new gate, on this tree:** four compiled-in languages are in exactly
+that condition, so `parameters` comes back `[]` where the `.def` declares extraction.
+
+| language | node type | declared | site |
+|---|---|---|---|
+| graphql | `fragment_spread` | FUNCTION_CALL | `graphql_types.def:226` |
+| hcl | `function_call` | FUNCTION_CALL | `hcl_types.def:170` |
+| markdown | `link_reference_definition` | CUSTOM | `markdown_types.def:169` |
+| zig | `call_expression` | FUNCTION_CALL | `zig_types.def:182` |
+
+All four measured on `build/release/duckdb`, and all four return `parameters = []`
+while binding a name (name extraction is a separate axis). Oracle: python, which HAS
+the mapping, returns `[{'name': '', 'type': 1}, {'name': '', 'type': 2}]` for
+`foo(1, 2)`. So this is the silent-empty defect, not a property of FUNCTION_CALL.
+
+Four more languages (`fsharp`, `haskell`, `julia`, `scala`, 47 declarations) are in the
+same condition but absent from the build — dormant, the condition yaml was in before
+#227. All eight are DECLARED under `native_extraction.unmapped` so the gate is green
+today and a NINTH fails it. Fixing them is extractor work, deliberately not bundled
+into the contract.
+
+### The gate's own input set, which its first draft got wrong
+
+Worth recording because it is the same defect one level up. The first draft scanned
+`src/language_configs/*_types.def` alone — and **sql's table is not there**: its 265
+`DEF_TYPE` entries are inlined in `src/language_adapters/sql_adapter.cpp`, so sql, one
+of the three languages #220 broke, was absent from the gate's input set and silently
+unjudged. The count it printed (27 declaring languages) was wrong for the same reason;
+the real figure is 330 non-NONE declarations across 28 languages.
+
+Fixed by reusing `audit_leaf_text_gaps`' parser helpers rather than writing a third
+one: `resolve_config_source` already knows sql and duckdb declare inline,
+`preprocess_def` follows `.def` #includes, and `iter_macro_arglists` tolerates several
+calls per line and C-concatenated literals — the two things clang-format does to
+`sql_adapter.cpp`.
+
+The durable fix is check 5, the DENOMINATOR: every per-language adapter must resolve to
+a table the gate can read, or be named in `no_declaration_source`. Its own first version
+tested that a FILE existed, and passed vacuously — `duckdb_adapter.cpp` exists and holds
+**zero** `DEF_TYPE` entries. It counts entries now.
+
+Also latent: **6 of the 17 `NativeExtractionStrategy` members have no case in
+`ExtractNativeContextTemplated`** (`GENERIC_FUNCTION`, `METHOD_DEFINITION`,
+`INTERFACE_DEFINITION`, `ENUM_DEFINITION`, `IMPORT_STATEMENT`, `EXPORT_STATEMENT`).
+No `.def` names one today; the spec lists them as `reserved` and the gate refuses a
+`.def` that does. Note that `conformance_kit.sh`'s `FUNCTION_NATIVE_STRATEGIES`
+includes two of them, so the kit would judge a language on a strategy the dispatcher
+cannot deliver.
 
 ## Conformance kit baseline — recorded 2026-10-09
 
@@ -161,8 +247,25 @@ language_config_json.cpp in full to enumerate exactly what must round-trip), the
 generate_taxonomy.py and prove byte-equivalence before flipping the source of truth.~~
 **Done — PR #195.**
 
-NEXT ACTION (2026-10-08): deliverable 3, the **conformance kit** — pure test writing
+~~NEXT ACTION (2026-10-08): deliverable 3, the **conformance kit** — pure test writing
 against the current layout, no product risk, and it is what makes M2/M3 verifiable. It is
 item #11 in `048`'s register. Deliverable 1 (module ABI) should be specified in parallel
 but not built out, since the cross-module name resolver (`043` Part C) is the consumer
-whose needs should shape it.
+whose needs should shape it.~~
+**Both done.** On the resolver caveat: `043` Part C already writes down what it needs from
+the ABI — "Module-id rule + import-child shape are per-language -> live in
+.def/native-extraction config, not SQL", on top of primitives `read_ast` already returns —
+so specifying ABI 1.0.0 did not have to wait for an M4 epic. The ABI is semver'd
+independently and a module declares the range it builds against, which is what absorbs the
+resolver's additions later.
+
+NEXT ACTION (2026-10-30): **M2** — the in-tree `core/` + `languages/<lang>/` layout
+(`048` row 13), with the #92 invariance test as the safety net. Two seams to move, both
+measured: `src/include/language_adapter.hpp` is 788 lines holding the 10-virtual interface
+AND 27 concrete per-language adapter classes plus `DynamicLanguageAdapter` (`DuckDBAdapter`
+is the 28th per-language adapter and lives in `duckdb_adapter.hpp`);
+`src/include/native_context_extraction.hpp` is 679
+lines holding the dispatcher AND the per-language rules (20 traits mappings, 14
+`IsBareNameDefinitionParent`, 6 `IsBareNameDefinitionField`, plus python's three free
+helpers). Every v1.17.0 name-binding fix landed in the second file, so until it is split
+the most active line of work sits on the engine side of the seam.
