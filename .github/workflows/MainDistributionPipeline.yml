@@ -296,6 +296,15 @@ jobs:
         run: python3 scripts/verify_module_abi.py --self-test
       - name: Verify the sources agree with spec/abi/module-abi.yaml
         run: python3 scripts/verify_module_abi.py
+      - name: Prove the dispatch gate can fail
+        # Same control, second gate. The planted fault covers the == idiom, the
+        # text-bound negative and the C-escape decoder, which are the three ways
+        # this gate has read its own input wrongly.
+        run: python3 scripts/verify_native_dispatch.py --self-test
+      - name: Verify every dispatched node type exists in its grammar
+        # Reads generated_parsers/**/src/parser.c, which is committed to this
+        # repository, so the default checkout is enough -- no submodules.
+        run: python3 scripts/verify_native_dispatch.py
 
   taxonomy-tables-sync:
     name: taxonomy tables in sync

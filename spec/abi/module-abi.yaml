@@ -275,6 +275,109 @@ native_extraction:
     - {language: typescript, strategy: CUSTOM, lines: 125}   # dead code
     - {language: typescript, strategy: FUNCTION_WITH_DECORATORS, lines: 158}   # dead code
 
+
+  # Node-type literals the extraction layer dispatches on that the grammar does
+  # NOT emit, as of this baseline. Gated by scripts/verify_native_dispatch.py.
+  #
+  # A dead literal produces no compile error, no link error and no warning: the
+  # branch is simply never taken, so the declared strategy returns an empty or
+  # partial answer. That is #220, three times over, and it is why this list is
+  # a spec entry rather than a TODO.
+  #
+  # `check` says how the literal reaches the grammar:
+  #   dispatch  a comparison in a per-language extractor or adapter
+  #   table     an entry in LANGUAGE_FUNCTION_CALL_TYPES
+  #   key       a LanguageTag name that misses that table, taking the default
+  #
+  # The entry is keyed on (check, language, literal), not on a line number,
+  # because line numbers rot and the gate must still recognise the same defect
+  # after the file moves. The trailing comment carries the line for a reader.
+  #
+  # This list is BIDIRECTIONAL. A new dead literal fails the gate, and so does
+  # a baselined one the run no longer reproduces -- otherwise a fixed literal
+  # would stay listed and the baseline would drift away from the code.
+  #
+  # Regenerate with: python3 scripts/verify_native_dispatch.py --emit-baseline
+  #
+  # In most of these the correct name is live in the same symbol table, which
+  # is the oracle that proves the finding: typescript dispatches on "parameter"
+  # while the grammar emits "required_parameter"; cpp on "class_definition"
+  # against "class_specifier"; c on "function_specifier" against
+  # "storage_class_specifier"; css on "media_feature_name" against
+  # "feature_name". Fixing them is #042's own work, one language per change,
+  # expectation first. This records the ground truth; it does not excuse it.
+  dead_dispatch:
+    - {check: dispatch, language: c, literal: "function_specifier"}   # c_native_extractors.hpp:227
+    - {check: dispatch, language: cpp, literal: "class_definition"}   # cpp_adapter.cpp:230
+    - {check: dispatch, language: cpp, literal: "default_parameter_declaration"}   # cpp_native_extractors.hpp:156
+    - {check: dispatch, language: cpp, literal: "function_specifier"}   # cpp_native_extractors.hpp:541
+    - {check: dispatch, language: cpp, literal: "pointer_type"}   # cpp_native_extractors.hpp:120
+    - {check: dispatch, language: cpp, literal: "reference_type"}   # cpp_native_extractors.hpp:120
+    - {check: dispatch, language: csharp, literal: "base_type"}   # csharp_native_extractors.hpp:255
+    - {check: dispatch, language: csharp, literal: "equals_value_clause"}   # csharp_native_extractors.hpp:119
+    - {check: dispatch, language: csharp, literal: "parameter_modifier"}   # csharp_native_extractors.hpp:116
+    - {check: dispatch, language: csharp, literal: "simple_base_type"}   # csharp_native_extractors.hpp:255
+    - {check: dispatch, language: css, literal: "media_feature_name"}   # css_native_extractors.hpp:169
+    - {check: dispatch, language: css, literal: "variable_name"}   # css_native_extractors.hpp:382
+    - {check: dispatch, language: go, literal: "primitive_type"}   # go_native_extractors.hpp:63
+    - {check: dispatch, language: java, literal: "primitive_type"}   # java_native_extractors.hpp:16
+    - {check: dispatch, language: kotlin, literal: "default_value"}   # kotlin_native_extractors.hpp:191
+    - {check: dispatch, language: kotlin, literal: "delegation_specifiers"}   # kotlin_native_extractors.hpp:373
+    - {check: dispatch, language: kotlin, literal: "enum_class_declaration"}   # kotlin_native_extractors.hpp:313
+    - {check: dispatch, language: kotlin, literal: "interface_declaration"}   # kotlin_native_extractors.hpp:309
+    - {check: dispatch, language: kotlin, literal: "type"}   # kotlin_native_extractors.hpp:51
+    - {check: dispatch, language: lua, literal: "local_function"}   # lua_adapter.cpp:140
+    - {check: dispatch, language: lua, literal: "local_function_declaration"}   # lua_adapter.cpp:68
+    - {check: dispatch, language: lua, literal: "local_variable_declaration"}   # lua_adapter.cpp:140
+    - {check: dispatch, language: markdown, literal: "image"}   # markdown_adapter.cpp:68
+    - {check: dispatch, language: markdown, literal: "link"}   # markdown_adapter.cpp:68
+    - {check: dispatch, language: php, literal: "optional_parameter"}   # php_native_extractors.hpp:102
+    - {check: dispatch, language: php, literal: "return_type"}   # php_native_extractors.hpp:51
+    - {check: dispatch, language: php, literal: "type_declaration"}   # php_native_extractors.hpp:139
+    - {check: dispatch, language: python, literal: "annotated_assignment"}   # python_native_extractors.hpp:651
+    - {check: dispatch, language: python, literal: "async_function_definition"}   # python_native_extractors.hpp:1071
+    - {check: dispatch, language: python, literal: "import_list"}   # python_native_extractors.hpp:1397
+    - {check: dispatch, language: sql, literal: "AND"}   # sql_native_extractors.hpp:529
+    - {check: dispatch, language: sql, literal: "OR"}   # sql_native_extractors.hpp:529
+    - {check: dispatch, language: sql, literal: "boolean_literal"}   # sql_native_extractors.hpp:703
+    - {check: dispatch, language: sql, literal: "column_reference"}   # sql_native_extractors.hpp:208
+    - {check: dispatch, language: sql, literal: "delete_statement"}   # sql_native_extractors.hpp:82
+    - {check: dispatch, language: sql, literal: "function_call"}   # sql_native_extractors.hpp:62
+    - {check: dispatch, language: sql, literal: "insert_statement"}   # sql_native_extractors.hpp:74
+    - {check: dispatch, language: sql, literal: "number_literal"}   # sql_native_extractors.hpp:702
+    - {check: dispatch, language: sql, literal: "select_statement"}   # sql_native_extractors.hpp:70
+    - {check: dispatch, language: sql, literal: "string_literal"}   # sql_native_extractors.hpp:702
+    - {check: dispatch, language: sql, literal: "table_reference"}   # sql_native_extractors.hpp:694
+    - {check: dispatch, language: sql, literal: "text"}   # sql_native_extractors.hpp:174
+    - {check: dispatch, language: sql, literal: "update_statement"}   # sql_native_extractors.hpp:78
+    - {check: dispatch, language: swift, literal: "access_level_modifier"}   # swift_native_extractors.hpp:211
+    - {check: dispatch, language: swift, literal: "closure_parameters"}   # swift_native_extractors.hpp:263
+    - {check: dispatch, language: swift, literal: "default_parameter_clause"}   # swift_native_extractors.hpp:150
+    - {check: dispatch, language: swift, literal: "enum_declaration"}   # swift_adapter.cpp:82
+    - {check: dispatch, language: swift, literal: "generic_type"}   # swift_native_extractors.hpp:373
+    - {check: dispatch, language: swift, literal: "rethrows"}   # swift_native_extractors.hpp:222
+    - {check: dispatch, language: swift, literal: "struct_declaration"}   # swift_adapter.cpp:81
+    - {check: dispatch, language: swift, literal: "type_inheritance_clause"}   # swift_native_extractors.hpp:353
+    - {check: dispatch, language: swift, literal: "variable_declaration"}   # swift_adapter.cpp:85
+    - {check: dispatch, language: typescript, literal: "field_declaration"}   # typescript_native_extractors.hpp:728
+    - {check: dispatch, language: typescript, literal: "module_declaration"}   # typescript_native_extractors.hpp:404
+    - {check: dispatch, language: typescript, literal: "namespace_declaration"}   # typescript_native_extractors.hpp:407
+    - {check: dispatch, language: typescript, literal: "number_literal"}   # typescript_native_extractors.hpp:1013
+    - {check: dispatch, language: typescript, literal: "parameter"}   # typescript_native_extractors.hpp:817
+    - {check: dispatch, language: typescript, literal: "rest_parameter"}   # typescript_native_extractors.hpp:112
+    - {check: dispatch, language: typescript, literal: "string_literal"}   # typescript_native_extractors.hpp:1015
+    - {check: table, language: php, literal: "argument_name"}   # function_call_extractor.hpp:169
+    - {check: table, language: r, literal: ","}   # function_call_extractor.hpp:203
+    - {check: table, language: r, literal: ";"}   # function_call_extractor.hpp:203
+    - {check: table, language: r, literal: "namespace_get"}   # function_call_extractor.hpp:202
+    - {check: table, language: r, literal: "namespace_get_internal"}   # function_call_extractor.hpp:202
+    - {check: table, language: ruby, literal: "chained_call"}   # function_call_extractor.hpp:180
+    - {check: table, language: ruby, literal: "method_call"}   # function_call_extractor.hpp:180
+    - {check: table, language: rust, literal: "method_call_expression"}   # function_call_extractor.hpp:132
+    - {check: table, language: swift, literal: "argument_list"}   # function_call_extractor.hpp:188
+    - {check: table, language: swift, literal: "init_expression"}   # function_call_extractor.hpp:186
+    - {check: table, language: swift, literal: "labeled_argument"}   # function_call_extractor.hpp:193
+
 # Bare name-binding hooks (#64). A plain identifier is generically a
 # NAME_REFERENCE; in some parent contexts it introduces a name instead. Those
 # positions have no distinct wrapper node, so the rule cannot come from the .def
