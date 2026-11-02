@@ -202,6 +202,79 @@ native_extraction:
     - {language: rust, strategy: ARROW_FUNCTION, declares: 1}
     - {language: typescript, strategy: CONSTRUCTOR_DEFINITION, declares: 1}
 
+  # The OPPOSITE direction to `unimplemented`, and the one nothing checked: a
+  # specialization that EXISTS and that no declaration can reach. The extractor
+  # specializes a strategy, and not one DEF_TYPE row in that language names it,
+  # so no input ever arrives. The compiler cannot see it -- an uninstantiated
+  # template is not an error -- and neither can the conformance kit, which
+  # judges declarations rather than code.
+  #
+  # Measured 2026-11-02: 45 pairs, in three shapes.
+  #
+  #   no-op      (19)  the body returns an empty NativeContext and nothing else.
+  #                    Harmless, and arguably a deliberate statement that this
+  #                    language does not do this strategy.
+  #   delegates  (10)  a one-line forward to another extractor. Also harmless.
+  #   dead code  (16)  a real implementation, ~1,642 lines in total, that no
+  #                    input can reach. python/IMPORT_STATEMENT is 271 lines and
+  #                    is unreachable TWICE over, because IMPORT_STATEMENT is
+  #                    also `reserved` -- the dispatcher has no case for it.
+  #
+  # The gate does not judge between the three. It fails on a FORTY-SIXTH, and on
+  # an entry here whose code has since been reached or removed. Classifying them
+  # by hand would need a threshold constant, and the argument for the threshold
+  # belongs in this comment rather than in the script.
+  #
+  # Deleting the dead-code ones is separate work: it removes entries from this
+  # list, which the gate requires, and it touches no behaviour because nothing
+  # reaches them.
+  unreachable:
+    - {language: cpp, strategy: CLASS_WITH_INHERITANCE, lines: 4}   # no-op
+    - {language: cpp, strategy: CUSTOM, lines: 156}   # dead code
+    - {language: css, strategy: ARROW_FUNCTION, lines: 4}   # no-op
+    - {language: css, strategy: ASYNC_FUNCTION, lines: 4}   # no-op
+    - {language: css, strategy: CLASS_WITH_INHERITANCE, lines: 4}   # no-op
+    - {language: css, strategy: CLASS_WITH_METHODS, lines: 6}   # no-op
+    - {language: css, strategy: CUSTOM, lines: 6}   # delegates
+    - {language: css, strategy: FUNCTION_CALL, lines: 6}   # delegates
+    - {language: css, strategy: FUNCTION_WITH_DECORATORS, lines: 4}   # no-op
+    - {language: dart, strategy: ASYNC_FUNCTION, lines: 19}   # dead code
+    - {language: dart, strategy: CLASS_WITH_INHERITANCE, lines: 4}   # no-op
+    - {language: dart, strategy: FUNCTION_WITH_DECORATORS, lines: 38}   # dead code
+    - {language: go, strategy: CLASS_WITH_INHERITANCE, lines: 4}   # no-op
+    - {language: html, strategy: ARROW_FUNCTION, lines: 5}   # no-op
+    - {language: html, strategy: ASYNC_FUNCTION, lines: 5}   # no-op
+    - {language: html, strategy: CLASS_WITH_INHERITANCE, lines: 5}   # no-op
+    - {language: html, strategy: CLASS_WITH_METHODS, lines: 6}   # no-op
+    - {language: html, strategy: CUSTOM, lines: 6}   # delegates
+    - {language: html, strategy: FUNCTION_CALL, lines: 6}   # delegates
+    - {language: html, strategy: FUNCTION_WITH_DECORATORS, lines: 5}   # no-op
+    - {language: java, strategy: CLASS_WITH_INHERITANCE, lines: 4}   # no-op
+    - {language: java, strategy: FUNCTION_WITH_DECORATORS, lines: 187}   # dead code
+    - {language: javascript, strategy: ASYNC_FUNCTION, lines: 7}   # delegates
+    - {language: javascript, strategy: CUSTOM, lines: 125}   # dead code
+    - {language: kotlin, strategy: ASYNC_FUNCTION, lines: 42}   # dead code
+    - {language: kotlin, strategy: GENERIC_FUNCTION, lines: 46}   # dead code
+    - {language: python, strategy: ASYNC_FUNCTION, lines: 6}   # delegates
+    - {language: python, strategy: FUNCTION_WITH_DECORATORS, lines: 237}   # dead code
+    - {language: python, strategy: IMPORT_STATEMENT, lines: 271}   # dead code
+    - {language: r, strategy: VARIABLE_WITH_TYPE, lines: 75}   # dead code
+    - {language: ruby, strategy: VARIABLE_WITH_TYPE, lines: 43}   # dead code
+    - {language: rust, strategy: ASYNC_FUNCTION, lines: 6}   # delegates
+    - {language: rust, strategy: CLASS_WITH_INHERITANCE, lines: 4}   # no-op
+    - {language: sql, strategy: ARROW_FUNCTION, lines: 6}   # no-op
+    - {language: sql, strategy: ASYNC_FUNCTION, lines: 6}   # no-op
+    - {language: sql, strategy: CLASS_WITH_INHERITANCE, lines: 22}   # dead code
+    - {language: sql, strategy: CLASS_WITH_METHODS, lines: 58}   # dead code
+    - {language: sql, strategy: CUSTOM, lines: 6}   # delegates
+    - {language: sql, strategy: FUNCTION_CALL, lines: 6}   # delegates
+    - {language: sql, strategy: FUNCTION_WITH_DECORATORS, lines: 6}   # no-op
+    - {language: swift, strategy: ASYNC_FUNCTION, lines: 40}   # dead code
+    - {language: typescript, strategy: ASYNC_FUNCTION, lines: 7}   # delegates
+    - {language: typescript, strategy: CLASS_WITH_INHERITANCE, lines: 4}   # no-op
+    - {language: typescript, strategy: CUSTOM, lines: 125}   # dead code
+    - {language: typescript, strategy: FUNCTION_WITH_DECORATORS, lines: 158}   # dead code
+
 # Bare name-binding hooks (#64). A plain identifier is generically a
 # NAME_REFERENCE; in some parent contexts it introduces a name instead. Those
 # positions have no distinct wrapper node, so the rule cannot come from the .def

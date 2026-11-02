@@ -134,10 +134,31 @@ satisfying its robustness items.
 Ordered so that each step is provable, and so the class is closed before the
 instances are chased.
 
-1. **Gate L3, L4 and L5** — extend `verify_module_abi.py` so its unit is
-   `(language, strategy, raw_type)`, add a reachability check for specializations
-   nothing declares, and baseline whatever that turns up. Without this, fixing
-   the four instances leaves the class open and the next drift silent.
+1. **Gate L3, L4 and L5** — ~~extend `verify_module_abi.py` so its unit is
+   `(language, strategy, raw_type)`~~, add a reachability check for
+   specializations nothing declares, and baseline whatever that turns up.
+   Without this, fixing the four instances leaves the class open and the next
+   drift silent.
+
+   **Revised 2026-11-02, after measuring.** L4 is done — `verify_module_abi.py`
+   check 7, 45 specializations baselined under `native_extraction.unreachable`,
+   of which 16 are real implementations totalling ~1,642 lines that no input can
+   reach. python's `IMPORT_STATEMENT` is 271 of them and is unreachable *twice*,
+   since that strategy is also `reserved`.
+
+   **L3 and L5 cannot be gated statically, and they are the same check.** A
+   specialization's handled-set is not a property of its source:
+   `LuaNativeExtractor<FUNCTION_WITH_PARAMS>` has zero node-type comparisons and
+   serves any declaring node that has a `parameters` child. So the real question
+   is whether each declaring node owns the child the extractor looks for — which
+   needs per-node field data from `grammars/<g>/src/node-types.json`, a
+   **submodule** file rather than a committed one. Reading it would couple the
+   gate to the 1.2 GB grammar clone and cost `verify_module_abi.py` its
+   bare-checkout property.
+
+   So L3/L5 move to step 3, the conformance kit, which already has a binary and
+   a corpus and can probe instead of derive. That makes step 3 load-bearing
+   rather than cosmetic.
 2. **Widen `verify_native_dispatch.py`** — accept the `==` idiom, glob
    `src/language_adapters/*.cpp` and the shared tables, and make it name every
    language it skipped. Its baseline moves; record the new one in

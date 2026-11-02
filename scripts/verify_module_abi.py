@@ -392,6 +392,35 @@ def main() -> int:
                 f"{language}/{strategy} is listed under `unimplemented`, but {extractor} now "
                 f"specializes it -- remove the entry")
 
+    # --- 7. the opposite direction: a specialization no declaration reaches ---
+    # Checks 4 and 6 ask whether a declaration has an implementation. This asks
+    # whether an implementation has a declaration. Nothing checked it before: the
+    # compiler cannot (an uninstantiated template is not an error) and the
+    # conformance kit cannot (it judges declarations, not code). It is how
+    # python shipped 508 lines of IMPORT_STATEMENT and FUNCTION_WITH_DECORATORS
+    # extraction that no input can arrive at.
+    spec_unreachable = {(e["language"], e["strategy"]) for e in native.get("unreachable") or []}
+    found_unreachable = set()
+    for adapter, extractor in sorted(adapter_to_extractor.items()):
+        language = adapter[: -len("Adapter")].lower()
+        if entry_count(language) == 0:
+            continue  # no table to compare against; check 5's business
+        names = {s for by in [declared.get(language, {})] for s in by}
+        # A language declaring only NONE has an empty `declared` entry, so fall
+        # back to the table rather than treating every specialization as dead.
+        for strategy in sorted(specialized.get(extractor, set())):
+            if strategy not in names:
+                found_unreachable.add((language, strategy))
+    for pair in sorted(found_unreachable - spec_unreachable):
+        findings.append(
+            f"{pair[0]} specializes {pair[1]} and no declaration in that language names it, so "
+            f"no input can reach it. Declare a node type that uses it, delete the "
+            f"specialization, or list it under `native_extraction.unreachable`")
+    for pair in sorted(spec_unreachable - found_unreachable):
+        findings.append(
+            f"{pair[0]}/{pair[1]} is listed under `unreachable`, but it is now either declared "
+            f"or gone -- remove the entry")
+
     # --- hooks ---
     in_header = {}
     for hook, adapter in HOOK.findall(header):
@@ -418,6 +447,9 @@ def main() -> int:
         print(f"declared unimplemented: {len(spec_unimplemented)} pairs, "
               f"{sum(e.get('declares', 0) for e in spec_unimplemented.values())} declarations "
               f"-- see native_extraction.unimplemented")
+    if spec_unreachable:
+        print(f"declared unreachable: {len(spec_unreachable)} specializations no declaration "
+              f"reaches -- see native_extraction.unreachable")
     if spec_unmapped:
         print(f"declared unmapped: {len(spec_unmapped)} languages "
               f"({sum(1 for e in spec_unmapped.values() if e.get('builtin'))} compiled in) "
