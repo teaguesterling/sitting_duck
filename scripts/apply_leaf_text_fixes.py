@@ -189,9 +189,15 @@ def find_def_type_spans(text: str):
 
         arglist = text[start:j]
         args = split_top_level_commas(arglist)
-        raw_m = raw_type_from_arg(args[0]) if args else None
-        if m:
-            yield unescape_c(m.group(1)), start, j
+        # raw_type_from_arg() already unescapes and concatenates adjacent
+        # literals, and returns a str or None -- not a regex match. An earlier
+        # revision of this function was regex-based and its `yield` survived the
+        # move to these helpers, referring to an `m` that no longer exists and
+        # calling unescape_c() a second time. Every run died here on its first
+        # retarget, which is why the leaf-text tail was never applied.
+        raw = raw_type_from_arg(args[0]) if args else None
+        if raw:
+            yield raw, start, j
         i = j + 1
 
 

@@ -433,7 +433,7 @@ const unordered_map<string, NodeConfig> SQLAdapter::node_configs = {
                                                                                                     NONE, 0) DEF_TYPE("op_unary_"
                                                                                                                       "other",
                                                                                                                       OPERATOR_ARITHMETIC,
-                                                                                                                      NONE,
+                                                                                                                      NODE_TEXT,
                                                                                                                       NONE,
                                                                                                                       0)
                                                                                                     DEF_TYPE(
