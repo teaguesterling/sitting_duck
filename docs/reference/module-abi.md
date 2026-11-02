@@ -47,6 +47,11 @@ binary contract, and why semantics arrive as data instead — layer 2.
 
 Adding a second required symbol is a MAJOR bump.
 
+To build a library that satisfies this, see
+[Custom languages](../how-to/custom-languages.md) — one `cc` invocation, plus
+`scanner.c` where the grammar has an external scanner, which 17 of the 28
+in-tree grammars do.
+
 ## Layer 2 — the data contract
 
 An out-of-tree module declares its semantics as JSON, not as C++. This is the
@@ -210,6 +215,9 @@ an error, so they are part of the contract:
 
 ## Related
 
+- [Custom languages: build one and load it](../how-to/custom-languages.md) — the
+  how-to for this page's layers 1 and 2: compiling a grammar to a shared library
+  (including the `scanner.c` step), writing the config, and what fails
 - [`tracker/features/044-v2-m1-contract.md`](https://github.com/teaguesterling/sitting_duck/blob/main/tracker/features/044-v2-m1-contract.md) — the M1 milestone this contract closes
 - [`docs/planning/v2-architecture.md`](https://github.com/teaguesterling/sitting_duck/blob/main/docs/planning/v2-architecture.md) — where the module layout is going (M2, M3)
 - [`register_language()`](functions.md#register_language) — the full parameter reference for the runtime door described in layer 1

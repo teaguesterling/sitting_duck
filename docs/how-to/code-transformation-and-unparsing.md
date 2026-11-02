@@ -96,7 +96,9 @@ SELECT ast_unparse(parsed_ast, newline := '\r\n');
 
 Sitting Duck's unparser satisfies the **pseudo-identity property**:
 
-$$\text{parse}(\text{unparse}(\text{parse}(S))) \equiv \text{parse}(S)$$
+```
+parse(unparse(parse(S)))  ==  parse(S)
+```
 
 You can test this property directly in SQL:
 

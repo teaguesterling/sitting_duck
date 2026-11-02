@@ -2,7 +2,9 @@
 
 The `ast_unparse` suite reconstructs formatted source code from Sitting Duck AST tables. It is a pluggable, rules-based formatter whose **target** property is pseudo-identity:
 
-$$\text{parse}(S) \equiv \text{parse}(\text{unparse}(\text{parse}(S)))$$
+```
+parse(S)  ==  parse(unparse(parse(S)))
+```
 
 That is: re-parsing unparsed output should yield a syntactically and semantically identical AST, even though the *text* may differ in whitespace and formatting.
 
