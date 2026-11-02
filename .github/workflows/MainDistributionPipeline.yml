@@ -277,6 +277,26 @@ jobs:
   # hand-edit inside a generated block, would ship C++ that disagrees with the
   # spec — which is the hand-sync drift this codegen exists to retire. This
   # check makes that divergence a hard CI failure.
+  # The module ABI's weak half is declared by template specialization, so a
+  # missing declaration is not a compile error -- it silently selects the empty
+  # default extractor. That is #220, which shipped in three languages. This gate
+  # reads spec/abi/module-abi.yaml as the authority and fails on any source that
+  # disagrees. Unlike verify_native_dispatch.py it needs no built binary and no
+  # grammar checkout, so it runs on a bare checkout in seconds.
+  module-abi-sync:
+    name: module ABI in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure PyYAML is available
+        run: python3 -c "import yaml" || python3 -m pip install --break-system-packages pyyaml
+      - name: Prove the gate can fail
+        # A gate that cannot be made to fail is indistinguishable from one that
+        # is not looking, so the planted-fault control runs before the check.
+        run: python3 scripts/verify_module_abi.py --self-test
+      - name: Verify the sources agree with spec/abi/module-abi.yaml
+        run: python3 scripts/verify_module_abi.py
+
   taxonomy-tables-sync:
     name: taxonomy tables in sync
     runs-on: ubuntu-latest

@@ -1,0 +1,253 @@
+# Module ABI — the declared contract between the engine and a language module.
+#
+# M1 deliverable 1 (tracker/features/044-v2-m1-contract.md). Prose lives in
+# docs/reference/module-abi.md; this file is the machine-checkable half, and
+# scripts/verify_module_abi.py gates the sources against it.
+#
+# WHY A DATA ARTIFACT. #220 was three languages that declared native extraction
+# and delivered nothing, with no compile error, link error or warning. The cause
+# was a MISSING declaration, and nothing can gate an absence unless the expected
+# set is written down. This file is that set.
+#
+# Maintained BY HAND, like the .def files. The gate reads it as the authority and
+# reports the sources that disagree. Regenerating it from the sources would make
+# the gate vacuous.
+version: 1.0.0
+
+# The contract has three layers. They are independent: a module can satisfy one
+# and not the others, and only the source layer is C++.
+layers:
+
+  binary:
+    # What crosses a shared-library boundary today, for register_language() (#80).
+    # This is the whole of it: one C function and tree-sitter's own version check.
+    symbol: "const TSLanguage *(*)()"
+    symbol_name: caller-supplied, the `symbol` argument of register_language()
+    version_check: ts_language_version(language) must fall within
+      TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION..TREE_SITTER_LANGUAGE_VERSION
+    enforced_in: src/register_language_function.cpp
+    # No C++ type crosses this boundary. LanguageAdapter's methods pass string,
+    # vector, unordered_map and unique_ptr, none of which is stable across
+    # separately compiled binaries -- so the source layer below is deliberately
+    # NOT part of the binary contract.
+    stability: stable; adding a second required symbol is a MAJOR bump
+
+  data:
+    # How an out-of-tree module declares semantics: as JSON, not as C++.
+    # DynamicLanguageAdapter implements the whole source interface from this.
+    schema_parsed_by: ParseLanguageConfigJSON (src/language_config_json.cpp)
+    consumed_by: DynamicLanguageAdapter (src/include/language_adapter.hpp)
+    shape: '{"language": <name>, "node_types": {<raw_type>: {...}}}'
+    node_config_fields: [semantic_type, refinement, name_strategy, flags]
+    # Refused outright rather than accepted and ignored, so a config author
+    # cannot believe native extraction is active when it is not. CUSTOM is
+    # refused for the same reason: it needs C++ that cannot be loaded at runtime.
+    refused_fields: [native_strategy]
+    # The names a config may use are the taxonomy spec's, not free text: an
+    # unknown semantic_type, name_strategy or flag throws, naming the node type.
+    names_defined_by: spec/taxonomy/taxonomy.yaml
+    stability: additive only; removing a field or renaming a strategy is a MAJOR bump
+
+  source:
+    # The interface a compiled-in module implements. In-tree only.
+    base_class: LanguageAdapter (src/include/language_adapter.hpp)
+    pure_virtuals:
+      - GetLanguageName
+      - GetAliases
+      - GetParsingFunction
+      - GetNormalizedType
+      - ExtractNodeName
+      - ExtractNodeValue
+      - IsPublicNode
+      - GetNodeConfigs
+      - InitializeParser
+      - CreateFreshParser
+    # Defaulted, so a module needs it only when its grammar has a named rule and
+    # an anonymous token with the same raw_type (#215).
+    virtuals_with_defaults:
+      - GetAnonNodeConfigs
+    registered_through: LanguageAdapterRegistry::RegisterLanguageFactory
+    stability: adding a pure virtual is a MAJOR bump; adding a defaulted virtual is MINOR
+
+# Native context extraction. This is the half of the source layer that is NOT on
+# the base class: a module declares it through template specializations, so a
+# missing one is not a compile error -- it silently selects the empty default.
+native_extraction:
+  dispatcher: ExtractNativeContextTemplated (src/include/native_context_extraction.hpp)
+
+  # Strategies the dispatcher has a case for. A .def may declare these.
+  dispatched:
+    - NONE
+    - FUNCTION_WITH_PARAMS
+    - FUNCTION_WITH_DECORATORS
+    - ARROW_FUNCTION
+    - ASYNC_FUNCTION
+    - CLASS_WITH_INHERITANCE
+    - CLASS_WITH_METHODS
+    - VARIABLE_WITH_TYPE
+    - CONSTRUCTOR_DEFINITION
+    - FUNCTION_CALL
+    - CUSTOM
+
+  # In the NativeExtractionStrategy enum but NOT in the dispatcher's switch, so
+  # they fall to `default:` and return an empty NativeContext. Declaring one in a
+  # .def is the #220 defect with a different cause, so the gate refuses it.
+  # Reserved, not dispatched: give one a case before a .def names it.
+  reserved:
+    - GENERIC_FUNCTION
+    - METHOD_DEFINITION
+    - INTERFACE_DEFINITION
+    - ENUM_DEFINITION
+    - IMPORT_STATEMENT
+    - EXPORT_STATEMENT
+
+  # Adapters with a NativeExtractionTraits specialization, i.e. the modules whose
+  # declared strategies actually reach an extractor.
+  modules:
+    - BashAdapter
+    - CAdapter
+    - CPPAdapter
+    - CSSAdapter
+    - CSharpAdapter
+    - DartAdapter
+    - GoAdapter
+    - HTMLAdapter
+    - JavaAdapter
+    - JavaScriptAdapter
+    - KotlinAdapter
+    - LuaAdapter
+    - PHPAdapter
+    - PythonAdapter
+    - RAdapter
+    - RubyAdapter
+    - RustAdapter
+    - SQLAdapter
+    - SwiftAdapter
+    - TypeScriptAdapter
+
+  # Per-language adapters with no DEF_TYPE table the gate can read, so the
+  # checks above are silent for them BY DECLARATION rather than by accident.
+  # The denominator check counts entries rather than testing that a file exists:
+  # duckdb_adapter.cpp exists and holds zero DEF_TYPE entries, which an
+  # existence test passed vacuously.
+  no_declaration_source:
+    # Wraps DuckDB's own parser and ships no declaration table at all, which is
+    # why the conformance kit reports 5 x UNDECL for it (#197). A result, not a
+    # harness problem.
+    - duckdb
+
+  # Languages whose declaration table names a non-NONE strategy with NO traits mapping
+  # above. Each one is #220's exact shape: the declaration is accepted, the
+  # extractor is the empty default, and the column comes back blank. Measured on
+  # the v1.17.0 tree, so these are DECLARED here rather than left silent. The
+  # gate fails on any language NOT in this list.
+  #
+  # An entry is removed by giving the language a traits specialization and an
+  # extractor, never by widening this list.
+  unmapped:
+    # compiled in, so the blank column is reachable from SQL today
+    - language: graphql
+      declares: 1   # fragment_spread FUNCTION_CALL, graphql_types.def:226
+      builtin: true
+    - language: hcl
+      declares: 1   # function_call FUNCTION_CALL, hcl_types.def:170
+      builtin: true
+    - language: markdown
+      declares: 1   # link_reference_definition CUSTOM, markdown_types.def:169
+      builtin: true
+    - language: zig
+      declares: 1   # call_expression FUNCTION_CALL, zig_types.def:182
+      builtin: true
+    # .def present but absent from the build, so dormant rather than live --
+    # the condition yaml was in before #227 wired it up.
+    - language: fsharp
+      declares: 10
+      builtin: false
+    - language: haskell
+      declares: 10
+      builtin: false
+    - language: julia
+      declares: 13
+      builtin: false
+    - language: scala
+      declares: 14
+      builtin: false
+
+  # The FINER form of the same defect, one level below `unmapped`. These
+  # languages DO have a traits mapping, so the check above is satisfied, but
+  # their extractor carries no specialization for the strategy named here -- so
+  # the language's OWN base template answers, and that returns an empty
+  # NativeContext exactly as the engine-wide default does. Every one of these is
+  # a compiled-in language.
+  #
+  # Two verified against the artifact rather than inferred: python
+  # `lambda a, b: a + b` and go `func(a int, b int) int` both return
+  # `parameters = []`, while python `foo(1, 2)` returns its arguments -- so the
+  # mechanism works and these declarations simply have nothing behind them.
+  #
+  # ARROW_FUNCTION dominates, in five languages at once, which is the tell that
+  # it is one omission repeated rather than five separate decisions. #220's lua
+  # fix is in here too: it implemented 2 of lua's 5 declared strategies, and
+  # the conformance kit only judged the function-shaped one.
+  #
+  # An entry leaves this list by gaining a specialization, or by the declaration
+  # changing to NONE where extraction was never intended. Not by widening it.
+  unimplemented:
+    - {language: go, strategy: ARROW_FUNCTION, declares: 1}
+    - {language: java, strategy: ARROW_FUNCTION, declares: 1}
+    - {language: lua, strategy: FUNCTION_CALL, declares: 2}
+    - {language: lua, strategy: VARIABLE_WITH_TYPE, declares: 1}
+    - {language: php, strategy: ARROW_FUNCTION, declares: 1}
+    - {language: python, strategy: ARROW_FUNCTION, declares: 1}
+    - {language: rust, strategy: ARROW_FUNCTION, declares: 1}
+    - {language: typescript, strategy: CONSTRUCTOR_DEFINITION, declares: 1}
+
+# Bare name-binding hooks (#64). A plain identifier is generically a
+# NAME_REFERENCE; in some parent contexts it introduces a name instead. Those
+# positions have no distinct wrapper node, so the rule cannot come from the .def
+# file and the walker consults these per-grammar hooks after applying .def flags.
+#
+# Both default to false, so a module that specializes neither is correct -- it
+# declares that the language has no bare binding context. Listing the
+# specializations here makes adding one a deliberate spec edit.
+hooks:
+
+  IsBareNameDefinitionParent:
+    signature: "bool(const char *parent_type)"
+    specialized_by:
+      - CAdapter
+      - CPPAdapter
+      - CSharpAdapter
+      - DartAdapter
+      - GoAdapter
+      - JavaAdapter
+      - JavaScriptAdapter
+      - KotlinAdapter
+      - LuaAdapter
+      - PythonAdapter
+      - RubyAdapter
+      - RustAdapter
+      - SwiftAdapter
+      - TypeScriptAdapter
+
+  IsBareNameDefinitionField:
+    signature: "bool(TSNode self, TSNode parent, const char *parent_type)"
+    # Needed where a defaulted parameter's VALUE shares the wrapper node with the
+    # NAME, so a parent-type rule would mis-flag the value.
+    specialized_by:
+      - CSharpAdapter
+      - JavaAdapter
+      - PythonAdapter
+      - RAdapter
+      - RustAdapter
+      - TypeScriptAdapter
+
+# Conventions the extractors share. Named here because a module that breaks one
+# produces plausible, wrong output rather than an error.
+conventions:
+  annotations_are_at_prefixed: >
+    Annotations and decorators always carry their '@' in extracted text, so
+    SplitAnnotations can separate them from keyword modifiers. Called Contract A
+    in native_context_extraction.hpp.
+  byte_offsets_are_zero_based_half_open: >
+    start_byte/end_byte under source := 'full' (048 item 2).

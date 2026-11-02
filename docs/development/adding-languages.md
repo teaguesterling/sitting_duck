@@ -110,6 +110,15 @@ The patch will be automatically applied during build via `scripts/apply_grammar_
 
 **For languages requiring native context extraction (functions with parameters, classes with methods), you MUST update these four critical files with EXACT class name consistency:**
 
+> **This rule is now gated, because asking was not enough.** 16 cases had drifted
+> from it by 2026-10-30 — 8 languages with no `NativeExtractionTraits` mapping and
+> 8 more (language, strategy) pairs with a mapping but no specialization. Neither
+> failure is a compile error: one selects the engine-wide empty default, the other
+> the language's own empty base template, and both produce a blank column and a
+> green build. `python3 scripts/verify_module_abi.py` now fails on both, against
+> the declared baselines in `spec/abi/module-abi.yaml`. Run it before you push a
+> new language, and see [Reviewing a Language Module](language-module-review.md).
+
 1. **Forward declaration in `src/include/native_context_extraction.hpp`** (line ~67):
 ```cpp
 class <Language>Adapter;  // EXACT class name match required
