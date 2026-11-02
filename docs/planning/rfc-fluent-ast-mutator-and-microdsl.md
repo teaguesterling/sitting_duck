@@ -156,7 +156,9 @@ In `sitting_duck`, `node_id` is an opaque surrogate key. Tree structure is deter
 1. `parent_id` (DAG parent reference)
 2. `sibling_index` (Child ordering)
 
-$$\text{TreeOrder}(N) = \langle N.\text{parent\_id}, \, N.\text{sibling\_index} \rangle$$
+```
+TreeOrder(N)  =  (N.parent_id, N.sibling_index)
+```
 
 **Consequences:**
 * Synthetic IDs (`900000 + i`) can be assigned to new nodes without re-indexing existing trees.

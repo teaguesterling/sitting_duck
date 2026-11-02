@@ -83,6 +83,7 @@ nav:
     - Structural Search: how-to/structural-search.md
     - Selector Examples: how-to/selector-examples.md
     - Code Transformation & Unparsing: how-to/code-transformation-and-unparsing.md
+    - Custom Languages: how-to/custom-languages.md
     - Cookbook: how-to/cookbook.md
   - Reference:
     - Functions: reference/functions.md
