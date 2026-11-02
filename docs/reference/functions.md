@@ -358,7 +358,7 @@ register_language(
 |-----------|------|---------|-------------|
 | `name` | VARCHAR | required | Name to register for the language |
 | `grammar_path` | VARCHAR | required | Path to the compiled tree-sitter shared library |
-| `config` | VARCHAR | `NULL` | Optional path or JSON string with node mapping configurations |
+| `config` | VARCHAR | `NULL` | Optional path or JSON string with node mapping configurations. Its schema is the ABI's data layer — see [Module ABI](module-abi.md) |
 | `extensions` | LIST(VARCHAR) | `[]` | File extensions to associate with the language |
 | `aliases` | LIST(VARCHAR) | `[]` | Alternative language names for detection |
 | `symbol` | VARCHAR | `NULL` | C symbol name (defaults to `tree_sitter_<name>`) |
@@ -373,6 +373,19 @@ SELECT * FROM register_language(
     extensions := ['mydsl', 'dsl']
 );
 ```
+
+See the [Module ABI](module-abi.md) for the contract your library and config must
+satisfy. Two parts of it decide whether a registration succeeds:
+
+- **The shared library** exports one C symbol, `const TSLanguage *(*)()`, and its
+  grammar's `ts_language_version()` must fall in the supported range. That is the
+  whole binary contract; registration also smoke-parses the empty string, so a
+  library that loads but cannot parse fails here rather than mid-query.
+- **The `config`** gives each node type a `semantic_type`, an optional
+  `refinement`, a `name_strategy` and `flags`, using names the taxonomy defines.
+  An unknown name is refused rather than ignored. **`native_strategy` is refused
+  too** — native context extraction needs compiled-in C++, so the `parameters`
+  and `signature_type` columns stay empty for a runtime-registered language.
 
 ---
 

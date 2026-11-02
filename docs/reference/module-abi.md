@@ -212,4 +212,5 @@ an error, so they are part of the contract:
 
 - [`tracker/features/044-v2-m1-contract.md`](https://github.com/teaguesterling/sitting_duck/blob/main/tracker/features/044-v2-m1-contract.md) — the M1 milestone this contract closes
 - [`docs/planning/v2-architecture.md`](https://github.com/teaguesterling/sitting_duck/blob/main/docs/planning/v2-architecture.md) — where the module layout is going (M2, M3)
+- [`register_language()`](functions.md#register_language) — the full parameter reference for the runtime door described in layer 1
 - [Semantic Types](semantic-types.md) — the taxonomy the data layer names
