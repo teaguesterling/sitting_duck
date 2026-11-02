@@ -102,46 +102,139 @@ on declaration nodes at all. Three of four cases wrong.
 | `verify_module_abi.py` | yes | unit is `(language, strategy)`; L3–L5 invisible |
 | `check_def_type_single_line.py` | yes | formatting only |
 | `generate_taxonomy.py --check` | yes | taxonomy table sync only |
-| `verify_native_dispatch.py` | **no** | matches `strcmp(<var with "type">, "lit")` only, so python's `==` idiom leaves 95 of 132 literals unexamined; globs `*_native_extractors.hpp`, so the shared tables and the adapters are unread; prints **no line** for a language with no extractor header |
+| `verify_native_dispatch.py` | **yes, since step 2** | was: matched `strcmp(<var with "type">, "lit")` only, so python's `==` idiom left 95 of 132 literals unexamined; globbed `*_native_extractors.hpp`, so the shared tables and the adapters were unread; printed **no line** for a language with no extractor header. Now: 1,374 literals in 27 languages, 191 in the shared table, 70 baselined. Remaining limit: 103 comparison sites whose operand is source text, which it names by operand |
 | `conformance_kit.sh` | **no** | `NATIVE-DECL` covers 5 of 10 declarable strategies and aggregates per language, so it prints `PASS: every declared capability was delivered` for python and zig while a declared capability of each delivers nothing |
 | the three `audit_*.py` | **no** | — |
 
 Only an **oracle language** caught the swift defect. That is now rubric item 1.7.
 
-## Also found: 9 dead literals in the shared extractor
+## Also found: 11 dead literals in the shared extractor
 
 `function_call_extractor.hpp` holds per-language node-name tables for 15
-languages and is in no gate's glob. Checked with `verify_native_dispatch.py`'s
-own `symbol_table()`:
+languages, 191 literals in all. It was in no gate's glob; it is now check B of
+`verify_native_dispatch.py`.
 
 ```
-rust    method_call_expression                      additional_calls
-php     argument_name                               named_params
-ruby    method_call, chained_call                   additional_calls
+php     argument_name            the grammar's rule is hidden: _argument_name
+r       namespace_get, namespace_get_internal      vs namespace_operator, ::, :::
+r       ",", ";"                 tree-sitter-r has no anon_sym_COMMA at all;
+                                 its comma node is named `comma`, so the
+                                 argument-punctuation skip never fires and
+                                 commas come back as operands
+ruby    method_call, chained_call                  vs call
+rust    method_call_expression                     vs call_expression
 swift   init_expression, argument_list, labeled_argument
-r       namespace_get, namespace_get_internal       name_types
-
-9 dead node-type literals + 5 dead punctuation literals (benign)
-go and rust both list ", " — with a trailing space
+                                 vs value_arguments, value_argument,
+                                 value_argument_label -- the same defect as
+                                 swift's one-blob arguments
 ```
 
-The file also contains **zero** depth bounds and **one** `ts_node_is_null` guard
-in 650 lines, which is why the review rubric no longer treats delegation to it as
-satisfying its robustness items.
+**This supersedes the earlier figure of 9 dead literals plus 5 benign dead
+punctuation.** That probe was wrong twice, and both faults were in its own
+input, not in the code it judged:
+
+  - It decoded only `\"` and `\\` from `ts_symbol_names[]`. Measured across
+    every generated parser, the table also carries `\?` (63 names), `\\` (8),
+    `\n` (3) and `\0` (1). So tree-sitter-dart's `?.`, written `"\?."` in
+    parser.c, read as absent when the grammar emits it.
+  - Its map-end test was `startswith("};")`, but the map closes with an
+    indented `    }}};`. It therefore ran past the end of the table and blamed
+    seven of the header's own generic helpers on dart.
+
+**One earlier claim does not reproduce:** go and rust do *not* list `", "` with
+a trailing space. No literal in the map has leading or trailing whitespace,
+checked exactly rather than by grep.
+
+The file still contains **zero** depth bounds and **one** `ts_node_is_null`
+guard in 650 lines, which is why the review rubric no longer treats delegation
+to it as satisfying its robustness items.
 
 ## v1.18.0 scope
 
 Ordered so that each step is provable, and so the class is closed before the
 instances are chased.
 
-1. **Gate L3, L4 and L5** — extend `verify_module_abi.py` so its unit is
-   `(language, strategy, raw_type)`, add a reachability check for specializations
-   nothing declares, and baseline whatever that turns up. Without this, fixing
-   the four instances leaves the class open and the next drift silent.
-2. **Widen `verify_native_dispatch.py`** — accept the `==` idiom, glob
-   `src/language_adapters/*.cpp` and the shared tables, and make it name every
-   language it skipped. Its baseline moves; record the new one in
-   `spec/abi/module-abi.yaml` rather than in prose.
+1. **Gate L3, L4 and L5** — ~~extend `verify_module_abi.py` so its unit is
+   `(language, strategy, raw_type)`~~, add a reachability check for
+   specializations nothing declares, and baseline whatever that turns up.
+   Without this, fixing the four instances leaves the class open and the next
+   drift silent.
+
+   **Revised 2026-11-02, after measuring.** L4 is done — `verify_module_abi.py`
+   check 7, 45 specializations baselined under `native_extraction.unreachable`,
+   of which 16 are real implementations totalling ~1,642 lines that no input can
+   reach. python's `IMPORT_STATEMENT` is 271 of them and is unreachable *twice*,
+   since that strategy is also `reserved`.
+
+   **L3 and L5 cannot be gated statically, and they are the same check.** A
+   specialization's handled-set is not a property of its source:
+   `LuaNativeExtractor<FUNCTION_WITH_PARAMS>` has zero node-type comparisons and
+   serves any declaring node that has a `parameters` child. So the real question
+   is whether each declaring node owns the child the extractor looks for — which
+   needs per-node field data from `grammars/<g>/src/node-types.json`, a
+   **submodule** file rather than a committed one. Reading it would couple the
+   gate to the 1.2 GB grammar clone and cost `verify_module_abi.py` its
+   bare-checkout property.
+
+   So L3/L5 move to step 3, the conformance kit, which already has a binary and
+   a corpus and can probe instead of derive. That makes step 3 load-bearing
+   rather than cosmetic.
+2. **Widen `verify_native_dispatch.py`** — DONE. Three checks now, because a
+   node-type literal reaches the grammar three ways: a comparison in a
+   per-language extractor or adapter (`dispatch`), an entry in
+   `LANGUAGE_FUNCTION_CALL_TYPES` (`table`), and the language name a
+   `LanguageTag` hands that table's lookup (`key`). Check `key` exists because
+   `GetNodeTypes()` falls back to `DEFAULT_FUNCTION_CALL_TYPES` on a miss, so a
+   tag returning `"c_sharp"` against a key `"csharp"` would take the default in
+   silence. Measured: 15 tags, 15 keys, all matching, 15 instantiations.
+
+   The variable test changed from a **name** to a **binding**. `"type" in name`
+   is wrong in both directions: `type_text` in `cpp_native_extractors.hpp:255`
+   is `content.substr()`, and `value_type` in `duckdb_adapter.cpp:748` is a
+   DuckDB `LogicalType`, while every `node_type == "lit"` comparison was
+   invisible. A variable now qualifies if its nearest preceding assignment
+   resolves, through `string(...)`, to `ts_node_type(...)`. A string parameter
+   qualifies only when **every** call site of its function passes a node type —
+   which is what keeps helpers like `IsTypeNode(const char *child_type)` in
+   scope; a purely lexical rule dropped 13 literals the old gate did judge.
+
+   | | old | new |
+   |---|---|---|
+   | dispatch literals judged | 765 in 20 headers | **1,374 in 27 languages** |
+   | distinct literals judged | 413 | **606** |
+   | shared-table literals | 0 | **191** |
+   | python | 37 | **136** |
+   | sql | 4 | **107** |
+   | css, html | 0, 0 | **35, 14** |
+
+   The oracle was the old gate itself: every literal it judged must still be
+   judged. The first lexical version failed that, by 13.
+
+   70 dead literals are now baselined in `spec/abi/module-abi.yaml` under
+   `native_extraction.dead_dispatch`, generated by `--emit-baseline` rather
+   than typed. The baseline is bidirectional and both directions are measured:
+   an unlisted dead literal exits 1, and a listed one the run cannot reproduce
+   also exits 1. The gate runs in CI behind its own planted-fault self-test.
+
+   What the 70 are not is a surprise. In most of them the correct name is live
+   in the same symbol table, which is the oracle that proves each finding:
+   typescript dispatches on `parameter` while the grammar emits
+   `required_parameter`; cpp on `class_definition` against `class_specifier`;
+   c on `function_specifier` against `storage_class_specifier`; css on
+   `media_feature_name` against `feature_name`; sql on `AND`/`OR` against
+   `keyword_and`/`keyword_or`. sql's case is the worst shape, because those two
+   dead literals sit in a `!=` filter at `sql_native_extractors.hpp:529`: the
+   skip never fires, so `AND` and `OR` are returned as operands. That is
+   populated-but-wrong, not blank. (A third sql literal, `"text"` at `:174`, is
+   an `==` and so merely misses.)
+
+   **One finding is a known defect, reproduced.** Check `table` flags swift's
+   `argument_list`, which is the wrong value recorded in §2 of this document —
+   found again, from the source side, by a gate that knew nothing about it.
+   Swift's other findings are **new and separate**: the adapter trio
+   `struct_declaration` / `enum_declaration` / `variable_declaration` at
+   `swift_adapter.cpp:81-85` is about declarations, not call arguments, and no
+   wrong output has been traced to it yet.
 3. **Make `NATIVE-DECL` per `(raw_type, strategy)`** and stop the kit printing
    `PASS: every declared capability was delivered` when it has only checked the
    function-shaped ones.
@@ -204,5 +297,5 @@ rubric's own item 2.5/2.6 prose. Code-site counts in the clustered work list are
 leads, not attributions, and the fan-out schema's missing `cause` field is why.
 
 **Three claims are about the checkers, not a language** —
-`verify_native_dispatch.py` (3) and `check_def_type_single_line.py` (1). They
-belong with step 2 of the scope above.
+`verify_native_dispatch.py` (3) and `check_def_type_single_line.py` (1). The
+three on the dispatch gate are answered by step 2 above.

@@ -33,9 +33,10 @@ python3 scripts/verify_module_abi.py                  # the module ABI contract
 python3 scripts/verify_module_abi.py --self-test      # proves the gate can fail
 python3 scripts/check_def_type_single_line.py         # one DEF_TYPE per line
 python3 scripts/generate_taxonomy.py --check          # taxonomy tables in sync
+python3 scripts/verify_native_dispatch.py             # dead dispatch literals
+python3 scripts/verify_native_dispatch.py --self-test # proves that gate can fail
 
 # a checker exists, nothing runs it. If you skip these, say so.
-python3 scripts/verify_native_dispatch.py             # dead dispatch literals
 python3 scripts/audit_unreachable_declarations.py --binary build/release/duckdb
 python3 scripts/audit_shadowed_declarations.py        # declarations hidden by an include
 python3 scripts/audit_anon_token_collisions.py --language <lang>
@@ -125,12 +126,14 @@ meaning.
 |---|---|---|---|
 | 3.1 | A `NativeExtractionTraits<<Lang>Adapter>` mapping exists | `verify_module_abi.py` check 4 | **CI, baselined** |
 | 3.2 | Every declared strategy has its own specialization | `verify_module_abi.py` check 6 | **CI, baselined** |
-| 3.2b | Every **declaring node type** is handled by that specialization | read the specialization's dispatch against every `DEF_TYPE` line declaring the strategy | **judgment** |
-| 3.2c | Every specialization is **reachable** — some declaration names its strategy | grep the declaration tables for the strategy | **judgment** |
-| 3.2d | Every declaration the strategy can structurally serve — the node actually owns the thing being extracted | parse one instance; check `node-types.json` | **judgment** |
+| 3.2b | Every **declaring node type** is handled by that specialization | read the specialization against every `DEF_TYPE` line declaring the strategy, and probe one instance of each | **judgment, and not statically gateable** — see below |
+| 3.2c | Every specialization is **reachable** — some declaration names its strategy | `verify_module_abi.py` check 7 | **CI, baselined** |
+| 3.2d | Every declaration the strategy can structurally serve — the node actually owns the thing being extracted | parse one instance. `grammars/<g>/src/node-types.json` has the field data, but it is a **submodule** file, not committed like `generated_parsers/*/parser.c` | **judgment** — see below |
 | 3.3 | Every declared strategy is one the dispatcher has a case for | `verify_module_abi.py` checks 1–3 | **CI** |
-| 3.4a | Every node-type literal in the extractor header exists in the grammar's symbol table | `verify_native_dispatch.py` | **script** |
-| 3.4b | …and in the **shared** tables the language delegates to | the gate does not read `function_call_extractor.hpp` — check by hand | **judgment** |
+| 3.4a | Every node-type literal the module dispatches on exists in the grammar's symbol table | `verify_native_dispatch.py` check `dispatch` — reads the extractor header **and** the adapter | **CI, baselined** |
+| 3.4b | …and in the **shared** `LANGUAGE_FUNCTION_CALL_TYPES` table | `verify_native_dispatch.py` check `table` | **CI, baselined** |
+| 3.4c | The module's `LanguageTag` name is a key of that table, so it does not silently take `DEFAULT_FUNCTION_CALL_TYPES` | `verify_native_dispatch.py` check `key` | **CI, baselined** |
+| 3.4d | A dispatch on **source text** rather than a node type is intended, not a confusion | the gate judges only operands bound to `ts_node_type` and prints the others by operand name; read that list for your language | **judgment** |
 | 3.5 | Each specialization's failure path leaves no **plausible** value behind | read it | **judgment** |
 | 3.6 | Upward ancestor walks are depth-bounded and guard `ts_node_is_null` | read it | **judgment** |
 | 3.7 | No dispatch literal contradicts a claim in the same module's comments | grep the literals, read the comments | **judgment** |
@@ -142,6 +145,22 @@ meaning.
 `verify_module_abi.py` exit 0 by design. Read its `declared unimplemented:` and
 `declared unmapped:` lines and grep `spec/abi/module-abi.yaml` for your language
 before concluding anything from the exit code.
+
+**Why 3.2b and 3.2d stay judgment, measured 2026-11-02.** A specialization's
+handled-set is not derivable from its own source. `LuaNativeExtractor<FUNCTION_WITH_PARAMS>`
+contains **zero** node-type comparisons — it walks for a `parameters` child and
+therefore serves any declaring node type that has one. So "which raw_types does
+this specialization handle" is not a property of the C++ at all; it is a property
+of whether each declaring node owns the child the extractor looks for. 3.2b and
+3.2d are the same question from two directions.
+
+Answering it statically needs per-node field data. That lives in
+`grammars/<g>/src/node-types.json`, which is a **grammar submodule** file —
+unlike `generated_parsers/*/src/parser.c`, which is committed. A gate reading it
+would couple to the 1.2 GB submodule clone and lose `verify_module_abi.py`'s
+bare-checkout property. The better home is the conformance kit, which already
+has a built binary and a corpus and can answer it by probing rather than
+deriving.
 
 **3.2b exists because check 6's unit is the strategy and a declaration's unit is
 the node type.** typescript declares `FUNCTION_WITH_PARAMS` on 11 node types and
@@ -208,9 +227,11 @@ alone, with the same grammar evidence §4 demands.
 
 1. **The build state first** — compiled in, or dormant table.
 2. **Every `CI` and `script` item run**, with its real output quoted and a
-   verdict of `ok`, `n/a` or `void`. Some exit non-zero by design:
-   `verify_native_dispatch.py`'s current baseline is recorded in
-   `spec/abi/module-abi.yaml`, not in this page, so that it cannot go stale here.
+   verdict of `ok`, `n/a` or `void`. `verify_native_dispatch.py` exits 0 against
+   its baseline, which lives in `spec/abi/module-abi.yaml` and not in this page,
+   so that it cannot go stale here. If it exits non-zero on your branch, you
+   either added a dead literal or fixed a baselined one — both need the spec
+   edited, which is the point.
 3. **A rating per surface**, on this scale and no other:
 
    | rating | means |

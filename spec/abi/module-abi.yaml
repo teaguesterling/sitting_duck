@@ -202,6 +202,182 @@ native_extraction:
     - {language: rust, strategy: ARROW_FUNCTION, declares: 1}
     - {language: typescript, strategy: CONSTRUCTOR_DEFINITION, declares: 1}
 
+  # The OPPOSITE direction to `unimplemented`, and the one nothing checked: a
+  # specialization that EXISTS and that no declaration can reach. The extractor
+  # specializes a strategy, and not one DEF_TYPE row in that language names it,
+  # so no input ever arrives. The compiler cannot see it -- an uninstantiated
+  # template is not an error -- and neither can the conformance kit, which
+  # judges declarations rather than code.
+  #
+  # Measured 2026-11-02: 45 pairs, in three shapes.
+  #
+  #   no-op      (19)  the body returns an empty NativeContext and nothing else.
+  #                    Harmless, and arguably a deliberate statement that this
+  #                    language does not do this strategy.
+  #   delegates  (10)  a one-line forward to another extractor. Also harmless.
+  #   dead code  (16)  a real implementation, ~1,642 lines in total, that no
+  #                    input can reach. python/IMPORT_STATEMENT is 271 lines and
+  #                    is unreachable TWICE over, because IMPORT_STATEMENT is
+  #                    also `reserved` -- the dispatcher has no case for it.
+  #
+  # The gate does not judge between the three. It fails on a FORTY-SIXTH, and on
+  # an entry here whose code has since been reached or removed. Classifying them
+  # by hand would need a threshold constant, and the argument for the threshold
+  # belongs in this comment rather than in the script.
+  #
+  # Deleting the dead-code ones is separate work: it removes entries from this
+  # list, which the gate requires, and it touches no behaviour because nothing
+  # reaches them.
+  unreachable:
+    - {language: cpp, strategy: CLASS_WITH_INHERITANCE, lines: 4}   # no-op
+    - {language: cpp, strategy: CUSTOM, lines: 156}   # dead code
+    - {language: css, strategy: ARROW_FUNCTION, lines: 4}   # no-op
+    - {language: css, strategy: ASYNC_FUNCTION, lines: 4}   # no-op
+    - {language: css, strategy: CLASS_WITH_INHERITANCE, lines: 4}   # no-op
+    - {language: css, strategy: CLASS_WITH_METHODS, lines: 6}   # no-op
+    - {language: css, strategy: CUSTOM, lines: 6}   # delegates
+    - {language: css, strategy: FUNCTION_CALL, lines: 6}   # delegates
+    - {language: css, strategy: FUNCTION_WITH_DECORATORS, lines: 4}   # no-op
+    - {language: dart, strategy: ASYNC_FUNCTION, lines: 19}   # dead code
+    - {language: dart, strategy: CLASS_WITH_INHERITANCE, lines: 4}   # no-op
+    - {language: dart, strategy: FUNCTION_WITH_DECORATORS, lines: 38}   # dead code
+    - {language: go, strategy: CLASS_WITH_INHERITANCE, lines: 4}   # no-op
+    - {language: html, strategy: ARROW_FUNCTION, lines: 5}   # no-op
+    - {language: html, strategy: ASYNC_FUNCTION, lines: 5}   # no-op
+    - {language: html, strategy: CLASS_WITH_INHERITANCE, lines: 5}   # no-op
+    - {language: html, strategy: CLASS_WITH_METHODS, lines: 6}   # no-op
+    - {language: html, strategy: CUSTOM, lines: 6}   # delegates
+    - {language: html, strategy: FUNCTION_CALL, lines: 6}   # delegates
+    - {language: html, strategy: FUNCTION_WITH_DECORATORS, lines: 5}   # no-op
+    - {language: java, strategy: CLASS_WITH_INHERITANCE, lines: 4}   # no-op
+    - {language: java, strategy: FUNCTION_WITH_DECORATORS, lines: 187}   # dead code
+    - {language: javascript, strategy: ASYNC_FUNCTION, lines: 7}   # delegates
+    - {language: javascript, strategy: CUSTOM, lines: 125}   # dead code
+    - {language: kotlin, strategy: ASYNC_FUNCTION, lines: 42}   # dead code
+    - {language: kotlin, strategy: GENERIC_FUNCTION, lines: 46}   # dead code
+    - {language: python, strategy: ASYNC_FUNCTION, lines: 6}   # delegates
+    - {language: python, strategy: FUNCTION_WITH_DECORATORS, lines: 237}   # dead code
+    - {language: python, strategy: IMPORT_STATEMENT, lines: 271}   # dead code
+    - {language: r, strategy: VARIABLE_WITH_TYPE, lines: 75}   # dead code
+    - {language: ruby, strategy: VARIABLE_WITH_TYPE, lines: 43}   # dead code
+    - {language: rust, strategy: ASYNC_FUNCTION, lines: 6}   # delegates
+    - {language: rust, strategy: CLASS_WITH_INHERITANCE, lines: 4}   # no-op
+    - {language: sql, strategy: ARROW_FUNCTION, lines: 6}   # no-op
+    - {language: sql, strategy: ASYNC_FUNCTION, lines: 6}   # no-op
+    - {language: sql, strategy: CLASS_WITH_INHERITANCE, lines: 22}   # dead code
+    - {language: sql, strategy: CLASS_WITH_METHODS, lines: 58}   # dead code
+    - {language: sql, strategy: CUSTOM, lines: 6}   # delegates
+    - {language: sql, strategy: FUNCTION_CALL, lines: 6}   # delegates
+    - {language: sql, strategy: FUNCTION_WITH_DECORATORS, lines: 6}   # no-op
+    - {language: swift, strategy: ASYNC_FUNCTION, lines: 40}   # dead code
+    - {language: typescript, strategy: ASYNC_FUNCTION, lines: 7}   # delegates
+    - {language: typescript, strategy: CLASS_WITH_INHERITANCE, lines: 4}   # no-op
+    - {language: typescript, strategy: CUSTOM, lines: 125}   # dead code
+    - {language: typescript, strategy: FUNCTION_WITH_DECORATORS, lines: 158}   # dead code
+
+
+  # Node-type literals the extraction layer dispatches on that the grammar does
+  # NOT emit, as of this baseline. Gated by scripts/verify_native_dispatch.py.
+  #
+  # A dead literal produces no compile error, no link error and no warning: the
+  # branch is simply never taken, so the declared strategy returns an empty or
+  # partial answer. That is #220, three times over, and it is why this list is
+  # a spec entry rather than a TODO.
+  #
+  # `check` says how the literal reaches the grammar:
+  #   dispatch  a comparison in a per-language extractor or adapter
+  #   table     an entry in LANGUAGE_FUNCTION_CALL_TYPES
+  #   key       a LanguageTag name that misses that table, taking the default
+  #
+  # The entry is keyed on (check, language, literal), not on a line number,
+  # because line numbers rot and the gate must still recognise the same defect
+  # after the file moves. The trailing comment carries the line for a reader.
+  #
+  # This list is BIDIRECTIONAL. A new dead literal fails the gate, and so does
+  # a baselined one the run no longer reproduces -- otherwise a fixed literal
+  # would stay listed and the baseline would drift away from the code.
+  #
+  # Regenerate with: python3 scripts/verify_native_dispatch.py --emit-baseline
+  #
+  # In most of these the correct name is live in the same symbol table, which
+  # is the oracle that proves the finding: typescript dispatches on "parameter"
+  # while the grammar emits "required_parameter"; cpp on "class_definition"
+  # against "class_specifier"; c on "function_specifier" against
+  # "storage_class_specifier"; css on "media_feature_name" against
+  # "feature_name". Fixing them is #042's own work, one language per change,
+  # expectation first. This records the ground truth; it does not excuse it.
+  dead_dispatch:
+    - {check: dispatch, language: c, literal: "function_specifier"}   # c_native_extractors.hpp:227
+    - {check: dispatch, language: cpp, literal: "class_definition"}   # cpp_adapter.cpp:230
+    - {check: dispatch, language: cpp, literal: "default_parameter_declaration"}   # cpp_native_extractors.hpp:156
+    - {check: dispatch, language: cpp, literal: "function_specifier"}   # cpp_native_extractors.hpp:541
+    - {check: dispatch, language: cpp, literal: "pointer_type"}   # cpp_native_extractors.hpp:120
+    - {check: dispatch, language: cpp, literal: "reference_type"}   # cpp_native_extractors.hpp:120
+    - {check: dispatch, language: csharp, literal: "base_type"}   # csharp_native_extractors.hpp:255
+    - {check: dispatch, language: csharp, literal: "equals_value_clause"}   # csharp_native_extractors.hpp:119
+    - {check: dispatch, language: csharp, literal: "parameter_modifier"}   # csharp_native_extractors.hpp:116
+    - {check: dispatch, language: csharp, literal: "simple_base_type"}   # csharp_native_extractors.hpp:255
+    - {check: dispatch, language: css, literal: "media_feature_name"}   # css_native_extractors.hpp:169
+    - {check: dispatch, language: css, literal: "variable_name"}   # css_native_extractors.hpp:382
+    - {check: dispatch, language: go, literal: "primitive_type"}   # go_native_extractors.hpp:63
+    - {check: dispatch, language: java, literal: "primitive_type"}   # java_native_extractors.hpp:16
+    - {check: dispatch, language: kotlin, literal: "default_value"}   # kotlin_native_extractors.hpp:191
+    - {check: dispatch, language: kotlin, literal: "delegation_specifiers"}   # kotlin_native_extractors.hpp:373
+    - {check: dispatch, language: kotlin, literal: "enum_class_declaration"}   # kotlin_native_extractors.hpp:313
+    - {check: dispatch, language: kotlin, literal: "interface_declaration"}   # kotlin_native_extractors.hpp:309
+    - {check: dispatch, language: kotlin, literal: "type"}   # kotlin_native_extractors.hpp:51
+    - {check: dispatch, language: lua, literal: "local_function"}   # lua_adapter.cpp:140
+    - {check: dispatch, language: lua, literal: "local_function_declaration"}   # lua_adapter.cpp:68
+    - {check: dispatch, language: lua, literal: "local_variable_declaration"}   # lua_adapter.cpp:140
+    - {check: dispatch, language: markdown, literal: "image"}   # markdown_adapter.cpp:68
+    - {check: dispatch, language: markdown, literal: "link"}   # markdown_adapter.cpp:68
+    - {check: dispatch, language: php, literal: "optional_parameter"}   # php_native_extractors.hpp:102
+    - {check: dispatch, language: php, literal: "return_type"}   # php_native_extractors.hpp:51
+    - {check: dispatch, language: php, literal: "type_declaration"}   # php_native_extractors.hpp:139
+    - {check: dispatch, language: python, literal: "annotated_assignment"}   # python_native_extractors.hpp:651
+    - {check: dispatch, language: python, literal: "async_function_definition"}   # python_native_extractors.hpp:1071
+    - {check: dispatch, language: python, literal: "import_list"}   # python_native_extractors.hpp:1397
+    - {check: dispatch, language: sql, literal: "AND"}   # sql_native_extractors.hpp:529
+    - {check: dispatch, language: sql, literal: "OR"}   # sql_native_extractors.hpp:529
+    - {check: dispatch, language: sql, literal: "boolean_literal"}   # sql_native_extractors.hpp:703
+    - {check: dispatch, language: sql, literal: "column_reference"}   # sql_native_extractors.hpp:208
+    - {check: dispatch, language: sql, literal: "delete_statement"}   # sql_native_extractors.hpp:82
+    - {check: dispatch, language: sql, literal: "function_call"}   # sql_native_extractors.hpp:62
+    - {check: dispatch, language: sql, literal: "insert_statement"}   # sql_native_extractors.hpp:74
+    - {check: dispatch, language: sql, literal: "number_literal"}   # sql_native_extractors.hpp:702
+    - {check: dispatch, language: sql, literal: "select_statement"}   # sql_native_extractors.hpp:70
+    - {check: dispatch, language: sql, literal: "string_literal"}   # sql_native_extractors.hpp:702
+    - {check: dispatch, language: sql, literal: "table_reference"}   # sql_native_extractors.hpp:694
+    - {check: dispatch, language: sql, literal: "text"}   # sql_native_extractors.hpp:174
+    - {check: dispatch, language: sql, literal: "update_statement"}   # sql_native_extractors.hpp:78
+    - {check: dispatch, language: swift, literal: "access_level_modifier"}   # swift_native_extractors.hpp:211
+    - {check: dispatch, language: swift, literal: "closure_parameters"}   # swift_native_extractors.hpp:263
+    - {check: dispatch, language: swift, literal: "default_parameter_clause"}   # swift_native_extractors.hpp:150
+    - {check: dispatch, language: swift, literal: "enum_declaration"}   # swift_adapter.cpp:82
+    - {check: dispatch, language: swift, literal: "generic_type"}   # swift_native_extractors.hpp:373
+    - {check: dispatch, language: swift, literal: "rethrows"}   # swift_native_extractors.hpp:222
+    - {check: dispatch, language: swift, literal: "struct_declaration"}   # swift_adapter.cpp:81
+    - {check: dispatch, language: swift, literal: "type_inheritance_clause"}   # swift_native_extractors.hpp:353
+    - {check: dispatch, language: swift, literal: "variable_declaration"}   # swift_adapter.cpp:85
+    - {check: dispatch, language: typescript, literal: "field_declaration"}   # typescript_native_extractors.hpp:728
+    - {check: dispatch, language: typescript, literal: "module_declaration"}   # typescript_native_extractors.hpp:404
+    - {check: dispatch, language: typescript, literal: "namespace_declaration"}   # typescript_native_extractors.hpp:407
+    - {check: dispatch, language: typescript, literal: "number_literal"}   # typescript_native_extractors.hpp:1013
+    - {check: dispatch, language: typescript, literal: "parameter"}   # typescript_native_extractors.hpp:817
+    - {check: dispatch, language: typescript, literal: "rest_parameter"}   # typescript_native_extractors.hpp:112
+    - {check: dispatch, language: typescript, literal: "string_literal"}   # typescript_native_extractors.hpp:1015
+    - {check: table, language: php, literal: "argument_name"}   # function_call_extractor.hpp:169
+    - {check: table, language: r, literal: ","}   # function_call_extractor.hpp:203
+    - {check: table, language: r, literal: ";"}   # function_call_extractor.hpp:203
+    - {check: table, language: r, literal: "namespace_get"}   # function_call_extractor.hpp:202
+    - {check: table, language: r, literal: "namespace_get_internal"}   # function_call_extractor.hpp:202
+    - {check: table, language: ruby, literal: "chained_call"}   # function_call_extractor.hpp:180
+    - {check: table, language: ruby, literal: "method_call"}   # function_call_extractor.hpp:180
+    - {check: table, language: rust, literal: "method_call_expression"}   # function_call_extractor.hpp:132
+    - {check: table, language: swift, literal: "argument_list"}   # function_call_extractor.hpp:188
+    - {check: table, language: swift, literal: "init_expression"}   # function_call_extractor.hpp:186
+    - {check: table, language: swift, literal: "labeled_argument"}   # function_call_extractor.hpp:193
+
 # Bare name-binding hooks (#64). A plain identifier is generically a
 # NAME_REFERENCE; in some parent contexts it introduces a name instead. Those
 # positions have no distinct wrapper node, so the rule cannot come from the .def
