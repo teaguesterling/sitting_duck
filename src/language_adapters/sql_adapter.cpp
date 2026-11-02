@@ -351,7 +351,10 @@ DEF_TYPE("keyword_conflict", METADATA_ANNOTATION, NODE_TEXT, NONE, ASTNodeFlags:
 //   scripts/audit_leaf_text_gaps.py
 DEF_TYPE("bang", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
 DEF_TYPE("dollar_quote", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
-DEF_TYPE("op_unary_other", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)
+// `op_unary_other` belonged here too, and was dead on arrival: it is already
+// declared above as OPERATOR_ARITHMETIC, and the first declaration of a key
+// wins in an unordered_map initialiser list. Its leaf-text gap is closed on
+// that live entry, not by a second one here.
 // clang-format on
 };
 

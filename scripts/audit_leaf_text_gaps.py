@@ -330,11 +330,17 @@ class LanguageAudit:
         return sorted([t for t, _ in self.gaps_wrong_strategy] + self.gaps_missing_entry)
 
 
-def iter_macro_arglists(text: str, token: str = DEF_TYPE_TOKEN):
+def iter_macro_arglists(text: str, token: str = DEF_TYPE_TOKEN, with_offsets: bool = False):
     """Yield the raw argument text of every balanced `token(...)` call in text.
 
     Skips occurrences inside // line comments and /* block comments so that a
     commented-out DEF_TYPE is not read as a live entry.
+
+    With `with_offsets`, yields `(arglist, start)` instead of `arglist`, where
+    `start` is the offset of the first argument character. Callers that must
+    report a file:line -- scripts/check_def_type_tables.py -- need the position,
+    and a second scanner written to recover it is a second scanner to keep
+    correct. Default off, so every existing caller is unaffected.
     """
     i = 0
     n = len(text)
@@ -374,7 +380,7 @@ def iter_macro_arglists(text: str, token: str = DEF_TYPE_TOKEN):
                     break
             j += 1
         if depth == 0:
-            yield text[start:j]
+            yield (text[start:j], start) if with_offsets else text[start:j]
             i = j + 1
         else:
             i = j

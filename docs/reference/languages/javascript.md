@@ -354,7 +354,6 @@ Boolean and nullish operators
 | `!` | OPERATOR_LOGICAL | NONE |  |
 | `?\?` | OPERATOR_LOGICAL | NONE |  |
 | `?` | OPERATOR_LOGICAL | NONE |  |
-| `??` | OPERATOR_LOGICAL | NONE |  |
 
 ## Comparison Operators
 

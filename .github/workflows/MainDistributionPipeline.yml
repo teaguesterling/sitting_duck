@@ -341,8 +341,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Every DEF_TYPE entry closes on its own line
-        run: python3 scripts/check_def_type_single_line.py
+      - name: Prove the DEF_TYPE table gate can fail
+        run: python3 scripts/check_def_type_tables.py --self-test
+      - name: One DEF_TYPE per line, and no raw type declared twice
+        run: python3 scripts/check_def_type_tables.py
       - name: Regenerate the language references from src/language_configs/*_types.def
         run: python3 docs/scripts/generate_language_reference.py
       - name: Verify the committed references match
