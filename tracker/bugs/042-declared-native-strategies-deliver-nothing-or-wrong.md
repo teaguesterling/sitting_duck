@@ -164,3 +164,45 @@ lives in the gate, per the rubric's §5.
 - The M2 repo split. Every fix here edits
   `src/include/native_context_extraction.hpp`, which is exactly the shared file
   M2 breaks up — so doing this work first is cheaper, not a reason to reorder M2.
+
+## 25-language fan-out, 2026-10-31 — and what it reframed
+
+All 25 remaining compiled-in languages were reviewed against the rubric, one
+agent each, 0 errors. Results: **25 of 25 rated `defective` on at least one
+surface; no language rated `sound` on node definitions or on the extractor.**
+140 wrong-value claims, 117 blanks, 94 under-declaration candidates, 157 rubric
+defects, 254 explicit "could not check" notes. The per-language plans are in
+`workspace/reviews/`; the clustering is in
+`workspace/reviews/00-clustered-work-list.md`.
+
+**The reframe: these are not 25 language defects.** They cluster into six output
+columns, and four of those are produced by ONE code path each.
+
+| output column | claims | languages | one code path? |
+|---|---:|---:|---|
+| `signature_type` | 47 | 16 | yes |
+| `modifiers` | 31 | 14 | yes |
+| `parameters` | 30 | 17 | mostly |
+| `is_exported` | 23 | 15 | **yes** — per-adapter `IsPublicNode`, OR'd at `unified_ast_backend_impl.hpp:326` |
+| `semantic_type` | 15 | 11 | no — `.def` choices, per language |
+| `name_strategy` | 9 | 7 | no — per language |
+
+So step 5's backlog should be worked **per column**, by four agents, not per
+language by twenty-five. A per-language fleet would have each agent re-derive
+the same four defects and then contend on one shared header.
+
+**Sampled verification: 11 of 11 claims reproduced**, across 9 languages, chosen
+for testability rather than plausibility — the table is in the clustered work
+list. The brief that produced the claims *led* the agents, so I expected the
+sample to deflate the count; it did not. 11 of 140 verified is the honest
+figure.
+
+**Scale correction.** An earlier heuristic pass attributed 47 claims to
+`IsPublicNode` by searching each review near its claims; counting only claims
+that name it in their own text gives **23**. The window was picking up the
+rubric's own item 2.5/2.6 prose. Code-site counts in the clustered work list are
+leads, not attributions, and the fan-out schema's missing `cause` field is why.
+
+**Three claims are about the checkers, not a language** —
+`verify_native_dispatch.py` (3) and `check_def_type_single_line.py` (1). They
+belong with step 2 of the scope above.
