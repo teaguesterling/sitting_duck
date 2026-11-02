@@ -163,6 +163,8 @@ Parser error nodes
 | `&` | PARSER_PUNCTUATION | NODE_TEXT | Anchor sigil `&` |
 | `*` | PARSER_PUNCTUATION | NODE_TEXT | Alias sigil `*` |
 | `yaml_version` | LITERAL_NUMBER | NODE_TEXT | The version in a `%YAML 1.2` directive |
+| `directive_name` | PARSER_CONSTRUCT | NODE_TEXT |  |
+| `directive_parameter` | PARSER_CONSTRUCT | NODE_TEXT |  |
 
 ---
 
