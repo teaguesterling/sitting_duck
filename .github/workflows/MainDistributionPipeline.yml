@@ -30,15 +30,36 @@ jobs:
   # commit, one on a v1.5.6-dev commit, one on DuckDB main. Nothing but a check
   # keeps this true.
   #
-  # WHAT CHANGED 2026-10-15, and why this job no longer says "pin == registry
-  # default": duckdb/community-extensions#3079 ("2.0 Release Prep", merged
-  # 15:42Z) moved build.yml's default duckdb_version off the v1.5.6 tag and onto
-  # a pinned DuckDB commit on the 2.0 line. This repo still pins v1.5.6. That
-  # divergence is REAL, DELIBERATE and UNRESOLVED -- migrating means repointing
-  # the shared submodule, which breaks exact-version co-load with the eight
-  # sibling repos until they move in lockstep, and runs into a measured ~27x
-  # ast_select planning regression on the 2.0 line (tracker/bugs/040, upstream
-  # duckdb/duckdb#26036). It is planned in tracker/features/051, not decided here.
+  # RESOLVED 2026-11-02: the pin moved to v2.0.0 (d54cbbe3). Teague's explicit
+  # instruction, which overrides the standing "never repoint" rule above:
+  # "Just move sitting_duck ... They all are building on 2.0.0 for their
+  # community releases so the pin is totally wrong at this point."
+  #
+  # The lockstep argument above did not apply any more: the fleet had already
+  # moved. Measured on origin/main, 2026-11-02 -- SEVEN of the eight siblings
+  # were already at d54cbbe3 with DUCKDB_VERSION v2.0.0 (markdown, mcp, webbed,
+  # yaml, zim, duck_tails, duck_block_utils). Only panduck still lagged at
+  # 069cc9f9, and it is being handled separately. So this repo was the straggler,
+  # not the one breaking ranks.
+  #
+  # A FIRST PASS OF THAT MEASUREMENT WAS WRONG, and the way it was wrong is worth
+  # keeping: it read `git rev-parse HEAD:duckdb` in each repo, where six of them
+  # had a FEATURE BRANCH checked out that predated their own pin move. That
+  # reports stale branch state as fleet state, and it produced a confident table
+  # claiming four divergent pins. Read origin/main, not HEAD, when asking what a
+  # repo ships.
+  #
+  # KNOWN AND ACCEPTED, not fixed: tracker/bugs/040. Re-measured the same day
+  # against this exact tag -- ast_select exec 13.05s and EXPLAIN 72.23s mean for
+  # an ELEVEN-node table, planning single-threaded (upstream duckdb/duckdb#26036).
+  # Teague deferred it explicitly ("don't worry about the 13 seconds now"). So a
+  # slow selector leg here is expected, and 040 stays open.
+  #
+  # NOT yet established when this landed: the suite had never run against v2.0.0
+  # in this repo. What WAS verified is narrower and worth stating as such -- the
+  # extension compiles (801 targets, 0 errors), loads, binds and answers on
+  # d54cbbe3 with zero source changes. duckdb-v2-test-coverage below is the leg
+  # that turns that into a real signal; read `ran tests: N passed`, not colour.
   #
   # So the two facts are now separate constants with separate authorities:
   #   DUCKDB_VERSION            what we pin and ship   -> checked against the tag upstream
@@ -53,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # What this repo pins, ships, and tests against.
-      DUCKDB_VERSION: v1.5.6
+      DUCKDB_VERSION: v2.0.0
       # The next line this workflow builds, for compile-compat and for the
       # test-coverage leg. BRANCH name, not the registry's commit -- see
       # duckdb-v2-test-coverage below for why that distinction is load-bearing.
@@ -79,9 +100,12 @@ jobs:
       # build_andium (v1.4.5) is `if: false`. The route exists with no caller,
       # which is why tracker/features/051 is now a live question.
       DUCKDB_REGISTRY_VARIANT: v1.5.6
-      # Flip day keeps a duckdb-legacy-build at the outgoing version for one
-      # release; set this to that version then so the stray-literal scan exempts
-      # it instead of flagging it. Empty the rest of the time.
+      # Set this ONLY while a duckdb-legacy-build at the outgoing version is
+      # actually shipped, so the stray-literal scan exempts it. It is empty
+      # across the 2.0.0 flip on purpose: the registry stopped building v1.5.6
+      # before the flip (no variegata leg in build_all.yml, build_andium is
+      # `if: false`), so no legacy leg was kept and a blanket exemption for
+      # v1.5.6 would only blind the scan to real drift.
       DUCKDB_LEGACY: ''
     steps:
       - uses: actions/checkout@v4
@@ -126,6 +150,9 @@ jobs:
             for v in $(printf '%s\n' "$line" | grep -oE "$ver_re" || true); do
               [ "$v" = "$DUCKDB_VERSION" ] && continue
               [ "$v" = "$DUCKDB_REGISTRY_STABLE" ] && continue
+              # A recorded registry value, asserted against the registry below.
+              # Exempt as a MIRROR of upstream, not as a version we ship.
+              [ "$v" = "$DUCKDB_REGISTRY_VARIANT" ] && continue
               [ -n "$DUCKDB_LEGACY" ] && [ "$v" = "$DUCKDB_LEGACY" ] && continue
               echo "::error::line ${lineno}: ${line} -- a DuckDB version literal that is not the shipped ${DUCKDB_VERSION} or the recorded registry stable ${DUCKDB_REGISTRY_STABLE}: derive it from the shipped version or bump it"
               bad=1
@@ -398,7 +425,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GEN: ninja
-      OVERRIDE_GIT_DESCRIBE: v1.5.6
+      OVERRIDE_GIT_DESCRIBE: v2.0.0
       EXT_FLAGS: -DSITTING_DUCK_LANGUAGES="python;cpp"
     steps:
       - uses: actions/checkout@v4
@@ -424,7 +451,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GEN: ninja
-      OVERRIDE_GIT_DESCRIBE: v1.5.6
+      OVERRIDE_GIT_DESCRIBE: v2.0.0
     steps:
       - uses: actions/checkout@v4
       - name: Checkout required submodules
@@ -577,10 +604,10 @@ jobs:
       test_config: '{"test_env_variables": {"T": "--test-flags \"--require sitting_duck\" \"test/*\""}}'
   duckdb-stable-build:
     name: Build extension binaries
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5-variegata
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v2.0-cyanoptera
     with:
-      duckdb_version: v1.5.6
-      ci_tools_version: v1.5-variegata
+      duckdb_version: v2.0.0
+      ci_tools_version: v2.0-cyanoptera
       extension_name: sitting_duck
       # Windows was excluded here from the v1.5.4 era, on the grounds that both
       # Windows legs failed while the same source passed Linux/macOS/wasm. That

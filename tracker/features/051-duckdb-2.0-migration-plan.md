@@ -503,3 +503,80 @@ for v1.4.5, is in use (`urlpattern`) and is the precedent followed.
   Oct-9 date; I misread the API.
 - bugs/040's severity on `b15358c3` specifically — every existing measurement is
   against a different commit.
+
+---
+
+## CORRECTION 2026-11-02 — §4's fleet claims, and the pin move that followed
+
+**§4 said repointing sitting_duck alone "breaks co-load with the other eight".
+That was already false when acted on.** Measured on **origin/main** (not HEAD)
+on 2026-11-02: seven of the eight siblings were already at `d54cbbe3` with
+`DUCKDB_VERSION: v2.0.0` — markdown, mcp, webbed, yaml, zim, duck_tails and
+duck_block_utils. Only `duckdb_panduck` still lagged at `069cc9f9`, and its
+constant drives a v1.5.6 build leg plus five dependent jobs, so it was put to
+Teague separately rather than flipped.
+
+sitting_duck was the straggler. The pin moved to v2.0.0 on
+`feat/051-duckdb-2.0-pin`, on Teague's explicit instruction, which overrides the
+standing never-repoint rule:
+
+  "Just move sitting_duck. The rest of the fleet has already moved."
+  "They all are building on 2.0.0 for their community releases so the pin is
+   totally wrong at this point."
+
+**A first pass at that measurement was wrong, and the shape of the error matters
+more than the numbers.** It read `git rev-parse HEAD:duckdb` per repo, where six
+repos had a feature branch checked out predating their own pin move. That
+reported stale branch state as fleet state and produced a confident table
+claiming four divergent pins — which was then used to tell Teague his own
+account of his fleet was partly wrong. He was right. **Ask origin/main what a
+repo ships; HEAD answers a different question.**
+
+**§4's "nine repos carry the identical `duckdb-pin` job" is also wrong.**
+Measured across six of them by the `fleet-pin-v2` session: markdown and panduck
+use a **tag-based** check; duck_block_utils, webbed and mcp use a
+**commit-based** check; zim's variant **prints no OK line at all** — so that one
+cannot distinguish a pass from a no-op, which is the failure class this file
+documents elsewhere. Any future fleet-wide change to that job must treat the
+variants as variants, not as copies.
+
+Option C is therefore **taken** for sitting_duck. `bugs/040` remains open and
+is explicitly deferred, not resolved: re-measured the same day against the
+v2.0.0 release tag at 13.05s exec and 72.23s plan for an 11-node table
+(see `tracker/bugs/040`, RE-MEASUREMENT 2026-11-02).
+
+---
+
+## VERIFIED 2026-11-02 — the suite on v2.0.0, measured
+
+This is the first run of the full suite against the new pin in this repo. The
+build directory was removed first, so no v1.5.6 CMake cache survived into it.
+
+**Build.** 801 of 801 targets, `rc=0`, **zero `error:` lines**. Every warning is
+`-Wdeprecated-declarations` from duckdb 2.0's own deprecations:
+`DataChunk::SetValue`, `Vector::Flatten(idx_t)`,
+`Vector::ToUnifiedFormat(idx_t, ...)` and `ListVector::GetEntry`. They are
+warnings, not errors, and no source change was needed to compile.
+
+**Suite.** `All tests passed (5 skipped tests, 9027 assertions in 162 test
+cases)`, `rc=0`. 167 test files ran. The 5 skips are
+`require-env SITTING_DUCK_TEST_GRAMMAR_DIR`. The capture holds zero `FAILED`,
+`Mismatch` or `Actual result` lines.
+
+§"RESOLVED: tests are NOT running on the v2.0 leg" above records 3 real failures
+from the first time tests ran on the 2.0 line. **None of the three reproduce on
+`d54cbbe3`.**
+
+**Pin identity, measured.** `git -C duckdb describe --tags HEAD` prints
+`v2.0.0`. `git -C duckdb rev-parse v2.0.0` prints
+`d54cbbe3df17e8e5ce68312f483b4155836112aa`. The pin is the release tag itself.
+
+**A trap for the next reader.** The built binary reports
+`library_version = v2.0.0-dev88609`. A local build sets no
+`OVERRIDE_GIT_DESCRIBE`, so duckdb names itself from a commit count instead of
+the tag. `source_id = d54cbbe3df` is the field that identifies the commit. Do
+not read "dev" as a wrong pin.
+
+**NOT established by this run.** No CI leg has run. Nothing here measures
+Windows, macOS, the extension-upload step, or the registry's own build. One
+Linux release build and one suite on one machine is the whole claim.
