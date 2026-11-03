@@ -580,3 +580,46 @@ not read "dev" as a wrong pin.
 **NOT established by this run.** No CI leg has run. Nothing here measures
 Windows, macOS, the extension-upload step, or the registry's own build. One
 Linux release build and one suite on one machine is the whole claim.
+
+### CORRECTION to the VERIFIED block above, from CI (2026-11-03)
+
+**The claim "the extension compiles, loads, binds and answers" was too broad.**
+`make test_release` runs `test/unittest`, which gets the extension through
+`LOAD_TESTS`. It never exercises the `duckdb` CLI. Loading was only ever shown
+by passing an explicit path plus `-unsigned`. The from-source CLI path was not
+measured, and it was broken.
+
+CI caught it. Two gates failed on PR #302 and both passed on `main` at
+`063a36c`:
+
+- `Language subset build (python;cpp)` —
+  `Catalog Error: Table Function with name ast_supported_languages does not exist!`
+- `From-source dev build LOADs without core_functions` —
+  `IO Error: ... signature is either missing or invalid`.
+
+**One cause.** v2.0 stopped linking an extension into the duckdb targets just
+because `extension_config.cmake` loads it. `extension_build_tools.cmake:784`:
+"DONT_LINK was removed, extensions are only linked when listed with
+`duckdb_extension_statically_link()` or `STATICALLY_LINK_EXTENSIONS`". The four
+core extensions still get linked, by `LINK_CORE_EXTENSIONS` calling that same
+function at `extension_build_tools.cmake:947`.
+
+Measured on the local v2.0.0 build before the fix: 0 `sitting_duck` symbols in
+the CLI out of 108,447 (binary not stripped; `json` has 122), and no
+`sitting_duck` row in `duckdb_extensions()` at all. After adding
+`duckdb_extension_statically_link(sitting_duck)`: the row reads
+`sitting_duck|STATICALLY_LINKED`, `ast_supported_languages()` returns 28 with no
+LOAD, the dev-build gate's verbatim command returns 5958 nodes, and the shell
+starts clean (no `'&' is not in the catalog`).
+
+Note that v1.5.6 gave the CLI the extension as `REPOSITORY`, not
+`STATICALLY_LINKED`. The fix does not restore the old mechanism; it uses v2.0's.
+
+**A false-green lesson, and a fleet one.**
+- A green suite is not a green CLI. The suite and the CLI reach the extension by
+  different paths, and only the CLI path broke. Any future claim of "it loads"
+  has to say through which path.
+- **No sibling repo calls `duckdb_extension_statically_link()`** (measured on
+  `origin/main` for markdown, webbed, yaml, mcp, zim). They may carry the same
+  gap. These two gates are what caught it here, and the other repos do not have
+  an equivalent, so their CI cannot see it.
