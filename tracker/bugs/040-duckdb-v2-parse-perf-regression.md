@@ -499,3 +499,119 @@ repo's coverage leg runs tests at all.
 So the figures above are unaffected by that bug, and the two are independent:
 #3086 is why the registry's builds *report* zero tests; bugs/040 is why the
 extension is slow on the line the registry builds.
+
+---
+
+# RE-MEASUREMENT 2026-11-02 — on the v2.0.0 RELEASE TAG, and it is undiminished
+
+Motivation: every figure in this file predates the release. The numbers above are
+against cyanoptera `d4c9dfd469f` and `b15358c3`, both pre-tag. `051` records
+`v2.0.0` as tagged at `d54cbbe3` but **never measured it**, and the
+`perf/26036-v2-remeasure` worktree still had its duckdb at v1.5.6, so the
+re-measure it was created for had not run. Teague asked for it before any pin
+decision.
+
+**The regression is undiminished on the release tag.**
+
+| | run 1 | run 2 | run 3 | mean |
+|---|---|---|---|---|
+| **v2.0.0 `EXPLAIN`** | 72.56s | 72.23s | 71.90s | **72.23s** |
+| **v2.0.0 exec** | 13.13s | 13.01s | 13.02s | **13.05s** |
+| **v1.5.6 `EXPLAIN`** | 0.76s | 0.71s | 0.67s | **0.71s** |
+| **v1.5.6 exec** | 0.64s | 0.57s | 0.65s | **0.62s** |
+
+Load sat at 2.1–6.2 throughout, recorded either side of every run — no
+saturation, unlike the 7.41s -> 1.36s swing that motivated the old load rule.
+`user` ~= `real` on the v2.0.0 `EXPLAIN` (72.33 user / 72.56 real), so
+**planning is still effectively single-threaded** and a wider box will not
+rescue it. Every run is reported; nothing is a best-of.
+
+## The independent agreement that matters
+
+The v2.0.0 exec mean, **13.05s**, reproduces this file's cyanoptera exec figure
+of **13.06s** — from a different duckdb commit (`d54cbbe3` vs `d4c9dfd469f`), a
+different build, and a different session. `EXPLAIN` likewise lands at 72.23s
+against the recorded 74.6s. Two independent measurements of the same magnitude
+is worth more than either alone.
+
+## The comparison IS source-identical on the timed path
+
+Measured, not assumed: `git diff d297e85 67d28c4 -- src/sql_macros/` is
+**empty**. The v2.0.0 build (the `perf/26036-v2-remeasure` worktree at
+`d297e85`) and the v1.5.6 comparator (the main checkout's build at `67d28c4`)
+carry **byte-identical macro source**, and `ast_select_from` is a SQL macro, so
+the timed path is the same code on both sides. Both sides also parse the same
+table: `parse_ast('def f(): pass','python')` returns **11 nodes** on each
+binary, measured on both.
+
+So the ratios hold for this pair:
+
+- `EXPLAIN` ratio **~101x** (72.23s / 0.71s), exec ratio **~21x** (13.05s / 0.62s).
+
+### Why the v1.5.6 figure is 0.62s and not the 0.44-0.50s recorded above
+
+Also measured, rather than reasoned about:
+`git diff --stat 6f82c98 67d28c4 -- src/sql_macros/` reports **717 insertions
+across 9 files**, including `tree_navigation.sql` (+57) and
+`scope_resolution.sql` (+39). The macro genuinely grew since the 2026-10-08
+build, so the older ratios (~124x / ~26.6x) had a smaller denominator. The
+movement is in the **v1.5.6 denominator**, not the 2.0 numerator.
+
+The conclusion does not rest on the ratio either way:
+
+**13 seconds per call and 72 seconds to plan, for an 11-node table, is unusable
+whatever it used to be.** The ratio is a detail; the absolute number is the
+finding.
+
+## What this settles
+
+- `040` remains **open and ship-blocking** against the commit the registry now
+  builds, and now also against the release tag itself.
+- `051`'s option C ("migrate to the v2.0.0 tag") is unblocked on *compile* and
+  still blocked on *this*.
+
+## Also measured: the extension COMPILES, LOADS and ANSWERS on v2.0.0 unchanged
+
+Built in the isolated worktree clone with **zero source changes**, 801 ninja
+targets, exit 0, in about 8 minutes on the 36-core box. Captured as blq
+`make:42`. The full ladder, not the colour:
+
+| step | result |
+|---|---|
+| compiles | 801/801, exit 0, **102 warnings** (a v1.5.6 build of this repo emits 8) |
+| loads | yes, with `-unsigned` and an explicit `LOAD` |
+| binds | `ast_select_from('t','function_definition')` resolves and returns 1 |
+| right answer | `parse_ast('def f(): pass','python')` -> 11 nodes, same as v1.5.6 |
+| which duckdb | `source_id = d54cbbe3df` — the release tag, not the pin |
+
+`051 §2` had compile evidence only at `b49238e` on the cyanoptera *line*. This is
+the release tag, and it answers queries.
+
+**Scope of that claim, so it is not read as more than it is:** this is four
+checks on one binary. **The test suite has NOT been run against v2.0.0.** `051`
+records that the first real test signal on the 2.0 line found 3 failures
+(a deprecated lambda arrow that was a warning on v1.5.6 and a hard Binder Error
+on 2.0), so "it builds and answers" is not "the suite passes".
+
+## Two 2.0 CLI changes that cost a false green
+
+`-no-agent` is required because duckdb 2.0 turns on agent mode when `AI_AGENT`
+is set, and `pragma_version` became a **table function**.
+
+The first one produced exactly the failure this bug is about. Passing
+`-no-agent` to the **1.5.6** binary makes it exit on a usage error, which timed
+at **0.01s** and read as a spectacular result. `workspace/043/bench_040.sh` now
+probes for the flag and runs a pre-flight that refuses to report timings unless
+the measured query returns its expected row.
+
+Note on ordering, for honesty: the v2.0.0 timings above were taken **before**
+that pre-flight existed. It was added after the 1.5.6 false green, and has since
+been run against the same v2.0.0 binary and passes (the `binds` row above). The
+timings are also independently corroborated by this file's own cyanoptera
+figures.
+
+**The shared submodule pin was verified unchanged at
+`069cc9f9b5be802405797faecc284961b07c70ef` before, during and after** — both the
+working tree and the recorded gitlink. Only `trees/perf-26036/duckdb`, which is
+an independent clone with its own `.git` directory, was moved; **it is still at
+v2.0.0**, so that worktree's gitlink reads as modified until it is restored.
