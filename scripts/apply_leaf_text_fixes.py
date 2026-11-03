@@ -32,8 +32,12 @@ reported as a follow-up for the semantic-types owner rather than applied here.
 
 Excluded languages
 ------------------
-* ``sql`` -- fixed for the comment/literal/operator classes like every other
-  language; its 214 ``keyword_*`` gaps are deferred (see SKIP_TYPE_PREFIXES).
+* ``sql`` -- no longer excluded. Its remaining 209 gaps are all ``keyword_*``
+  and are appended with ``IS_KEYWORD`` (see APPEND_FLAGS). The earlier revision
+  of this docstring said 214 deferred keyword gaps out of 219; both counts were
+  taken before ``op_unary_other``'s duplicate was resolved and before the
+  non-keyword tail landed. Measured now: 350 named leaves, 141 covered,
+  209 gaps, every one of them ``keyword_*``.
 * ``typescript`` -- typescript_types.def ``#include``s javascript_types.def and
   all of its gaps are inherited ones, so fixing javascript fixes both. Adding
   them to typescript_types.def too would duplicate keys in the merged map.
@@ -84,9 +88,40 @@ EXCLUDED_LANGUAGES = {"typescript"}
 # adding 214 PARSER_CONSTRUCT rows beside them would make one table two-tier.
 # The keyword gaps are real -- verified: `ON DELETE NO ACTION` unparses as
 # "keyword_no keyword_action" -- and are reported as outstanding.
-SKIP_TYPE_PREFIXES: dict[str, tuple[str, ...]] = {
-    "sql": ("keyword_",),
+SKIP_TYPE_PREFIXES: dict[str, tuple[str, ...]] = {}
+
+# Flags for an APPENDED entry, by language and raw-type prefix. First match
+# wins; anything unmatched gets "0".
+#
+# Why sql's keyword_* entries get IS_KEYWORD and nothing else does
+# ----------------------------------------------------------------
+# An appended entry is meant to change name extraction ONLY, which is why the
+# semantic type is PARSER_CONSTRUCT -- the value
+# PopulateSemanticFieldsTemplated already assigns to an unconfigured type. Flags
+# work the same way: the fallback assigns 0, so "0" is the no-change value and
+# the default here.
+#
+# sql's keyword_* family is the one deliberate exception. These 209 types ARE
+# keywords -- that is what the grammar calls them -- and the 141 sql types
+# already configured include keyword entries that all carry IS_KEYWORD. Writing
+# 209 siblings with flags 0 beside them would make one table two-tier, and the
+# flag is what `WHERE flags & IS_KEYWORD` selects on.
+#
+# This IS a behaviour change, unlike the semantic type. The `flags` column moves
+# from 0 to IS_KEYWORD for 209 sql node types, so the test suite has to be run
+# and read, not assumed. The semantic type does not move: PARSER_CONSTRUCT is
+# already what those nodes resolve to.
+APPEND_FLAGS: dict[str, tuple[tuple[str, str], ...]] = {
+    "sql": (("keyword_", "ASTNodeFlags::IS_KEYWORD"),),
 }
+
+
+def flags_for(language: str, raw_type: str) -> str:
+    """The flags column for a newly appended entry. "0" unless a rule matches."""
+    for prefix, flags in APPEND_FLAGS.get(language, ()):
+        if raw_type.startswith(prefix):
+            return flags
+    return "0"
 
 # Gaps that the static derivation structurally cannot see, found by
 # sweep_observed_leaves.py against the corpus and each verified by hand. Three
@@ -135,8 +170,14 @@ APPEND_HEADER = """
 // strategy that can recover it.
 //
 // PARSER_CONSTRUCT is what PopulateSemanticFieldsTemplated already assigns to
-// an unconfigured type, so these entries change name extraction only and
-// leave semantic classification exactly as it is today.
+// an unconfigured type, so the semantic type written here is the one these
+// nodes already resolve to. Semantic classification does not move.
+//
+// The flags column is 0 for the same reason -- the fallback assigns 0 -- EXCEPT
+// where the type family genuinely carries a universal flag. sql's keyword_*
+// entries carry IS_KEYWORD, which the sql keyword types configured before them
+// already carry; that one column does change what `flags` reports for those
+// nodes. See APPEND_FLAGS in scripts/apply_leaf_text_fixes.py.
 //
 // Derived, not hand-written. Regenerate after a grammar bump with:
 //   scripts/audit_leaf_text_gaps.py
@@ -259,15 +300,34 @@ def escape_c(raw_type: str) -> str:
     return raw_type.replace("\\", "\\\\").replace('"', '\\"')
 
 
+FENCE_ON = "// clang-format on"
+
+
 def splice_into_initializer(text: str, block: str, path: Path) -> str:
-    """Insert `block` just before the brace closing the node_configs list."""
+    """Insert `block` just before the brace closing the node_configs list.
+
+    If the table is fenced with `// clang-format off` / `// clang-format on`,
+    insert INSIDE the fence. src/language_adapters/sql_adapter.cpp is fenced
+    precisely so clang-format cannot cascade its entries back into a staircase;
+    appending after `// clang-format on` would leave every new entry outside the
+    protection and the next `make format` would shred them -- which is how seven
+    of sql's raw types came to be split across adjacent string literals in the
+    first place.
+    """
     anchor = text.find("#undef DEF_TYPE")
     if anchor == -1:
         raise ValueError(f"{path}: no '#undef DEF_TYPE' to anchor the insert on")
     close = text.rfind("};", 0, anchor)
     if close == -1:
         raise ValueError(f"{path}: no closing brace for the initialiser before {anchor}")
-    return text[:close] + "\n" + block + text[close:]
+
+    fence = text.rfind(FENCE_ON, 0, close)
+    # Only treat it as this table's fence if nothing but whitespace separates
+    # the two; a fence belonging to some earlier construct must not capture us.
+    if fence != -1 and text[fence + len(FENCE_ON):close].strip() == "":
+        close = fence
+
+    return text[:close] + block + text[close:]
 
 
 def main() -> int:
@@ -351,8 +411,11 @@ def main() -> int:
 
         # 2. Append entries for types the grammar exposes but nothing configures.
         if missing:
-            lines = [f'DEF_TYPE("{escape_c(t)}", PARSER_CONSTRUCT, NODE_TEXT, NONE, 0)'
-                     for t in sorted(missing)]
+            lines = [
+                f'DEF_TYPE("{escape_c(t)}", PARSER_CONSTRUCT, NODE_TEXT, NONE, '
+                f'{flags_for(language, t)})'
+                for t in sorted(missing)
+            ]
             text = pending.get(primary, primary.read_text(encoding="utf-8"))
             block = APPEND_HEADER + "\n".join(lines) + "\n"
             if primary.suffix == ".def":

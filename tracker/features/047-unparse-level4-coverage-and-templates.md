@@ -1,6 +1,6 @@
 # 047 — unparse level 4: leaf-text coverage + node templates
 
-**Status:** 4a largely done (see "4a status" below). 4b is **split in two, and the
+**Status:** 4a **done for every tree-sitter language** (see "4a status" below). 4b is **split in two, and the
 first half has landed**: byte-exact reproduction of an *unmodified* tree is done and
 measured (see "4b part 1" below); per-node templates for *synthesized / modified*
 nodes are not started. On the v2.0.0 list; the work was described in 041 as future
@@ -16,7 +16,7 @@ together they are what "level 4" means:
 
 | 041 step | what it is | status |
 |---|---|---|
-| 1. Leaf-text coverage | every named, non-self-describing leaf needs `NODE_TEXT` so its text is recoverable | **done for 25 of 26 tree-sitter languages**; sql's `keyword_*` table outstanding |
+| 1. Leaf-text coverage | every named, non-self-describing leaf needs `NODE_TEXT` so its text is recoverable | **done, 27 of 27 tree-sitter languages** — 720 leaves, 720 covered, 0 gaps (2026-11-02) |
 | 2. Spacing / tight-token rules | per-language spacing, keyword-vs-identifier before `(` | **shipped** as the rules engine + presets (v1.15.0–v1.15.1) |
 | 3a. Byte-exact round trip | reproduce an *unmodified* tree byte for byte under `source := 'full'` | **done** — `ast_unparse_exact*`, 26/26 languages |
 | 3b. Node templates | per-node-type unparse templates — emit a *modified* tree with exact layout | **not done** |
@@ -72,14 +72,23 @@ deliberately **no committed JSON snapshot**, because a tracked snapshot goes
 stale silently the first time a grammar moves and a stale baseline is worse
 than none. The outstanding work is recorded as prose below instead.
 
-Result — 348 gaps found, 134 closed, 214 outstanding:
+Result — all closed. 348 gaps were found and 134 closed in PR #199; the
+non-keyword tail landed in #298 and sql's keyword table on 2026-11-02:
 
 - 705 named leaves across 26 tree-sitter languages; **344** lacked a text
   strategy per the grammar derivation, plus **4** the derivation structurally
   cannot see (found by the corpus sweep) = **348**.
 - Closed **134**: 125 static non-sql (121 file edits — TypeScript's 4 close via
   javascript_types.def, which it `#include`s), 4 empirical, 5 sql non-keyword.
-- Outstanding **214**: sql `keyword_*` only.
+- Outstanding **0**. `scripts/audit_leaf_text_gaps.py` now reports 720 named
+  leaves across 27 languages, 720 covered, 0 gaps. sql held 350 of the 720.
+- The counts above do not reconcile arithmetically with the 214 once quoted,
+  and the earlier figure was wrong rather than merely stale. Two causes, both
+  measured: `op_unary_other` was declared twice in sql_adapter.cpp and the
+  audit counted the pair as one uncovered type, and clang-format had split
+  seven raw types across adjacent string literals, which the line-anchored
+  scanner of the day could not read. The measured figure at the time of the
+  fix was **209**, every one of them `keyword_*`.
 
 Acceptance test: `test/sql/ast_unparse_leaf_text.test` (35 assertions, 1107
 corpus leaves across 26 languages).
@@ -88,11 +97,28 @@ The reproducer now returns `# hello there\nx = 1`.
 
 ### Outstanding
 
-- **sql: 214 `keyword_*` leaves.** Real — `ON DELETE NO ACTION` unparses as
-  `keyword_no keyword_action`. Deferred because the existing SQL keyword entries
-  carry meaningful semantic types and `IS_KEYWORD`, so 214 `PARSER_CONSTRUCT`
-  rows beside them want their own change (and probably a per-keyword semantic
-  classification pass).
+- ~~**sql: 214 `keyword_*` leaves.**~~ **Closed 2026-11-02**, as 209 rows of
+  `DEF_TYPE("keyword_x", PARSER_CONSTRUCT, NODE_TEXT, NONE, ASTNodeFlags::IS_KEYWORD)`.
+  The reproducer `ON DELETE NO ACTION` now round-trips byte-exactly and is
+  pinned in `test/sql/ast_unparse_leaf_text.test`.
+
+  The deferral reasoning was half right. Adding the rows beside keyword entries
+  that carry meaningful semantic types does make the table two-tier — so the
+  decision was to **split**: land all 209 with `PARSER_CONSTRUCT`, which is the
+  value `PopulateSemanticFieldsTemplated` already assigns to an unconfigured
+  type, and leave the semantic classification as a separate change over all 353
+  rows. The semantic type of no node moved.
+
+  `IS_KEYWORD` did move, and `node_config.hpp:130` defines it as an **alias for
+  `IS_SYNTAX_ONLY`**, not its own bit. So these 209 types also answer
+  `is_construct(flags)` = false now. That is correct for a keyword and is
+  asserted in the test so the second-order effect is pinned.
+
+  The taxonomy pass is **not** done and is not a tidy-up: the 143 keyword rows
+  that predate this answer the same question four ways (`keyword_index` →
+  TYPE_REFERENCE, `keyword_view` → TYPE_COMPOSITE, `keyword_schema` →
+  DEFINITION_MODULE, `keyword_sequence` → DEFINITION_VARIABLE), so matching the
+  tail to the head would give 353 rows that still cannot be reasoned about.
 - **`duckdb` (native parser) — was issue #197, FIXED by PR #205.** Its adapter
   reported `children_count = 0` for *every* node (while `descendant_count` was
   correct), so the whole tree read as leaves and
@@ -360,16 +386,18 @@ file, which is exactly what §5g exploits to make the guard fire.
 
 ## Sequencing note
 
-4a has **landed** for 25 of the 26 tree-sitter languages (PR #199); sql's 214
-`keyword_*` leaves remain, deferred for a per-keyword classification pass, and sql's
+4a has **landed for all 27 tree-sitter languages**: PR #199 for 25, #298 for the
+non-keyword tail, and sql's keyword table on 2026-11-02. Measured 720 leaves, 720
+covered, 0 gaps. The per-keyword classification pass is a separate change. sql's
 5 non-keyword gaps are closed. 4b no longer waits on a decision (settled 2026-10-07)
 and its substrate now exists: `start_byte` / `end_byte` are exposed under
 `source := 'full'` (PR #198), so byte-exact slicing is a `substring()` on raw bytes
 rather than a reconstruction from line/column — which was fragile with multi-byte
 characters and mixed line endings. The remaining order is:
 
-1. ~~**4a** — leaf-text coverage.~~ **Landed**, PR #199. 134 of 348 grammar-derived
-   gaps closed; 214 sql `keyword_*` outstanding. See also #200 (the
+1. ~~**4a** — leaf-text coverage.~~ **Complete.** PR #199 closed 134 of 348;
+   #298 closed the non-keyword tail; the 209 sql `keyword_*` rows landed
+   2026-11-02. 720 leaves, 720 covered, 0 gaps. See also #200 (the
    anonymous-token-with-variable-text class is corpus-bounded, not enumerated) and
    #197 (the `duckdb` adapter's unparse was broken for an unrelated reason —
    `children_count` was 0 on every node; **fixed by PR #205**, though `duckdb`
