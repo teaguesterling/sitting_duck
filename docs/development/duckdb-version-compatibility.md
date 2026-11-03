@@ -5,12 +5,28 @@
 split — see [planning/v2-architecture.md](../planning/v2-architecture.md) and
 `tracker/features/044-v2-m1-contract.md`.
 
-sitting_duck builds against two DuckDB lines from one source tree:
+**Updated 2026-11-02: the v1.5 leg is gone.** The submodule pin moved to `v2.0.0`
+(`d54cbbe3`) and `duckdb-stable-build` moved with it, so sitting_duck now builds
+against the 2.0 line only:
 
 | Leg | DuckDB | Where |
 |---|---|---|
-| Stable (shipped) | `v1.5.6`, CI tools `v1.5-variegata` | `duckdb-stable-build` in `.github/workflows/MainDistributionPipeline.yml` |
+| Stable (shipped) | `v2.0.0`, CI tools `v2.0-cyanoptera` | `duckdb-stable-build` in `.github/workflows/MainDistributionPipeline.yml` |
 | Next (canary) | `v2.0-cyanoptera`, CI tools `main` | `duckdb-next-build`, same file, `skip_tests: true` |
+| Release coverage | `v2.0.0`, CI tools `main` | `duckdb-v2-test-coverage`, same file — the leg that actually runs tests |
+
+v1.5.6 is no longer delivered: the community registry stopped asking for a
+v1.5.6 build before the flip (`build_all.yml` has no variegata leg and
+`build_andium` is `if: false`), so no legacy leg was kept.
+
+**What that means for everything below.** The shims are still dual-line in
+source, but only their 2.0 branch is now compiled — three of the four
+`__has_include` probes resolve to the 2.0 side, and no CI leg builds v1.5.6. The
+v1.5 fallbacks are therefore unexercised. They are deliberately left in place
+rather than deleted: they cost nothing at build time, and removing ~22
+probe/fallback pairs across 867 lines is a deliberate refactor, not a side
+effect of a pin move. Treat the v1.5 halves below as history, not as a
+supported configuration, and do not add new ones.
 
 ## The two-line situation
 
