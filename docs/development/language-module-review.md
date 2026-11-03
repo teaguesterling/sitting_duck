@@ -31,7 +31,8 @@ no workflow at all, so for those the review *is* the gate.
 # enforced in CI — run them to see what CI will say
 python3 scripts/verify_module_abi.py                  # the module ABI contract
 python3 scripts/verify_module_abi.py --self-test      # proves the gate can fail
-python3 scripts/check_def_type_single_line.py         # one DEF_TYPE per line
+python3 scripts/check_def_type_tables.py              # one DEF_TYPE per line, no duplicate raw type
+python3 scripts/check_def_type_tables.py --self-test  # proves the gate can fail
 python3 scripts/generate_taxonomy.py --check          # taxonomy tables in sync
 python3 scripts/verify_native_dispatch.py             # dead dispatch literals
 python3 scripts/verify_native_dispatch.py --self-test # proves that gate can fail
@@ -62,10 +63,11 @@ table in `src/language_adapters/<lang>_adapter.cpp` for `sql` and `duckdb`.
 | # | Expectation | Proof | Enforced by |
 |---|---|---|---|
 | 1.1 | Every declared `raw_type` is one the grammar can emit | `audit_unreachable_declarations.py --binary …` | **script** |
-| 1.2 | No `raw_type` declared twice with conflicting strategies | kit `DECL-UNIQUE` (the verdict). `DECL-UNIQ-FLAGS` is its **planted-fault control**, not a per-language cell | **script** |
+| 1.2 | No `raw_type` declared twice, conflicting **or** agreeing | `check_def_type_tables.py` | **CI** |
+| 1.2a | …with conflicting strategies, per language | kit `DECL-UNIQUE` (the verdict). `DECL-UNIQ-FLAGS` is its **planted-fault control**, not a per-language cell | **script** |
 | 1.3 | A grammar with a named rule *and* an anonymous token of the same `raw_type` declares both (#215) | `audit_anon_token_collisions.py --language <lang>`. Without `--language` it prints counts, not names | **script** |
 | 1.4 | No declaration is shadowed by an `#include`d sibling table | `audit_shadowed_declarations.py`. Record `n/a` where the language has no include edge | **script** |
-| 1.5 | One `DEF_TYPE` per line | `check_def_type_single_line.py` | **CI** |
+| 1.5 | One `DEF_TYPE` per line | `check_def_type_tables.py` | **CI** |
 | 1.6 | Every `semantic_type`, strategy and flag name exists in the taxonomy | `generate_taxonomy.py --check` | **CI** |
 | 1.7 | Every declared capability is actually delivered | kit, **for function-shaped strategies only** — see below | **partly / judgment** |
 | 1.8 | The `semantic_type` **chosen** is the right one for that node | — | **judgment** |

@@ -1044,14 +1044,22 @@ DEF_TYPE("||", OPERATOR_LOGICAL, NONE, NONE, 0)
 /** @brief Logical NOT */
 DEF_TYPE("!", OPERATOR_LOGICAL, NONE, NONE, 0)
 
-/** @brief Nullish coalescing (escaped for macro) */
+// `?\?` IS the node type `??`. The backslash escapes the second question mark
+// so the pair cannot begin a trigraph; the compiler reads one raw type from it.
+// A second entry spelled `"??"` sat below this one and was dead, because the
+// table is an unordered_map initialiser list and the first declaration of a key
+// wins. The generated reference listed both, as though the grammar had two
+// distinct nullish operators. scripts/check_def_type_tables.py now fails on
+// that shape.
+//
+// The @brief below stays on ONE line: generate_language_reference.py matches a
+// single-line brief, so a wrapped one lands half-truncated in the published
+// table.
+/** @brief Nullish coalescing */
 DEF_TYPE("?\?", OPERATOR_LOGICAL, NONE, NONE, 0)
 
 /** @brief Ternary question mark */
 DEF_TYPE("?", OPERATOR_LOGICAL, NONE, NONE, 0)
-
-/** @brief Nullish coalescing (alternate) */
-DEF_TYPE("??", OPERATOR_LOGICAL, NONE, NONE, 0)
 
 /** @} */ // end javascript_logical
 

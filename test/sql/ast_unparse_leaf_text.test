@@ -325,8 +325,48 @@ SELECT source LIKE '%a $ b%' FROM ast_unparse_code('val s = "a$b"', 'kotlin');
 true
 
 # sql: comments are the one non-keyword class fixed for sql in this change.
-# sql's 214 keyword_* leaves remain outstanding (tracked separately).
 query T
 SELECT replace(source, chr(10), '|') FROM ast_unparse_code('-- hi' || chr(10) || 'SELECT 1;', 'sql');
 ----
 -- hi|SELECT 1;
+
+# sql keyword_* leaves. These were the last gap in the language: 209 named
+# keyword leaves that no DEF_TYPE entry configured, so every FIND_*/FIRST_CHILD
+# strategy returned "" on them and ast_unparse.sql's
+# COALESCE(NULLIF(name, ''), type) emitted the TYPE where the TEXT belongs.
+#
+# WHY THESE INPUTS. Each uses keywords that were in the uncovered 209, not the
+# 141 that already worked -- a round-trip through keyword_select would have
+# passed before the fix and proves nothing. Measured before the fix, on the
+# binary built from the previous commit:
+#
+#   keyword_zerofill -> name '', flags 0     (so unparse emitted "keyword_zerofill")
+#
+# and ON DELETE NO ACTION round-tripped as "keyword_no keyword_action", which is
+# what scripts/apply_leaf_text_fixes.py records as the verified symptom.
+#
+# The assertion is byte-exact equality with the input, not non-emptiness: a
+# round-trip that emits a type name is still a non-empty string, so a
+# non-emptiness check cannot tell the two apart.
+query T
+SELECT source = 'CREATE TABLE t(a INT REFERENCES u(b) ON DELETE NO ACTION);'
+FROM ast_unparse_code('CREATE TABLE t(a INT REFERENCES u(b) ON DELETE NO ACTION);', 'sql');
+----
+true
+
+# The name must be the keyword's own text, and the keyword flag must be set.
+# Both columns moved in this change; the semantic type deliberately did not,
+# because PARSER_CONSTRUCT is what PopulateSemanticFieldsTemplated already
+# assigned to these unconfigured types.
+#
+# The predicate is is_syntax_only, not an is_keyword: node_config.hpp:130
+# defines IS_KEYWORD as an ALIAS for IS_SYNTAX_ONLY rather than its own bit. So
+# setting it also flips is_construct to false for these 209 types, which is the
+# correct answer for a keyword and is asserted here so the second-order effect
+# is pinned rather than discovered later.
+query TTTT
+SELECT name, semantic_type, is_syntax_only(flags), is_construct(flags)
+FROM parse_ast('CREATE TABLE t(a INT ZEROFILL);', 'sql')
+WHERE type = 'keyword_zerofill';
+----
+ZEROFILL	PARSER_CONSTRUCT	true	false

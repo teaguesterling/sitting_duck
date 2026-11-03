@@ -100,7 +100,7 @@ on declaration nodes at all. Three of four cases wrong.
 | check | in a workflow | limit |
 |---|---|---|
 | `verify_module_abi.py` | yes | unit is `(language, strategy)`; L3–L5 invisible |
-| `check_def_type_single_line.py` | yes | formatting only |
+| `check_def_type_tables.py` | yes | formatting, and duplicate raw types |
 | `generate_taxonomy.py --check` | yes | taxonomy table sync only |
 | `verify_native_dispatch.py` | **yes, since step 2** | was: matched `strcmp(<var with "type">, "lit")` only, so python's `==` idiom left 95 of 132 literals unexamined; globbed `*_native_extractors.hpp`, so the shared tables and the adapters were unread; printed **no line** for a language with no extractor header. Now: 1,374 literals in 27 languages, 191 in the shared table, 70 baselined. Remaining limit: 103 comparison sites whose operand is source text, which it names by operand |
 | `conformance_kit.sh` | **no** | `NATIVE-DECL` covers 5 of 10 declarable strategies and aggregates per language, so it prints `PASS: every declared capability was delivered` for python and zig while a declared capability of each delivers nothing |
@@ -297,5 +297,5 @@ rubric's own item 2.5/2.6 prose. Code-site counts in the clustered work list are
 leads, not attributions, and the fan-out schema's missing `cause` field is why.
 
 **Three claims are about the checkers, not a language** —
-`verify_native_dispatch.py` (3) and `check_def_type_single_line.py` (1). The
+`verify_native_dispatch.py` (3) and `check_def_type_tables.py` (1). The
 three on the dispatch gate are answered by step 2 above.
