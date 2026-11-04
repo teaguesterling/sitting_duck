@@ -46,8 +46,29 @@ repository gets whatever that tree holds. In THIS repository, measured:
 
 | glob | files matched | bytes |
 |---|---:|---:|
-| `**/*.json` (`docs/languages/infrastructure.md:122`) | 9,809 | **382.6 MB** |
+| `**/*.*` — 26 sites | **425,552** | **33,695 MB (33.7 GB)** |
+| `**/*.cpp` — 5 sites | 50,961 | 878.9 MB |
+| `**/*.tf` — 5 sites | 10,465 | 17.2 MB |
+| `**/*.json` — 1 site | 9,809 | 382.6 MB |
+| `**/*.py` — 20 sites | 7,089 | 32.5 MB |
+| `**/*.rs` — 3 sites | 4,139 | 47.7 MB |
+| `**/*.go` | 1,028 | 1.6 MB |
+| `**/*.toml` — 1 site | 822 | 0.7 MB |
 | `src/**/*.cpp` (`docs/reference/css-pseudo-classes.md:237`) | 29 | 0.4 MB |
+
+Measured with `find . -name '<pat>' -not -path './.git/*' -type f`.
+
+**`**/*.*` asks the extension to parse 33.7 GB across 425,552 files in one
+call.** 96 GB resident is not a surprise at that input size — what is
+surprising is that it reached only 96 GB. The counts are inflated by the 19
+worktrees under `trees/`, by `build/`, and by the `duckdb` submodule, all of
+which a recursive glob from the repo root happily descends into. That is the
+point: the reader does not choose what `**` matches, their working directory
+does.
+
+`**/*.cpp` matching 50,961 files rather than this project's 29 is the clearest
+illustration. The same pattern is harmless under `src/` and catastrophic at the
+root, and nothing in the docs says which the reader is standing in.
 
 `**/*.json` sweeps every grammar's `node-types.json`, two 14.7 MB
 `build/bench_*.json`, and **the same files again inside all 19 worktrees under
