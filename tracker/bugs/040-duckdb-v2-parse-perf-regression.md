@@ -615,3 +615,40 @@ figures.
 working tree and the recorded gitlink. Only `trees/perf-26036/duckdb`, which is
 an independent clone with its own `.git` directory, was moved; **it is still at
 v2.0.0**, so that worktree's gitlink reads as modified until it is restored.
+
+## The suite-scale cost, measured on three CI runs (2026-11-03)
+
+The figures above are per query. The `Runtime grammar registration tests` job
+runs the whole suite in one step, so its step time gives the same comparison at
+suite scale.
+
+| run | sha | duckdb | Build release | Run the test suite |
+|---|---|---|---|---|
+| 41574700019 | `063a36c` | v1.5.6 | 14m11s (851s) | **6m17s (377s)** |
+| 41670278557 | `84f4f14` (PR #302) | v2.0.0 | 25m28s (1528s) | **146m36s (8796s)** |
+| 41702556859 | `96335de` (main, after the merge) | v2.0.0 | 14m30s (870s) | **94m01s (5641s)** |
+
+All three runs print the same line: `All tests passed (9340 assertions in 167
+test cases)`. The work is identical, so the step time is the regression and not
+a change in what runs.
+
+The two v2.0.0 runs ran the same code and differ by 1.56x, so one run does not
+give a precise factor. The build step is the runner-speed control: the PR run
+built in 1.80x the v1.5.6 run's build time, the after-merge run in 1.02x. The
+after-merge run is therefore the cleaner comparison.
+
+**The suite step costs about 15x more on v2.0.0 (5641s against 377s). The PR
+run read 23x, on a slower runner.** The regression applies to the whole suite,
+not only to the probe query of this bug.
+
+Correction, for the record: a report on 2026-11-03 gave 23.3x as the figure. It
+used run 41670278557 alone. Two runs give 15x to 23x, and the build-time
+control favours the low end.
+
+### What this changes about the decision
+
+This bug stays open and deferred, as `051` records. The cost is now known to be
+recurring rather than one-off: every CI run of the suite pays it, and the job
+sits near GitHub's 6-hour job limit at 2h31m for the whole run. That is new
+information, not a reopened argument. Teague accepted the deferral on the
+per-query evidence.
