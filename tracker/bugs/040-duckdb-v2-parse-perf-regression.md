@@ -1,9 +1,16 @@
 # 040 — `ast_select` macro planning is catastrophically slow on DuckDB v2.0
 
-**Status:** open — **ship-blocking for the v2.0-compatible claim** (was mis-scoped as a deferrable follow-up)
+**Status:** open — **deferred and accepted, not ship-blocking.** Corrected 2026-11-03:
+this line read "ship-blocking for the v2.0-compatible claim (was mis-scoped as a
+deferrable follow-up)". The v2.0.0 pin merged to `main` as `96335de` with this bug
+open, so nothing was in fact blocked. The cost is accepted and recurring — see the
+last section of this file.
 **Found:** 2026-09-07, via community-extensions PR #2663 `test_against_latest` (DuckDB v2.0-cyanoptera)
 **Re-measured 2026-10-08 against cyanoptera `d4c9dfd469f`: numbers below are CURRENT, not stale.**
-The ~27x per-call penalty is undiminished and the ship-blocking status is confirmed — see
+The ~27x per-call penalty is undiminished. The "ship-blocking status is confirmed"
+clause that stood here is withdrawn for the same reason as the Status line above:
+the pin shipped anyway, on 2026-11-03, with the cost accepted. The penalty is
+confirmed; the blocking was not. See
 [RE-MEASUREMENT 2026-10-08](#re-measurement-2026-10-08--the-regression-has-not-improved-on-this-path)
 at the end of this file. The upstream #26036 improvement did **not** reach this path.
 
@@ -588,7 +595,10 @@ targets, exit 0, in about 8 minutes on the 36-core box. Captured as blq
 the release tag, and it answers queries.
 
 **Scope of that claim, so it is not read as more than it is:** this is four
-checks on one binary. **The test suite has NOT been run against v2.0.0.** `051`
+checks on one binary. **At the time of writing, the test
+suite had NOT been run against v2.0.0.** (Updated 2026-11-03: it has since run
+three times — twice in CI, once locally — and passed every time. See the last
+section of this file.) `051`
 records that the first real test signal on the 2.0 line found 3 failures
 (a deprecated lambda arrow that was a warning on v1.5.6 and a hard Binder Error
 on 2.0), so "it builds and answers" is not "the suite passes".
@@ -633,9 +643,11 @@ test cases)`. The work is identical, so the step time is the regression and not
 a change in what runs.
 
 The two v2.0.0 runs ran the same code and differ by 1.56x, so one run does not
-give a precise factor. The build step is the runner-speed control: the PR run
-built in 1.80x the v1.5.6 run's build time, the after-merge run in 1.02x. The
-after-merge run is therefore the cleaner comparison.
+give a precise factor. The build step is the only control available: the PR run
+built in 1.80x the v1.5.6 run's build time, the after-merge run in 1.02x.
+**Reading that difference as runner speed is an inference, not a measurement** —
+nothing here measures a runner. Under that inference the after-merge run is the
+cleaner comparison.
 
 **The suite step costs about 15x more on v2.0.0 (5641s against 377s). The PR
 run read 23x, on a slower runner.** The regression applies to the whole suite,
@@ -648,7 +660,10 @@ control favours the low end.
 ### What this changes about the decision
 
 This bug stays open and deferred, as `051` records. The cost is now known to be
-recurring rather than one-off: every CI run of the suite pays it, and the job
-sits near GitHub's 6-hour job limit at 2h31m for the whole run. That is new
+recurring rather than one-off: every CI run of the suite pays it. Corrected
+2026-11-03: an earlier version of this sentence said the job "sits near GitHub's
+6-hour job limit at 2h31m for the whole run", which mixed two quantities. 2h31m
+is the **run**; the 6-hour limit is per **job**, and the longest job measured
+2h53m — 48% of the limit, which is not near it. That is new
 information, not a reopened argument. Teague accepted the deferral on the
 per-query evidence.
