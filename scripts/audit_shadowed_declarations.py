@@ -66,7 +66,8 @@ from audit_leaf_text_gaps import (  # noqa: E402
     unescape_c,
 )
 
-DEFS_DIR = pathlib.Path(__file__).resolve().parent.parent / "src" / "language_configs"
+# Per-language sources moved to languages/<lang>/ in 054 M2 stage 1.
+LANGUAGES_DIR = pathlib.Path(__file__).resolve().parent.parent / "languages"
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+\.def)"', re.M)
 FIELDS = ("semantic_type", "name_strategy", "native_strategy", "flags")
 
@@ -104,7 +105,7 @@ def main() -> int:
     total_identical = total_differing = 0
     edges = 0
 
-    for defp in sorted(DEFS_DIR.glob("*_types.def")):
+    for defp in sorted(LANGUAGES_DIR.glob("*/*_types.def")):
         lang = defp.name[: -len("_types.def")]
         own = first_decls(defp)
         for inc_name in INCLUDE_RE.findall(defp.read_text(errors="replace")):

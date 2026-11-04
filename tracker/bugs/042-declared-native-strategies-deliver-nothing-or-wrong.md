@@ -103,10 +103,43 @@ on declaration nodes at all. Three of four cases wrong.
 | `check_def_type_tables.py` | yes | formatting, and duplicate raw types |
 | `generate_taxonomy.py --check` | yes | taxonomy table sync only |
 | `verify_native_dispatch.py` | **yes, since step 2** | was: matched `strcmp(<var with "type">, "lit")` only, so python's `==` idiom left 95 of 132 literals unexamined; globbed `*_native_extractors.hpp`, so the shared tables and the adapters were unread; printed **no line** for a language with no extractor header. Now: 1,374 literals in 27 languages, 191 in the shared table, 70 baselined. Remaining limit: 103 comparison sites whose operand is source text, which it names by operand |
-| `conformance_kit.sh` | **no** | `NATIVE-DECL` covers 5 of 10 declarable strategies and aggregates per language, so it prints `PASS: every declared capability was delivered` for python and zig while a declared capability of each delivers nothing |
+| `conformance_kit.sh` | **no** | `NATIVE-DECL` covers 5 of 10 declarable strategies and aggregates per language, so it prints `PASS: every declared capability was delivered` for python and zig while a declared capability of each delivers nothing. **And nothing proves it can fail** — see below |
 | the three `audit_*.py` | **no** | — |
 
 Only an **oracle language** caught the swift defect. That is now rubric item 1.7.
+
+### `NATIVE-DECL` is the one kit check with no negative control
+
+Measured 2026-11-03, from `scripts/conformance_kit.sh` and from a clean run.
+The kit's step 5 says what it intends:
+
+> Every check above reports its happy answer both when it is right AND when it
+> compared nothing. These plant a fault and require each check to notice.
+
+It plants **8** faults. `control_note` is called for `PARSE`, `CALL-NAMED`,
+`NATIVE-ABST`, `RAW-JOIN`, `NO-EMPTY`, `DECL-UNIQUE`, `DECL-UNIQ-FLAGS` and
+`DECL-RUNTIME`. The matrix also has 8 columns, so the two counts match and the
+gap reads as closed — but the sets differ by one in each direction:
+
+| | in the matrix | has a control |
+|---|---|---|
+| `NATIVE-DECL` | yes | **no** |
+| `DECL-UNIQ-FLAGS` | no (folded into `DECL-UNIQUE`) | yes |
+
+There is no `# --- NATIVE-DECL` block and no documented exception, so this is an
+omission rather than a decision. `044:72`'s "all 9 negative controls" is
+corrected there.
+
+**Why it matters for step 3.** `NATIVE-DECL` is exactly the check step 3 makes
+finer, and it is the check this document already blames for printing `PASS:
+every declared capability was delivered` over python and zig. Making an
+unproven check stricter produces a finding count nobody can calibrate: if the
+check cannot detect a planted fault today, a quiet new result after step 3 is
+not evidence of anything. So step 3 writes the control FIRST, against the
+current per-language check, and only then changes the unit of judgment.
+
+This is also the precondition for the baselining decision below. A baseline is
+only as good as the gate that fills it.
 
 ## Also found: 11 dead literals in the shared extractor
 
@@ -150,6 +183,21 @@ guard in 650 lines, which is why the review rubric no longer treats delegation
 to it as satisfying its robustness items.
 
 ## v1.18.0 scope
+
+**NARROWED BY TEAGUE, 2026-11-03: steps 3 and 4 only.** Step 5 and the
+25-language fan-out below move to v1.19.0. The release is held until steps 3
+and 4 land, and "green" means **baselined, not fixed**: each known case step 3
+surfaces is recorded in a declared baseline with its measurement and its
+reason, exactly as `spec/abi/module-abi.yaml` already handles L1, L2, L4 and
+the 70 dead literals. The gate is then green today and a NEW case fails it, in
+both directions — an unlisted case and a listed case that stops reproducing
+both exit 1.
+
+The reasoning for stopping at 4: the four values in step 4 are the only ones
+that are *populated and wrong*, so they satisfy every non-emptiness check in
+this repository, the kit included. A user sees a plausible wrong answer rather
+than a blank. Step 5's 12 live decisions are mostly retractions, and the
+fan-out is a column-wise campaign; neither is a reason to hold a tag.
 
 Ordered so that each step is provable, and so the class is closed before the
 instances are chased.
@@ -299,3 +347,161 @@ leads, not attributions, and the fan-out schema's missing `cause` field is why.
 **Three claims are about the checkers, not a language** —
 `verify_native_dispatch.py` (3) and `check_def_type_tables.py` (1). The
 three on the dispatch gate are answered by step 2 above.
+
+## Implementation plan for steps 3 and 4 — AWAITING APPROVAL (2026-11-04)
+
+Written before any code, per `CLAUDE.md`. Nothing below is implemented. Every
+number in it is measured on `build/release/duckdb` and
+`build/release/test/unittest` at `dec3d3b`, except where it says inferred.
+
+### What step 3 can and cannot find
+
+A per-pair **non-emptiness** check finds L3 and L5: a declaring node type that
+delivers nothing. It does **not** find the four populated-and-wrong values in
+§"The four that are WRONG". Those satisfy every non-emptiness check in this
+repository, which is the whole reason they are a separate step. So a quiet
+result from step 3 is not evidence about step 4, and this document says so
+before the work starts rather than after the result arrives.
+
+### 3a. The missing negative control, against the CURRENT aggregate check
+
+`check_native_declared()` (`scripts/conformance_kit.sh:713`) takes one
+argument and reads the precomputed `cap_native_def`. Give it a second argument
+`table_override`, exactly as `check_native_absent()` and `check_decl_unique()`
+already have, and resolve the capability from that table when it is given.
+
+The plant: copy `def_table`, and change zig's `function_declaration` row from
+native strategy `NONE` to `FUNCTION_WITH_PARAMS`. Then run the real check
+twice, the two-sided shape the `DECL-UNIQUE` control already uses — baseline
+must be `n/a`, planted must be `FAIL`.
+
+**Feasibility measured today**, with the override flag that already exists and
+no edit to the script:
+
+```
+$ ./scripts/conformance_kit.sh --languages zig --force-capability zig:native
+zig  ok  ok  FAIL*  ok  ok  ok  ok  ok
+  FAIL   zig  NATIVE-DECL  7 of 10 function defs take parameters in source, 0 delivered
+TOTALS ok=7 FAIL=1 dirty=0 void=0 UNDECL=0 n/a=0 | languages=1 (no fixture: 0)
+exit 3
+```
+
+All 8 existing controls fired in that same run, so this is also a second clean
+control read, now on the stage-2 tree.
+
+zig is the right subject and not an arbitrary one. `languages/zig/zig_types.def:82`
+declares `function_declaration` as `DEFINITION_FUNCTION | ... , FIND_IDENTIFIER,
+NONE`, and zig's corpus holds 10 function definitions of which 7 take a
+parameter in source. So the plant is an **L5-shaped fault**: a declaration the
+implementation cannot serve, which is the class step 3 exists to catch.
+
+**Why a table plant and not `--force-capability zig:native`.** The override can
+only express a per-LANGUAGE capability. It cannot express a `(raw_type,
+strategy)` declaration, so it would have to be rewritten at 3c — and a control
+written after the change proves nothing about the change. The planted row fires
+under both units.
+
+Commit 1 is the control alone: no change to any verdict. Expected after it:
+9 controls, 8 matrix columns. `DECL-UNIQ-FLAGS` still has a control and no
+column; that stays recorded, not fixed.
+
+### 3b. Where the per-pair declarations come from — THE ONE OPEN DECISION
+
+The def scan cannot supply them as written, for three measured reasons:
+
+| | measured |
+|---|---|
+| include chain | `languages/typescript/typescript_types.def:60` is `#include "../javascript/javascript_types.def"`. The kit attributes rows by file basename and never follows it. The kit sees **5** function-shaped pairs in typescript's own file; L3 above records **11** declaring node types for `FUNCTION_WITH_PARAMS` alone. **typescript is the only cross-language include of 28 languages.** |
+| shadowing | `typescript_types.def:63` documents first-wins shadowing (#222). A naive union would judge declarations the loader dropped. |
+| ambiguity | ruby declares 21 raw_types twice with conflicting strategies. The per-pair check must restrict to unambiguous declarations, as `check_native_absent` already does with `HAVING count(DISTINCT native_strategy) = 1`. |
+
+Census of what the kit can see today, from `languages/*/*_types.def` and the
+adapters that inline their table: **107** distinct `(language, raw_type,
+function-shaped strategy)` triples, **91** of them in compiled-in languages
+(the 4 dormant ones hold 16).
+
+  - **Option A — emulate the loader in awk.** Follow `#include`, apply
+    first-wins. No extension change, lands inside v1.18.0's gate-work scope.
+    The cost is honest: it is a second definition of the loader, in a second
+    language, and it can drift from the real one.
+  - **Option B — expose `native_strategy` in `ast_type_map()`.** This is the
+    kit's own KNOWN GAP (`conformance_kit.sh:66-76`) and the M1 finding behind
+    it. It measures the loaded map, which is the artifact rather than its
+    description, and it is what makes the kit out-of-tree capable on this axis.
+    It changes extension output, so it needs a failing test first, and it
+    widens v1.18.0 past gate work.
+
+**Recommendation: A now, B recorded as the M1 gap it already is.** Default if
+nobody answers: A.
+
+### 3c. The unit change
+
+For each unambiguous declared pair `(language, raw_type, function-shaped
+strategy)`:
+
+  - `ok` — some node of that raw_type in the corpus delivers parameters;
+  - `FAIL` — nodes of that raw_type exist, at least one takes a parameter in
+    source, and none delivers;
+  - `void` — no node of that raw_type in the corpus, or none takes a parameter
+    in source.
+
+The source-side guard stays exactly as it is, for the reason already written at
+`conformance_kit.sh:719-733`: it may only ever decide `void` vs `FAIL`, never
+`ok` vs `FAIL`, so a miss costs coverage and not correctness.
+
+The check prints its **denominator**: `N of M declared pairs exercised`. Most of
+the 91 are expected to be unexercised, and a count of findings without the
+count of pairs that were looked at is the shape this repo has already been
+bitten by: a diagnostic with no denominator goes quiet when its input set is
+short, and the silence reads as a clean bill.
+
+The language cell keeps one verdict — the worst of its pairs — so the matrix
+stays a matrix. The per-pair rows go in the DETAIL block and in
+`--matrix-csv`.
+
+### 3d. Baselining, bidirectionally
+
+Each known case step 3 surfaces is recorded with its measurement and its
+reason, the way `spec/abi/module-abi.yaml` already records L1, L2, L4 and the
+70 dead literals.
+
+  - an unlisted `FAIL` pair exits 3;
+  - a listed pair that stops reproducing exits 3 — and that includes a listed
+    pair that becomes **`void`**, because "the corpus stopped exercising it" is
+    not "it was fixed";
+  - the file is a TSV under `spec/conformance/`, read the way the kit already
+    reads `def_table` through `read_csv(..., quote := '')`. The kit is bash and
+    depends on nothing but a loaded extension; `module-abi.yaml` is YAML read by
+    python. Same discipline, deliberately different file type.
+
+### 3e. The PASS line claims more than it checked
+
+`conformance_kit.sh:1528` prints `PASS: every declared capability was
+delivered`. After 3c it must state what ran: pairs exercised, pairs baselined.
+This is the sentence §"Why no existing gate caught any of them" quotes against
+python and zig. Separate, cheap commit.
+
+### Step 4 — the four populated-and-wrong values
+
+Expectation first, one language per change, and the test commit separate from
+the implementation commit in every case (`~/.CLAUDE.md`, the Golden Rule).
+
+| # | change | expectation that must fail first |
+|---|---|---|
+| 4.1 | python annotation path | `d: float = 1` gives `float`; `y: int` never gives the node-type string `assignment` |
+| 4.2 | swift argument container | `add(a: 1, b: 2)` gives two arguments, with python's two-row shape as the oracle |
+| 4.3 | lua modifier walk | a function merely NESTED in a `local function` carries no modifier |
+| 4.4 | lua visibility dispatch | the four rows of §4 above, three of which are wrong today |
+
+Order: 3a, then the 3b answer, then 3c, 3d, 3e, then 4.1 to 4.4. The kit is
+re-run after each step-3 commit; the full suite after step 4.
+
+**Baseline to beat, measured 2026-11-04 on `6fe4943` (the suite's own commit;
+`6fe4943..dec3d3b` touches only `tracker/`):**
+`All tests passed (5 skipped tests, 9032 assertions in 162 test cases)`, exit 0.
+
+The 9032 reconciles with the 9027 recorded on main `d297e85` on 2026-10-28:
+`9bc100f` is the only commit touching `test/` in between, and
+`test/sql/ast_unparse_leaf_text.test` measures **35 assertions before it and 40
+after**, in one test case either way. 9027 + 5 = 9032, 162 cases unchanged.
+Measured by running that one file at both versions, not inferred from the diff.

@@ -25,7 +25,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/python_unparse.def"
+#include "../languages/python/python_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["py"] = rules;
 		map["python"] = std::move(rules);
@@ -35,7 +35,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/javascript_unparse.def"
+#include "../languages/javascript/javascript_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["js"] = rules;
 		map["javascript"] = std::move(rules);
@@ -45,7 +45,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/typescript_unparse.def"
+#include "../languages/typescript/typescript_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["ts"] = rules;
 		map["typescript"] = std::move(rules);
@@ -55,7 +55,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/c_unparse.def"
+#include "../languages/c/c_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["c"] = std::move(rules);
 	}
@@ -64,7 +64,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/cpp_unparse.def"
+#include "../languages/cpp/cpp_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["c++"] = rules;
 		map["cc"] = rules;
@@ -76,7 +76,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/go_unparse.def"
+#include "../languages/go/go_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["go"] = std::move(rules);
 	}
@@ -85,7 +85,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/rust_unparse.def"
+#include "../languages/rust/rust_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["rs"] = rules;
 		map["rust"] = std::move(rules);
@@ -95,7 +95,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/java_unparse.def"
+#include "../languages/java/java_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["java"] = std::move(rules);
 	}
@@ -104,7 +104,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/ruby_unparse.def"
+#include "../languages/ruby/ruby_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["rb"] = rules;
 		map["ruby"] = std::move(rules);
@@ -114,7 +114,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/bash_unparse.def"
+#include "../languages/bash/bash_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["sh"] = rules;
 		map["shell"] = rules;
@@ -125,7 +125,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/csharp_unparse.def"
+#include "../languages/csharp/csharp_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["c#"] = rules;
 		map["cs"] = rules;
@@ -136,7 +136,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/css_unparse.def"
+#include "../languages/css/css_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["css"] = std::move(rules);
 	}
@@ -145,7 +145,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/dart_unparse.def"
+#include "../languages/dart/dart_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["dart"] = std::move(rules);
 	}
@@ -154,7 +154,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/fsharp_unparse.def"
+#include "../languages/fsharp/fsharp_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["f#"] = rules;
 		map["fs"] = rules;
@@ -165,7 +165,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/graphql_unparse.def"
+#include "../languages/graphql/graphql_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["gql"] = rules;
 		map["graphql"] = std::move(rules);
@@ -175,7 +175,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/haskell_unparse.def"
+#include "../languages/haskell/haskell_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["hs"] = rules;
 		map["haskell"] = std::move(rules);
@@ -185,7 +185,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/hcl_unparse.def"
+#include "../languages/hcl/hcl_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["tf"] = rules;
 		map["terraform"] = rules;
@@ -196,7 +196,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/html_unparse.def"
+#include "../languages/html/html_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["htm"] = rules;
 		map["html"] = std::move(rules);
@@ -206,7 +206,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/json_unparse.def"
+#include "../languages/json/json_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["json"] = std::move(rules);
 	}
@@ -215,7 +215,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/julia_unparse.def"
+#include "../languages/julia/julia_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["jl"] = rules;
 		map["julia"] = std::move(rules);
@@ -225,7 +225,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/kotlin_unparse.def"
+#include "../languages/kotlin/kotlin_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["kt"] = rules;
 		map["kotlin"] = std::move(rules);
@@ -235,7 +235,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/lua_unparse.def"
+#include "../languages/lua/lua_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["lua"] = std::move(rules);
 	}
@@ -244,7 +244,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/markdown_unparse.def"
+#include "../languages/markdown/markdown_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["md"] = rules;
 		map["markdown"] = std::move(rules);
@@ -254,7 +254,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/php_unparse.def"
+#include "../languages/php/php_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["php"] = std::move(rules);
 	}
@@ -263,7 +263,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/r_unparse.def"
+#include "../languages/r/r_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["r"] = std::move(rules);
 	}
@@ -272,7 +272,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/scala_unparse.def"
+#include "../languages/scala/scala_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["scala"] = std::move(rules);
 	}
@@ -281,7 +281,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/swift_unparse.def"
+#include "../languages/swift/swift_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["swift"] = std::move(rules);
 	}
@@ -290,7 +290,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/toml_unparse.def"
+#include "../languages/toml/toml_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["toml"] = std::move(rules);
 	}
@@ -299,7 +299,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/yaml_unparse.def"
+#include "../languages/yaml/yaml_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["yml"] = rules;
 		map["yaml"] = std::move(rules);
@@ -309,7 +309,7 @@ static std::unordered_map<std::string, std::vector<UnparseRule>> InitLanguageRul
 	{
 		std::vector<UnparseRule> rules;
 #define DEF_UNPARSE_RULE(kind, target, int_arg, str_arg) rules.emplace_back(kind, target, int_arg, str_arg);
-#include "language_configs/unparse/zig_unparse.def"
+#include "../languages/zig/zig_unparse.def"
 #undef DEF_UNPARSE_RULE
 		map["zig"] = std::move(rules);
 	}

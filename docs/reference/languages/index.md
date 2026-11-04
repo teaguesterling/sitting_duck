@@ -17,7 +17,7 @@ organized by programming language. Each page shows:
     reports what your build actually has.
 
     **[Fsharp](fsharp.md), [Haskell](haskell.md), [Julia](julia.md), [Scala](scala.md) are not among them.** Each has a
-    semantic-type mapping (`src/language_configs/<lang>_types.def`) and a
+    semantic-type mapping (`languages/<lang>/<lang>_types.def`) and a
     page here, but no adapter is built, so they error with "Unsupported
     language". Those pages are design references.
 
@@ -81,4 +81,4 @@ organized by programming language. Each page shows:
 
 ---
 
-*This documentation is auto-generated from the `.def` files in `src/language_configs/`*
+*This documentation is auto-generated from the `.def` files in `languages/<lang>/`*

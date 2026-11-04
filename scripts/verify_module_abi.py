@@ -33,8 +33,8 @@ sources that disagree with it. Five checks:
   5. DENOMINATOR: every per-language adapter resolves to a declaration table,
      or is named in `no_declaration_source`. Checks 3 and 4 are only as good as
      the set of tables they see, and this gate's first draft scanned
-     `src/language_configs/*_types.def` alone -- which silently omitted sql,
-     whose 233 entries are inlined in `src/language_adapters/sql_adapter.cpp`,
+     `languages/*/*_types.def` alone -- which silently omitted sql, whose 233
+     entries are inlined in `languages/sql/sql_adapter.cpp`,
      and sql is one of the three languages #220 broke.
 
 plus: the hook specialization lists match the header.
@@ -71,7 +71,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SPEC = ROOT / "spec" / "abi" / "module-abi.yaml"
 HEADER = ROOT / "src" / "include" / "native_context_extraction.hpp"
 NODE_CONFIG = ROOT / "src" / "include" / "node_config.hpp"
-DEFS_DIR = ROOT / "src" / "language_configs"
+# Per-language sources moved to languages/<lang>/ in 054 M2 stage 1.
+LANGUAGES_DIR = ROOT / "languages"
 
 # Where LanguageAdapter subclasses are declared. duckdb_adapter_backup.hpp also
 # declares one and is deliberately excluded: the build never compiles it (#226).
@@ -128,7 +129,8 @@ def candidate_languages(adapters):
     .def with no adapter at all (fsharp, haskell, julia, scala today -- the
     condition yaml was in before #227 wired it up)."""
     languages = {a[: -len("Adapter")].lower() for a in adapters}
-    languages |= {p.name[: -len("_types.def")] for p in DEFS_DIR.glob("*_types.def")}
+    languages |= {p.name[: -len("_types.def")]
+              for p in LANGUAGES_DIR.glob("*/*_types.def")}
     return languages
 
 
@@ -227,10 +229,10 @@ def self_test() -> int:
         print("::error::self-test FAILED: an `unmapped` entry did not silence its language")
         return 1
 
-    # 2. the denominator: sql's table is NOT in src/language_configs, and the
+    # 2. the denominator: sql has no _types.def at all, and the
     #    resolver must still find it. This is the hole the first draft had.
     sql_source = resolve_config_source("sql")
-    if sql_source is None or sql_source.parent.name != "language_adapters":
+    if sql_source is None or not sql_source.name.endswith("_adapter.cpp"):
         print(f"::error::self-test FAILED: sql's declaration table resolved to {sql_source}, "
               f"not an inline adapter table")
         return 1

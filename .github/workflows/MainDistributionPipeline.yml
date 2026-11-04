@@ -346,8 +346,9 @@ jobs:
   #   * REGISTRATION ORDER. ast_supported_languages() returns hash-map order,
   #     not declaration order (measured), so reordering the cmake table changes
   #     nothing observable in any existing test.
-  #   * THE KIT'S DENOMINATOR. conformance_kit.sh globs src/language_configs and
-  #     src/language_adapters. After the M2 move those match zero files, and a
+  #   * THE KIT'S DENOMINATOR. conformance_kit.sh globs languages/*/*_types.def
+  #     and languages/*/*_adapter.cpp. Point those at a directory that no longer
+  #     holds the tables -- as the M2 move did -- and they match zero files, and a
   #     language whose declarations the kit cannot read is reported UNDECL, not
   #     FAIL -- so the kit goes blind and STAYS GREEN.
   #
@@ -388,7 +389,7 @@ jobs:
             exit 1
           fi
 
-  # docs/reference/languages/*.md is GENERATED from src/language_configs/*_types.def
+  # docs/reference/languages/*.md is GENERATED from languages/*/*_types.def
   # by docs/scripts/generate_language_reference.py. Nothing in the build
   # regenerates it, so a .def change without a regeneration ships a reference
   # page that disagrees with the code.
@@ -409,12 +410,12 @@ jobs:
         run: python3 scripts/check_def_type_tables.py --self-test
       - name: One DEF_TYPE per line, and no raw type declared twice
         run: python3 scripts/check_def_type_tables.py
-      - name: Regenerate the language references from src/language_configs/*_types.def
+      - name: Regenerate the language references from languages/*/*_types.def
         run: python3 docs/scripts/generate_language_reference.py
       - name: Verify the committed references match
         run: |
           if ! git diff --exit-code -- docs/reference/languages/; then
-            echo '::error file=docs/reference/languages/index.md::the generated language references are out of sync with src/language_configs/*_types.def. Run `python3 docs/scripts/generate_language_reference.py` and commit the regenerated pages alongside the .def change.'
+            echo '::error file=docs/reference/languages/index.md::the generated language references are out of sync with languages/*/*_types.def. Run `python3 docs/scripts/generate_language_reference.py` and commit the regenerated pages alongside the .def change.'
             exit 1
           fi
 

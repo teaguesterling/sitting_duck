@@ -93,25 +93,38 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PARSERS_DIR = REPO_ROOT / "generated_parsers"
 MANIFEST = PARSERS_DIR / "MANIFEST"
-DEFS_DIR = REPO_ROOT / "src" / "language_configs"
-ADAPTERS_DIR = REPO_ROOT / "src" / "language_adapters"
+# Per-language sources live one directory per language (054 M2 stage 1). They
+# were in src/language_configs/ and src/language_adapters/ until that move;
+# spec/layout/layout.yaml holds the authoritative templates, and
+# scripts/verify_layout_invariance.py fails when these two disagree with it.
+LANGUAGES_DIR = REPO_ROOT / "languages"
+
+
+def language_dir(language: str) -> Path:
+    return LANGUAGES_DIR / language
 
 
 def resolve_config_source(language: str) -> Path | None:
     """Locate the DEF_TYPE table for a language.
 
-    Most languages keep it in ``src/language_configs/<lang>_types.def``, but
-    ``sql`` and ``duckdb`` declare their tables inline in the adapter
-    translation unit instead. Both spellings use the same DEF_TYPE macro, so
-    the same parser reads either.
+    Most languages keep it in ``languages/<lang>/<lang>_types.def``, but ``sql``
+    and ``duckdb`` declare their tables inline in the adapter translation unit
+    instead. Both spellings use the same DEF_TYPE macro, so the same parser
+    reads either.
     """
-    def_path = DEFS_DIR / f"{language}_types.def"
+    def_path = language_dir(language) / f"{language}_types.def"
     if def_path.exists():
         return def_path
-    adapter_path = ADAPTERS_DIR / f"{language}_adapter.cpp"
+    adapter_path = language_dir(language) / f"{language}_adapter.cpp"
     if adapter_path.exists():
         return adapter_path
     return None
+
+
+def iter_definition_tables():
+    """Every ``<lang>_types.def`` in the tree, with its language name."""
+    for path in sorted(LANGUAGES_DIR.glob("*/*_types.def")):
+        yield path.name[: -len("_types.def")], path
 
 # Name-extraction strategies that can yield text for a node with no children.
 # Every FIND_*/FIRST_CHILD strategy searches children, so on a leaf it returns
@@ -596,7 +609,9 @@ def main() -> int:
         def_path = resolve_config_source(language)
         if def_path is None:
             print(f"!! {language}: no DEF_TYPE table found in "
-                  f"{DEFS_DIR} or {ADAPTERS_DIR}", file=sys.stderr)
+                  f"{language_dir(language)} "
+                  f"(expected {language}_types.def or {language}_adapter.cpp)",
+                  file=sys.stderr)
             return 2
         audits.append(audit_language(language, manifest[language], def_path))
 

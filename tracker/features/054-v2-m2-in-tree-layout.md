@@ -1,6 +1,16 @@
 # 054 — M2: the in-tree `core/` + `languages/<lang>/` layout
 
-**Status:** PLAN, not approved, nothing executed. Written 2026-11-03.
+**Status:** stages 0–2 EXECUTED 2026-11-03. Stage 3 deliberately not started.
+Written 2026-11-03 as a plan; §10 records what executing it measured.
+
+Teague approved "stages 0–2, stop before the macro split".
+
+| stage | state | landed as |
+|---|---|---|
+| 0 — the invariance gate | merged | PR #306, `8cc5827` |
+| 1 — `git mv` to `languages/<lang>/` | open | PR #307, `8532350` `7e5fa17` `b96e588` |
+| 2 — `module.cmake` per language | open | PR #307, `525e083` `6037b17` |
+| 3 — the macro split | **not started, by decision** | — |
 
 **Scope source:** `docs/planning/v2-architecture.md` "Migration sequencing", M2.
 `tracker/features/044-v2-m1-contract.md:262` makes M2 the next action.
@@ -209,3 +219,104 @@ v2 layout".
   cannot be regenerated under tree-sitter 0.26.
 - **Whether the registry descriptor build reads any moved path.** Not yet
   measured.
+
+---
+
+## 10. What executing the plan measured, 2026-11-03
+
+### 10a. Where the plan was wrong
+
+| the plan said | measured |
+|---|---|
+| §5: "6 test files" need changes | **zero functional changes.** The `register_language*.test` files point at `grammars/`, which did not move. Two comment-only edits, in commit C |
+| §1: M2 is four pieces | three. The grammar-submodule piece was already done |
+| §2: nothing asserts the invariants | confirmed, three ways — and that is why stage 0 exists |
+
+An over-estimate that quietly turns out fine is how a stated exception becomes a
+habit, so the test-file figure is recorded rather than dropped.
+
+### 10b. The gate caught the move twice, and both times by failing loudly
+
+Stage 0's whole purpose was to make a silent change loud. It did, twice, and
+neither was found by a content grep:
+
+1. **Stage 1 — `scripts/verify_native_dispatch.py`.** It builds its path from
+   components, so the literal `src/language_adapters` never appears in the file
+   and the path inventory missed it. It exited 1 with *"no `*_adapter.cpp`
+   found; this check is looking in the wrong place"*. Its non-vacuity guard is
+   the only reason that was not a silent hole.
+2. **Stage 2 — `scripts/verify_layout_invariance.py`.** Moving the declarations
+   out of `cmake/BuiltinLanguages.cmake` left its regex matching nothing. Exit
+   1: *"matched 0 `sitting_duck_language()` declarations ...; the pattern is
+   wrong, not the code"*.
+
+And one consumer failed **silently**, which is the shape worth remembering:
+`docs/scripts/generate_language_reference.py` returned `[]` and carried on.
+That list derives the not-built-in warning box, so an empty list DELETES the
+box and the page looks finished — #235 exactly. It raises now, and both shapes
+are proven to raise (list missing; list present but empty), with a control
+returning 28.
+
+### 10c. Stage 2's shape, and why the order list is written out
+
+`cmake/BuiltinLanguages.cmake` keeps only ORDER. Each language declares itself
+in `languages/<name>/module.cmake`, with its adapter path relative to **itself**
+— measured: inside a cmake `macro()`, `CMAKE_CURRENT_LIST_DIR` is the included
+module's own directory. That is what keeps the directory self-describing when
+M3 extracts `languages/`.
+
+The list is written out, not globbed. `file(GLOB)` returns directories sorted
+alphabetically, which is not registration order, and **that reorder would be
+invisible**: every language still present, so every count and every set
+comparison still passes, and `ast_supported_languages()` cannot see it either
+(§2a). The generated `.def` is the only observable record.
+
+The includer checks each module instead of trusting the list. Five faults
+planted against a skeleton tree, all five failing the configure, plus a control
+that configures cleanly:
+
+| planted fault | detected |
+|---|---|
+| module declares nothing | yes |
+| module declares the wrong name | yes |
+| listed module missing | yes |
+| adapter file missing | yes |
+| module declares two languages | yes |
+| *control: no fault planted* | *configures cleanly* |
+
+The gate repeats the name check statically (check 1b), because the list is an
+INDEX and a module is the artifact: a module declaring a different language
+would leave the index intact and every count unchanged, and the build would
+register the wrong set in the right-looking order.
+
+### 10d. The acceptance oracle, re-measured after each stage
+
+| artifact | stage 1 | stage 2 |
+|---|---|---|
+| generated `builtin_languages.def` | `a27449126689c8ff` | `a27449126689c8ff` |
+| `ast_type_map()` all languages, 3911 rows | `dca09978a8040157` | `dca09978a8040157` |
+| `ast_supported_languages()` | 28 | 28 |
+| build | 0 errors | 0 errors, 104 warnings |
+| generated language reference | 30 pages identical but for 2 intended strings | all 31 identical |
+| four static gates + self-tests | green | green |
+| conformance kit | `ok=192 FAIL=0 dirty=1 void=7 UNDECL=5 n/a=19`, 8/8 controls, exit 0 | — |
+
+Both sha256 figures match §3's before-oracle, captured before anything moved.
+
+### 10e. The kit's denominator moved by exactly one file, and had to be explained
+
+`def scan: 3837 DEF_TYPE entries from 58 files, 31 languages` — 58, where it was
+59. `dynamic_language_adapter.cpp` stayed on the engine side and left the glob's
+scope. It holds zero `DEF_TYPE` entries, which is why entries (4039 by the
+gate's own count) and readable tables (31) did not move. The floor in
+`spec/layout/layout.yaml` forced that one-file drop to be explained rather than
+absorbed, which is the whole point of a floor.
+
+### 10f. Still open
+
+- **Stage 3 (the macro split) is not started**, by decision. §7 says why: "core
+  accessors vs add-ons" is not written down anywhere as a list, and it changes
+  which macros a default build registers, which is visible to every user.
+- §9's unknowns about the registry descriptor build are still unmeasured.
+- The kit's runtime on the v2.0 line: the clean run completed, so the "may now
+  be a long job" worry in §9 is answered for the in-tree case.

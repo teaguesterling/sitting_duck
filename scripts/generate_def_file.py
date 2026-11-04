@@ -199,8 +199,9 @@ def main():
     print(f"Found {len(grammar_data['rules'])} rules, {len(grammar_data['tokens'])} tokens, {len(grammar_data['strings'])} strings")
     
     # Generate output path
-    output_dir = Path("src/language_configs")
-    output_dir.mkdir(exist_ok=True)
+    # One directory per language since 054 M2 stage 1.
+    output_dir = Path("languages") / language_name
+    output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{language_name}_types.def"
     
     # Generate the .def file

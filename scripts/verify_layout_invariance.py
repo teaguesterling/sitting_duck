@@ -79,6 +79,8 @@ BUILD_DIR = ROOT / "build"
 DECLARATION = re.compile(r"^\s*sitting_duck_language\(\s*([a-z0-9_]+)\s", re.M)
 # SD_BUILTIN_LANGUAGE_TS(python, PythonAdapter)
 GENERATED = re.compile(r"^SD_BUILTIN_LANGUAGE_(?:TS|NATIVE)\(\s*([a-z0-9_]+)\s*,", re.M)
+# set(SITTING_DUCK_LANGUAGE_MODULES python javascript ... yaml)
+MODULE_LIST = re.compile(r"set\(SITTING_DUCK_LANGUAGE_MODULES\s+(.*?)\)", re.S)
 
 
 def load_spec(path=SPEC):
@@ -86,11 +88,50 @@ def load_spec(path=SPEC):
 
 
 def declared_order(spec, root=ROOT):
-    """Language names in cmake declaration order, which IS registration order."""
+    """Language names in registration order, from the cmake declaration table.
+
+    Since M2 stage 2 the per-language declarations live in
+    `languages/<name>/module.cmake` and this table only LISTS them, in order. So
+    the order comes from `SITTING_DUCK_LANGUAGE_MODULES` here, and
+    `module_declarations()` separately proves each module declares the language
+    its directory is named for. Reading the list alone would be reading an index
+    rather than the artifact: a module could declare something else entirely and
+    this check would not notice.
+    """
     table = root / spec["paths"]["declaration_table"]
     if not table.exists():
         return None, f"{spec['paths']['declaration_table']} does not exist"
-    return DECLARATION.findall(table.read_text(encoding="utf-8", errors="replace")), None
+    text = table.read_text(encoding="utf-8", errors="replace")
+    m = MODULE_LIST.search(text)
+    if not m:
+        return None, (f"no set(SITTING_DUCK_LANGUAGE_MODULES ...) in "
+                      f"{spec['paths']['declaration_table']}; the pattern is wrong, "
+                      f"not the code")
+    # Strip cmake comments, then split on whitespace.
+    body = re.sub(r"#[^\n]*", "", m.group(1))
+    return body.split(), None
+
+
+def module_declarations(spec, root=ROOT):
+    """{language: (declared_names, error_or_None)} for every listed language.
+
+    The includer checks this at configure time too, and fails the build. This
+    repeats it statically so a bare checkout catches a module that declares the
+    wrong language, or nothing at all, without configuring cmake.
+    """
+    out = {}
+    template = spec["paths"].get("module")
+    if not template:
+        return out
+    for language in spec["registration_order"]:
+        rel = template.format(language=language)
+        path = root / rel
+        if not path.exists():
+            out[language] = (None, f"{language}: no module at `{rel}`")
+            continue
+        names = DECLARATION.findall(path.read_text(encoding="utf-8", errors="replace"))
+        out[language] = (names, None)
+    return out
 
 
 def generated_tables(spec, root=ROOT):
@@ -113,6 +154,9 @@ def language_sources(spec, language):
     out = {}
 
     out["adapter"] = paths["adapter"].format(language=language)
+
+    if paths.get("module"):
+        out["module"] = paths["module"].format(language=language)
 
     if exc.get("definitions") == "none":
         out["definitions"] = None
@@ -219,6 +263,37 @@ def check(spec, root=ROOT, require_build=False):
         else:
             summary.append(f"registration order: {len(found)} languages, cmake == spec")
 
+    # --- 1b. each module declares the language its own directory is named for ---
+    # The list above is an index. This reads the artifact. A module that declares
+    # a different language, or declares twice, or declares nothing, would leave
+    # the index intact and every count unchanged -- the build would simply
+    # register the wrong set, in the right-looking order. A missing module file
+    # is check 3's finding, not repeated here.
+    modules = module_declarations(spec, root)
+    if spec["paths"].get("module") and not modules:
+        findings.append(
+            "spec/layout/layout.yaml declares `paths.module`, but no module was read; "
+            "the pattern is wrong, not the code")
+    checked = 0
+    for language, (names, _) in sorted(modules.items()):
+        if names is None:
+            continue
+        rel = spec["paths"]["module"].format(language=language)
+        if len(names) != 1:
+            findings.append(
+                f"{rel} calls sitting_duck_language() {len(names)} time(s); each module "
+                f"must declare exactly one language, or the includer's order list stops "
+                f"describing what is registered")
+        elif names[0] != language:
+            findings.append(
+                f"{rel} declares `{names[0]}`, but its directory names it `{language}`. "
+                f"The registration list would still read correctly while the build "
+                f"registered something else")
+        else:
+            checked += 1
+    if checked:
+        summary.append(f"language modules: {checked} declare exactly their own language")
+
     # --- 2. every generated table in the build tree carries the same order ---
     tables = generated_tables(spec, root)
     if not tables:
@@ -298,7 +373,24 @@ def check(spec, root=ROOT, require_build=False):
     for stale in sorted(listed_not_lang - on_disk_adapters):
         findings.append(
             f"`{stale}` is listed under `not_a_language`, but no adapter for it exists "
-            f"any more -- remove the entry")
+            f"any more -- remove the entry, or move it to `engine_adapters` if it left "
+            f"the languages glob rather than the tree")
+
+    # --- 3c. engine-side adapters must still be where the spec says ---
+    # These sit outside the languages glob on purpose, so no count above would
+    # notice one disappearing. Without this check, deleting the engine's own
+    # adapter would be invisible to every gate in the repo.
+    engine = spec.get("engine_adapters") or []
+    if not engine:
+        findings.append(
+            "spec lists no `engine_adapters`; at least dynamic_language_adapter.cpp is "
+            "expected, so an empty list means the section went stale rather than true")
+    for entry in engine:
+        rel = entry["path"] if isinstance(entry, dict) else entry
+        if not (root / rel).exists():
+            findings.append(
+                f"`{rel}` is listed under `engine_adapters`, but it does not exist. It is "
+                f"outside the languages glob, so no file or entry count above can see it go")
 
     # --- 4. the conformance kit can still see its own input ---
     d = measure_denominator(spec, root)
@@ -386,6 +478,32 @@ def self_test() -> int:
               "reported per language")
         return 1
 
+    # 3d. a module that declares the wrong language must be caught. Planted in
+    # the SPEC rather than on disk: pointing `paths.module` at another language's
+    # module makes every module declare a name that is not its directory's,
+    # which is the shape the check exists for. The real tree is not touched.
+    if spec["paths"].get("module"):
+        mismatched = dict(spec)
+        mismatched["paths"] = dict(spec["paths"])
+        mismatched["paths"]["module"] = (
+            f"languages/{spec['registration_order'][0]}/module.cmake")
+        findings, _ = check(mismatched)
+        if not any("but its directory names it" in f for f in findings):
+            print("::error::self-test FAILED: a module declaring a language other than "
+                  "its own directory was not detected; the order list would be read as "
+                  "the registered set")
+            return 1
+
+        # And a `paths.module` that resolves to nothing must be reported, not skipped.
+        nowhere = dict(spec)
+        nowhere["paths"] = dict(spec["paths"])
+        nowhere["paths"]["module"] = "zyzzyva/{language}/module.cmake"
+        findings, _ = check(nowhere)
+        if not any("no module at" in f for f in findings):
+            print("::error::self-test FAILED: a module path resolving to nothing was "
+                  "not reported")
+            return 1
+
     # 4. the floors must be reachable: a floor nothing can satisfy is not a floor.
     impossible = dict(spec)
     impossible["kit_denominator"] = dict(spec["kit_denominator"])
@@ -399,7 +517,9 @@ def self_test() -> int:
     print(f"self-test OK: detects a two-language reorder as an ORDER change and not a "
           f"membership change; detects a dropped language as a membership change; detects "
           f"path templates that resolve to nothing, both per language and at the kit "
-          f"denominator; and the real tree passes with "
+          f"denominator; detects a module that declares a language other than its own "
+          f"directory, and a module path that resolves to nothing; and the real tree "
+          f"passes with "
           f"{d['files']} files / {d['entries']} DEF_TYPE entries / "
           f"{d['languages_with_tables']} readable tables")
     return 0

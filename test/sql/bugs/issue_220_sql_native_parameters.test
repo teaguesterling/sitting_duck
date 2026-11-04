@@ -11,7 +11,7 @@
 #              that declares the strategy
 #
 # `create_function` is what declares FUNCTION_WITH_PARAMS
-# (src/language_adapters/sql_adapter.cpp:32), and it was the single node type
+# (languages/sql/sql_adapter.cpp:32), and it was the single node type
 # missing from SQLNativeExtractor<FUNCTION_WITH_PARAMS>'s dispatch, which
 # handled create_table, create_view, function_call, window_function, four
 # *_statement forms, statement, binary_expression, term and list. So every

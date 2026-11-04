@@ -47,7 +47,7 @@
 #       module that lives in another repo entirely.
 #
 #   DEF-DERIVED (in-tree only) -- the `native_extraction` argument of
-#       DEF_TYPE, scanned out of src/language_configs/*_types.def and the
+#       DEF_TYPE, scanned out of languages/*/*_types.def and the
 #       adapter translation units that inline their tables (sql_adapter.cpp).
 #       This is the ONLY source for the signature/parameter/modifier
 #       capability, because ast_type_map() does not surface `native_strategy`.
@@ -148,8 +148,8 @@ declare -a def_sources=()
 # ast_supported_languages() so a .def with no registered adapter (yaml, fsharp,
 # haskell, julia, scala today) cannot invent a phantom language.
 readonly DEFAULT_DEF_SOURCES=(
-    "${repo_root}/src/language_configs/*_types.def"
-    "${repo_root}/src/language_adapters/*_adapter.cpp"
+    "${repo_root}/languages/*/*_types.def"
+    "${repo_root}/languages/*/*_adapter.cpp"
 )
 
 # The native-extraction strategies that amount to "this node type declares a
@@ -224,7 +224,7 @@ Options:
                          (default: ${corpus})
   --def-source GLOB      where to scan DEF_TYPE tables for the native-strategy
                          declaration. Repeatable. Defaults to this repo's
-                         language_configs/ and language_adapters/.
+                         languages/<lang>/.
                          Pass --def-source '' to scan nothing and see what the
                          kit can still conclude from the runtime alone -- which
                          is what an out-of-tree module gets.

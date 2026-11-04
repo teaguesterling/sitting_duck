@@ -98,7 +98,7 @@ write_allowlist_sentinel() {
 # path column would make every control run trivially (and uselessly) "differ".
 # start_line/end_line are included for completeness and for other languages,
 # but they carry no signal for `duckdb`: DuckDBAdapter::CreateASTNode hardcodes
-# both to 1 (src/language_adapters/duckdb_adapter.cpp), so every row reads 1,1.
+# both to 1 (languages/duckdb/duckdb_adapter.cpp), so every row reads 1,1.
 # Do not read a clean comparison of those two columns as evidence of anything.
 readonly STRUCT_COLUMNS="node_id, type, name, semantic_type, parent_id, depth, sibling_index, children_count, descendant_count, start_line, end_line"
 # Same names, as a read_csv() column spec, so the classifier below reads the

@@ -617,8 +617,14 @@ def main() -> int:
 
     headers = {p.name.replace("_native_extractors.hpp", ""): p
                for p in (ROOT / "src" / "include").glob("*_native_extractors.hpp")}
+    # One directory per language since 054 M2 stage 1; this was
+    # src/language_adapters/*_adapter.cpp before that move. The path is built
+    # from components, so the string "src/language_adapters" never appeared in
+    # this file -- which is why a grep for it missed this gate and the move
+    # broke it. It failed loudly (exit 1, "looking in the wrong place"), which
+    # is the non-vacuity guard below doing its job.
     adapters = {p.name.replace("_adapter.cpp", ""): p
-                for p in (ROOT / "src" / "language_adapters").glob("*_adapter.cpp")
+                for p in (ROOT / "languages").glob("*/*_adapter.cpp")
                 if p.name not in NOT_TREE_SITTER
                 and p.name.replace("_adapter.cpp", "") not in NOT_TREE_SITTER}
     if not headers:
