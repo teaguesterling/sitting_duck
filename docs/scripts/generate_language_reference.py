@@ -2,7 +2,7 @@
 """
 Generate language reference documentation from .def files.
 
-This script parses the Doxygen-style comments in src/language_configs/*_types.def
+This script parses the Doxygen-style comments in languages/*/*_types.def
 files and generates markdown documentation for each language's node types.
 
 Usage:
@@ -377,7 +377,7 @@ def generate_index(languages: list) -> str:
             md.append("")
             links = ", ".join(f"[{display[k]}]({k}.md)" for k in not_built)
             md.append(f"    **{links} {'is' if one else 'are'} not among them.** Each has a")
-            md.append("    semantic-type mapping (`src/language_configs/<lang>_types.def`) and a")
+            md.append("    semantic-type mapping (`languages/<lang>/<lang>_types.def`) and a")
             md.append("    page here, but no adapter is built, so they error with \"Unsupported")
             md.append("    language\". Those pages are design references.")
             if no_page:
@@ -459,7 +459,7 @@ def generate_index(languages: list) -> str:
 
     md.append("---")
     md.append("")
-    md.append("*This documentation is auto-generated from the `.def` files in `src/language_configs/`*")
+    md.append("*This documentation is auto-generated from the `.def` files in `languages/<lang>/`*")
     md.append("")
 
     return '\n'.join(md)
@@ -470,7 +470,8 @@ def main():
     script_dir = Path(__file__).parent
     project_root = script_dir.parent.parent
 
-    def_dir = project_root / 'src' / 'language_configs'
+    # Per-language sources moved to languages/<lang>/ in 054 M2 stage 1.
+    def_dir = project_root / 'languages'
     output_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else script_dir.parent / 'reference' / 'languages'
 
     # Create output directory
@@ -480,7 +481,7 @@ def main():
     print(f"Writing documentation to: {output_dir}")
 
     # Find all .def files
-    def_files = sorted(def_dir.glob('*_types.def'))
+    def_files = sorted(def_dir.glob('*/*_types.def'))
 
     if not def_files:
         print(f"No .def files found in {def_dir}")

@@ -41,87 +41,87 @@ endmacro()
 set(SITTING_DUCK_ALL_LANGUAGES "")
 
 sitting_duck_language(python PythonAdapter TS
-    ADAPTER src/language_adapters/python_adapter.cpp
+    ADAPTER languages/python/python_adapter.cpp
     PARSERS tree-sitter-python/src/parser.c tree-sitter-python/src/scanner.c)
 sitting_duck_language(javascript JavaScriptAdapter TS
-    ADAPTER src/language_adapters/javascript_adapter.cpp
+    ADAPTER languages/javascript/javascript_adapter.cpp
     PARSERS tree-sitter-javascript/src/parser.c tree-sitter-javascript/src/scanner.c)
 sitting_duck_language(cpp CPPAdapter TS
-    ADAPTER src/language_adapters/cpp_adapter.cpp
+    ADAPTER languages/cpp/cpp_adapter.cpp
     PARSERS tree-sitter-cpp/src/parser.c tree-sitter-cpp/src/scanner.c)
 sitting_duck_language(typescript TypeScriptAdapter TS
-    ADAPTER src/language_adapters/typescript_adapter.cpp
+    ADAPTER languages/typescript/typescript_adapter.cpp
     PARSERS tree-sitter-typescript/typescript/src/parser.c tree-sitter-typescript/typescript/src/scanner.c)
 sitting_duck_language(sql SQLAdapter TS
-    ADAPTER src/language_adapters/sql_adapter.cpp
+    ADAPTER languages/sql/sql_adapter.cpp
     PARSERS tree-sitter-sql/src/parser.c tree-sitter-sql/src/scanner.c)
 # DuckDB native parser - SQL parsing with database-native accuracy (no
 # tree-sitter grammar; the adapter wraps DuckDB's own parser).
 sitting_duck_language(duckdb DuckDBAdapter NATIVE
-    ADAPTER src/language_adapters/duckdb_adapter.cpp)
+    ADAPTER languages/duckdb/duckdb_adapter.cpp)
 sitting_duck_language(go GoAdapter TS
-    ADAPTER src/language_adapters/go_adapter.cpp
+    ADAPTER languages/go/go_adapter.cpp
     PARSERS tree-sitter-go/src/parser.c)
 sitting_duck_language(ruby RubyAdapter TS
-    ADAPTER src/language_adapters/ruby_adapter.cpp
+    ADAPTER languages/ruby/ruby_adapter.cpp
     PARSERS tree-sitter-ruby/src/parser.c tree-sitter-ruby/src/scanner.c)
 sitting_duck_language(markdown MarkdownAdapter TS
-    ADAPTER src/language_adapters/markdown_adapter.cpp
+    ADAPTER languages/markdown/markdown_adapter.cpp
     PARSERS tree-sitter-markdown/tree-sitter-markdown/src/parser.c
             tree-sitter-markdown/tree-sitter-markdown/src/scanner.c)
 sitting_duck_language(java JavaAdapter TS
-    ADAPTER src/language_adapters/java_adapter.cpp
+    ADAPTER languages/java/java_adapter.cpp
     PARSERS tree-sitter-java/src/parser.c)
 sitting_duck_language(php PHPAdapter TS
-    ADAPTER src/language_adapters/php_adapter.cpp
+    ADAPTER languages/php/php_adapter.cpp
     PARSERS tree-sitter-php/php/src/parser.c tree-sitter-php/php/src/scanner.c)
 sitting_duck_language(html HTMLAdapter TS
-    ADAPTER src/language_adapters/html_adapter.cpp
+    ADAPTER languages/html/html_adapter.cpp
     PARSERS tree-sitter-html/src/parser.c tree-sitter-html/src/scanner.c)
 sitting_duck_language(css CSSAdapter TS
-    ADAPTER src/language_adapters/css_adapter.cpp
+    ADAPTER languages/css/css_adapter.cpp
     PARSERS tree-sitter-css/src/parser.c tree-sitter-css/src/scanner.c)
 sitting_duck_language(c CAdapter TS
-    ADAPTER src/language_adapters/c_adapter.cpp
+    ADAPTER languages/c/c_adapter.cpp
     PARSERS tree-sitter-c/src/parser.c)
 sitting_duck_language(rust RustAdapter TS
-    ADAPTER src/language_adapters/rust_adapter.cpp
+    ADAPTER languages/rust/rust_adapter.cpp
     PARSERS tree-sitter-rust/src/parser.c tree-sitter-rust/src/scanner.c)
 sitting_duck_language(json JSONAdapter TS
-    ADAPTER src/language_adapters/json_adapter.cpp
+    ADAPTER languages/json/json_adapter.cpp
     PARSERS tree-sitter-json/src/parser.c)
 sitting_duck_language(bash BashAdapter TS
-    ADAPTER src/language_adapters/bash_adapter.cpp
+    ADAPTER languages/bash/bash_adapter.cpp
     PARSERS tree-sitter-bash/src/parser.c tree-sitter-bash/src/scanner.c)
 sitting_duck_language(swift SwiftAdapter TS
-    ADAPTER src/language_adapters/swift_adapter.cpp
+    ADAPTER languages/swift/swift_adapter.cpp
     PARSERS tree-sitter-swift/src/parser.c tree-sitter-swift/src/scanner.c)
 sitting_duck_language(r RAdapter TS
-    ADAPTER src/language_adapters/r_adapter.cpp
+    ADAPTER languages/r/r_adapter.cpp
     PARSERS tree-sitter-r/src/parser.c tree-sitter-r/src/scanner.c)
 sitting_duck_language(kotlin KotlinAdapter TS
-    ADAPTER src/language_adapters/kotlin_adapter.cpp
+    ADAPTER languages/kotlin/kotlin_adapter.cpp
     PARSERS tree-sitter-kotlin/src/parser.c tree-sitter-kotlin/src/scanner.c)
 sitting_duck_language(csharp CSharpAdapter TS
-    ADAPTER src/language_adapters/csharp_adapter.cpp
+    ADAPTER languages/csharp/csharp_adapter.cpp
     PARSERS tree-sitter-c-sharp/src/parser.c tree-sitter-c-sharp/src/scanner.c)
 sitting_duck_language(lua LuaAdapter TS
-    ADAPTER src/language_adapters/lua_adapter.cpp
+    ADAPTER languages/lua/lua_adapter.cpp
     PARSERS tree-sitter-lua/src/parser.c tree-sitter-lua/src/scanner.c)
 sitting_duck_language(hcl HCLAdapter TS
-    ADAPTER src/language_adapters/hcl_adapter.cpp
+    ADAPTER languages/hcl/hcl_adapter.cpp
     PARSERS tree-sitter-hcl/src/parser.c tree-sitter-hcl/src/scanner.c)
 sitting_duck_language(graphql GraphQLAdapter TS
-    ADAPTER src/language_adapters/graphql_adapter.cpp
+    ADAPTER languages/graphql/graphql_adapter.cpp
     PARSERS tree-sitter-graphql/src/parser.c)
 sitting_duck_language(toml TOMLAdapter TS
-    ADAPTER src/language_adapters/toml_adapter.cpp
+    ADAPTER languages/toml/toml_adapter.cpp
     PARSERS tree-sitter-toml/src/parser.c tree-sitter-toml/src/scanner.c)
 sitting_duck_language(zig ZigAdapter TS
-    ADAPTER src/language_adapters/zig_adapter.cpp
+    ADAPTER languages/zig/zig_adapter.cpp
     PARSERS tree-sitter-zig/src/parser.c)
 sitting_duck_language(dart DartAdapter TS
-    ADAPTER src/language_adapters/dart_adapter.cpp
+    ADAPTER languages/dart/dart_adapter.cpp
     PARSERS tree-sitter-dart/src/parser.c tree-sitter-dart/src/scanner.c)
 
 # yaml's parser is ABI 13 (the runtime's TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION),
@@ -130,7 +130,7 @@ sitting_duck_language(dart DartAdapter TS
 # Both are fine to compile and load; see scripts/generate_all_parsers.sh for why
 # this grammar cannot currently be regenerated (#233).
 sitting_duck_language(yaml YAMLAdapter TS
-    ADAPTER src/language_adapters/yaml_adapter.cpp
+    ADAPTER languages/yaml/yaml_adapter.cpp
     PARSERS tree-sitter-yaml/src/parser.c tree-sitter-yaml/src/scanner.cc)
 
 #############################

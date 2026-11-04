@@ -25,7 +25,7 @@ namespace duckdb {
 #define DEF_TYPE_ANON(raw_type, semantic_type, name_strat, native_strat, flags)
 
 const unordered_map<string, NodeConfig> KotlinAdapter::node_configs = {
-#include "../language_configs/kotlin_types.def"
+#include "../kotlin/kotlin_types.def"
 };
 
 #undef DEF_TYPE
@@ -37,7 +37,7 @@ const unordered_map<string, NodeConfig> KotlinAdapter::node_configs = {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> KotlinAdapter::node_configs_anon = {
-#include "../language_configs/kotlin_types.def"
+#include "../kotlin/kotlin_types.def"
 };
 
 #undef DEF_TYPE

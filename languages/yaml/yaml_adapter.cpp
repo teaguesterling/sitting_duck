@@ -22,7 +22,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> YAMLAdapter::node_configs = {
-#include "../language_configs/yaml_types.def"
+#include "../yaml/yaml_types.def"
 };
 
 #undef DEF_TYPE

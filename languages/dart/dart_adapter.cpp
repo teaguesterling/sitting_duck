@@ -27,7 +27,7 @@ namespace duckdb {
 #define DEF_TYPE_ANON(raw_type, semantic_type, name_strat, native_strat, flags)
 
 const unordered_map<string, NodeConfig> DartAdapter::node_configs = {
-#include "../language_configs/dart_types.def"
+#include "../dart/dart_types.def"
 };
 
 #undef DEF_TYPE
@@ -39,7 +39,7 @@ const unordered_map<string, NodeConfig> DartAdapter::node_configs = {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> DartAdapter::node_configs_anon = {
-#include "../language_configs/dart_types.def"
+#include "../dart/dart_types.def"
 };
 
 #undef DEF_TYPE

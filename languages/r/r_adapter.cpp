@@ -23,7 +23,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> RAdapter::node_configs = {
-#include "../language_configs/r_types.def"
+#include "../r/r_types.def"
 };
 
 #undef DEF_TYPE

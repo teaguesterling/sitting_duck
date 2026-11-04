@@ -22,7 +22,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> PythonAdapter::node_configs = {
-#include "../language_configs/python_types.def"
+#include "../python/python_types.def"
 };
 
 #undef DEF_TYPE

@@ -57,7 +57,7 @@
  * and may override JavaScript definitions where the TypeScript parser
  * produces different node types.
  */
-#include "javascript_types.def"
+#include "../javascript/javascript_types.def"
 
 // =============================================================================
 // SHADOWING: what this #include means for every entry below it (#222)

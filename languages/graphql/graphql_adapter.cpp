@@ -26,7 +26,7 @@ namespace duckdb {
 #define DEF_TYPE_ANON(raw_type, semantic_type, name_strat, native_strat, flags)
 
 const unordered_map<string, NodeConfig> GraphQLAdapter::node_configs = {
-#include "../language_configs/graphql_types.def"
+#include "../graphql/graphql_types.def"
 };
 
 #undef DEF_TYPE
@@ -38,7 +38,7 @@ const unordered_map<string, NodeConfig> GraphQLAdapter::node_configs = {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> GraphQLAdapter::node_configs_anon = {
-#include "../language_configs/graphql_types.def"
+#include "../graphql/graphql_types.def"
 };
 
 #undef DEF_TYPE

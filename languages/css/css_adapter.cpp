@@ -22,7 +22,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> CSSAdapter::node_configs = {
-#include "../language_configs/css_types.def"
+#include "../css/css_types.def"
 };
 
 #undef DEF_TYPE

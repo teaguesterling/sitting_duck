@@ -23,7 +23,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> HCLAdapter::node_configs = {
-#include "../language_configs/hcl_types.def"
+#include "../hcl/hcl_types.def"
 };
 
 #undef DEF_TYPE

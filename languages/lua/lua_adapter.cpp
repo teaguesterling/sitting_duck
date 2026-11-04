@@ -21,7 +21,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> LuaAdapter::node_configs = {
-#include "../language_configs/lua_types.def"
+#include "../lua/lua_types.def"
 };
 
 #undef DEF_TYPE

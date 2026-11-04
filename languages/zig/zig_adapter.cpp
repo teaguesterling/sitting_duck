@@ -23,7 +23,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> ZigAdapter::node_configs = {
-#include "../language_configs/zig_types.def"
+#include "../zig/zig_types.def"
 };
 
 #undef DEF_TYPE

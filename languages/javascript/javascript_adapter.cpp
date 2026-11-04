@@ -23,7 +23,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> JavaScriptAdapter::node_configs = {
-#include "../language_configs/javascript_types.def"
+#include "../javascript/javascript_types.def"
 };
 
 #undef DEF_TYPE

@@ -22,7 +22,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> JavaAdapter::node_configs = {
-#include "../language_configs/java_types.def"
+#include "../java/java_types.def"
 };
 
 #undef DEF_TYPE

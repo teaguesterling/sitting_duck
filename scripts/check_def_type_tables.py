@@ -4,7 +4,7 @@ duplicate raw type.
 
 WHY CHECK 1 EXISTS -- ONE ENTRY PER LINE
 
-docs/reference/languages/*.md is generated from src/language_configs/*_types.def
+docs/reference/languages/*.md is generated from languages/*/*_types.def
 by docs/scripts/generate_language_reference.py. That generator reads one line at
 a time and matches DEF_TYPE with a single-line regular expression
 (generate_language_reference.py:149).
@@ -29,10 +29,10 @@ deciding the behaviour.
 
 Both shapes were present when this check was written, and neither was known:
 
-  * src/language_adapters/sql_adapter.cpp declared `op_unary_other` twice with
+  * languages/sql/sql_adapter.cpp declared `op_unary_other` twice with
     CONFLICTING configs -- OPERATOR_ARITHMETIC/NODE_TEXT live, and
     PARSER_CONSTRUCT/NODE_TEXT dead. 264 entries for 263 distinct types.
-  * src/language_configs/javascript_types.def declared the nullish-coalescing
+  * languages/javascript/javascript_types.def declared the nullish-coalescing
     operator twice with IDENTICAL configs: `"?\?"` (escaped against the `??=`
     trigraph) and a plain `"??"` commented "alternate". Both are the raw type
     `??`, so the second never did anything.
@@ -84,8 +84,8 @@ from audit_leaf_text_gaps import (  # noqa: E402
 # needs its OWN floor: the .def files alone clear 3000, so sql dropping out of
 # the scan would change no number anybody reads.
 SOURCES = (
-    ("src/language_configs/*_types.def", 3000),
-    ("src/language_adapters/sql_adapter.cpp", 200),
+    ("languages/*/*_types.def", 3000),
+    ("languages/sql/sql_adapter.cpp", 200),
 )
 
 

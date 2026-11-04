@@ -22,7 +22,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> CPPAdapter::node_configs = {
-#include "../language_configs/cpp_types.def"
+#include "../cpp/cpp_types.def"
 };
 
 #undef DEF_TYPE

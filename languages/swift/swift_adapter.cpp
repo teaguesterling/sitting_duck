@@ -22,7 +22,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> SwiftAdapter::node_configs = {
-#include "../language_configs/swift_types.def"
+#include "../swift/swift_types.def"
 };
 
 #undef DEF_TYPE

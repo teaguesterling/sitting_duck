@@ -22,7 +22,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> GoAdapter::node_configs = {
-#include "../language_configs/go_types.def"
+#include "../go/go_types.def"
 };
 
 #undef DEF_TYPE

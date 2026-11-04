@@ -28,7 +28,7 @@ namespace duckdb {
 
 const unordered_map<string, NodeConfig> TypeScriptAdapter::node_configs = {
 // TypeScript-specific type definitions (includes JavaScript as base)
-#include "../language_configs/typescript_types.def"
+#include "../typescript/typescript_types.def"
 };
 
 #undef DEF_TYPE
@@ -40,7 +40,7 @@ const unordered_map<string, NodeConfig> TypeScriptAdapter::node_configs = {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> TypeScriptAdapter::node_configs_anon = {
-#include "../language_configs/typescript_types.def"
+#include "../typescript/typescript_types.def"
 };
 
 #undef DEF_TYPE

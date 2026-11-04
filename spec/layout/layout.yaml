@@ -29,8 +29,8 @@ version: 1.0.0
 # Where per-language sources live today. `{language}` is the registered name;
 # `{grammar}` is the grammar directory suffix, which differs for csharp.
 paths:
-  adapter: "src/language_adapters/{language}_adapter.cpp"
-  definitions: "src/language_configs/{language}_types.def"
+  adapter: "languages/{language}/{language}_adapter.cpp"
+  definitions: "languages/{language}/{language}_types.def"
   grammar: "grammars/tree-sitter-{grammar}"
   declaration_table: "cmake/BuiltinLanguages.cmake"
   # Emitted into the build tree by cmake/BuiltinLanguages.cmake. Checked only
@@ -103,9 +103,22 @@ unregistered_definitions:
   - julia
   - scala
 
-# Adapter translation units that are not one language's module.
-not_a_language:
-  - dynamic_language
+# Adapter translation units that sit UNDER the languages glob but are not one
+# language's module. Empty since 054 M2 stage 1: the only such file was
+# dynamic_language_adapter.cpp, which stayed on the engine side of the move and
+# is therefore outside the glob entirely. It is listed under `engine_adapters`
+# instead.
+not_a_language: []
+
+# Adapter translation units that deliberately did NOT move into languages/.
+# They are engine code, not language modules, and M3 extracts them with the
+# engine. Listed with full paths and checked for existence, so that deleting or
+# moving one is a finding rather than a silent drop out of every count.
+engine_adapters:
+  - path: "src/language_adapters/dynamic_language_adapter.cpp"
+    reason: "implements LanguageAdapter from DATA (register_language); not one language"
+  - path: "src/language_adapters/duckdb_adapter_backup.cpp"
+    reason: "dead: the build never compiles it (#226). Does not match *_adapter.cpp."
 
 # THE CONFORMANCE KIT'S DENOMINATOR.
 #
@@ -131,7 +144,16 @@ not_a_language:
 # kit's 3837 in here would be a floor nothing here measures -- and a floor set
 # 200 below the true value is 200 of slack nobody intended.
 kit_denominator:
-  files_min: 59            # 30 *_types.def + 29 *_adapter.cpp, measured 2026-11-03
+  # 58 = 30 *_types.def (26 registered + 4 unregistered) + 28 *_adapter.cpp.
+  #
+  # Was 59 before 054 M2 stage 1, when the globs were src/language_configs and
+  # src/language_adapters. The move took it to 58 because
+  # dynamic_language_adapter.cpp stayed on the engine side and so left the
+  # glob's scope. That file holds zero DEF_TYPE entries, which is why the other
+  # two counts did NOT move: entries stayed at 4039 and readable tables at 31,
+  # measured either side of the move. The gate forced this one-file drop to be
+  # explained rather than absorbed, which is the whole point of a floor.
+  files_min: 58
   def_type_entries_min: 3500      # measured 4039, deduped by language
   languages_with_tables_min: 31   # 26 registered with .def + 4 unregistered + sql's inline;
                                   # duckdb is the one language with no readable table at all

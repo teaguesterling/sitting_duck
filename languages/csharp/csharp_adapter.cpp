@@ -21,7 +21,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> CSharpAdapter::node_configs = {
-#include "../language_configs/csharp_types.def"
+#include "../csharp/csharp_types.def"
 };
 
 #undef DEF_TYPE

@@ -22,7 +22,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> JSONAdapter::node_configs = {
-#include "../language_configs/json_types.def"
+#include "../json/json_types.def"
 };
 
 #undef DEF_TYPE

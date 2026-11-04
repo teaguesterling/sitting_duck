@@ -298,7 +298,24 @@ def check(spec, root=ROOT, require_build=False):
     for stale in sorted(listed_not_lang - on_disk_adapters):
         findings.append(
             f"`{stale}` is listed under `not_a_language`, but no adapter for it exists "
-            f"any more -- remove the entry")
+            f"any more -- remove the entry, or move it to `engine_adapters` if it left "
+            f"the languages glob rather than the tree")
+
+    # --- 3c. engine-side adapters must still be where the spec says ---
+    # These sit outside the languages glob on purpose, so no count above would
+    # notice one disappearing. Without this check, deleting the engine's own
+    # adapter would be invisible to every gate in the repo.
+    engine = spec.get("engine_adapters") or []
+    if not engine:
+        findings.append(
+            "spec lists no `engine_adapters`; at least dynamic_language_adapter.cpp is "
+            "expected, so an empty list means the section went stale rather than true")
+    for entry in engine:
+        rel = entry["path"] if isinstance(entry, dict) else entry
+        if not (root / rel).exists():
+            findings.append(
+                f"`{rel}` is listed under `engine_adapters`, but it does not exist. It is "
+                f"outside the languages glob, so no file or entry count above can see it go")
 
     # --- 4. the conformance kit can still see its own input ---
     d = measure_denominator(spec, root)

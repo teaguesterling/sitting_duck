@@ -22,7 +22,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> MarkdownAdapter::node_configs = {
-#include "../language_configs/markdown_types.def"
+#include "../markdown/markdown_types.def"
 };
 
 #undef DEF_TYPE

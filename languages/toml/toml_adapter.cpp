@@ -23,7 +23,7 @@ namespace duckdb {
 	                      NativeExtractionStrategy::native_strat, flags)},
 
 const unordered_map<string, NodeConfig> TOMLAdapter::node_configs = {
-#include "../language_configs/toml_types.def"
+#include "../toml/toml_types.def"
 };
 
 #undef DEF_TYPE
