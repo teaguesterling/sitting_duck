@@ -431,8 +431,74 @@ function-shaped strategy)` triples, **91** of them in compiled-in languages
     It changes extension output, so it needs a failing test first, and it
     widens v1.18.0 past gate work.
 
-**Recommendation: A now, B recorded as the M1 gap it already is.** Default if
-nobody answers: A.
+**Recommendation was A now, B recorded as the M1 gap it already is.**
+
+**DECIDED BY TEAGUE, 2026-11-04: Option B.** `ast_type_map()` gains
+`native_strategy`. The kit then reads the declaration surface from the loaded
+map instead of from a source scan, which is the ABI's own answer and not a
+second definition of the loader.
+
+### What the measurements changed in this plan, after it was written
+
+Three things in the table above were taken from this document's own older text
+rather than from a run, and two of them were wrong.
+
+  - **The ambiguity row was stale.** It said ruby declares 21 raw_types twice
+    with conflicting strategies, quoting `class` at `ruby_types.def:71` and
+    `:593`. Measured 2026-11-04: ruby declares `class` **once**, there are no
+    preprocessor directives in that file, and the clean kit run reports
+    `ok ruby DECL-UNIQUE every raw_type declared exactly once`. Across all 28
+    registered languages the effective named table has **zero** duplicate
+    raw_types: row counts and distinct-key counts are equal for every one. So
+    the duplicates were fixed before this plan was written. The comment at
+    `conformance_kit.sh` in `check_native_absent()` still describes them, and
+    §"The four that are WRONG" above is the only place it matters; both are
+    historical, not current.
+  - **The shadowing row holds in principle and is empty in fact.** typescript's
+    effective table is 293 rows with 293 distinct raw_types, so nothing is
+    shadowed today. First-wins still decides what would happen, which is why
+    the oracle applies it.
+  - **The census was file-local, so it under-counted by exactly typescript.**
+    Re-derived with the C preprocessor over each language's declaration source,
+    applying the first-wins rule `unordered_map`'s initializer-list constructor
+    applies: **99** function-shaped declarations across the 28 registered
+    languages, not 91. typescript holds **13**, of which **11** are
+    `FUNCTION_WITH_PARAMS` — which reproduces L3's figure above from a second,
+    independent direction. A basename scan of `typescript_types.def` sees 5.
+
+The oracle is `workspace/` material rather than a gate: it exists to produce
+the expectations, and `ast_type_map()` is what the gate reads afterwards.
+
+**And the cost I put on Option A was overstated.** I argued A meant "a second
+definition of the loader, in a second language". `scripts/check_def_type_tables.py`
+already contains an include-aware `DEF_TYPE` reader — it reports "checked 3837
+DEF_TYPE entries across 31 translation unit roots" and its own self-test plants
+a **cross-include duplicate** — so A could have reused that reader instead of
+being written in awk. The repo already had the include-aware parse; the kit
+simply did not use it. B is still the better answer, for the reason it was
+chosen (the loaded map is the artifact, and it works for a module that ships no
+sources), but the comparison as I put it gave A a cost it did not have.
+
+### 3b as built
+
+`ast_type_map()` now reports `native_strategy` between `name_strategy` and
+`flags` — the third and fourth `DEF_TYPE` arguments, adjacent, with `flags`
+last. `scripts/generate_taxonomy.py` owns the label table, so
+`spec/taxonomy/taxonomy.yaml` stays the single place a strategy is named and
+the `taxonomy tables in sync` gate keeps the C++ honest.
+
+The expectation came first:
+`test/sql/conformance/native_strategy_declarations.test`, red before the change
+with `count_star()` 0 against 1 for the column's own existence. Its numbers are
+the oracle's, not the extension's, and it pins the typescript count at 11 with
+a note saying that reading 4 there means the surface has silently become a file
+scan again.
+
+Two documents described the old surface and are corrected in the same change:
+`docs/reference/functions.md`'s Output Schema listed seven columns, three of
+which (`semantic_name`, `selector`, `strategy`) do not exist and two of its
+three examples could not run; `docs/reference/module-abi.md` said the
+native-context axis is in-tree only, which this change is what fixes.
 
 ### 3c. The unit change
 
@@ -505,3 +571,31 @@ The 9032 reconciles with the 9027 recorded on main `d297e85` on 2026-10-28:
 `test/sql/ast_unparse_leaf_text.test` measures **35 assertions before it and 40
 after**, in one test case either way. 9027 + 5 = 9032, 162 cases unchanged.
 Measured by running that one file at both versions, not inferred from the diff.
+
+### 3a and 3b as landed
+
+| commit | what |
+|---|---|
+| `4c45743` | the `NATIVE-DECL` negative control, planted in the declaration table. 9 of 9 controls fire; the full kit run agrees with the clean baseline on **all 224 cells**, exit 0 |
+| `ff47d9a` | the expectation, red on the then-current build at its own first assertion |
+| `9343405` | `ast_type_map()` gains `native_strategy`; the label table is generated; two documents corrected |
+| `ccbc067` | `capability_declarations.test` retracts the closed half of the M1 finding, with its shape kept and pointing the other way |
+
+Static gates, all measured after `ccbc067`:
+
+```
+taxonomy tables are in sync with spec/taxonomy/taxonomy.yaml
+clang-format --dry-run -Werror src/ast_type_map_function.cpp      rc=0
+check_def_type_tables.py --self-test                              self-test OK
+check_def_type_tables.py            3837 entries, 31 TU roots, OK
+generate_language_reference.py      30 languages, docs/reference/languages NO DIFF
+native_strategy_declarations.test   24 assertions, passed
+capability_declarations.test        75 assertions, passed (failed at :166 before ccbc067)
+make release                        0 errors, 106 warnings (104 + one SetValue
+                                    deprecation per build target, same warning
+                                    at a new line)
+```
+
+Still to do in step 3: **3c** (the per-pair unit), **3d** (the bidirectional
+baseline) and **3e** (the `PASS` line). 3c is now a query against
+`native_strategy` rather than a scan, which is what the decision bought.
