@@ -1,9 +1,10 @@
 # Built-in language selection for sitting_duck.
 #
-# Every built-in language is declared once, below, with everything the build
-# needs to include or exclude it as a unit: its adapter translation unit, its
-# vendored tree-sitter parser sources, and the C++ adapter class name used by
-# the generated registration table.
+# Every built-in language is declared once, in its own
+# `languages/<name>/module.cmake`, with everything the build needs to include or
+# exclude it as a unit: its adapter translation unit, its vendored tree-sitter
+# parser sources, and the C++ adapter class name used by the generated
+# registration table. This file includes those modules and owns the ORDER.
 #
 # Selection is controlled by two cache variables:
 #
@@ -23,115 +24,99 @@
 # https://github.com/teaguesterling/sitting_duck/issues/87
 
 # sitting_duck_language(<name> <AdapterClass> <TS|NATIVE>
-#                       ADAPTER <adapter.cpp>
+#                       ADAPTER <adapter.cpp, relative to the calling module>
 #                       [PARSERS <parser sources relative to PARSER_SOURCE_DIR>...])
+#
+# ADAPTER is resolved against the directory of the file that CALLS this macro,
+# not against the project root. Measured: inside a macro, CMAKE_CURRENT_LIST_DIR
+# is the included module's own directory. That is what lets
+# languages/<name>/module.cmake say `ADAPTER <name>_adapter.cpp` and stay
+# correct when M3 extracts languages/ into its own repository.
 macro(sitting_duck_language NAME CLASS KIND)
     cmake_parse_arguments(_SDL "" "ADAPTER" "PARSERS" ${ARGN})
     list(APPEND SITTING_DUCK_ALL_LANGUAGES ${NAME})
     set(SD_LANG_${NAME}_CLASS ${CLASS})
     set(SD_LANG_${NAME}_KIND ${KIND})
-    set(SD_LANG_${NAME}_ADAPTER ${_SDL_ADAPTER})
+    set(SD_LANG_${NAME}_ADAPTER "${CMAKE_CURRENT_LIST_DIR}/${_SDL_ADAPTER}")
     set(SD_LANG_${NAME}_PARSERS ${_SDL_PARSERS})
 endmacro()
 
-# Declaration order is registration order (must match the historical order of
-# LanguageAdapterRegistry::InitializeDefaultAdapters); user-supplied language
+#############################
+# Language modules, in registration order
+#############################
+#
+# THIS LIST IS REGISTRATION ORDER. It must match the historical order of
+# LanguageAdapterRegistry::InitializeDefaultAdapters; user-supplied language
 # lists are re-sorted into this order so a subset build registers languages in
-# the same relative order as the full build.
+# the same relative order as a full build.
+#
+# It is written out rather than globbed on purpose. `file(GLOB)` returns the
+# directories sorted alphabetically, which is NOT registration order, and the
+# reorder would be invisible: every language would still be present, so every
+# count and every set comparison would still pass. `ast_supported_languages()`
+# cannot catch it either -- it returns hash-map order, not registration order
+# (measured; tracker/features/054-v2-m2-in-tree-layout.md §2a). The generated
+# sitting_duck_builtin_languages.def is the only observable record of this
+# order, and scripts/verify_layout_invariance.py checks both against
+# spec/layout/layout.yaml.
+set(SITTING_DUCK_LANGUAGE_MODULES
+    python javascript cpp typescript sql duckdb go ruby markdown java php html
+    css c rust json bash swift r kotlin csharp lua hcl graphql toml zig dart
+    yaml)
+
+set(SITTING_DUCK_LANGUAGES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/languages"
+    CACHE PATH "Directory holding the per-language module.cmake files")
+
 set(SITTING_DUCK_ALL_LANGUAGES "")
+foreach(_sdl_name IN LISTS SITTING_DUCK_LANGUAGE_MODULES)
+    set(_sdl_module "${SITTING_DUCK_LANGUAGES_DIR}/${_sdl_name}/module.cmake")
+    if(NOT EXISTS "${_sdl_module}")
+        message(FATAL_ERROR
+            "sitting_duck: ${_sdl_name} is listed in SITTING_DUCK_LANGUAGE_MODULES "
+            "but ${_sdl_module} does not exist")
+    endif()
 
-sitting_duck_language(python PythonAdapter TS
-    ADAPTER languages/python/python_adapter.cpp
-    PARSERS tree-sitter-python/src/parser.c tree-sitter-python/src/scanner.c)
-sitting_duck_language(javascript JavaScriptAdapter TS
-    ADAPTER languages/javascript/javascript_adapter.cpp
-    PARSERS tree-sitter-javascript/src/parser.c tree-sitter-javascript/src/scanner.c)
-sitting_duck_language(cpp CPPAdapter TS
-    ADAPTER languages/cpp/cpp_adapter.cpp
-    PARSERS tree-sitter-cpp/src/parser.c tree-sitter-cpp/src/scanner.c)
-sitting_duck_language(typescript TypeScriptAdapter TS
-    ADAPTER languages/typescript/typescript_adapter.cpp
-    PARSERS tree-sitter-typescript/typescript/src/parser.c tree-sitter-typescript/typescript/src/scanner.c)
-sitting_duck_language(sql SQLAdapter TS
-    ADAPTER languages/sql/sql_adapter.cpp
-    PARSERS tree-sitter-sql/src/parser.c tree-sitter-sql/src/scanner.c)
-# DuckDB native parser - SQL parsing with database-native accuracy (no
-# tree-sitter grammar; the adapter wraps DuckDB's own parser).
-sitting_duck_language(duckdb DuckDBAdapter NATIVE
-    ADAPTER languages/duckdb/duckdb_adapter.cpp)
-sitting_duck_language(go GoAdapter TS
-    ADAPTER languages/go/go_adapter.cpp
-    PARSERS tree-sitter-go/src/parser.c)
-sitting_duck_language(ruby RubyAdapter TS
-    ADAPTER languages/ruby/ruby_adapter.cpp
-    PARSERS tree-sitter-ruby/src/parser.c tree-sitter-ruby/src/scanner.c)
-sitting_duck_language(markdown MarkdownAdapter TS
-    ADAPTER languages/markdown/markdown_adapter.cpp
-    PARSERS tree-sitter-markdown/tree-sitter-markdown/src/parser.c
-            tree-sitter-markdown/tree-sitter-markdown/src/scanner.c)
-sitting_duck_language(java JavaAdapter TS
-    ADAPTER languages/java/java_adapter.cpp
-    PARSERS tree-sitter-java/src/parser.c)
-sitting_duck_language(php PHPAdapter TS
-    ADAPTER languages/php/php_adapter.cpp
-    PARSERS tree-sitter-php/php/src/parser.c tree-sitter-php/php/src/scanner.c)
-sitting_duck_language(html HTMLAdapter TS
-    ADAPTER languages/html/html_adapter.cpp
-    PARSERS tree-sitter-html/src/parser.c tree-sitter-html/src/scanner.c)
-sitting_duck_language(css CSSAdapter TS
-    ADAPTER languages/css/css_adapter.cpp
-    PARSERS tree-sitter-css/src/parser.c tree-sitter-css/src/scanner.c)
-sitting_duck_language(c CAdapter TS
-    ADAPTER languages/c/c_adapter.cpp
-    PARSERS tree-sitter-c/src/parser.c)
-sitting_duck_language(rust RustAdapter TS
-    ADAPTER languages/rust/rust_adapter.cpp
-    PARSERS tree-sitter-rust/src/parser.c tree-sitter-rust/src/scanner.c)
-sitting_duck_language(json JSONAdapter TS
-    ADAPTER languages/json/json_adapter.cpp
-    PARSERS tree-sitter-json/src/parser.c)
-sitting_duck_language(bash BashAdapter TS
-    ADAPTER languages/bash/bash_adapter.cpp
-    PARSERS tree-sitter-bash/src/parser.c tree-sitter-bash/src/scanner.c)
-sitting_duck_language(swift SwiftAdapter TS
-    ADAPTER languages/swift/swift_adapter.cpp
-    PARSERS tree-sitter-swift/src/parser.c tree-sitter-swift/src/scanner.c)
-sitting_duck_language(r RAdapter TS
-    ADAPTER languages/r/r_adapter.cpp
-    PARSERS tree-sitter-r/src/parser.c tree-sitter-r/src/scanner.c)
-sitting_duck_language(kotlin KotlinAdapter TS
-    ADAPTER languages/kotlin/kotlin_adapter.cpp
-    PARSERS tree-sitter-kotlin/src/parser.c tree-sitter-kotlin/src/scanner.c)
-sitting_duck_language(csharp CSharpAdapter TS
-    ADAPTER languages/csharp/csharp_adapter.cpp
-    PARSERS tree-sitter-c-sharp/src/parser.c tree-sitter-c-sharp/src/scanner.c)
-sitting_duck_language(lua LuaAdapter TS
-    ADAPTER languages/lua/lua_adapter.cpp
-    PARSERS tree-sitter-lua/src/parser.c tree-sitter-lua/src/scanner.c)
-sitting_duck_language(hcl HCLAdapter TS
-    ADAPTER languages/hcl/hcl_adapter.cpp
-    PARSERS tree-sitter-hcl/src/parser.c tree-sitter-hcl/src/scanner.c)
-sitting_duck_language(graphql GraphQLAdapter TS
-    ADAPTER languages/graphql/graphql_adapter.cpp
-    PARSERS tree-sitter-graphql/src/parser.c)
-sitting_duck_language(toml TOMLAdapter TS
-    ADAPTER languages/toml/toml_adapter.cpp
-    PARSERS tree-sitter-toml/src/parser.c tree-sitter-toml/src/scanner.c)
-sitting_duck_language(zig ZigAdapter TS
-    ADAPTER languages/zig/zig_adapter.cpp
-    PARSERS tree-sitter-zig/src/parser.c)
-sitting_duck_language(dart DartAdapter TS
-    ADAPTER languages/dart/dart_adapter.cpp
-    PARSERS tree-sitter-dart/src/parser.c tree-sitter-dart/src/scanner.c)
+    # A module that declares nothing is the failure this check exists for: the
+    # include would succeed, the language would vanish from every count, and a
+    # subset build of the survivors would look entirely healthy.
+    list(LENGTH SITTING_DUCK_ALL_LANGUAGES _sdl_before)
+    include("${_sdl_module}")
+    list(LENGTH SITTING_DUCK_ALL_LANGUAGES _sdl_after)
 
-# yaml's parser is ABI 13 (the runtime's TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION),
-# not 15 like the rest, and its external scanner is C++ (scanner.cc, which
-# #includes schema.generated.cc -- tree-sitter allows only one scanner file).
-# Both are fine to compile and load; see scripts/generate_all_parsers.sh for why
-# this grammar cannot currently be regenerated (#233).
-sitting_duck_language(yaml YAMLAdapter TS
-    ADAPTER languages/yaml/yaml_adapter.cpp
-    PARSERS tree-sitter-yaml/src/parser.c tree-sitter-yaml/src/scanner.cc)
+    math(EXPR _sdl_added "${_sdl_after} - ${_sdl_before}")
+    if(NOT _sdl_added EQUAL 1)
+        message(FATAL_ERROR
+            "sitting_duck: ${_sdl_module} declared ${_sdl_added} languages; "
+            "each module.cmake must call sitting_duck_language() exactly once")
+    endif()
+    list(GET SITTING_DUCK_ALL_LANGUAGES ${_sdl_before} _sdl_declared)
+    if(NOT _sdl_declared STREQUAL _sdl_name)
+        message(FATAL_ERROR
+            "sitting_duck: ${_sdl_module} declared language `${_sdl_declared}`, "
+            "but its directory names it `${_sdl_name}`")
+    endif()
+    if(NOT EXISTS "${SD_LANG_${_sdl_name}_ADAPTER}")
+        message(FATAL_ERROR
+            "sitting_duck: ${_sdl_module} names adapter "
+            "${SD_LANG_${_sdl_name}_ADAPTER}, which does not exist")
+    endif()
+endforeach()
+
+list(LENGTH SITTING_DUCK_ALL_LANGUAGES _sdl_total)
+list(LENGTH SITTING_DUCK_LANGUAGE_MODULES _sdl_expected)
+if(NOT _sdl_total EQUAL _sdl_expected)
+    message(FATAL_ERROR
+        "sitting_duck: ${_sdl_expected} modules listed but ${_sdl_total} "
+        "languages declared")
+endif()
+unset(_sdl_name)
+unset(_sdl_module)
+unset(_sdl_before)
+unset(_sdl_after)
+unset(_sdl_added)
+unset(_sdl_declared)
+unset(_sdl_total)
+unset(_sdl_expected)
 
 #############################
 # Selection & validation
