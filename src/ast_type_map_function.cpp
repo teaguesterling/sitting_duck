@@ -25,7 +25,8 @@ namespace duckdb {
 // Usage:
 //   SELECT * FROM ast_type_map();                          -- all languages
 //   SELECT * FROM ast_type_map('python');                  -- one language
-//   SELECT * FROM ast_type_map() WHERE selector = '.func'; -- find by alias
+//   SELECT * FROM ast_type_map()
+//     WHERE native_strategy = 'function_with_params';     -- who declares a strategy
 //   SELECT * FROM ast_type_map() WHERE node_type = 'for_statement'; -- reverse lookup
 
 struct TypeMapBindData : public TableFunctionData {
