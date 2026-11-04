@@ -1,0 +1,93 @@
+# name: test/sql/bugs/042_python_type_annotations.test
+# description: tracker/bugs/042 step 4.1 -- python's annotated assignments report the annotation, not the value
+# group: [bugs]
+
+# WHY THIS FAILS BEFORE THE FIX
+#
+# python_types.def:89 declares `assignment` with native strategy
+# VARIABLE_WITH_TYPE, so every assignment node claims to report a declared
+# type. For an ANNOTATED assignment the declared type is written in the
+# source -- `d: float = 1` declares float -- and the annotation is in the tree
+# as a `type` child whose name is the annotation text. The extractor does not
+# read it. It infers from the value after `=` instead, and when there is no
+# value it emits the NODE TYPE STRING.
+#
+# Measured on build/release/duckdb at caeeaa0, before the fix:
+#
+#   d: float = 1    int           should be float
+#   x: str = None   None          should be str
+#   b: list = []    list          right, by coincidence
+#   y: int          assignment    <- the node type string, in the type column
+#   z = 3           int           correct: no annotation, inferred from 3
+#
+# 042 names the cause: the extractor's `annotated_assignment` branch is dead,
+# because that node type has zero occurrences in tree-sitter-python's
+# ts_symbol_names[]. The grammar emits `assignment` with a `type` child, not a
+# separate `annotated_assignment` node.
+#
+# THIS IS NOT A BLANK. Every row above is populated, so it satisfies every
+# non-emptiness check in this repository, the conformance kit included. That is
+# why 042 separates "declared and delivers nothing" (step 3, gated) from
+# "delivers the wrong value" (step 4, this file).
+
+require sitting_duck
+
+# =============================================================================
+# 1. The annotation is what signature_type must report
+# =============================================================================
+
+query II
+SELECT name, signature_type
+FROM parse_ast('d: float = 1
+x: str = None
+b: list = []
+y: int
+z = 3', 'python', context := 'native')
+WHERE type = 'assignment'
+ORDER BY start_line;
+----
+d	float
+x	str
+b	list
+y	int
+z	int
+
+# `z = 3` is in that list on purpose: there is no annotation, so inferring the
+# type from the value is correct and must not change. A fix that reads the
+# annotation and then stops inferring would break this row.
+
+# =============================================================================
+# 2. The annotation was always in the tree
+# =============================================================================
+# This is the assertion that says the fix is possible at all: the `type` child
+# carries the annotation text as its name. If this ever returns fewer rows, the
+# grammar changed and the fix above has to change with it.
+
+query II
+SELECT name, type
+FROM parse_ast('d: float = 1
+y: int', 'python', context := 'native')
+WHERE type = 'type'
+ORDER BY start_line;
+----
+float	type
+int	type
+
+# =============================================================================
+# 3. A signature_type is never a node type name
+# =============================================================================
+# `y: int` reporting `assignment` is one instance of a class: a extractor that
+# falls through can emit the node's own type string into a type column, and the
+# result looks like data. This pins the class rather than the instance, so the
+# same mistake in another language's extractor fails here too.
+
+query I
+SELECT count(*)
+FROM parse_ast('d: float = 1
+x: str = None
+b: list = []
+y: int
+z = 3', 'python', context := 'native') n
+WHERE n.signature_type IN (SELECT node_type FROM ast_type_map('python'));
+----
+0
