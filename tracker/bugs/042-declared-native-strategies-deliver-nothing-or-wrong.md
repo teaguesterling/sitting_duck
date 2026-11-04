@@ -740,3 +740,80 @@ NO-EMPTY iterating fixtures per language. Three shapes, cheapest first:
 
 Recommended: the first two per push, the full matrix nightly. Not done — it is
 new CI minutes on every push and that is Teague's call, not a gate decision.
+
+### Step 4 as landed — the four populated-and-wrong values
+
+Expectation first in every case, and every number re-measured on this build
+rather than taken from the table above. That mattered: the table was right
+about all four defects, and incomplete about two of them.
+
+| | expectation | fix | what changed |
+|---|---|---|---|
+| 4.1 python | `c0973a5` | `55b578a` | `d: float = 1` was `int`, now `float`; `y: int` was the string `assignment`, now `int` |
+| 4.2 swift | `7c45a48` | `fdd2347` | `add(a: 1, b: 2)` was one argument `(a: 1, b: 2)`, now two: `a: 1`, `b: 2` |
+| 4.3 lua | `26436b2` | `35b4cd5` | a function nested in a `local function` was `[local]`, now carries no modifier |
+| 4.4 lua | `26436b2` | `35b4cd5` | `local l_local` and `local function l_func` were exported, now are not |
+
+#### Two of my own expectations were wrong, and both were caught while red
+
+  - **python.** I first asserted that no `signature_type` may be any node type
+    name. That would have **failed on correct output**: `list`, `set`, `tuple`
+    and `type` are all python node types and perfectly good annotations, so
+    `b: list = []` must report `list`. Narrowed to "no node reports its OWN
+    type as its type" — and that version returned **5**, not 1. python leaked
+    the node type string in two places: the `assignment` this document
+    records, and the four annotation `identifier` nodes under it, which fell
+    through `ExtractIdentifierType` to `return "identifier"`. The fix addresses
+    both.
+  - **swift.** My test's own header said it was not pinning argument labels,
+    and the next assertion pinned the types as `1` and `2` — which requires
+    splitting `a: 1` into label and value. Corrected to `a: 1` / `b: 2`: two
+    arguments rather than one blob, which is the defect. The label split needs
+    `value_argument_label`, still recorded as a dead literal.
+
+#### The swift fix was a nesting level, not a renamed literal
+
+`argument_list` was indeed absent from the grammar. But `value_arguments` is a
+**grandchild** of the call node, and `ExtractCallExpression` matches on direct
+children only:
+
+```
+call_expression > call_suffix > value_arguments > value_argument
+                                               > value_argument_label
+```
+
+So renaming the literal alone would have matched nothing and delivered zero
+arguments. `ExtractCallArguments` now descends one level when the node it was
+handed merely WRAPS the container named by `types.arguments`. For every other
+language the matched node IS that container, so nothing else moves.
+
+#### And the fix moved a baseline, which is the contract working
+
+`swift / argument_list` was listed in `spec/abi/module-abi.yaml` as a known
+dead literal. The fix makes it *absent* rather than dead, so the entry stopped
+reproducing and `verify_native_dispatch.py` would have exited 1 —
+"a listed literal the run cannot reproduce". Pruned in the same commit:
+
+```
+OK: 69 known-dead literal(s) still exactly as spec/abi/module-abi.yaml records
+    them, and no new ones
+```
+
+69 where it read 70. A baseline that only catches new findings is half a gate;
+this is the other half firing on a fix.
+
+#### Scope held where the measurement did not support the claim
+
+042's lua table lists four wrong rows. `g_global = 1` is not one this dispatch
+can own: measured, it produces no definition node at all, only an
+`assignment_statement` typed `OPERATOR_ASSIGNMENT`. Whether a bare global
+assignment should be MODELLED as an exported variable definition is a `.def`
+and semantic-type decision. 2 of the 3 rows the dispatch owns are fixed; that
+one is stated rather than folded in.
+
+#### Regression evidence
+
+The 7 `native_extraction` tests report **535 assertions** after all four
+fixes — the same count as before any of them. `verify_module_abi.py` and
+`verify_native_dispatch.py` both OK. The full suite is the release gate and
+runs next.
