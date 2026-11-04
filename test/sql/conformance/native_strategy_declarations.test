@@ -1,0 +1,150 @@
+# name: test/sql/conformance/native_strategy_declarations.test
+# description: ast_type_map() surfaces native_strategy, so a declaration is checkable at run time (042 step 3)
+# group: [conformance]
+
+# WHY THIS EXISTS
+#
+# scripts/conformance_kit.sh states the gap this file closes, in its own
+# header, under "KNOWN GAP (an M1 finding, not a bug in this script)":
+#
+#     "ast_type_map() exposes `name_strategy` but NOT the `native_strategy`
+#      that drives signature/parameter/modifier extraction, so the signature
+#      capability is not derivable at run time at all -- only by reading the
+#      .def sources, which an out-of-tree module may not ship."
+#
+# So the kit derives that one capability by SCANNING languages/*/*_types.def
+# and attributing every row to a language by the file's own basename. That
+# scan is wrong for any language whose table is assembled by the
+# preprocessor, and typescript is such a language: typescript_types.def:60 is
+# `#include "../javascript/javascript_types.def"`, and the basename scan
+# cannot see a single included row.
+#
+# This is not a style preference. tracker/bugs/042 moves the kit's
+# NATIVE-DECL check from one verdict per LANGUAGE to one verdict per
+# declaring node type, and a per-node-type check cannot run on a declaration
+# list that is missing rows: it would report `void` -- "nothing to measure"
+# -- for declarations the loader holds.
+#
+# The assertions below therefore pin the DECLARATION SURFACE, not the
+# extractor. A row here says "this node type claims this native strategy".
+# Whether the claim is honoured is what the conformance kit and
+# tracker/bugs/042 step 4 are for.
+
+require sitting_duck
+
+# =============================================================================
+# 1. The column exists, and it is the loaded map rather than a source scan
+# =============================================================================
+# `native_strategy` is the fourth DEF_TYPE argument, lowercased, with the same
+# spelling rule name_strategy already uses (spec/taxonomy/taxonomy.yaml owns
+# both label tables, and scripts/generate_taxonomy.py --check keeps the C++ in
+# sync with them).
+
+query I
+SELECT count(*) FROM (DESCRIBE SELECT * FROM ast_type_map())
+WHERE column_name = 'native_strategy' AND column_type = 'VARCHAR';
+----
+1
+
+# =============================================================================
+# 2. Three declarations, pinned, each load-bearing somewhere else
+# =============================================================================
+# python function_definition  -- python_types.def:65, the declaration the
+#                                NATIVE-ABST control plants NONE over.
+# python assignment           -- python_types.def:89, the declaration behind
+#                                042's first wrong value (the annotation path
+#                                that never reads an annotation).
+# zig function_declaration    -- zig_types.def:82, declared NONE, and the row
+#                                the NATIVE-DECL negative control re-declares
+#                                FUNCTION_WITH_PARAMS to prove the check can
+#                                fail.
+
+query III
+SELECT language, node_type, native_strategy
+FROM ast_type_map()
+WHERE (language = 'python' AND node_type IN ('function_definition', 'assignment'))
+   OR (language = 'zig'    AND node_type = 'function_declaration')
+ORDER BY language, node_type;
+----
+python	assignment	variable_with_type
+python	function_definition	function_with_params
+zig	function_declaration	none
+
+# =============================================================================
+# 3. The include chain, which is the reason this surface has to exist
+# =============================================================================
+# 11 typescript node types declare FUNCTION_WITH_PARAMS. Only 4 of them are
+# written in typescript_types.def; the other 7 arrive through the #include of
+# javascript_types.def. The expectation was derived independently of the
+# extension, by running the C preprocessor over typescript_types.def with
+# DEF_TYPE expanded to one row per entry and applying the first-wins rule that
+# `unordered_map`'s initializer-list constructor applies:
+#
+#   DEF_TYPE rows after preprocessing: 293
+#   distinct raw_types (first-wins):   293      <- no shadowed raw_type today
+#   first-wins FUNCTION_WITH_PARAMS:    11
+#
+# A basename scan of typescript_types.def alone sees 4. If this number ever
+# reads 4, the surface has stopped being the loaded map and has become a file
+# scan again.
+
+query I
+SELECT count(*) FROM ast_type_map('typescript') WHERE native_strategy = 'function_with_params';
+----
+11
+
+# And the included rows are present under typescript's own name, not only
+# under javascript's. `function_expression` is declared in
+# javascript_types.def and nowhere in typescript_types.def.
+
+query II
+SELECT language, native_strategy FROM ast_type_map()
+WHERE node_type = 'function_expression' AND language IN ('javascript', 'typescript')
+ORDER BY language;
+----
+javascript	function_with_params
+typescript	function_with_params
+
+# =============================================================================
+# 4. Every strategy has a label -- the direction a new enumerator breaks
+# =============================================================================
+# GetNativeExtractionStrategyName() ends in a `default: return "unknown"`, so
+# an enumerator added to NativeExtractionStrategy without a label in
+# spec/taxonomy/taxonomy.yaml would surface as `unknown` rather than as a
+# build error. Zero rows is the assertion; the taxonomy gate is the other
+# half.
+
+query I
+SELECT count(*) FROM ast_type_map()
+WHERE native_strategy IS NULL OR native_strategy = '' OR native_strategy = 'unknown';
+----
+0
+
+# =============================================================================
+# 5. The capability the kit had to derive from sources is now a query
+# =============================================================================
+# This is the whole point: the function-shaped strategies, straight from the
+# runtime, for every registered language. A language with no row here declares
+# no function-shaped native extraction and is owed nothing by NATIVE-DECL.
+# Pinned as a COUNT per language so that adding a language does not edit this
+# file, while a declaration moving between languages does. Only the four
+# languages at 8 or more are pinned; the full census is 99 declarations across
+# the 28 registered languages, derived from the sources by the same
+# preprocessor-plus-first-wins oracle used above.
+#
+# typescript at 13 against javascript at 8 is the include chain again: 8 of
+# typescript's 13 come from javascript's table, and 5 are its own.
+
+query II
+SELECT language, count(*) FROM ast_type_map()
+WHERE native_strategy IN ('function_with_params', 'function_with_decorators',
+                          'arrow_function', 'async_function', 'generic_function',
+                          'method_definition', 'constructor_definition')
+GROUP BY language
+HAVING count(*) >= 8
+ORDER BY language;
+----
+dart	12
+javascript	8
+sql	10
+typescript	13
