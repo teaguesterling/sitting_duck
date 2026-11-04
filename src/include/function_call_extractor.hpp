@@ -185,7 +185,18 @@ static const std::unordered_map<string, FunctionCallNodeTypes> LANGUAGE_FUNCTION
          "call_expression",
          "init_expression",
          nullptr,
-         "argument_list",
+         // `value_arguments` is the real container. `argument_list` was not in
+         // the swift grammar at all, so nothing ever matched it and the
+         // `call_suffix` alternative below was what got taken as the argument
+         // list -- producing ONE argument whose text was the whole
+         // parenthesised call: `add(a: 1, b: 2)` came back as
+         // [{'name': '', 'type': '(a: 1, b: 2)'}]. tracker/bugs/042 step 4.2.
+         //
+         // The suffix stays in the alternative slot, because it IS the direct
+         // child of `call_expression` and so the only thing a direct-child
+         // match can find. ExtractCallArguments then descends from it into
+         // this container.
+         "value_arguments",
          "call_suffix",
          {"identifier", "navigation_expression", "self_expression"},
          {",", "(", ")", ";", ":"},
@@ -465,6 +476,28 @@ private:
 	static vector<ParameterInfo> ExtractCallArguments(TSNode args_node, const string &content,
 	                                                  const FunctionCallNodeTypes &types) {
 		vector<ParameterInfo> arguments;
+
+		// DESCEND ONE LEVEL when the node we matched merely WRAPS the argument
+		// container. ExtractCallExpression matches on DIRECT children of the
+		// call node, and swift's grammar nests
+		// `call_expression > call_suffix > value_arguments` -- so a
+		// direct-child match can only ever find the suffix, and taking the
+		// suffix's children as arguments yields one argument whose text is the
+		// whole parenthesised list (tracker/bugs/042 step 4.2).
+		//
+		// For every other language in the table the matched node IS the
+		// container named by `types.arguments`, so this loop finds no nested
+		// container and nothing changes. Checked against `types.arguments`
+		// alone and not the alternative, so a wrapper can never be mistaken
+		// for its own content.
+		uint32_t wrapper_child_count = ts_node_child_count(args_node);
+		for (uint32_t i = 0; i < wrapper_child_count; i++) {
+			TSNode wrapper_child = ts_node_child(args_node, i);
+			if (strcmp(ts_node_type(wrapper_child), types.arguments) == 0) {
+				args_node = wrapper_child;
+				break;
+			}
+		}
 
 		uint32_t child_count = ts_node_child_count(args_node);
 
