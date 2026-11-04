@@ -47,6 +47,221 @@ line and reporting it as a live registry value.
 > submodule pin, `069cc9f9b5b`"), so no step below is executed without an
 > explicit, specific go-ahead. This document is the thing to argue with.
 
+## 0-bis. Update, 2026-10-25 (later): the red v2.0 leg does NOT indict the tag
+
+> **Landed 2026-11-03, written 2026-10-25/26.** This section and its RUNG
+> blocks were measured before the pin moved, and they are the record of how
+> the tag was cleared — not the current state. The pin DID move (`96335de`),
+> and the later blocks in this file settle what followed: `CORRECTION
+> 2026-11-02`, `VERIFIED 2026-11-02 — the suite on v2.0.0, measured`, and the
+> `CORRECTION ... from CI (2026-11-03)` that replaced this plan's timing
+> figures. Read those for the present; read this for how it was established.
+
+**The `v2.0 test coverage` leg is red on every PR, and that red is upstream
+branch drift, not the release.** This is the measurement §3 said was missing.
+
+Three commits on one linear history, all compared through
+`gh api repos/duckdb/duckdb/compare/<base>...<head>` (no clone, no fetch, and
+no submodule change):
+
+| commit | what it is | our leg's result |
+|---|---|---|
+| `b6013f7aa2` | cyanoptera on 2026-10-19 | **158 passed, 5 skipped in 4161s** |
+| `d54cbbe3df` | **the `v2.0.0` TAG**, 19 commits later | not measured |
+| `bb5bdadda4` | cyanoptera on 2026-10-25 | **0 passed, 163 failed, 0 skipped in 3s** |
+
+`compare d54cbbe3df...bb5bdadda4` → `ahead_by=466, behind_by=0`.
+`compare b6013f7aa2...d54cbbe3df` → `ahead_by=19, behind_by=0`.
+
+**So the v2.0.0 tag sits 466 commits BEHIND the breakage, and only 19 commits
+ahead of a commit where the extension demonstrably worked.** The leg tracks a
+moving post-release development branch. Its red is evidence about cyanoptera's
+tip, and carries no verdict on the release.
+
+### Why "0 passed, 163 failed, 0 skipped" means "could not load"
+
+Not an inference. This leg was built to produce exactly that signature, and the
+A/B was verified before it was added — see the comment at
+`.github/workflows/MainDistributionPipeline.yml:511-519`: `--require
+sitting_duck` turns a silent skip into a failure; extension present gave
+`16 passed, 2 skipped`, hidden gave `0 passed, 18 failed`. The 2026-10-19 green
+is the positive control: 158 passed + 5 skipped = 163, and those 5 are the same
+`require-env SITTING_DUCK_TEST_GRAMMAR_DIR` tests that skip locally.
+
+I retracted this reading once as unmeasured, having forgotten the leg's own
+design. The retraction was wrong; the oracle above settles it.
+
+### The §3 mechanism does NOT explain this one
+
+§3's cause is the 32-byte version truncation versus an uncapped compare.
+`v2.0-cyanoptera` is 15 characters, fits, and loaded fine at `b6013f7aa2`. So
+this is a NEW failure in the 466 post-release commits, cause unknown. The log
+cannot say more: `duckdb/scripts/ci/run_tests.py` prints only each test's
+summary, with no per-test stderr.
+
+### Two consequences for this plan
+
+1. **The leg should pin `v2.0.0` now that the tag exists.** Tracking a branch
+   made it a drift detector for someone else's development tip, which is not
+   what §3 wanted it for. Changing it is a workflow edit plus a push, so it is
+   queued under the CI restriction.
+2. **Option C's risk is lower than the red suggested, but the 19-commit gap
+   between the last known-good commit and the tag is NOT measured.** Closing it
+   needs a local build against `d54cbbe3df`, which also yields the per-test
+   stderr CI withholds. That needs no CI and no repoint: build in a scratch
+   checkout, never the shared submodule, which stays at `069cc9f9` (v1.5.6).
+
+### RUNG 1 MEASURED, 2026-10-25: our source compiles clean against the v2.0.0 tag
+
+**106 of 106 translation units compile against `d54cbbe3df` with no errors.**
+This closes the compile half of the 19-commit gap above. It says nothing about
+loading or behaviour — those are rungs 2 to 4.
+
+Method, and why the result is trustworthy rather than vacuous:
+
+- Took the REAL compile commands from `build/release/compile_commands.json`
+  (the clean build of merged main `86e6f27`), repointed only the 21 duckdb
+  include paths, switched `-std=c++11` to `-std=c++17`, added `-fsyntax-only`.
+  Script: session scratchpad, `syntax_sweep.py`.
+- **The submodule was never touched.** DuckDB v2.0.0 was shallow-cloned to the
+  scratchpad; `git submodule status duckdb` stays `069cc9f9` (v1.5.6).
+  Verified after the sweep.
+- **Positive control:** the same sweep against the v1.5.6 submodule at
+  `-std=c++11` gives 106/106. The harness runs.
+- **Rewrite verified, not assumed:** all 21 rewritten `-I` paths resolve under
+  the scratch tree, and zero tokens still contain
+  `Projects/sitting_duck/duckdb/`. This was the measuring-one-tree-twice trap
+  and it was checked explicitly.
+- **Negative control, the one that matters:** a probe TU calling the removed
+  `UnaryExecutor::ExecuteWithNulls` directly, bypassing the shim, COMPILES
+  against v1.5.6 and FAILS against v2.0.0:
+
+      neg_control.cpp:8:24: error: 'ExecuteWithNulls' is not a member of
+      'duckdb::UnaryExecutor'
+
+  So the harness distinguishes the two trees and does detect a removed API. A
+  green sweep is therefore evidence, not an empty pass.
+
+Supporting measurement: `ExecuteWithNulls` appears in 3 header files under
+v1.5.6's `src/include/` and 0 under v2.0.0's. The probe headers the compat layer
+keys on (`common/vector/list_vector.hpp`, `common/vector/struct_vector.hpp`,
+`common/identifier.hpp`) are all PRESENT in v2.0.0, so the sweep exercised the
+new-API branches rather than the v1.5.x ones. The compat layer dispatches on
+`__has_include`, not on version macros, which is why pointing the include path
+at a different tree is a valid test at all.
+
+**What is still unmeasured for option C:** rungs 2 to 4 — whether the extension
+LOADS against v2.0.0, binds, and returns right answers. Rung 1 passing removes
+API drift as a blocker and leaves ABI and runtime as the open questions.
+
+### Already-mitigated break, recorded so it is not re-litigated
+
+A fleet notice flagged that v2.0.0 removed `UnaryExecutor::ExecuteWithNulls`.
+Our tree already shims it. `src/include/duckdb_compat.hpp:476-543` defines
+`CompatUnaryExecuteWithNulls` / `CompatBinaryExecuteWithNulls`, switching on
+`DUCKDB_HAS_NEW_VECTOR_HEADERS`, and names the removal commit `987ea2c409`. All
+four call sites go through the shim (`semantic_type_functions.cpp` ×3,
+`ast_source_bytes_function.cpp`, `semantic_type_logical_type.cpp`). Measured
+2026-10-25 by grep over `src/`.
+
+Also measured: `v2.0.0` is a LIGHTWEIGHT tag — `git ls-remote --tags` returns
+`refs/tags/v2.0.0` with no peeled `^{}` entry, exactly like `v1.5.6`. Any pin
+check that reads only the peeled form will read empty and must keep its
+fallback.
+
+
+### RUNGS 2-4 MEASURED, 2026-10-26: the extension loads AND passes at the tag
+
+**`ran tests: 160 passed, 5 skipped in 1347s` against `d54cbbe3df`.**
+
+This closes the ladder. The premise of §0-bis — that the v2.0 red was branch
+drift and not the release — is now confirmed by a full suite run at the tag,
+not by a compile sweep and an argument.
+
+Where it ran: PR #291 (`cb64b99b`), which pins the `duckdb-v2-test-coverage`
+leg to the literal `v2.0.0` instead of the drifting `v2.0-cyanoptera`. Run
+40249132196 attempt 2, job 121668718210, conclusion `success`.
+
+Verbatim, and the echo first, because a pin that silently resolves to a branch
+tip would invalidate everything below:
+
+    + git -C duckdb checkout v2.0.0
+    HEAD is now at d54cbbe3df1 Update MySQL to include rebind workaround (#27537)
+    Using prebuilt DuckDB archive: https://duckdb-staging.duckdb.org/d54cbbe3df/v2.0.0/.../duckdb-static-libs-linux-amd64.tar.gz
+    DUCKDB_PREBUILT_LIBRARY: .../extracted/libduckdb_static.a
+    [289/289] Linking CXX executable test/unittest
+    python3 ./duckdb/scripts/ci/run_tests.py ... --test-flags --require sitting_duck test/*
+    .................................................. [100%]
+    all tests passed in 1347s (5 skipped tests)
+    Skipped tests (5):
+    require-env SITTING_DUCK_TEST_GRAMMAR_DIR: 5
+    ran tests: 160 passed, 5 skipped in 1347s
+
+`d54cbbe3df` is the same commit rung 1 compiled 106/106 against. So rungs 1
+through 4 are measured at one commit, not at three different ones.
+
+Why this is positive evidence and not a green hole. §3b of this document is
+about a leg that reported green while running zero tests, so the standard here
+has to be higher than a checkmark:
+
+- 160 + 5 = 165 = EVERY `.test` file at `cb64b99b` (counted with
+  `git ls-tree -r --name-only | grep -c '\.test$'`). Nothing was left out.
+- `--require sitting_duck` is in the test flags. A could-not-load therefore
+  prints 165 FAILURES, not silence — that is the whole point of the guard, and
+  it is the exact signature the branch produced (§0-bis). It did not fire.
+- The 5 skips are named and env-gated: `require-env
+  SITTING_DUCK_TEST_GRAMMAR_DIR`. They are not unexplained.
+- A real build preceded the run (`[289/289] Linking`), against the extracted
+  v2.0.0 static library, and 1347s of real test execution followed.
+- Zero occurrences of `failed`, `FAIL` or `error:` in the whole 823KB log.
+- The log ALSO contains `Tests are skipped in this run...` further down. That
+  is a second, deliberate no-op `make test_release` before the upload phase.
+  The real result precedes it. Checked deliberately, because that line alone is
+  indistinguishable from the §3b failure mode.
+
+Unexplained, and flagged rather than averaged away: the positive control at
+`b6013f7aa2` measured 4161s for 158 passed / 5 skipped, while this run took
+1347s for 160 / 5 — a 3x difference in reported TEST time, not job time.
+Plausibly prebuilt-versus-source DuckDB, or runner variance. Not chased,
+because the conclusion does not rest on it.
+
+#### One detour worth recording: the first attempt's red was not v2.0.0 either
+
+Attempt 1 of the same job failed, and it would have been easy to read as "the
+tag is broken too". It died BEFORE compiling anything:
+
+    File ".../extension-ci-tools/scripts/ci_phase.py", line 700, in prepare_prebuilt_duckdb
+        for member in bundle.getmembers():
+    EOFError: Compressed file ended before the end-of-stream marker was reached
+
+The artifact on the server was intact, measured the same day: `content-length:
+33584665`, `etag: "853f9653b8aa460e28b106078f5205f1"`, local `md5sum` equal to
+that etag, `gzip -t` clean, 19 members, `last-modified` six days before the run
+and unchanged since. So the runner's copy was short.
+
+The mechanism is upstream and is worth knowing, because it will recur.
+`extension-ci-tools@main` downloads with no length comparison
+(`ci_phase.py:432-436`): a plain `urlopen`, then `shutil.copyfileobj`, then
+`temporary.replace(destination)`. The stdlib declines to raise on a short body
+— `/usr/lib/python3.12/http/client.py:531`:
+
+    n = self.fp.readinto(b)
+    if not n and b:
+        # Ideally, we would raise IncompleteRead if the content-length
+        # wasn't satisfied, but it might break compatibility.
+        self._close_conn()
+
+So a truncated download returns 0, reads as EOF, is promoted to the final
+filename as if complete, and surfaces 250 lines later as an EOFError naming
+neither the URL nor the size. Worse: the designed recovery — fall back to
+building DuckDB from source, with a clear message — sits six lines below, in an
+`except (OSError, urllib.error.URLError)` that nothing ever raises into.
+
+Consequence for this document: a red on the v2.0 leg must be read down to the
+step before it is attributed. Three different causes have now worn the same red
+checkmark on that one leg — branch drift (§0-bis), a truncated download, and
+`skip_tests` on an adjacent leg with a colliding job name.
+
 ## 1. What changed, verified from upstream
 
 `duckdb/community-extensions#3079` ("2.0 Release Prep") merged
