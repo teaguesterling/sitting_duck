@@ -74,12 +74,19 @@ float	type
 int	type
 
 # =============================================================================
-# 3. A signature_type is never a node type name
+# 3. No node reports its OWN type string as its type
 # =============================================================================
-# `y: int` reporting `assignment` is one instance of a class: a extractor that
+# `y: int` reporting `assignment` is one instance of a class: an extractor that
 # falls through can emit the node's own type string into a type column, and the
 # result looks like data. This pins the class rather than the instance, so the
-# same mistake in another language's extractor fails here too.
+# same fall-through in another extractor fails here too.
+#
+# NARROWED after a first draft that read `signature_type IN (SELECT node_type
+# FROM ast_type_map('python'))`. That version would have FAILED ON CORRECT
+# OUTPUT: `list`, `set`, `tuple` and `type` are all python node types AND
+# perfectly good type annotations, so `b: list = []` must report `list`. The
+# defect is not "a type name that happens to be a node type", it is "the
+# node's own type, because nothing else was found".
 
 query I
 SELECT count(*)
@@ -88,6 +95,6 @@ x: str = None
 b: list = []
 y: int
 z = 3', 'python', context := 'native') n
-WHERE n.signature_type IN (SELECT node_type FROM ast_type_map('python'));
+WHERE n.signature_type = n.type;
 ----
 0

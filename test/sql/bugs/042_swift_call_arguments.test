@@ -61,6 +61,13 @@ SELECT count(*) FROM (
 ----
 0
 
+# Each argument is the corresponding argument from the source. The LABEL is
+# still part of the text, and that is the honest expectation for this fix:
+# splitting `a: 1` into name `a` and value `1` means parsing
+# `value_argument_label`, which 042 lists among swift's dead literals as a
+# SEPARATE finding. A first draft of this file pinned `1` and `2`, which would
+# have demanded that split inside a bugfix -- the exact thing the header says
+# it is not pinning.
 query I
 SELECT p.type FROM (
     SELECT unnest(parameters) AS p
@@ -68,8 +75,8 @@ SELECT p.type FROM (
     WHERE type = 'call_expression'
 );
 ----
-1
-2
+a: 1
+b: 2
 
 # =============================================================================
 # 3. The definition path must not move
