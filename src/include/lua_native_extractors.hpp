@@ -170,13 +170,47 @@ inline vector<string> ExtractModifiers(TSNode node, const string &content) {
 	//         expression_list
 	//           function_definition   <- the node we were handed
 	//
-	// The first version of this walked only ts_node_parent(node) and looked for
+	// An earlier version walked only ts_node_parent(node) and looked for
 	// `variable_declaration`; the real parent is `expression_list`, so that
 	// branch could never fire while its comment claimed it handled this form.
-	// Walk a bounded number of ancestors instead and take the first `local`.
+	//
+	// THE WALK IS RESTRICTED TO THE DECLARATION CHAIN, and that is the fix for
+	// tracker/bugs/042 step 4.3. Walking four ancestors of ANY kind gave an
+	// anonymous function merely NESTED inside a `local function` its parent's
+	// visibility:
+	//
+	//     local function outer(a)
+	//       return function(b) return a + b end   <- reported modifiers=[local]
+	//     end
+	//
+	// Both chains are measured, and they are told apart by their SECOND link:
+	//
+	//     declared: function_definition < expression_list < assignment_statement
+	//                                   < variable_declaration   <- the `local`
+	//     nested:   function_definition < expression_list < return_statement
+	//                                   < block < function_declaration  <- NOT ours
+	//
+	// So the walk may pass only through the three node types that can sit
+	// between a function expression and the declaration OF that expression.
+	// `return_statement` is not one of them, and the walk stops there rather
+	// than reaching a `local` that belongs to an enclosing function.
 	TSNode ancestor = node;
 	for (int depth = 0; depth < 4; depth++) {
-		ancestor = ts_node_parent(ancestor);
+		TSNode parent = ts_node_parent(ancestor);
+		if (ts_node_is_null(parent)) {
+			break;
+		}
+		const char *parent_type = ts_node_type(parent);
+		if (!parent_type) {
+			break;
+		}
+		const bool declaration_link = strcmp(parent_type, "expression_list") == 0 ||
+		                              strcmp(parent_type, "assignment_statement") == 0 ||
+		                              strcmp(parent_type, "variable_declaration") == 0;
+		if (!declaration_link) {
+			break;
+		}
+		ancestor = parent;
 		if (ts_node_is_null(ancestor)) {
 			break;
 		}
