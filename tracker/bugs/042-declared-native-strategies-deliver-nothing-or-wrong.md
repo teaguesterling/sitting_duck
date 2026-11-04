@@ -599,3 +599,144 @@ make release                        0 errors, 106 warnings (104 + one SetValue
 Still to do in step 3: **3c** (the per-pair unit), **3d** (the bidirectional
 baseline) and **3e** (the `PASS` line). 3c is now a query against
 `native_strategy` rather than a scan, which is what the decision bought.
+
+### 3c, 3d and 3e as built, and what changing the unit found
+
+`NATIVE-DECL` now judges each declaring node type. The declarations come from
+`ast_type_map()`'s `native_strategy`, the corpus measurement is per raw type,
+and every verdict carries its denominator: `N of M declared pairs exercised`.
+
+**What it found, measured on `build/release/duckdb` at `2606999`:**
+
+```
+before (per language)   ok=192 FAIL=0 dirty=1 void=7 UNDECL=5 n/a=19   exit 0
+after  (per pair)       ok=187 FAIL=7 dirty=1 void=5 UNDECL=5 n/a=19   exit 3
+```
+
+**14 pairs in 7 languages**, where the language-level cell reported none. Every
+one is in `spec/conformance/native-decl-baseline.tsv` with its measurement and
+its reason; the shape of the finding is what matters here:
+
+| level | pairs | the shape |
+|---|---:|---|
+| L5 | 11 | the declaration names a node the strategy cannot serve. 8 of them declare a function-shaped strategy on an `ORGANIZATION_LIST` — the argument or parameter list ITSELF (`python parameters`, `javascript formal_parameters`, `cpp parameter_list`, …). A function-shaped strategy extracts the parameters OF a definition, so on the list node there is nothing to find. The other three are `css media_statement` (an `@media` block declared `DEFINITION_CLASS`), `sql invocation` (a call site, where `FUNCTION_CALL` is the strategy for arguments) and `sql statement` (a generic statement node) |
+| L3 | 3 | the node IS definition-shaped and owns a parameter list, so an implementation could satisfy it: `cpp function_declarator`, `cpp lambda_expression`, `dart method_signature`. Which specialization is missing is **not traced** — inferred from the declaration and the empty column, not read out of the extractor |
+
+Two of typescript's failing pairs reach it through
+`typescript_types.def:60`'s `#include` of javascript's table. A basename source
+scan cannot see them at all, so this is the first finding that **only** the
+Option B surface could produce.
+
+### The cell that moved the other way is itself a finding
+
+`html NATIVE-DECL` went from `void` ("no function definitions in corpus") to
+`ok`. The old check looked for `is_function_definition` nodes; the new one
+looks at the node types html actually declares. html declares
+`FUNCTION_WITH_PARAMS` on `element` (`html_types.def:87`, `ORGANIZATION_BLOCK`)
+and on `script_element` (`:90`, `EXTERNAL_EMBED`), and they deliver:
+
+```
+$ SELECT type, parameters FROM read_ast('test/data/unparse_leaf_text/sample.html',
+                                        context := 'native')
+  WHERE type IN ('element','script_element') AND len(parameters) > 0;
+element|[{'name': class, 'type': greeting}]
+```
+
+That is the HTML attribute `class="greeting"` arriving in the `parameters`
+column. **`ok` here is a true statement about non-emptiness and a false
+impression about correctness** — which is exactly the reach limit this plan
+stated before the work started: a per-pair non-emptiness check finds blanks,
+never populated-and-wrong values. It belongs with the four in §"The four that
+are WRONG", and it was found by accident, by a check that cannot see it.
+
+`css` moved the same way, `void` to `ok`, and carries the same caveat: its
+delivering node types are `call_expression`, `import_statement`,
+`keyframes_statement` and `rule`. A CSS `rule` reporting `parameters` is
+non-emptiness, not a signature. Neither cell is a FAIL and neither can be
+baselined, because both deliver — they are recorded here because the gate
+cannot see them.
+
+**Green, with the baseline, measured (`conformance_kit.sh:68`, 54 minutes):**
+
+```
+TOTALS ok=194 FAIL=0 dirty=1 void=5 UNDECL=5 n/a=19 | languages=28 (no fixture: 0)
+PASS: every check this run could judge was satisfied
+      declared pairs: 99 in 20 languages | baselined as known: 14 | 5 void, 5 undeclared, 19 n/a
+```
+
+Against the recorded clean run, exactly **two of 224 cells** changed, and both
+are the `void` to `ok` moves above. `NATIVE-DECL` is now 19 `ok`, 7 `n/a`, 1
+`UNDECL` (duckdb, which declares nothing anywhere) and 1 `void` (bash, whose
+one declared pair has no parameter in source). The 99 pairs in 20 languages
+agree with the preprocessor census to the pair.
+
+One more honest note on the measurements: `css media_statement` records
+`src_params=1`. The source-side guard looks for a word character inside the
+first parentheses, and in a media query that is `(max-width: 600px)`, not a
+parameter. The guard only ever decides `void` against `FAIL`, so it cannot
+manufacture a pass — but that row's "takes a parameter in source" is a guard
+artifact and the baseline says so.
+
+### The baseline, and why it has two controls
+
+`spec/conformance/native-decl-baseline.tsv`, generated by
+`--emit-decl-baseline` and annotated by hand, because a measurement says what
+and never why. The contract is bidirectional and both directions exit 3:
+
+  - a declared-and-undelivered pair that is **not listed** fails the run;
+  - a **listed** pair that no longer reproduces also fails the run. "Stopped
+    reproducing" includes becoming `void`: a pair nobody measures is not a pair
+    that was fixed.
+
+Each direction has its own planted fault, so the column carries **two**
+controls — and that asymmetry is written into the kit's header rather than left
+to be discovered, which is the whole lesson of this entry's `NATIVE-DECL` gap:
+
+```
+ok  NATIVE-DECL       1 declaring node types delivered nothing and are NOT baselined
+                      [function_declaration]; 1 of 1 declared pairs exercised
+ok  NATIVE-DECL-BASE  1 baselined pair(s) no longer reproduce [function_definition]
+                      -- fixed, or the corpus stopped exercising them; prune the baseline
+CONTROLS OK: every check demonstrably detects its planted fault
+```
+
+`NATIVE-DECL-BASE` asserts the MESSAGE, not just the verdict: python has
+unlisted failures of its own, so a bare `FAIL` would have proved nothing there.
+
+### 3e: the verdict states its own scope
+
+The final line used to read `PASS: every declared capability was delivered`,
+which is the sentence this document quotes as having been printed over python
+and zig. It now reads:
+
+```
+PASS: every check this run could judge was satisfied
+      declared pairs: N in M languages | baselined as known: 14 | V void, U undeclared, A n/a
+```
+
+### The gate now exists and still runs nowhere — a decision for Teague
+
+Measured 2026-11-04: `conformance_kit.sh` appears in
+`.github/workflows/MainDistributionPipeline.yml` exactly once, inside a
+**comment** (line 349). No job runs it. The table in §"Why no existing gate
+caught any of them" already said `in a workflow: no`, and step 3 did not change
+that.
+
+So the bidirectional baseline is only bidirectional when someone runs the kit.
+A new declared-and-undelivered pair exits 3 — on a developer's machine, when
+asked. Nothing catches it on a push.
+
+The cost is the reason it is a decision rather than an omission: the full run
+takes **54 minutes** (`conformance_kit.sh:68`), most of it in RAW-JOIN and
+NO-EMPTY iterating fixtures per language. Three shapes, cheapest first:
+
+  - `--emit-decl-baseline` alone runs only NATIVE-DECL and took **under two
+    minutes**. A job that emits and diffs against the committed baseline would
+    catch both directions of the contract and nothing else.
+  - `--controls-only` takes **110 seconds** and proves all ten controls fire,
+    which is what makes any later matrix readable.
+  - the full matrix at 54 minutes, which is a nightly rather than a per-push
+    job.
+
+Recommended: the first two per push, the full matrix nightly. Not done — it is
+new CI minutes on every push and that is Teague's call, not a gate decision.
