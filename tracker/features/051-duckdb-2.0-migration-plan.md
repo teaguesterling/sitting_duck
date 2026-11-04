@@ -1,10 +1,18 @@
 # 051 — DuckDB 2.0 migration plan
 
-**Status:** PLAN ONLY — nothing in here has been executed
+**Status:** EXECUTED for the pin move; the rest of the plan is not done.
+Corrected 2026-11-03: this line read "PLAN ONLY — nothing in here has been
+executed". PR #302 moved the pin to the `v2.0.0` tag, dropped the v1.5 CI leg,
+and added `duckdb_extension_statically_link(sitting_duck)`; it merged as
+`96335de`. Still not done: deleting the v1.5 compat shims, and the fleet-wide
+ABI question. See the VERIFIED section and the CI correction below.
 **Created:** 2026-10-15
 **Updated:** 2026-10-25 — **DuckDB 2.0.0 shipped.** See §0.
 **Trigger:** the community registry moved to the 2.0 line today, not on the 21st
-**Blocks on:** a decision about `tracker/bugs/040`, and a fleet-wide ABI decision
+**Blocks on:** nothing, for the pin move. Updated 2026-11-03: the
+`tracker/bugs/040` decision was taken — deferred and accepted. The fleet-wide
+ABI question is still open, and now concerns the sibling repos rather than this
+one.
 
 ## 0. Update, 2026-10-25: the release landed and option C is now open
 

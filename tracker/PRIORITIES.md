@@ -2,6 +2,21 @@
 
 **Last Updated:** 2026-04-26 (post-sprint update)
 
+> **Superseded, 2026-11-03.** This file predates the v2.0 arc and does not
+> mention it. **Do not prioritise from it.** The live sources are
+> `tracker/features/048` (the 18-piece work register and its near-term order),
+> `tracker/features/044` (the M1 contract and its standing), and
+> `docs/planning/v2-architecture.md` (the M1→M4 sequencing).
+>
+> Three statements below are now false, left in place as the pre-v2 record:
+>
+> - "27 language support" — it is **28**, measured from
+>   `cmake/BuiltinLanguages.cmake` (28 `sitting_duck_language(...)` declarations).
+> - "**YAML is not supported**" — it is, since
+>   `cmake/BuiltinLanguages.cmake:132` (tree-sitter ABI 13).
+> - "106 test files, 6049 assertions" — CI's grammar job now reports
+>   `9340 assertions in 167 test cases`.
+
 ## Priority Levels
 
 - **P0 (Critical)**: Blocking issues that prevent basic functionality
