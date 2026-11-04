@@ -14,7 +14,13 @@ namespace duckdb {
 //
 // Returns one row per DEF_TYPE entry across all (or a specific) language.
 // Exposes the relationship between tree-sitter node types, semantic types,
-// selector aliases, and flags.
+// extraction strategies and flags.
+//
+// This is the DECLARATION SURFACE of a language module: it reports what the
+// loaded map holds, not what any source file says, so it answers for a module
+// whose table is assembled by the preprocessor or that ships no sources at all
+// (v2.0 M3 moves language modules out of this repository). Both strategy
+// columns come from the same map the extractors read.
 //
 // Usage:
 //   SELECT * FROM ast_type_map();                          -- all languages
@@ -27,7 +33,8 @@ struct TypeMapBindData : public TableFunctionData {
 };
 
 struct TypeMapGlobalState : public GlobalTableFunctionState {
-	// Precomputed rows: (language, node_type, semantic_type_name, kind, flags, name_role, is_scope)
+	// Precomputed rows: (language, node_type, semantic_type_name, kind, flags,
+	// name_role, is_scope, is_syntax, name_strategy, native_strategy)
 	struct Row {
 		string language;
 		string node_type;
@@ -40,6 +47,7 @@ struct TypeMapGlobalState : public GlobalTableFunctionState {
 		bool is_scope;
 		bool is_syntax;
 		string name_strategy;
+		string native_strategy;
 	};
 
 	vector<Row> rows;
@@ -132,6 +140,47 @@ static string GetExtractionStrategyName(ExtractionStrategy strategy) {
 		return "unknown";
 	}
 }
+
+static string GetNativeExtractionStrategyName(NativeExtractionStrategy strategy) {
+	switch (strategy) {
+	case NativeExtractionStrategy::NONE:
+		return "none";
+	case NativeExtractionStrategy::FUNCTION_WITH_PARAMS:
+		return "function_with_params";
+	case NativeExtractionStrategy::FUNCTION_WITH_DECORATORS:
+		return "function_with_decorators";
+	case NativeExtractionStrategy::ARROW_FUNCTION:
+		return "arrow_function";
+	case NativeExtractionStrategy::ASYNC_FUNCTION:
+		return "async_function";
+	case NativeExtractionStrategy::CLASS_WITH_INHERITANCE:
+		return "class_with_inheritance";
+	case NativeExtractionStrategy::CLASS_WITH_METHODS:
+		return "class_with_methods";
+	case NativeExtractionStrategy::VARIABLE_WITH_TYPE:
+		return "variable_with_type";
+	case NativeExtractionStrategy::GENERIC_FUNCTION:
+		return "generic_function";
+	case NativeExtractionStrategy::METHOD_DEFINITION:
+		return "method_definition";
+	case NativeExtractionStrategy::CONSTRUCTOR_DEFINITION:
+		return "constructor_definition";
+	case NativeExtractionStrategy::INTERFACE_DEFINITION:
+		return "interface_definition";
+	case NativeExtractionStrategy::ENUM_DEFINITION:
+		return "enum_definition";
+	case NativeExtractionStrategy::IMPORT_STATEMENT:
+		return "import_statement";
+	case NativeExtractionStrategy::EXPORT_STATEMENT:
+		return "export_statement";
+	case NativeExtractionStrategy::FUNCTION_CALL:
+		return "function_call";
+	case NativeExtractionStrategy::CUSTOM:
+		return "custom";
+	default:
+		return "unknown";
+	}
+}
 // <<< END GENERATED TAXONOMY: type_map_name_tables >>>
 
 static unique_ptr<FunctionData> TypeMapBind(ClientContext &context, TableFunctionBindInput &input,
@@ -144,11 +193,16 @@ static unique_ptr<FunctionData> TypeMapBind(ClientContext &context, TableFunctio
 	}
 
 	// Output schema
-	names = {"language", "node_type", "semantic_type", "kind", "name_role",
-	         "is_scope", "is_syntax", "name_strategy", "flags"};
-	return_types = {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR,
-	                LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::BOOLEAN,
-	                LogicalType::BOOLEAN, LogicalType::VARCHAR, LogicalType::UTINYINT};
+	// native_strategy sits beside name_strategy, and before flags, because the
+	// two strategies are the third and fourth DEF_TYPE arguments and belong
+	// together. Appending it after flags would have kept positional callers
+	// working, but it would also have put the fourth argument of DEF_TYPE after
+	// the fifth, which is the kind of ordering nobody can explain later.
+	names = {"language",  "node_type",     "semantic_type",   "kind", "name_role", "is_scope",
+	         "is_syntax", "name_strategy", "native_strategy", "flags"};
+	return_types = {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR,
+	                LogicalType::VARCHAR, LogicalType::BOOLEAN, LogicalType::BOOLEAN, LogicalType::VARCHAR,
+	                LogicalType::VARCHAR, LogicalType::UTINYINT};
 
 	return std::move(bind_data);
 }
@@ -183,6 +237,13 @@ static unique_ptr<GlobalTableFunctionState> TypeMapInit(ClientContext &context, 
 			row.is_scope = (entry.second.flags & ASTNodeFlags::IS_SCOPE) != 0;
 			row.is_syntax = (entry.second.flags & ASTNodeFlags::IS_SYNTAX_ONLY) != 0;
 			row.name_strategy = GetExtractionStrategyName(entry.second.name_strategy);
+			// The capability scripts/conformance_kit.sh had to derive by reading
+			// languages/*/*_types.def, because nothing exposed it at run time.
+			// That scan attributes a row to a language by the file's own
+			// basename, so it cannot see a table the preprocessor assembles:
+			// typescript_types.def #includes javascript's, and the scan found 5
+			// of the 13 function-shaped declarations this map holds.
+			row.native_strategy = GetNativeExtractionStrategyName(entry.second.native_strategy);
 			state->rows.push_back(std::move(row));
 		}
 	}
@@ -215,7 +276,8 @@ static void TypeMapFunction(ClientContext &context, TableFunctionInput &data_p, 
 		output.SetValue(5, count, Value::BOOLEAN(row.is_scope));
 		output.SetValue(6, count, Value::BOOLEAN(row.is_syntax));
 		output.SetValue(7, count, Value(row.name_strategy));
-		output.SetValue(8, count, Value::UTINYINT(row.flags));
+		output.SetValue(8, count, Value(row.native_strategy));
+		output.SetValue(9, count, Value::UTINYINT(row.flags));
 
 		count++;
 		state.current_row++;

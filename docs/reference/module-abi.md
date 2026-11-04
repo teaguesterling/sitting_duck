@@ -173,12 +173,18 @@ of its own negative controls stops firing, so a run that cannot fail is reported
 rather than counted.
 
 It takes an out-of-tree module through `--extension`, `--def-source` and
-`--corpus`, but **one axis is still in-tree only**: the native-context checks
-are derived from `DEF_TYPE` tables in this repository, because
-`native_strategy` is not surfaced by `ast_type_map()`. Exposing it there is what
-would make the kit fully out-of-tree-capable on that axis. The kit's own header
-says so, and the limit matters less than it reads: a runtime config cannot
-declare native extraction at all (see layer 2).
+`--corpus`. The native-context axis **used to be in-tree only**, because
+`native_strategy` was not surfaced anywhere at run time and the kit had to scan
+this repository's `DEF_TYPE` tables for it. `ast_type_map()` now reports
+`native_strategy` beside `name_strategy`, so that capability is derivable from a
+loaded module alone.
+
+That also removed a defect the source scan had, not only a limitation: a scan
+attributes each row to a language by the file's own basename, so it could not
+see a table the preprocessor assembles. `languages/typescript/typescript_types.def`
+`#include`s javascript's table, and the scan found **5** of the **13**
+function-shaped declarations typescript's loaded map holds. A runtime config
+still cannot declare native extraction at all (see layer 2).
 
 ## Trust boundary
 
