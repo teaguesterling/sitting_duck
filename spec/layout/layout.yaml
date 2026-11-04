@@ -1,0 +1,137 @@
+# Layout invariants for the v2 M2 move (tracker/features/054).
+#
+# WHY THIS FILE EXISTS
+# --------------------
+# tracker/features/044-v2-m1-contract.md:22 names a safety net for M2:
+#
+#     "Safety net for later (M2): the #92 invariance test -- default build
+#      byte-equivalent, canonical registration order -- must stay green
+#      throughout."
+#
+# Measured 2026-11-03: that test did not exist. PR #92 is compile-time language
+# selection, the feature; its 8 files contain no test. A content grep for
+# `registration order`, `byte.?equivalen` and `canonical order` across test/,
+# .github/ and scripts/ returned nothing. A gate that nothing asserts cannot
+# "stay green" -- it was never red.
+#
+# This file is the authority the gate reads. scripts/verify_layout_invariance.py
+# compares the tree against it.
+#
+# WHAT M2 CHANGES HERE
+# --------------------
+# Stage 1 of M2 moves per-language sources into languages/<lang>/. That changes
+# the four `paths` templates below and NOTHING else in this file. The ordered
+# list, the exceptions and the denominator are properties of the project, not
+# of where its files sit -- which is exactly what makes them useful across the
+# move.
+version: 1.0.0
+
+# Where per-language sources live today. `{language}` is the registered name;
+# `{grammar}` is the grammar directory suffix, which differs for csharp.
+paths:
+  adapter: "src/language_adapters/{language}_adapter.cpp"
+  definitions: "src/language_configs/{language}_types.def"
+  grammar: "grammars/tree-sitter-{grammar}"
+  declaration_table: "cmake/BuiltinLanguages.cmake"
+  # Emitted into the build tree by cmake/BuiltinLanguages.cmake. Checked only
+  # when a build is present, so this gate still runs on a bare checkout.
+  generated_table: "extension/sitting_duck/sitting_duck_generated/sitting_duck_builtin_languages.def"
+
+# CANONICAL REGISTRATION ORDER.
+#
+# Declaration order in cmake/BuiltinLanguages.cmake IS registration order; the
+# file says so, and re-sorts a user-supplied subset into it so that a subset
+# build registers in the same relative order as a full build.
+#
+# `ast_supported_languages()` does NOT preserve this order. Measured
+# 2026-11-03: the same 28 languages come back as
+#   graphql lua kotlin bash zig json csharp rust toml c python javascript html
+#   r swift cpp dart sql typescript ruby java hcl php duckdb go markdown yaml css
+# which looks like hash-map iteration order. So a test that reads order from
+# that function pins a hash order and passes whatever happens to registration.
+# This list is the only authority.
+registration_order:
+  - python
+  - javascript
+  - cpp
+  - typescript
+  - sql
+  - duckdb
+  - go
+  - ruby
+  - markdown
+  - java
+  - php
+  - html
+  - css
+  - c
+  - rust
+  - json
+  - bash
+  - swift
+  - r
+  - kotlin
+  - csharp
+  - lua
+  - hcl
+  - graphql
+  - toml
+  - zig
+  - dart
+  - yaml
+
+# Languages whose files do not follow the `paths` templates. Every entry is a
+# measured irregularity, not a convenience.
+exceptions:
+  sql:
+    definitions: none   # its 233 DEF_TYPE entries are inlined in sql_adapter.cpp
+    reason: "declaration table lives in the adapter translation unit"
+  duckdb:
+    definitions: none
+    grammar: none       # parses through DuckDB's own parser, not tree-sitter
+    reason: "native adapter; the 28th language and the only non-tree-sitter one"
+  csharp:
+    grammar: "c-sharp"  # grammars/tree-sitter-c-sharp, not -csharp
+    reason: "upstream grammar repository name differs from the registered name"
+
+# Declaration tables that belong to no registered language. These are the
+# condition yaml was in before #227 wired it up: a .def with no adapter.
+# Listed so that the gate's file counts are exact rather than approximate.
+unregistered_definitions:
+  - fsharp
+  - haskell
+  - julia
+  - scala
+
+# Adapter translation units that are not one language's module.
+not_a_language:
+  - dynamic_language
+
+# THE CONFORMANCE KIT'S DENOMINATOR.
+#
+# scripts/conformance_kit.sh scans DEFAULT_DEF_SOURCES:
+#     ${repo_root}/src/language_configs/*_types.def
+#     ${repo_root}/src/language_adapters/*_adapter.cpp
+# After the M2 move those globs match zero files. A language whose declarations
+# the kit cannot read is reported UNDECL, not FAIL -- so the kit goes blind and
+# STAYS GREEN. That is the failure this section exists to prevent.
+#
+# Floors, not equalities. `files_min` and `languages_with_tables_min` sit AT the
+# measured value, because a drop in either means a glob broke or a table became
+# unreadable -- neither happens on purpose. `def_type_entries_min` sits well
+# below the measured value, because declarations are deleted deliberately (#232
+# removed 315 of them in one PR); its job is to catch a collapse, not to pin a
+# count.
+#
+# MEASURED WITH scripts/verify_layout_invariance.py, NOT with the kit.
+# The kit's header reports 3837 entries for this same tree. That is a different
+# measurement, not a disagreement: the kit counts rows it parsed into four
+# fields and drops the `raw_type` placeholder and arglists shorter than five
+# arguments, while this gate counts raw DEF_TYPE macro invocations. Copying the
+# kit's 3837 in here would be a floor nothing here measures -- and a floor set
+# 200 below the true value is 200 of slack nobody intended.
+kit_denominator:
+  files_min: 59            # 30 *_types.def + 29 *_adapter.cpp, measured 2026-11-03
+  def_type_entries_min: 3500      # measured 4039, deduped by language
+  languages_with_tables_min: 31   # 26 registered with .def + 4 unregistered + sql's inline;
+                                  # duckdb is the one language with no readable table at all

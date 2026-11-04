@@ -333,6 +333,43 @@ jobs:
         # repository, so the default checkout is enough -- no submodules.
         run: python3 scripts/verify_native_dispatch.py
 
+  # tracker/features/044-v2-m1-contract.md:22 names a safety net for the M2
+  # layout move -- "the #92 invariance test -- default build byte-equivalent,
+  # canonical registration order -- must stay green throughout". Measured
+  # 2026-11-03: that test did not exist. #92 is compile-time language selection,
+  # the feature, and its 8 files contain no test; a content grep for
+  # `registration order`, `byte.?equivalen` and `canonical order` across test/,
+  # .github/ and scripts/ returned nothing. A gate that nothing asserts cannot
+  # stay green -- it was never red. This job is that gate.
+  #
+  # Two invariants no other check can see:
+  #   * REGISTRATION ORDER. ast_supported_languages() returns hash-map order,
+  #     not declaration order (measured), so reordering the cmake table changes
+  #     nothing observable in any existing test.
+  #   * THE KIT'S DENOMINATOR. conformance_kit.sh globs src/language_configs and
+  #     src/language_adapters. After the M2 move those match zero files, and a
+  #     language whose declarations the kit cannot read is reported UNDECL, not
+  #     FAIL -- so the kit goes blind and STAYS GREEN.
+  #
+  # Static: reads the cmake table, the spec and the declaration tables. No build
+  # and no submodules, so it runs on a bare checkout in seconds.
+  layout-invariance:
+    name: layout and registration order
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure PyYAML is available
+        run: python3 -c "import yaml" || python3 -m pip install --break-system-packages pyyaml
+      - name: Prove the gate can fail
+        # Planted faults, before the check: a two-language reorder must be
+        # reported as an ORDER change and not a membership change, a dropped
+        # language as a membership change, and path templates resolving to
+        # nothing must trip both the per-language check and the kit-denominator
+        # floor -- that last one is the exact shape the M2 move would hit.
+        run: python3 scripts/verify_layout_invariance.py --self-test
+      - name: Verify the tree agrees with spec/layout/layout.yaml
+        run: python3 scripts/verify_layout_invariance.py
+
   taxonomy-tables-sync:
     name: taxonomy tables in sync
     runs-on: ubuntu-latest
