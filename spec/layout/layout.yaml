@@ -32,6 +32,11 @@ paths:
   adapter: "languages/{language}/{language}_adapter.cpp"
   definitions: "languages/{language}/{language}_types.def"
   grammar: "grammars/tree-sitter-{grammar}"
+  # Since M2 stage 2 each language declares itself here, and the declaration
+  # table below only LISTS the modules, in registration order. The gate reads
+  # the order from that list and then reads every module, because a list is an
+  # index and a module is the artifact.
+  module: "languages/{language}/module.cmake"
   declaration_table: "cmake/BuiltinLanguages.cmake"
   # Emitted into the build tree by cmake/BuiltinLanguages.cmake. Checked only
   # when a build is present, so this gate still runs on a bare checkout.

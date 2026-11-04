@@ -331,11 +331,28 @@ def builtin_languages() -> list:
     regenerating the index silently DELETED it (#235), and before that it
     carried a language count that had to be edited by hand every time a
     language was added.
+
+    Since M2 stage 2 the per-language declarations live in
+    languages/<name>/module.cmake, and this file lists them in registration
+    order instead. Returning [] on a miss would re-create #235 exactly -- the
+    warning box would vanish and the page would look finished -- so an
+    unreadable list raises instead.
     """
     cmake = REPO_ROOT / "cmake" / "BuiltinLanguages.cmake"
     if not cmake.exists():
         return []
-    return re.findall(r"^sitting_duck_language\((\w+)", cmake.read_text(), re.M)
+    text = cmake.read_text()
+    m = re.search(r"set\(SITTING_DUCK_LANGUAGE_MODULES\s+(.*?)\)", text, re.S)
+    if not m:
+        raise RuntimeError(
+            "cmake/BuiltinLanguages.cmake has no set(SITTING_DUCK_LANGUAGE_MODULES ...); "
+            "the pattern is wrong, not the code. Returning an empty list here would "
+            "silently delete the not-built-in warning box, which is #235.")
+    languages = re.sub(r"#[^\n]*", "", m.group(1)).split()
+    if not languages:
+        raise RuntimeError(
+            "cmake/BuiltinLanguages.cmake lists zero language modules")
+    return languages
 
 
 def generate_index(languages: list) -> str:
