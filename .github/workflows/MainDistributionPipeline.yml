@@ -150,8 +150,12 @@ jobs:
             for v in $(printf '%s\n' "$line" | grep -oE "$ver_re" || true); do
               [ "$v" = "$DUCKDB_VERSION" ] && continue
               [ "$v" = "$DUCKDB_REGISTRY_STABLE" ] && continue
-              # A recorded registry value, asserted against the registry below.
-              # Exempt as a MIRROR of upstream, not as a version we ship.
+              # A recorded registry value, exempt as a MIRROR of upstream rather
+              # than a version we ship. NO LONGER asserted against the registry:
+              # the parse that did so read upstream's code SHAPE, and broke when
+              # that shape changed while the mapping did not (see below). So this
+              # exemption now rests on the constant alone. If v1.5.6 stops being a
+              # version the registry routes, nothing here will notice.
               [ "$v" = "$DUCKDB_REGISTRY_VARIANT" ] && continue
               [ -n "$DUCKDB_LEGACY" ] && [ "$v" = "$DUCKDB_LEGACY" ] && continue
               echo "::error::line ${lineno}: ${line} -- a DuckDB version literal that is not the shipped ${DUCKDB_VERSION} or the recorded registry stable ${DUCKDB_REGISTRY_STABLE}: derive it from the shipped version or bump it"
@@ -229,7 +233,7 @@ jobs:
             live1=$(mktemp); live2=$(mktemp)
             grep -vE '^[[:space:]]*#' "$f1" > "$live1" || true
             grep -vE '^[[:space:]]*#' "$f2" > "$live2" || true
-            # FIVE values, in the shapes the registry writes them today.
+            # FOUR values, in the shapes the registry writes them today.
             # stable and default are parsed separately although both are v2.0.0:
             # they are different settings, and the registry has split them before.
             reg_stable=$(grep -m1 -o "DUCKDB_LATEST_STABLE: *'v[^']*'" "$live1" | grep -o "'v[^']*'" | tr -d "'" || true)
@@ -242,9 +246,31 @@ jobs:
             reg_default=$(grep -m1 "DUCKDB_VERSION:" "$live1" | grep -m1 -o "'v[^']*'" | tr -d "'" || true)
             reg_commit=$(grep -m1 -oE "duckdb_commit:.*'[0-9a-f]{40}'" "$live1" | grep -oE '[0-9a-f]{40}' || true)
             reg_tools=$(grep -m1 -o "inputs.ci_tools_version || '[^']*'" "$live1" | grep -o "'[^']*'$" | tr -d "'" || true)
-            # build.py routes one DUCKDB_VERSION to each descriptor's `variegata`
-            # ref; the version sits in the condition on the line before.
-            reg_variant=$(grep -B1 "'variegata' in desc" "$live2" | grep -m1 -o "== 'v[0-9.]*'" | grep -o "v[0-9.]*" || true)
+            # A FIFTH value was parsed here and is deliberately gone: the
+            # `variegata` variant version, read from scripts/build.py. It is the
+            # only value this job took from upstream's code STRUCTURE rather than
+            # from a declared setting, and that is what broke it.
+            #
+            # Measured 2026-11-04. At registry a3ee00f3 build.py read
+            #     elif os.environ['DUCKDB_VERSION'] == 'v1.5.6':
+            #         if 'variegata' in desc['repo']:
+            # and at 9bbbfa8c the same mapping reads
+            #     elif os.environ['DUCKDB_VERSION'] == 'v1.5.6':
+            #         extension_ref = select_ref('variegata');
+            # The v1.5.6 -> variegata routing is UNCHANGED. Only the line our grep
+            # anchored on is gone, so the parse returned empty and this job failed
+            # PR #308 -- a PR that touches no workflow and no submodule. The job's
+            # own error said "this check's parse is wrong about the registry, fix
+            # the check", and this is that fix.
+            #
+            # Re-anchoring on select_ref() would restore the assertion and the
+            # coupling together, and break again at the next reflow. The other four
+            # values come from declared settings (DUCKDB_LATEST_STABLE:,
+            # DUCKDB_VERSION:, duckdb_commit:, inputs.ci_tools_version ||) and
+            # parsed correctly across this change, so they stay.
+            #
+            # $live2 is still fetched, because the duckdb_tag absence check below
+            # reads build.yml and the fetch covers both files.
             # An ABSENCE, asserted positively: this job records no tag because the
             # registry has no active tag default. If one comes back, the record is
             # incomplete and silence would hide it.
@@ -253,14 +279,14 @@ jobs:
               echo "::error::the community registry has an ACTIVE duckdb_tag default again (${reg_tag}) at ${sha:-main}; this job deliberately records none, so add DUCKDB_REGISTRY_TAG back and assert it"
               echo "duckdb-pin: FAILED, registry re-added a duckdb_tag default (${reg_tag})" >> "$summary"; exit 1
             fi
-            if [ -z "$reg_stable" ] || [ -z "$reg_default" ] || [ -z "$reg_commit" ] || [ -z "$reg_tools" ] || [ -z "$reg_variant" ]; then
-              echo "::error::community-extensions at ${sha:-main} was fetched but build.yml/build.py carry no recognisable defaults (stable='${reg_stable}', default='${reg_default}', commit='${reg_commit}', ci-tools='${reg_tools}', variant='${reg_variant}'); this check's parse is wrong about the registry, fix the check"
+            if [ -z "$reg_stable" ] || [ -z "$reg_default" ] || [ -z "$reg_commit" ] || [ -z "$reg_tools" ]; then
+              echo "::error::community-extensions at ${sha:-main} was fetched but build.yml carries no recognisable defaults (stable='${reg_stable}', default='${reg_default}', commit='${reg_commit}', ci-tools='${reg_tools}'); this check's parse is wrong about the registry, fix the check"
               echo "duckdb-pin: FAILED, registry files fetched but unparseable" >> "$summary"; exit 1
             fi
-            registry="${reg_stable}/${reg_default}/${reg_commit}/${reg_tools}/${reg_variant}"
-            recorded="${DUCKDB_REGISTRY_STABLE}/${DUCKDB_REGISTRY_STABLE}/${DUCKDB_REGISTRY_COMMIT}/${DUCKDB_REGISTRY_TOOLS}/${DUCKDB_REGISTRY_VARIANT}"
+            registry="${reg_stable}/${reg_default}/${reg_commit}/${reg_tools}"
+            recorded="${DUCKDB_REGISTRY_STABLE}/${DUCKDB_REGISTRY_STABLE}/${DUCKDB_REGISTRY_COMMIT}/${DUCKDB_REGISTRY_TOOLS}"
             if [ "$registry" != "$recorded" ]; then
-              echo "::error::the community registry now builds stable/default/commit/ci-tools/variant ${registry} (at ${sha:-main}) but this workflow records ${recorded}; update the DUCKDB_REGISTRY_* constants, and reconsider tracker/features/051 -- the registry has moved again"
+              echo "::error::the community registry now builds stable/default/commit/ci-tools ${registry} (at ${sha:-main}) but this workflow records ${recorded}; update the DUCKDB_REGISTRY_* constants, and reconsider tracker/features/051 -- the registry has moved again"
               echo "duckdb-pin: FAILED, registry ${registry} vs recorded ${recorded}" >> "$summary"; exit 1
             fi
             # Informational, not a gate: is the registry's pinned commit actually
@@ -278,7 +304,7 @@ jobs:
             # cannot become invisible: we pin and ship ${DUCKDB_VERSION}, while the
             # registry's default is ${reg_stable} and NO job in its build_all.yml
             # asks for ${DUCKDB_VERSION} any more.
-            mode="registry verified at ${sha:-main}: default ${reg_stable} at ${reg_commit:0:10} (${ident}) on ${reg_tools}, variant ${reg_variant}; THIS REPO SHIPS ${DUCKDB_VERSION}, which the registry no longer builds by default (declared divergence, tracker/features/051)"
+            mode="registry verified at ${sha:-main}: default ${reg_stable} at ${reg_commit:0:10} (${ident}) on ${reg_tools} (variant no longer asserted); THIS REPO SHIPS ${DUCKDB_VERSION}, which the registry no longer builds by default (declared divergence, tracker/features/051)"
           fi
           echo "duckdb-pin: OK, pin ${have:0:10} == ${DUCKDB_VERSION}; jobs ship ${DUCKDB_VERSION} and ${DUCKDB_NEXT}; ${mode}" | tee -a "$summary"
 
