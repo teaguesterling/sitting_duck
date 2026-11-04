@@ -14,7 +14,7 @@
 #     call-naming capability IS derivable at run time -- but NOT the
 #     native_strategy that drives signature / parameter / modifier extraction.
 #     That capability is therefore only derivable by reading
-#     src/language_configs/*_types.def, which an out-of-tree module (M3) may not
+#     languages/*/*_types.def, which an out-of-tree module (M3) may not
 #     ship, so scripts/conformance_kit.sh reports it as UNDECL in that case.
 #
 # These assertions are deliberately shaped so that CLOSING the gap breaks them:
@@ -221,7 +221,7 @@ ORDER BY language;
 duckdb
 
 # `duckdb` still registers and parses, but its node_type_count is 0: the
-# adapter carries no DEF_TYPE table at all (src/language_adapters/
+# adapter carries no DEF_TYPE table at all (languages/duckdb/
 # duckdb_adapter.cpp has no DEF_TYPE entry, unlike every other adapter, which
 # either includes a *_types.def or inlines its table as sql_adapter.cpp does).
 # So for this one language NOTHING about its capabilities is declared anywhere
