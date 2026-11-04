@@ -103,10 +103,43 @@ on declaration nodes at all. Three of four cases wrong.
 | `check_def_type_tables.py` | yes | formatting, and duplicate raw types |
 | `generate_taxonomy.py --check` | yes | taxonomy table sync only |
 | `verify_native_dispatch.py` | **yes, since step 2** | was: matched `strcmp(<var with "type">, "lit")` only, so python's `==` idiom left 95 of 132 literals unexamined; globbed `*_native_extractors.hpp`, so the shared tables and the adapters were unread; printed **no line** for a language with no extractor header. Now: 1,374 literals in 27 languages, 191 in the shared table, 70 baselined. Remaining limit: 103 comparison sites whose operand is source text, which it names by operand |
-| `conformance_kit.sh` | **no** | `NATIVE-DECL` covers 5 of 10 declarable strategies and aggregates per language, so it prints `PASS: every declared capability was delivered` for python and zig while a declared capability of each delivers nothing |
+| `conformance_kit.sh` | **no** | `NATIVE-DECL` covers 5 of 10 declarable strategies and aggregates per language, so it prints `PASS: every declared capability was delivered` for python and zig while a declared capability of each delivers nothing. **And nothing proves it can fail** — see below |
 | the three `audit_*.py` | **no** | — |
 
 Only an **oracle language** caught the swift defect. That is now rubric item 1.7.
+
+### `NATIVE-DECL` is the one kit check with no negative control
+
+Measured 2026-11-03, from `scripts/conformance_kit.sh` and from a clean run.
+The kit's step 5 says what it intends:
+
+> Every check above reports its happy answer both when it is right AND when it
+> compared nothing. These plant a fault and require each check to notice.
+
+It plants **8** faults. `control_note` is called for `PARSE`, `CALL-NAMED`,
+`NATIVE-ABST`, `RAW-JOIN`, `NO-EMPTY`, `DECL-UNIQUE`, `DECL-UNIQ-FLAGS` and
+`DECL-RUNTIME`. The matrix also has 8 columns, so the two counts match and the
+gap reads as closed — but the sets differ by one in each direction:
+
+| | in the matrix | has a control |
+|---|---|---|
+| `NATIVE-DECL` | yes | **no** |
+| `DECL-UNIQ-FLAGS` | no (folded into `DECL-UNIQUE`) | yes |
+
+There is no `# --- NATIVE-DECL` block and no documented exception, so this is an
+omission rather than a decision. `044:72`'s "all 9 negative controls" is
+corrected there.
+
+**Why it matters for step 3.** `NATIVE-DECL` is exactly the check step 3 makes
+finer, and it is the check this document already blames for printing `PASS:
+every declared capability was delivered` over python and zig. Making an
+unproven check stricter produces a finding count nobody can calibrate: if the
+check cannot detect a planted fault today, a quiet new result after step 3 is
+not evidence of anything. So step 3 writes the control FIRST, against the
+current per-language check, and only then changes the unit of judgment.
+
+This is also the precondition for the baselining decision below. A baseline is
+only as good as the gate that fills it.
 
 ## Also found: 11 dead literals in the shared extractor
 
@@ -150,6 +183,21 @@ guard in 650 lines, which is why the review rubric no longer treats delegation
 to it as satisfying its robustness items.
 
 ## v1.18.0 scope
+
+**NARROWED BY TEAGUE, 2026-11-03: steps 3 and 4 only.** Step 5 and the
+25-language fan-out below move to v1.19.0. The release is held until steps 3
+and 4 land, and "green" means **baselined, not fixed**: each known case step 3
+surfaces is recorded in a declared baseline with its measurement and its
+reason, exactly as `spec/abi/module-abi.yaml` already handles L1, L2, L4 and
+the 70 dead literals. The gate is then green today and a NEW case fails it, in
+both directions — an unlisted case and a listed case that stops reproducing
+both exit 1.
+
+The reasoning for stopping at 4: the four values in step 4 are the only ones
+that are *populated and wrong*, so they satisfy every non-emptiness check in
+this repository, the kit included. A user sees a plausible wrong answer rather
+than a blank. Step 5's 12 live decisions are mostly retractions, and the
+fan-out is a column-wise campaign; neither is a reason to hold a tag.
 
 Ordered so that each step is provable, and so the class is closed before the
 instances are chased.
