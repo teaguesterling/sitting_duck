@@ -172,6 +172,16 @@ silent-empty. It exits 3 if any declared capability is undelivered and 4 if one
 of its own negative controls stops firing, so a run that cannot fail is reported
 rather than counted.
 
+The native-context check judges each **declaring node type**, not each
+language, and measures them against
+`spec/conformance/native-decl-baseline.tsv`: the declared-and-undelivered pairs
+that are already known, each with the measurement that found it and the reason
+it is listed. That baseline is bidirectional, and exit 3 covers both
+directions — an unlisted failure, and a listed pair that no longer reproduces
+(including one the corpus stopped exercising, which is a coverage loss rather
+than a fix). An out-of-tree module judges every pair with
+`--decl-baseline ''`, or ships a baseline of its own.
+
 It takes an out-of-tree module through `--extension`, `--def-source` and
 `--corpus`. The native-context axis **used to be in-tree only**, because
 `native_strategy` was not surfaced anywhere at run time and the kit had to scan

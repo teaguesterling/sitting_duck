@@ -63,17 +63,22 @@
 #   UNDECLARED -- neither source could answer. The row is UNDECL, counted and
 #       visible, and is neither a pass nor a fail.
 #
-# KNOWN GAP (an M1 finding, not a bug in this script)
-# ---------------------------------------------------
-# There is no capability declaration surface in the extension.
-# ast_supported_languages() returns (language, extensions, parser_type,
-# node_type_count) and nothing else; nothing anywhere in src/ declares what a
-# language module supports. ast_type_map() exposes `name_strategy` but NOT the
-# `native_strategy` that drives signature/parameter/modifier extraction, so the
-# signature capability is not derivable at run time at all -- only by reading
-# the .def sources, which an out-of-tree module may not ship. Adding
-# native_strategy to ast_type_map() (or a dedicated capability surface) is what
-# would make this script fully out-of-tree-capable on the native-context axis.
+# THE GAP THAT WAS HERE, AND THE HALF OF IT THAT IS CLOSED
+# --------------------------------------------------------
+# This block used to record a KNOWN GAP: ast_type_map() exposed
+# `name_strategy` but NOT the `native_strategy` that drives
+# signature/parameter/modifier extraction, so that capability was derivable
+# only by reading the .def sources -- which an out-of-tree module may not ship.
+#
+# CLOSED 2026-11-04 (tracker/bugs/042 step 3): ast_type_map() reports
+# native_strategy, and NATIVE-DECL reads its declarations from there. The
+# def-derived scan below stays for NATIVE-ABST, which needs the NONE-declared
+# node types and the duplicate-declaration view that only the sources have.
+#
+# STILL OPEN: ast_supported_languages() returns (language, extensions,
+# parser_type, node_type_count) and nothing about what a module can do, so a
+# module's capability SET is still not one query. See
+# docs/reference/module-abi.md layer 2.
 #
 # EVERY CHECK MUST BE ABLE TO FAIL
 # --------------------------------
@@ -88,10 +93,15 @@
 #   CALL-NAMED     control/unnamed_calls.sh is pure `$(...)` substitution, so
 #                  no call node can carry a callee name; a language forced to
 #                  declare call naming over it must FAIL.
-#   NATIVE-DECL    zig's `function_declaration` is re-declared
-#                  FUNCTION_WITH_PARAMS in the declaration table, although
-#                  nothing serves it; its corpus has 7 functions that take a
-#                  parameter in source, so "declared => delivered" must FAIL.
+#   NATIVE-DECL    zig's `function_declaration` is added to the function-shaped
+#                  declaration list, although nothing serves it; its corpus has
+#                  7 functions that take a parameter in source, so
+#                  "declared => delivered" must FAIL for that one node type.
+#   NATIVE-DECL-   python's `function_definition` is listed in a planted
+#   BASE           baseline as a known failure although it delivers; the
+#                  check must report the entry as no longer reproducing. This
+#                  is the direction that stops a baseline becoming a mute
+#                  button, and it is why one column carries two controls.
 #   NATIVE-ABSENT  python is forced to NOT declare native extraction
 #                  (python:!native) while its corpus demonstrably produces
 #                  parameters -- the undeclared-must-be-absent direction must
@@ -143,6 +153,13 @@ matrix_csv=""
 languages_filter=""
 quiet=0
 controls_only=0
+emit_decl_baseline=0
+# Declared-and-undelivered pairs that are KNOWN, each with the measurement that
+# found it and the reason it is listed rather than fixed. The gate is green on
+# these and red on a new one, in BOTH directions -- see the block above
+# check_native_declared(). Pass --decl-baseline '' to judge every pair, which
+# is what an out-of-tree module with no baseline of its own gets.
+decl_baseline_file="${repo_root}/spec/conformance/native-decl-baseline.tsv"
 declare -a force_caps=()
 declare -a def_sources=()
 
@@ -183,12 +200,15 @@ declarations come from):
                Gated PER NODE TYPE on ast_type_map()'s name_strategy, so a
                node type declared \`none\` (bash command_substitution, hcl
                template_interpolation) is excluded rather than failed.
-  NATIVE-DECL  a language declaring a function-shaped native strategy produces
-               at least one function definition with parameters. Gated on the
-               def-derived native declaration AND on the corpus actually
-               containing a function that takes a parameter in source, so a
-               corpus of no-argument functions reports \`void\` (fixture gap),
-               never \`FAIL\`.
+  NATIVE-DECL  every node type that DECLARES a function-shaped native strategy
+               delivers parameters on at least one node of that type. The unit
+               is the declaring node type, not the language (042 step 3), and
+               the declarations come from ast_type_map()'s native_strategy --
+               the loaded map, so it works for a module that ships no sources.
+               Gated per pair on the corpus actually containing a node of that
+               type that takes a parameter in source, so a fixture gap reports
+               \`void\`, never \`FAIL\`. The detail line carries the
+               denominator: how many declared pairs were exercised at all.
   NATIVE-ABST  node types whose declared native strategy is NONE produce NO
                native payload. The direction with no "untyped code" excuse: if
                the .def says NONE and the engine emits parameters anyway, the
@@ -238,6 +258,16 @@ Options:
                          off. CAP is one of: call_names, native.
                          Repeatable. Overridden rows are marked \`*\`.
   --matrix-csv FILE      also write the matrix as CSV
+  --decl-baseline FILE   the declared-and-undelivered pairs NATIVE-DECL treats
+                         as known (default:
+                         spec/conformance/native-decl-baseline.tsv). Pass \'\'
+                         to judge every pair. The baseline is bidirectional: an
+                         unlisted failure fails the run, and so does a listed
+                         pair that stops reproducing.
+  --emit-decl-baseline   run ONLY NATIVE-DECL, print baseline rows for every
+                         declared-and-undelivered pair, and exit. The reason
+                         column comes out as TODO: a reason is not measurable
+                         and has to be written by whoever lists the pair.
   --controls-only        run only the negative controls and exit
   -q, --quiet            only print the matrix and the verdict
   -h, --help             this text
@@ -264,6 +294,8 @@ while [ $# -gt 0 ]; do
         --languages)         languages_filter="${2:?--languages needs a list}"; shift 2 ;;
         --force-capability)  force_caps+=("${2:?--force-capability needs LANG:CAP}"); shift 2 ;;
         --matrix-csv)        matrix_csv="${2:?--matrix-csv needs a path}"; shift 2 ;;
+        --decl-baseline)     decl_baseline_file="${2-}"; shift 2 ;;
+        --emit-decl-baseline) emit_decl_baseline=1; shift ;;
         --controls-only)     controls_only=1; shift ;;
         -q|--quiet)          quiet=1; shift ;;
         -h|--help)           usage; exit "${EXIT_OK}" ;;
@@ -454,6 +486,69 @@ done < <(awk -F'\t' -v re="^(${FUNCTION_NATIVE_STRATEGIES})$" '
     { total[$1]++; if ($4 ~ re) fn[$1]++ }
     END { for (l in total) printf "%s|%s|%s\n", l, total[l], (l in fn ? fn[l] : 0) }
 ' "${def_table}" | sort)
+
+# ---- 2b2. RUNTIME: the function-shaped declarations, per node type ----------
+# Since 042 step 3 this is where NATIVE-DECL gets its declarations, and it is
+# the loaded map rather than a source scan. ast_type_map() reports
+# native_strategy as of that step, which is what makes this possible at all --
+# the kit's own header used to record its absence as a KNOWN GAP.
+#
+# It is not only about out-of-tree modules. A source scan attributes each
+# DEF_TYPE row to a language by the file's own basename, so it cannot see a
+# table the preprocessor assembles: typescript_types.def #includes
+# javascript's, and the scan sees 5 function-shaped declarations where the map
+# holds 13. A per-node-type check cannot run on a list that is missing rows --
+# it would report `void`, "nothing to measure", for declarations the loader
+# holds.
+#
+# The function-shaped set is still FUNCTION_NATIVE_STRATEGIES, matched with
+# upper() so the one definition serves both the awk above and this SQL.
+native_decl_rows="${workdir}/native_decl.tsv"
+run_sql "
+    SELECT language || chr(9) || node_type || chr(9) || native_strategy
+    FROM ast_type_map()
+    WHERE regexp_matches(upper(native_strategy), '^(${FUNCTION_NATIVE_STRATEGIES})\$')
+    ORDER BY language, node_type;
+" >"${native_decl_rows}"
+decl_pairs=$(wc -l <"${native_decl_rows}" | tr -d ' ')
+decl_langs=$(awk -F'\t' '{print $1}' "${native_decl_rows}" | sort -u | wc -l | tr -d ' ')
+
+# Which languages ast_type_map() can speak for at all. A language with NO rows
+# declares nothing anywhere the runtime can see -- `duckdb` wraps DuckDB's own
+# parser and ships no DEF_TYPE table -- and that is UNDECL, not n/a.
+declare -A type_map_seen=()
+while IFS= read -r l; do
+    [ -n "${l}" ] && type_map_seen["${l}"]=1
+done < <(run_sql "SELECT DISTINCT language FROM ast_type_map() ORDER BY language;")
+
+# One language's declared pairs, as <node_type>\t<strategy> lines.
+native_decl_list() {
+    awk -F'\t' -v l="$1" 'BEGIN{OFS="\t"} $1 == l {print $2, $3}' "${native_decl_rows}"
+}
+
+# ---- 2b3. the NATIVE-DECL baseline ------------------------------------------
+# One row per known declared-and-undelivered pair:
+#   language \t node_type \t strategy \t level \t measurement \t reason
+# Comment and blank lines are skipped. Loaded here, in the main shell, because
+# every check runs inside a command substitution and an assignment made there
+# is discarded -- the same trap that made the PARSE quarantine a silent no-op.
+declare -A decl_baseline=()
+decl_baseline_rows=0
+decl_baseline_note="none"
+if [ -n "${decl_baseline_file}" ]; then
+    if [ ! -f "${decl_baseline_file}" ]; then
+        warn "VOID: no such NATIVE-DECL baseline: ${decl_baseline_file}"
+        warn "(pass --decl-baseline '' to judge every declared pair instead)"
+        exit "${EXIT_HARNESS}"
+    fi
+    while IFS=$'\t' read -r _bl _bn _bs _rest; do
+        case "${_bl}" in ''|'#'*) continue ;; esac
+        [ -z "${_bn}" ] && continue
+        decl_baseline["${_bl}:${_bn}"]="${_bs}"
+        decl_baseline_rows=$((decl_baseline_rows + 1))
+    done <"${decl_baseline_file}"
+    decl_baseline_note="${decl_baseline_rows} pairs from ${decl_baseline_file}"
+fi
 
 # ---- 2c. OVERRIDES ----------------------------------------------------------
 declare -A override=()
@@ -709,78 +804,196 @@ check_call_named() {
     fi
 }
 
-# ---- NATIVE-DECL: declared => delivered -------------------------------------
+# ---- NATIVE-DECL: declared => delivered, PER DECLARING NODE TYPE ------------
 # Requirement: 044 "modifiers/signatures populate per declared capabilities".
-# A language whose .def gives some node type a function-shaped native strategy
-# claims to extract a signature there; it must produce at least one function
-# definition with a parameter list somewhere in its corpus.
-# table_override (arg 2) exists so the negative control can run THIS function
-# against a PLANTED declaration table. The fault belongs in the declaration --
-# that is the input this check is sensitive to -- and it is NOT planted with
-# --force-capability, because an override can only express a per-LANGUAGE
-# capability. It could not express the (raw_type, strategy) unit this check is
-# moving to, so that control would have to be rewritten at the change, and a
-# control written after a change proves nothing about the change.
-check_native_declared() {
-    local lang="$1" table_override="${2-}" plist out fns withparams cap capval capsrc
-    if [ -n "${table_override}" ]; then
-        # Resolved from the PLANTED table by the same rule step 2b uses, so the
-        # control exercises this function's own gate and not a copy of it.
-        local fnnative
-        fnnative=$(awk -F'\t' -v l="${lang}" -v re="^(${FUNCTION_NATIVE_STRATEGIES})$" \
-                   '$1 == l && $4 ~ re' "${table_override}" | wc -l | tr -d ' ')
-        capval=$([ "${fnnative}" -gt 0 ] && echo 1 || echo 0)
-        capsrc="table"
-    else
-        cap=$(resolve_cap "${lang}" native); capval="${cap%% *}"; capsrc="${cap##* }"
-    fi
-    [ "${capval}" = "?" ] && { printf 'UNDECL\tno .def reachable for this language'; return; }
-    [ "${capval}" = "0" ] && { printf 'n/a\tdeclares no function-shaped native strategy (%s)' "${capsrc}"; return; }
+#
+# THE UNIT IS (raw_type, strategy), since 042 step 3. It used to be the
+# LANGUAGE: a language whose .def gave any node type a function-shaped strategy
+# had to produce one function definition with parameters somewhere in its
+# corpus. One delivering node type therefore answered for every declaring node
+# type the language had, and 042 records what that hid -- typescript declares
+# FUNCTION_WITH_PARAMS on 11 node types and earned `ok` from 19 of 20 function
+# definitions; sql declares 10 and earned it from 2. The claim is made per node
+# type, so the judgement has to be too (042's L3 and L5).
+#
+# THE BASELINE, and why it is not a mute button. Changing the unit surfaced 14
+# pairs in 7 languages at once. Fixing 14 declarations is a separate decision
+# from gating the class, so each is listed in the baseline with the measurement
+# that found it and the reason it is listed. The contract is bidirectional and
+# both directions fail the run:
+#
+#   * a declared-and-undelivered pair that is NOT listed  -> FAIL
+#   * a LISTED pair that no longer reproduces            -> FAIL
+#
+# The second direction is the one that makes a baseline worth having. "Stopped
+# reproducing" includes a pair that became `void` -- the corpus stopped
+# exercising it -- because a pair nobody measures is not a pair that was fixed.
+# It also includes a declaration that was deleted, since the pair then leaves
+# the declaration list entirely.
+#
+# TWO CONTROLS, ONE COLUMN, and that asymmetry is written down rather than
+# left to be discovered: NATIVE-DECL has two directions and DECL-UNIQUE
+# already sets the precedent of two controls for one column. `NATIVE-DECL`
+# plants a declaration nothing serves; `NATIVE-DECL-BASE` plants a baseline
+# entry for a pair that does deliver, and the check must call that stale.
+#
+# decl_override (arg 2) is the declaration list this check reads, as
+# <node_type>\t<strategy> lines. The first control plants a row in it -- the
+# fault belongs in the DECLARATION, which is the input this check is supposed
+# to be sensitive to. It is a file rather than a --force-capability override
+# because an override can only express a per-LANGUAGE capability, and this
+# check no longer judges per language.
+#
+# baseline_override (arg 3) is the baseline to judge against, for the second
+# control. Empty means the loaded one.
+
+# Measures one language's declared pairs against its corpus.
+# Prints <node_type>|<seen>|<src_params>|<delivered>, one per declared pair.
+#
+# The SOURCE-SIDE GUARD is unchanged, and so is the reason for it: "this node
+# type delivered nothing" is the right verdict only if some node of that type
+# TAKES a parameter in the first place. `auto greet() -> string` and
+# `void main()` legitimately deliver nothing, and an earlier revision of this
+# script reported exactly that for cpp and dart as conformance failures. It was
+# wrong both times.
+#
+# It reads the first parenthesised group of the node's own peek and asks
+# whether it contains a word character. Deliberately crude and deliberately
+# language-agnostic: it only ever decides `void` vs `FAIL`, never `ok` vs
+# `FAIL`, so a miss costs coverage and not correctness.
+native_decl_measure() {
+    local lang="$1" decls="$2" plist decl_values="" node_type strategy
+    while IFS=$'\t' read -r node_type strategy; do
+        [ -z "${node_type}" ] && continue
+        decl_values="${decl_values}${decl_values:+, }('$(sql_quote "${node_type}")')"
+    done <<<"${decls}"
+    [ -z "${decl_values}" ] && return 0
     plist=$(paths_list "${lang}")
-    # The SOURCE-SIDE GUARD is what keeps this check from reporting a fixture
-    # gap as a defect. "No function definition carries parameters" is the right
-    # verdict only if some function in the corpus TAKES a parameter in the
-    # first place -- `auto greet() -> std::string` and `void main()` legitimately
-    # deliver nothing, and an earlier revision of this script reported exactly
-    # that for cpp and dart as conformance failures. It was wrong both times.
-    #
-    # The guard reads the first parenthesised group of the node's own peek and
-    # asks whether it contains a word character. That is deliberately crude and
-    # deliberately language-agnostic: it only ever decides `void` vs `FAIL`,
-    # never `ok` vs `FAIL`, so a miss costs coverage, not correctness.
-    #
-    # And the FAIL threshold is "delivered NOTHING", not "delivered fewer than
-    # the guard counted": `int main(void)` has a word character between its
-    # parens and no parameters, so a ratio test would manufacture noise.
-    local src_params
-    if ! out=$(run_sql "
-        WITH fns AS (
-            SELECT parameters,
+    run_sql "
+        WITH decl(node_type) AS (VALUES ${decl_values}),
+        nodes AS (
+            SELECT type, parameters,
                    regexp_extract(coalesce(peek, ''), '^[^(]*\((.*?)\)', 1) AS first_parens
             FROM read_ast(${plist}, '$(sql_quote "${lang}")', context := 'native',
                           peek := 'full', ignore_errors := true)
-            WHERE is_function_definition(semantic_type) AND NOT is_syntax_only(flags)
+            WHERE NOT is_syntax_only(flags)
         )
-        SELECT count(*),
-               count(*) FILTER (WHERE regexp_matches(first_parens, '[A-Za-z_]')),
-               count(*) FILTER (WHERE parameters IS NOT NULL AND len(parameters) > 0)
-        FROM fns;
-    " 2>&1); then
+        SELECT d.node_type,
+               count(n.type),
+               count(n.type) FILTER (WHERE regexp_matches(n.first_parens, '[A-Za-z_]')),
+               count(n.type) FILTER (WHERE n.parameters IS NOT NULL AND len(n.parameters) > 0)
+        FROM decl d LEFT JOIN nodes n ON n.type = d.node_type
+        GROUP BY d.node_type ORDER BY d.node_type;
+    "
+}
+
+check_native_declared() {
+    local lang="$1" decl_override="${2-}" baseline_override="${3-}" decls out src
+    if [ -n "${decl_override}" ]; then
+        decls=$(cat -- "${decl_override}")
+        src="declaration list"
+    else
+        decls=$(native_decl_list "${lang}")
+        src="runtime"
+    fi
+    if [ -z "${decls}" ]; then
+        # No rows at all in ast_type_map() means the module declares nothing
+        # the runtime can see, which is a different answer from "declares no
+        # function-shaped strategy". `duckdb` is the first case and must stay
+        # UNDECL; the languages that declare node types but no function-shaped
+        # strategy are the second and stay n/a.
+        if [ -z "${decl_override}" ] && [ -z "${type_map_seen[${lang}]+x}" ]; then
+            printf 'UNDECL\tast_type_map() has no declaration rows for this language'
+        else
+            printf 'n/a\tdeclares no function-shaped native strategy (%s)' "${src}"
+        fi
+        return
+    fi
+    if ! out=$(native_decl_measure "${lang}" "${decls}" 2>&1); then
         printf 'void\tnative read raised: %s' "$(printf '%s' "${out}" | head -1)"
         return
     fi
-    fns=$(printf '%s' "${out}" | cut -d'|' -f1)
-    src_params=$(printf '%s' "${out}" | cut -d'|' -f2)
-    withparams=$(printf '%s' "${out}" | cut -d'|' -f3)
-    if [ "${fns}" -eq 0 ]; then
-        printf 'void\tno function definitions in corpus'
-    elif [ "${src_params}" -eq 0 ]; then
-        printf 'void\t%s function defs, none takes a parameter in source (fixture gap)' "${fns}"
-    elif [ "${withparams}" -eq 0 ]; then
-        printf 'FAIL\t%s of %s function defs take parameters in source, 0 delivered' "${src_params}" "${fns}"
+
+    # The baseline to judge against: the override for the second control,
+    # otherwise the loaded one. Read into a local map so the lookups below are
+    # the same shape in both cases.
+    local -A base=()
+    local bkey
+    if [ -n "${baseline_override}" ]; then
+        local _bl _bn _bs _rest
+        while IFS=$'\t' read -r _bl _bn _bs _rest; do
+            case "${_bl}" in ''|'#'*) continue ;; esac
+            [ -z "${_bn}" ] && continue
+            base["${_bl}:${_bn}"]="${_bs}"
+        done <"${baseline_override}"
     else
-        printf 'ok\t%s/%s function defs carry parameters (%s take one in source)' \
-            "${withparams}" "${fns}" "${src_params}"
+        for bkey in "${!decl_baseline[@]}"; do
+            base["${bkey}"]="${decl_baseline[${bkey}]}"
+        done
+    fi
+
+    local n_pairs=0 n_ok=0 n_fail=0 n_absent=0 n_gap=0 n_based=0
+    local failed="" okd="" based=""
+    local node seen src_params delivered
+    declare -A measured_fail=()
+    while IFS='|' read -r node seen src_params delivered; do
+        [ -z "${node}" ] && continue
+        n_pairs=$((n_pairs + 1))
+        if [ "${seen}" -eq 0 ]; then
+            n_absent=$((n_absent + 1))
+        elif [ "${src_params}" -eq 0 ]; then
+            n_gap=$((n_gap + 1))
+        elif [ "${delivered}" -eq 0 ]; then
+            measured_fail["${node}"]=1
+            if [ -n "${base[${lang}:${node}]+x}" ]; then
+                n_based=$((n_based + 1)); based="${based}${based:+, }${node}"
+            else
+                n_fail=$((n_fail + 1)); failed="${failed}${failed:+, }${node}"
+            fi
+        else
+            n_ok=$((n_ok + 1)); okd="${okd}${okd:+, }${node}"
+        fi
+    done <<<"${out}"
+
+    # The other direction. A listed pair that is not measured as failing has
+    # either been fixed or stopped being exercised, and a baseline nobody
+    # prunes is a baseline that hides the next regression.
+    local stale="" n_stale=0
+    for bkey in "${!base[@]}"; do
+        case "${bkey}" in
+            "${lang}:"*) ;;
+            *) continue ;;
+        esac
+        node="${bkey#"${lang}":}"
+        if [ -z "${measured_fail[${node}]+x}" ]; then
+            n_stale=$((n_stale + 1)); stale="${stale}${stale:+, }${node}"
+        fi
+    done
+
+    # THE DENOMINATOR IS PART OF THE ANSWER. Most declared pairs are not in the
+    # corpus at all, and a finding count without the count of pairs that were
+    # looked at is the shape this repo has already been bitten by: a diagnostic
+    # with no denominator goes quiet when its input set is short, and the
+    # silence reads as a clean bill.
+    local exercised=$((n_ok + n_fail + n_based + n_gap))
+    local note
+    note=$(printf '%s of %s declared pairs exercised' "${exercised}" "${n_pairs}")
+    [ "${n_based}" -gt 0 ] && note="${note}; ${n_based} baselined"
+    [ "${n_absent}" -gt 0 ] && note="${note}; ${n_absent} absent from corpus"
+    [ "${n_gap}" -gt 0 ] && note="${note}; ${n_gap} with no parameter in source"
+
+    if [ "${n_stale}" -gt 0 ]; then
+        printf 'FAIL\t%s baselined pair(s) no longer reproduce [%s] -- fixed, or the corpus stopped exercising them; prune the baseline; %s' \
+            "${n_stale}" "$(printf '%s' "${stale}" | cut -c1-80)" "${note}"
+    elif [ "${n_fail}" -gt 0 ]; then
+        local shown; shown=$(printf '%s' "${failed}" | cut -c1-80)
+        printf 'FAIL\t%s declaring node types delivered nothing and are NOT baselined [%s%s]; %s' \
+            "${n_fail}" "${shown}" "$([ "${#failed}" -gt 80 ] && echo ' ...')" "${note}"
+    elif [ "${n_ok}" -gt 0 ]; then
+        printf 'ok\t%s declaring node types delivered [%s]; %s' \
+            "${n_ok}" "$(printf '%s' "${okd}" | cut -c1-60)" "${note}"
+    else
+        printf 'void\tno declared node type delivered or failed; %s' "${note}"
     fi
 }
 
@@ -1212,6 +1425,37 @@ check_decl_runtime() {
 }
 
 # =============================================================================
+# STEP 3b -- --emit-decl-baseline
+# =============================================================================
+# Generated, never typed. A baseline written by hand is a list of what someone
+# believed; this one is a list of what the corpus showed, and the reason column
+# comes out TODO because a reason is not measurable.
+#
+# It runs check_parse first for each language, for the same reason the matrix
+# does: downstream checks must never measure a fixture the guard quarantined.
+if [ "${emit_decl_baseline}" -eq 1 ]; then
+    printf '# language\tnode_type\tstrategy\tlevel\tmeasurement\treason\n'
+    for lang in "${langs[@]}"; do
+        [ -z "${corpus_files[${lang}]+x}" ] && continue
+        r=$(check_parse "${lang}")
+        [ "${r%%$'\t'*}" = "void" ] && continue
+        decls=$(native_decl_list "${lang}")
+        [ -z "${decls}" ] && continue
+        rows=$(native_decl_measure "${lang}" "${decls}") || continue
+        while IFS='|' read -r node seen srcp deliv; do
+            [ -z "${node}" ] && continue
+            [ "${seen}" -gt 0 ] || continue
+            [ "${srcp}" -gt 0 ] || continue
+            [ "${deliv}" -eq 0 ] || continue
+            strategy=$(awk -F'\t' -v n="${node}" '$1 == n {print $2; exit}' <<<"${decls}")
+            printf '%s\t%s\t%s\tTODO\tseen=%s src_params=%s delivered=%s\tTODO\n' \
+                "${lang}" "${node}" "${strategy}" "${seen}" "${srcp}" "${deliv}"
+        done <<<"${rows}"
+    done
+    exit "${EXIT_OK}"
+fi
+
+# =============================================================================
 # STEP 4 -- run the matrix
 # =============================================================================
 readonly -a CHECK_NAMES=(PARSE CALL-NAMED NATIVE-DECL NATIVE-ABST RAW-JOIN NO-EMPTY DECL-UNIQUE DECL-RUNTIME)
@@ -1263,6 +1507,8 @@ if [ "${controls_only}" -eq 0 ]; then
     say "corpus:    ${corpus} (${corpus_rows} fixtures)"
     say "languages: ${#langs[@]} of ${#runtime_langs[@]} registered (from ast_supported_languages())"
     say "def scan:  ${def_rows} DEF_TYPE entries from ${def_files_scanned} files, ${#def_seen[@]} languages"
+    say "decl surf: ${decl_pairs} function-shaped (node_type, strategy) pairs in ${decl_langs} languages, from ast_type_map()"
+    say "baseline:  ${decl_baseline_note}"
     if [ ${#force_caps[@]} -gt 0 ]; then
         say "overrides: ${force_caps[*]}"
     fi
@@ -1408,34 +1654,33 @@ else
 fi
 
 # --- NATIVE-DECL: declare a function-shaped strategy where nothing can -------
-# serve it. This is the control the check had been missing, and its absence was
-# not a decision: there was no block here and no documented exception, while
-# the 8 planted faults and the 8 matrix columns differed by one in each
+# serve it. This control was missing entirely until 042 step 3, and its absence
+# was not a decision: there was no block here and no documented exception,
+# while the planted faults and the matrix columns differed by one in each
 # direction (NATIVE-DECL had a column and no control; DECL-UNIQ-FLAGS has a
-# control and no column, being folded into DECL-UNIQUE).
+# control and no column, being folded into DECL-UNIQUE by #216).
 #
 # zig declares `function_declaration` with native strategy NONE
-# (languages/zig/zig_types.def), and its corpus holds 10 function definitions
-# of which 7 take a parameter in source. So planting FUNCTION_WITH_PARAMS on
-# that one row is tracker/bugs/042's L5 shape -- a declaration the
-# implementation cannot serve -- rather than an arbitrary fault, and the real
-# check has to report that nothing was delivered.
+# (languages/zig/zig_types.def), so it appears in no function-shaped
+# declaration list, and its corpus holds 10 function definitions of which 7
+# take a parameter in source. Adding that one pair to the list is therefore
+# 042's L5 shape -- a declaration nothing can serve -- and the real check has
+# to report that nothing was delivered.
 #
-# Two-sided, like the DECL-UNIQUE controls: the SAME function over the
-# unplanted table must say n/a first. Without that half, a check that returned
+# The plant is in the DECLARATION LIST, which is where this check now reads
+# from. It was a def-table plant for one commit, before step 3 changed the
+# input from a source scan to ast_type_map(); the fault is the same row either
+# way, which is why the control was written first.
+#
+# Two-sided, like the DECL-UNIQUE controls: the SAME function over zig's
+# unplanted list must say n/a first. Without that half, a check that returned
 # FAIL unconditionally would pass as a fired control.
 planted_native="${workdir}/planted_native.tsv"
-awk -F'\t' 'BEGIN{OFS="\t"} {
-    if ($1 == "zig" && $2 == "function_declaration") $4 = "FUNCTION_WITH_PARAMS"
-    print
-}' "${def_table}" >"${planted_native}"
-planted_native_rows=$(awk -F'\t' '$1 == "zig" && $2 == "function_declaration" && $4 == "FUNCTION_WITH_PARAMS"' \
-                      "${planted_native}" | wc -l | tr -d ' ')
-# The plant itself is verified before the check is judged. If zig's row is ever
-# renamed or dropped, the plant silently becomes a no-op and a check that
-# noticed nothing would look like a check that had nothing to notice.
-if [ "${planted_native_rows}" -gt 0 ] && [ -n "${corpus_files[zig]+x}" ]; then
-    baseline_native=$(check_native_declared zig "${def_table}")
+native_decl_list zig >"${planted_native}"
+planted_native_before=$(wc -l <"${planted_native}" | tr -d ' ')
+if [ -n "${corpus_files[zig]+x}" ] && [ "${planted_native_before}" -eq 0 ]; then
+    baseline_native=$(check_native_declared zig "${planted_native}")
+    printf 'function_declaration\tFUNCTION_WITH_PARAMS\n' >>"${planted_native}"
     r=$(check_native_declared zig "${planted_native}")
     cv="${r%%$'\t'*}"
     if [ "${cv}" = "FAIL" ] && [ "${baseline_native%%$'\t'*}" = "n/a" ]; then
@@ -1444,13 +1689,47 @@ if [ "${planted_native_rows}" -gt 0 ] && [ -n "${corpus_files[zig]+x}" ]; then
         control_note "NATIVE-DECL" notfired "a declaration nothing can serve" \
             "baseline ${baseline_native%%$'\t'*}, planted ${cv}: ${r#*$'\t'}"
     fi
-elif [ "${def_rows}" -eq 0 ]; then
-    control_note "NATIVE-DECL" skipped "" "no DEF_TYPE source scanned; NATIVE-DECL is UNDECL everywhere"
-elif [ "${planted_native_rows}" -eq 0 ]; then
-    control_note "NATIVE-DECL" notfired "zig function_declaration in the def table" \
-        "the plant matched no row; zig's declaration moved or was renamed"
+elif [ "${decl_pairs}" -eq 0 ]; then
+    control_note "NATIVE-DECL" skipped "" "ast_type_map() reports no function-shaped declaration anywhere"
+elif [ "${planted_native_before}" -ne 0 ]; then
+    # zig now declares one itself, so the baseline half cannot be n/a and the
+    # plant is no longer a plant. Reported rather than worked around: the
+    # subject of a control has to be chosen, not assumed.
+    control_note "NATIVE-DECL" notfired "zig to declare no function-shaped strategy" \
+        "zig now declares ${planted_native_before}; pick another subject"
 else
     control_note "NATIVE-DECL" notfired "a zig fixture in the corpus" "missing"
+fi
+
+# --- NATIVE-DECL-BASE: a baseline entry that no longer reproduces ------------
+# The other direction of the baseline contract, and the one that decides
+# whether a baseline is a record or a mute button. python's
+# `function_definition` demonstrably DELIVERS parameters, so listing it as a
+# known failure is a lie the check has to catch -- and catch with the right
+# message, not merely with a FAIL it would have produced anyway (python has
+# unlisted failures of its own, so the verdict alone proves nothing here).
+#
+# This is the second control on one matrix column. NATIVE-DECL has two
+# directions; DECL-UNIQUE already sets the precedent of two controls for one
+# column. Written down here because an UNDOCUMENTED asymmetry between the
+# controls and the columns is exactly what hid NATIVE-DECL's missing control.
+planted_base="${workdir}/planted_decl_baseline.tsv"
+printf 'python\tfunction_definition\tFUNCTION_WITH_PARAMS\tcontrol\tplanted\tplanted\n' \
+    >"${planted_base}"
+if [ -n "${corpus_files[python]+x}" ]; then
+    r=$(check_native_declared python "" "${planted_base}")
+    cv="${r%%$'\t'*}"
+    r_real=$(check_native_declared python)
+    if [ "${cv}" = "FAIL" ] \
+       && printf '%s' "${r}" | grep -q 'no longer reproduce' \
+       && ! printf '%s' "${r_real}" | grep -q 'no longer reproduce'; then
+        control_note "NATIVE-DECL-BASE" fired "a stale baseline entry" "${r#*$'\t'}"
+    else
+        control_note "NATIVE-DECL-BASE" notfired "a stale baseline entry" \
+            "planted ${cv}: ${r#*$'\t'} || unplanted: ${r_real}"
+    fi
+else
+    control_note "NATIVE-DECL-BASE" notfired "a python fixture in the corpus" "missing"
 fi
 
 # --- NATIVE-ABST: re-declare every python node type as native_strategy NONE --
@@ -1592,5 +1871,12 @@ if [ "${n_fail}" -ne 0 ]; then
     exit "${EXIT_FAIL}"
 fi
 
-echo "PASS: every declared capability was delivered (${n_void} void, ${n_undecl} undeclared, ${n_na} n/a)"
+# The old line here said "PASS: every declared capability was delivered". It
+# claimed more than the run had checked, and 042 quotes it as having been
+# printed over python and zig while a declared capability of each delivered
+# nothing. A verdict states its own scope: how many pairs were declared, how
+# many are baselined as known, and how many cells had nothing to measure.
+printf 'PASS: every check this run could judge was satisfied\n'
+printf '      declared pairs: %s in %s languages | baselined as known: %s | %s void, %s undeclared, %s n/a\n' \
+    "${decl_pairs}" "${decl_langs}" "${decl_baseline_rows}" "${n_void}" "${n_undecl}" "${n_na}"
 exit "${EXIT_OK}"
