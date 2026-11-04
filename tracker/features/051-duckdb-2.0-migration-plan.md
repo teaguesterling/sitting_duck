@@ -14,7 +14,48 @@ ABI question. See the VERIFIED section and the CI correction below.
 ABI question is still open, and now concerns the sibling repos rather than this
 one.
 
+## 0. Update, 2026-10-25: the release landed and option C is now open
+
+Measured on 2026-10-25, from the GitHub API and the registry's own files at
+`community-extensions` commit `f13027e5`:
+
+- **`v2.0.0` IS tagged** in duckdb/duckdb, on 2026-10-20, at
+  `d54cbbe3df17e8e5ce68312f483b4155836112aa`. §1 below says it is not; that was
+  true when written and is now wrong. Corrected in place.
+- **The registry's default is the version STRING `v2.0.0` again**, not a bare
+  SHA. `DUCKDB_LATEST_STABLE: 'v2.0.0'`, and the commit moved to a separate
+  `duckdb_commit` input, which carries `d54cbbe3` — the release commit itself.
+- **No job asks for a v1.5.6 build any more.** `build_all.yml` has no
+  variegata leg, and `build_andium` (v1.4.5) is `if: false`. `build.py:47`
+  still routes `v1.5.6` to `variegata`, so the route exists with no caller.
+- Our descriptor is unaffected for availability: `ref` and `variegata` are the
+  same commit, `b49238e6`, and `ref` is what the default build reads. v1.16.0
+  is still built, now against v2.0.0.
+
+**What this does to the options in §5.** Option C's precondition is met, and the
+risk it carried ("the registry may keep a SHA default indefinitely") did not
+happen. C is now the least-work path rather than a wait. The submodule repoint
+it needs is still Teague's call and still contradicts a standing instruction, so
+nothing here is executed.
+
+The `duckdb-pin` CI job was repaired separately on 2026-10-25 for the shape
+change, not the migration: it had been parsing a commented-out `duckdb_tag`
+line and reporting it as a live registry value.
+
+> Teague asked for a plan including the submodule repoint. **The repoint
+> contradicts a standing instruction** ("never repoint the shared duckdb
+> submodule pin, `069cc9f9b5b`"), so no step below is executed without an
+> explicit, specific go-ahead. This document is the thing to argue with.
+
 ## 0-bis. Update, 2026-10-25 (later): the red v2.0 leg does NOT indict the tag
+
+> **Landed 2026-11-03, written 2026-10-25/26.** This section and its RUNG
+> blocks were measured before the pin moved, and they are the record of how
+> the tag was cleared — not the current state. The pin DID move (`96335de`),
+> and the later blocks in this file settle what followed: `CORRECTION
+> 2026-11-02`, `VERIFIED 2026-11-02 — the suite on v2.0.0, measured`, and the
+> `CORRECTION ... from CI (2026-11-03)` that replaced this plan's timing
+> figures. Read those for the present; read this for how it was established.
 
 **The `v2.0 test coverage` leg is red on every PR, and that red is upstream
 branch drift, not the release.** This is the measurement §3 said was missing.
@@ -220,39 +261,6 @@ Consequence for this document: a red on the v2.0 leg must be read down to the
 step before it is attributed. Three different causes have now worn the same red
 checkmark on that one leg — branch drift (§0-bis), a truncated download, and
 `skip_tests` on an adjacent leg with a colliding job name.
-
-## 0. Update, 2026-10-25: the release landed and option C is now open
-
-Measured on 2026-10-25, from the GitHub API and the registry's own files at
-`community-extensions` commit `f13027e5`:
-
-- **`v2.0.0` IS tagged** in duckdb/duckdb, on 2026-10-20, at
-  `d54cbbe3df17e8e5ce68312f483b4155836112aa`. §1 below says it is not; that was
-  true when written and is now wrong. Corrected in place.
-- **The registry's default is the version STRING `v2.0.0` again**, not a bare
-  SHA. `DUCKDB_LATEST_STABLE: 'v2.0.0'`, and the commit moved to a separate
-  `duckdb_commit` input, which carries `d54cbbe3` — the release commit itself.
-- **No job asks for a v1.5.6 build any more.** `build_all.yml` has no
-  variegata leg, and `build_andium` (v1.4.5) is `if: false`. `build.py:47`
-  still routes `v1.5.6` to `variegata`, so the route exists with no caller.
-- Our descriptor is unaffected for availability: `ref` and `variegata` are the
-  same commit, `b49238e6`, and `ref` is what the default build reads. v1.16.0
-  is still built, now against v2.0.0.
-
-**What this does to the options in §5.** Option C's precondition is met, and the
-risk it carried ("the registry may keep a SHA default indefinitely") did not
-happen. C is now the least-work path rather than a wait. The submodule repoint
-it needs is still Teague's call and still contradicts a standing instruction, so
-nothing here is executed.
-
-The `duckdb-pin` CI job was repaired separately on 2026-10-25 for the shape
-change, not the migration: it had been parsing a commented-out `duckdb_tag`
-line and reporting it as a live registry value.
-
-> Teague asked for a plan including the submodule repoint. **The repoint
-> contradicts a standing instruction** ("never repoint the shared duckdb
-> submodule pin, `069cc9f9b5b`"), so no step below is executed without an
-> explicit, specific go-ahead. This document is the thing to argue with.
 
 ## 1. What changed, verified from upstream
 
