@@ -88,6 +88,10 @@
 #   CALL-NAMED     control/unnamed_calls.sh is pure `$(...)` substitution, so
 #                  no call node can carry a callee name; a language forced to
 #                  declare call naming over it must FAIL.
+#   NATIVE-DECL    zig's `function_declaration` is re-declared
+#                  FUNCTION_WITH_PARAMS in the declaration table, although
+#                  nothing serves it; its corpus has 7 functions that take a
+#                  parameter in source, so "declared => delivered" must FAIL.
 #   NATIVE-ABSENT  python is forced to NOT declare native extraction
 #                  (python:!native) while its corpus demonstrably produces
 #                  parameters -- the undeclared-must-be-absent direction must
@@ -710,9 +714,26 @@ check_call_named() {
 # A language whose .def gives some node type a function-shaped native strategy
 # claims to extract a signature there; it must produce at least one function
 # definition with a parameter list somewhere in its corpus.
+# table_override (arg 2) exists so the negative control can run THIS function
+# against a PLANTED declaration table. The fault belongs in the declaration --
+# that is the input this check is sensitive to -- and it is NOT planted with
+# --force-capability, because an override can only express a per-LANGUAGE
+# capability. It could not express the (raw_type, strategy) unit this check is
+# moving to, so that control would have to be rewritten at the change, and a
+# control written after a change proves nothing about the change.
 check_native_declared() {
-    local lang="$1" plist out fns withparams cap capval capsrc
-    cap=$(resolve_cap "${lang}" native); capval="${cap%% *}"; capsrc="${cap##* }"
+    local lang="$1" table_override="${2-}" plist out fns withparams cap capval capsrc
+    if [ -n "${table_override}" ]; then
+        # Resolved from the PLANTED table by the same rule step 2b uses, so the
+        # control exercises this function's own gate and not a copy of it.
+        local fnnative
+        fnnative=$(awk -F'\t' -v l="${lang}" -v re="^(${FUNCTION_NATIVE_STRATEGIES})$" \
+                   '$1 == l && $4 ~ re' "${table_override}" | wc -l | tr -d ' ')
+        capval=$([ "${fnnative}" -gt 0 ] && echo 1 || echo 0)
+        capsrc="table"
+    else
+        cap=$(resolve_cap "${lang}" native); capval="${cap%% *}"; capsrc="${cap##* }"
+    fi
     [ "${capval}" = "?" ] && { printf 'UNDECL\tno .def reachable for this language'; return; }
     [ "${capval}" = "0" ] && { printf 'n/a\tdeclares no function-shaped native strategy (%s)' "${capsrc}"; return; }
     plist=$(paths_list "${lang}")
@@ -1384,6 +1405,52 @@ if [ -f "${control_dir}/unnamed_calls.sh" ]; then
     fi
 else
     control_note "CALL-NAMED" notfired "control/unnamed_calls.sh" "missing"
+fi
+
+# --- NATIVE-DECL: declare a function-shaped strategy where nothing can -------
+# serve it. This is the control the check had been missing, and its absence was
+# not a decision: there was no block here and no documented exception, while
+# the 8 planted faults and the 8 matrix columns differed by one in each
+# direction (NATIVE-DECL had a column and no control; DECL-UNIQ-FLAGS has a
+# control and no column, being folded into DECL-UNIQUE).
+#
+# zig declares `function_declaration` with native strategy NONE
+# (languages/zig/zig_types.def), and its corpus holds 10 function definitions
+# of which 7 take a parameter in source. So planting FUNCTION_WITH_PARAMS on
+# that one row is tracker/bugs/042's L5 shape -- a declaration the
+# implementation cannot serve -- rather than an arbitrary fault, and the real
+# check has to report that nothing was delivered.
+#
+# Two-sided, like the DECL-UNIQUE controls: the SAME function over the
+# unplanted table must say n/a first. Without that half, a check that returned
+# FAIL unconditionally would pass as a fired control.
+planted_native="${workdir}/planted_native.tsv"
+awk -F'\t' 'BEGIN{OFS="\t"} {
+    if ($1 == "zig" && $2 == "function_declaration") $4 = "FUNCTION_WITH_PARAMS"
+    print
+}' "${def_table}" >"${planted_native}"
+planted_native_rows=$(awk -F'\t' '$1 == "zig" && $2 == "function_declaration" && $4 == "FUNCTION_WITH_PARAMS"' \
+                      "${planted_native}" | wc -l | tr -d ' ')
+# The plant itself is verified before the check is judged. If zig's row is ever
+# renamed or dropped, the plant silently becomes a no-op and a check that
+# noticed nothing would look like a check that had nothing to notice.
+if [ "${planted_native_rows}" -gt 0 ] && [ -n "${corpus_files[zig]+x}" ]; then
+    baseline_native=$(check_native_declared zig "${def_table}")
+    r=$(check_native_declared zig "${planted_native}")
+    cv="${r%%$'\t'*}"
+    if [ "${cv}" = "FAIL" ] && [ "${baseline_native%%$'\t'*}" = "n/a" ]; then
+        control_note "NATIVE-DECL" fired "a declaration nothing can serve" "${r#*$'\t'}"
+    else
+        control_note "NATIVE-DECL" notfired "a declaration nothing can serve" \
+            "baseline ${baseline_native%%$'\t'*}, planted ${cv}: ${r#*$'\t'}"
+    fi
+elif [ "${def_rows}" -eq 0 ]; then
+    control_note "NATIVE-DECL" skipped "" "no DEF_TYPE source scanned; NATIVE-DECL is UNDECL everywhere"
+elif [ "${planted_native_rows}" -eq 0 ]; then
+    control_note "NATIVE-DECL" notfired "zig function_declaration in the def table" \
+        "the plant matched no row; zig's declaration moved or was renamed"
+else
+    control_note "NATIVE-DECL" notfired "a zig fixture in the corpus" "missing"
 fi
 
 # --- NATIVE-ABST: re-declare every python node type as native_strategy NONE --
