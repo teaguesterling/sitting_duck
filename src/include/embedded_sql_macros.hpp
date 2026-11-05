@@ -4585,10 +4585,48 @@ CREATE OR REPLACE MACRO ast_select_from(
                     WHEN pc.pseudo_arg = 'class'
                          OR (pc.pseudo_arg_class IS NOT NULL
                              AND is_semantic_type(semantic_type_code('DEFINITION_CLASS'), UPPER(pc.pseudo_arg_class)))
-                        THEN a.scope.class IS NOT NULL
-                             AND (pc.pseudo_arg_name IS NULL OR EXISTS (
-                                 SELECT 1 FROM ast s WHERE s.file_path = a.file_path
-                                   AND s.node_id = a.scope.class AND s.name = pc.pseudo_arg_name))
+                        THEN CASE
+                            -- Struct fast path, for languages whose class containers
+                            -- are scope providers (IS_SCOPE). Nearest-enclosing by
+                            -- construction, because scope.class IS the nearest one.
+                            WHEN a.scope.class IS NOT NULL
+                                THEN (pc.pseudo_arg_name IS NULL OR EXISTS (
+                                    SELECT 1 FROM ast s WHERE s.file_path = a.file_path
+                                      AND s.node_id = a.scope.class AND s.name = pc.pseudo_arg_name))
+                            -- #166: the struct is only populated under IS_SCOPE nodes,
+                            -- and a semantic class need not be a scope provider. SQL's
+                            -- create_table is DEFINITION_CLASS with is_scope = false,
+                            -- so this arm used to return 0 rows silently while the
+                            -- bare-type form, :in-scope(create_table), answered 4.
+                            -- The grammar rejects :in-scope(create_table#customers),
+                            -- so .class#name was the only way to ask by name.
+                            --
+                            -- Fall back to the same ancestor walk the bare-type ELSE
+                            -- branch uses, restricted to semantic class definitions.
+                            -- Reachable only where scope.class IS NULL, so no language
+                            -- with real scope providers changes behaviour.
+                            --
+                            -- The inner NOT EXISTS keeps nearest-enclosing semantics,
+                            -- matching the struct path: a node inside a class nested in
+                            -- another class is in scope of the INNER one only.
+                            ELSE EXISTS (
+                                SELECT 1 FROM ast cls_anc
+                                WHERE cls_anc.file_path = a.file_path
+                                  AND a.node_id > cls_anc.node_id
+                                  AND a.node_id <= cls_anc.node_id + cls_anc.descendant_count
+                                  AND is_class_definition(cls_anc.semantic_type)
+                                  AND (pc.pseudo_arg_name IS NULL
+                                       OR cls_anc.name = pc.pseudo_arg_name)
+                                  AND NOT EXISTS (
+                                      SELECT 1 FROM ast nested
+                                      WHERE nested.file_path = a.file_path
+                                        AND nested.node_id > cls_anc.node_id
+                                        AND nested.node_id < a.node_id
+                                        AND a.node_id <= nested.node_id + nested.descendant_count
+                                        AND is_class_definition(nested.semantic_type)
+                                  )
+                            )
+                        END
                     WHEN pc.pseudo_arg = 'module'
                          OR (pc.pseudo_arg_class IS NOT NULL
                              AND is_semantic_type(semantic_type_code('DEFINITION_MODULE'), UPPER(pc.pseudo_arg_class)))
@@ -4743,6 +4781,9 @@ CREATE OR REPLACE MACRO ast_select_from(
     ),
     -- ::parent-definition — nearest ancestor that is a named definition
     pe_parent_def AS (
+
+)SQLMACRO"
+        R"SQLMACRO(
         SELECT DISTINCT def.* FROM matched m
         JOIN ast def ON def.file_path = m.file_path
           AND m.node_id > def.node_id
@@ -4806,9 +4847,6 @@ CREATE OR REPLACE MACRO ast_select(
     source,
     selector,
     language := NULL,
-
-)SQLMACRO"
-        R"SQLMACRO(
     peek := NULL
 ) AS TABLE
     -- Parse into a temp name, then delegate to ast_select_from.
