@@ -1,0 +1,109 @@
+# name: test/sql/bugs/166_in_scope_class_fallback.test
+# description: #166 -- :in-scope(.class#X) falls back to the ancestor walk where X is not a scope provider
+# group: [bugs]
+
+# THE DEFECT
+#
+# `:in-scope()` has two argument forms and they disagreed. Measured on
+# build/release/duckdb at 3d6b4df, over test/data/sql/example.sql:
+#
+#   .class#customers                        1
+#   .var:in-scope(.class#customers)         0   <- silently empty
+#   .var:in-scope(create_table)             4
+#   create_table#customers column_definition 4   <- the right answer
+#
+# The bare-type form walks ancestors by descendant range. The semantic-class
+# form reads the precomputed scope struct, which the traversal only populates
+# under nodes flagged IS_SCOPE. Measured, SQL's container is a semantic class
+# that is not a scope provider:
+#
+#   create_table       customers  DEFINITION_CLASS     is_scope=false
+#   column_definition  id         DEFINITION_VARIABLE  scope.class=NULL
+#
+# against Python, where the struct is populated:
+#
+#   class_definition   UserService                     is_scope=true
+#   function_definition get_user                       scope.class=367
+#
+# So `a.scope.class IS NOT NULL` could never be true for SQL, and the form that
+# failed is the one the error messages recommend -- the grammar rejects
+# `:in-scope(create_table#customers)`, so `.class#name` is the only way to ask.
+#
+# THE FIX: when the scope struct is empty for this node, fall back to the same
+# ancestor walk the bare-type form uses, restricted to semantic class
+# definitions and keeping the nearest-enclosing guard. Teague ruled for the
+# fallback on 2026-11-05, over flagging SQL's containers as scopes (which would
+# change read_ast output for every SQL file and fix only SQL) and over raising
+# an error (which refuses the query rather than answering it).
+#
+# The fallback is strictly additive. It is reachable only where scope.class is
+# NULL, so every language with real scope providers keeps the struct fast path
+# and its nearest-scope semantics. Section 3 is that control.
+#
+# NOT FIXED, and no case measured: the function and module forms have the same
+# structural hole. A language whose functions are not scope providers would fail
+# the same way. No fixture in this repo exhibits it, so it is left alone rather
+# than fixed blind.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. THE FIX -- the two argument forms now agree, and on the right number
+#
+# Asserted as one query so the equality is the assertion, not two numbers that
+# happen to match. Two selector calls, which is the cost floor for comparing
+# two forms; each costs ~25 s of planning on the v2.0 line (duckdb/duckdb#26036).
+# =============================================================================
+
+query II
+SELECT
+    (SELECT count(*) FROM ast_select('test/data/sql/example.sql', '.var:in-scope(.class#customers)')),
+    (SELECT count(*) FROM ast_select('test/data/sql/example.sql', '.var:in-scope(create_table)'));
+----
+4	4
+
+# =============================================================================
+# 2. INDEPENDENT CONTROL -- 4 is the right answer, derived without :in-scope
+#
+# read_ast only, so this costs no planning. The customers table declares four
+# columns, and a descendant selector agrees (measured: 4). If the fixture is
+# edited, this fails alongside section 1 instead of letting it drift.
+# =============================================================================
+
+query I
+SELECT count(*) FROM read_ast('test/data/sql/example.sql') c
+WHERE c.type = 'column_definition'
+  AND EXISTS (
+      SELECT 1 FROM read_ast('test/data/sql/example.sql') t
+      WHERE t.type = 'create_table' AND t.name = 'customers'
+        AND c.node_id > t.node_id AND c.node_id <= t.node_id + t.descendant_count
+  );
+----
+4
+
+# The container really is a semantic class that is NOT a scope provider. This is
+# the precondition the fallback exists for; if SQL ever gains IS_SCOPE on
+# create_table, this fails and tells the reader the fallback is now dead code.
+query III
+SELECT type, semantic_type, is_scope(flags)
+FROM read_ast('test/data/sql/example.sql')
+WHERE type = 'create_table' AND name = 'customers';
+----
+create_table	DEFINITION_CLASS	false
+
+# =============================================================================
+# 3. CONTROL -- the struct fast path is untouched where it works
+#
+# Python populates scope.class, so the fallback must not be reached and the
+# nearest-scope semantics must not widen to any-ancestor. ast_select_pseudo_
+# classes.test pins the same number; it is restated here so a regression names
+# #166 rather than the pseudo-class suite.
+# =============================================================================
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/qualified_names.py', '.fn:in-scope(.class#User)');
+----
+2
