@@ -1,0 +1,104 @@
+# name: test/sql/bugs/191_callgraph_arg_guard.test
+# description: #191 -- :calls/:called-by refuse a non-name argument instead of ignoring it
+# group: [bugs]
+
+# THE DEFECT
+#
+# :calls() and :called-by() are documented as taking a bare function name, and
+# that form is correct. Any other argument shape was discarded, and the
+# pseudo-class then matched the UNFILTERED set while still looking like a
+# filter. Measured on build/release/duckdb at 7aa8e7f, sample_app.py:
+#
+#   .fn                        20
+#   .fn:calls(execute)          4   <- correct
+#   .fn:calls(.fn#execute)     17   <- argument ignored
+#   .fn:calls(#execute)        17   <- argument ignored
+#   .fn:calls(*)               17   <- argument ignored
+#   .fn:calls()                17   <- no argument at all
+#   .call:called-by(.fn#main)  44   <- argument ignored
+#
+# 17 is "functions that call anything" and 44 is "calls inside any function",
+# so the selector degenerated to the bare pseudo-class. The caller could not
+# detect it: the result is plausible and non-empty.
+#
+# THE CAUSE
+#
+# pseudo_classes_raw fills pseudo_arg from the first CSS tag or string only.
+# A `#name` lands in pseudo_arg_name, a `.class` in pseudo_arg_class, and the
+# `#name` split in pseudo_classes is applied for is-scope/in-scope ONLY. So for
+# every other pseudo-class a selector-shaped argument leaves pseudo_arg NULL,
+# and the call-graph arms read `pseudo_arg IS NULL OR callee.name = pseudo_arg`
+# -- NULL meaning "no filter".
+#
+# That NULL branch is undocumented. docs/reference/css-pseudo-classes.md gives
+# :calls(name) and :called-by(name), and :is-called is the no-argument form.
+#
+# WHY A REFUSAL AND NOT A FEATURE
+#
+# Teague ruled on 2026-11-05 for a deprecation path: a later release teaches
+# :calls() to accept recognisable selector arguments (#name, .fn#name), since a
+# bare name can never begin with `.` or `#`, and adds :calls-name() as the
+# explicit scalar spelling. Until that exists, these shapes must not be
+# answered with a number that looks like a filter. An error is the bugfix; the
+# capability is a separate change.
+#
+# Nothing in the suite used either shape before this file: every existing use
+# is the bare-name form.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. THE FIX -- each lying shape now refuses
+#
+# Four selector calls, which is the floor for covering the distinct shapes:
+# .class#name, bare #name, and the empty argument, plus one :called-by case so
+# both arms are known to be guarded rather than just the one that was reported.
+# Each costs ~31 s of planning on the v2.0 line (duckdb/duckdb#26036).
+# =============================================================================
+
+statement error
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.fn:calls(.fn#execute)');
+----
+takes a function NAME
+
+statement error
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.fn:calls(#execute)');
+----
+takes a function NAME
+
+statement error
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.fn:calls()');
+----
+takes a function NAME
+
+statement error
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.call:called-by(.fn#main)');
+----
+takes a function NAME
+
+# =============================================================================
+# 2. CONTROL -- the documented bare-name form is untouched
+#
+# This is the assertion that forbids the over-correction. A guard keyed on the
+# wrong field would refuse the correct form too, and the suite's 14 other
+# bare-name uses would fail with it; this states the expected COUNT so a guard
+# that merely stops erroring is not enough.
+# =============================================================================
+
+query I
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.fn:calls(execute)');
+----
+4
+
+# =============================================================================
+# 3. CONTROL -- :is-called still takes no argument
+#
+# :is-called is the documented no-argument form, and it must not be caught by a
+# guard aimed at the two that require one. read_ast-free, one selector call.
+# =============================================================================
+
+statement ok
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.fn:is-called');
