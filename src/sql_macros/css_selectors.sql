@@ -2206,7 +2206,8 @@ CREATE OR REPLACE MACRO ast_select_from(
 CREATE OR REPLACE MACRO ast_select(
     source,
     selector,
-    language := NULL
+    language := NULL,
+    peek := NULL
 ) AS TABLE
     -- Parse into a temp name, then delegate to ast_select_from.
     -- We use read_ast directly and wrap with ast_select_from via a CTE trick:
@@ -2229,9 +2230,26 @@ CREATE OR REPLACE MACRO ast_select(
     -- column-valued selector cannot fold this CASE at bind time; if the lateral
     -- dispatch is revived, it should pre-parse with peek := 'full' and use
     -- ast_select_from directly instead of this wrapper.
+    --
+    -- peek := OVERRIDES everything above. It takes read_ast's own peek levels
+    -- ('full', 'smart', 'none', 'none+schema', ...) and is forwarded verbatim,
+    -- so an explicit level wins over the auto-materialization: a caller who
+    -- passes peek := 'none+schema' and also filters on [peek...] gets the
+    -- peek_filter_validation error with its re-parse hint, rather than having
+    -- the argument silently overridden. Explicit beats implicit. The default,
+    -- NULL, means "decide exactly as before", so no existing caller moves.
+    --
+    -- Why opt-in and not simply on, which is what #261 asked for: measured over
+    -- src/*.cpp (27 files, 464 KB of source, 93,675 nodes), peek text totals
+    -- 1.23 MB at 'smart' and 4.20 MB at 'full' -- 9x the source size -- while
+    -- extraction TIME is not measurable above run-to-run noise (0.78-0.84 s at
+    -- every level, interleaved so the noise has a control). The cost is memory,
+    -- not time, it scales with the tree rather than the file, and it is the
+    -- caller's to spend. Pinned by test/sql/bugs/261_ast_select_peek.test.
     WITH __ast_src AS (
         SELECT * FROM read_ast(source, language,
-            peek := CASE WHEN selector LIKE '%[peek%'
-                         THEN 'full' ELSE 'none+schema' END)
+            peek := coalesce(peek,
+                             CASE WHEN selector LIKE '%[peek%'
+                                  THEN 'full' ELSE 'none+schema' END))
     )
     SELECT * FROM ast_select_from('__ast_src', selector);

@@ -1,0 +1,131 @@
+# name: test/sql/bugs/261_ast_select_peek.test
+# description: #261 -- ast_select can materialize peek on request, default unchanged
+# group: [bugs]
+
+# WHY THIS FAILS BEFORE THE FIX
+#
+# #261 reports that ast_select() "drops peek on the way out" and that "only the
+# projection is lost". Measured on build/release/duckdb at 54b07c2, that
+# diagnosis is wrong. src/sql_macros/css_selectors.sql parses with
+#
+#     peek := CASE WHEN selector LIKE '%[peek%' THEN 'full' ELSE 'none+schema' END
+#
+# so peek is never EXTRACTED unless the selector itself carries a [peek...]
+# attribute filter. The 'none+schema' suffix keeps the column in the output
+# schema as all-NULL without computing it. Nothing is projected away.
+#
+# Both of the issue's observations follow from that CASE, not from a projection
+# bug. Measured on this file:
+#
+#   ast_select(f, '.func')               20 rows,  0 peek non-null
+#   ast_select(f, '.str')                28 rows,  0 peek non-null
+#   ast_select(f, '.str[peek*=SELECT]')   3 rows,  3 peek non-null  <- CASE fired
+#
+# The default is therefore a deliberate cost choice, not a defect. Measured over
+# src/*.cpp (27 files, 464 KB of source, 93,675 nodes), peek text totals 1.23 MB
+# at 'smart' and 4.20 MB at 'full' -- 9x the source size -- while extraction TIME
+# is not measurable above run-to-run noise (0.78-0.84 s at every level, with
+# interleaved controls). So forcing peek on for every caller would buy a
+# non-NULL column with a 9x memory cost, which is the hazard class of
+# tracker/bugs/055.
+#
+# This file pins the opt-in instead: a `peek :=` parameter on ast_select, with
+# the default left exactly where it was. Before the fix, every query below that
+# passes `peek :=` raises a Binder Error, because the parameter does not exist.
+
+require sitting_duck
+
+# =============================================================================
+# THE CONTROL: the default is unchanged
+# =============================================================================
+# These three zeros are the control. A "fix" that simply forced peek on for
+# everyone would turn them into 20 and 28 and silently impose the 9x text cost
+# on every existing caller. If these ever stop being zero, the default moved.
+
+query II
+SELECT count(*), count(peek)
+FROM ast_select('test/data/python/sample_app.py', '.func');
+----
+20	0
+
+query II
+SELECT count(*), count(peek)
+FROM ast_select('test/data/python/sample_app.py', '.str');
+----
+28	0
+
+# The existing auto-materialization still fires for a [peek...] filter. This is
+# the second control: it shows peek extraction itself works, so the zeros above
+# are the default choosing not to extract, not an extraction failure.
+
+query II
+SELECT count(*), count(peek)
+FROM ast_select('test/data/python/sample_app.py', '.str[peek*=SELECT]');
+----
+3	3
+
+# =============================================================================
+# peek := 'full' materializes it
+# =============================================================================
+
+query II
+SELECT count(*), count(peek)
+FROM ast_select('test/data/python/sample_app.py', '.func', peek := 'full');
+----
+20	20
+
+# =============================================================================
+# The tutorial's question is answered, not merely non-NULL
+# =============================================================================
+# docs/tutorials/css-selectors.md asks "Which methods in UserService call the
+# database without error handling, AND WHAT SQL DO THEY USE?" and selects peek.
+# A non-NULL peek is not enough: the SQL lives in the function BODY, so this
+# asserts the body text arrives, per method. This is what makes 'full' the right
+# level for that example and 'smart' the wrong one.
+
+query III
+SELECT name, peek LIKE '%INSERT INTO%', peek LIKE '%DELETE FROM%'
+FROM ast_select('test/data/python/sample_app.py',
+    '.class#UserService .func:has(.call#execute):not(:has(.try))',
+    peek := 'full')
+ORDER BY name;
+----
+create_user	true	false
+delete_user	false	true
+
+# =============================================================================
+# The parameter is passed through, not just switched on
+# =============================================================================
+# 'smart' truncates to the first line, so it returns the signature and NOT the
+# body. Pinning the exact text proves ast_select forwards the caller's level
+# verbatim rather than mapping anything non-default to 'full'. It also records
+# why 'smart' does not answer the tutorial's question.
+
+query II
+SELECT name, peek
+FROM ast_select('test/data/python/sample_app.py',
+    '.class#UserService .func:has(.call#execute):not(:has(.try))',
+    peek := 'smart')
+ORDER BY name;
+----
+create_user	def create_user(self, name, email):
+delete_user	def delete_user(self, user_id):
+
+# =============================================================================
+# An explicit level wins over the [peek...] auto-materialization
+# =============================================================================
+# Explicit beats implicit. A caller who asks for no peek and then filters on it
+# gets the existing guard's actionable error, rather than having their argument
+# silently overridden. This pins that precedence in both directions.
+
+statement error
+SELECT count(*)
+FROM ast_select('test/data/python/sample_app.py', '.str[peek*=SELECT]', peek := 'none+schema');
+----
+the selector filters on [peek...] but the source has no peek text
+
+query II
+SELECT count(*), count(peek)
+FROM ast_select('test/data/python/sample_app.py', '.func', peek := 'none+schema');
+----
+20	0

@@ -408,24 +408,35 @@ satisfy. Two parts of it decide whether a registration succeeds:
 
 ## `ast_unparse()`
 
-Reconstruct formatted source code from an AST table or CTE query.
+Unparse a source file on disk into formatted source code text. To unparse an AST
+that is already in memory — a table, CTE, or view — use `ast_unparse_from()`.
 
 ### Signature
 
 ```sql
-ast_unparse(ast_table, [indent_size := 4, use_tabs := false, newline := '\n']) -> VARCHAR
+ast_unparse(path VARCHAR, [preset := '']) -> TABLE(file_path VARCHAR, source VARCHAR)
+ast_unparse_from(ast_table VARCHAR, [preset := '']) -> TABLE(file_path VARCHAR, source VARCHAR)
 ```
+
+Both are table macros, so both are called in a `FROM` clause. Calling
+`ast_unparse` as a scalar raises `Binder Error: Function "ast_unparse" is a
+table function but it was used as a scalar function.`
 
 ### Example
 
 ```sql
+-- a file on disk
+SELECT source FROM ast_unparse('src/main.py');
+
+-- an AST already in memory; a CTE name works as the table argument
 WITH ast AS (
     SELECT * FROM parse_ast('def add(a, b): return a + b', 'python')
 )
-SELECT ast_unparse(ast) AS code;
+SELECT source FROM ast_unparse_from('ast');
 ```
 
-See the [AST Unparse Reference](unparse.md) for full formatting rules and guarantees.
+See the [AST Unparse Reference](unparse.md) for the full macro set, the `preset`
+values, and formatting guarantees.
 
 ---
 

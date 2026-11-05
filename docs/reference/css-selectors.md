@@ -195,7 +195,7 @@ Parallel parsing (8 threads) provides 4.9x speedup on medium datasets.
 ## API Reference
 
 ```sql
-ast_select(source, selector, language := NULL)
+ast_select(source, selector, language := NULL, peek := NULL)
 ```
 
 | Parameter | Type | Description |
@@ -203,8 +203,37 @@ ast_select(source, selector, language := NULL)
 | `source` | VARCHAR | File path, glob pattern, or array of paths |
 | `selector` | VARCHAR | CSS selector string |
 | `language` | VARCHAR | Optional language override (auto-detected) |
+| `peek` | VARCHAR | Optional `peek` level, forwarded to `read_ast()` (v1.18.1+) |
 
 Returns the same columns as `read_ast()`.
+
+#### The `peek` column is empty unless you ask for it
+
+`ast_select` does not extract `peek` by default, so that column comes back NULL:
+
+```sql
+-- peek is NULL here
+SELECT name, peek FROM ast_select('src/app.py', '.func');
+
+-- peek carries each function's full text here
+SELECT name, peek FROM ast_select('src/app.py', '.func', peek := 'full');
+```
+
+This is a cost choice, not an oversight. `peek` copies each node's source text,
+so every ancestor of a match carries a copy of the matched region: measured over
+27 C++ files (464 KB of source, 93,675 nodes), the extracted text totals 1.23 MB
+at `peek := 'smart'` and 4.20 MB at `peek := 'full'` — about 9x the source. The
+extraction time itself is not measurable above run-to-run noise, so the cost is
+memory, and it grows with tree depth rather than file size.
+
+Two things follow:
+
+- **`peek := 'smart'` is not a cheap substitute for `'full'`.** It truncates to
+  the first line, so it gives you a signature, not a body.
+- **A `[peek...]` attribute filter still materializes `peek` by itself**, because
+  such a filter would otherwise match nothing. An explicit `peek :=` wins over
+  that, so passing `peek := 'none'` alongside a `[peek...]` filter raises an
+  error with a re-parse hint rather than silently ignoring your argument.
 
 ### `ast_select_from` — Parse Once, Query Many (v1.7.4+)
 
