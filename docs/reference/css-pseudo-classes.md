@@ -175,6 +175,8 @@ the given kind. For `function` / `class` / `module` it reads the precomputed
 `scope.*` struct; for a bare tree-sitter type it walks to the nearest ancestor of
 that type, **excluding subtrees of nested ancestors of the same type**.
 
+> **Containers that are not scope providers** ([#166](https://github.com/teaguesterling/sitting_duck/issues/166)). The `scope.*` struct is populated only beneath nodes flagged `IS_SCOPE`, and a semantic class need not be one — SQL's `create_table` is a `DEFINITION_CLASS` that provides no scope. Where the struct is empty, the `.class#name` form falls back to the same ancestor walk the bare-type form uses, so both forms give the same answer. It used to return nothing at all, silently.
+
 This solves the nested function problem:
 
 ```sql
@@ -301,6 +303,8 @@ SELECT name FROM ast_select('src/**/*.py', '.call:called-by(process_request)');
 
 > **Note (name-matched, not resolved).** `:calls`/`:called-by` match on the call's *name*, not a resolved call target — same-named functions across files are not disambiguated (that is the resolver's job). Both are evaluated through the bounded `scope.function` equi-join, which is what keeps them from exhausting memory on large tables.
 
+> **The argument is a bare name, and only a bare name** ([#191](https://github.com/teaguesterling/sitting_duck/issues/191)). Write `:calls(execute)`. A selector argument — `#execute`, `.fn#execute` — and an empty `:calls()` both raise. They used to be discarded silently, which left the pseudo-class matching every node with any call while still looking like a filter. This is the one place in the dialect where a bare token means a *name* rather than a node type; a later release adds `:calls-name()` as the explicit spelling and gives the selector forms their own meaning.
+
 ### `:is-called` — Function Is Called
 
 Matches function definitions that are called somewhere in the file:
@@ -315,7 +319,7 @@ SELECT name FROM ast_select('src/**/*.py', '.func:not(:is-called)');
 
 ### `:is-referenced` — Definition Is Referenced
 
-Matches definitions that are referenced somewhere:
+Matches definitions that are referenced somewhere outside themselves:
 
 ```sql
 -- Variables that are actually used
@@ -324,6 +328,10 @@ SELECT name FROM ast_select('src/**/*.py', '.var:is-referenced');
 -- Dead code: defined but never referenced
 SELECT name FROM ast_select('src/**/*.py', '.func:not(:is-referenced)');
 ```
+
+> **A definition does not reference itself** ([#147](https://github.com/teaguesterling/sitting_duck/issues/147)). References from inside the definition's own subtree do not count. That includes a **recursive call**: a function called only by itself is not referenced, because dead-code detection is what this pseudo-class is for. A definition's own name is a separate node carrying the reference flag, so without this rule every named definition referenced itself and `:not(:is-referenced)` was always empty.
+>
+> `ast_dead_code()` answers a different question and may disagree here. It matches on name alone, counts a self-call as a call, and excludes `main`, `setup`, `teardown`, `init`, `constructor` and dunder names outright.
 
 ### `:exported` — Visible Outside the File
 
