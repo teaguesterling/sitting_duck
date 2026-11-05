@@ -965,6 +965,52 @@ CREATE OR REPLACE MACRO ast_select_from(
             END as ok
         ),
 
+        -- :calls / :called-by require a bare NAME argument (#191).
+        --
+        -- pseudo_arg is filled from the first CSS tag or string only, so a `#name`
+        -- lands in pseudo_arg_name and a `.class` in pseudo_arg_class. The `#name`
+        -- split in pseudo_classes above runs for is-scope/in-scope ONLY, so for
+        -- these two a selector-shaped argument leaves pseudo_arg NULL -- and the
+        -- dispatch arms read NULL as "no filter". Measured before this guard, on
+        -- test/data/python/sample_app.py where `.fn` is 20:
+        --
+        --   .fn:calls(execute)          4   correct
+        --   .fn:calls(.fn#execute)     17   argument ignored
+        --   .fn:calls(#execute)        17   argument ignored
+        --   .fn:calls()                17   no argument at all
+        --   .call:called-by(.fn#main)  44   argument ignored
+        --
+        -- 17 is "functions that call anything". The result was plausible and
+        -- non-empty, so the caller could not tell the filter had been dropped --
+        -- the #184 failure class, where a wrong argument TYPE is accepted and
+        -- discarded rather than refused.
+        --
+        -- One condition covers every lying shape, because pseudo_arg is set for
+        -- exactly the documented form and nothing else.
+        name_arg_pseudo_class_names(name) AS (
+            VALUES ('calls'), ('called-by')
+        ),
+        name_arg_offender AS (
+            SELECT pc.pseudo_name AS name
+            FROM pseudo_classes pc
+            WHERE pc.pseudo_name IN (SELECT name FROM name_arg_pseudo_class_names)
+              AND pc.pseudo_arg IS NULL
+            LIMIT 1
+        ),
+        name_arg_validation AS (
+            SELECT CASE
+                WHEN EXISTS (SELECT 1 FROM name_arg_offender) THEN error(format(
+                    'ast_select: :{}() takes a function NAME, for example :{}(execute). '
+                    'The argument given is not a name. It would be ignored, and the '
+                    'filter would then match every node with any call. Selector '
+                    'arguments (#name, .class, .class#name) are not supported here.',
+                    (SELECT name FROM name_arg_offender),
+                    (SELECT name FROM name_arg_offender)
+                ))
+                ELSE true
+            END as ok
+        ),
+
         -- :scope / :in-scope argument guards (#145). Both take the same grammar
         -- (keyword function|class|module | .class alias | bare tree-sitter type |
         -- optional #name on the .class form). Three shapes are rejected loudly
@@ -1453,6 +1499,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                  AND (SELECT ok FROM retired_scope_validation)
                  AND (SELECT ok FROM zero_arity_validation)
                  AND (SELECT ok FROM scope_arg_validation)
+                 AND (SELECT ok FROM name_arg_validation)
                  AND (SELECT ok FROM peek_filter_validation)
                  AND (SELECT ok FROM attr_filter_validation)
                  AND (SELECT ok FROM semantic_class_validation)
