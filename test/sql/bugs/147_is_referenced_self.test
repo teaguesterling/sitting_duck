@@ -67,11 +67,19 @@ inner_same,level2,level3
 
 # The complement, which is what #147 reported as permanently empty. `recurse`
 # appears here: its only reference is its own recursive call.
-query I
-SELECT string_agg(name, ',' ORDER BY name)
+#
+# The unnamed row is not a defect and is asserted rather than filtered away.
+# `.fn` is the semantic class DEFINITION_FUNCTION, so it also matches the
+# anonymous lambda at edge_cases.py:27, which carries NAME_DEFINITION with an
+# empty name. A definition with no name can never be referenced BY name, so it
+# belongs in this complement. Both facts come from one ast_select call, because
+# each selector call costs ~13 s of planning on the v2.0 line.
+query II
+SELECT count(*) FILTER (WHERE name = '') AS unnamed,
+       string_agg(name, ',' ORDER BY name) FILTER (WHERE name <> '') AS named
 FROM ast_select('test/data/callgraph/edge_cases.py', '.fn:not(:is-referenced)');
 ----
-direct_and_nested,level1,method,method_lambda,recurse,twin_a,twin_b,with_comprehension
+1	direct_and_nested,level1,method,method_lambda,recurse,twin_a,twin_b,with_comprehension
 
 # =============================================================================
 # 2. CONTROL -- the flag itself is untouched

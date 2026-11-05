@@ -1877,6 +1877,23 @@ CREATE OR REPLACE MACRO ast_select_from(
                       AND is_name_reference(ref.flags)
                       AND ref.name = a.name
                       AND ref.node_id != a.node_id
+                      -- #147: a reference from INSIDE this definition's own subtree
+                      -- does not count. The definition's own name is a separate node,
+                      -- a DIRECT CHILD of the definition, and it carries
+                      -- NAME_REFERENCE -- so without this every named definition
+                      -- referenced itself and :not(:is-referenced), the documented
+                      -- dead-code query, was always empty.
+                      --
+                      -- This also excludes a recursive self-call, by Teague's ruling
+                      -- of 2026-11-05: dead-code detection is the documented purpose,
+                      -- and a function called only by itself is dead. ast_dead_code()
+                      -- answers a different question and still counts self-calls.
+                      --
+                      -- A range, not a parent_id test, because it does not depend on
+                      -- WHICH node carries the definition flag -- container and
+                      -- declarator both carry NAME_DEFINITION while #276 is open.
+                      AND NOT (ref.node_id > a.node_id
+                               AND ref.node_id <= a.node_id + a.descendant_count)
                 )
 
             -- :exported — publicly visible outside file/module (IS_EXPORTED flag)
