@@ -754,6 +754,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                    fcn.name AS pseudo_arg_class,   -- a `.class` inside the args (e.g. :is-scope(.fn))
                    fin.name AS pseudo_arg_name,    -- a `#name` inside the args (e.g. :is-scope(.fn#foo))
                    fpv.name AS pseudo_arg_plain,   -- an unquoted plain_value (e.g. the `function#foo` footgun)
+                   pargs.args_id IS NOT NULL AS has_arg_block,  -- `:calls()` vs bare `:calls` (#191)
                    false as negated
             FROM sel_pseudo_classes pcs
             JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
@@ -763,6 +764,7 @@ CREATE OR REPLACE MACRO ast_select_from(
             LEFT JOIN sel_pcs_first_class_name fcn  ON fcn.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_id_name    fin  ON fin.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_plain_value fpv ON fpv.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_to_args pargs ON pargs.pcs_id = pcs.node_id
             WHERE cn.name NOT IN ('has', 'not')
 
             UNION ALL
@@ -774,6 +776,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                    fcn.name AS pseudo_arg_class,
                    fin.name AS pseudo_arg_name,
                    fpv.name AS pseudo_arg_plain,
+                   pargs.args_id IS NOT NULL AS has_arg_block,
                    true as negated
             FROM sel_pseudo_classes pcs
             JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
@@ -788,6 +791,7 @@ CREATE OR REPLACE MACRO ast_select_from(
             LEFT JOIN sel_pcs_first_class_name fcn  ON fcn.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_id_name    fin  ON fin.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_plain_value fpv ON fpv.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_to_args pargs ON pargs.pcs_id = pcs.node_id
             WHERE cn.name != 'has'
         ),
 
@@ -817,6 +821,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                         THEN split_part(pseudo_arg_plain, '#', 2)
                         ELSE pseudo_arg_name END AS pseudo_arg_name,
                    pseudo_arg_plain,
+                   has_arg_block,
                    negated
             FROM pseudo_classes_raw
         ),
@@ -994,6 +999,13 @@ CREATE OR REPLACE MACRO ast_select_from(
             SELECT pc.pseudo_name AS name
             FROM pseudo_classes pc
             WHERE pc.pseudo_name IN (SELECT name FROM name_arg_pseudo_class_names)
+              -- An argument block was WRITTEN but yielded no name. The bare,
+              -- parenthesis-free form is a different and legitimate predicate --
+              -- `.call:called-by` is "this node has some enclosing function" --
+              -- and is pinned by ast_select_pseudo_classes.test and by
+              -- issue_146_calls_scope_edge_cases.test. Keying on pseudo_arg
+              -- alone refused it too.
+              AND pc.has_arg_block
               AND pc.pseudo_arg IS NULL
             LIMIT 1
         ),
@@ -1003,7 +1015,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                     'ast_select: :{}() takes a function NAME, for example :{}(execute). '
                     'The argument given is not a name. It would be ignored, and the '
                     'filter would then match every node with any call. Selector '
-                    'arguments (#name, .class, .class#name) are not supported here.',
+                    'arguments (#name, .class, .class#name) are not supported here. '
+                    'To match regardless of name, write the pseudo-class bare, with '
+                    'no parentheses.',
                     (SELECT name FROM name_arg_offender),
                     (SELECT name FROM name_arg_offender)
                 ))

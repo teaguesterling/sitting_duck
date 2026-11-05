@@ -303,7 +303,9 @@ SELECT name FROM ast_select('src/**/*.py', '.call:called-by(process_request)');
 
 > **Note (name-matched, not resolved).** `:calls`/`:called-by` match on the call's *name*, not a resolved call target — same-named functions across files are not disambiguated (that is the resolver's job). Both are evaluated through the bounded `scope.function` equi-join, which is what keeps them from exhausting memory on large tables.
 
-> **The argument is a bare name, and only a bare name** ([#191](https://github.com/teaguesterling/sitting_duck/issues/191)). Write `:calls(execute)`. A selector argument — `#execute`, `.fn#execute` — and an empty `:calls()` both raise. They used to be discarded silently, which left the pseudo-class matching every node with any call while still looking like a filter. This is the one place in the dialect where a bare token means a *name* rather than a node type; a later release adds `:calls-name()` as the explicit spelling and gives the selector forms their own meaning.
+> **Written bare, with no parentheses, both match regardless of name.** `.call:called-by` is "this node has some enclosing function", and `.fn:calls` is "this function calls something". The suite relies on these; this reference previously omitted them.
+>
+> **With parentheses, the argument is a bare name, and only a bare name** ([#191](https://github.com/teaguesterling/sitting_duck/issues/191)). Write `:calls(execute)`. A selector argument — `#execute`, `.fn#execute` — and an empty `:calls()` both raise. They used to be discarded silently, which left the pseudo-class matching every node with any call while still looking like a filter. This is the one place in the dialect where a bare token means a *name* rather than a node type; a later release adds `:calls-name()` as the explicit spelling and gives the selector forms their own meaning.
 
 ### `:is-called` — Function Is Called
 

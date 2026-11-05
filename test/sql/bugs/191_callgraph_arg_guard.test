@@ -94,7 +94,33 @@ SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.fn:calls(exe
 4
 
 # =============================================================================
-# 3. CONTROL -- :is-called still takes no argument
+# 3. CONTROL -- the BARE, parenthesis-free form is a different predicate
+#
+# `.call:called-by` means "this node has some enclosing function", and
+# `.fn:calls` means "this function calls something". Both are legitimate and
+# both are pinned elsewhere: ast_select_pseudo_classes.test:342 ("Bare
+# :called-by -- every call is inside some function scope"),
+# issue_146_calls_scope_edge_cases.test:142,148 and
+# scope_resolution/callgraph_macros.test:282.
+#
+# My first version of this guard keyed on `pseudo_arg IS NULL`, which is also
+# true for the bare form, and broke all three of those files. The guard now
+# requires that an argument BLOCK was written. These assertions exist so that
+# mistake cannot be made twice -- they are the regression, not decoration.
+# =============================================================================
+
+query II
+SELECT
+    (SELECT count(*) FROM ast_select('test/data/python/callgraph_direct.py', '.call')),
+    (SELECT count(*) FROM ast_select('test/data/python/callgraph_direct.py', '.call:called-by'));
+----
+3	3
+
+statement ok
+SELECT count(*) FROM ast_select('test/data/python/sample_app.py', '.fn:calls');
+
+# =============================================================================
+# 4. CONTROL -- :is-called still takes no argument
 #
 # :is-called is the documented no-argument form, and it must not be caught by a
 # guard aimed at the two that require one. read_ast-free, one selector call.

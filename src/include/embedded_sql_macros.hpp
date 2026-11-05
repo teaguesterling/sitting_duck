@@ -3318,6 +3318,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                    fcn.name AS pseudo_arg_class,   -- a `.class` inside the args (e.g. :is-scope(.fn))
                    fin.name AS pseudo_arg_name,    -- a `#name` inside the args (e.g. :is-scope(.fn#foo))
                    fpv.name AS pseudo_arg_plain,   -- an unquoted plain_value (e.g. the `function#foo` footgun)
+                   pargs.args_id IS NOT NULL AS has_arg_block,  -- `:calls()` vs bare `:calls` (#191)
                    false as negated
             FROM sel_pseudo_classes pcs
             JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
@@ -3327,6 +3328,7 @@ CREATE OR REPLACE MACRO ast_select_from(
             LEFT JOIN sel_pcs_first_class_name fcn  ON fcn.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_id_name    fin  ON fin.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_plain_value fpv ON fpv.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_to_args pargs ON pargs.pcs_id = pcs.node_id
             WHERE cn.name NOT IN ('has', 'not')
 
             UNION ALL
@@ -3338,12 +3340,13 @@ CREATE OR REPLACE MACRO ast_select_from(
                    fcn.name AS pseudo_arg_class,
                    fin.name AS pseudo_arg_name,
                    fpv.name AS pseudo_arg_plain,
-                   true as negated
-            FROM sel_pseudo_classes pcs
-            JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
 
 )SQLMACRO"
         R"SQLMACRO(
+                   pargs.args_id IS NOT NULL AS has_arg_block,
+                   true as negated
+            FROM sel_pseudo_classes pcs
+            JOIN sel_class_names cn ON cn.parent_id = pcs.node_id
             -- The inner pseudo-class must be a direct child of :not()'s arguments
             JOIN sel_arg_blocks not_args ON not_args.node_id = pcs.parent_id
             JOIN sel_pseudo_classes not_pcs ON not_pcs.node_id = not_args.parent_id
@@ -3355,6 +3358,7 @@ CREATE OR REPLACE MACRO ast_select_from(
             LEFT JOIN sel_pcs_first_class_name fcn  ON fcn.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_id_name    fin  ON fin.pcs_id = pcs.node_id
             LEFT JOIN sel_pcs_first_plain_value fpv ON fpv.pcs_id = pcs.node_id
+            LEFT JOIN sel_pcs_to_args pargs ON pargs.pcs_id = pcs.node_id
             WHERE cn.name != 'has'
         ),
 
@@ -3384,6 +3388,7 @@ CREATE OR REPLACE MACRO ast_select_from(
                         THEN split_part(pseudo_arg_plain, '#', 2)
                         ELSE pseudo_arg_name END AS pseudo_arg_name,
                    pseudo_arg_plain,
+                   has_arg_block,
                    negated
             FROM pseudo_classes_raw
         ),
@@ -3561,6 +3566,13 @@ CREATE OR REPLACE MACRO ast_select_from(
             SELECT pc.pseudo_name AS name
             FROM pseudo_classes pc
             WHERE pc.pseudo_name IN (SELECT name FROM name_arg_pseudo_class_names)
+              -- An argument block was WRITTEN but yielded no name. The bare,
+              -- parenthesis-free form is a different and legitimate predicate --
+              -- `.call:called-by` is "this node has some enclosing function" --
+              -- and is pinned by ast_select_pseudo_classes.test and by
+              -- issue_146_calls_scope_edge_cases.test. Keying on pseudo_arg
+              -- alone refused it too.
+              AND pc.has_arg_block
               AND pc.pseudo_arg IS NULL
             LIMIT 1
         ),
@@ -3570,7 +3582,12 @@ CREATE OR REPLACE MACRO ast_select_from(
                     'ast_select: :{}() takes a function NAME, for example :{}(execute). '
                     'The argument given is not a name. It would be ignored, and the '
                     'filter would then match every node with any call. Selector '
-                    'arguments (#name, .class, .class#name) are not supported here.',
+                    'arguments (#name, .class, .class#name) are not supported here. '
+
+)SQLMACRO"
+        R"SQLMACRO(
+                    'To match regardless of name, write the pseudo-class bare, with '
+                    'no parentheses.',
                     (SELECT name FROM name_arg_offender),
                     (SELECT name FROM name_arg_offender)
                 ))
@@ -3586,9 +3603,6 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- the keyword/type form (the CSS grammar lumps `function#foo` into one
         -- token it can't split — only `.fn#foo` works), and a bare :in-scope with
         -- no argument (meaningless — use :is-scope for scope boundaries).
-
-)SQLMACRO"
-        R"SQLMACRO(
         scope_arg_validation AS (
             SELECT CASE
                 -- (a) MALFORMED #name on the keyword/type form. The valid shape
@@ -3801,6 +3815,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                                         (SELECT lower(cls) FROM unknown_semantic_class))
                         WHEN (SELECT hint FROM semantic_class_near_misses) IS NOT NULL
                             THEN format('Did you mean: {}? Full list: '
+
+)SQLMACRO"
+        R"SQLMACRO(
                                         'SELECT selector, resolves_to FROM ast_semantic_aliases().',
                                         (SELECT hint FROM semantic_class_near_misses))
                         ELSE 'Full list: SELECT selector, resolves_to FROM ast_semantic_aliases().'
@@ -3817,9 +3834,6 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- registered grammars (FIND_CALL_TARGET), but some call-semantic nodes
         -- have no single callee (bash command_substitution) and future grammars
         -- may not be covered. If the source HAS call nodes but NONE of them are
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- named, the selector cannot bind — raise instead of returning 0 rows
         -- (or, for the :not(:has()) form, matching everything).
         -- When only SOME calls are unnamed this stays silent: mixed sources are
@@ -4049,6 +4063,9 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- CTE that every matched_base branch cross-joins. This is deliberate:
         -- the guards must fire even when the branch's row filters match ZERO
         -- rows (the guarded situations — e.g. `.call#foo` over unnamed call
+
+)SQLMACRO"
+        R"SQLMACRO(
         -- nodes — produce exactly that empty base). A join build side is
         -- materialized regardless of probe cardinality, so error() here cannot
         -- be skipped; a filter in matched_raw's WHERE would never be evaluated
@@ -4063,9 +4080,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                 (SELECT left_type FROM combinator_parts) as left_type,
                 (SELECT left_type || '_%' FROM combinator_parts) as left_type_like,
                 (SELECT right_type FROM combinator_parts) as right_type,
-
-)SQLMACRO"
-        R"SQLMACRO(
                 (SELECT right_type || '_%' FROM combinator_parts) as right_type_like,
                 (SELECT left_class FROM combinator_parts) as left_class,
                 (SELECT left_id FROM combinator_parts) as left_id,
@@ -4313,6 +4327,9 @@ CREATE OR REPLACE MACRO ast_select_from(
 
             -- Native extraction: annotations string
             WHEN ac.attr_name = 'annotation' THEN
+
+)SQLMACRO"
+        R"SQLMACRO(
                 CASE ac.attr_op WHEN '*=' THEN a.annotations LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '^=' THEN a.annotations LIKE ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value_esc ESCAPE '\'
@@ -4326,9 +4343,6 @@ CREATE OR REPLACE MACRO ast_select_from(
             WHEN ac.attr_name = 'qualified' THEN
                 CASE ac.attr_op
                     WHEN '*=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
-
-)SQLMACRO"
-        R"SQLMACRO(
                     WHEN '^=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE ac.attr_value_esc || '%' ESCAPE '\'
                     WHEN '$=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value_esc ESCAPE '\'
                     ELSE ast_qualified_name_as_string(a.qualified_name) = ac.attr_value
@@ -4538,6 +4552,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                                AND t2.file_path = a.file_path
                     WHERE t2.type != mp.pat_type
                        OR (mp.pat_name IS NOT NULL AND mp.pat_name != ''
+
+)SQLMACRO"
+        R"SQLMACRO(
                            AND mp.pat_name != '___' AND t2.name != mp.pat_name)
                 )
 
@@ -4554,9 +4571,6 @@ CREATE OR REPLACE MACRO ast_select_from(
                   AND NOT EXISTS (
                       SELECT 1 FROM ast_pattern mp
                       JOIN ast t2 ON t2.node_id = t.node_id + mp.idx
-
-)SQLMACRO"
-        R"SQLMACRO(
                                  AND t2.file_path = a.file_path
                       WHERE t2.type != mp.pat_type
                          OR (mp.pat_name IS NOT NULL AND mp.pat_name != ''
@@ -4771,6 +4785,9 @@ CREATE OR REPLACE MACRO ast_select_from(
     -- functions contain a call expression spelled the same as this definition",
     -- which is an over-approximation of "which functions call this definition":
     -- two same-named definitions in one file collide, imports are not followed, and
+
+)SQLMACRO"
+        R"SQLMACRO(
     -- a method call `x.speak()` is attributed to every `speak` definition in that
     -- file. The join is bounded (seed-driven, equi-join on name then on
     -- scope.function) — the imprecision is semantic, not a scaling problem.
@@ -4789,9 +4806,6 @@ CREATE OR REPLACE MACRO ast_select_from(
          AND caller_fn.file_path = call_node.file_path
     ),
     -- ::call-sites — the CALL EXPRESSIONS that invoke this function, regardless of
-
-)SQLMACRO"
-        R"SQLMACRO(
     -- where they sit. This is ::callers without the join to the calling function, and
     -- it exists because that join silently drops module-level calls: `main` is called
     -- from `if __name__ == '__main__': main()` in both fixtures, which has no enclosing
