@@ -185,8 +185,14 @@ Combine everything to answer a complex question: "Which methods in UserService c
 ```sql
 SELECT name, start_line, peek
 FROM ast_select('test/data/python/sample_app.py',
-    '.class#UserService .func:has(.call#execute):not(:has(.try))');
+    '.class#UserService .func:has(.call#execute):not(:has(.try))',
+    peek := 'full');
 ```
+
+`peek := 'full'` is what answers the second half of the question. `ast_select`
+does not extract `peek` by default, because the extracted text grows with the
+tree rather than the file — measured at roughly 9x the source size — so you ask
+for it when you want it. Without it that third column comes back NULL.
 
 This single selector uses:
 - `.class#UserService` — scope to the UserService class
