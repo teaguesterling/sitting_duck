@@ -1,0 +1,70 @@
+# name: test/sql/bugs/042_lua_modifier_scope.test
+# description: tracker/bugs/042 step 4.3 -- a lua function nested in a `local function` is not itself local
+# group: [bugs]
+
+# WHY THIS FAILS BEFORE THE FIX
+#
+# ExtractModifiers walks up to four ancestors looking for a `local` keyword.
+# An anonymous function merely NESTED inside a `local function` therefore
+# inherits its parent's visibility.
+#
+# Measured on build/release/duckdb at caeeaa0, before the fix:
+#
+#   local function outer(a)                 function_declaration  outer   [local]   correct
+#     return function(b) return a + b end   function_definition   (anon)  [local]   WRONG
+#   end
+#
+# `local` on the inner function would mean a local declaration, and there is
+# no declaration there at all: it is an expression being returned. The
+# modifier is not merely redundant, it is false.
+#
+# WHY THE EXISTING TEST DID NOT CATCH IT. #220's lua test contains only the
+# direct form, `local anon = function()`, which the four-deep walk handles
+# correctly. So the walk passed its test and shipped. That is this defect's
+# real lesson and it is why the nested form is pinned here by shape, not by
+# one example.
+
+require sitting_duck
+
+# =============================================================================
+# 1. The nested function carries no modifier
+# =============================================================================
+# Counted rather than compared as text, so the assertion says "none" rather
+# than "not this particular one".
+
+query III
+SELECT type, coalesce(nullif(name, ''), '(anon)') AS name, len(coalesce(modifiers, []::VARCHAR[]))
+FROM parse_ast('local function outer(a)
+  return function(b) return a + b end
+end', 'lua', context := 'native')
+WHERE type IN ('function_declaration', 'function_definition')
+ORDER BY start_line, type;
+----
+function_declaration	outer	1
+function_definition	(anon)	0
+
+# And the one modifier that IS there is the right one, so a fix cannot pass
+# this file by emptying the column for everybody.
+
+query I
+SELECT array_to_string(modifiers, ',')
+FROM parse_ast('local function outer(a)
+  return function(b) return a + b end
+end', 'lua', context := 'native')
+WHERE type = 'function_declaration';
+----
+local
+
+# =============================================================================
+# 2. The direct form keeps working -- this is what #220 pinned
+# =============================================================================
+# `local anon = function() ... end` IS a local declaration, so the function
+# expression on its right-hand side may legitimately carry `local`. The fix
+# must not take that away while removing the nested case.
+
+query II
+SELECT type, array_to_string(coalesce(modifiers, []::VARCHAR[]), ',')
+FROM parse_ast('local anon = function(x) return x end', 'lua', context := 'native')
+WHERE type = 'function_definition';
+----
+function_definition	local

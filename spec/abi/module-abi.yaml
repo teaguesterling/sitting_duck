@@ -374,7 +374,6 @@ native_extraction:
     - {check: table, language: ruby, literal: "chained_call"}   # function_call_extractor.hpp:180
     - {check: table, language: ruby, literal: "method_call"}   # function_call_extractor.hpp:180
     - {check: table, language: rust, literal: "method_call_expression"}   # function_call_extractor.hpp:132
-    - {check: table, language: swift, literal: "argument_list"}   # function_call_extractor.hpp:188
     - {check: table, language: swift, literal: "init_expression"}   # function_call_extractor.hpp:186
     - {check: table, language: swift, literal: "labeled_argument"}   # function_call_extractor.hpp:193
 

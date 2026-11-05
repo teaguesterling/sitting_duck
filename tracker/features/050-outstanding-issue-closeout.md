@@ -249,3 +249,91 @@ declaring a coverage gap, grep for the *behaviour*, not the issue number.
   statuses are the issues' claims, not this document's.
 - `tracker/PRIORITIES.md` is stale (last updated 2026-04-26; still says YAML is
   unsupported, which v1.16.0 contradicts). It needs a pass, but not here.
+
+---
+
+## Addendum, 2026-11-04 — re-reading this register before the v1.18.0 release
+
+Program step 5 asked for quick wins worth adding in a bugfix release before the
+community PR. The honest first result is that **this register already held two
+of the three things I "found"**, measured five weeks earlier.
+
+### What I re-derived rather than discovered
+
+- **#150.** I ran the capstone example and recorded "exit 0, 2 rows — no longer
+  errors". Family A line 107 already says *"the capstone example now runs (2
+  rows)"*. I reproduced a measurement this file states.
+- **#261.** I measured `ast_select` returning 20 rows with 0 non-NULL `peek`
+  against `read_ast`'s 20 of 20. Family C line 134 already records
+  *"0 of 20, 0 of 22, 0 of 25 across py/js/cpp"* — three cases where I did one.
+
+Both are now confirmed to still reproduce on the v1.18.0 candidate, which has
+some value, but neither is a find. The `search-tracker-before-measuring` lesson
+applies to this file specifically.
+
+**A method error worth keeping.** To check what this register covers, I grepped
+for `#[0-9]+` and concluded ten issues were unregistered. They were all present
+as bare numbers in the family tables (`| 64 | reported |`). The grep was shaped
+by one notation and missed the other — the same shape as the retraction above,
+where a search shaped by ticket numbers missed coverage filed under behaviour
+names. Counting both notations gives 42 mentions, and the real absences are 7.
+
+### This register is 7 issues stale
+
+39 issues are open, against the 35 recorded here. Seven are mentioned nowhere in
+this file, and every one was filed on or after this register's own triage date:
+
+| # | filed | one line |
+|---|---|---|
+| 263 | 2026-10-15 | kotlin `primary_constructor` declares native strategy `NONE` |
+| 273 | 2026-10-18 | `assignment` is named after the RHS when the target is not a bare identifier |
+| 276 | 2026-10-18 | container and declarator both carry `NAME_DEFINITION`, so names return 2–3× |
+| 277 | 2026-10-18 | go `x := 1` binds no name |
+| 282 | 2026-10-19 | delete the git URI `@revision` strip once duck_tails moves the ref |
+| 283 | 2026-10-19 | C++ variadic parameters: only the unqualified form extracts |
+| 288 | 2026-10-25 | names bound by the bare-name hook never reach `ast_definitions()` |
+
+**Four of the seven are the node-identity theme**, which this register already
+names as *"the one place with real leverage"*. #273, #276, #277 and #288 are all
+"which node owns a construct's name", read from the binding side rather than the
+selector side. Proposed order item 3 lists four issues (#139 remainder, #158,
+#140, #186). **It is eight.** That does not change the ordering argument; it
+roughly doubles the payoff, and the register understated its own best item.
+
+### Measured on the v1.18.0 candidate
+
+- **#226 moves from `reported` to `measured`.** All seven paths still exist and
+  total **1331 lines**, matching the issue's figure exactly. The set is
+  **closed**: the only referrers of `ast_helper_functions.hpp` and
+  `structured_ast_types.hpp` are the dead `.cpp` files beside them, and nothing
+  outside the set references any of it. A deletion, not an investigation.
+- **#263 reproduces**, and it matters for 042.
+  `languages/kotlin/kotlin_types.def:89` declares `primary_constructor` with
+  `NONE`, and `class Person(val name: String, val age: Int)` yields
+  `parameters = []` on both `class_declaration` and `primary_constructor`.
+- **New, not yet filed: `ast_unparse` is documented as a scalar.**
+  `docs/reference/functions.md:416` gives
+  `ast_unparse(ast_table, ...) -> VARCHAR` and line 425 shows
+  `SELECT ast_unparse(ast) AS code;`. `duckdb_functions()` reports
+  `ast_unparse` as a **`table_macro`**, so the signature and the example are
+  both wrong. Docs-only.
+
+### The gap #263 exposes in the gate this release ships
+
+`NATIVE-DECL` now judges every `(node_type, native_strategy)` pair that declares
+a function-shaped strategy. **#263 is invisible to it**, because
+`primary_constructor` declares `NONE` — there is no declared pair to measure. A
+node that *is* the parameter carrier, declaring that it carries nothing, reads to
+the gate as a node with nothing to check.
+
+That is the complement of what 042 step 3 closed, and it is 042 step 5's
+subject. It is also why #259 is referenced and not closed by this release:
+#259 asks for a build-time gate over the declared set, and a wrong declaration of
+`NONE` is outside any check that starts from declarations.
+
+**Recommendation for the bugfix release**, cheapest first: the `ast_unparse`
+docs fix and a retitle of #150 to its remaining feature scope (both docs-only),
+then #226's deletion (mechanical, 1331 lines, closed set), then #261. #263 is
+small but belongs with 042 step 5 rather than with a docs release, because the
+fix is a declaration change whose correctness only the step-5 work can judge.
+Teague's call; nothing here is started.

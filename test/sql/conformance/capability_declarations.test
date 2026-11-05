@@ -7,21 +7,27 @@
 # capabilities are declared somewhere checkable, so this file pins the
 # declaration surface as it actually exists today.
 #
-# THE M1 FINDING THIS FILE RECORDS: there is no capability declaration surface.
+# THE M1 FINDING THIS FILE RECORDS, and the half of it that is now closed.
 #   * ast_supported_languages() returns (language, extensions, parser_type,
-#     node_type_count) and nothing about what the module can do.
-#   * ast_type_map() exposes the per-node-type NAME strategy -- so the
-#     call-naming capability IS derivable at run time -- but NOT the
-#     native_strategy that drives signature / parameter / modifier extraction.
-#     That capability is therefore only derivable by reading
-#     languages/*/*_types.def, which an out-of-tree module (M3) may not
-#     ship, so scripts/conformance_kit.sh reports it as UNDECL in that case.
+#     node_type_count) and nothing about what the module can do. STILL OPEN.
+#   * ast_type_map() exposed the per-node-type NAME strategy but NOT the
+#     native_strategy that drives signature / parameter / modifier extraction,
+#     so that one capability was derivable only by reading
+#     languages/*/*_types.def -- which an out-of-tree module (M3) may not ship.
+#     CLOSED 2026-11-04 by tracker/bugs/042 step 3: ast_type_map() reports
+#     native_strategy beside name_strategy, and the pinned column list below
+#     records it.
 #
-# These assertions are deliberately shaped so that CLOSING the gap breaks them:
-# adding a native_strategy column to ast_type_map(), or a capability surface to
-# ast_supported_languages(), changes the pinned column lists below. That is the
-# intent -- the test should fail when the finding is fixed, not quietly keep
-# passing.
+# These assertions were deliberately shaped so that CLOSING the gap breaks
+# them, and that is exactly what happened: this file failed at the pinned
+# column list below the moment the column existed, which is why the column list
+# is pinned rather than counted. The shape is KEPT, pointing the other way --
+# native_strategy is now REQUIRED, so removing it, renaming it, or adding a
+# third strategy column breaks this file just as loudly.
+#
+# What is still owed, and still unpinnable here: ast_supported_languages() has
+# no capability surface at all, so a module's set of capabilities is still not
+# one query. docs/reference/module-abi.md layer 2 is where that lives.
 #
 # KNOWN LIMITATION: the totals below (28 registered languages, 27 with
 # declarations, the per-strategy language counts) are pinned for the DEFAULT
@@ -162,7 +168,8 @@ parser_type
 statement ok
 CREATE TABLE __tm AS SELECT * FROM ast_type_map();
 
-# name_strategy is here; native_strategy is NOT. This absence is the finding.
+# BOTH strategies are here since 042 step 3. The absence of native_strategy
+# was the finding; its presence is now the requirement.
 query I
 SELECT column_name FROM (DESCRIBE __tm) ORDER BY column_name;
 ----
@@ -173,6 +180,7 @@ kind
 language
 name_role
 name_strategy
+native_strategy
 node_type
 semantic_type
 
@@ -181,10 +189,15 @@ SELECT count(*) FROM (DESCRIBE __tm) WHERE column_name = 'name_strategy';
 ----
 1
 
+# Was 0, and the 0 was the finding. The LIKE shape is kept because it is what
+# catches a RENAME: a column called `native_extraction_strategy` would satisfy
+# an exact-name test written against the new name and nothing else, while this
+# one keeps answering 1 for any spelling that still says `native`. The exact
+# spelling is pinned in the list above.
 query I
 SELECT count(*) FROM (DESCRIBE __tm) WHERE column_name LIKE '%native%';
 ----
-0
+1
 
 # =============================================================================
 # Coverage of the runtime declaration surface. ast_type_map() is driven by each
@@ -244,15 +257,18 @@ WHERE node_type_count = 0
 1
 
 # =============================================================================
-# NEGATIVE CONTROL for the "no native_strategy column" assertions. A column
+# The control that was needed when the assertion above expected 0: a column
 # count of 0 is also what a typo'd predicate returns, so the same LIKE shape
-# must find the column that IS there.
+# had to find a column that WAS there. It is kept now that the count is 1,
+# because it is the only assertion here that would notice a THIRD strategy
+# column appearing -- the one shape neither the exact list nor the '%native%'
+# count catches on its own.
 # =============================================================================
 
 query I
 SELECT count(*) FROM (DESCRIBE __tm) WHERE column_name LIKE '%strategy%';
 ----
-1
+2
 
 # And ast_type_map() must actually be populated -- an empty table would satisfy
 # several assertions above for the wrong reason. This is a deliberate one-sided

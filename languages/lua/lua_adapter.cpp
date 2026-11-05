@@ -131,12 +131,35 @@ bool LuaAdapter::IsPublicNode(TSNode node, const string &content) const {
 	const char *node_type_str = ts_node_type(node);
 	string node_type = string(node_type_str);
 
-	// Global function/variable declarations are public
+	// `local` IS the declaration's visibility, and it is a direct CHILD of the
+	// declaration node. Measured on tree-sitter-lua:
+	//
+	//     local l_local = 2            variable_declaration [local, assignment_statement]
+	//     function g_func() end        function_declaration [function, identifier, parameters, end]
+	//     local function l_func() end  function_declaration [local, function, identifier, ...]
+	//
+	// The `local_function` and `local_variable_declaration` branches below were
+	// unreachable: tree-sitter-lua emits neither node type, so `local` was
+	// never consulted and every declaration came back public.
+	// tracker/bugs/042 step 4.4, pinned by
+	// test/sql/bugs/042_lua_local_visibility.test.
 	if (node_type == "function_declaration" || node_type == "variable_declaration") {
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			if (ts_node_is_null(child)) {
+				continue;
+			}
+			const char *child_type = ts_node_type(child);
+			if (child_type && strcmp(child_type, "local") == 0) {
+				return false;
+			}
+		}
 		return true;
 	}
 
-	// Local declarations are private to their scope
+	// Kept for a grammar that emits them. tree-sitter-lua does not, which is
+	// why the check above reads the keyword instead of the node type.
 	if (node_type == "local_function" || node_type == "local_variable_declaration") {
 		return false;
 	}

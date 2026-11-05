@@ -666,7 +666,16 @@ def render_flag_name_table(spec):
 
 
 def render_type_map_name_tables(spec):
-    """The lowercased name_role / name_strategy spellings ast_type_map() emits."""
+    """The lowercased spellings ast_type_map() emits for name_role and for
+    BOTH strategy enums.
+
+    native_strategy is the fourth DEF_TYPE argument, and ast_type_map() did not
+    surface it until 042 step 3. Without it the conformance kit could only
+    derive that capability by scanning languages/*/*_types.def and attributing
+    each row by the file's own basename -- a scan that cannot see typescript's
+    `#include "../javascript/javascript_types.def"`, so it found 5 of the 13
+    function-shaped declarations typescript's loaded table actually holds.
+    """
     roles = name_role_values(spec)
     none_label = roles[0]["label"]
 
@@ -689,15 +698,30 @@ def render_type_map_name_tables(spec):
     out.append("}")
     out.append("")
 
-    out.append("static string GetExtractionStrategyName(ExtractionStrategy strategy) {")
-    out.append("\tswitch (strategy) {")
-    for value in strategy_enum(spec, "ExtractionStrategy")["values"]:
-        out.append("\tcase ExtractionStrategy::%s:" % value["name"])
-        out.append('\t\treturn "%s";' % strategy_label(value))
-    out.append("\tdefault:")
-    out.append('\t\treturn "unknown";')
-    out.append("\t}")
-    out.append("}")
+    # One renderer for both strategy enums: they differ only in the enum they
+    # switch on and the function that wraps it, and a second hand-written copy
+    # is how the two label tables would drift apart.
+    def strategy_table(enum_name, function_name):
+        lines = ["static string %s(%s strategy) {" % (function_name, enum_name)]
+        lines.append("\tswitch (strategy) {")
+        for value in strategy_enum(spec, enum_name)["values"]:
+            lines.append("\tcase %s::%s:" % (enum_name, value["name"]))
+            lines.append('\t\treturn "%s";' % strategy_label(value))
+        # `default` rather than an exhaustive switch on purpose: a strategy
+        # added to the spec without a label must surface as a reportable
+        # "unknown" row, which test/sql/conformance/native_strategy_declarations.test
+        # asserts is empty, rather than as a compiler warning nobody reads.
+        lines.append("\tdefault:")
+        lines.append('\t\treturn "unknown";')
+        lines.append("\t}")
+        lines.append("}")
+        return lines
+
+    out.extend(strategy_table("ExtractionStrategy", "GetExtractionStrategyName"))
+    out.append("")
+    out.extend(
+        strategy_table("NativeExtractionStrategy", "GetNativeExtractionStrategyName")
+    )
     return out
 
 

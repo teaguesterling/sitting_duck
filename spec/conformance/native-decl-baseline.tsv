@@ -1,0 +1,54 @@
+# native-decl-baseline.tsv -- declared-and-undelivered node types that are KNOWN
+#
+# One row per (language, node_type) whose declared function-shaped native
+# strategy delivers nothing on the conformance corpus. Read by
+# scripts/conformance_kit.sh's NATIVE-DECL check, which is per declaring node
+# type since tracker/bugs/042 step 3.
+#
+# Columns, tab-separated:
+#   language  node_type  strategy  level  measurement  reason
+#
+# THE CONTRACT IS BIDIRECTIONAL, and both directions exit 3:
+#   * a declared-and-undelivered pair that is NOT listed here fails the run;
+#   * a pair listed here that no longer reproduces ALSO fails the run -- it was
+#     either fixed, in which case delete the row, or the corpus stopped
+#     exercising it, in which case the coverage loss is the finding.
+#
+# `level` is the level in 042's taxonomy: L3 is a declaring node type the
+# specialization does not serve; L5 is a declaration the strategy structurally
+# cannot serve.
+#
+# GENERATED, then annotated. Produce the rows with
+#   ./scripts/conformance_kit.sh --emit-decl-baseline
+# and write the reason by hand: a measurement says what, never why.
+#
+# Generated 2026-11-04 from build/release/duckdb at 2606999, against
+# test/data/conformance/corpus.tsv. 14 pairs, 7 languages. The matching full
+# run is conformance_kit.sh:66.
+#
+# --- L5: declared on the argument/parameter CONTAINER, not on a definition ---
+# A function-shaped strategy extracts the parameters OF a definition. On the
+# list node itself there is nothing for it to find, so no implementation can
+# satisfy these: the declaration is what is wrong. 042 §"v1.18.0 scope" step 5
+# answers each of these `implement` / `retract` / `retract and reclassify`,
+# per the review rubric's §4, rather than by reflex.
+cpp	argument_list	function_with_params	L5	seen=10 src_params=2 delivered=0	declared ORGANIZATION_LIST at cpp_types.def:779; the argument list of a CALL, with name strategy NONE
+cpp	parameter_list	function_with_params	L5	seen=13 src_params=8 delivered=0	declared ORGANIZATION_LIST at cpp_types.def:774; this node IS the parameter list the strategy would look for
+javascript	arguments	function_with_params	L5	seen=20 src_params=14 delivered=0	declared ORGANIZATION_LIST|COLLECTION at javascript_types.def:603; the argument list of a call
+javascript	formal_parameters	function_with_params	L5	seen=16 src_params=10 delivered=0	declared ORGANIZATION_LIST|COLLECTION at javascript_types.def:608; this node IS the parameter list
+python	argument_list	function_with_params	L5	seen=20 src_params=16 delivered=0	declared ORGANIZATION_LIST at python_types.def:392; the argument list of a call
+python	parameters	function_with_params	L5	seen=15 src_params=12 delivered=0	declared ORGANIZATION_LIST at python_types.def:391; this node IS the parameter list
+typescript	arguments	function_with_params	L5	seen=14 src_params=9 delivered=0	javascript_types.def:603, reaching typescript through the #include at typescript_types.def:60 -- invisible to a basename source scan, which is why the kit reads ast_type_map()
+typescript	formal_parameters	function_with_params	L5	seen=21 src_params=18 delivered=0	javascript_types.def:608, through the same #include
+css	media_statement	function_with_params	L5	seen=2 src_params=1 delivered=0	declared DEFINITION_CLASS at css_types.def:93; an @media block is not a function and has no parameter list. src_params=1 is the guard matching a word character inside the first parentheses of a media query, not a parameter
+sql	invocation	function_with_params	L5	seen=7 src_params=6 delivered=0	declared COMPUTATION_CALL at sql_adapter.cpp:47; a CALL site. FUNCTION_CALL is the strategy for call arguments, FUNCTION_WITH_PARAMS the one for definitions
+sql	statement	function_with_params	L5	seen=9 src_params=3 delivered=0	declared EXECUTION_STATEMENT at sql_adapter.cpp:144; a generic statement node, with name strategy NONE
+#
+# --- L3: a real declaring node type the specialization does not serve --------
+# These three ARE definition-shaped and own (or can reach) a parameter list, so
+# an implementation could satisfy them. Which specialization is missing is NOT
+# yet traced -- the cause here is inferred from the declaration and the empty
+# column, not read out of the extractor, and tracing it is 042 step 5's job.
+cpp	function_declarator	function_with_params	L3	seen=12 src_params=7 delivered=0	declared DEFINITION_FUNCTION at cpp_types.def:78; it owns the parameter_list child, so this is a gap in the extractor rather than a wrong declaration
+cpp	lambda_expression	arrow_function	L3	seen=1 src_params=1 delivered=0	declared DEFINITION_FUNCTION|LAMBDA with ARROW_FUNCTION at cpp_types.def:98. ONE node in the whole corpus, so this row rests on a single observation: a fixture with more lambdas would say more
+dart	method_signature	function_with_params	L3	seen=8 src_params=1 delivered=0	declared DEFINITION_FUNCTION at dart_types.def:157 with a CUSTOM name strategy; 8 nodes, of which the guard finds 1 with a parameter in source

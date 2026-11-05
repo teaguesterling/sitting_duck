@@ -303,25 +303,42 @@ ast_type_map(language VARCHAR) -> TABLE
 | Column | Type | Description |
 |--------|------|-------------|
 | `language` | VARCHAR | Programming language identifier |
-| `node_type` | VARCHAR | Tree-sitter AST node type |
-| `semantic_type` | UTINYINT | Universal semantic type code |
-| `semantic_name` | VARCHAR | Semantic type name (e.g. `'DEFINITION_FUNCTION'`) |
-| `selector` | VARCHAR | CSS selector alias (e.g. `'.func'`, `'.class'`, `'.call'`) |
-| `strategy` | VARCHAR | Extraction strategy (e.g. `'NAME_FIELD'`, `'FIRST_CHILD'`) |
-| `flags` | UTINYINT | Pre-configured node property flags |
+| `node_type` | VARCHAR | Tree-sitter AST node type (the first `DEF_TYPE` argument) |
+| `semantic_type` | VARCHAR | Semantic type NAME, e.g. `'DEFINITION_FUNCTION'`. Use `semantic_type_code()` for the byte that `is_semantic_type()` filters on |
+| `kind` | VARCHAR | The semantic type's family, e.g. `'definition'`, `'literal'`, `'syntax'` |
+| `name_role` | VARCHAR | `'reference'`, `'declaration'`, `'definition'`, or NULL |
+| `is_scope` | BOOLEAN | The node opens a scope |
+| `is_syntax` | BOOLEAN | The node is syntax only (a keyword or punctuation token) |
+| `name_strategy` | VARCHAR | Name extraction strategy, e.g. `'find_identifier'`, `'node_text'`, `'none'` |
+| `native_strategy` | VARCHAR | Native context extraction strategy, e.g. `'function_with_params'`, `'variable_with_type'`, `'none'`. This is what drives `parameters`, `signature_type` and `modifiers` |
+| `flags` | UTINYINT | The raw node property flag byte |
+
+The two strategy columns are the third and fourth `DEF_TYPE` arguments, and the
+table reports the **loaded** declaration map rather than any source file — so it
+answers for a language module whose table is assembled by the preprocessor, or
+that ships no sources at all.
 
 ### Examples
 
 ```sql
 -- View all function node types across languages
-SELECT language, node_type, strategy
+SELECT language, node_type, name_strategy
 FROM ast_type_map()
-WHERE selector = '.func';
+WHERE semantic_type = 'DEFINITION_FUNCTION';
 
 -- Reverse lookup for Python
-SELECT node_type, semantic_name, strategy
+SELECT node_type, semantic_type, name_strategy
 FROM ast_type_map('python')
 WHERE node_type LIKE '%function%';
+
+-- Which node types CLAIM to deliver a function signature?
+SELECT language, count(*) AS declaring_node_types
+FROM ast_type_map()
+WHERE native_strategy IN ('function_with_params', 'function_with_decorators',
+                          'arrow_function', 'async_function', 'generic_function',
+                          'method_definition', 'constructor_definition')
+GROUP BY language
+ORDER BY declaring_node_types DESC;
 ```
 
 ---

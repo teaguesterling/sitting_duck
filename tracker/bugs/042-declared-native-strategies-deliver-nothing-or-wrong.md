@@ -431,8 +431,74 @@ function-shaped strategy)` triples, **91** of them in compiled-in languages
     It changes extension output, so it needs a failing test first, and it
     widens v1.18.0 past gate work.
 
-**Recommendation: A now, B recorded as the M1 gap it already is.** Default if
-nobody answers: A.
+**Recommendation was A now, B recorded as the M1 gap it already is.**
+
+**DECIDED BY TEAGUE, 2026-11-04: Option B.** `ast_type_map()` gains
+`native_strategy`. The kit then reads the declaration surface from the loaded
+map instead of from a source scan, which is the ABI's own answer and not a
+second definition of the loader.
+
+### What the measurements changed in this plan, after it was written
+
+Three things in the table above were taken from this document's own older text
+rather than from a run, and two of them were wrong.
+
+  - **The ambiguity row was stale.** It said ruby declares 21 raw_types twice
+    with conflicting strategies, quoting `class` at `ruby_types.def:71` and
+    `:593`. Measured 2026-11-04: ruby declares `class` **once**, there are no
+    preprocessor directives in that file, and the clean kit run reports
+    `ok ruby DECL-UNIQUE every raw_type declared exactly once`. Across all 28
+    registered languages the effective named table has **zero** duplicate
+    raw_types: row counts and distinct-key counts are equal for every one. So
+    the duplicates were fixed before this plan was written. The comment at
+    `conformance_kit.sh` in `check_native_absent()` still describes them, and
+    §"The four that are WRONG" above is the only place it matters; both are
+    historical, not current.
+  - **The shadowing row holds in principle and is empty in fact.** typescript's
+    effective table is 293 rows with 293 distinct raw_types, so nothing is
+    shadowed today. First-wins still decides what would happen, which is why
+    the oracle applies it.
+  - **The census was file-local, so it under-counted by exactly typescript.**
+    Re-derived with the C preprocessor over each language's declaration source,
+    applying the first-wins rule `unordered_map`'s initializer-list constructor
+    applies: **99** function-shaped declarations across the 28 registered
+    languages, not 91. typescript holds **13**, of which **11** are
+    `FUNCTION_WITH_PARAMS` — which reproduces L3's figure above from a second,
+    independent direction. A basename scan of `typescript_types.def` sees 5.
+
+The oracle is `workspace/` material rather than a gate: it exists to produce
+the expectations, and `ast_type_map()` is what the gate reads afterwards.
+
+**And the cost I put on Option A was overstated.** I argued A meant "a second
+definition of the loader, in a second language". `scripts/check_def_type_tables.py`
+already contains an include-aware `DEF_TYPE` reader — it reports "checked 3837
+DEF_TYPE entries across 31 translation unit roots" and its own self-test plants
+a **cross-include duplicate** — so A could have reused that reader instead of
+being written in awk. The repo already had the include-aware parse; the kit
+simply did not use it. B is still the better answer, for the reason it was
+chosen (the loaded map is the artifact, and it works for a module that ships no
+sources), but the comparison as I put it gave A a cost it did not have.
+
+### 3b as built
+
+`ast_type_map()` now reports `native_strategy` between `name_strategy` and
+`flags` — the third and fourth `DEF_TYPE` arguments, adjacent, with `flags`
+last. `scripts/generate_taxonomy.py` owns the label table, so
+`spec/taxonomy/taxonomy.yaml` stays the single place a strategy is named and
+the `taxonomy tables in sync` gate keeps the C++ honest.
+
+The expectation came first:
+`test/sql/conformance/native_strategy_declarations.test`, red before the change
+with `count_star()` 0 against 1 for the column's own existence. Its numbers are
+the oracle's, not the extension's, and it pins the typescript count at 11 with
+a note saying that reading 4 there means the surface has silently become a file
+scan again.
+
+Two documents described the old surface and are corrected in the same change:
+`docs/reference/functions.md`'s Output Schema listed seven columns, three of
+which (`semantic_name`, `selector`, `strategy`) do not exist and two of its
+three examples could not run; `docs/reference/module-abi.md` said the
+native-context axis is in-tree only, which this change is what fixes.
 
 ### 3c. The unit change
 
@@ -505,3 +571,249 @@ The 9032 reconciles with the 9027 recorded on main `d297e85` on 2026-10-28:
 `test/sql/ast_unparse_leaf_text.test` measures **35 assertions before it and 40
 after**, in one test case either way. 9027 + 5 = 9032, 162 cases unchanged.
 Measured by running that one file at both versions, not inferred from the diff.
+
+### 3a and 3b as landed
+
+| commit | what |
+|---|---|
+| `4c45743` | the `NATIVE-DECL` negative control, planted in the declaration table. 9 of 9 controls fire; the full kit run agrees with the clean baseline on **all 224 cells**, exit 0 |
+| `ff47d9a` | the expectation, red on the then-current build at its own first assertion |
+| `9343405` | `ast_type_map()` gains `native_strategy`; the label table is generated; two documents corrected |
+| `ccbc067` | `capability_declarations.test` retracts the closed half of the M1 finding, with its shape kept and pointing the other way |
+
+Static gates, all measured after `ccbc067`:
+
+```
+taxonomy tables are in sync with spec/taxonomy/taxonomy.yaml
+clang-format --dry-run -Werror src/ast_type_map_function.cpp      rc=0
+check_def_type_tables.py --self-test                              self-test OK
+check_def_type_tables.py            3837 entries, 31 TU roots, OK
+generate_language_reference.py      30 languages, docs/reference/languages NO DIFF
+native_strategy_declarations.test   24 assertions, passed
+capability_declarations.test        75 assertions, passed (failed at :166 before ccbc067)
+make release                        0 errors, 106 warnings (104 + one SetValue
+                                    deprecation per build target, same warning
+                                    at a new line)
+```
+
+Still to do in step 3: **3c** (the per-pair unit), **3d** (the bidirectional
+baseline) and **3e** (the `PASS` line). 3c is now a query against
+`native_strategy` rather than a scan, which is what the decision bought.
+
+### 3c, 3d and 3e as built, and what changing the unit found
+
+`NATIVE-DECL` now judges each declaring node type. The declarations come from
+`ast_type_map()`'s `native_strategy`, the corpus measurement is per raw type,
+and every verdict carries its denominator: `N of M declared pairs exercised`.
+
+**What it found, measured on `build/release/duckdb` at `2606999`:**
+
+```
+before (per language)   ok=192 FAIL=0 dirty=1 void=7 UNDECL=5 n/a=19   exit 0
+after  (per pair)       ok=187 FAIL=7 dirty=1 void=5 UNDECL=5 n/a=19   exit 3
+```
+
+**14 pairs in 7 languages**, where the language-level cell reported none. Every
+one is in `spec/conformance/native-decl-baseline.tsv` with its measurement and
+its reason; the shape of the finding is what matters here:
+
+| level | pairs | the shape |
+|---|---:|---|
+| L5 | 11 | the declaration names a node the strategy cannot serve. 8 of them declare a function-shaped strategy on an `ORGANIZATION_LIST` — the argument or parameter list ITSELF (`python parameters`, `javascript formal_parameters`, `cpp parameter_list`, …). A function-shaped strategy extracts the parameters OF a definition, so on the list node there is nothing to find. The other three are `css media_statement` (an `@media` block declared `DEFINITION_CLASS`), `sql invocation` (a call site, where `FUNCTION_CALL` is the strategy for arguments) and `sql statement` (a generic statement node) |
+| L3 | 3 | the node IS definition-shaped and owns a parameter list, so an implementation could satisfy it: `cpp function_declarator`, `cpp lambda_expression`, `dart method_signature`. Which specialization is missing is **not traced** — inferred from the declaration and the empty column, not read out of the extractor |
+
+Two of typescript's failing pairs reach it through
+`typescript_types.def:60`'s `#include` of javascript's table. A basename source
+scan cannot see them at all, so this is the first finding that **only** the
+Option B surface could produce.
+
+### The cell that moved the other way is itself a finding
+
+`html NATIVE-DECL` went from `void` ("no function definitions in corpus") to
+`ok`. The old check looked for `is_function_definition` nodes; the new one
+looks at the node types html actually declares. html declares
+`FUNCTION_WITH_PARAMS` on `element` (`html_types.def:87`, `ORGANIZATION_BLOCK`)
+and on `script_element` (`:90`, `EXTERNAL_EMBED`), and they deliver:
+
+```
+$ SELECT type, parameters FROM read_ast('test/data/unparse_leaf_text/sample.html',
+                                        context := 'native')
+  WHERE type IN ('element','script_element') AND len(parameters) > 0;
+element|[{'name': class, 'type': greeting}]
+```
+
+That is the HTML attribute `class="greeting"` arriving in the `parameters`
+column. **`ok` here is a true statement about non-emptiness and a false
+impression about correctness** — which is exactly the reach limit this plan
+stated before the work started: a per-pair non-emptiness check finds blanks,
+never populated-and-wrong values. It belongs with the four in §"The four that
+are WRONG", and it was found by accident, by a check that cannot see it.
+
+`css` moved the same way, `void` to `ok`, and carries the same caveat: its
+delivering node types are `call_expression`, `import_statement`,
+`keyframes_statement` and `rule`. A CSS `rule` reporting `parameters` is
+non-emptiness, not a signature. Neither cell is a FAIL and neither can be
+baselined, because both deliver — they are recorded here because the gate
+cannot see them.
+
+**Green, with the baseline, measured (`conformance_kit.sh:68`, 54 minutes):**
+
+```
+TOTALS ok=194 FAIL=0 dirty=1 void=5 UNDECL=5 n/a=19 | languages=28 (no fixture: 0)
+PASS: every check this run could judge was satisfied
+      declared pairs: 99 in 20 languages | baselined as known: 14 | 5 void, 5 undeclared, 19 n/a
+```
+
+Against the recorded clean run, exactly **two of 224 cells** changed, and both
+are the `void` to `ok` moves above. `NATIVE-DECL` is now 19 `ok`, 7 `n/a`, 1
+`UNDECL` (duckdb, which declares nothing anywhere) and 1 `void` (bash, whose
+one declared pair has no parameter in source). The 99 pairs in 20 languages
+agree with the preprocessor census to the pair.
+
+One more honest note on the measurements: `css media_statement` records
+`src_params=1`. The source-side guard looks for a word character inside the
+first parentheses, and in a media query that is `(max-width: 600px)`, not a
+parameter. The guard only ever decides `void` against `FAIL`, so it cannot
+manufacture a pass — but that row's "takes a parameter in source" is a guard
+artifact and the baseline says so.
+
+### The baseline, and why it has two controls
+
+`spec/conformance/native-decl-baseline.tsv`, generated by
+`--emit-decl-baseline` and annotated by hand, because a measurement says what
+and never why. The contract is bidirectional and both directions exit 3:
+
+  - a declared-and-undelivered pair that is **not listed** fails the run;
+  - a **listed** pair that no longer reproduces also fails the run. "Stopped
+    reproducing" includes becoming `void`: a pair nobody measures is not a pair
+    that was fixed.
+
+Each direction has its own planted fault, so the column carries **two**
+controls — and that asymmetry is written into the kit's header rather than left
+to be discovered, which is the whole lesson of this entry's `NATIVE-DECL` gap:
+
+```
+ok  NATIVE-DECL       1 declaring node types delivered nothing and are NOT baselined
+                      [function_declaration]; 1 of 1 declared pairs exercised
+ok  NATIVE-DECL-BASE  1 baselined pair(s) no longer reproduce [function_definition]
+                      -- fixed, or the corpus stopped exercising them; prune the baseline
+CONTROLS OK: every check demonstrably detects its planted fault
+```
+
+`NATIVE-DECL-BASE` asserts the MESSAGE, not just the verdict: python has
+unlisted failures of its own, so a bare `FAIL` would have proved nothing there.
+
+### 3e: the verdict states its own scope
+
+The final line used to read `PASS: every declared capability was delivered`,
+which is the sentence this document quotes as having been printed over python
+and zig. It now reads:
+
+```
+PASS: every check this run could judge was satisfied
+      declared pairs: N in M languages | baselined as known: 14 | V void, U undeclared, A n/a
+```
+
+### The gate now exists and still runs nowhere — a decision for Teague
+
+Measured 2026-11-04: `conformance_kit.sh` appears in
+`.github/workflows/MainDistributionPipeline.yml` exactly once, inside a
+**comment** (line 349). No job runs it. The table in §"Why no existing gate
+caught any of them" already said `in a workflow: no`, and step 3 did not change
+that.
+
+So the bidirectional baseline is only bidirectional when someone runs the kit.
+A new declared-and-undelivered pair exits 3 — on a developer's machine, when
+asked. Nothing catches it on a push.
+
+The cost is the reason it is a decision rather than an omission: the full run
+takes **54 minutes** (`conformance_kit.sh:68`), most of it in RAW-JOIN and
+NO-EMPTY iterating fixtures per language. Three shapes, cheapest first:
+
+  - `--emit-decl-baseline` alone runs only NATIVE-DECL and took **under two
+    minutes**. A job that emits and diffs against the committed baseline would
+    catch both directions of the contract and nothing else.
+  - `--controls-only` takes **110 seconds** and proves all ten controls fire,
+    which is what makes any later matrix readable.
+  - the full matrix at 54 minutes, which is a nightly rather than a per-push
+    job.
+
+Recommended: the first two per push, the full matrix nightly. Not done — it is
+new CI minutes on every push and that is Teague's call, not a gate decision.
+
+### Step 4 as landed — the four populated-and-wrong values
+
+Expectation first in every case, and every number re-measured on this build
+rather than taken from the table above. That mattered: the table was right
+about all four defects, and incomplete about two of them.
+
+| | expectation | fix | what changed |
+|---|---|---|---|
+| 4.1 python | `c0973a5` | `55b578a` | `d: float = 1` was `int`, now `float`; `y: int` was the string `assignment`, now `int` |
+| 4.2 swift | `7c45a48` | `fdd2347` | `add(a: 1, b: 2)` was one argument `(a: 1, b: 2)`, now two: `a: 1`, `b: 2` |
+| 4.3 lua | `26436b2` | `35b4cd5` | a function nested in a `local function` was `[local]`, now carries no modifier |
+| 4.4 lua | `26436b2` | `35b4cd5` | `local l_local` and `local function l_func` were exported, now are not |
+
+#### Two of my own expectations were wrong, and both were caught while red
+
+  - **python.** I first asserted that no `signature_type` may be any node type
+    name. That would have **failed on correct output**: `list`, `set`, `tuple`
+    and `type` are all python node types and perfectly good annotations, so
+    `b: list = []` must report `list`. Narrowed to "no node reports its OWN
+    type as its type" — and that version returned **5**, not 1. python leaked
+    the node type string in two places: the `assignment` this document
+    records, and the four annotation `identifier` nodes under it, which fell
+    through `ExtractIdentifierType` to `return "identifier"`. The fix addresses
+    both.
+  - **swift.** My test's own header said it was not pinning argument labels,
+    and the next assertion pinned the types as `1` and `2` — which requires
+    splitting `a: 1` into label and value. Corrected to `a: 1` / `b: 2`: two
+    arguments rather than one blob, which is the defect. The label split needs
+    `value_argument_label`, still recorded as a dead literal.
+
+#### The swift fix was a nesting level, not a renamed literal
+
+`argument_list` was indeed absent from the grammar. But `value_arguments` is a
+**grandchild** of the call node, and `ExtractCallExpression` matches on direct
+children only:
+
+```
+call_expression > call_suffix > value_arguments > value_argument
+                                               > value_argument_label
+```
+
+So renaming the literal alone would have matched nothing and delivered zero
+arguments. `ExtractCallArguments` now descends one level when the node it was
+handed merely WRAPS the container named by `types.arguments`. For every other
+language the matched node IS that container, so nothing else moves.
+
+#### And the fix moved a baseline, which is the contract working
+
+`swift / argument_list` was listed in `spec/abi/module-abi.yaml` as a known
+dead literal. The fix makes it *absent* rather than dead, so the entry stopped
+reproducing and `verify_native_dispatch.py` would have exited 1 —
+"a listed literal the run cannot reproduce". Pruned in the same commit:
+
+```
+OK: 69 known-dead literal(s) still exactly as spec/abi/module-abi.yaml records
+    them, and no new ones
+```
+
+69 where it read 70. A baseline that only catches new findings is half a gate;
+this is the other half firing on a fix.
+
+#### Scope held where the measurement did not support the claim
+
+042's lua table lists four wrong rows. `g_global = 1` is not one this dispatch
+can own: measured, it produces no definition node at all, only an
+`assignment_statement` typed `OPERATOR_ASSIGNMENT`. Whether a bare global
+assignment should be MODELLED as an exported variable definition is a `.def`
+and semantic-type decision. 2 of the 3 rows the dispatch owns are fixed; that
+one is stated rather than folded in.
+
+#### Regression evidence
+
+The 7 `native_extraction` tests report **535 assertions** after all four
+fixes — the same count as before any of them. `verify_module_abi.py` and
+`verify_native_dispatch.py` both OK. The full suite is the release gate and
+runs next.

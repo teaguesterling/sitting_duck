@@ -774,6 +774,15 @@ private:
 				return ExtractAssignmentType(parent, content);
 			} else if (parent_type == "annotated_assignment") {
 				return ExtractAnnotatedAssignmentType(parent, content);
+			} else if (parent_type == "type") {
+				// The identifier IS the annotation: `d: float` gives a `type`
+				// node whose only child is the identifier `float`. Falling
+				// through to the "identifier" default below put this node's own
+				// type string into a type column -- the same defect as the
+				// `assignment` one, found by the same assertion in
+				// test/sql/bugs/042_python_type_annotations.test, which
+				// requires that NO node report its own type as its type.
+				return ExtractTypeText(node, content);
 			} else if (parent_type == "attribute") {
 				return "attribute_access";
 			} else if (parent_type == "call") {
@@ -847,8 +856,28 @@ private:
 	}
 
 	static string ExtractAssignmentType(TSNode node, const string &content) {
-		// For assignments, try to infer type from right-hand side
+		// AN ANNOTATION WINS OVER INFERENCE, and this is where it has to be
+		// read. tree-sitter-python emits `assignment` with a `type` child for
+		// `d: float = 1`; it has no `annotated_assignment` node at all -- zero
+		// occurrences in ts_symbol_names[] -- so the branch for that node type
+		// in Extract() above is unreachable, and ExtractAnnotatedAssignmentType
+		// is dead code kept only for a grammar that might emit it.
+		//
+		// Before this, `d: float = 1` reported `int`, inferred from the 1, and
+		// `y: int` -- which has no value to infer from -- reported the string
+		// "assignment": the node's own type, in a type column.
+		// tracker/bugs/042 step 4.1, pinned by
+		// test/sql/bugs/042_python_type_annotations.test.
 		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			if (strcmp(ts_node_type(child), "type") == 0) {
+				return ExtractTypeText(child, content);
+			}
+		}
+
+		// No annotation: infer from the right-hand side, which is correct for
+		// `z = 3` and is unchanged.
 		for (uint32_t i = 0; i < child_count; i++) {
 			TSNode child = ts_node_child(node, i);
 			const char *child_type = ts_node_type(child);
@@ -860,7 +889,10 @@ private:
 			}
 		}
 
-		return "assignment";
+		// Neither an annotation nor a value, so nothing is known about the
+		// type. "assignment" -- this node's own type string -- is not an
+		// answer, it is the absence of one wearing data's clothes.
+		return "";
 	}
 
 	static vector<string> ExtractAssignmentModifiers(TSNode node, const string &content) {

@@ -1,0 +1,55 @@
+# name: test/sql/bugs/042_lua_local_visibility.test
+# description: tracker/bugs/042 step 4.4 -- `local` decides lua visibility
+# group: [bugs]
+
+# WHY THIS FAILS BEFORE THE FIX
+#
+# lua's IsPublicNode dispatches on three node types that tree-sitter-lua does
+# not emit, so `local` is never consulted on a declaration node and everything
+# declared comes back exported.
+#
+# Measured on build/release/duckdb at caeeaa0, before the fix:
+#
+#   local l_local = 2            variable_declaration  is_exported = true    WRONG
+#   function g_func() end        function_declaration  is_exported = true    correct
+#   local function l_func() end  function_declaration  is_exported = true    WRONG
+#
+# SCOPE, stated because 042's table lists a fourth row this file does not pin.
+# `g_global = 1` produces no definition node at all: lua has no declaration
+# syntax for a global, so the only node carrying that name is an
+# `assignment_statement` with semantic type OPERATOR_ASSIGNMENT. Whether a bare
+# global assignment should be MODELLED as an exported variable definition is a
+# declaration question -- a .def and semantic-type decision -- and not part of
+# the visibility dispatch. This file fixes `local` being ignored, which is 2 of
+# the 3 wrong rows, and leaves that one where it belongs.
+
+require sitting_duck
+
+# =============================================================================
+# `local` is not exported; a bare declaration is
+# =============================================================================
+
+query III
+SELECT start_line, type, is_exported(flags)
+FROM parse_ast('g_global = 1
+local l_local = 2
+function g_func() end
+local function l_func() end', 'lua')
+WHERE type IN ('variable_declaration', 'function_declaration')
+ORDER BY start_line, type;
+----
+2	variable_declaration	false
+3	function_declaration	true
+4	function_declaration	false
+
+# The positive row above is the control: a fix that simply stopped exporting
+# anything would satisfy the two `local` rows and break `g_func`, and this
+# file would still fail. Stated as its own assertion so the reason survives
+# a later edit to the table.
+
+query I
+SELECT count(*)
+FROM parse_ast('function g_func() end', 'lua')
+WHERE type = 'function_declaration' AND is_exported(flags);
+----
+1

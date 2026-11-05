@@ -1,0 +1,96 @@
+# name: test/sql/bugs/042_swift_call_arguments.test
+# description: tracker/bugs/042 step 4.2 -- swift call arguments come back as arguments, not as one blob
+# group: [bugs]
+
+# WHY THIS FAILS BEFORE THE FIX
+#
+# LANGUAGE_FUNCTION_CALL_TYPES["swift"] names the argument container
+# `argument_list`, which is NOT in the swift grammar's symbol table. The
+# grammar nests `call_expression > call_suffix > value_arguments`. Finding no
+# container it knows, the extractor takes the whole call suffix as a single
+# argument -- parentheses included.
+#
+# Measured on build/release/duckdb at caeeaa0, before the fix:
+#
+#   swift   add(a: 1, b: 2)   [{'name': '', 'type': '(a: 1, b: 2)'}]
+#   python  add(1, 2)         [{'name': '', 'type': 1}, {'name': '', 'type': 2}]
+#
+# python is the ORACLE here, and that matters: without a second language
+# answering the same question the swift row looks like a populated column doing
+# its job. 042 records that only an oracle language caught this one, which is
+# why it is now item 1.7 of the review rubric.
+#
+# swift's DEFINITION path is fine and stays pinned below, so this is the call
+# path alone:
+#   func add(a: Int, b: Int)  ->  [{'name': a, 'type': Int}, {'name': b, 'type': Int}]
+#
+# NOT PINNED, deliberately: the argument LABELS. Swift labels its call
+# arguments (`a:`, `b:`) and the grammar has a `value_argument_label` node, so
+# a richer answer than python's empty names is possible -- but that is a
+# separate question from "one blob or two arguments", and pinning it here would
+# demand a feature in a bugfix.
+
+require sitting_duck
+
+# =============================================================================
+# 1. Two arguments, not one
+# =============================================================================
+
+query I
+SELECT len(parameters)
+FROM parse_ast('func add(a: Int, b: Int) -> Int { return a + b }
+let r = add(a: 1, b: 2)', 'swift', context := 'native')
+WHERE type = 'call_expression';
+----
+2
+
+# =============================================================================
+# 2. And each one is an argument, not the whole parenthesised suffix
+# =============================================================================
+# The tell is punctuation: an argument's type cannot contain the call's own
+# parentheses or the comma that separates it from the next argument. This is
+# the assertion that would have caught the defect without knowing the right
+# answer, which is what makes it worth keeping after the fix.
+
+query I
+SELECT count(*) FROM (
+    SELECT unnest(parameters) AS p
+    FROM parse_ast('let r = add(a: 1, b: 2)', 'swift', context := 'native')
+    WHERE type = 'call_expression'
+) WHERE p.type LIKE '%(%' OR p.type LIKE '%)%' OR p.type LIKE '%,%';
+----
+0
+
+# Each argument is the corresponding argument from the source. The LABEL is
+# still part of the text, and that is the honest expectation for this fix:
+# splitting `a: 1` into name `a` and value `1` means parsing
+# `value_argument_label`, which 042 lists among swift's dead literals as a
+# SEPARATE finding. A first draft of this file pinned `1` and `2`, which would
+# have demanded that split inside a bugfix -- the exact thing the header says
+# it is not pinning.
+query I
+SELECT p.type FROM (
+    SELECT unnest(parameters) AS p
+    FROM parse_ast('let r = add(a: 1, b: 2)', 'swift', context := 'native')
+    WHERE type = 'call_expression'
+);
+----
+a: 1
+b: 2
+
+# =============================================================================
+# 3. The definition path must not move
+# =============================================================================
+# swift already extracts a function definition's parameters with names AND
+# types. A fix that reaches for the call container must not disturb it.
+
+query III
+SELECT p.name, p.type, 'definition' FROM (
+    SELECT unnest(parameters) AS p
+    FROM parse_ast('func add(a: Int, b: Int) -> Int { return a + b }', 'swift',
+                   context := 'native')
+    WHERE type = 'function_declaration'
+);
+----
+a	Int	definition
+b	Int	definition
