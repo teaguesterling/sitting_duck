@@ -149,3 +149,31 @@ SELECT COUNT(*) FROM ast_select('test/data/callgraph/edge_cases.py', '.fn:export
 WHERE name IN ('inner_same', 'level2', 'level3');
 ----
 0
+
+# =============================================================================
+# 7. THE CONSEQUENCE -- prune := ['internal'] follows the flag
+#
+# ShouldPruneNode (src/include/unified_ast_backend_impl.hpp:85) subtree-prunes
+# any BINDS_NAME node that lacks IS_EXPORTED, so this change also narrows
+# `prune := ['internal']`. That is a second feature moving, and it had no test
+# of its own before this file, so it is pinned here rather than left implicit.
+#
+# Measured after the fix: 11 function_definitions become 8, losing exactly the
+# three nested ones. Before the fix all 11 survived, because every one of them
+# carried IS_EXPORTED -- derived from the measured pre-fix flags recorded at the
+# top of this file plus the ShouldPruneNode condition, not separately measured.
+# =============================================================================
+
+query II
+SELECT count(*), string_agg(name, ',' ORDER BY name)
+FROM read_ast('test/data/callgraph/edge_cases.py', prune := ['internal'])
+WHERE type = 'function_definition';
+----
+8	direct_and_nested,level1,method,method_lambda,recurse,twin_a,twin_b,with_comprehension
+
+# CONTROL: without the policy, nothing is pruned.
+query I
+SELECT count(*) FROM read_ast('test/data/callgraph/edge_cases.py')
+WHERE type = 'function_definition';
+----
+11
