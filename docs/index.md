@@ -99,7 +99,7 @@ Reconstruct formatted source code from AST tables with the `ast_unparse` engine:
 WITH ast AS (
     SELECT * FROM parse_ast('def greet(name): print(f"Hello {name}")', 'python')
 )
-SELECT ast_unparse(ast) AS code;
+SELECT source FROM ast_unparse_from('ast');
 ```
 
 [Unparse reference guide →](reference/unparse.md)

@@ -61,7 +61,7 @@ transformed AS (
     FROM parsed
 )
 -- Unparse: Regenerate valid Python code
-SELECT ast_unparse(transformed) AS refactored_code;
+SELECT source AS refactored_code FROM ast_unparse_from('transformed');
 ```
 
 ---
@@ -77,18 +77,28 @@ FROM ast_unparse_rules('go')
 WHERE rule_kind IN ('INDENT_CHILDREN', 'BREAK_BEFORE', 'EMPTY_LINES_BEFORE');
 ```
 
-You can customize the indentation width or line endings directly in `ast_unparse()`:
+Indentation and line endings come from the rule set, and you choose a rule set with
+a `preset` argument rather than with per-call formatting options. The presets are
+`pep8` / `black`, `gofmt`, `prettier`, `llvm`, `google` and `rustfmt`:
 
 ```sql
--- Unparse with 2-space indentation (e.g. for JavaScript/JSON/YAML)
-SELECT ast_unparse(parsed_ast, indent_size := 2);
+-- Default rules indent with four spaces
+SELECT source FROM ast_unparse_code(E'func f() int {\nreturn 1\n}\n', 'go');
 
--- Unparse with hard tabs (e.g. for Go or Makefile)
-SELECT ast_unparse(parsed_ast, use_tabs := true);
-
--- Unparse with CRLF Windows newlines
-SELECT ast_unparse(parsed_ast, newline := '\r\n');
+-- gofmt indents with a hard tab instead
+SELECT source FROM ast_unparse_code(E'func f() int {\nreturn 1\n}\n', 'go', 'gofmt');
 ```
+
+A preset *is* a rule set, so you can see exactly which rules it changes:
+
+```sql
+SELECT rule, target, int_arg FROM ast_unparse_rules('python', 'black')
+EXCEPT
+SELECT rule, target, int_arg FROM ast_unparse_rules('python', '');
+-- INDENT_STRING | * | 0
+```
+
+For anything no preset covers, pass your own rules table to `ast_unparse_custom()`.
 
 ---
 
@@ -100,27 +110,31 @@ Sitting Duck's unparser satisfies the **pseudo-identity property**:
 parse(unparse(parse(S)))  ==  parse(S)
 ```
 
-You can test this property directly in SQL:
+You can test this property directly in SQL. The unparsed text has to reach
+`parse_ast()` through a variable rather than a CTE, because a table function
+argument cannot be a subquery (`Binder Error: Table function cannot contain
+subqueries`):
 
 ```sql
-WITH original AS (
-    SELECT * FROM parse_ast('def multiply(x, y): return x * y', 'python')
-),
-unparsed AS (
-    SELECT ast_unparse(original) AS code
-),
-reparsed AS (
-    SELECT * FROM parse_ast((SELECT code FROM unparsed), 'python')
-)
--- Verify that node structure, types, and identifiers match exactly
+CREATE OR REPLACE TABLE original AS
+    SELECT * FROM parse_ast('def multiply(x, y): return x * y', 'python');
+
+SET VARIABLE roundtrip_code = (SELECT source FROM ast_unparse_from('original'));
+
+CREATE OR REPLACE TABLE reparsed AS
+    SELECT * FROM parse_ast(getvariable('roundtrip_code'), 'python');
+
+-- Verify that node structure, types, and identifiers match exactly.
+-- The count is the assertion: 0 means the property held.
 SELECT
-    o.node_id,
-    o.type AS original_type,
-    r.type AS roundtrip_type,
-    o.name AS original_name,
-    r.name AS roundtrip_name
-FROM original o
-FULL OUTER JOIN reparsed r ON o.node_id = r.node_id;
+    (SELECT count(*) FROM original)  AS original_nodes,
+    (SELECT count(*) FROM reparsed)  AS roundtrip_nodes,
+    (SELECT count(*)
+       FROM original o FULL OUTER JOIN reparsed r ON o.node_id = r.node_id
+      WHERE o.type IS DISTINCT FROM r.type
+         OR o.name IS DISTINCT FROM r.name) AS mismatches;
+-- original_nodes | roundtrip_nodes | mismatches
+--             18 |              18 |          0
 ```
 
 ---

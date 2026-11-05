@@ -825,7 +825,7 @@ modified AS (
         start_line, end_line, depth, sibling_index, children_count, descendant_count, peek
     FROM parsed
 )
-SELECT ast_unparse(modified) AS generated_code;
+SELECT source AS generated_code FROM ast_unparse_from('modified');
 ```
 
 Discover formatting and layout rules using `ast_unparse_rules()`:
