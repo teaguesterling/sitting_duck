@@ -325,9 +325,24 @@ SELECT name FROM ast_select('src/**/*.py', '.var:is-referenced');
 SELECT name FROM ast_select('src/**/*.py', '.func:not(:is-referenced)');
 ```
 
-### `:exported` — Module-Level Public Definition
+### `:exported` — Visible Outside the File
 
-Matches definitions at module scope that are part of the public API:
+Matches definitions that the language treats as visible outside the file. Each
+language gives its own rule:
+
+| Language | Rule |
+|---|---|
+| Python | the name does not start with `_` |
+| Go | the name starts with a capital letter |
+| Java | the declaration has a `public` modifier |
+| JavaScript | the declaration is inside an `export` statement |
+| C++ | namespace or global scope, or after `public:` |
+
+A public method matches. In Go, Java, JavaScript and C++, a method of a
+reachable class is part of the public API.
+
+A definition inside a function body never matches. No supported language can
+import it, whatever its name (#148).
 
 ```sql
 -- Public API surface
@@ -335,6 +350,13 @@ SELECT name, type FROM ast_select('src/**/*.py', ':exported');
 
 -- Exported but never referenced internally
 SELECT name FROM ast_select('src/**/*.py', ':exported:not(:is-referenced)');
+```
+
+For module-level definitions only, use `ast_exports()`. It adds the
+module-scope condition that `:exported` does not apply:
+
+```sql
+SELECT name, type FROM ast_exports('src/**/*.py');
 ```
 
 ### Pseudo-Elements (`::` — Navigation)
@@ -661,7 +683,7 @@ This is useful in environments where you can't install community extensions, or 
 | `:called-by(name)` | Immediate enclosing function is name (a lambda counts as the function) |
 | `:is-called` | Function is called somewhere |
 | `:is-referenced` | Definition is referenced somewhere |
-| `:exported` | Module-level public definition |
+| `:exported` | Definition the language treats as visible outside the file |
 | **Ordering** | |
 | `:precedes(type)` | Before a sibling of type |
 | `:follows(type)` | After a sibling of type |

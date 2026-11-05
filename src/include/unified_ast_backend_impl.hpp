@@ -321,9 +321,31 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 				// NAME_DECLARATION (0x04) bitmask matches both DECLARATION and DEFINITION
 				// since DEFINITION (0x06) also has bit 2 set. ast_exports() further
 				// narrows to definitions only via is_name_definition().
+				//
+				// A definition inside a FUNCTION BODY is never visible outside the file,
+				// whatever the language's rule says about its name (#148). A nested def
+				// cannot be imported in Python, Go, Java, JavaScript or C++, so the name
+				// convention alone is not enough. scope_node_stack holds only this node's
+				// ANCESTORS at this point -- the current node is pushed further down, after
+				// scope tracking -- so a DEFINITION_FUNCTION on the stack means "inside a
+				// function body". A method is deliberately NOT excluded: its nearest scope
+				// is a class, which is itself reachable from outside.
+				//
+				// Checked here, before the prune check below, so that prune_internal reads
+				// the same answer as :exported, is_exported() and ast_exports().
 				if ((ast_node.universal_flags & ASTNodeFlags::NAME_DECLARATION) &&
 				    adapter->IsPublicNode(entry.node, content)) {
-					ast_node.universal_flags |= ASTNodeFlags::IS_EXPORTED;
+					bool inside_function_body = false;
+					for (auto it = scope_node_stack.rbegin(); it != scope_node_stack.rend(); ++it) {
+						// Mask refinement bits, as the nearest-of-kind scan below does.
+						if ((it->kind & 0xFC) == SemanticTypes::DEFINITION_FUNCTION) {
+							inside_function_body = true;
+							break;
+						}
+					}
+					if (!inside_function_body) {
+						ast_node.universal_flags |= ASTNodeFlags::IS_EXPORTED;
+					}
 				}
 			} else {
 				// No context info - set minimal defaults (use flat fields)
