@@ -15,9 +15,14 @@
 #   languages/javascript/javascript_adapter.cpp   inside an `export` statement
 #   languages/cpp/cpp_adapter.cpp            namespace/global, or after `public:`
 #
-# In Go, Java, JavaScript and C++ a public METHOD is part of the public API, so
-# a module-scope rule would empty the pseudo-class of meaning there -- Java
-# would match only top-level public types. The docs sentence is what was wrong.
+# In Go, Java and C++ a public METHOD is part of the public API, so a
+# module-scope rule would empty the pseudo-class of meaning there -- Java would
+# match only top-level public types. The docs sentence is what was wrong.
+#
+# CORRECTION (a4cbc3f): an earlier version of this comment claimed the same for
+# JavaScript. Measured, a JS method is NEVER exported: the rule tests the node's
+# own type and its PARENT's type for `export`, and a method's parent is the
+# class body. TypeScript matches a method only where `public` is written.
 #
 # One case is false in every one of those languages: a function defined inside
 # another function's body cannot be imported, whatever its name. That is the
