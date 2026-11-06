@@ -139,7 +139,7 @@ DEF_TYPE("unset_command", DEFINITION_VARIABLE | SemanticRefinements::Variable::M
  */
 
 /// @brief Generic command - wrapper for command structures
-DEF_TYPE("command", COMPUTATION_CALL, NONE, NONE, 0)
+DEF_TYPE("command", COMPUTATION_CALL, CUSTOM, NONE, 0)
 
 /// @brief Pipeline - commands connected via `|` for stream processing
 DEF_TYPE("pipeline", EXECUTION_STATEMENT, NONE, NONE, 0)

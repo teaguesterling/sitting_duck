@@ -63,6 +63,24 @@ string BashAdapter::ExtractNodeName(TSNode node, const string &content) const {
 	if (config) {
 		if (config->name_strategy == ExtractionStrategy::CUSTOM) {
 			string node_type = string(node_type_str);
+			if (node_type == "command") {
+				// The command name lives in the grammar's REQUIRED `name` field, which holds a
+				// `command_name` wrapper -- it is not a direct child of `command`. Argument words
+				// ARE direct children, so FIND_IDENTIFIER's `word` pass named the first ARGUMENT:
+				// `date +%s` came out as `+%s` (#140). Commit 28c61fd left this UNNAMED rather
+				// than wrong, and tracked the correct binding here.
+				TSNode name_node = ts_node_child_by_field_name(node, "name", 4);
+				if (ts_node_is_null(name_node)) {
+					return "";
+				}
+				// Only a literal `word` is a statically knowable command name. A
+				// `simple_expansion` callee (`$verbose && ...`, `if $DEBUG; then`), a string or a
+				// command substitution resolves at run time, and naming it would record the
+				// VARIABLE rather than the command -- the same class of wrong name as `+%s`.
+				// Python returns "" for `fns[k]()` and JavaScript for `obj[k]()`, so an empty
+				// name is the house answer for a dynamic callee, not a gap.
+				return FindChildByType(name_node, content, "word");
+			}
 			if (node_type == "declaration_command") {
 				// declaration_command nests the variable name 2 levels deep:
 				// declaration_command -> variable_assignment -> variable_name
