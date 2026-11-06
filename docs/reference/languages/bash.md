@@ -92,7 +92,7 @@ Command execution in Bash: - Simple commands: `command arg1 arg2` - Pipelines: `
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
-| `command` | COMPUTATION_CALL | NONE | Generic command - wrapper for command structures |
+| `command` | COMPUTATION_CALL | CUSTOM | Generic command - wrapper for command structures |
 | `pipeline` | EXECUTION_STATEMENT | NONE | Pipeline - commands connected via `\|` for stream processing |
 | `command_substitution` | COMPUTATION_CALL \| Call::FUNCTION | NONE | Command substitution - `$(cmd)` captures command output as string |
 | `process_substitution` | COMPUTATION_CALL \| Call::FUNCTION | NONE | Process substitution - `<(cmd)` or `>(cmd)` provides file descriptor |
