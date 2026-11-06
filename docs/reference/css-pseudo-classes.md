@@ -337,19 +337,38 @@ SELECT name FROM ast_select('src/**/*.py', '.func:not(:is-referenced)');
 
 ### `:exported` — Visible Outside the File
 
-Matches definitions that the language treats as visible outside the file. Each
-language gives its own rule:
+Matches definitions that the language treats as visible outside the file. All 28
+language adapters give a rule. Eleven of them:
 
 | Language | Rule |
 |---|---|
 | Python | the name does not start with `_` |
 | Go | the name starts with a capital letter |
-| Java | the declaration has a `public` modifier |
-| JavaScript | the declaration is inside an `export` statement |
+| Dart | the name does not start with `_` |
+| C | no `static` storage class |
 | C++ | namespace or global scope, or after `public:` |
+| Ruby | public unless a preceding bare `private` or `protected` |
+| Java | a `public` modifier; no modifier means package-private, so no |
+| C# | a `public` or `internal` modifier |
+| Rust | a `pub` visibility modifier |
+| JavaScript | the declaration, or its parent, is an `export` statement |
+| TypeScript | the same, or an explicit `public` modifier |
 
-A public method matches. In Go, Java, JavaScript and C++, a method of a
-reachable class is part of the public API.
+**A public method matches in most of these languages, and not in JavaScript.**
+Measured on an `export class` holding one method:
+
+```
+js  class_declaration    Service        exported
+js  method_definition    publicMethod   NOT exported
+ts  method_definition    publicMethod   exported       -- `public` is written
+ts  method_definition    bareMethod     NOT exported
+py  function_definition  public_method  exported
+```
+
+JavaScript's rule tests the declaration and its parent for `export`. A method's
+parent is the class body, so a method can never match. TypeScript adds a test
+for an accessibility modifier, so a method matches only where `public` is
+written.
 
 A definition inside a function body never matches. No supported language can
 import it, whatever its name (#148).
