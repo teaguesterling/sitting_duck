@@ -370,8 +370,22 @@ parent is the class body, so a method can never match. TypeScript adds a test
 for an accessibility modifier, so a method matches only where `public` is
 written.
 
-A definition inside a function body never matches. No supported language can
-import it, whatever its name (#148).
+A definition inside a function body does not match, whatever its name (#148).
+Nothing can import a name bound inside a function body, so the language's own
+visibility rule is not sufficient on its own.
+
+**One measured exception: Dart.** Dart's `function_signature` carries the
+function's name and is a *sibling* of its `function_body`, not its parent, so a
+Dart function body is not recognised as being inside a function. A Dart local
+still matches, where the same shape in Python does not:
+
+```
+dart    local_variable_declaration  localSecret  matches
+python  assignment                  localSecret  does not match
+```
+
+This is tracked, and is the behaviour of every release so far rather than a
+change.
 
 ```sql
 -- Public API surface
