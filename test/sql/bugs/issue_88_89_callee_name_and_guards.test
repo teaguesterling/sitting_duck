@@ -12,7 +12,8 @@
 #
 # Issue #89: where the engine cannot honor a selector's semantics it must say
 # so. Covered here: #name bound to call nodes over a source whose call nodes
-# carry no callee names (bash command_substitution), unknown attribute names,
+# carry no callee names (bash `$(...)` and dynamically-named commands),
+# unknown attribute names,
 # and documented-but-unsupported attribute/operator combos — all raise errors
 # instead of returning silently-wrong/empty results.
 #
@@ -164,29 +165,69 @@ caller	5
 # Section 4: #89 guards — "can't answer" raises, never a silent empty
 # =============================================================================
 
-# Bash command_substitution is CALL-semantic but carries no single callee name.
-# Binding a #name to call nodes over such a source is unanswerable: error.
+# THE GUARD SOURCE MOVED IN #140a, and it had to move. These three assertions
+# used test/data/call_extraction/calls.sh, which is `stamp=$(date +%s)` and
+# `echo "$stamp"`. Its `command` nodes were unnamed, so binding `#date` was
+# unanswerable and raised. #140a binds `command`'s name, so that source is now
+# ANSWERABLE -- it is asserted positively further down, and `.call#date` there
+# returns the `date` row instead of raising.
+#
+# A guard with no source that triggers it is not a tested guard, so the shape
+# moved to test/data/conformance/control/dynamic_calls.sh. Every call node in
+# that file is unnamed for a reason #140a does not remove: a command named by a
+# parameter expansion (`$cmd --flag`) or a string (`"$prog" arg`) resolves at
+# run time, and `$(...)` has no single callee at all (#91). Measured, 4 call
+# nodes, 0 named.
 statement error
-SELECT * FROM ast_select('test/data/call_extraction/calls.sh', '.call#date');
+SELECT * FROM ast_select('test/data/conformance/control/dynamic_calls.sh', '.call#date');
 ----
 no call node in this source carries a callee name
 
 # Same guard for the :has() composition...
 statement error
-SELECT * FROM ast_select('test/data/call_extraction/calls.sh', 'program:has(.call#date)');
+SELECT * FROM ast_select('test/data/conformance/control/dynamic_calls.sh', 'program:has(.call#date)');
 ----
 no call node in this source carries a callee name
 
 # ...and for :not(:has()) — where the failure mode would be matching EVERYTHING
 statement error
-SELECT * FROM ast_select('test/data/call_extraction/calls.sh', 'program:not(:has(.call#date))');
+SELECT * FROM ast_select('test/data/conformance/control/dynamic_calls.sh', 'program:not(:has(.call#date))');
 ----
 no call node in this source carries a callee name
 
-# .call WITHOUT a name filter over the same source is answerable and stays quiet.
-# bash `command` is now COMPUTATION_CALL (#139), so this counts the two commands
-# (date, echo) plus the command_substitution — all call-semantic but unnamed
-# (correct command-name binding is tracked in #140).
+# =============================================================================
+# Section 4a: #140a — the formerly-unanswerable bash source now ANSWERS.
+#
+# This is the positive twin of the three guards above, and the user-visible
+# point of #140a: `.call#date` over a shell script used to be impossible.
+# Asserted by ROW, not by count, per the #83 convention -- a count alone would
+# pass if the selector started matching the wrong node.
+# =============================================================================
+
+query III
+SELECT type, name, start_line
+FROM ast_select('test/data/call_extraction/calls.sh', '.call#date');
+----
+command	date	2
+
+# The two composed forms answer too, rather than raising. `:not(:has())` is the
+# sharp one: its failure mode is matching EVERYTHING, so 0 is the assertion that
+# the negation actually ran.
+query I
+SELECT COUNT(*) FROM ast_select('test/data/call_extraction/calls.sh', 'program:has(.call#date)');
+----
+1
+
+query I
+SELECT COUNT(*) FROM ast_select('test/data/call_extraction/calls.sh', 'program:not(:has(.call#date))');
+----
+0
+
+# .call WITHOUT a name filter is answerable and stays quiet, and its count is
+# UNCHANGED by #140a. bash `command` is COMPUTATION_CALL (#139), so this counts
+# the two commands (date, echo) plus the command_substitution. #140a changed
+# which of them carry names, not how many are call-semantic -- pinning the same
+# 3 here is what separates "named correctly" from "retyped by accident".
 query I
 SELECT COUNT(*) FROM ast_select('test/data/call_extraction/calls.sh', '.call');
 ----

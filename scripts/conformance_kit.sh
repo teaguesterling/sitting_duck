@@ -1635,10 +1635,17 @@ else
     control_note "PARSE" notfired "control/broken.py" "missing"
 fi
 
-# --- CALL-NAMED: a forced declaration over an all-unnamed fixture must FAIL --
-# Runs check_call_named itself: bash's own ast_type_map() shows 0 named call
-# node types, so the capability is FORCED on (and the forcing is visible), and
-# the fixture is pure `$(...)` substitution, so no call node can be named.
+# --- CALL-NAMED: a forced declaration over a part-unnamed fixture must FAIL ---
+# Runs check_call_named itself. The capability is FORCED on, which matters for
+# two reasons: bash declares naming for only ONE of its three call-semantic
+# types (`command`, since #140a), and forcing DROPS the per-node-type gate, so
+# every call node in the fixture is judged rather than only the declared ones.
+#
+# CORRECTED (#140a). This used to say bash shows "0 named call node types" and
+# that the fixture is "pure `$(...)` substitution, so no call node can be
+# named". Both are now wrong: bash shows 1, and 3 of the fixture's 6 call nodes
+# are named. The control still FAILS, which is what it is here to do -- the 3
+# `$(...)` nodes have no single callee and stay unnamed (#91).
 if [ -f "${control_dir}/unnamed_calls.sh" ]; then
     override[bash:call_names]=1
     r=$(check_call_named bash "['$(sql_quote "${control_dir}/unnamed_calls.sh")']")
