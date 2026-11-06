@@ -1,0 +1,127 @@
+# name: test/sql/bugs/147_is_referenced_self.test
+# description: #147 -- a definition's own name node must not count as a reference to it
+# group: [bugs]
+
+# THE DEFECT
+#
+# `:is-referenced` matched every named definition, so `.func:not(:is-referenced)`
+# -- which docs/reference/css-pseudo-classes.md presents as THE dead-code query
+# -- always returned 0 rows. Measured on build/release/duckdb at 30704be9:
+#
+#   .fn                      20     .fn:is-referenced       20
+#   .fn:not(:is-referenced)   0
+#
+# The cause is that a definition's own name is a separate node, it is a DIRECT
+# CHILD of the definition, and it carries NAME_REFERENCE. Measured on
+# test/data/python/sample_app.py:
+#
+#   node_id  type                 name       is_def  is_ref  parent_id
+#   761      function_definition  transform  true    false   --
+#   763      identifier           transform  false   true    761
+#
+# The `:is-referenced` arm looked for any NAME_REFERENCE node with the same name
+# and a different node_id, so node 763 answered for node 761 and every
+# definition referenced itself.
+#
+# THE RULE, and why it is the subtree and not just that child
+#
+# References from inside the definition's OWN SUBTREE do not count. Teague ruled
+# on 2026-11-05 that a recursive self-call is not "being referenced", because the
+# documented purpose is dead-code detection and a function called only by itself
+# is dead. The subtree range also does not depend on WHICH node carries the
+# definition flag, which matters while #276 is open -- there container and
+# declarator nodes both carry NAME_DEFINITION.
+#
+# `recurse` in the fixture is the case that distinguishes the two candidate
+# fixes. Excluding only the direct name child leaves it referenced by its own
+# recursive call; excluding the subtree does not.
+#
+# NOT A DIVERGENCE TO FIX: ast_dead_code() answers a different question and is
+# allowed to disagree here. It matches on name alone, collects every call name
+# including a self-call, and excludes `main`, `setup`, `teardown`, `init`,
+# `constructor` and dunder names outright (src/sql_macros/tree_navigation.sql).
+# Teague confirmed on 2026-11-05 that these are different things.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. THE FIX -- exactly which definitions are referenced
+#
+# Two ast_select calls carry the whole discrimination, as a partition of .fn.
+# Each selector call costs ~13 s of planning on the DuckDB v2.0 line
+# (duckdb/duckdb#26036), so the names are asserted as one aggregate rather than
+# one query per name.
+#
+# Referenced: inner_same, level2 and level3 are each named from OUTSIDE their own
+# subtree -- `return inner_same`, and the nested calls in the depth chain.
+# =============================================================================
+
+query I
+SELECT string_agg(name, ',' ORDER BY name)
+FROM ast_select('test/data/callgraph/edge_cases.py', '.fn:is-referenced');
+----
+inner_same,level2,level3
+
+# The complement, which is what #147 reported as permanently empty. `recurse`
+# appears here: its only reference is its own recursive call.
+#
+# The unnamed row is not a defect and is asserted rather than filtered away.
+# `.fn` is the semantic class DEFINITION_FUNCTION, so it also matches the
+# anonymous lambda at edge_cases.py:27, which carries NAME_DEFINITION with an
+# empty name. A definition with no name can never be referenced BY name, so it
+# belongs in this complement. Both facts come from one ast_select call, because
+# each selector call costs ~13 s of planning on the v2.0 line.
+query II
+SELECT count(*) FILTER (WHERE name = '') AS unnamed,
+       string_agg(name, ',' ORDER BY name) FILTER (WHERE name <> '') AS named
+FROM ast_select('test/data/callgraph/edge_cases.py', '.fn:not(:is-referenced)');
+----
+1	direct_and_nested,level1,method,method_lambda,recurse,twin_a,twin_b,with_comprehension
+
+# =============================================================================
+# 2. CONTROL -- the flag itself is untouched
+#
+# The fix belongs in the selector, not in the extractor. A definition's own name
+# node must KEEP NAME_REFERENCE, because ast_find_references and the resolver
+# read it. If a future change "fixes" #147 by clearing that flag instead, this
+# assertion fails and names the reason.
+# =============================================================================
+
+query IIII
+SELECT type, name, is_name_definition(flags), is_name_reference(flags)
+FROM read_ast('test/data/python/sample_app.py')
+WHERE node_id IN (761, 763) ORDER BY node_id;
+----
+function_definition	transform	true	false
+identifier	transform	false	true
+
+# The own-name node is a direct child of its definition, which is the fact the
+# subtree range relies on.
+query I
+SELECT r.parent_id = d.node_id
+FROM read_ast('test/data/python/sample_app.py') d, read_ast('test/data/python/sample_app.py') r
+WHERE d.node_id = 761 AND r.node_id = 763;
+----
+true
+
+# =============================================================================
+# 3. CONTROL -- a definition referenced from elsewhere in the file still matches
+#
+# Guards the over-correction: excluding the subtree must not exclude references
+# that merely sit in another definition. `transform` is called by `main`, and
+# `validate_email` by `create_user`, both from outside their own subtrees.
+# =============================================================================
+
+query I
+SELECT count(*) FROM read_ast('test/data/python/sample_app.py') d
+WHERE d.type = 'function_definition' AND d.name IN ('transform', 'validate_email')
+  AND EXISTS (
+      SELECT 1 FROM read_ast('test/data/python/sample_app.py') r
+      WHERE r.file_path = d.file_path AND is_name_reference(r.flags) AND r.name = d.name
+        AND NOT (r.node_id > d.node_id AND r.node_id <= d.node_id + d.descendant_count)
+  );
+----
+2

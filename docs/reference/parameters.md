@@ -321,6 +321,14 @@ Available policies:
 | `leaves` | Leaf nodes (no children) | Re-parents children |
 | `internal` | Non-exported internal definitions | Drops subtree |
 
+**`internal` in detail.** It drops any name binding that `is_exported(flags)`
+does not set. Inside a function body it drops only what another file could have
+imported had it been at top level — functions and classes — and keeps locals,
+parameters and destructuring targets. Those are not exported either, correctly
+so, but dropping them removes the body of every function the policy keeps. So
+`prune := ['internal']` gives you the public API surface with its
+implementations intact, not a list of signatures.
+
 **Re-parents children**: The pruned node is removed but its children are attached to the grandparent. **Drops subtree**: The node and all its descendants are removed entirely.
 
 ---

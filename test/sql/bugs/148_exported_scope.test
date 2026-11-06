@@ -1,0 +1,184 @@
+# name: test/sql/bugs/148_exported_scope.test
+# description: #148 -- IS_EXPORTED is language visibility AND not inside a function body
+# group: [bugs]
+
+# WHAT #148 REPORTED, AND WHY THE FIX IS NOT WHAT IT ASKED FOR
+#
+# #148 reports that `:exported` "includes methods and nested functions, while
+# the docs define it as module-level public definitions", and proposes adding a
+# module-scope condition. Measured first, the authority runs the other way for
+# four of the five languages that implement visibility:
+#
+#   languages/python/python_adapter.cpp      name[0] != '_'
+#   languages/go/go_adapter.cpp              isupper(name[0])
+#   languages/java/java_adapter.cpp          a `public` modifier
+#   languages/javascript/javascript_adapter.cpp   inside an `export` statement
+#   languages/cpp/cpp_adapter.cpp            namespace/global, or after `public:`
+#
+# In Go, Java and C++ a public METHOD is part of the public API, so a
+# module-scope rule would empty the pseudo-class of meaning there -- Java would
+# match only top-level public types. The docs sentence is what was wrong.
+#
+# CORRECTION (a4cbc3f): an earlier version of this comment claimed the same for
+# JavaScript. Measured, a JS method is NEVER exported: the rule tests the node's
+# own type and its PARENT's type for `export`, and a method's parent is the
+# class body. TypeScript matches a method only where `public` is written.
+#
+# One case is false in every one of those languages: a function defined inside
+# another function's body cannot be imported, whatever its name. That is the
+# only thing this change removes.
+#
+# Measured on build/release/duckdb at 30704be9, BEFORE the fix, over
+# test/data/callgraph/edge_cases.py -- `exported` is the IS_EXPORTED flag and
+# `encl_fn` is scope.function:
+#
+#   direct_and_nested  exported=true   encl_fn=NULL     module-level, correct
+#   level1             exported=true   encl_fn=NULL     module-level, correct
+#   method             exported=true   encl_fn=NULL     a method, correct
+#   method_lambda      exported=true   encl_fn=NULL     a method, correct
+#   inner_same         exported=true   encl_fn=set      WRONG
+#   level2             exported=true   encl_fn=set      WRONG
+#   level3             exported=true   encl_fn=set      WRONG
+#
+# So the discriminator is scope.function, which the traversal already computes
+# for every node. Before the fix the three WRONG rows read true and the first
+# query below fails.
+#
+# EVERY DISCRIMINATING CASE IS PAIRED WITH A CONTROL, because the likely wrong
+# fix is to exclude anything that is not at module scope. That would also drop
+# methods, which is the behaviour this file forbids.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. THE FIX -- a function nested in a function body is not exported
+# =============================================================================
+
+query TT
+SELECT name, CASE WHEN is_exported(flags) THEN 'exported' ELSE 'internal' END AS visibility
+FROM read_ast('test/data/callgraph/edge_cases.py')
+WHERE type = 'function_definition' AND name IN ('inner_same', 'level2', 'level3')
+ORDER BY name;
+----
+inner_same	internal
+level2	internal
+level3	internal
+
+# =============================================================================
+# 2. CONTROL -- methods keep the flag. A module-scope fix would break this.
+# =============================================================================
+
+query TT
+SELECT name, CASE WHEN is_exported(flags) THEN 'exported' ELSE 'internal' END AS visibility
+FROM read_ast('test/data/callgraph/edge_cases.py')
+WHERE type = 'function_definition' AND name IN ('method', 'method_lambda')
+ORDER BY name;
+----
+method	exported
+method_lambda	exported
+
+# A method on a class in the larger fixture, stated separately so the reason
+# survives an edit to edge_cases.py.
+query T
+SELECT CASE WHEN is_exported(flags) THEN 'exported' ELSE 'internal' END AS visibility
+FROM read_ast('test/data/python/sample_app.py')
+WHERE type = 'function_definition' AND name = 'get_user';
+----
+exported
+
+# =============================================================================
+# 3. CONTROL -- module-level functions keep the flag
+# =============================================================================
+
+query TT
+SELECT name, CASE WHEN is_exported(flags) THEN 'exported' ELSE 'internal' END AS visibility
+FROM read_ast('test/data/callgraph/edge_cases.py')
+WHERE type = 'function_definition' AND name IN ('direct_and_nested', 'level1')
+ORDER BY name;
+----
+direct_and_nested	exported
+level1	exported
+
+# =============================================================================
+# 4. CONTROL -- per-language visibility is untouched
+#
+# The fix adds a condition; it must not replace the adapter's rule. Go is the
+# clearest case because capitalisation alone decides it.
+# =============================================================================
+
+query TT
+SELECT name, CASE WHEN is_exported(flags) THEN 'exported' ELSE 'internal' END AS visibility
+FROM read_ast('test/data/go/visibility.go')
+WHERE type = 'function_declaration' AND name IN ('PublicFunction', 'privateFunction')
+ORDER BY name;
+----
+PublicFunction	exported
+privateFunction	internal
+
+# Python's underscore rule still applies at module scope.
+query I
+SELECT COUNT(*)
+FROM read_ast('test/data/python/sample_app.py')
+WHERE type = 'function_definition' AND is_exported(flags) AND name LIKE '\_%';
+----
+0
+
+# =============================================================================
+# 5. CONTROL -- ast_exports() does not move
+#
+# ast_exports() is the module-level subset: is_exported(flags) AND
+# COALESCE(scope.current, 0) = 0 (src/sql_macros/scope_resolution.sql). It
+# already excluded nested definitions, so removing their flag cannot change it.
+# test/sql/test_resolver.test pins the same count; this restates it here so a
+# regression names #148 rather than the resolver.
+# =============================================================================
+
+query I
+SELECT COUNT(*) FROM ast_exports('test/data/python/sample_app.py');
+----
+10
+
+# =============================================================================
+# 6. The :exported pseudo-class follows the flag
+#
+# ONE ast_select call only. Each selector call costs ~13 s of planning on the
+# DuckDB v2.0 line (duckdb/duckdb#26036), and four ast_select-heavy suites
+# already need the 7200 s batch budget set in the Makefile.
+# =============================================================================
+
+query I
+SELECT COUNT(*) FROM ast_select('test/data/callgraph/edge_cases.py', '.fn:exported')
+WHERE name IN ('inner_same', 'level2', 'level3');
+----
+0
+
+# =============================================================================
+# 7. THE CONSEQUENCE -- prune := ['internal'] follows the flag
+#
+# ShouldPruneNode (src/include/unified_ast_backend_impl.hpp:85) subtree-prunes
+# any BINDS_NAME node that lacks IS_EXPORTED, so this change also narrows
+# `prune := ['internal']`. That is a second feature moving, and it had no test
+# of its own before this file, so it is pinned here rather than left implicit.
+#
+# Measured after the fix: 11 function_definitions become 8, losing exactly the
+# three nested ones. Before the fix all 11 survived, because every one of them
+# carried IS_EXPORTED -- derived from the measured pre-fix flags recorded at the
+# top of this file plus the ShouldPruneNode condition, not separately measured.
+# =============================================================================
+
+query II
+SELECT count(*), string_agg(name, ',' ORDER BY name)
+FROM read_ast('test/data/callgraph/edge_cases.py', prune := ['internal'])
+WHERE type = 'function_definition';
+----
+8	direct_and_nested,level1,method,method_lambda,recurse,twin_a,twin_b,with_comprehension
+
+# CONTROL: without the policy, nothing is pruned.
+query I
+SELECT count(*) FROM read_ast('test/data/callgraph/edge_cases.py')
+WHERE type = 'function_definition';
+----
+11

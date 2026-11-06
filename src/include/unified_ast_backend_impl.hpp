@@ -61,7 +61,8 @@ static string SanitizeUTF8(const string &input) {
 
 // Helper: decide whether to prune a node at parse time.
 // Returns: 0 = keep, 1 = node prune (re-parent children), 2 = subtree prune (drop everything)
-static int ShouldPruneNode(const ASTNode &node, uint32_t ts_child_count, const ExtractionConfig &config) {
+static int ShouldPruneNode(const ASTNode &node, uint32_t ts_child_count, const ExtractionConfig &config,
+                           bool inside_function) {
 	if (!config.has_prune)
 		return 0;
 
@@ -82,8 +83,23 @@ static int ShouldPruneNode(const ASTNode &node, uint32_t ts_child_count, const E
 	if (config.prune_leaves && ts_child_count == 0)
 		return 1;
 	if (config.prune_internal) {
+		// An unexported name binding is internal, so it goes. But INSIDE a function
+		// body only definitions another file could have imported are dropped --
+		// functions and classes. Locals, parameters and destructuring targets are
+		// unexported too, and correctly so, since nothing can import them; pruning
+		// them deleted the bodies of the functions this policy keeps
+		// (tracker/bugs/056: 1246 nodes -> 841, assignment 26 -> 2 on sample_app.py).
+		//
+		// Both clauses are load-bearing. Without importable_kind a nested function
+		// survives and the documented 11 -> 8 breaks. Without !inside_function a
+		// private module-level VARIABLE survives, which main pruned.
 		if ((node.universal_flags & ASTNodeFlags::BINDS_NAME) && !(node.universal_flags & ASTNodeFlags::IS_EXPORTED)) {
-			return 2;
+			const uint8_t base = node.semantic_type & 0xFC;
+			const bool importable_kind =
+			    base == SemanticTypes::DEFINITION_FUNCTION || base == SemanticTypes::DEFINITION_CLASS;
+			if (importable_kind || !inside_function) {
+				return 2;
+			}
 		}
 	}
 	return 0;
@@ -133,6 +149,9 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 		int32_t sibling_index;
 		bool processed;   // Track if node has been processed
 		idx_t node_index; // Index in nodes array for this node
+		// Is this node inside a function body? Carried down the traversal
+		// instead of being read from scope_node_stack (tracker/bugs/056).
+		bool inside_function;
 	};
 
 	// Hoist GetNodeConfigs outside the hot loop - huge performance optimization!
@@ -143,7 +162,7 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 	const auto &anon_node_configs = adapter->GetAnonNodeConfigs();
 
 	vector<StackEntry> stack;
-	stack.push_back({root, -1, 0, 0, false, 0});
+	stack.push_back({root, -1, 0, 0, false, 0, false});
 
 	// Scope stack for qualified_name: tracks (node_index, segment) pairs. Each
 	// segment is a QualifiedNameSegment carrying the semantic type, raw name,
@@ -321,9 +340,25 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 				// NAME_DECLARATION (0x04) bitmask matches both DECLARATION and DEFINITION
 				// since DEFINITION (0x06) also has bit 2 set. ast_exports() further
 				// narrows to definitions only via is_name_definition().
+				//
+				// A definition inside a FUNCTION BODY is never visible outside the file,
+				// whatever the language's rule says about its name (#148). A method is
+				// deliberately NOT excluded: its nearest scope is a class, which is itself
+				// reachable from outside.
+				//
+				// entry.inside_function is carried down the traversal. It replaced a scan
+				// of scope_node_stack, which made this answer depend on `structure :=` and
+				// on `prune :=` -- see tracker/bugs/056. Dart is NOT covered: its
+				// function_signature is a SIBLING of function_body, so no ancestor test
+				// reaches a Dart function body.
+				//
+				// Checked here, before the prune check below, so that prune_internal reads
+				// the same answer as :exported, is_exported() and ast_exports().
 				if ((ast_node.universal_flags & ASTNodeFlags::NAME_DECLARATION) &&
 				    adapter->IsPublicNode(entry.node, content)) {
-					ast_node.universal_flags |= ASTNodeFlags::IS_EXPORTED;
+					if (!entry.inside_function) {
+						ast_node.universal_flags |= ASTNodeFlags::IS_EXPORTED;
+					}
 				}
 			} else {
 				// No context info - set minimal defaults (use flat fields)
@@ -334,11 +369,25 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 				ast_node.native_extraction_attempted = false;
 			}
 
+			// Does THIS node open a function body for its descendants?
+			//
+			// Carried on the traversal entry rather than pushed on a stack, because a
+			// pruned node does `stack.pop_back(); continue;` below and never gets a
+			// second visit, so there is no symmetric pop point. Propagating downward
+			// needs no pop and is therefore correct under every prune policy.
+			//
+			// IS_SCOPE is load-bearing. In C++ `function_declarator` is itself a
+			// DEFINITION_FUNCTION child of `function_definition`, so without IS_SCOPE
+			// every top-level C++ function would look nested inside itself.
+			const bool child_inside_function =
+			    entry.inside_function || ((ast_node.universal_flags & ASTNodeFlags::IS_SCOPE) &&
+			                              (ast_node.semantic_type & 0xFC) == SemanticTypes::DEFINITION_FUNCTION);
+
 			// === PRUNE CHECK ===
 			// Must happen AFTER property extraction (semantic_type, flags, name needed
 			// for policy evaluation) and BEFORE emit/scope tracking.
 			if (config.has_prune) {
-				int prune_action = ShouldPruneNode(ast_node, child_count, config);
+				int prune_action = ShouldPruneNode(ast_node, child_count, config, entry.inside_function);
 				if (prune_action == 2) {
 					// Subtree prune: drop this node AND all children
 					stack.pop_back();
@@ -351,7 +400,8 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 						for (int32_t i = child_count - 1; i >= 0; i--) {
 							TSNode child = ts_node_child(entry.node, i);
 							// Re-parent to pruned node's parent, keep same depth
-							stack.push_back({child, entry.parent_id, entry.depth, i, false, 0});
+							stack.push_back(
+							    {child, entry.parent_id, entry.depth, i, false, 0, child_inside_function});
 						}
 					}
 					continue;
@@ -481,7 +531,7 @@ ASTResult UnifiedASTBackend::ParseToASTResultTemplated(const AdapterType *adapte
 				int64_t current_id = ast_node.node_id;
 				for (int32_t i = child_count - 1; i >= 0; i--) {
 					TSNode child = ts_node_child(entry.node, i);
-					stack.push_back({child, current_id, entry.depth + 1, i, false, 0});
+					stack.push_back({child, current_id, entry.depth + 1, i, false, 0, child_inside_function});
 				}
 			}
 		} else {

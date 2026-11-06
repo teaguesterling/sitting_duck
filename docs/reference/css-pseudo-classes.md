@@ -175,6 +175,8 @@ the given kind. For `function` / `class` / `module` it reads the precomputed
 `scope.*` struct; for a bare tree-sitter type it walks to the nearest ancestor of
 that type, **excluding subtrees of nested ancestors of the same type**.
 
+> **Containers that are not scope providers** ([#166](https://github.com/teaguesterling/sitting_duck/issues/166)). The `scope.*` struct is populated only beneath nodes flagged `IS_SCOPE`, and a semantic class need not be one — SQL's `create_table` is a `DEFINITION_CLASS` that provides no scope. Where the struct is empty, the `.class#name` form falls back to the same ancestor walk the bare-type form uses, so both forms give the same answer. It used to return nothing at all, silently.
+
 This solves the nested function problem:
 
 ```sql
@@ -301,6 +303,10 @@ SELECT name FROM ast_select('src/**/*.py', '.call:called-by(process_request)');
 
 > **Note (name-matched, not resolved).** `:calls`/`:called-by` match on the call's *name*, not a resolved call target — same-named functions across files are not disambiguated (that is the resolver's job). Both are evaluated through the bounded `scope.function` equi-join, which is what keeps them from exhausting memory on large tables.
 
+> **Written bare, with no parentheses, both match regardless of name.** `.call:called-by` is "this node has some enclosing function", and `.fn:calls` is "this function calls something". The suite relies on these; this reference previously omitted them.
+>
+> **With parentheses, the argument is a bare name, and only a bare name** ([#191](https://github.com/teaguesterling/sitting_duck/issues/191)). Write `:calls(execute)`. A selector argument — `#execute`, `.fn#execute` — and an empty `:calls()` both raise. They used to be discarded silently, which left the pseudo-class matching every node with any call while still looking like a filter. This is the one place in the dialect where a bare token means a *name* rather than a node type; a later release adds `:calls-name()` as the explicit spelling and gives the selector forms their own meaning.
+
 ### `:is-called` — Function Is Called
 
 Matches function definitions that are called somewhere in the file:
@@ -315,7 +321,7 @@ SELECT name FROM ast_select('src/**/*.py', '.func:not(:is-called)');
 
 ### `:is-referenced` — Definition Is Referenced
 
-Matches definitions that are referenced somewhere:
+Matches definitions that are referenced somewhere outside themselves:
 
 ```sql
 -- Variables that are actually used
@@ -325,9 +331,61 @@ SELECT name FROM ast_select('src/**/*.py', '.var:is-referenced');
 SELECT name FROM ast_select('src/**/*.py', '.func:not(:is-referenced)');
 ```
 
-### `:exported` — Module-Level Public Definition
+> **A definition does not reference itself** ([#147](https://github.com/teaguesterling/sitting_duck/issues/147)). References from inside the definition's own subtree do not count. That includes a **recursive call**: a function called only by itself is not referenced, because dead-code detection is what this pseudo-class is for. A definition's own name is a separate node carrying the reference flag, so without this rule every named definition referenced itself and `:not(:is-referenced)` was always empty.
+>
+> `ast_dead_code()` answers a different question and may disagree here. It matches on name alone, counts a self-call as a call, and excludes `main`, `setup`, `teardown`, `init`, `constructor` and dunder names outright.
 
-Matches definitions at module scope that are part of the public API:
+### `:exported` — Visible Outside the File
+
+Matches definitions that the language treats as visible outside the file. All 28
+language adapters give a rule. Eleven of them:
+
+| Language | Rule |
+|---|---|
+| Python | the name does not start with `_` |
+| Go | the name starts with a capital letter |
+| Dart | the name does not start with `_` |
+| C | no `static` storage class |
+| C++ | namespace or global scope, or after `public:` |
+| Ruby | public unless a preceding bare `private` or `protected` |
+| Java | a `public` modifier; no modifier means package-private, so no |
+| C# | a `public` or `internal` modifier |
+| Rust | a `pub` visibility modifier |
+| JavaScript | the declaration, or its parent, is an `export` statement |
+| TypeScript | the same, or an explicit `public` modifier |
+
+**A public method matches in most of these languages, and not in JavaScript.**
+Measured on an `export class` holding one method:
+
+```
+js  class_declaration    Service        exported
+js  method_definition    publicMethod   NOT exported
+ts  method_definition    publicMethod   exported       -- `public` is written
+ts  method_definition    bareMethod     NOT exported
+py  function_definition  public_method  exported
+```
+
+JavaScript's rule tests the declaration and its parent for `export`. A method's
+parent is the class body, so a method can never match. TypeScript adds a test
+for an accessibility modifier, so a method matches only where `public` is
+written.
+
+A definition inside a function body does not match, whatever its name (#148).
+Nothing can import a name bound inside a function body, so the language's own
+visibility rule is not sufficient on its own.
+
+**One measured exception: Dart.** Dart's `function_signature` carries the
+function's name and is a *sibling* of its `function_body`, not its parent, so a
+Dart function body is not recognised as being inside a function. A Dart local
+still matches, where the same shape in Python does not:
+
+```
+dart    local_variable_declaration  localSecret  matches
+python  assignment                  localSecret  does not match
+```
+
+This is tracked, and is the behaviour of every release so far rather than a
+change.
 
 ```sql
 -- Public API surface
@@ -335,6 +393,13 @@ SELECT name, type FROM ast_select('src/**/*.py', ':exported');
 
 -- Exported but never referenced internally
 SELECT name FROM ast_select('src/**/*.py', ':exported:not(:is-referenced)');
+```
+
+For module-level definitions only, use `ast_exports()`. It adds the
+module-scope condition that `:exported` does not apply:
+
+```sql
+SELECT name, type FROM ast_exports('src/**/*.py');
 ```
 
 ### Pseudo-Elements (`::` — Navigation)
@@ -661,7 +726,7 @@ This is useful in environments where you can't install community extensions, or 
 | `:called-by(name)` | Immediate enclosing function is name (a lambda counts as the function) |
 | `:is-called` | Function is called somewhere |
 | `:is-referenced` | Definition is referenced somewhere |
-| `:exported` | Module-level public definition |
+| `:exported` | Definition the language treats as visible outside the file |
 | **Ordering** | |
 | `:precedes(type)` | Before a sibling of type |
 | `:follows(type)` | After a sibling of type |

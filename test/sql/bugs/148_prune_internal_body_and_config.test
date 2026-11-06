@@ -1,0 +1,209 @@
+# name: test/sql/bugs/148_prune_internal_body_and_config.test
+# description: #148 fallout -- prune_internal must keep kept-function bodies, and IS_EXPORTED must not depend on structure/prune (tracker/bugs/056)
+# group: [bugs]
+
+# WHAT THIS FILE IS FOR
+#
+# aab2457 made IS_EXPORTED strict: a definition inside a function body does not
+# get the flag. That is the correct answer -- a function-local name cannot be
+# imported. The defect is downstream. ShouldPruneNode subtree-prunes
+# `BINDS_NAME && !IS_EXPORTED`, so `prune := ['internal']` started deleting the
+# BODIES of functions it keeps.
+#
+# Measured on test/data/python/sample_app.py with the pre-fix binary:
+#
+#                    control   prune := ['internal']
+#   all nodes          1246            841
+#   assignment           26              2
+#   call                 45             30
+#
+# 73 nodes inside function bodies lost the flag. Only 3 were the nested
+# functions #148 was about: 37 parameters, 24 locals, 5 default parameters and
+# 4 destructuring targets made up the rest. Every one of the five kinds carries
+# name bits 6, so all of them are name-DEFINITIONS; declaration-versus-
+# definition cannot separate them.
+#
+# 148_exported_scope.test section 7 counts only function_definition, so it
+# passes while all of this is live. This file covers what that count cannot see.
+#
+# THE FIX this file pins: ShouldPruneNode subtree-prunes on
+#
+#     BINDS_NAME && !IS_EXPORTED && (importable_kind || !inside_function)
+#
+# where importable_kind is semantic base DEFINITION_FUNCTION or
+# DEFINITION_CLASS. Both added clauses are load-bearing and each has a control
+# below: drop importable_kind and nested functions stop being pruned; drop
+# !inside_function and private module-level variables stop being pruned.
+#
+# The expected counts in section 1 were derived by simulating that predicate
+# over the unpruned tree BEFORE the fix was written, not read off the fixed
+# binary. Section 1 fails against the pre-fix binary.
+
+require sitting_duck
+
+statement ok
+LOAD sitting_duck;
+
+# =============================================================================
+# 1. THE FIX -- prune := ['internal'] keeps the bodies of functions it keeps
+#
+# Pre-fix: assignment 2, call 30. The `call` figure is the clearest signal,
+# because every one of the 45 calls in the fixture survives the policy: a call
+# is not a name binding, so it can only disappear as collateral from a pruned
+# ancestor.
+# =============================================================================
+
+query II
+SELECT
+  (SELECT count(*) FROM read_ast('test/data/python/sample_app.py', prune := ['internal']) WHERE type = 'assignment'),
+  (SELECT count(*) FROM read_ast('test/data/python/sample_app.py', prune := ['internal']) WHERE type = 'call');
+----
+20	45
+
+# CONTROL: the unpruned tree, so the numbers above are read against something.
+query II
+SELECT
+  (SELECT count(*) FROM read_ast('test/data/python/sample_app.py') WHERE type = 'assignment'),
+  (SELECT count(*) FROM read_ast('test/data/python/sample_app.py') WHERE type = 'call');
+----
+26	45
+
+# =============================================================================
+# 2. CONTROL for the importable_kind clause -- nested functions are STILL
+# pruned. This is the documented 11 -> 8 from 148_exported_scope.test section 7,
+# restated here so that removing importable_kind fails in this file too.
+# =============================================================================
+
+query II
+SELECT count(*), string_agg(name, ',' ORDER BY name)
+FROM read_ast('test/data/callgraph/edge_cases.py', prune := ['internal'])
+WHERE type = 'function_definition';
+----
+8	direct_and_nested,level1,method,method_lambda,recurse,twin_a,twin_b,with_comprehension
+
+# =============================================================================
+# 3. CONTROL for the !inside_function clause -- an unexported binding that is
+# NOT inside a function body is still pruned.
+#
+# Go's `privateField` is a field_declaration (semantic base DEFINITION_VARIABLE,
+# so NOT an importable kind) at struct level, so scope.function is NULL. Only
+# the !inside_function clause can prune it. 2 nodes carry the name unpruned.
+# =============================================================================
+
+query II
+SELECT
+  (SELECT count(*) FROM read_ast('test/data/go/visibility.go') WHERE name = 'privateField'),
+  (SELECT count(*) FROM read_ast('test/data/go/visibility.go', prune := ['internal']) WHERE name = 'privateField');
+----
+2	0
+
+# =============================================================================
+# 4. IS_EXPORTED MUST NOT DEPEND ON structure :=
+#
+# Pre-fix the guard read scope_node_stack, which is pushed only under
+# `config.structure >= StructureLevel::FULL`. So at structure := 'minimal' the
+# whole #148 fix was silently inert.
+#
+# Measured pre-fix: 'full' gives 8 function_definitions, 'minimal' gives 11,
+# and level2/level3/inner_same all report is_exported = true at 'minimal'.
+# IS_EXPORTED did not depend on structure := before aab2457.
+# =============================================================================
+
+query III
+SELECT
+  (SELECT count(*) FROM read_ast('test/data/callgraph/edge_cases.py', prune := ['internal'], structure := 'full') WHERE type = 'function_definition'),
+  (SELECT count(*) FROM read_ast('test/data/callgraph/edge_cases.py', prune := ['internal'], structure := 'minimal') WHERE type = 'function_definition'),
+  (SELECT count(*) FROM read_ast('test/data/callgraph/edge_cases.py', prune := ['internal'], structure := 'none') WHERE type = 'function_definition');
+----
+8	8	8
+
+# The flag itself, at the level where it used to be inert.
+query TT
+SELECT name, CASE WHEN is_exported(flags) THEN 'exported' ELSE 'internal' END
+FROM read_ast('test/data/callgraph/edge_cases.py', structure := 'minimal')
+WHERE type = 'function_definition' AND name IN ('inner_same', 'level2', 'level3')
+ORDER BY name;
+----
+inner_same	internal
+level2	internal
+level3	internal
+
+# CONTROL: the same three names at structure := 'full' already read internal
+# before the fix, so this row pair is what proves the two levels AGREE rather
+# than that both changed.
+query TT
+SELECT name, CASE WHEN is_exported(flags) THEN 'exported' ELSE 'internal' END
+FROM read_ast('test/data/callgraph/edge_cases.py', structure := 'full')
+WHERE type = 'function_definition' AND name IN ('inner_same', 'level2', 'level3')
+ORDER BY name;
+----
+inner_same	internal
+level2	internal
+level3	internal
+
+# =============================================================================
+# 5. IS_EXPORTED MUST NOT DEPEND ON prune :=
+#
+# scope_node_stack held only nodes that SURVIVED pruning, so a node-pruned
+# anonymous function stopped counting as an enclosing function body.
+#
+# HONEST LIMIT OF THIS CHECK: measured on the pre-fix binary, edge_cases.py
+# gives the same answer with and without prune := ['unnamed'] (9 exported of 16
+# named binders either way), so this fixture does NOT exercise the walrus-in-
+# lambda case that shows the defect. A fixture cannot be added to test/data to
+# cover it: multi_file_edge_cases.test and ast_select_combinator_steps.test
+# glob test/data/python/*.py and test/data/**/*.py, so a new file there moves
+# their counts. This stays as a guard against the dependence reappearing, and
+# it is NOT evidence that the prune dependence is gone -- the construction is.
+# =============================================================================
+
+query II
+SELECT
+  (SELECT count(*) FROM read_ast('test/data/callgraph/edge_cases.py') WHERE binds_name(flags) AND name <> '' AND is_exported(flags)),
+  (SELECT count(*) FROM read_ast('test/data/callgraph/edge_cases.py', prune := ['unnamed']) WHERE binds_name(flags) AND name <> '' AND is_exported(flags));
+----
+9	9
+
+# =============================================================================
+# 6. DART IS NOT FIXED, AND THIS PINS THE LIMITATION DELIBERATELY
+#
+# READ THIS BEFORE "FIXING" A FAILURE HERE. The expected values below are the
+# CURRENT, KNOWN-INCOMPLETE behaviour, not the desired one. They are pinned so
+# the limitation is recorded instead of silently assumed.
+#
+# Dart's function_signature carries DEFINITION_FUNCTION and the name, and is a
+# SIBLING of function_body -- both are children of program. So no walk up from
+# a DEFINITION_FUNCTION node reaches a Dart function body, and a Dart local
+# keeps IS_EXPORTED where the identical Python shape loses it. Dropping the
+# IS_SCOPE requirement does not rescue Dart and breaks C++, where
+# function_declarator is itself a DEFINITION_FUNCTION child of
+# function_definition. See tracker/bugs/056, "Dart is NOT fixable this way".
+#
+# This equals main's behaviour, so it is an incompleteness, not a regression.
+# `greet` in anonymous_functions.dart is a local inside a top-level Dart
+# function. It reads 'exported', and scope.function is NULL, which is the
+# mechanism: the body is not seen as being inside a function at all. When Dart
+# is fixed this becomes 'internal' and 'inside-fn', and this block and its
+# comment must be rewritten, not merely re-recorded.
+# =============================================================================
+
+query TTT
+SELECT name,
+       CASE WHEN is_exported(flags) THEN 'exported' ELSE 'internal' END,
+       CASE WHEN scope.function IS NULL THEN 'no-enclosing-fn' ELSE 'inside-fn' END
+FROM read_ast('test/data/dart/anonymous_functions.dart')
+WHERE type = 'local_variable_declaration'
+ORDER BY node_id
+LIMIT 1;
+----
+greet	exported	no-enclosing-fn
+
+# The C++ shape that IS_SCOPE protects. function_declarator is itself a
+# DEFINITION_FUNCTION child of function_definition, so an ancestor test that
+# drops the IS_SCOPE requirement would strip the flag from every top-level C++
+# function's declarator and could move this count. 5 is the measured current
+# value and must not move.
+query I
+SELECT count(*) FROM ast_exports('test/data/cpp/simple.cpp');
+----
+5
