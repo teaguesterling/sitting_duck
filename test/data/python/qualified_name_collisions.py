@@ -34,11 +34,11 @@ def accumulator():
 
 class Container:
     def __init__(self, value):
-        # Two assignments with the same RHS identifier produce V[value]
-        # and V[value][2] inside the __init__ scope. (Sitting Duck records
-        # the identifier on the RHS of self.attr = ident as a definition.)
-        # Expected: C[Container] F[__init__] V[value]
-        #           C[Container] F[__init__] V[value][2]
+        # These define self.a and self.b, NOT `value`, which is the
+        # parameter and is read twice. This comment used to claim the RHS
+        # identifier was recorded as a definition; that was #273 and is
+        # fixed. The method-scope collision these lines used to supply is
+        # asserted inline in test/sql/qualified_name.test (Test 19).
         self.a = value
         self.b = value
 
