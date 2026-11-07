@@ -1,0 +1,117 @@
+# name: test/sql/bugs/273_assignment_target_not_rhs.test
+# description: #273 — an assignment whose target is not a bare identifier must not report the right-hand side as its name
+# group: [bugs]
+
+# #273: `self.db = conn` asserted that `conn` is DEFINED on that line. `conn` is
+# a parameter defined elsewhere and is only READ there. A wrong definition is
+# worse than a missing one, because a scope-resolution query gets a false binder
+# instead of no answer.
+#
+# MEASURED MECHANISM, recorded in tracker/roadmap/v1.18.3-survey.md. The name
+# strategy for `assignment` is FIND_IDENTIFIER, which scans ALL children for a
+# node of type `identifier`. Where the target is an `attribute` or a
+# `subscript`, the scan walks past the target and finds the first identifier on
+# the RIGHT-hand side. So the leak needs a right-hand side that BEGINS with a
+# bare identifier:
+#
+#     self.path = path     -> 'path'   leaked from the right
+#     self.data = {}       -> ''       no identifier for the scan to find
+#
+# That is why section 2 pairs each leaking line with an already-empty line. A
+# fix that merely blanked every attribute-target assignment would pass section 1
+# and tell us nothing, because half of those rows are empty already.
+#
+# THIS IS NOT PYTHON-SPECIFIC. Ruby's `@name = name` leaks the same way through
+# the same shared strategy. Section 4 pins that, so a Python-only fix fails.
+#
+# WHAT THIS FILE DELIBERATELY DOES NOT ASSERT. After the fix, the `attribute`
+# target node still carries the correct dotted name (`self.path`) and still
+# lacks the NAME_DEFINITION role flag, so it is still absent from
+# ast_definitions(). That is #288's shape, not this one. This file pins only
+# that the assignment stops claiming the right-hand side.
+
+require sitting_duck
+
+# =============================================================================
+# 1. THE DEFECT — no attribute-target assignment may report a name
+# =============================================================================
+
+# Lines 13, 28, 29 and 54 of sample_app.py are `self.X = y` with a bare
+# identifier on the right. Each one currently reports that identifier.
+# Expected after the fix: none of them reports a name.
+query I
+SELECT count(*) FROM read_ast('test/data/python/sample_app.py')
+WHERE type = 'assignment' AND start_line IN (13, 28, 29, 54) AND name <> '';
+----
+0
+
+# The same four, named, so a failure says WHICH case regressed rather than only
+# that a count moved.
+query IT
+SELECT start_line, name FROM read_ast('test/data/python/sample_app.py')
+WHERE type = 'assignment' AND start_line IN (13, 28, 29, 54)
+ORDER BY start_line;
+----
+13	(empty)
+28	(empty)
+29	(empty)
+54	(empty)
+
+# =============================================================================
+# 2. THE PAIRED CONTROL — the already-empty attribute targets must stay empty
+# =============================================================================
+
+# Lines 14, 18, 30, 33 and 48 are attribute targets whose right-hand side is not
+# a bare identifier, so there was never anything for the scan to leak. They are
+# empty before the fix and must be empty after it. Without this pair, section 1
+# could pass for the wrong reason.
+query I
+SELECT count(*) FROM read_ast('test/data/python/sample_app.py')
+WHERE type = 'assignment' AND start_line IN (14, 18, 30, 33, 48) AND name <> '';
+----
+0
+
+# =============================================================================
+# 3. THE REGRESSION CONTROL — a bare target still reports its own name
+# =============================================================================
+
+# This is the case the fix must not break. A plain `x = ...` binds x, and that
+# is the single most common definition form in Python. If a fix stops the scan
+# too early, these go empty and the extension loses most of its variables.
+query IT
+SELECT start_line, name FROM read_ast('test/data/python/sample_app.py')
+WHERE type = 'assignment' AND start_line IN (7, 8, 42, 57, 73)
+ORDER BY start_line;
+----
+7	MAX_RETRIES
+8	DEFAULT_TIMEOUT
+42	result
+57	rows
+73	user
+
+# =============================================================================
+# 4. CROSS-LANGUAGE CONTROL — Ruby leaks through the same shared strategy
+# =============================================================================
+
+# `@name = name` in test/data/ruby/simple.rb reports `name` today. The target is
+# an instance variable, not a bare identifier, so the scan reaches the right.
+# A fix applied only to Python's .def file leaves this red.
+query IT
+SELECT start_line, name FROM read_ast('test/data/ruby/simple.rb')
+WHERE type = 'assignment' AND start_line = 3;
+----
+3	(empty)
+
+# =============================================================================
+# 5. THE TARGET KEEPS ITS OWN NAME — the name is not being destroyed, only
+#    detached from the wrong node
+# =============================================================================
+
+# The `attribute` node for the target already carries the correct dotted name.
+# The fix must not remove it: #288 will later make such nodes discoverable, and
+# it needs the name to still be there.
+query T
+SELECT name FROM read_ast('test/data/python/sample_app.py')
+WHERE type = 'attribute' AND start_line = 13 ORDER BY node_id LIMIT 1;
+----
+self.path

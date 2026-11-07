@@ -63,8 +63,23 @@ attribute filters inside :has(...) are not supported
 
 # The #88/#89 pairing itself: a selector binding a name to call nodes over a
 # source whose call nodes carry NO callee name cannot be answered.
+#
+# SOURCE CHANGED IN #140a. This used unnamed_calls.sh, whose `$(date +%s)` holds
+# a `command` node as well as a `command_substitution`. #140a names that command
+# `date`, so the file now has 3 named of 6 call nodes -- the guard's EXISTS is
+# satisfied and it correctly stops raising. Worse for this assertion, `.call#date`
+# would now MATCH, so keeping the old source would have asserted an error that
+# cannot happen.
+#
+# dynamic_calls.sh is the replacement: 4 call nodes, 0 named, measured. Its
+# commands are named by a parameter expansion or a string, so they are resolved
+# at run time and #140a cannot bind them.
+#
+# unnamed_calls.sh is STILL the right control for the conformance kit's
+# CALL-NAMED check, which needs SOME unnamed call node, not all of them. The two
+# controls want different properties; that is why both files exist.
 statement error
-SELECT * FROM ast_select('test/data/conformance/control/unnamed_calls.sh', '.call#date',
+SELECT * FROM ast_select('test/data/conformance/control/dynamic_calls.sh', '.call#date',
                          language := 'bash');
 ----
 no call node in this source carries a callee name

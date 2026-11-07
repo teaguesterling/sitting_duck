@@ -1,0 +1,107 @@
+# name: test/sql/bugs/277_go_short_var_declaration_name.test
+# description: #277 — Go's short variable declaration (x := 1) must carry the declared name
+# group: [bugs]
+
+# #277: `x := 1` binds no name, so Go's most common variable form is
+# undiscoverable. The node claims to be a definition and then carries nothing:
+# `is_name_definition(flags)` is true, `is_definition(semantic_type)` is true,
+# and `name` is empty, so ast_definitions()'s `name <> ''` filter drops it.
+#
+# MEASURED MECHANISM, recorded in tracker/roadmap/v1.18.3-survey.md. The .def
+# entry uses FIND_IDENTIFIER, which looks for a direct child of type
+# `identifier`. In tree-sitter-go, `short_var_declaration` has the fields `left`
+# and `right`, and `left` is an `expression_list`, not a bare `identifier`. So
+# there is no direct identifier child and the result is empty.
+#
+# NOTE ON THE ISSUE TEXT: #277 records the name as NULL. Measured, it is the
+# empty string. The macro filter drops it either way, but an assertion written
+# against NULL would be wrong, so this file asserts the empty string.
+#
+# SHARED CAUSE WITH #273. Both come from FIND_IDENTIFIER scanning the wrong
+# region of the node. #273 leaks a name from the right-hand side; #277 finds
+# nothing because the left side is wrapped in a list. A fix that searches the
+# grammar's `left` field addresses both, which is why these two files are the
+# same commit's evidence.
+#
+# WHAT THIS FILE DOES NOT CLAIM TO FIX. `a, b := 1, 2` is ONE node binding TWO
+# names, and `name` is a single column. Section 3 pins the current behaviour of
+# that form rather than asserting a right answer, because there is no right
+# single answer. See the survey's drift note 6.
+
+require sitting_duck
+
+# =============================================================================
+# 1. THE DEFECT — both short var declarations in the fixture carry their name
+# =============================================================================
+
+# test/data/go/css_selectors_test.go lines 15 and 16 are
+# `dx := p.X - other.X` and `dy := p.Y - other.Y`.
+query IT
+SELECT start_line, name FROM read_ast('test/data/go/css_selectors_test.go')
+WHERE type = 'short_var_declaration' ORDER BY node_id;
+----
+15	dx
+16	dy
+
+# Stated as a ratio, so a new fixture with more declarations cannot make this
+# pass by accident.
+query II
+SELECT count(*), count(*) FILTER (WHERE name <> '')
+FROM read_ast('test/data/go/**/*.go') WHERE type = 'short_var_declaration';
+----
+2	2
+
+# =============================================================================
+# 2. THE POINT OF THE ISSUE — the name reaches ast_definitions()
+# =============================================================================
+
+# The flag and the semantic type were already right, so the ONLY thing standing
+# between this node and discoverability was the empty name. This is the
+# assertion that matters to a user, and #288's report warns that a fix which
+# satisfies is_name_definition() without reaching this macro is only half done.
+query I
+SELECT count(*) FROM ast_definitions('test/data/go/css_selectors_test.go')
+WHERE name IN ('dx', 'dy');
+----
+2
+
+# =============================================================================
+# 3. THE REGRESSION CONTROL — the declaration forms that already worked
+# =============================================================================
+
+# A fix that redirects the search to the grammar's `left` field must not disturb
+# nodes that have no `left` field. These three Go declaration forms are all
+# named today, and none of them has a `left` field.
+#
+# NOT var_spec or const_spec: measured, the committed Go fixtures contain ZERO
+# of either, so a control over them would read 0 = 0 and pass whatever the fix
+# did. A control an empty input set satisfies is not a control.
+#
+# COUNT CHANGED BY #140b, not by a fix to #277. The `**` glob recurses, and
+# #140b adds test/data/go/types/type_declarations.go with 5 more type_spec
+# nodes plus `unexported` (Counter, Pair, Reader, Meters, Grams,
+# unexported). Measured: 4 -> 10. The
+# function_declaration and method_declaration counts do not move, because that
+# fixture declares neither.
+query TII
+SELECT type, count(*), count(*) FILTER (WHERE name <> '')
+FROM read_ast('test/data/go/**/*.go')
+WHERE type IN ('function_declaration', 'method_declaration', 'type_spec')
+GROUP BY type ORDER BY type;
+----
+function_declaration	7	7
+method_declaration	4	4
+type_spec	10	10
+
+# =============================================================================
+# 4. CROSS-LANGUAGE CONTROL — FIND_IDENTIFIER's other users are unaffected
+# =============================================================================
+
+# FIND_IDENTIFIER is shared across languages, so the blast radius of changing it
+# is every node type that uses it. Python function and class definitions are the
+# highest-traffic users. If this count moves, the change was too broad.
+query I
+SELECT count(*) FROM read_ast('test/data/python/sample_app.py')
+WHERE type IN ('function_definition', 'class_definition') AND name <> '';
+----
+23

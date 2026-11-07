@@ -17,10 +17,17 @@
 #
 # WHY A CAPABILITY GATE. 27 languages do not all have calls, and the ones that
 # do do not all extract callee names: bash's `$(...)` has no single callee, so
-# bash declares no call naming and must not be penalised for it (#91 says so
-# explicitly). The gate is derived at run time from ast_type_map()'s
-# name_strategy -- a language declares call naming iff some call-semantic node
-# type has a strategy other than 'none'.
+# that node type declares no call naming and must not be penalised for it (#91
+# says so explicitly). The gate is derived at run time from ast_type_map()'s
+# name_strategy -- a node type declares call naming iff its strategy is other
+# than 'none'.
+#
+# THE GATE IS PER NODE TYPE AND #140a IS WHY THAT MATTERS. bash used to be the
+# one language exempt as a WHOLE: all three of its call-semantic types declared
+# 'none'. #140a binds `command`'s name from the grammar's `name` field, so bash
+# now declares naming for one of its three types and is exempt only for the two
+# substitution forms. A language-level reading of this file would now demand a
+# name from `$(...)` as well.
 
 require sitting_duck
 
@@ -68,7 +75,7 @@ GROUP BY language
 HAVING count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')) > 0
 ORDER BY language;
 ----
-bash	3	0
+bash	3	1
 c	4	3
 cpp	5	3
 csharp	2	2
@@ -99,14 +106,22 @@ zig	2	2
 # declarations that could never match a node, which is exactly the failure
 # mode #232 is about: an unreachable declaration reads as a capability.
 #
-# bash is the #91 exception made explicit: it HAS call-semantic node types and
-# declares naming for none of them, so it is `n/a`, not a failure.
-query I
-SELECT count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')
-                          AND name_strategy <> 'none')
-FROM ast_type_map('bash');
+# bash was the #91 exception made explicit: it HAD call-semantic node types and
+# declared naming for none of them, so it was `n/a` rather than a failure.
+# #140a changed that for ONE of the three. Pinned per node type, not as a count,
+# so the two that are still legitimately exempt are named rather than implied:
+#
+#   command               word child of the grammar's `name` field (#140a)
+#   command_substitution  `$(...)` has no single callee (#91)
+#   process_substitution  `<(...)` likewise
+query TT
+SELECT node_type, name_strategy FROM ast_type_map('bash')
+WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')
+ORDER BY node_type;
 ----
-0
+command	custom
+command_substitution	none
+process_substitution	none
 
 # =============================================================================
 # THE CHECK. Every call node whose OWN node type declares a name-extraction
@@ -153,6 +168,13 @@ FROM ast_type_map('bash');
 #
 # The counts stay pinned per language (not collapsed to a single "0 unnamed"
 # total) so a regression names the language it broke.
+#
+# bash JOINS THIS CHECK IN #140a, at `bash 5 0`. It was absent before, not
+# passing: the gate skipped every bash call node because all three of its types
+# declared 'none'. Five of these come from `command` nodes in
+# test/data/call_extraction/calls.sh and test/data/unparse_leaf_text/, and all
+# five carry a name. This row is the point of #140a -- bash is now HELD to the
+# same check as the other 17 languages instead of being exempt from it.
 # =============================================================================
 
 query III
@@ -174,6 +196,7 @@ FROM calls c
 JOIN tm ON tm.language = c.language AND tm.node_type = c.type AND tm.name_strategy <> 'none'
 GROUP BY 1 ORDER BY 1;
 ----
+bash	5	0
 c	9	0
 cpp	1	0
 csharp	3	0
@@ -286,40 +309,70 @@ template_interpolation	none	2	2
 # require the SAME query shape to see it.
 # =============================================================================
 
-# The control fixture is pure `$(...)` command substitution, so every one of its
-# call nodes is unnamed and none is syntax-only. Point the predicate at it and
-# it must count them -- if this returned 0, the "0 unnamed" above would mean
-# nothing.
+# The control fixture's three `$(...)` substitutions are unnamed and none of its
+# call nodes is syntax-only. Point the predicate at it and it must count them --
+# if this returned 0, the "0 unnamed" above would mean nothing.
+#
+# CORRECTED (#140a). This expected `6 6` and the comment called the fixture
+# "pure `$(...)` command substitution". That was never true: `a=$(date +%s)`
+# contains a `command` node as well as a `command_substitution`, so the fixture
+# has always held 3 of each. The 6 agreed only because `command` was unnamed
+# too. #140a names those 3, so the honest count is 3 of 6.
+#
+# THE CONTROL STILL FIRES, which is the reason it can be updated rather than
+# replaced: 3 unnamed is still non-zero, so a forced declaration pointed here
+# still FAILS the kit's CALL-NAMED check. Had #140a driven this to 0 of 6, this
+# control would have become vacuous and needed a different fixture.
 query II
 SELECT count(*) FILTER (WHERE name IS NULL OR name = ''), count(*)
 FROM read_ast('test/data/conformance/control/unnamed_calls.sh', 'bash')
 WHERE is_semantic_type(semantic_type, 'CALL') AND NOT is_syntax_only(flags);
 ----
-6	6
+3	6
 
 # And the capability gate itself must be able to exclude: inverting it selects
-# exactly the languages the check does NOT cover, and that set must be
-# non-empty -- otherwise the gate is decorative.
+# exactly what the check does NOT cover, and that set must be non-empty --
+# otherwise the gate is decorative.
 #
 # Pinned as the exact SET, not as `count(*) > 0`. The boolean form was the same
 # shape as the assertions #202 was filed about: it passes for one excluded
-# language and equally for twenty, so it would not notice the gate starting to
-# exclude something it should be checking. Naming bash makes the claim
-# falsifiable in both directions.
-query III
-SELECT language,
-       count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')) AS call_types,
-       count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')
-                          AND name_strategy <> 'none')                                     AS naming_types
+# member and equally for twenty, so it would not notice the gate starting to
+# exclude something it should be checking.
+#
+# MOVED TO NODE-TYPE LEVEL BY #140a, and it had to move. This control used to
+# select whole LANGUAGES with call types and no naming, and it was pinned as
+# `bash 3 0` because bash was the only one. #140a gives bash's `command` a
+# strategy, so that language-level set is now EMPTY -- measured -- and an empty
+# expectation here would be exactly the decorative control the comment above
+# warns against. This repo's own rule, from
+# test/sql/bugs/277_go_short_var_declaration_name.test: "A control an empty
+# input set satisfies is not a control."
+#
+# So it now pins the exclusion the kit's gate ACTUALLY applies, which is per
+# node type (check_call_named() joins on name_strategy <> 'none' per type).
+# Nine members, each a node the check must skip rather than fail:
+#   bash  $(...) and <(...)        no single callee (#91)
+#   c     offsetof_expression      a type offset, not a callee
+#   cpp   new / delete             operators
+#   hcl   template_interpolation   the per-node-type case this gate was built for
+#   js/ts new, instantiation_expression   keyword tokens and type instantiation
+query TT
+SELECT language, node_type
 FROM ast_type_map()
 WHERE language IN (SELECT language FROM __builtin)
-GROUP BY language
-HAVING count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')) > 0
-   AND count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')
-                          AND name_strategy <> 'none') = 0
-ORDER BY language;
+  AND is_semantic_type(semantic_type_code(semantic_type), 'CALL')
+  AND name_strategy = 'none'
+ORDER BY language, node_type;
 ----
-bash	3	0
+bash	command_substitution
+bash	process_substitution
+c	offsetof_expression
+cpp	delete
+cpp	new
+hcl	template_interpolation
+javascript	new
+typescript	instantiation_expression
+typescript	new
 
 # =============================================================================
 # The `new`-keyword classification quirk, pinned rather than hidden. A bare

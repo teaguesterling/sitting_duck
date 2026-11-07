@@ -276,6 +276,24 @@ string LanguageAdapter::ExtractFunctionNameFromText(TSNode node, const string &c
 	return function_name;
 }
 
+// Is this node type a bare name, as opposed to a compound target?
+//
+// Used by FIND_IDENTIFIER to decide whether an assignment's `left` field names
+// one thing. An `attribute` (`self.path`), a `subscript` (`arr[0]`) or a
+// destructuring pattern is NOT a bare name: it has a name INSIDE it, but that
+// inner identifier is the receiver, not the thing being defined. Returning it
+// is the #273 defect.
+//
+// The list mirrors the child types FindIdentifierInChildren searches for, so
+// the two agree about what counts as a name. Ruby's `instance_variable` and
+// `global_variable` are deliberately ABSENT: `@name = name` must report no
+// name rather than the right-hand side.
+static bool IsSimpleNameNodeType(const string &type) {
+	return type == "identifier" || type == "property_identifier" || type == "field_identifier" ||
+	       type == "qualified_identifier" || type == "name" || type == "simple_identifier" ||
+	       type == "type_identifier" || type == "constant" || type == "variable_name" || type == "word";
+}
+
 string LanguageAdapter::FindIdentifierInChildren(TSNode node, const string &content) const {
 	// Try common identifier node types across languages
 	string result = FindChildByType(node, content, "identifier");
@@ -385,6 +403,40 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 		return "";
 	}
 	case ExtractionStrategy::FIND_IDENTIFIER: {
+		// Where the grammar gives this node a `left` field, the name belongs to
+		// the TARGET and nowhere else (tracker/roadmap/v1.18.3-survey.md).
+		// Scanning every child instead produces two defects:
+		//   #273  `self.path = path` walks past the `attribute` target and
+		//         returns `path`, asserting that the right-hand side is DEFINED
+		//         here. It is a parameter defined elsewhere and only read.
+		//   #277  Go `dx := p.X - other.X` finds nothing, because tree-sitter-go
+		//         wraps `left` in an `expression_list`, so no direct `identifier`
+		//         child exists.
+		// Only nodes that HAVE a `left` field take this path, and measured, all
+		// of them are assignment-like, so the rest of FIND_IDENTIFIER's 206 node
+		// types are untouched.
+		TSNode target = ts_node_child_by_field_name(node, "left", 4);
+		if (!ts_node_is_null(target)) {
+			// A list target can only be named by a single-valued `name` column
+			// when it holds exactly one element. `a, b := 1, 2` binds two names,
+			// and reporting the first would be a plausible wrong answer, so it
+			// reports none. See the survey's drift note 6.
+			const string target_type = ts_node_type(target);
+			if (target_type.size() >= 5 && target_type.compare(target_type.size() - 5, 5, "_list") == 0) {
+				if (ts_node_named_child_count(target) != 1) {
+					return "";
+				}
+				target = ts_node_named_child(target, 0);
+			}
+			// A bare name is taken verbatim. An `attribute`, `subscript` or
+			// destructuring target is NOT a simple name, so it reports none
+			// rather than the first identifier inside it, which would be the
+			// receiver (`self` of `self.path`) and not the thing being defined.
+			if (IsSimpleNameNodeType(ts_node_type(target))) {
+				return ExtractNodeText(target, content);
+			}
+			return "";
+		}
 		string result = FindIdentifierInChildren(node, content);
 		if (result.empty()) {
 			result = FindIdentifierInWrappers(node, content, 2);
