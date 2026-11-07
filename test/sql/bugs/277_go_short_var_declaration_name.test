@@ -76,6 +76,12 @@ WHERE name IN ('dx', 'dy');
 # NOT var_spec or const_spec: measured, the committed Go fixtures contain ZERO
 # of either, so a control over them would read 0 = 0 and pass whatever the fix
 # did. A control an empty input set satisfies is not a control.
+#
+# COUNT CHANGED BY #140b, not by a fix to #277. The `**` glob recurses, and
+# #140b adds test/data/go/types/type_declarations.go with 5 more type_spec
+# nodes (Counter, Pair, Reader, Meters, Grams). Measured: 4 -> 9. The
+# function_declaration and method_declaration counts do not move, because that
+# fixture declares neither.
 query TII
 SELECT type, count(*), count(*) FILTER (WHERE name <> '')
 FROM read_ast('test/data/go/**/*.go')
@@ -84,7 +90,7 @@ GROUP BY type ORDER BY type;
 ----
 function_declaration	7	7
 method_declaration	4	4
-type_spec	4	4
+type_spec	9	9
 
 # =============================================================================
 # 4. CROSS-LANGUAGE CONTROL — FIND_IDENTIFIER's other users are unaffected

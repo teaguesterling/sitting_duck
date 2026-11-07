@@ -1284,14 +1284,19 @@ ORDER BY name;
 ----
 BaseQueue
 
-# Go: .class returns struct/interface types (names are on parent type_spec)
+# Go: .class returns the NAMED type declarations (#140b).
+# This assertion used to read `SELECT type` and expect interface_type plus two
+# struct_type rows, because Go's name sat on the parent type_spec and the class
+# sat on the unnamed body. That pinned the defect #140b reports. The fix moves
+# the name and the class onto one node, so this now reads like every sibling
+# assertion in this section: by name.
 query I
-SELECT type FROM ast_select('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', '.class')
-ORDER BY type;
+SELECT name FROM ast_select('test/data/rosetta/Lang/Go/Abstract-type/abstract-type.go', '.class')
+ORDER BY name;
 ----
-interface_type
-struct_type
-struct_type
+Beast
+Cat
+Dog
 
 # Rust: .class in abstract type
 query I

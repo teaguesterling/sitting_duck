@@ -1,0 +1,180 @@
+# name: test/sql/bugs/140b_go_named_type_declarations.test
+# description: #140b — Go's named type declarations must carry the name and the class
+# group: [bugs]
+
+# #140b: Go declares a named type with two nodes, and NEITHER is usable alone.
+# MEASURED at b066df6 over test/data/go/types/type_declarations.go:
+#
+#   type_spec       name='Pair'  EXECUTION_DECLARATION  flags=0  is_definition=false
+#   struct_type     name=''      DEFINITION_CLASS       flags=8  is_definition=true
+#
+# The name is on the node that is not a definition. The class is on the node
+# that has no name. So `ast_definitions()` returned ZERO classes for Go — its
+# `name <> ''` filter drops struct_type, and `is_definition()` drops type_spec —
+# and `.class` returned 4 rows with an empty name column. Measured: `.class`
+# over the fixture could not tell you that `Pair` exists.
+#
+# THE FIX FOLLOWS THE HOUSE CONVENTION, not a new idea. TypeScript, Rust, Java
+# and Dart all put the name AND the class on the DECLARATION node:
+#
+#   typescript  type_alias_declaration  DEFINITION_CLASS  NAME_DEFINITION|IS_SCOPE
+#   rust        struct_item             DEFINITION_CLASS  NAME_DEFINITION|IS_SCOPE
+#   java        class_declaration       DEFINITION_CLASS  NAME_DEFINITION|IS_SCOPE
+#   dart        type_alias              DEFINITION_CLASS  NAME_DEFINITION|IS_SCOPE
+#
+# So Go's `type_spec` and `type_alias` take the same shape, and `struct_type` /
+# `interface_type` take IS_CONSTITUENT — the flag #139 added for a sub-part whose
+# enclosing construct already represents the whole. `.class` skips constituents
+# (src/sql_macros/css_selectors.sql:1554), so each named type is selected once.
+#
+# THE ALIAS FORM IS A THIRD CASE the issue text does not mention. Measured,
+# `type Celsius = float64` parses to `type_alias`, NOT `type_spec`, and the Go
+# .def had no entry for it at all, so it fell through to PARSER_CONSTRUCT with
+# no name. Teague approved including it in #140b.
+#
+# THE COST, STATED AND ACCEPTED. A stored per-node-type bit cannot be
+# context-dependent, and Go's `struct_type` IS: it is a sub-part in
+# `type Pair struct{}` but the WHOLE construct in `var anonymous struct{}` and
+# in `struct{}{}`. Flagging it as a constituent therefore removes the two
+# anonymous forms from `.class`. Section 4 pins that loss rather than hiding it.
+# An inline `struct{}` used as a set element is arguably not a class definition,
+# which is why the loss was accepted. Recorded in tracker/roadmap/v1.18.3-survey.md.
+
+require sitting_duck
+
+# =============================================================================
+# 1. THE POINT OF THE ISSUE — Go's named types reach ast_definitions()
+# =============================================================================
+
+# This returned ZERO rows before the fix. It is the assertion a user feels:
+# `ast_definitions()` is how a caller asks "what does this file define?".
+query TT
+SELECT name, definition_type FROM ast_definitions('test/data/go/types/type_declarations.go')
+WHERE definition_type = 'class' ORDER BY start_line;
+----
+Celsius	class
+Counter	class
+Pair	class
+Reader	class
+Meters	class
+Grams	class
+
+# =============================================================================
+# 2. `.class` NAMES THE TYPE, NOT ITS UNNAMED BODY
+# =============================================================================
+
+# Before the fix this returned 4 rows, every one with an empty name: three
+# struct_type and one interface_type. Now it returns the six named declarations.
+# The `type` column is asserted too, so a fix that reached the right names
+# through the wrong node would still fail.
+query TTI
+SELECT type, name, start_line FROM ast_select('test/data/go/types/type_declarations.go', '.class')
+ORDER BY start_line;
+----
+type_alias	Celsius	12
+type_spec	Counter	15
+type_spec	Pair	18
+type_spec	Reader	24
+type_spec	Meters	30
+type_spec	Grams	31
+
+# Stated as a ratio as well, so a new fixture with more declarations cannot make
+# this pass by accident, and an empty name cannot pass as a match.
+query II
+SELECT count(*), count(*) FILTER (WHERE name <> '')
+FROM ast_select('test/data/go/types/type_declarations.go', '.class');
+----
+6	6
+
+# =============================================================================
+# 3. THE THREE NODES, WITH THEIR FLAGS
+# =============================================================================
+
+# flags 14 = IS_SCOPE (8) | NAME_DEFINITION (6), the house value for a named
+# definition that opens a scope. flags 40 = IS_SCOPE (8) | IS_CONSTITUENT (32).
+# Asserting the flag byte is what distinguishes this fix from one that only
+# moved a semantic type.
+query TITTI
+SELECT type, start_line, name, semantic_type_to_string(semantic_type), flags
+FROM read_ast('test/data/go/types/type_declarations.go')
+WHERE type IN ('type_spec', 'type_alias', 'struct_type', 'interface_type')
+ORDER BY node_id;
+----
+type_alias	12	Celsius	DEFINITION_CLASS	14
+type_spec	15	Counter	DEFINITION_CLASS	14
+type_spec	18	Pair	DEFINITION_CLASS	14
+struct_type	18	(empty)	DEFINITION_CLASS	40
+type_spec	24	Reader	DEFINITION_CLASS	14
+interface_type	24	(empty)	DEFINITION_CLASS	40
+type_spec	30	Meters	DEFINITION_CLASS	14
+type_spec	31	Grams	DEFINITION_CLASS	14
+struct_type	38	(empty)	DEFINITION_CLASS	40
+struct_type	44	(empty)	DEFINITION_CLASS	40
+
+# =============================================================================
+# 4. THE ACCEPTED COST — the anonymous struct forms leave `.class`
+# =============================================================================
+
+# `var anonymous struct{...}` (line 38) and `map[string]struct{}{}` (line 44)
+# are struct_type nodes with no enclosing named declaration. A constituent flag
+# cannot distinguish them from the one at line 18, so they are no longer
+# selected as classes. This assertion exists so that the loss is a decision on
+# the record, not a surprise found later.
+#
+# The nodes are still in the tree with their semantic type intact, which is what
+# the second query proves. A structural query can still reach them.
+query I
+SELECT count(*) FROM ast_select('test/data/go/types/type_declarations.go', '.class')
+WHERE start_line IN (38, 44);
+----
+0
+
+query TII
+SELECT type, count(*), count(*) FILTER (WHERE is_constituent(flags))
+FROM read_ast('test/data/go/types/type_declarations.go')
+WHERE type IN ('struct_type', 'interface_type') GROUP BY type ORDER BY type;
+----
+interface_type	1	1
+struct_type	3	3
+
+# =============================================================================
+# 5. THE SAME FIX ON THE FIXTURE THAT WAS ALREADY COMMITTED
+# =============================================================================
+
+# test/data/go/css_selectors_test.go holds Point, Shape and Rectangle. A fix
+# that worked only on the fixture written for it would be a fixture, not a fix.
+query T
+SELECT name FROM ast_select('test/data/go/css_selectors_test.go', '.class') ORDER BY name;
+----
+Point
+Rectangle
+Shape
+
+# =============================================================================
+# 6. REGRESSION CONTROL — the languages that already did this are unmoved
+# =============================================================================
+
+# The change edits languages/go/go_types.def only, so no other language should
+# move. Rust's three type-declaration node types are the control: they already
+# carry DEFINITION_CLASS with NAME_DEFINITION | IS_SCOPE, which is the shape Go
+# is being changed TO. If these counts move, the change was not Go-local.
+query TII
+SELECT type, count(*), count(*) FILTER (WHERE name <> '')
+FROM read_ast('test/data/rust/**/*.rs')
+WHERE type IN ('struct_item', 'trait_item', 'enum_item')
+GROUP BY type ORDER BY type;
+----
+enum_item	1	1
+struct_item	2	2
+trait_item	2	2
+
+# Go's other named declaration forms have nothing to do with type_spec, and a
+# broad edit to the Go .def would disturb them. Measured at b066df6: 7 and 4.
+query TII
+SELECT type, count(*), count(*) FILTER (WHERE name <> '')
+FROM read_ast('test/data/go/**/*.go')
+WHERE type IN ('function_declaration', 'method_declaration')
+GROUP BY type ORDER BY type;
+----
+function_declaration	7	7
+method_declaration	4	4
