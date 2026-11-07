@@ -42,3 +42,9 @@ var anonymous struct {
 // `struct{}{}` as a map value, which is how Go spells a set. This is the most
 // common anonymous struct in the language.
 var marker = map[string]struct{}{"a": {}}
+
+// A lowercase name is not exported in Go, so this one's flag byte is 14 — the
+// bare house value, IS_SCOPE | NAME_DEFINITION — while every capitalized type
+// above reads 30. The pair proves the extra bit is IS_EXPORTED, computed from
+// the name (#148), and not something #140b's .def entry sets.
+type unexported int

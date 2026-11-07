@@ -79,7 +79,8 @@ WHERE name IN ('dx', 'dy');
 #
 # COUNT CHANGED BY #140b, not by a fix to #277. The `**` glob recurses, and
 # #140b adds test/data/go/types/type_declarations.go with 5 more type_spec
-# nodes (Counter, Pair, Reader, Meters, Grams). Measured: 4 -> 9. The
+# nodes plus `unexported` (Counter, Pair, Reader, Meters, Grams,
+# unexported). Measured: 4 -> 10. The
 # function_declaration and method_declaration counts do not move, because that
 # fixture declares neither.
 query TII
@@ -90,7 +91,7 @@ GROUP BY type ORDER BY type;
 ----
 function_declaration	7	7
 method_declaration	4	4
-type_spec	9	9
+type_spec	10	10
 
 # =============================================================================
 # 4. CROSS-LANGUAGE CONTROL — FIND_IDENTIFIER's other users are unaffected

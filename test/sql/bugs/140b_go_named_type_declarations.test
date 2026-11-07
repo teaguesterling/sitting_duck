@@ -58,6 +58,7 @@ Pair	class
 Reader	class
 Meters	class
 Grams	class
+unexported	class
 
 # =============================================================================
 # 2. `.class` NAMES THE TYPE, NOT ITS UNNAMED BODY
@@ -77,6 +78,7 @@ type_spec	Pair	18
 type_spec	Reader	24
 type_spec	Meters	30
 type_spec	Grams	31
+type_spec	unexported	50
 
 # Stated as a ratio as well, so a new fixture with more declarations cannot make
 # this pass by accident, and an empty name cannot pass as a match.
@@ -84,32 +86,43 @@ query II
 SELECT count(*), count(*) FILTER (WHERE name <> '')
 FROM ast_select('test/data/go/types/type_declarations.go', '.class');
 ----
-6	6
+7	7
 
 # =============================================================================
 # 3. THE THREE NODES, WITH THEIR FLAGS
 # =============================================================================
 
-# flags 14 = IS_SCOPE (8) | NAME_DEFINITION (6), the house value for a named
-# definition that opens a scope. flags 40 = IS_SCOPE (8) | IS_CONSTITUENT (32).
-# Asserting the flag byte is what distinguishes this fix from one that only
-# moved a semantic type.
+# flags 14 = IS_SCOPE (8) | NAME_DEFINITION (6), the house value this .def
+# entry sets for a named definition that opens a scope. flags 32 =
+# IS_CONSTITUENT alone: the body is a sub-part and does NOT own a scope, which
+# is what java `class_body`, typescript `interface_body` and rust
+# `field_declaration_list` all do (flags 0). Asserting the flag byte is what
+# distinguishes this fix from one that only moved a semantic type.
+#
+# A CORRECTED ORACLE. I predicted 14 for every named row and measured 30.
+# 30 = IS_EXPORTED (16) | 14, and IS_EXPORTED is computed AT RUNTIME from Go's
+# capitalization rule (#148), not from this .def entry. Every name in the
+# fixture was capitalized, so the extra bit was invisible. `unexported` on
+# line 50 is the control that makes the two values differ by exactly that bit:
+# 14 against 30. Without it, a future reader could not tell whether 30 came
+# from the .def or from the name.
 query TITTI
 SELECT type, start_line, name, semantic_type_to_string(semantic_type), flags
 FROM read_ast('test/data/go/types/type_declarations.go')
 WHERE type IN ('type_spec', 'type_alias', 'struct_type', 'interface_type')
 ORDER BY node_id;
 ----
-type_alias	12	Celsius	DEFINITION_CLASS	14
-type_spec	15	Counter	DEFINITION_CLASS	14
-type_spec	18	Pair	DEFINITION_CLASS	14
-struct_type	18	(empty)	DEFINITION_CLASS	40
-type_spec	24	Reader	DEFINITION_CLASS	14
-interface_type	24	(empty)	DEFINITION_CLASS	40
-type_spec	30	Meters	DEFINITION_CLASS	14
-type_spec	31	Grams	DEFINITION_CLASS	14
-struct_type	38	(empty)	DEFINITION_CLASS	40
-struct_type	44	(empty)	DEFINITION_CLASS	40
+type_alias	12	Celsius	DEFINITION_CLASS	30
+type_spec	15	Counter	DEFINITION_CLASS	30
+type_spec	18	Pair	DEFINITION_CLASS	30
+struct_type	18	(empty)	DEFINITION_CLASS	32
+type_spec	24	Reader	DEFINITION_CLASS	30
+interface_type	24	(empty)	DEFINITION_CLASS	32
+type_spec	30	Meters	DEFINITION_CLASS	30
+type_spec	31	Grams	DEFINITION_CLASS	30
+struct_type	38	(empty)	DEFINITION_CLASS	32
+struct_type	44	(empty)	DEFINITION_CLASS	32
+type_spec	50	unexported	DEFINITION_CLASS	14
 
 # =============================================================================
 # 4. THE ACCEPTED COST — the anonymous struct forms leave `.class`
@@ -178,3 +191,41 @@ GROUP BY type ORDER BY type;
 ----
 function_declaration	7	7
 method_declaration	4	4
+
+# =============================================================================
+# 7. ONE SCOPE PER TYPE, NOT TWO
+# =============================================================================
+
+# The body must NOT keep IS_SCOPE once the declaration has it. Measured with
+# both flags set: `scope.class` for the field `First` pointed at the unnamed
+# `struct_type`, while `.class#Pair` matched the `type_spec`. The two ids never
+# met, so this query returned EMPTY while the plain descendant form below
+# returned both fields. A selector pair that disagrees is #166's defect, so
+# this assertion is what stops the body's scope flag coming back.
+query TTI
+SELECT type, name, start_line
+FROM ast_select('test/data/go/types/type_declarations.go', '.variable:in-scope(.class#Pair)')
+ORDER BY start_line;
+----
+field_declaration	First	19
+field_declaration	Second	20
+
+# The descendant form must agree with the :in-scope form. This one passed even
+# with the stacked scopes, which is exactly why the pair is asserted together:
+# the broken half was invisible on its own.
+query TTI
+SELECT type, name, start_line
+FROM ast_select('test/data/go/types/type_declarations.go', '.class#Pair .variable')
+ORDER BY start_line;
+----
+field_declaration	First	19
+field_declaration	Second	20
+
+# An interface's method reaches its type the same way. Before #140b the
+# enclosing type had no name to give, so `Read`'s qualified_name was `F[Read]`
+# alone. It now carries the interface: `C[Reader] F[Read]`.
+query TT
+SELECT name, qualified_name
+FROM ast_resolve_entity('test/data/go/types/type_declarations.go', 'Read');
+----
+Read	C[Reader] F[Read]
