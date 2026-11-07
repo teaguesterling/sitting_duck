@@ -1,0 +1,277 @@
+# name: test/sql/conformance/parameter_binding_multilang.test
+# description: every language binds every parameter, with its own name and its declared type
+# group: [conformance]
+
+# WHY THIS FILE EXISTS
+#
+# #283 changed the C++ parameter type convention. 71 of the 92 parameters in
+# src/unified_ast_backend.cpp moved, three suites read that file, and NOT ONE
+# expectation anywhere in the suite failed. The behaviour was pinned nowhere.
+#
+# So this file pins the cross-language invariant directly. It asserts the one
+# surface every language shares -- the `parameters` list on a function node
+# under `context := 'native'` -- against the defect class that keeps recurring:
+#
+#     A parameter's name is NESTED, and a plausible WRONG candidate sits next
+#     to it: the parameter's TYPE, or its DEFAULT VALUE.
+#
+# Measured instances of that class so far: #273 (the assignment RHS), #277 (a
+# list wrapper), #283 (a reference declarator), #315 (a default value), #318
+# (the type, via a fallback to qualified_identifier), #320 (a rest_pattern
+# wrapper).
+#
+# And instances where the parameter is dropped entirely rather than misnamed:
+# #315 (cpp defaults), #319 (java varargs), #321 (csharp params, upstream),
+# #322 (every zig parameter).
+#
+# EVERY PROBE IS THE SAME SHAPE. One function called `probe`, whose parameters
+# cover a bare name, a typed name, a defaulted name, a decorated name and a
+# variadic, as far as each language allows. Each language's snippet is inline,
+# so no fixture is touched and no glob moves.
+#
+# HOW TO READ A FAILURE
+#
+# Sections 1 and 2 are a regression net: these answers are CORRECT and a change
+# that moves them is a defect.
+#
+# Section 3 pins answers that are WRONG TODAY, each with its issue number. They
+# are pinned so that FIXING one shows up here as a failure, which is the signal
+# to update this file rather than a reason to worry. A gap left unpinned is a
+# gap nobody can see, and that is how #283's convention survived unasserted.
+
+require sitting_duck
+
+# =============================================================================
+# 1. Languages that bind every parameter correctly
+# =============================================================================
+
+# python — the reference shape. A bare name, an annotated name, a defaulted
+# name and both together. None of the four loses its name to its annotation or
+# to its default.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'def probe(a, b: int, c = 1, d: str = "x"):\n    pass\n', 'python', context := 'native')
+WHERE type = 'function_definition';
+----
+['a : -', 'b : int', 'c : -', 'd : str']
+
+# go — the structural rule from #272 holds for every form, variadic included.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'func probe(a int, b *int, c map[string]int, d ...string) {}\n', 'go', context := 'native')
+WHERE type = 'function_declaration';
+----
+['a : int', 'b : *int', 'c : map[string]int', 'd : ...string']
+
+# rust — references, mutable references and generics all keep their decoration
+# in the type and leave the name alone.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'fn probe(a: i32, b: &str, c: &mut Vec<i32>, d: Option<&[u8]>) {}\n', 'rust', context := 'native')
+WHERE type = 'function_item';
+----
+['a : i32', 'b : &str', 'c : &mut Vec<i32>', 'd : Option<&[u8]>']
+
+# kotlin — a default value and a vararg, neither of which captures the name.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'fun probe(a: Int, b: String = "x", vararg c: Int) {}\n', 'kotlin', context := 'native')
+WHERE type = 'function_declaration';
+----
+['a : Int', 'b : String', 'c : Int']
+
+# dart — an optional positional parameter in brackets.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'void probe(int a, String b, [String c = "x"]) {}\n', 'dart', context := 'native')
+WHERE type = 'function_signature';
+----
+['a : int', 'b : String', 'c : String']
+
+# r — untyped, with a default.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'probe <- function(a, b = 1) { }\n', 'r', context := 'native')
+WHERE type = 'function_definition';
+----
+['a : -', 'b : -']
+
+# lua — untyped, with the bare ellipsis as its own parameter.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'function probe(a, b, ...) end\n', 'lua', context := 'native')
+WHERE type = 'function_declaration';
+----
+['a : -', 'b : -', '... : -']
+
+# =============================================================================
+# 2. Correct, but carrying a sigil or label in the name
+# =============================================================================
+# These four bind every parameter and never confuse the name with the type or
+# the default. What they do differ on is whether the name includes the
+# language's own punctuation. That is a CONVENTION question, not a defect, and
+# it is pinned here so that a future decision to normalise it is a deliberate,
+# visible change rather than drift.
+#
+#   php     `$a`    keeps the sigil
+#   ruby    `*c`    keeps the splat, `d:` keeps the keyword colon
+#   js      `...c`  keeps the rest dots
+#   swift   `_ a`   keeps the external-label underscore
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'<?php\nfunction probe($a, int $b, string $c = "x", ...$d) {}\n', 'php', context := 'native')
+WHERE type = 'function_definition';
+----
+['$a : -', '$b : int', '$c : string', '$d : -']
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'def probe(a, b = 1, *c, d:, e: 2)\nend\n', 'ruby', context := 'native')
+WHERE type = 'method';
+----
+['a : -', 'b : -', '*c : -', 'd: : -', 'e: : -']
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'function probe(a, b = 1, ...c) {}\n', 'javascript', context := 'native')
+WHERE type = 'function_declaration';
+----
+['a : -', 'b : -', '...c : -']
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'func probe(_ a: Int, b: String = "x", c: inout Int) {}\n', 'swift', context := 'native')
+WHERE type = 'function_declaration';
+----
+['_ a : Int', 'b : String', 'c : Int']
+
+# =============================================================================
+# 3. The gaps, pinned so that fixing one is visible
+# =============================================================================
+# Each assertion below records what is returned TODAY and is WRONG. Fixing the
+# named issue will make it fail. That is the intended behaviour of this
+# section: update the expectation in the same commit as the fix.
+
+# --- #315: C++ drops every DEFAULTED parameter ----------------------------
+# `int c = 1` and `const std::string& d = "x"` are both absent. The arity is 3
+# where the source declares 5, and nothing marks the list as partial.
+# `fp` is correct, and is the control: #283 fixed the nested-declarator name,
+# so this is a dispatch gap and not a naming gap.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'void probe(int a, const std::string& b, int c = 1, const std::string& d = "x", int (*fp)(int)) {}\n', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['a : int', 'b : const std::string&', 'fp : int (*)(int)']
+
+query II
+SELECT 5 AS declared, len(parameters) AS reported
+FROM parse_ast(E'void probe(int a, const std::string& b, int c = 1, const std::string& d = "x", int (*fp)(int)) {}\n', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+5	3
+
+# --- #317 / #318: C keeps neither the qualifier nor the nested name --------
+# `const char *b` loses its `const`, and `int (*fp)(int)` is named `param`
+# with the type `int`. C has its own extractor, untouched by #283, so this is
+# the same defect C++ had before it. Compare the cpp row above, where the same
+# function pointer reads `fp : int (*)(int)`.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'void probe(int a, const char *b, int (*fp)(int), int arr[10]) {}\n', 'c', context := 'native')
+WHERE type = 'function_definition';
+----
+['a : int', 'b : char*', 'param : int', 'arr : int[]']
+
+# --- #319: java drops a varargs parameter ---------------------------------
+# `int... d` parses as `spread_parameter`, which java_types.def:183 DOES
+# declare, and whose AST row carries the correct name `d`. The function's
+# extractor iterates `formal_parameter` only, so the parameter never reaches
+# the list. That is the #220 shape: a dispatch that does not know a node the
+# grammar emits.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'class K {\n  void probe(int a, String[] b, java.util.Map<String,Integer> c, int... d) {}\n}\n', 'java', context := 'native')
+WHERE type = 'method_declaration';
+----
+['a : int', 'b : String[]', 'c : java.util.Map<String,Integer>']
+
+# The control that proves the node and its name exist, and that only the list
+# is short: the AST row for the dropped parameter is named correctly.
+query TT
+SELECT type, name FROM parse_ast(E'class K {\n  void probe(int a, int... d) {}\n}\n', 'java')
+WHERE type IN ('formal_parameter', 'spread_parameter') ORDER BY name;
+----
+formal_parameter	a
+spread_parameter	d
+
+# --- #320: typescript drops a rest parameter ------------------------------
+# `...c: number[]` IS a `required_parameter`, so the dispatch reaches it, but
+# its name sits inside a `rest_pattern` wrapper and the identifier lookup does
+# not descend into one. The same nested-name class as #318.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'function probe(a: number, b: string = "x", ...c: number[]) {}\n', 'typescript', context := 'native')
+WHERE type = 'function_declaration';
+----
+['a : number', 'b : string']
+
+# The control: the node is present and its name is EMPTY, which is why the
+# caller's guard drops it.
+query TT
+SELECT type, coalesce(nullif(name,''),'<empty>') FROM parse_ast('function probe(a: number, ...c: number[]) {}', 'typescript')
+WHERE type = 'required_parameter' ORDER BY node_id;
+----
+required_parameter	a
+required_parameter	<empty>
+
+# --- #321: a csharp `params` parameter has no node to read ----------------
+# This one is NOT a dispatch gap. tree-sitter-c-sharp emits ONE `parameter`
+# node for the two parameters below, with `params`, `array_type` and
+# `identifier` as loose siblings of it under `parameter_list`, and it reports
+# ZERO error nodes while doing so. `ref` is also absent from the type.
+# Like the C++ pointer pack in #283, there is nothing for an extractor to
+# bind, so this is an upstream shape rather than our defect.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'class K {\n  void probe(int a, ref int b, string c = "x", params int[] d) {}\n}\n', 'csharp', context := 'native')
+WHERE type = 'method_declaration';
+----
+['a : int', 'b : int', 'c : string']
+
+# The measurement behind that claim: one `parameter` node for two parameters,
+# and no ERROR. Removing `params` restores the second node, which is the
+# control that isolates the keyword as the cause.
+query II
+SELECT count(*) FILTER (WHERE type = 'parameter') AS parameter_nodes,
+       count(*) FILTER (WHERE type = 'ERROR') AS errors
+FROM parse_ast(E'class K {\n  void probe(int a, params int[] d) {}\n}\n', 'csharp');
+----
+1	0
+
+query II
+SELECT count(*) FILTER (WHERE type = 'parameter') AS parameter_nodes,
+       count(*) FILTER (WHERE type = 'ERROR') AS errors
+FROM parse_ast(E'class K {\n  void probe(int a, int[] d) {}\n}\n', 'csharp');
+----
+2	0
+
+# --- #322: no zig parameter reaches the list at all -----------------------
+# `parameter` is declared at zig_types.def:91 with a name strategy, and the
+# AST rows ARE named. Nothing populates the function's list, so this is the
+# #263 shape: a declared capability delivering nothing.
+query II
+SELECT 2 AS declared, len(parameters) AS reported
+FROM parse_ast(E'fn probe(a: i32, b: []const u8) void {}\n', 'zig', context := 'native')
+WHERE type = 'function_declaration';
+----
+2	0
+
+# The control: the nodes exist and are named, so only the list is empty.
+query TT
+SELECT type, name FROM parse_ast(E'fn probe(a: i32, b: []const u8) void {}\n', 'zig')
+WHERE type = 'parameter' ORDER BY node_id;
+----
+parameter	a
+parameter	b
