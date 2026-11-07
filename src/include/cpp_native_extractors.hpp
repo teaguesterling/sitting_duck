@@ -48,39 +48,183 @@ struct CppNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 		return context;
 	}
 
-	// Public helper method accessible to other extractors
-	// Pulls the real name and type out of a C++ variadic parameter. Structural
-	// rather than a list of node names: the type is whatever precedes the
-	// variadic_declarator, and the name is the identifier inside it.
+	// Public helper methods accessible to other extractors
+
+	static string NodeText(TSNode node, const string &content) {
+		if (ts_node_is_null(node)) {
+			return string();
+		}
+		uint32_t start = ts_node_start_byte(node);
+		uint32_t end = ts_node_end_byte(node);
+		if (start < content.length() && end <= content.length() && end > start) {
+			return content.substr(start, end - start);
+		}
+		return string();
+	}
+
+	// #283. Walks a declarator chain to the declarator-id, which is the
+	// parameter's name. The grammar bounds the walk exactly:
+	// pointer_declarator, array_declarator and function_declarator each carry a
+	// `declarator` FIELD, and function_declarator's own parameter list is a
+	// SEPARATE `parameters` field, so following the field can never descend
+	// into a function pointer's parameters and mistake one of those for the
+	// name. reference_declarator, parenthesized_declarator and
+	// variadic_declarator have no fields at all; their declarator is the single
+	// named child.
+	//
+	// Returns a null node for an abstract declarator, such as the `int*` in
+	// `void f(int*)`, which has no name to find.
+	static TSNode FindDeclaratorId(TSNode declarator) {
+		TSNode current = declarator;
+		// The chain is a few links long in real code. The guard is only here so
+		// that a malformed tree cannot spin.
+		for (uint32_t guard = 0; guard < 32; guard++) {
+			if (ts_node_is_null(current)) {
+				break;
+			}
+			const char *node_type = ts_node_type(current);
+			if (!node_type) {
+				break;
+			}
+			if (strcmp(node_type, "identifier") == 0 || strcmp(node_type, "field_identifier") == 0) {
+				return current;
+			}
+			if (strcmp(node_type, "pointer_declarator") == 0 || strcmp(node_type, "array_declarator") == 0 ||
+			    strcmp(node_type, "function_declarator") == 0 || strcmp(node_type, "init_declarator") == 0) {
+				current = ts_node_child_by_field_name(current, "declarator", 10);
+				continue;
+			}
+			if (strcmp(node_type, "reference_declarator") == 0 || strcmp(node_type, "parenthesized_declarator") == 0 ||
+			    strcmp(node_type, "variadic_declarator") == 0) {
+				current = ts_node_named_child(current, 0);
+				continue;
+			}
+			break;
+		}
+		TSNode none = {};
+		return none;
+	}
+
+	// #283. Collapses the whitespace that excision leaves behind, and closes the
+	// gap an array bound opens: `int arr[10]` without `arr` reads `int [10]`,
+	// and the type-id is written `int[10]`.
+	static string NormalizeDeclaredType(const string &raw) {
+		string out;
+		bool pending_space = false;
+		for (size_t i = 0; i < raw.size(); i++) {
+			char c = raw[i];
+			if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+				pending_space = !out.empty();
+				continue;
+			}
+			if (pending_space && c != '[') {
+				out += ' ';
+			}
+			pending_space = false;
+			out += c;
+		}
+		return out;
+	}
+
+	// #283. A parameter's declared type is its declaration with the name removed,
+	// which is C++'s own abstract declarator. `int&` is a different type from
+	// `int`, so the qualifiers stay. The previous revision matched a list of type
+	// node names instead, which dropped every `const`, `&`, `&&` and `*`.
+	//
+	// Removed along with the name: the specifiers that are not part of a type.
+	// node-types.json gives parameter_declaration's non-field children as
+	// attribute_declaration, attribute_specifier, ms_declspec_modifier,
+	// storage_class_specifier and type_qualifier. Only type_qualifier belongs to
+	// the type, so it is the only one kept.
+	//
+	// A trailing attribute, as in `int x [[attr]]`, is NOT removed: a cut is
+	// taken only where it precedes the name, so that the cuts stay in source
+	// order and can never overlap.
+	static string DeclaredTypeText(TSNode decl, TSNode name_id, const string &content) {
+		uint32_t decl_start = ts_node_start_byte(decl);
+		uint32_t decl_end = ts_node_end_byte(decl);
+		if (decl_start >= content.length() || decl_end > content.length() || decl_end <= decl_start) {
+			return string();
+		}
+
+		// Byte ranges to drop, built in source order: the specifiers sit in
+		// `_declaration_specifiers`, which precedes the declarator field.
+		vector<std::pair<uint32_t, uint32_t>> cuts;
+		bool have_name = !ts_node_is_null(name_id);
+		uint32_t name_start = have_name ? ts_node_start_byte(name_id) : decl_end;
+		uint32_t child_count = ts_node_child_count(decl);
+		for (uint32_t i = 0; i < child_count && i < 100; i++) {
+			TSNode child = ts_node_child(decl, i);
+			if (ts_node_is_null(child)) {
+				continue;
+			}
+			const char *child_type = ts_node_type(child);
+			if (!child_type) {
+				continue;
+			}
+			if (strcmp(child_type, "storage_class_specifier") == 0 ||
+			    strcmp(child_type, "attribute_declaration") == 0 || strcmp(child_type, "attribute_specifier") == 0 ||
+			    strcmp(child_type, "ms_declspec_modifier") == 0 || strcmp(child_type, "comment") == 0) {
+				uint32_t child_start = ts_node_start_byte(child);
+				uint32_t child_end = ts_node_end_byte(child);
+				if (child_end <= name_start && child_end > child_start) {
+					cuts.push_back(std::make_pair(child_start, child_end));
+				}
+			}
+		}
+		if (have_name) {
+			cuts.push_back(std::make_pair(name_start, ts_node_end_byte(name_id)));
+		}
+
+		string kept;
+		uint32_t cursor = decl_start;
+		for (idx_t c = 0; c < cuts.size(); c++) {
+			uint32_t cut_start = cuts[c].first;
+			uint32_t cut_end = cuts[c].second;
+			if (cut_start < cursor || cut_end > decl_end) {
+				continue;
+			}
+			kept += content.substr(cursor, cut_start - cursor);
+			cursor = cut_end;
+		}
+		if (cursor < decl_end) {
+			kept += content.substr(cursor, decl_end - cursor);
+		}
+
+		return NormalizeDeclaredType(kept);
+	}
+
+	// Pulls the name and type out of a C++ variadic parameter. The pack is not a
+	// special case any more: the same declarator walk and the same type rule
+	// serve it and every ordinary parameter.
+	//
+	// grammars/tree-sitter-cpp/grammar.js:463-478 bounds the shape:
+	//
+	//     variadic_parameter_declaration: seq(
+	//       _declaration_specifiers,
+	//       field('declarator', choice(
+	//         variadic_declarator,                                // "... args"
+	//         alias(variadic_reference_declarator, reference_declarator))))
+	//     variadic_declarator: seq('...', optional(identifier))
+	//     variadic_reference_declarator: seq(choice('&&','&'), variadic_declarator)
+	//
+	// So the declarator is one of exactly two shapes and the identifier sits at
+	// depth 1 or 2, never deeper. The previous revision read the type from the
+	// FIRST non-declarator child, so `const Args&...` stopped at the `const` and
+	// never reached `Args`; and it looked for the variadic_declarator among
+	// DIRECT children only, so the `&` and `&&` forms, where it sits inside a
+	// reference_declarator, lost the name entirely.
+	//
+	// The `...` needs no concatenation here. It is in the source text already, so
+	// excising the name leaves it in place.
 	static ParameterInfo ExtractCppVariadicParameterDeclaration(TSNode node, const string &content) {
 		ParameterInfo param;
 		param.is_variadic = true;
 
-		auto text_of = [&content](TSNode n) -> string {
-			uint32_t start = ts_node_start_byte(n);
-			uint32_t end = ts_node_end_byte(n);
-			if (start < content.length() && end <= content.length()) {
-				return content.substr(start, end - start);
-			}
-			return string();
-		};
-
-		uint32_t child_count = ts_node_child_count(node);
-		for (uint32_t i = 0; i < child_count; i++) {
-			TSNode child = ts_node_child(node, i);
-			const char *child_type = ts_node_type(child);
-			if (strcmp(child_type, "variadic_declarator") == 0) {
-				uint32_t decl_count = ts_node_child_count(child);
-				for (uint32_t j = 0; j < decl_count; j++) {
-					TSNode decl_child = ts_node_child(child, j);
-					if (strcmp(ts_node_type(decl_child), "identifier") == 0) {
-						param.name = text_of(decl_child);
-					}
-				}
-			} else if (param.type.empty()) {
-				param.type = text_of(child) + "...";
-			}
-		}
+		TSNode declarator = ts_node_child_by_field_name(node, "declarator", 10);
+		TSNode name_id = FindDeclaratorId(declarator);
+		param.name = NodeText(name_id, content);
+		param.type = DeclaredTypeText(node, name_id, content);
 
 		return param;
 	}
@@ -92,6 +236,21 @@ struct CppNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 		if (ts_node_is_null(node)) {
 			return param;
 		}
+
+		// #283. One rule for every C++ parameter: the name is the declarator-id
+		// at the end of the declarator chain, and the type is the declaration
+		// with that name removed.
+		//
+		// What this replaced lost two things. The type came from a list of type
+		// node names, so `const int& a` read as `int` -- the qualifier and the
+		// reference were both dropped. The name came from a ONE-level look
+		// inside a declarator, so `int** pp`, `void (*fp)(int)`,
+		// `int (&arr)[3]` and `const char* const* argv` all reported an empty
+		// name, because their declarator-id is two or three levels down.
+		TSNode declarator = ts_node_child_by_field_name(node, "declarator", 10);
+		TSNode name_id = FindDeclaratorId(declarator);
+		param.name = NodeText(name_id, content);
+		param.type = DeclaredTypeText(node, name_id, content);
 
 		uint32_t child_count = ts_node_child_count(node);
 
@@ -115,45 +274,7 @@ struct CppNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 				continue;
 			}
 
-			if (strcmp(child_type, "primitive_type") == 0 || strcmp(child_type, "type_identifier") == 0 ||
-			    strcmp(child_type, "template_type") == 0 || strcmp(child_type, "qualified_identifier") == 0 ||
-			    strcmp(child_type, "pointer_type") == 0 || strcmp(child_type, "reference_type") == 0) {
-				// Parameter type
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-
-				// Safety check: ensure bounds are valid
-				if (start < content.length() && end <= content.length() && end > start) {
-					param.type = content.substr(start, end - start);
-				}
-			} else if (strcmp(child_type, "identifier") == 0) {
-				// Parameter name
-				uint32_t start = ts_node_start_byte(child);
-				uint32_t end = ts_node_end_byte(child);
-				// Safety check: ensure bounds are valid
-				if (start < content.length() && end <= content.length() && end > start) {
-					param.name = content.substr(start, end - start);
-				}
-			} else if (strcmp(child_type, "reference_declarator") == 0 ||
-			           strcmp(child_type, "pointer_declarator") == 0 || strcmp(child_type, "array_declarator") == 0 ||
-			           strcmp(child_type, "function_declarator") == 0) {
-				// C++ declarators - look for nested identifier
-				uint32_t declarator_child_count = ts_node_child_count(child);
-				for (uint32_t j = 0; j < declarator_child_count && j < 100; j++) {
-					TSNode declarator_child = ts_node_child(child, j);
-					if (!ts_node_is_null(declarator_child)) {
-						const char *declarator_child_type = ts_node_type(declarator_child);
-						if (declarator_child_type && strcmp(declarator_child_type, "identifier") == 0) {
-							uint32_t start = ts_node_start_byte(declarator_child);
-							uint32_t end = ts_node_end_byte(declarator_child);
-							if (start < content.length() && end <= content.length() && end > start) {
-								param.name = content.substr(start, end - start);
-								break; // Found identifier, stop looking
-							}
-						}
-					}
-				}
-			} else if (strcmp(child_type, "default_parameter_declaration") == 0) {
+			if (strcmp(child_type, "default_parameter_declaration") == 0) {
 				// Parameter with default value
 				param.is_optional = true;
 				// Extract default value from this node
