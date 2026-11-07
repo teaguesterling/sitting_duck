@@ -59,6 +59,47 @@ string JavaAdapter::ExtractNodeName(TSNode node, const string &content) const {
 	const NodeConfig *config = GetNodeConfig(node_type_str);
 
 	if (config) {
+		if (config->name_strategy == ExtractionStrategy::CUSTOM) {
+			string node_type = string(node_type_str);
+			if (node_type == "import_declaration") {
+				// #140c. The name of an import is its PATH, not the statement. NODE_TEXT
+				// returned `import java.util.List;`, keyword and semicolon included, so a
+				// prefix query over a package could not be written at all.
+				//
+				// The grammar gives this node NO named fields
+				// (grammars/tree-sitter-java/src/node-types.json), so there is no field to
+				// read the way bash's `command` does in #140a. Its rule is
+				//     'import' ('static')? _name ('.' asterisk)? ';'
+				// and its only NAMED children are _name, which is an `identifier` or a
+				// `scoped_identifier`, and the optional `asterisk`. `import`, `static`,
+				// `.` and `;` are anonymous, so scanning the NAMED children is exact.
+				string path;
+				bool wildcard = false;
+				uint32_t named_count = ts_node_named_child_count(node);
+				for (uint32_t i = 0; i < named_count; i++) {
+					TSNode child = ts_node_named_child(node, i);
+					const char *child_type = ts_node_type(child);
+					if (strcmp(child_type, "asterisk") == 0) {
+						wildcard = true;
+					} else if (path.empty() && (strcmp(child_type, "scoped_identifier") == 0 ||
+					                            strcmp(child_type, "identifier") == 0)) {
+						// Both arms of _name are taken. A single-segment import has a bare
+						// `identifier` child and no scoped_identifier at all.
+						path = ExtractNodeText(child, content);
+					}
+				}
+				if (path.empty()) {
+					// No _name child: nothing statically knowable to bind. An empty name is
+					// the house answer, as it is for a dynamic callee in bash and python.
+					return "";
+				}
+				// The star is kept. `java.io` alone cannot be told apart from a single-type
+				// import of a class named `io`, and no other column records the difference.
+				// `static` is dropped: `name` is a path in every other language, and the
+				// keyword stays in the node's own text.
+				return wildcard ? path + ".*" : path;
+			}
+		}
 		return ExtractByStrategy(node, content, config->name_strategy);
 	}
 

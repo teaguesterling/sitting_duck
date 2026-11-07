@@ -290,12 +290,19 @@ true
 # config contributes its own node types (test/data/dynamic_grammars/
 # jsond_types.json declares FIRST_CHILD and NODE_TEXT strategies), which
 # unfiltered adds a `first_child` row and bumps node_text/none to 28.
+#
+# `custom` MOVED 19 -> 20 WITH #140c, and this pin is the reason the move is
+# visible at all. Java had no CUSTOM entry until `import_declaration` took one,
+# so java joins the custom languages here. `node_text` does NOT drop, because
+# java still declares the `import` KEYWORD node as NODE_TEXT -- which is the
+# control test/sql/bugs/140c_java_import_paths.test section 7 asserts from the
+# other side. Any other row moving means the .def edit was wider than one entry.
 query II
 SELECT name_strategy, count(DISTINCT language) FROM ast_type_map()
 WHERE language IN (SELECT language FROM __builtin_expected)
 GROUP BY 1 ORDER BY 1;
 ----
-custom	19
+custom	20
 find_assignment_target	13
 find_call_target	18
 find_identifier	21
