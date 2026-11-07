@@ -1,0 +1,217 @@
+# name: test/sql/bugs/283_cpp_variadic_params.test
+# description: #283 — a C++ parameter's type is its declared type, qualifiers included
+# group: [bugs]
+
+# #272 fixed the unqualified parameter pack `Args... args`. The other forms were
+# still wrong, and the fixture covered only the unqualified one, so CI was green.
+#
+# Measured before this change (release build at b3abb6d):
+#     plain(Args... args)                -> args    : Args...                (right)
+#     qualified(const Args&... args)      -> <empty> : const...               (both wrong)
+#     rvalue(Args&&... args)              -> <empty> : Args...                (name wrong)
+#     unnamed(Args...)                    -> <empty> : Args...                (right)
+#     qualunnamed(const Args&...)         -> <empty> : const...               (type wrong)
+#     tmpl(std::vector<Args>&&... args)   -> <empty> : std::vector<Args>...   (name wrong)
+#
+# Two causes, both in ExtractCppVariadicParameterDeclaration:
+#   1. the type took the FIRST non-declarator child, so `const Args&...` read the
+#      `const` qualifier and never reached `Args`;
+#   2. the name was looked for among DIRECT children only, and in the `&`/`&&`
+#      forms the variadic_declarator sits one level down, inside a
+#      reference_declarator.
+#
+# The grammar bounds both. grammars/tree-sitter-cpp/grammar.js:463-478:
+#
+#     variadic_parameter_declaration: seq(
+#       _declaration_specifiers,                 // field 'type' + type_qualifier children
+#       field('declarator', choice(
+#         variadic_declarator,                              //  "... args"
+#         alias(variadic_reference_declarator, reference_declarator))))  // "&... args"
+#     variadic_declarator: seq('...', optional(identifier))
+#     variadic_reference_declarator: seq(choice('&&','&'), variadic_declarator)
+#
+# So the declarator is exactly two shapes, at depth 1 or 2. Nothing is guessed.
+#
+# THE RULE, which Teague set: a parameter's type is the declaration with the
+# parameter NAME removed -- C++'s own abstract-declarator. `int&` is a different
+# type from `int`, so the qualifiers stay. This applies to EVERY C++ parameter,
+# not only packs: a column where a pack keeps `const` and an ordinary parameter
+# drops it would be worse than one that is uniformly bare.
+#
+# Storage-class specifiers, attributes and declspec are removed with the name,
+# because they are not part of the type. `const` and `volatile` are kept,
+# because they are.
+
+require sitting_duck
+
+# =============================================================================
+# 1. The six parseable pack forms
+# =============================================================================
+# Lines 2, 3 and 6 were the broken ones. Line 1 and line 4 must not move.
+
+query TTT
+SELECT x.name,
+       coalesce(nullif(p.name, ''), '<unnamed>'),
+       p.type
+FROM parse_ast(
+  E'template<class... A> void f1(A... args) {}\n'
+  'template<class... A> void f2(const A&... args) {}\n'
+  'template<class... A> void f3(A&&... args) {}\n'
+  'template<class... A> void f4(A...) {}\n'
+  'template<class... A> void f5(const A&...) {}\n'
+  'template<class... A> void f6(std::vector<A>&&... args) {}',
+  'cpp', context := 'native') x,
+  UNNEST(x.parameters) t(p)
+WHERE x.type = 'function_definition'
+ORDER BY x.name;
+----
+f1	args	A...
+f2	args	const A&...
+f3	args	A&&...
+f4	<unnamed>	A...
+f5	<unnamed>	const A&...
+f6	args	std::vector<A>&&...
+
+# =============================================================================
+# 2. Ordinary parameters follow the same rule
+# =============================================================================
+# Every one of these returned the bare base type before the change: `int` for
+# the first four, `std::vector<int>` for the fifth.
+
+query TTT
+SELECT x.name,
+       coalesce(nullif(p.name, ''), '<unnamed>'),
+       p.type
+FROM parse_ast(
+  E'void g1(const int& a) {}\n'
+  'void g2(int&& b) {}\n'
+  'void g3(int* c) {}\n'
+  'void g4(const std::vector<int>& v) {}\n'
+  'void g5(volatile unsigned long long int w) {}',
+  'cpp', context := 'native') x,
+  UNNEST(x.parameters) t(p)
+WHERE x.type = 'function_definition'
+ORDER BY x.name;
+----
+g1	a	const int&
+g2	b	int&&
+g3	c	int*
+g4	v	const std::vector<int>&
+g5	w	volatile unsigned long long int
+
+# =============================================================================
+# 3. The nested declarators, which lost the NAME as well
+# =============================================================================
+# This is the same one-level-descent defect as the pack's, in the ordinary
+# parameter path. Measured before: all four reported an EMPTY name, and the
+# types were `int`, `void`, `int` and `char`.
+#
+# The descent is exact rather than a search: pointer_declarator,
+# array_declarator and function_declarator each carry a `declarator` FIELD,
+# which is separate from function_declarator's `parameters` field. So following
+# that field cannot wander into the nested parameter list of a function pointer.
+
+query TTT
+SELECT x.name,
+       coalesce(nullif(p.name, ''), '<unnamed>'),
+       p.type
+FROM parse_ast(
+  E'void h1(int** pp) {}\n'
+  'void h2(void (*fp)(int)) {}\n'
+  'void h3(int (&arr)[3]) {}\n'
+  'void h4(const char* const* argv) {}\n'
+  'void h5(int arr2[10]) {}',
+  'cpp', context := 'native') x,
+  UNNEST(x.parameters) t(p)
+WHERE x.type = 'function_definition'
+ORDER BY x.name;
+----
+h1	pp	int**
+h2	fp	void (*)(int)
+h3	arr	int (&)[3]
+h4	argv	const char* const*
+h5	arr2	int[10]
+
+# =============================================================================
+# 4. What is removed with the name, and what is kept
+# =============================================================================
+# An abstract declarator has no name to remove, so the whole declaration IS the
+# type. A storage class, an attribute and a declspec are not part of a type, so
+# they go. `const` and `volatile` are part of it, so they stay.
+
+query TTT
+SELECT x.name,
+       coalesce(nullif(p.name, ''), '<unnamed>'),
+       p.type
+FROM parse_ast(
+  E'void k1(int*) {}\n'
+  'void k2(const char*) {}\n'
+  'void k3(register int r) {}\n'
+  'void k4([[maybe_unused]] int x) {}\n'
+  'void k5(const A&...) {}',
+  'cpp', context := 'native') x,
+  UNNEST(x.parameters) t(p)
+WHERE x.type = 'function_definition'
+ORDER BY x.name;
+----
+k1	<unnamed>	int*
+k2	<unnamed>	const char*
+k3	r	int
+k4	x	int
+k5	<unnamed>	const A&...
+
+# =============================================================================
+# 5. The pointer pack cannot be reached from here
+# =============================================================================
+# `Args*... args` is not an extractor defect. The grammar's declarator choice
+# (grammar.js:463-478) offers `variadic_declarator` and
+# `variadic_reference_declarator` only -- there is no pointer alternative -- so
+# the form does not parse. Four spellings were measured, and every one produced
+# ERROR nodes and no `function_definition` row at all.
+#
+# This pins the parse, not an intent. If a later tree-sitter-cpp learns the
+# form, this assertion SHOULD fail, and the right response is to extract it.
+
+query II
+SELECT
+  count(*) FILTER (WHERE type = 'function_definition'),
+  count(*) FILTER (WHERE type = 'ERROR') > 0
+FROM parse_ast('template<class... A> void ptr(A*... args) {}', 'cpp');
+----
+0	true
+
+# The `&` and `&&` forms, by contrast, parse and now bind. This is the control
+# that tells "the grammar cannot" apart from "we did not look".
+query II
+SELECT
+  count(*) FILTER (WHERE type = 'function_definition'),
+  count(*) FILTER (WHERE type = 'ERROR')
+FROM parse_ast(E'template<class... A> void amp(A&... args) {}\ntemplate<class... A> void amp2(A&&... args) {}', 'cpp');
+----
+2	0
+
+# =============================================================================
+# 6. Controls: the #220 fixture does not move
+# =============================================================================
+# test/data/variadic/sample.cpp holds four parameters and NONE of them carries a
+# qualifier, so issue_220_variadic_parameters.test:63 is unaffected by the rule.
+# Asserting it here as well means a future change to the rule cannot quietly
+# move that pin.
+
+query III
+SELECT name, len(parameters),
+       list_transform(parameters, lambda p: p.name || ':' || p.type)::VARCHAR
+FROM read_ast('test/data/variadic/sample.cpp', context := 'native')
+WHERE type = 'function_definition' ORDER BY name;
+----
+pack	1	['args:Args...']
+plain	2	['a:int', 'b:double']
+
+# go is untouched by this change: its variadic rule is structural already and
+# lives in its own extractor.
+query I
+SELECT list_transform(parameters, lambda p: p.type)[2]
+FROM read_ast('test/data/variadic/sample.go', context := 'native')
+WHERE type = 'function_declaration' AND name = 'Printf';
+----
+...interface{}
