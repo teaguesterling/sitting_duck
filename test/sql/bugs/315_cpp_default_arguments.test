@@ -301,15 +301,24 @@ WHERE type = 'function_definition';
 void
 
 # =============================================================================
-# 8. #318 — the AST row `name`, pinned at its measured WRONG value
-#    These are NOT assertions that the behaviour is right. #318 is a separate
-#    issue, already admitted to v1.18.3 after this one, and its cause is the
-#    FIND_IDENTIFIER strategy at languages/cpp/cpp_types.def:191 and :196, not
-#    the native extractor this file changes.
+# 8. The AST row `name` — #318 landed, so these are now CORRECT
+#    This block was written while #315 landed, pinning the row names at their
+#    measured WRONG values and stating the post-fix oracle in this comment:
+#    "every row below becomes the declarator-id: b, s, p, r, ''". That is now
+#    what it asserts, which is the block being REWRITTEN rather than
+#    re-recorded, as the comment required.
 #
-#    They are here so that #315 cannot silently change them, and so that #318
-#    has an oracle. When #318 lands, every row below becomes the declarator-id:
-#    b, s, p, r, '' — and this block must be rewritten, not merely re-recorded.
+#    What they were before #318, for the record:
+#        int b = 2                   b             (was already right)
+#        const std::string& s = "x"  std::string   the TYPE
+#        int* p = nullptr            <e>
+#        int& r = global             global        the DEFAULT VALUE
+#        int = 2                     <e>           (was already right)
+#
+#    #318 repointed cpp_types.def:191 and :196 from FIND_IDENTIFIER to
+#    FIND_IN_DECLARATOR, and gave that strategy the declarator walk #283
+#    wrote. The native `parameters` payload is unchanged by it, which is what
+#    section 7's controls prove.
 # =============================================================================
 
 query TT
@@ -319,22 +328,23 @@ WHERE type = 'optional_parameter_declaration'
 ORDER BY node_id;
 ----
 int b = 2	b
-const std::string& s = "x"	std::string
-int* p = nullptr	<e>
-int& r = global	global
+const std::string& s = "x"	s
+int* p = nullptr	p
+int& r = global	r
 int = 2	<e>
 
-# The same defect without a default, which is the control that makes the rows
-# above #318's and not #315's: adding a default turns a MISSING name into a
-# WRONG one, but the missing name is already there without one.
+# The same forms without a default. Before #318 these were the control that
+# made the rows above #318's and not #315's -- adding a default turned a
+# MISSING name into a WRONG one, and the missing name was there either way.
+# Measured before #318: <e>, <e>, a.
 query TT
 SELECT peek, coalesce(nullif(name, ''), '<e>')
 FROM parse_ast('void g(const char* q, int& r, int a) {}', 'cpp', context := 'native')
 WHERE type = 'parameter_declaration'
 ORDER BY node_id;
 ----
-const char* q	<e>
-int& r	<e>
+const char* q	q
+int& r	r
 int a	a
 
 # =============================================================================
