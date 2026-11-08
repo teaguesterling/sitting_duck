@@ -128,9 +128,15 @@ WHERE native_strategy IS NULL OR native_strategy = '' OR native_strategy = 'unkn
 # no function-shaped native extraction and is owed nothing by NATIVE-DECL.
 # Pinned as a COUNT per language so that adding a language does not edit this
 # file, while a declaration moving between languages does. Only the four
-# languages at 8 or more are pinned; the full census is 99 declarations across
-# the 28 registered languages, derived from the sources by the same
+# languages at 8 or more are pinned; the full census is 101 declarations held by
+# 20 of the 28 registered languages, derived from the sources by the same
 # preprocessor-plus-first-wins oracle used above.
+#
+# Was 99 until #263 on 2026-11-07, which added CONSTRUCTOR_DEFINITION to
+# kotlin's two constructor nodes and so moved kotlin from 4 to 6. It stays below
+# 8, which is why the assertion below did not move -- that was predicted before
+# the change and then measured, by running the census query rather than by
+# adding 2 to this sentence.
 #
 # typescript at 13 against javascript at 8 is the include chain again: 8 of
 # typescript's 13 come from javascript's table, and 5 are its own.
