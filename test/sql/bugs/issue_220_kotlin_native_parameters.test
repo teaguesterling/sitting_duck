@@ -125,14 +125,20 @@ WHERE type = 'function_declaration';
 ----
 true	true
 
-# `primary_constructor` declares native strategy NONE in kotlin_types.def, and
+# `primary_constructor` declared native strategy NONE in kotlin_types.def, and
 # its items are `class_parameter` rather than `parameter`. It therefore
-# delivers nothing BY DECLARATION, and the kit's per-node-type gate excludes it
-# instead of failing it. Pinned so that wiring class_parameter later is a
-# deliberate change to this expectation rather than an accident.
+# delivered nothing BY DECLARATION, and the kit's per-node-type gate excluded it
+# instead of failing it. This pin existed so that wiring class_parameter later
+# would be a deliberate change to this expectation rather than an accident.
+#
+# #263 is that change, on 2026-11-07. The declaration is now
+# CONSTRUCTOR_DEFINITION and all three primary constructors in the corpus take
+# parameters in source, so `with_params` moves from 0 to 3. The count stays 3:
+# no fixture was added, because #263's probes are inline strings.
+# The shapes themselves are pinned in test/sql/bugs/263_kotlin_constructor_params.test.
 query II
 SELECT count(*) AS n, count(*) FILTER (WHERE len(parameters) > 0) AS with_params
 FROM read_ast('test/data/kotlin/*.kt', 'kotlin', context := 'native', ignore_errors := true)
 WHERE type = 'primary_constructor';
 ----
-3	0
+3	3
