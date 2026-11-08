@@ -86,6 +86,19 @@ WHERE type = 'primary_constructor';
 # =============================================================================
 # 2. The three traps, each pinned so taking the shortcut fails here
 # =============================================================================
+# MEASURED, not predicted. The naive reuse was PLANTED in a scratch build on
+# 2026-11-07 -- ExtractKotlinParameter for the items, and
+# FUNCTION_WITH_PARAMS's ExtractKotlinModifiers and ExtractKotlinReturnType for
+# the rest -- and this is what it produced:
+#
+#   class P(val x: Int = y)          ['y : Int']   should be ['x : Int']
+#   data class Person(...)           [data]        should be []
+#   sealed class R(...)              [sealed]      should be []
+#   class Person(...) signature      Unit          should be empty
+#
+# Against that build this file failed at the trap-2 probe below, with 5 of 6
+# assertions passing before it. So the traps are real and these assertions
+# discriminate; they are not merely green today.
 
 # --- TRAP 1: the strategy must be IMPLEMENTED, not only declared ------------
 # ExtractNativeContextTemplated (native_context_extraction.hpp:512) is generic
@@ -146,6 +159,37 @@ FROM parse_ast(E'sealed class R(val code: Int)\n', 'kotlin', context := 'native'
 WHERE type = 'primary_constructor';
 ----
 []	1
+
+# POSITIVE coverage for ExtractOwnModifiers. Both controls above are NEGATIVE,
+# and a function that unconditionally returned [] would pass them both. The
+# explicit-`constructor` forms below are the only primary-constructor shape
+# where `modifiers` is genuinely a CHILD of the constructor node, so they are
+# what proves the helper reads anything at all. Both forms are common in
+# dependency-injection code.
+
+query II
+SELECT list_transform(parameters, lambda p: p.name || ' : ' || p.type)::VARCHAR AS params, modifiers::VARCHAR AS mods
+FROM parse_ast(E'class P private constructor(val x: Int)\n', 'kotlin', context := 'native')
+WHERE type = 'primary_constructor';
+----
+['x : Int']	[private]
+
+query II
+SELECT list_transform(parameters, lambda p: p.name || ' : ' || p.type)::VARCHAR AS params, modifiers::VARCHAR AS mods
+FROM parse_ast(E'class P @Inject constructor(val x: Int)\n', 'kotlin', context := 'native')
+WHERE type = 'primary_constructor';
+----
+['x : Int']	[@Inject]
+
+# The same for the secondary form, whose `modifiers` child sits before its
+# `constructor` keyword.
+
+query II
+SELECT list_transform(parameters, lambda p: p.name || ' : ' || p.type)::VARCHAR AS params, modifiers::VARCHAR AS mods
+FROM parse_ast(E'class Q {\n  private constructor(a: Int) {}\n}\n', 'kotlin', context := 'native')
+WHERE type = 'secondary_constructor';
+----
+['a : Int']	[private]
 
 # The other half of trap 3: ExtractKotlinReturnType falls through to "Unit", and
 # a constructor has no return type. Java sets signature_type = "" deliberately
