@@ -21,8 +21,8 @@
 # wrapper).
 #
 # And instances where the parameter is dropped entirely rather than misnamed:
-# #315 (cpp defaults), #319 (java varargs), #321 (csharp params, upstream),
-# #322 (every zig parameter).
+# #315 (cpp defaults -- FIXED, and now pinned correct in section 1), #319 (java
+# varargs), #321 (csharp params, upstream), #322 (every zig parameter).
 #
 # EVERY PROBE IS THE SAME SHAPE. One function called `probe`, whose parameters
 # cover a bare name, a typed name, a defaulted name, a decorated name and a
@@ -104,6 +104,34 @@ WHERE type = 'function_declaration';
 ----
 ['a : -', 'b : -', '... : -']
 
+# cpp — five parameters, and every one of them binds: a bare typed name, a
+# reference whose name is nested one level down, TWO DEFAULTED names, and a
+# function pointer whose declarator-id is three levels down.
+#
+# This probe sat in section 3 until #315. Measured before it, the list held
+# three of the five -- `c` and `d` were absent and nothing marked the list as
+# partial -- because ExtractCppParametersDirect had no arm for
+# `optional_parameter_declaration`. `fp` was already correct, and was the
+# control that made it a dispatch gap rather than a naming gap.
+#
+# `c : int` is also the assertion that would catch the type reading `int = 1`:
+# #315 keeps a default out of the type by clamping the declared-type window at
+# the `=` token, and a fix that only added the dispatch arm would fail here.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'void probe(int a, const std::string& b, int c = 1, const std::string& d = "x", int (*fp)(int)) {}\n', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['a : int', 'b : const std::string&', 'c : int', 'd : const std::string&', 'fp : int (*)(int)']
+
+# The arity on its own. Pinned at 5 3 before #315.
+query II
+SELECT 5 AS declared, len(parameters) AS reported
+FROM parse_ast(E'void probe(int a, const std::string& b, int c = 1, const std::string& d = "x", int (*fp)(int)) {}\n', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+5	5
+
 # =============================================================================
 # 2. Correct, but carrying a sigil or label in the name
 # =============================================================================
@@ -152,25 +180,6 @@ WHERE type = 'function_declaration';
 # Each assertion below records what is returned TODAY and is WRONG. Fixing the
 # named issue will make it fail. That is the intended behaviour of this
 # section: update the expectation in the same commit as the fix.
-
-# --- #315: C++ drops every DEFAULTED parameter ----------------------------
-# `int c = 1` and `const std::string& d = "x"` are both absent. The arity is 3
-# where the source declares 5, and nothing marks the list as partial.
-# `fp` is correct, and is the control: #283 fixed the nested-declarator name,
-# so this is a dispatch gap and not a naming gap.
-query I
-SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
-FROM parse_ast(E'void probe(int a, const std::string& b, int c = 1, const std::string& d = "x", int (*fp)(int)) {}\n', 'cpp', context := 'native')
-WHERE type = 'function_definition';
-----
-['a : int', 'b : const std::string&', 'fp : int (*)(int)']
-
-query II
-SELECT 5 AS declared, len(parameters) AS reported
-FROM parse_ast(E'void probe(int a, const std::string& b, int c = 1, const std::string& d = "x", int (*fp)(int)) {}\n', 'cpp', context := 'native')
-WHERE type = 'function_definition';
-----
-5	3
 
 # --- #317 / #318: C keeps neither the qualifier nor the nested name --------
 # `const char *b` loses its `const`, and `int (*fp)(int)` is named `param`

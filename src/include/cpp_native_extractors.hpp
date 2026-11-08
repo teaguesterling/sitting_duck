@@ -143,6 +143,38 @@ struct CppNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 	static string DeclaredTypeText(TSNode decl, TSNode name_id, const string &content) {
 		uint32_t decl_start = ts_node_start_byte(decl);
 		uint32_t decl_end = ts_node_end_byte(decl);
+
+		// #315. An optional_parameter_declaration carries `= <expression>` inside
+		// the node, and a default value is not part of the declared type. The
+		// window is CLAMPED to the start of the `=` token -- the previous sibling
+		// of the `default_value` field -- rather than excised as a third cut.
+		//
+		// A cut would have to be pushed after the name cut to keep the cuts in
+		// source order, and the apply loop below skips any cut starting behind
+		// its cursor, so a tail cut pushed inside the specifier loop would make
+		// it skip the NAME and leave the name inside the type. Clamping cannot
+		// get that wrong, and it also closes a corner: for the abstract form
+		// `void h(int = 2)` there is no name, `name_start` falls back to the node
+		// end, and the specifier guard would then admit a `comment` child sitting
+		// after the `=`.
+		//
+		// Clamping keeps everything LEFT of the `=`, so an array bound survives:
+		// `int arr[3] = nullptr` reads `int[3]`, matching the convention above.
+		//
+		// This is a no-op for the other two callers. node-types.json gives
+		// neither parameter_declaration nor variadic_parameter_declaration a
+		// `default_value` field, so the lookup returns a null node.
+		TSNode default_value = ts_node_child_by_field_name(decl, "default_value", 13);
+		if (!ts_node_is_null(default_value)) {
+			TSNode eq = ts_node_prev_sibling(default_value);
+			if (!ts_node_is_null(eq)) {
+				uint32_t eq_start = ts_node_start_byte(eq);
+				if (eq_start > decl_start && eq_start < decl_end) {
+					decl_end = eq_start;
+				}
+			}
+		}
+
 		if (decl_start >= content.length() || decl_end > content.length() || decl_end <= decl_start) {
 			return string();
 		}
@@ -274,44 +306,13 @@ struct CppNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 				continue;
 			}
 
-			if (strcmp(child_type, "default_parameter_declaration") == 0) {
-				// Parameter with default value
-				param.is_optional = true;
-				// Extract default value from this node
-				uint32_t def_count = ts_node_child_count(child);
-
-				// Safety check: reasonable limit on default value children
-				if (def_count > 100) {
-					continue;
-				}
-
-				for (uint32_t j = 0; j < def_count; j++) {
-					TSNode def_child = ts_node_child(child, j);
-
-					// Safety check: ensure child node is valid
-					if (ts_node_is_null(def_child)) {
-						continue;
-					}
-
-					const char *def_type = ts_node_type(def_child);
-
-					// Safety check: ensure def_type is not null
-					if (!def_type) {
-						continue;
-					}
-
-					if (strcmp(def_type, "=") != 0) { // Skip the equals sign
-						uint32_t start = ts_node_start_byte(def_child);
-						uint32_t end = ts_node_end_byte(def_child);
-
-						// Safety check: ensure bounds are valid
-						if (start < content.length() && end <= content.length() && end > start) {
-							param.default_value = content.substr(start, end - start);
-						}
-					}
-				}
-			} else if (strcmp(child_type, "storage_class_specifier") == 0 ||
-			           strcmp(child_type, "type_qualifier") == 0) {
+			// #315. A branch for `default_parameter_declaration` stood here, and it
+			// had never run: that name occurs 0 times in node-types.json,
+			// grammar.json and grammar.js. The real node is
+			// optional_parameter_declaration, which is a parameter node in its own
+			// right rather than a child of this one, and it is handled by
+			// ExtractOptionalParameterDeclaration below.
+			if (strcmp(child_type, "storage_class_specifier") == 0 || strcmp(child_type, "type_qualifier") == 0) {
 				// Parameter qualifiers (const, volatile, etc.)
 				uint32_t start = ts_node_start_byte(child);
 				uint32_t end = ts_node_end_byte(child);
@@ -325,6 +326,162 @@ struct CppNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 		}
 
 		return param;
+	}
+
+	// #315. A C++ default argument makes the parameter a DIFFERENT node:
+	// `optional_parameter_declaration`, not `parameter_declaration`. Measured
+	// from grammars/tree-sitter-cpp/grammar.js:456:
+	//
+	//     optional_parameter_declaration: seq(
+	//       _declaration_specifiers,
+	//       field('declarator', optional(choice(_declarator, abstract_reference_declarator))),
+	//       '=',
+	//       field('default_value', expression))
+	//
+	// The declarator is OPTIONAL, so `void h(int = 2)` is a legal parameter with
+	// no name at all. Reading the `declarator` field keeps the name empty there.
+	// Scanning children for an identifier instead would report the DEFAULT VALUE
+	// as the name -- `int = x` would read `x` -- which is exactly what the AST
+	// row's FIND_IDENTIFIER strategy does today, and that is #318, not this.
+	//
+	// The name and the type come from the same two helpers #283 added, so a
+	// defaulted parameter follows one rule with every other parameter. The
+	// default is kept out of the type by DeclaredTypeText's window clamp, not by
+	// trimming its result, because a type can legitimately contain an `=` in
+	// forms such as `decltype(a = b)`.
+	static ParameterInfo ExtractOptionalParameterDeclaration(TSNode node, const string &content) {
+		ParameterInfo param;
+
+		if (ts_node_is_null(node)) {
+			return param;
+		}
+
+		TSNode declarator = ts_node_child_by_field_name(node, "declarator", 10);
+		TSNode name_id = FindDeclaratorId(declarator);
+		param.name = NodeText(name_id, content);
+		param.type = DeclaredTypeText(node, name_id, content);
+
+		// `is_optional` and `default_value` are recorded because ParameterInfo
+		// has the fields. Neither reaches SQL: `parameters` is exposed as
+		// STRUCT("name" VARCHAR, "type" VARCHAR)[], exactly as `is_variadic` is
+		// invisible. Exposing them is #255's territory.
+		TSNode default_value = ts_node_child_by_field_name(node, "default_value", 13);
+		if (!ts_node_is_null(default_value)) {
+			param.default_value = NodeText(default_value, content);
+			param.is_optional = true;
+		}
+
+		return param;
+	}
+
+	static vector<ParameterInfo> ExtractCppParameters(TSNode node, const string &content) {
+		vector<ParameterInfo> params;
+
+		// Safety check: ensure node is valid
+		if (ts_node_is_null(node)) {
+			return params;
+		}
+
+		// #315. Three node types reach here that the scan below cannot serve,
+		// because it looks for a function_declarator CHILD and then a
+		// parameter_list inside it. A node that IS one of those found no such
+		// child and returned an empty list, so a prototype reported no
+		// parameters at all and a lambda reported none either -- defaulted or
+		// not. All three declare FUNCTION_WITH_PARAMS in
+		// languages/cpp/cpp_types.def (:78, :98, :774), so they were declared,
+		// dispatched and silently empty.
+		//
+		// node-types.json gives every step a FIELD, so none of this needs a
+		// scan:
+		//
+		//     function_declarator   field `parameters` -> parameter_list
+		//     lambda_expression     field `declarator` -> lambda_declarator
+		//     lambda_declarator     field `parameters` -> parameter_list
+		//
+		// `argument_list` also declares the strategy (:779) and is deliberately
+		// NOT handled here: a call's arguments are not parameters, and they
+		// already reach SQL through the FUNCTION_CALL extractor.
+		const char *node_type = ts_node_type(node);
+		if (node_type) {
+			if (strcmp(node_type, "parameter_list") == 0) {
+				return ExtractCppParametersDirect(node, content);
+			}
+			if (strcmp(node_type, "function_declarator") == 0) {
+				TSNode list = ts_node_child_by_field_name(node, "parameters", 10);
+				if (!ts_node_is_null(list)) {
+					return ExtractCppParametersDirect(list, content);
+				}
+				return params;
+			}
+			if (strcmp(node_type, "lambda_expression") == 0) {
+				TSNode declarator = ts_node_child_by_field_name(node, "declarator", 10);
+				if (!ts_node_is_null(declarator)) {
+					TSNode list = ts_node_child_by_field_name(declarator, "parameters", 10);
+					if (!ts_node_is_null(list)) {
+						return ExtractCppParametersDirect(list, content);
+					}
+				}
+				return params;
+			}
+		}
+
+		// For C++, parameters are nested: function_definition -> function_declarator -> parameter_list
+		// First find the function_declarator
+		uint32_t child_count = ts_node_child_count(node);
+
+		// Safety check: reasonable limit on child count
+		if (child_count > 1000) {
+			return params;
+		}
+
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+
+			// Safety check: ensure child node is valid
+			if (ts_node_is_null(child)) {
+				continue;
+			}
+
+			const char *child_type = ts_node_type(child);
+
+			// Safety check: ensure child_type is not null
+			if (!child_type) {
+				continue;
+			}
+
+			if (strcmp(child_type, "function_declarator") == 0) {
+				// Now look for parameter_list within the function_declarator
+				uint32_t declarator_child_count = ts_node_child_count(child);
+
+				// Safety check: reasonable limit on child count
+				if (declarator_child_count > 1000) {
+					continue;
+				}
+
+				for (uint32_t j = 0; j < declarator_child_count; j++) {
+					TSNode param_child = ts_node_child(child, j);
+
+					// Safety check: ensure child node is valid
+					if (ts_node_is_null(param_child)) {
+						continue;
+					}
+
+					const char *param_child_type = ts_node_type(param_child);
+
+					// Safety check: ensure child_type is not null
+					if (!param_child_type) {
+						continue;
+					}
+
+					if (strcmp(param_child_type, "parameter_list") == 0) {
+						params = ExtractCppParametersDirect(param_child, content);
+						return params; // Found parameters, return immediately
+					}
+				}
+			}
+		}
+
+		return params;
 	}
 
 private:
@@ -515,73 +672,6 @@ private:
 		return "";
 	}
 
-	static vector<ParameterInfo> ExtractCppParameters(TSNode node, const string &content) {
-		vector<ParameterInfo> params;
-
-		// Safety check: ensure node is valid
-		if (ts_node_is_null(node)) {
-			return params;
-		}
-
-		// For C++, parameters are nested: function_definition -> function_declarator -> parameter_list
-		// First find the function_declarator
-		uint32_t child_count = ts_node_child_count(node);
-
-		// Safety check: reasonable limit on child count
-		if (child_count > 1000) {
-			return params;
-		}
-
-		for (uint32_t i = 0; i < child_count; i++) {
-			TSNode child = ts_node_child(node, i);
-
-			// Safety check: ensure child node is valid
-			if (ts_node_is_null(child)) {
-				continue;
-			}
-
-			const char *child_type = ts_node_type(child);
-
-			// Safety check: ensure child_type is not null
-			if (!child_type) {
-				continue;
-			}
-
-			if (strcmp(child_type, "function_declarator") == 0) {
-				// Now look for parameter_list within the function_declarator
-				uint32_t declarator_child_count = ts_node_child_count(child);
-
-				// Safety check: reasonable limit on child count
-				if (declarator_child_count > 1000) {
-					continue;
-				}
-
-				for (uint32_t j = 0; j < declarator_child_count; j++) {
-					TSNode param_child = ts_node_child(child, j);
-
-					// Safety check: ensure child node is valid
-					if (ts_node_is_null(param_child)) {
-						continue;
-					}
-
-					const char *param_child_type = ts_node_type(param_child);
-
-					// Safety check: ensure child_type is not null
-					if (!param_child_type) {
-						continue;
-					}
-
-					if (strcmp(param_child_type, "parameter_list") == 0) {
-						params = ExtractCppParametersDirect(param_child, content);
-						return params; // Found parameters, return immediately
-					}
-				}
-			}
-		}
-
-		return params;
-	}
-
 	static vector<ParameterInfo> ExtractCppParametersDirect(TSNode params_node, const string &content) {
 		vector<ParameterInfo> parameters;
 
@@ -631,6 +721,14 @@ private:
 				// never run; it also filled in the placeholders name="..." and
 				// type="variadic" rather than the real ones.
 				param = ExtractCppVariadicParameterDeclaration(child, content);
+				is_valid_param = !param.name.empty() || !param.type.empty();
+			} else if (strcmp(child_type, "optional_parameter_declaration") == 0) {
+				// #315. A parameter with a default argument. Dispatching on
+				// `parameter_declaration` alone skipped the child entirely, so the
+				// whole parameter was absent from the list and the reported arity
+				// was silently short -- `void f(int a, int b = 2)` read as one
+				// parameter, with nothing in the row saying one was missing.
+				param = ExtractOptionalParameterDeclaration(child, content);
 				is_valid_param = !param.name.empty() || !param.type.empty();
 			}
 
@@ -870,73 +968,16 @@ private:
 		return "";
 	}
 
+	// #315. This was a SECOND copy of the parameter dispatch, and it was dead:
+	// it looked for a parameter_list among the lambda's DIRECT children, while
+	// node-types.json puts it one level down, under the `declarator` field's
+	// lambda_declarator. So a lambda reported no parameters at all, defaulted or
+	// not -- which is why the no-default case is the control in the test.
+	//
+	// Delegating means the two field hops live in one place, and the
+	// optional-parameter arm never has to exist twice.
 	static vector<ParameterInfo> ExtractLambdaParameters(TSNode node, const string &content) {
-		vector<ParameterInfo> params;
-
-		// Safety check: ensure node is valid
-		if (ts_node_is_null(node)) {
-			return params;
-		}
-
-		// Look for parameter_list in lambda_expression
-		uint32_t child_count = ts_node_child_count(node);
-
-		// Safety check: reasonable limit on child count
-		if (child_count > 1000) {
-			return params;
-		}
-
-		for (uint32_t i = 0; i < child_count; i++) {
-			TSNode child = ts_node_child(node, i);
-
-			// Safety check: ensure child node is valid
-			if (ts_node_is_null(child)) {
-				continue;
-			}
-
-			const char *child_type = ts_node_type(child);
-
-			// Safety check: ensure child_type is not null
-			if (!child_type) {
-				continue;
-			}
-
-			if (strcmp(child_type, "parameter_list") == 0) {
-				// Use the same parameter extraction logic as regular functions
-				uint32_t param_child_count = ts_node_child_count(child);
-
-				// Safety check: reasonable limit on parameter count
-				if (param_child_count > 1000) {
-					return params;
-				}
-
-				for (uint32_t j = 0; j < param_child_count; j++) {
-					TSNode param_child = ts_node_child(child, j);
-
-					// Safety check: ensure child node is valid
-					if (ts_node_is_null(param_child)) {
-						continue;
-					}
-
-					const char *param_child_type = ts_node_type(param_child);
-
-					// Safety check: ensure child_type is not null
-					if (!param_child_type) {
-						continue;
-					}
-
-					if (strcmp(param_child_type, "parameter_declaration") == 0) {
-						ParameterInfo param = ExtractParameterDeclaration(param_child, content);
-						if (!param.name.empty() || !param.type.empty()) {
-							params.push_back(param);
-						}
-					}
-				}
-				break;
-			}
-		}
-
-		return params;
+		return CppNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractCppParameters(node, content);
 	}
 
 	static vector<string> ExtractLambdaModifiers(TSNode node, const string &content) {
@@ -968,12 +1009,6 @@ private:
 		}
 
 		return modifiers;
-	}
-
-	// Reuse the parameter declaration extraction from FUNCTION_WITH_PARAMS
-	static ParameterInfo ExtractParameterDeclaration(TSNode node, const string &content) {
-		return CppNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractParameterDeclaration(node,
-		                                                                                                       content);
 	}
 };
 
