@@ -188,12 +188,12 @@ DEF_TYPE("declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::MUT
 /**
  * @brief Function parameter: `Type name` in parameter list
  */
-DEF_TYPE("parameter_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
+DEF_TYPE("parameter_declaration", DEFINITION_VARIABLE | SemanticRefinements::Variable::PARAMETER, FIND_IN_DECLARATOR, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /**
  * @brief Optional parameter with default: `Type name = default`
  */
-DEF_TYPE("optional_parameter_declaration", DEFINITION_VARIABLE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION)
+DEF_TYPE("optional_parameter_declaration", DEFINITION_VARIABLE, FIND_IN_DECLARATOR, NONE, ASTNodeFlags::NAME_DEFINITION)
 
 /**
  * @brief Field declaration in class: `Type name;`

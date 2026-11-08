@@ -2,6 +2,7 @@
 
 #include "native_context_extraction.hpp"
 #include "function_call_extractor.hpp"
+#include "declarator_walk.hpp"
 #include <tree_sitter/api.h>
 
 namespace duckdb {
@@ -75,34 +76,11 @@ struct CppNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS> {
 	// Returns a null node for an abstract declarator, such as the `int*` in
 	// `void f(int*)`, which has no name to find.
 	static TSNode FindDeclaratorId(TSNode declarator) {
-		TSNode current = declarator;
-		// The chain is a few links long in real code. The guard is only here so
-		// that a malformed tree cannot spin.
-		for (uint32_t guard = 0; guard < 32; guard++) {
-			if (ts_node_is_null(current)) {
-				break;
-			}
-			const char *node_type = ts_node_type(current);
-			if (!node_type) {
-				break;
-			}
-			if (strcmp(node_type, "identifier") == 0 || strcmp(node_type, "field_identifier") == 0) {
-				return current;
-			}
-			if (strcmp(node_type, "pointer_declarator") == 0 || strcmp(node_type, "array_declarator") == 0 ||
-			    strcmp(node_type, "function_declarator") == 0 || strcmp(node_type, "init_declarator") == 0) {
-				current = ts_node_child_by_field_name(current, "declarator", 10);
-				continue;
-			}
-			if (strcmp(node_type, "reference_declarator") == 0 || strcmp(node_type, "parenthesized_declarator") == 0 ||
-			    strcmp(node_type, "variadic_declarator") == 0) {
-				current = ts_node_named_child(current, 0);
-				continue;
-			}
-			break;
-		}
-		TSNode none = {};
-		return none;
+		// #318 moved the walk itself to declarator_walk.hpp, because the
+		// FIND_IN_DECLARATOR name strategy needs the same one and the two layers
+		// cannot include each other. This stays as the name #283 and #315 use, so
+		// their tests keep covering the shared implementation.
+		return FindDeclaratorIdNode(declarator);
 	}
 
 	// #283. Collapses the whitespace that excision leaves behind, and closes the

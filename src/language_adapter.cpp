@@ -1,4 +1,5 @@
 #include "language_adapter.hpp"
+#include "declarator_walk.hpp"
 #include "semantic_types.hpp"
 #include "ast_file_utils.hpp"
 #include "ast_type.hpp" // For ASTResult definition
@@ -125,6 +126,33 @@ string LanguageAdapter::ExtractNameFromQualifiedNode(TSNode qualified_node, cons
 }
 
 string LanguageAdapter::ExtractNameFromDeclarator(TSNode node, const string &content) const {
+	// #318. Try the shared C/C++ declarator walk FIRST. It follows the grammar's
+	// own `declarator` fields all the way to the declarator-id, so it is right
+	// at every nesting depth -- `const std::string& s`, `int* p`,
+	// `int (*fp)(int)`, `int (*fp_ret(int a))(char)` -- where the search below
+	// stops one level in and returns the type, the default value, or nothing.
+	//
+	// It is ADDITIVE, not a replacement. The walk knows only C/C++ declarator
+	// node types, so for java's `variable_declarator`, whose name lives in a
+	// `name` field, it returns null and the original search below runs
+	// unchanged. test/sql/languages/java_refinements.test is the control.
+	TSNode declarator_field = ts_node_child_by_field_name(node, "declarator", 10);
+	if (!ts_node_is_null(declarator_field)) {
+		TSNode walked = FindDeclaratorIdNode(declarator_field);
+		if (!ts_node_is_null(walked)) {
+			return ExtractNodeText(walked, content);
+		}
+	}
+
+	// For a parameter node the walk's null answer is AUTHORITATIVE: no
+	// declarator means the parameter has no name. Without this, `void f(int = x)`
+	// would fall through to the search below, find the default value's own
+	// `identifier`, and report `x` as the name -- which is the very defect #318
+	// is fixing. Measured: that is what the old FIND_IDENTIFIER strategy did.
+	if (DeclaratorIdIsTheWholeName(ts_node_type(node))) {
+		return "";
+	}
+
 	// Universal declarator extraction
 	// Searches for identifiers inside declarator nodes
 
@@ -522,8 +550,7 @@ string LanguageAdapter::ExtractByStrategy(TSNode node, const string &content, Ex
 			return t == "type_identifier" || t == "constructor_name";
 		};
 		auto is_type_name_wrapper = [](const string &t) {
-			return t == "generic_type" || t == "scoped_type_identifier" || t == "user_type" ||
-			       t == "simple_user_type";
+			return t == "generic_type" || t == "scoped_type_identifier" || t == "user_type" || t == "simple_user_type";
 		};
 		// Rightmost identifier-like descendant of n, preferring later children
 		// (the method name in a member chain is the last leaf: obj.a().b -> b).
