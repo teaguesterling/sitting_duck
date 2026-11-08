@@ -56,9 +56,31 @@
 #     [](int a, int b = 3)        lambda_expression   -> []   (EVERY param, not just defaults)
 #     [](int a, int c)            lambda_expression   -> []   (so its loop was dead, not partial)
 #
-# EXPECTATIONS IN SECTIONS 1-6 ARE PREDICTED, not measured: they describe
-# behaviour that does not exist yet. This file is committed RED on purpose, so
-# each one is a hypothesis under test. Sections 7 and 8 are measured now.
+# HOW THIS FILE WAS BUILT, because it matters for how much to trust it.
+#
+# It was committed RED first (8a6272b). At that point sections 1-6 were
+# PREDICTIONS -- they described behaviour that did not exist -- and sections 7
+# and 8 were measured against the pre-fix build. Verified red at :70, the first
+# arity assertion, and sections 7-8 verified passing on that same build.
+#
+# Every prediction then turned out exact. They are measurements now, against
+# the build at 7353c95.
+#
+# The file was also shown to DISCRIMINATE, not merely to pass, by planting two
+# faults and rebuilding:
+#
+#   A. the dispatch arm with no type clamp -- `int b = 2` reported the type
+#      `int = 2`, `int b[3] = nullptr` reported `int[3] = nullptr`. Failed at
+#      :70. `const char* s`, which has no default, was unchanged, which is the
+#      control proving the clamp is a no-op without an `=`.
+#   B. the name read by scanning children for an identifier instead of reading
+#      the `declarator` field -- `int = x` reported `x : int`, and
+#      `int& r = global` reported `global : int& r`, the name leaking into the
+#      type as well. Failed at :91, the `dv` row. `int b = 2` and section 1's
+#      m3 row still PASSED under fault B, because each of those names is a
+#      direct identifier child -- which is why sections 2 and 3 exist.
+#
+# Section 10 pins #324, a defect this fix made visible rather than caused.
 
 require sitting_duck
 
@@ -328,3 +350,36 @@ int a	a
 #    So no assertion here covers them, and none pretends to. Exposing them is
 #    #255's territory, and #315 does not need it.
 # =============================================================================
+
+# =============================================================================
+# 10. #324 — pinned at its measured WRONG value
+#     Giving function_declarator its parameters (section 4) exposed a defect
+#     that an empty list had been hiding. A function returning a FUNCTION
+#     POINTER has two nested function_declarator nodes, each with its own
+#     `parameters` field, and the OUTER one's field belongs to the returned
+#     function type rather than to the declared function.
+#
+#     So the outer row below reports `<e> : char` -- the parameter of the
+#     returned `int(char)` -- where the function's own parameter is `a : int`.
+#     The inner row is correct, and is the control that makes this a nesting
+#     defect rather than a parameters defect.
+#
+#     This is NOT an argument against section 4. Before #315 both rows read
+#     `[]`, so a wrong answer was hidden behind a missing one; the node
+#     declares FUNCTION_WITH_PARAMS at languages/cpp/cpp_types.def:78 and
+#     delivered nothing. Fixing #324 means walking the `declarator` field chain
+#     to the innermost function_declarator, which is the walk FindDeclaratorId
+#     already performs.
+#
+#     The outer row's empty `name` is #318's, not #324's.
+# =============================================================================
+
+query TTT
+SELECT peek, coalesce(nullif(name,''),'<e>'),
+       list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('int (*fp_ret(int a))(char);', 'cpp', context := 'native')
+WHERE type = 'function_declarator'
+ORDER BY node_id;
+----
+(*fp_ret(int a))(char)	<e>	['<e> : char']
+fp_ret(int a)	fp_ret	['a : int']
