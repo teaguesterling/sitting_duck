@@ -216,16 +216,43 @@ WHERE type = 'function_declaration';
 ['a : Int', 'b : Int', 'rest : String']	Int
 
 # `class_declaration` puts PARENT TYPES in `parameters`, not constructor
-# parameters. A class with a primary constructor AND a supertype must keep the
-# supertype there, so the two nodes do not start answering each other's
-# question.
+# parameters. The half of this that #263 must not break is that the
+# constructor's own parameter `n` does not leak onto the class. It does not.
+#
+# --- #323: but it should read ['B'], and it never has -----------------------
+# This expectation was written as a PREDICTION rather than a measurement, and
+# measuring it is how #323 was found. ExtractParentTypes
+# (kotlin_native_extractors.hpp:373) searches for a `delegation_specifiers`
+# child -- PLURAL -- and grammars/tree-sitter-kotlin/src/node-types.json has no
+# such node among its 263. The emitted node is `delegation_specifier`,
+# singular, a direct child of `class_declaration`, and two supertypes produce
+# two siblings rather than one container. So EVERY kotlin class reports no
+# parents, and `has_extends` stays false, so the `extends` marker is lost too.
+#
+# Independent of #263: the grammar evidence stands on its own, the same empty
+# answer comes back for a class with NO primary constructor, and java extracts
+# the identical relationship correctly (control below).
+#
+# Pinned at today's wrong value, so fixing #323 makes this fail.
 
 query II
 SELECT list_transform(parameters, lambda p: p.name)::VARCHAR AS parents, signature_type AS sigt
 FROM parse_ast(E'open class B(val n: Int)\nclass D(n: Int) : B(n)\n', 'kotlin', context := 'native')
 WHERE type = 'class_declaration' AND name = 'D';
 ----
-['B']	class
+[]	class
+
+# The control that makes #323 a kotlin defect rather than a missing feature:
+# java puts its supertype in `parameters` exactly as CLASS_WITH_METHODS
+# intends, from the same strategy.
+
+query II
+SELECT name, list_transform(parameters, lambda p: p.name)::VARCHAR AS parents
+FROM parse_ast(E'class A {}\nclass D extends A {}\n', 'java', context := 'native')
+WHERE type = 'class_declaration' ORDER BY name;
+----
+A	[]
+D	[A]
 
 # The `class_parameter` AST row was ALREADY correct -- only the constructor's
 # list was empty. That is this release's recurring signature: the node is
