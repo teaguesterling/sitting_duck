@@ -667,3 +667,73 @@ is the **run**; the 6-hour limit is per **job**, and the longest job measured
 2h53m — 48% of the limit, which is not near it. That is new
 information, not a reopened argument. Teague accepted the deferral on the
 per-query evidence.
+
+## 2026-11-09: most of the per-call cost was one CASE, and it is decorrelated
+
+Measured on `build/release`, DuckDB `v2.0.0-dev88609` (`d54cbbe3df`), `-no-agent`,
+`SET threads=1`, every timing a fresh process under Slurm on longbottom. Full
+write-up with every table: https://claude.ai/artifact/TP9zVnrdBPhfFMca9bRPef
+
+**Where the time was.** Truncating `ast_select_from` at successive CTEs, on a
+table of `simple.py`:
+
+| final statement reads | time |
+|---|---|
+| `sel_props` (all parsing, all 13 validations) | 0.81 s |
+| `matched_base` | 1.19 s |
+| `matched_raw` | 16.1 s |
+| `matched_raw` with only the pseudo-class `NOT EXISTS` | 13.5-13.9 s |
+| ... with that CASE's correlated arms removed | 1.25 s |
+
+`PRAGMA profiling_mode='detailed'`: `planner.total_time` 12.41 s with the
+correlated arms against 0.42 s without; binding under 60 ms throughout. The cost
+was constant in the input (16.5-17.9 s across 4 selectors, 110 vs 28,785 nodes)
+and superlinear in the number of correlated arms: removing the four arm groups
+saved 8.9 + 6.3 + 5.6 + 5.9 s against a 12.6 s total.
+
+**The growth since September was one fix.** Timing every commit that touched
+`css_selectors.sql` on one binary, two interleaved rounds: the ten guard commits
+`94357a8`..`3d6b4df` added ~0.8 s together; `7aa8e7f` (#166, a doubly nested
+correlated ancestor walk) added ~3 s; #191 added ~0.6 s. The September -> November
+growth measured within one run is ~4.5 s (11.8 -> 16.5 s), not the 5.3 s that was
+quoted from separate sessions.
+
+**Tried, no effect:** `MATERIALIZED` on the hub CTEs (EXPLAIN confirms the
+keyword survives macro expansion); one `NOT EXISTS` per arm (1.4-2.4 s, at load 20,
+unconfirmed). A synthetic with 32 correlated arms over a base table plans in
+73 ms, so there is still no minimal upstream repro.
+
+**Fix (`perf/decorrelate-pseudo-classes`).** The ten correlated arms (last-child,
+calls, called-by, is-called, is-referenced, match, contains, in-scope, precedes,
+follows) are computed once, uncorrelated, into `pc_hits(pc_id, file_path,
+node_id)`; `matched_raw` probes it with one `LEFT JOIN`.
+
+| | before | after |
+|---|---|---|
+| `ast_select_from(t, 'function_definition')`, `simple.py` (same binary, `.read` old vs new, two rounds) | 17.42 / 17.25 s | 2.36 / 2.32 s |
+| `ast_select('simple.py', 'function_definition')`, same conditions | 19.24 / 19.70 s | 3.12 / 2.90 s |
+| `src/*.cpp` (93,675 nodes), `.call:in-scope(function_definition)` | 771 / 431 s | 3.2 / 3.4 s |
+| `src/*.cpp`, each changed arm | (minutes for :in-scope) | 2.6-3.5 s |
+| `css_selectors_multilang.test` alone | 2909.9 s (older session) | 417.7 s |
+| full `unittest "test/*"`, `-c 4` | -- | 2925 s wall incl. queue; 9703 assertions / 182 cases pass, 5 skipped (grammar env) |
+
+The 93k-node minutes were EXECUTION, not planning: the decorrelated arms ran as
+always-on joins (a 37.4M-row `CROSS_PRODUCT` inside a delim-join CTE on a
+28k-node file). On that table `PREPARE` with constant arguments did not isolate
+execution -- each `EXECUTE` cost about one re-plan -- unlike the 0.2 s EXECUTEs
+measured on `simple.py`; cause unknown.
+
+**Equivalence.** EXCEPT ALL both ways, old macro vs new, over 100 selectors: every
+`test/sql` selector that uses a changed arm, plus negated, glob, alias,
+nested/anonymous-class, row-returning `:match`, and two-different-rows-of-one-arm
+cases that exercise `pc_id`. 0 differing rows; 78 cases return rows; 6 error cases raise byte-identical messages. All 36 `test/sql`
+files that call `ast_select` pass with the same assertion counts as the
+unchanged `main` build.
+
+**Not measured:** the v1.5.6 line. This repo's CI has no v1.5.6 leg and the
+registry no longer builds one; the local v1.5.6 binary predates current helpers
+(`ast_semantic_aliases` missing) and fails both macros identically.
+
+**What this leaves.** ~2.3 s per call against a 1.25 s floor for the rest of the
+macro and ~0.2 s execution. That remainder is the case for `features/046`; the
+planner regression on correlated subqueries itself is unchanged upstream.
