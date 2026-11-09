@@ -114,8 +114,8 @@ public:
 			return parameters;
 		}
 
-		bool next_is_vararg = false;  // set by a preceding parameter_modifiers
-		bool expect_default = false;  // set by an `=` following a parameter
+		bool next_is_vararg = false; // set by a preceding parameter_modifiers
+		bool expect_default = false; // set by an `=` following a parameter
 
 		for (uint32_t i = 0; i < child_count; i++) {
 			TSNode child = ts_node_child(params_node, i);
@@ -251,6 +251,188 @@ public:
 						break;
 					if (strcmp(ts_node_type(sibling), "modifiers") == 0) {
 						extract_from_modifiers_node(sibling);
+					}
+				}
+			}
+		}
+
+		return modifiers;
+	}
+};
+
+// Specialization for CONSTRUCTOR_DEFINITION (Kotlin constructors)
+//
+// #263: `primary_constructor` and `secondary_constructor` both declared native
+// strategy NONE, so `class Person(val name: String, val age: Int)` -- the way
+// almost every Kotlin class is written -- reported zero parameters. Declaration
+// and delivery agreed, which is why the conformance kit passed it.
+//
+// The two forms are DIFFERENT SHAPES carrying the same gap, and only the
+// secondary one matches the function walk. Measured 2026-11-07:
+//
+//   class Person(var age: Int = 0)        constructor(b: Int = 0)
+//     primary_constructor                   secondary_constructor
+//       "("                                   "constructor"
+//       class_parameter                       function_value_parameters
+//         simple_identifier  age                 "("
+//         ":"                                    parameter
+//         user_type          Int                   simple_identifier  b
+//         "="                 <- CHILD             ...
+//         integer_literal    0                   "="               <- SIBLING
+//       ")"                                      integer_literal  0
+//                                                ")"
+//
+// This does NOT delegate to FUNCTION_WITH_PARAMS::Extract, because two helpers
+// on that path are wrong for a constructor:
+//
+//   - ExtractKotlinReturnType falls through to `return "Unit"`, and a
+//     constructor has no return type. Java's CONSTRUCTOR_DEFINITION sets
+//     signature_type = "" for the same reason
+//     (java_native_extractors.hpp:1012).
+//   - ExtractKotlinModifiers falls back to the PARENT's preceding siblings and
+//     accepts `class_modifier`. `modifiers` is a preceding sibling of
+//     `primary_constructor` under `class_declaration`, so a `data class`
+//     constructor would inherit `data`, and a `sealed class` one `sealed`.
+template <>
+struct KotlinNativeExtractor<NativeExtractionStrategy::CONSTRUCTOR_DEFINITION> {
+	static NativeContext Extract(TSNode node, const string &content) {
+		NativeContext context;
+
+		// Deliberately empty: a constructor has no return type.
+		context.signature_type = "";
+
+		const char *node_type = ts_node_type(node);
+		if (node_type && strcmp(node_type, "secondary_constructor") == 0) {
+			// Exactly the function shape -- `parameter` items inside a
+			// `function_value_parameters` container, defaults as siblings -- so
+			// the existing walk is reused rather than duplicated.
+			context.parameters =
+			    KotlinNativeExtractor<NativeExtractionStrategy::FUNCTION_WITH_PARAMS>::ExtractKotlinParameters(node,
+			                                                                                                   content);
+		} else {
+			context.parameters = ExtractClassParameters(node, content);
+		}
+
+		context.modifiers = ExtractOwnModifiers(node, content);
+
+		return context;
+	}
+
+public:
+	// `class_parameter` items are DIRECT children of `primary_constructor`.
+	// There is no container node to find first, which is why
+	// ExtractKotlinParameters cannot be used here: it looks for
+	// `function_value_parameters` and finds nothing.
+	static vector<ParameterInfo> ExtractClassParameters(TSNode node, const string &content) {
+		vector<ParameterInfo> parameters;
+
+		uint32_t child_count = ts_node_child_count(node);
+		if (child_count > 1000) {
+			return parameters;
+		}
+
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			if (ts_node_is_null(child)) {
+				continue;
+			}
+			const char *child_type = ts_node_type(child);
+			if (!child_type || strcmp(child_type, "class_parameter") != 0) {
+				continue; // "(" "," ")" are punctuation, not parameters
+			}
+			ParameterInfo param = ExtractClassParameter(child, content);
+			if (!param.name.empty()) {
+				parameters.push_back(param);
+			}
+		}
+
+		return parameters;
+	}
+
+	// The name and the type are both BEFORE the `=`. After it sits the default
+	// expression, which in this grammar is a CHILD of the parameter and is
+	// frequently a `simple_identifier` itself. So a loop that keeps matching
+	// past the `=` reports the DEFAULT as the parameter's name:
+	// `class P(val x: Int = y)` yields `y`. Stopping at the `=` is the reason
+	// this function exists instead of a call to ExtractKotlinParameter, whose
+	// loop assigns on every `simple_identifier` and never breaks.
+	static ParameterInfo ExtractClassParameter(TSNode node, const string &content) {
+		ParameterInfo param;
+
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			if (ts_node_is_null(child)) {
+				continue;
+			}
+			const char *child_type = ts_node_type(child);
+			if (!child_type) {
+				continue;
+			}
+
+			if (strcmp(child_type, "=") == 0) {
+				// The node after `=` is the whole default expression. The name
+				// and the type are already read, so stop here rather than let
+				// the default overwrite either of them.
+				TSNode default_node = ts_node_next_sibling(child);
+				if (!ts_node_is_null(default_node)) {
+					param.default_value = ExtractNodeText(default_node, content);
+					param.is_optional = true;
+				}
+				break;
+			}
+
+			if (strcmp(child_type, "simple_identifier") == 0) {
+				if (param.name.empty()) {
+					param.name = ExtractNodeText(child, content);
+				}
+			} else if (strcmp(child_type, "type") == 0 || strcmp(child_type, "nullable_type") == 0 ||
+			           strcmp(child_type, "user_type") == 0 || strcmp(child_type, "function_type") == 0) {
+				param.type = ExtractNodeText(child, content);
+			}
+			// `binding_pattern_kind` holds `val` or `var`, which makes this
+			// parameter a property declaration as well. That is a second
+			// consumer of the same node and not a parameter fix, so #263 leaves
+			// it alone rather than writing raw text into `annotations`, whose
+			// documented contract is JSON.
+		}
+
+		return param;
+	}
+
+	// This node's OWN `modifiers` child only, and only the modifiers a
+	// constructor can carry. `class_modifier` and `inheritance_modifier` are
+	// excluded by construction: they belong to the class, and the parent-sibling
+	// fallback that would reach them is exactly the trap described above.
+	static vector<string> ExtractOwnModifiers(TSNode node, const string &content) {
+		vector<string> modifiers;
+
+		uint32_t child_count = ts_node_child_count(node);
+		for (uint32_t i = 0; i < child_count; i++) {
+			TSNode child = ts_node_child(node, i);
+			if (ts_node_is_null(child)) {
+				continue;
+			}
+			const char *child_type = ts_node_type(child);
+			if (!child_type || strcmp(child_type, "modifiers") != 0) {
+				continue;
+			}
+
+			uint32_t mod_count = ts_node_child_count(child);
+			for (uint32_t j = 0; j < mod_count; j++) {
+				TSNode modifier = ts_node_child(child, j);
+				if (ts_node_is_null(modifier)) {
+					continue;
+				}
+				const char *mod_type = ts_node_type(modifier);
+				if (!mod_type) {
+					continue;
+				}
+				if (strcmp(mod_type, "visibility_modifier") == 0 || strcmp(mod_type, "member_modifier") == 0 ||
+				    strcmp(mod_type, "annotation") == 0) {
+					string mod = ExtractNodeText(modifier, content);
+					if (!mod.empty()) {
+						modifiers.push_back(mod);
 					}
 				}
 			}

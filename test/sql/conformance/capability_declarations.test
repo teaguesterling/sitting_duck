@@ -290,16 +290,37 @@ true
 # config contributes its own node types (test/data/dynamic_grammars/
 # jsond_types.json declares FIRST_CHILD and NODE_TEXT strategies), which
 # unfiltered adds a `first_child` row and bumps node_text/none to 28.
+#
+# `custom` MOVED 19 -> 20 WITH #140c, and this pin is the reason the move is
+# visible at all. Java had no CUSTOM entry until `import_declaration` took one,
+# so java joins the custom languages here. `node_text` does NOT drop, because
+# java still declares the `import` KEYWORD node as NODE_TEXT -- which is the
+# control test/sql/bugs/140c_java_import_paths.test section 7 asserts from the
+# other side. Any other row moving means the .def edit was wider than one entry.
+#
+# `find_in_declarator` MOVED 2 -> 3 WITH #318, and this pin is again the only
+# place the move is visible. cpp's `parameter_declaration` and
+# `optional_parameter_declaration` were repointed from FIND_IDENTIFIER to
+# FIND_IN_DECLARATOR (languages/cpp/cpp_types.def:191 and :196), because that
+# strategy now carries the declarator walk and FIND_IDENTIFIER reported a
+# parameter's TYPE or its DEFAULT VALUE as the name. So cpp joins c and java
+# here, and the strategy's row count goes 3 -> 5 although this query counts
+# only distinct languages.
+#
+# `find_identifier` does NOT drop from 21, because cpp still declares 20-odd
+# other node types with it -- the two repointed rows are not cpp's only ones.
+# That is the control proving the edit was two entries and not a sweep, and it
+# held: every other row below is unchanged, measured.
 query II
 SELECT name_strategy, count(DISTINCT language) FROM ast_type_map()
 WHERE language IN (SELECT language FROM __builtin_expected)
 GROUP BY 1 ORDER BY 1;
 ----
-custom	19
+custom	20
 find_assignment_target	13
 find_call_target	18
 find_identifier	21
-find_in_declarator	2
+find_in_declarator	3
 find_property	4
 node_text	27
 none	27

@@ -1,0 +1,332 @@
+# name: test/sql/bugs/263_kotlin_constructor_params.test
+# description: Kotlin constructors deliver their parameters (#263), and the three traps in reusing the function walk
+# group: [bugs]
+#
+# WHY THIS FILE EXISTS
+#
+# `class Person(val name: String, val age: Int)` is how almost every Kotlin
+# class is written, and `primary_constructor` reported ZERO parameters. The
+# cause was a declared gap, not a bug: kotlin_types.def:89 declared native
+# strategy NONE, so declaration and delivery agreed and the conformance kit
+# passed it correctly. `secondary_constructor` (kotlin_types.def:92) carried the
+# identical NONE declaration and the identical gap.
+#
+# THE DEFECT CLASS THIS RELEASE KEEPS MEETING
+#
+# A parameter's real name is NESTED, and a plausible WRONG candidate sits next
+# to it -- its type, or its default value. #273, #277, #283, #315, #318 and #320
+# are the other instances. Section 2 below pins the seventh, which would have
+# been introduced BY THIS FIX had the obvious reuse been taken: in a
+# `class_parameter` the default value is a CHILD, so there are two
+# `simple_identifier` children and the existing helper takes the last one.
+#
+# HOW TO READ A FAILURE HERE
+#
+#   Section 1 or 3 fails    -> a constructor stopped delivering parameters.
+#   Section 2 fails         -> the walk took the default value as the name, or
+#                              the class modifier leaked into the constructor.
+#   Section 4 fails         -> the fix reached something it should not have.
+#                              These are CONTROLS: they were green before the
+#                              fix and must stay green.
+#
+# The grammar shapes, measured 2026-11-07 against the binary from 89d7816:
+#
+#   class Person(var age: Int = 0)        constructor(b: Int = 0)
+#     primary_constructor                   secondary_constructor
+#       "("                                   "constructor"
+#       class_parameter                       function_value_parameters
+#         simple_identifier  age                 "("
+#         ":"                                    parameter
+#         user_type          Int                   simple_identifier  b
+#         "="                 <- CHILD             ...
+#         integer_literal    0                   "="               <- SIBLING
+#       ")"                                      integer_literal  0
+#                                                ")"
+#
+# So the two forms need two branches, and only the secondary one can reuse
+# ExtractKotlinParametersDirect.
+
+require sitting_duck
+
+# =============================================================================
+# 1. The fix: a primary constructor delivers its parameters
+# =============================================================================
+# Three shapes in one probe: a `val` property parameter, a `var` property
+# parameter carrying a default, and a plain parameter with a generic type.
+# MEASURED BEFORE THE FIX: []
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'class Person(val name: String, var age: Int = 0, tags: List<String>)\n', 'kotlin', context := 'native')
+WHERE type = 'primary_constructor';
+----
+['name : String', 'age : Int', 'tags : List<String>']
+
+# The arity, asserted on its own so a short-but-plausible list cannot pass.
+# That is #315's lesson: a list of 2 where the source declares 3 looks like an
+# answer.
+
+query II
+SELECT 3 AS declared, len(parameters) AS reported
+FROM parse_ast(E'class Person(val name: String, var age: Int = 0, tags: List<String>)\n', 'kotlin', context := 'native')
+WHERE type = 'primary_constructor';
+----
+3	3
+
+# A constructor that genuinely takes nothing must stay empty rather than become
+# a one-element list of punctuation.
+
+query II
+SELECT len(parameters) AS reported, parameters::VARCHAR AS got
+FROM parse_ast(E'class Empty()\n', 'kotlin', context := 'native')
+WHERE type = 'primary_constructor';
+----
+0	[]
+
+# =============================================================================
+# 2. The three traps, each pinned so taking the shortcut fails here
+# =============================================================================
+# MEASURED, not predicted. The naive reuse was PLANTED in a scratch build on
+# 2026-11-07 -- ExtractKotlinParameter for the items, and
+# FUNCTION_WITH_PARAMS's ExtractKotlinModifiers and ExtractKotlinReturnType for
+# the rest -- and this is what it produced:
+#
+#   class P(val x: Int = y)          ['y : Int']   should be ['x : Int']
+#   data class Person(...)           [data]        should be []
+#   sealed class R(...)              [sealed]      should be []
+#   class Person(...) signature      Unit          should be empty
+#
+# Against that build this file failed at the trap-2 probe below, with 5 of 6
+# assertions passing before it. So the traps are real and these assertions
+# discriminate; they are not merely green today.
+
+# --- TRAP 1: the strategy must be IMPLEMENTED, not only declared ------------
+# ExtractNativeContextTemplated (native_context_extraction.hpp:512) is generic
+# over the adapter, it has a CONSTRUCTOR_DEFINITION case at :540, and
+# KotlinAdapter has a traits specialization at :447. So declaring the strategy
+# WITHOUT writing KotlinNativeExtractor<CONSTRUCTOR_DEFINITION> compiles, runs,
+# and falls through to the base template at kotlin_native_extractors.hpp:17,
+# which returns an empty NativeContext. That is the #220 shape: declared,
+# dispatched, and silently empty -- and it is indistinguishable from the bug
+# this file fixes. Section 1 is the assertion that catches it; this comment is
+# why section 1 is not redundant with the declaration.
+
+# --- TRAP 2: the default value must not become the name ---------------------
+# `val x: Int = y` gives class_parameter TWO simple_identifier children: the
+# name `x` and the default `y`. ExtractKotlinParameter
+# (kotlin_native_extractors.hpp:172) assigns param.name on EVERY match and never
+# breaks, so reusing it unchanged reports the name as `y`.
+# MEASURED BEFORE THE FIX: []   PREDICTED IF REUSED NAIVELY: ['y : Int']
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'class P(val x: Int = y)\n', 'kotlin', context := 'native')
+WHERE type = 'primary_constructor';
+----
+['x : Int']
+
+# Two defaults of different kinds, so the walk cannot pass by handling only a
+# literal. `z`'s default is a string literal, which has its own child.
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'class P(val x: Int = y, val z: String = "k")\n', 'kotlin', context := 'native')
+WHERE type = 'primary_constructor';
+----
+['x : Int', 'z : String']
+
+# --- TRAP 3: the class modifier must not leak into the constructor ---------
+# ExtractKotlinModifiers (kotlin_native_extractors.hpp:244) falls back to the
+# PARENT's children that precede the node, and its accept list includes
+# `class_modifier`. Measured: `modifiers` is a preceding sibling of
+# `primary_constructor` under `class_declaration`, so delegating to
+# FUNCTION_WITH_PARAMS::Extract would give the constructor `data`.
+# This assertion is a CONTROL -- it was already green, because the strategy was
+# NONE. It is here because the fix is what can break it.
+
+query II
+SELECT modifiers::VARCHAR AS mods, coalesce(nullif(signature_type,''),'<empty>') AS sigt
+FROM parse_ast(E'data class Person(val name: String)\n', 'kotlin', context := 'native')
+WHERE type = 'primary_constructor';
+----
+[]	<empty>
+
+# `sealed` is the same shape, and simple.kt:62 has one.
+
+query II
+SELECT modifiers::VARCHAR AS mods, len(parameters) AS np
+FROM parse_ast(E'sealed class R(val code: Int)\n', 'kotlin', context := 'native')
+WHERE type = 'primary_constructor';
+----
+[]	1
+
+# POSITIVE coverage for ExtractOwnModifiers. Both controls above are NEGATIVE,
+# and a function that unconditionally returned [] would pass them both. The
+# explicit-`constructor` forms below are the only primary-constructor shape
+# where `modifiers` is genuinely a CHILD of the constructor node, so they are
+# what proves the helper reads anything at all. Both forms are common in
+# dependency-injection code.
+
+query II
+SELECT list_transform(parameters, lambda p: p.name || ' : ' || p.type)::VARCHAR AS params, modifiers::VARCHAR AS mods
+FROM parse_ast(E'class P private constructor(val x: Int)\n', 'kotlin', context := 'native')
+WHERE type = 'primary_constructor';
+----
+['x : Int']	[private]
+
+query II
+SELECT list_transform(parameters, lambda p: p.name || ' : ' || p.type)::VARCHAR AS params, modifiers::VARCHAR AS mods
+FROM parse_ast(E'class P @Inject constructor(val x: Int)\n', 'kotlin', context := 'native')
+WHERE type = 'primary_constructor';
+----
+['x : Int']	[@Inject]
+
+# The same for the secondary form, whose `modifiers` child sits before its
+# `constructor` keyword.
+
+query II
+SELECT list_transform(parameters, lambda p: p.name || ' : ' || p.type)::VARCHAR AS params, modifiers::VARCHAR AS mods
+FROM parse_ast(E'class Q {\n  private constructor(a: Int) {}\n}\n', 'kotlin', context := 'native')
+WHERE type = 'secondary_constructor';
+----
+['a : Int']	[private]
+
+# The other half of trap 3: ExtractKotlinReturnType falls through to "Unit", and
+# a constructor has no return type. Java sets signature_type = "" deliberately
+# at java_native_extractors.hpp:1012, and that is the precedent followed here.
+# Also a CONTROL: green before, and the fix must not turn it into `Unit`.
+
+query I
+SELECT coalesce(nullif(signature_type,''),'<empty>')
+FROM parse_ast(E'class Person(val name: String)\n', 'kotlin', context := 'native')
+WHERE type = 'primary_constructor';
+----
+<empty>
+
+# =============================================================================
+# 3. The secondary constructor, the same gap in the other shape
+# =============================================================================
+# Not named in #263. Included on Teague's instruction of 2026-11-07, because it
+# carries the identical NONE/NONE declaration in the same file and its walk is
+# the EXISTING ExtractKotlinParametersDirect -- one branch rather than new code.
+# MEASURED BEFORE THE FIX: []
+#
+# There are ZERO secondary_constructor nodes in test/data/kotlin/*.kt, so this
+# section is the only coverage it has. The probes are inline strings rather than
+# a new fixture, so no glob moves -- bug 055's unbounded-glob problem.
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast(E'class P {\n  constructor(a: Int, b: String = "x") {}\n}\n', 'kotlin', context := 'native')
+WHERE type = 'secondary_constructor';
+----
+['a : Int', 'b : String']
+
+# The secondary shape puts the default in a SIBLING of the parameter, which is
+# why the existing walk carries state across the loop. `vararg` is a preceding
+# sibling too, and is the other reason. Both exercised here.
+
+query II
+SELECT 3 AS declared, len(parameters) AS reported
+FROM parse_ast(E'class P {\n  constructor(a: Int, b: Int = 2, vararg rest: String) {}\n}\n', 'kotlin', context := 'native')
+WHERE type = 'secondary_constructor';
+----
+3	3
+
+# A secondary constructor has no return type either.
+
+query I
+SELECT coalesce(nullif(signature_type,''),'<empty>')
+FROM parse_ast(E'class P {\n  constructor(a: Int) {}\n}\n', 'kotlin', context := 'native')
+WHERE type = 'secondary_constructor';
+----
+<empty>
+
+# =============================================================================
+# 4. Controls: what the fix must NOT reach
+# =============================================================================
+# Every assertion in this section is green BEFORE the fix. If one of them turns
+# red, the fix went wider than the two constructor nodes.
+
+# An ordinary function keeps its parameters, its defaults and its return type.
+# MEASURED BEFORE THE FIX: ['a : Int', 'b : Int', 'rest : String'] / Int
+
+query II
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR AS got,
+       signature_type AS sigt
+FROM parse_ast(E'fun add(a: Int, b: Int = 2, vararg rest: String): Int { return a }\n', 'kotlin', context := 'native')
+WHERE type = 'function_declaration';
+----
+['a : Int', 'b : Int', 'rest : String']	Int
+
+# `class_declaration` puts PARENT TYPES in `parameters`, not constructor
+# parameters. The half of this that #263 must not break is that the
+# constructor's own parameter `n` does not leak onto the class. It does not.
+#
+# --- #323: but it should read ['B'], and it never has -----------------------
+# This expectation was written as a PREDICTION rather than a measurement, and
+# measuring it is how #323 was found. ExtractParentTypes
+# (kotlin_native_extractors.hpp:373) searches for a `delegation_specifiers`
+# child -- PLURAL -- and grammars/tree-sitter-kotlin/src/node-types.json has no
+# such node among its 263. The emitted node is `delegation_specifier`,
+# singular, a direct child of `class_declaration`, and two supertypes produce
+# two siblings rather than one container. So EVERY kotlin class reports no
+# parents, and `has_extends` stays false, so the `extends` marker is lost too.
+#
+# Independent of #263: the grammar evidence stands on its own, the same empty
+# answer comes back for a class with NO primary constructor, and java extracts
+# the identical relationship correctly (control below).
+#
+# Pinned at today's wrong value, so fixing #323 makes this fail.
+
+query II
+SELECT list_transform(parameters, lambda p: p.name)::VARCHAR AS parents, signature_type AS sigt
+FROM parse_ast(E'open class B(val n: Int)\nclass D(n: Int) : B(n)\n', 'kotlin', context := 'native')
+WHERE type = 'class_declaration' AND name = 'D';
+----
+[]	class
+
+# The control that makes #323 a kotlin defect rather than a missing feature:
+# java puts its supertype in `parameters` exactly as CLASS_WITH_METHODS
+# intends, from the same strategy.
+
+query II
+SELECT name, list_transform(parameters, lambda p: p.name)::VARCHAR AS parents
+FROM parse_ast(E'class A {}\nclass D extends A {}\n', 'java', context := 'native')
+WHERE type = 'class_declaration' ORDER BY name;
+----
+A	[]
+D	[A]
+
+# The `class_parameter` AST row was ALREADY correct -- only the constructor's
+# list was empty. That is this release's recurring signature: the node is
+# there, the name is right, and the caller never collected it.
+
+query TT
+SELECT type, coalesce(nullif(name,''),'<empty>')
+FROM parse_ast(E'class P(val x: Int = y, val z: String = "k")\n', 'kotlin')
+WHERE type = 'class_parameter' ORDER BY node_id;
+----
+class_parameter	x
+class_parameter	z
+
+# A MEASURED ASYMMETRY, pinned rather than fixed. For a FUNCTION parameter
+# kotlin flags the inner identifier as a definition
+# (name_role_params_multilang.test:102). For a CLASS parameter it does not: the
+# definition sits on the `class_parameter` container instead, and the inner
+# identifier reads as a reference. Whether the role belongs on the container or
+# on the leaf is #276's question, not #263's, so this records today's answer so
+# that changing it is visible.
+
+query TT
+SELECT name, CASE WHEN is_name_definition(flags) THEN 'DEF' ELSE 'REF' END
+FROM parse_ast('class P(val x: Int = y)', 'kotlin')
+WHERE type = 'simple_identifier' AND name IN ('x','y') ORDER BY name;
+----
+x	REF
+y	REF
+
+# The corpus-wide count lives in
+# test/sql/bugs/issue_220_kotlin_native_parameters.test, whose `3 0` pin moves
+# to `3 3` in the same commit as this file. It is left there rather than copied
+# here, so there is one home for that number.

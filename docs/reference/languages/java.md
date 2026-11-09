@@ -55,7 +55,7 @@ Java organizes code into packages. The `program` node represents the entire comp
 |-----------|---------------|-----------------|-------------|
 | `program` | DEFINITION_MODULE | NONE | Package declarations and import statements |
 | `package_declaration` | DEFINITION_MODULE | FIND_IDENTIFIER |  |
-| `import_declaration` | EXTERNAL_IMPORT \| Import::MODULE | NODE_TEXT |  |
+| `import_declaration` | EXTERNAL_IMPORT \| Import::MODULE | CUSTOM |  |
 
 ## Class and Type Definitions
 

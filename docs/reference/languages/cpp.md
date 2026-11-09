@@ -71,8 +71,8 @@ Variable, parameter, and field declarations
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `declaration` | DEFINITION_VARIABLE \| Variable::MUTABLE | FIND_IDENTIFIER | Variable declaration: `Type name = value;` |
-| `parameter_declaration` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IDENTIFIER | Function parameter: `Type name` in parameter list |
-| `optional_parameter_declaration` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Optional parameter with default: `Type name = default` |
+| `parameter_declaration` | DEFINITION_VARIABLE \| Variable::PARAMETER | FIND_IN_DECLARATOR | Function parameter: `Type name` in parameter list |
+| `optional_parameter_declaration` | DEFINITION_VARIABLE | FIND_IN_DECLARATOR | Optional parameter with default: `Type name = default` |
 | `field_declaration` | DEFINITION_VARIABLE \| Variable::FIELD | FIND_IDENTIFIER | Field declaration in class: `Type name;` |
 | `init_declarator` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Initializing declarator: `name = value` in declaration |
 | `enumerator` | DEFINITION_VARIABLE | FIND_IDENTIFIER | Enumerator: `NAME` or `NAME = value` in enum |

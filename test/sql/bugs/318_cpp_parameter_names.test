@@ -1,0 +1,205 @@
+# name: test/sql/bugs/318_cpp_parameter_names.test
+# description: #318 — a C++ parameter's name column returns the type, the default value, or nothing, depending on the declarator
+# group: [bugs]
+
+# The `name` column for a C++ parameter is the parameter's TYPE, its DEFAULT
+# VALUE, or EMPTY, depending on the declarator form. Only a bare identifier
+# reads correctly. This is the AST row's `name`; #283 fixed the same defect in
+# the function's `parameters` struct, and #315 then fixed the defaulted ones.
+#
+# Measured before this change (release build at 6486820):
+#     int b                  -> b             (right)
+#     const std::string& s   -> std::string   the TYPE
+#     int* p                 -> <empty>
+#     int& r                 -> <empty>
+#     int (*fp)(int)         -> <empty>
+#     int arr[3]             -> <empty>
+#     int& r = global        -> global        the DEFAULT VALUE
+#     int = x                -> x             the default value, where there is
+#                                             no name at all
+#
+# Cause. languages/cpp/cpp_types.def:191 and :196 declare FIND_IDENTIFIER,
+# which calls FindIdentifierInChildren (src/language_adapter.cpp:297). That
+# tries a fixed list of DIRECT child types in order:
+#
+#     identifier -> property_identifier -> field_identifier
+#                -> qualified_identifier -> name -> simple_identifier -> ...
+#
+# When the real name is nested inside a reference_declarator or a
+# pointer_declarator there is no direct `identifier`, so the search falls
+# through and lands on whichever listed type happens to be a direct child: the
+# type (`qualified_identifier` for `std::string`), or the default value's own
+# `identifier` (`global`). Nothing marks the answer as a guess.
+#
+# THE SAME SHAPE BREAKS FIND_IN_DECLARATOR, which is what this change fixes
+# rather than replaces. Measured before:
+#     int* g(int a)                 (c)  -> g        (right)
+#     int (*fp_ret(int a))(char)    (c)  -> int      the RETURN TYPE
+#     class K { int[] arr = null; } (java) -> arr    (right)
+#     void m() { String b = "x"; }  (java) -> b      (right)
+#
+# So one walk serves both, and #283's FindDeclaratorId already is that walk:
+# pointer_declarator, array_declarator, function_declarator and init_declarator
+# each carry a `declarator` FIELD, and a function_declarator's own parameter
+# list is a SEPARATE `parameters` field, so the walk can never descend into a
+# function pointer's parameters and mistake one for the name.
+#
+# It cannot simply REPLACE FIND_IN_DECLARATOR. Java's two sites do have a
+# `declarator` field, but it points at a `variable_declarator` whose name lives
+# in a `name` field, so the walk stops there and java must keep falling back to
+# the old search. Sections 4 and 5 are the controls for that.
+#
+# WHICH EXPECTATIONS ARE MEASURED AND WHICH ARE PREDICTED.
+#
+# Sections 1, 2, 3 and 6 are PREDICTED: they describe behaviour that does not
+# exist yet, so each is a hypothesis under test and this file is committed RED
+# on purpose. Section 6 is a prediction too, not a control -- it asserts the
+# post-fix fixture names `item` and `msg` where the build returns `T` and
+# `std::string`.
+#
+# Sections 4 and 5 are MEASURED on the pre-fix build and must not move.
+# Verified by extracting them and running them alone at 6486820: 9 assertions,
+# all passing.
+
+require sitting_duck
+
+# =============================================================================
+# 1. Every declarator form binds the declarator-id
+#    Measured before: b, std::string, <e>, <e>, <e>, <e>, <e>.
+#
+#    Seven rows for six declared parameters: `int (*fp)(int)` contributes its
+#    own inner `parameter_declaration` for the `int` that the pointed-to
+#    function takes, and that one is abstract, so its name is correctly empty.
+# =============================================================================
+
+query TT
+SELECT peek, coalesce(nullif(name, ''), '<e>')
+FROM parse_ast('void f(int b, const std::string& s, int* p, int& r, int (*fp)(int), int arr[3]) {}', 'cpp')
+WHERE type = 'parameter_declaration'
+ORDER BY node_id;
+----
+int b	b
+const std::string& s	s
+int* p	p
+int& r	r
+int (*fp)(int)	fp
+int	<e>
+int arr[3]	arr
+
+# =============================================================================
+# 2. A default value is never the name
+#    Measured before: b, std::string, <e>, global, <e>.
+#
+#    `int& r = global` is the row this issue is named for: a confident wrong
+#    answer rather than a missing one. `int = 2` and `int = x` have no name at
+#    all, and `int = x` is the trap — the fallback search would find the
+#    default's own identifier, so the fix must SUPPRESS the fallback for a
+#    parameter node whose declarator is absent.
+# =============================================================================
+
+query TT
+SELECT peek, coalesce(nullif(name, ''), '<e>')
+FROM parse_ast('void f(int b = 2, const std::string& s = "x", int* p = nullptr, int& r = global, int = 2) {}', 'cpp')
+WHERE type = 'optional_parameter_declaration'
+ORDER BY node_id;
+----
+int b = 2	b
+const std::string& s = "x"	s
+int* p = nullptr	p
+int& r = global	r
+int = 2	<e>
+
+query TT
+SELECT peek, coalesce(nullif(name, ''), '<e>')
+FROM parse_ast('void f(int a, int = x) {}', 'cpp')
+WHERE type IN ('parameter_declaration', 'optional_parameter_declaration')
+ORDER BY node_id;
+----
+int a	a
+int = x	<e>
+
+# =============================================================================
+# 3. C's function name, fixed as a side effect
+#    Measured before: g (right), and `int` for fp_ret — the RETURN TYPE where
+#    the function's own name belongs. No existing test covers this, which is
+#    why it is pinned here rather than left to be noticed later.
+# =============================================================================
+
+query TT
+SELECT peek, coalesce(nullif(name, ''), '<e>')
+FROM parse_ast('int* g(int a) { return 0; } int (*fp_ret(int a))(char) { return 0; }', 'c')
+WHERE type = 'function_definition'
+ORDER BY node_id;
+----
+int* g(int a) { return 0; }	g
+int (*fp_ret(int a))(char) { return 0; }	fp_ret
+
+# =============================================================================
+# 4. Java must not move — the control for "additive, not a replacement"
+#    Java shares FIND_IN_DECLARATOR with C. Its declarator chain ends in a
+#    `variable_declarator` whose name is in a `name` field, which this walk
+#    does not follow, so java reaches the old search and keeps these answers.
+#    Both values measured at 6486820, before the change.
+# =============================================================================
+
+query TTT
+SELECT type, peek, coalesce(nullif(name, ''), '<e>')
+FROM parse_ast('class K { private int[] arr = null; void m() { String b = "x"; } }', 'java')
+WHERE type IN ('field_declaration', 'local_variable_declaration')
+ORDER BY node_id;
+----
+field_declaration	private int[] arr = null;	arr
+local_variable_declaration	String b = "x";	b
+
+# =============================================================================
+# 5. The native payload must not move
+#    #283 and #315 fixed the function's `parameters` struct, which already
+#    walks the declarator. This change touches the NAME column only, so every
+#    value below is measured and must be identical afterwards. If one moves,
+#    the two paths have been coupled by accident.
+# =============================================================================
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void f(const char* s, int& r, int a) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['s : const char*', 'r : int&', 'a : int']
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void m1(int a, int b = 2) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['a : int', 'b : int']
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('template <typename... Args> void vari(const Args&... args) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['args : const Args&...']
+
+# =============================================================================
+# 6. Where the fixture churn lives
+#    test/data/cpp/*.cpp holds twelve parameter_declaration rows. Ten already
+#    read correctly; two carry the TYPE, and both have a reference_declarator:
+#
+#        const T& item            name = T             -> item
+#        const std::string& msg   name = std::string   -> msg
+#
+#    Those are the only two fixture names this change moves, and no test
+#    asserts either of them today — measured with
+#    `grep -rn "item\|msg" test/sql`, which found nothing. The DEFECT is
+#    asserted twice (here and in section 8 of the #315 file) while the churn is
+#    asserted nowhere, which is the right way round.
+# =============================================================================
+
+query TT
+SELECT peek, coalesce(nullif(name, ''), '<e>')
+FROM read_ast('test/data/cpp/*.cpp', ignore_errors := true)
+WHERE type = 'parameter_declaration' AND peek LIKE 'const %&%'
+ORDER BY peek;
+----
+const T& item	item
+const std::string& msg	msg

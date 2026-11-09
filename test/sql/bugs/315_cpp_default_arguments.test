@@ -1,0 +1,395 @@
+# name: test/sql/bugs/315_cpp_default_arguments.test
+# description: #315 — a C++ default argument makes its whole parameter vanish, and three nodes that declare a parameter strategy return nothing
+# group: [bugs]
+
+# A C++ function with a default argument reports a parameter list that is SHORT
+# BUT PLAUSIBLE. Nothing in the row says a parameter is missing, so a query that
+# counts arity gets a wrong number with no warning.
+#
+# Measured before this change (release build at 3e41f6e, context := 'native'):
+#     void m1(int a, int b = 2)                        -> ['a : int']                 (1 of 2)
+#     void m2(int a, int b, int c = 3)                 -> ['a : int', 'b : int']      (2 of 3)
+#     void m3(const std::string& s, bool = true, ...)  -> ['s : const std::string&']  (1 of 3)
+#     void dv(const int& x = 0)                        -> []                          (0 of 1)
+#     void m4(int a)                                   -> ['a : int']                 (right)
+#
+# Cause. ExtractCppParametersDirect (src/include/cpp_native_extractors.hpp:618)
+# dispatches on two node names:
+#
+#     if (strcmp(child_type, "parameter_declaration") == 0) { ... }
+#     else if (strcmp(child_type, "variadic_parameter_declaration") == 0) { ... }
+#
+# grammars/tree-sitter-cpp/grammar.js:456 names a defaulted parameter
+# `optional_parameter_declaration`, which is neither, so the child is skipped and
+# nothing is ever pushed for it.
+#
+#     optional_parameter_declaration: $ => seq(
+#       $._declaration_specifiers,
+#       field('declarator', optional(choice($._declarator, $.abstract_reference_declarator))),
+#       '=',
+#       field('default_value', $.expression),
+#     )
+#
+# Three facts come out of that rule, each measured on a real parse:
+#   1. `default_value` is a FIELD, so the fix never guesses which child it is.
+#   2. the declarator is OPTIONAL — `void h(int = 2)` is a legal parameter with
+#      no name, and must still be reported or arity goes wrong the other way.
+#   3. the `=` is a direct anonymous child, between declarator and value.
+#
+# Fact 3 is what makes the type right. #283's rule is that a parameter's type is
+# its declaration with the NAME excised. Applied unchanged to `int b = 2` that
+# keeps `int ` and ` = 2`, so the type would read `int = 2`. The fix CLAMPS
+# DeclaredTypeText's window to the start of the `=` instead of adding a third
+# cut, which also keeps `int b[3] = nullptr` reporting `int[3]` rather than
+# losing its array bound.
+#
+# Also deleted in the same change: ExtractParameterDeclaration's branch for
+# `default_parameter_declaration`. That name occurs 0 times in node-types.json,
+# grammar.json and grammar.js, so the branch has never run. The #220 shape:
+# declared, dispatched, unreachable, green.
+#
+# THREE MORE NODES, admitted to #315 on 2026-11-07. They share one cause: a node
+# that declares a parameter strategy goes looking for a child it already is.
+# Measured before this change:
+#     void k(int a, int b = 2);   function_declarator -> []   (declares FUNCTION_WITH_PARAMS)
+#                                 parameter_list      -> []   (declares FUNCTION_WITH_PARAMS)
+#     [](int a, int b = 3)        lambda_expression   -> []   (EVERY param, not just defaults)
+#     [](int a, int c)            lambda_expression   -> []   (so its loop was dead, not partial)
+#
+# HOW THIS FILE WAS BUILT, because it matters for how much to trust it.
+#
+# It was committed RED first (8a6272b). At that point sections 1-6 were
+# PREDICTIONS -- they described behaviour that did not exist -- and sections 7
+# and 8 were measured against the pre-fix build. Verified red at :70, the first
+# arity assertion, and sections 7-8 verified passing on that same build.
+#
+# Every prediction then turned out exact. They are measurements now, against
+# the build at 7353c95.
+#
+# The file was also shown to DISCRIMINATE, not merely to pass, by planting two
+# faults and rebuilding:
+#
+#   A. the dispatch arm with no type clamp -- `int b = 2` reported the type
+#      `int = 2`, `int b[3] = nullptr` reported `int[3] = nullptr`. Failed at
+#      :70. `const char* s`, which has no default, was unchanged, which is the
+#      control proving the clamp is a no-op without an `=`.
+#   B. the name read by scanning children for an identifier instead of reading
+#      the `declarator` field -- `int = x` reported `x : int`, and
+#      `int& r = global` reported `global : int& r`, the name leaking into the
+#      type as well. Failed at :91, the `dv` row. `int b = 2` and section 1's
+#      m3 row still PASSED under fault B, because each of those names is a
+#      direct identifier child -- which is why sections 2 and 3 exist.
+#
+# Section 10 pins #324, a defect this fix made visible rather than caused.
+
+require sitting_duck
+
+# =============================================================================
+# 1. The fix — every declared parameter is reported
+#    Measured before: 1 of 2, 2 of 3, 1 of 3, 0 of 1.
+# =============================================================================
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void m1(int a, int b = 2) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['a : int', 'b : int']
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void m2(int a, int b, int c = 3) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['a : int', 'b : int', 'c : int']
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void m3(const std::string& s, bool flag = true, int n = 0) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['s : const std::string&', 'flag : bool', 'n : int']
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void dv(const int& x = 0) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['x : const int&']
+
+# The arity on its own, so a reader sees the number and not only the payload.
+# This is the assertion a user's own COUNT query is really asking.
+query II
+SELECT 3 AS declared, len(parameters) AS reported
+FROM parse_ast('void m2(int a, int b, int c = 3) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+3	3
+
+# =============================================================================
+# 2. The type is the declaration with the name AND the default removed
+#    A type of `int = 2` is what the one-arm fix produces. The window is clamped
+#    at the `=` rather than cut from the name, which is why the array bound and
+#    the template argument list both survive.
+# =============================================================================
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void arr(int a, int b[3] = nullptr) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['a : int', 'b : int[3]']
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void mp(std::map<int,int> m = {}) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['m : std::map<int,int>']
+
+# A default value containing a comma must not split the parameter list, and must
+# not reach the type. Measured before: [] — the parameter was dropped entirely.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void ce(int a = g(1,2)) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['a : int']
+
+# =============================================================================
+# 3. The trap: a bare identifier sitting where a name is absent
+#    This is the recurring defect class of v1.18.3 — a parameter's real name is
+#    nested, and a plausible WRONG candidate sits next to it. Here there is no
+#    name at all, and the default value is a bare identifier.
+#
+#    `int = x` parses as:  primitive_type `int` | `=` | identifier `x`
+#    with NO declarator field. So the name must come back EMPTY. An
+#    implementation that scanned children for an identifier instead of reading
+#    the `declarator` field would report `x`, and the AST row already does
+#    exactly that — see section 8.
+# =============================================================================
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void absx(int a, int = x) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['a : int', '<e> : int']
+
+# The same shape with a literal default, which has no identifier to mistake.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void ab(int a, int = 2) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['a : int', '<e> : int']
+
+# A reference whose default is an identifier. The native payload must give the
+# name `r`; the AST row gives `global`, which is #318 and is pinned in section 8.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void refg(int& r = global) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['r : int&']
+
+# =============================================================================
+# 4. A prototype — function_declarator declares FUNCTION_WITH_PARAMS
+#    Measured before: []. ExtractCppParameters searched for a
+#    function_declarator CHILD, so a node that IS one found nothing. A
+#    declaration without a body therefore reported no parameters at all,
+#    defaulted or not.
+# =============================================================================
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void k(int a, int b = 2);', 'cpp', context := 'native')
+WHERE type = 'function_declarator';
+----
+['a : int', 'b : int']
+
+# The same node in a DEFINITION, which is the control proving section 4 is about
+# the node type and not about the missing body. Measured before: [] here too,
+# while its parent function_definition reported ['a : int'].
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void d(int a, int b = 2) {}', 'cpp', context := 'native')
+WHERE type = 'function_declarator';
+----
+['a : int', 'b : int']
+
+# =============================================================================
+# 5. A lambda — ExtractLambdaParameters was a second, stale copy of the dispatch
+#    Measured before: [] for EVERY parameter, defaulted or not, because it
+#    looked for parameter_list among the lambda's direct children while the
+#    grammar nests it under lambda_declarator.
+#
+#    The no-default case is the control that proves the loop was DEAD rather
+#    than merely missing the optional-parameter arm. Without it, a fix that only
+#    added the arm would look correct here.
+# =============================================================================
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('auto l = [](int a, int c) { return a; };', 'cpp', context := 'native')
+WHERE type = 'lambda_expression';
+----
+['a : int', 'c : int']
+
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('auto l = [](int a, int b = 3) { return a; };', 'cpp', context := 'native')
+WHERE type = 'lambda_expression';
+----
+['a : int', 'b : int']
+
+# =============================================================================
+# 6. A parameter_list on its own — it also declares FUNCTION_WITH_PARAMS
+#    (languages/cpp/cpp_types.def:774). Measured before: [].
+#    Its signature_type must stay NULL: IsTypeNode is false for every direct
+#    child of a parameter_list, so ExtractCppReturnType finds nothing. That half
+#    IS measured — NULL today — and must not move.
+# =============================================================================
+
+query II
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR,
+       coalesce(signature_type, '<null>')
+FROM parse_ast('void d(int a, int b = 2) {}', 'cpp', context := 'native')
+WHERE type = 'parameter_list';
+----
+['a : int', 'b : int']	<null>
+
+# =============================================================================
+# 7. Controls — measured NOW, and none of them may move
+#    Every value below was read out of the release build at 3e41f6e before a
+#    line of the fix was written.
+# =============================================================================
+
+# The issue's own control: a function with no default argument at all.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void m4(int a) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['a : int']
+
+# #283's declared-type rule, with no default anywhere. The pointer and the
+# reference keep their qualifiers, and all three names resolve through nested
+# declarators. If the clamp ever applied where there is no `=`, this moves.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('void nd(const char* s, int& r, int a) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['s : const char*', 'r : int&', 'a : int']
+
+# #283's parameter pack. variadic_parameter_declaration has no default_value
+# field, so the clamp must be a no-op for it.
+query I
+SELECT list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('template <typename... Args> void vari(const Args&... args) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+['args : const Args&...']
+
+# The return type of a defaulted-parameter function is untouched by all of this.
+query I
+SELECT coalesce(signature_type, '<null>')
+FROM parse_ast('void m1(int a, int b = 2) {}', 'cpp', context := 'native')
+WHERE type = 'function_definition';
+----
+void
+
+# =============================================================================
+# 8. The AST row `name` — #318 landed, so these are now CORRECT
+#    This block was written while #315 landed, pinning the row names at their
+#    measured WRONG values and stating the post-fix oracle in this comment:
+#    "every row below becomes the declarator-id: b, s, p, r, ''". That is now
+#    what it asserts, which is the block being REWRITTEN rather than
+#    re-recorded, as the comment required.
+#
+#    What they were before #318, for the record:
+#        int b = 2                   b             (was already right)
+#        const std::string& s = "x"  std::string   the TYPE
+#        int* p = nullptr            <e>
+#        int& r = global             global        the DEFAULT VALUE
+#        int = 2                     <e>           (was already right)
+#
+#    #318 repointed cpp_types.def:191 and :196 from FIND_IDENTIFIER to
+#    FIND_IN_DECLARATOR, and gave that strategy the declarator walk #283
+#    wrote. The native `parameters` payload is unchanged by it, which is what
+#    section 7's controls prove.
+# =============================================================================
+
+query TT
+SELECT peek, coalesce(nullif(name, ''), '<e>')
+FROM parse_ast('void f(int b = 2, const std::string& s = "x", int* p = nullptr, int& r = global, int = 2) {}', 'cpp', context := 'native')
+WHERE type = 'optional_parameter_declaration'
+ORDER BY node_id;
+----
+int b = 2	b
+const std::string& s = "x"	s
+int* p = nullptr	p
+int& r = global	r
+int = 2	<e>
+
+# The same forms without a default. Before #318 these were the control that
+# made the rows above #318's and not #315's -- adding a default turned a
+# MISSING name into a WRONG one, and the missing name was there either way.
+# Measured before #318: <e>, <e>, a.
+query TT
+SELECT peek, coalesce(nullif(name, ''), '<e>')
+FROM parse_ast('void g(const char* q, int& r, int a) {}', 'cpp', context := 'native')
+WHERE type = 'parameter_declaration'
+ORDER BY node_id;
+----
+const char* q	q
+int& r	r
+int a	a
+
+# =============================================================================
+# 9. Where the corpus count lives
+#    test/data/** holds ZERO optional_parameter_declaration nodes, which is why
+#    every probe above is an inline parse_ast string and no fixture was added
+#    (bug 055: an unbounded glob moves when any file is added beside it).
+#    Our own src/ tree holds 67 of them — 2 in *.cpp and 65 in *.hpp — so the
+#    construct is common in real code and absent from what CI reads.
+#
+#    is_optional and default_value are set on ParameterInfo by this fix, but
+#    neither reaches SQL: `parameters` is STRUCT("name" VARCHAR, "type" VARCHAR)[].
+#    So no assertion here covers them, and none pretends to. Exposing them is
+#    #255's territory, and #315 does not need it.
+# =============================================================================
+
+# =============================================================================
+# 10. #324 — pinned at its measured WRONG value
+#     Giving function_declarator its parameters (section 4) exposed a defect
+#     that an empty list had been hiding. A function returning a FUNCTION
+#     POINTER has two nested function_declarator nodes, each with its own
+#     `parameters` field, and the OUTER one's field belongs to the returned
+#     function type rather than to the declared function.
+#
+#     So the outer row below reports `<e> : char` -- the parameter of the
+#     returned `int(char)` -- where the function's own parameter is `a : int`.
+#     The inner row is correct, and is the control that makes this a nesting
+#     defect rather than a parameters defect.
+#
+#     This is NOT an argument against section 4. Before #315 both rows read
+#     `[]`, so a wrong answer was hidden behind a missing one; the node
+#     declares FUNCTION_WITH_PARAMS at languages/cpp/cpp_types.def:78 and
+#     delivered nothing. Fixing #324 means walking the `declarator` field chain
+#     to the innermost function_declarator, which is the walk FindDeclaratorId
+#     already performs.
+#
+#     The outer row's empty `name` is #318's, not #324's.
+# =============================================================================
+
+query TTT
+SELECT peek, coalesce(nullif(name,''),'<e>'),
+       list_transform(parameters, lambda p: coalesce(nullif(p.name,''),'<e>') || ' : ' || coalesce(nullif(p.type,''),'-'))::VARCHAR
+FROM parse_ast('int (*fp_ret(int a))(char);', 'cpp', context := 'native')
+WHERE type = 'function_declarator'
+ORDER BY node_id;
+----
+(*fp_ret(int a))(char)	<e>	['<e> : char']
+fp_ret(int a)	fp_ret	['a : int']

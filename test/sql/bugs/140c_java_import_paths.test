@@ -1,0 +1,217 @@
+# name: test/sql/bugs/140c_java_import_paths.test
+# description: #140c — a Java import must carry the import path, not the whole statement
+# group: [bugs]
+
+# #140c. `import java.math.BigInteger;` reports the WHOLE STATEMENT as its name,
+# because languages/java/java_types.def gives import_declaration the NODE_TEXT
+# strategy. The name therefore carries the `import` keyword, the spaces and the
+# semicolon. Measured over test/data/**/*.java: `.import[name^="java"]` matches
+# 0 of 44, while `[name*="java"]` matches all 44. A prefix query over an import
+# path is the normal way to ask "what does this file depend on", and it cannot
+# be asked at all.
+#
+# MEASURED GRAMMAR. grammars/tree-sitter-java/grammar.js:841 is
+#     import_declaration: 'import' ('static')? _name ('.' asterisk)? ';'
+# and grammars/tree-sitter-java/src/node-types.json gives import_declaration
+# "fields": {} — it has NO named fields, so the binding cannot use
+# ts_node_child_by_field_name the way bash's `command` did in #140a. It scans
+# children by TYPE instead. The node's only NAMED children are _name
+# (identifier | scoped_identifier) and the optional `asterisk`; `import`,
+# `static`, `.` and `;` are anonymous.
+#
+# THE CORPUS HOLDS THREE OF THE FIVE SHAPES. Measured:
+#     import scoped_identifier ;              40
+#     import scoped_identifier . asterisk ;    3
+#     import static scoped_identifier ;        1
+# Section 4 supplies the other two from source text through parse_ast(),
+# because an assertion that an empty input set satisfies is not an assertion.
+#
+# TWO DECISIONS, BOTH DELIBERATE AND BOTH VISIBLE HERE.
+#
+# 1. A wildcard import KEEPS ITS STAR. `import java.io.*;` is named `java.io.*`,
+#    not `java.io`. The star is the only thing that separates it from a
+#    single-type import of a class named `io`, and nothing else on the node
+#    records it. Section 2 asserts the star; section 7 asserts that the
+#    scoped_identifier child, which holds only `java.io`, is not what is used.
+#
+# 2. `static` IS DROPPED. `import static java.nio.charset.StandardCharsets.UTF_8;`
+#    is named for its path. `name` is a path in every other language, and the
+#    keyword stays in the node's own text, so no information is lost.
+#
+# NOT DONE HERE. The wildcard form keeps SemanticRefinements::Import::MODULE and
+# does NOT move to Import::WILDCARD. A refinement is stored PER NODE TYPE, and
+# one `import_declaration` entry covers both forms, so a stored bit cannot tell
+# them apart. That is the same constraint that left Go's `struct_type`
+# context-dependent in #140b.
+
+require sitting_duck
+
+# =============================================================================
+# 1. THE DEFECT — the file that nearly every Java test reads
+# =============================================================================
+
+# test/data/languages/java/Test.java lines 3-5. Before the fix each of these
+# read `import java.util.List;` and so on, keyword and semicolon included.
+query IT
+SELECT start_line, name FROM read_ast('test/data/languages/java/Test.java')
+WHERE type = 'import_declaration' ORDER BY start_line;
+----
+3	java.util.List
+4	java.util.ArrayList
+5	java.util.stream.Collectors
+
+# =============================================================================
+# 2. THE THREE SHAPES THE CORPUS CONTAINS
+# =============================================================================
+
+# One named oracle per shape, so a fix that handles only the common form fails
+# here rather than passing on a majority.
+query T
+SELECT DISTINCT name FROM read_ast('test/data/**/*.java', ignore_errors := true)
+WHERE type = 'import_declaration'
+  AND name IN ('java.math.BigInteger', 'java.io.*',
+               'java.nio.charset.StandardCharsets.UTF_8')
+ORDER BY name;
+----
+java.io.*
+java.math.BigInteger
+java.nio.charset.StandardCharsets.UTF_8
+
+# =============================================================================
+# 3. THE RATIO — stated so that a larger corpus cannot satisfy it by accident
+# =============================================================================
+
+# Every import node is named, and NO name carries statement punctuation. The
+# second and third columns are the ones that move: before the fix they read
+# 44 and 44, because every name was a whole statement.
+query IIII
+SELECT count(*),
+       count(*) FILTER (WHERE name <> ''),
+       count(*) FILTER (WHERE name LIKE '%;%'),
+       count(*) FILTER (WHERE name LIKE '% %')
+FROM read_ast('test/data/**/*.java', ignore_errors := true)
+WHERE type = 'import_declaration';
+----
+44	44	0	0
+
+# The buckets a dependency query would actually ask for. Measured from the
+# statement text before the fix, so these are a translation of known data and
+# not a guess: 22 under java.util., 9 under java.io. (the wildcard included),
+# 4 under javax., 3 wildcards.
+query IIII
+SELECT count(*) FILTER (WHERE name LIKE 'java.util.%'),
+       count(*) FILTER (WHERE name LIKE 'java.io.%'),
+       count(*) FILTER (WHERE name LIKE 'javax.%'),
+       count(*) FILTER (WHERE name LIKE '%.*')
+FROM read_ast('test/data/**/*.java', ignore_errors := true)
+WHERE type = 'import_declaration';
+----
+22	9	4	3
+
+# =============================================================================
+# 4. THE TWO GRAMMAR SHAPES THE CORPUS DOES NOT HOLD
+# =============================================================================
+
+# `import static <path>.*;` is legal Java and has ZERO instances in
+# test/data/**/*.java, so it is supplied as source text. It exercises both
+# optional parts of the rule at once: `static` dropped, star kept.
+query T
+SELECT name FROM parse_ast(E'import static java.lang.Math.*;\nclass C {}', 'java')
+WHERE type = 'import_declaration';
+----
+java.lang.Math.*
+
+# The grammar's OTHER _name arm is a bare `identifier`, with no dots. It too has
+# zero instances in the corpus. The binding must not assume scoped_identifier.
+query T
+SELECT name FROM parse_ast(E'import Foo;\nclass C {}', 'java')
+WHERE type = 'import_declaration';
+----
+Foo
+
+# A static import of one member, inline, beside a plain one. The two forms must
+# produce the same KIND of answer — a path — and differ only in that path.
+query IT
+SELECT start_line, name FROM parse_ast(
+  E'import static java.lang.Math.abs;\nimport java.util.Map;\nclass C {}', 'java')
+WHERE type = 'import_declaration' ORDER BY start_line;
+----
+1	java.lang.Math.abs
+2	java.util.Map
+
+# =============================================================================
+# 5. THE QUERY THE ISSUE REPORTS — a prefix match over an import path
+# =============================================================================
+
+# This is the point of the issue. Before the fix the first column read 0,
+# because every name began with the word `import`.
+query II
+SELECT
+  (SELECT count(*) FROM ast_select('test/data/**/*.java', '.import[name^="java.util."]')),
+  (SELECT count(*) FROM ast_select('test/data/**/*.java', '.import[name^="java"]'));
+----
+22	44
+
+# =============================================================================
+# 6. THE CONSEQUENCE FOR ast_imports() — a macro, not only a column
+# =============================================================================
+
+# Java's import_declaration reaches ast_imports() through the `rust_use_names`
+# branch of src/sql_macros/scope_resolution.sql, which already read the right
+# child for `imported_name`. `source_module` came from the node's name, so it
+# used to be the whole statement. It is now a module path, which is what the
+# column is called and what every other language puts there.
+query TT
+SELECT source_module, imported_name
+FROM ast_imports('test/data/languages/java/Test.java')
+ORDER BY source_module;
+----
+java.util.ArrayList	ArrayList
+java.util.List	List
+java.util.stream.Collectors	Collectors
+
+# =============================================================================
+# 7. CONTROLS — what this change must NOT move
+# =============================================================================
+
+# The `import` KEYWORD node keeps NODE_TEXT and keeps reading `import`. Only
+# import_declaration changes strategy. If this moves, the .def edit was too wide.
+query TI
+SELECT name, count(*) FROM read_ast('test/data/languages/java/Test.java')
+WHERE type = 'import' GROUP BY name;
+----
+import	3
+
+# package_declaration was ALREADY unnamed and stays that way. #140c is about
+# imports; naming a package is a separate question nobody has asked.
+query TT
+SELECT type, name FROM read_ast('test/data/languages/java/Test.java')
+WHERE type = 'package_declaration';
+----
+package_declaration	(empty)
+
+# The scoped_identifier CHILD is unchanged, and for a wildcard import it holds
+# only `java.io` — which is why the parent cannot simply copy it. This asserts
+# the gap that decision 1 above closes.
+query TT
+SELECT DISTINCT p.name, c.name
+FROM read_ast('test/data/**/*.java', ignore_errors := true) p
+JOIN read_ast('test/data/**/*.java', ignore_errors := true) c
+  ON c.parent_id = p.node_id AND c.file_path = p.file_path
+WHERE p.type = 'import_declaration' AND c.type = 'scoped_identifier'
+  AND p.name LIKE '%.*'
+ORDER BY p.name;
+----
+java.io.*	java.io
+java.util.*	java.util
+
+# CROSS-LANGUAGE CONTROL. Python builds its import names in its own adapter and
+# must not move. A change made in the shared ExtractByStrategy instead of in
+# JavaAdapter would show up here.
+query IT
+SELECT start_line, name FROM read_ast('test/data/python/sample_app.py')
+WHERE type IN ('import_statement', 'import_from_statement') ORDER BY start_line;
+----
+2	os
+3	json
+4	pathlib

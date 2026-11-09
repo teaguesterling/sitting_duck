@@ -100,6 +100,74 @@ DEF_TYPE("method_elem", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, ASTNodeFlags
 // TYPE DEFINITIONS
 // =============================================================================
 
+// #140b — THE NAME AND THE CLASS BELONG ON ONE NODE.
+//
+// This block is a plain comment, not doxygen, on purpose:
+// docs/scripts/generate_language_reference.py flattens every `* ` line between
+// `@defgroup` and `@{` into ONE paragraph of the generated page
+// (generate_language_reference.py:113-119). A long rationale there makes
+// docs/reference/languages/go.md unreadable, so the rationale lives here and
+// the doxygen brief below stays short.
+//
+// Go spells a named type with two nodes, and before this change neither was
+// usable alone. Measured over test/data/go/types/type_declarations.go:
+//
+//   type_spec     name='Pair'  EXECUTION_DECLARATION  is_definition=false
+//   struct_type   name=''      DEFINITION_CLASS       is_definition=true
+//
+// `ast_definitions()` filters on `is_definition()` AND `name <> ''`, so it
+// returned ZERO classes for Go. `.class` returned the unnamed body instead of
+// the declaration. The declaration node now carries both, which is what every
+// other language in this tree already does:
+//
+//   typescript  type_alias_declaration  DEFINITION_CLASS  NAME_DEFINITION|IS_SCOPE
+//   rust        struct_item             DEFINITION_CLASS  NAME_DEFINITION|IS_SCOPE
+//   java        class_declaration       DEFINITION_CLASS  NAME_DEFINITION|IS_SCOPE
+//   dart        type_alias              DEFINITION_CLASS  NAME_DEFINITION|IS_SCOPE
+//
+// `type_spec` takes NO Class refinement, because one node type covers struct,
+// interface and plain defined types (`type Counter int`). A stored refinement
+// cannot vary with the body. TypeScript's `type_alias_declaration` is bare
+// DEFINITION_CLASS for the same reason. The refinements stay on the bodies,
+// where the grammar does distinguish them.
+//
+// `type_alias` (`type Celsius = float64`) is a DIFFERENT grammar node and had
+// no entry here at all, so it fell through to PARSER_CONSTRUCT with no name.
+// Dart's entry of the same name is the model.
+//
+// `struct_type` and `interface_type` become IS_CONSTITUENT — #139's flag for a
+// sub-part whose enclosing construct already represents the whole — so a class
+// selector returns each named type ONCE instead of returning its body. The
+// skip happens at src/sql_macros/css_selectors.sql:1554.
+//
+// THEY ALSO LOSE IS_SCOPE, for the same convention reason. No other language in
+// this tree gives a type BODY a scope: java `class_body`, `interface_body` and
+// `enum_body`, typescript `interface_body`, `enum_body` and `object_type`, and
+// rust `field_declaration_list` are all flags 0. The declaration owns the
+// scope. Measured, leaving IS_SCOPE on the body stacked two class scopes and
+// broke one selector: `scope.class` for the field `First` pointed at the
+// unnamed `struct_type`, while `.class#Pair` matched the `type_spec`, so
+// `.variable:in-scope(.class#Pair)` returned EMPTY. With the body's IS_SCOPE
+// removed it returns `First` and `Second`.
+//
+// The only measured loss is that an ANONYMOUS struct's field no longer reports
+// a class scope: `scope.class` for `Z` in `var anonymous struct{ Z int }` goes
+// from the struct_type's node id to NULL. That id carried no name, so no
+// selector could reach it by name. The field's `qualified_name` is unchanged,
+// measured: it still reads `V[anonymous] V[Z]`, because the chain is built from
+// named ancestors and already walked past the unnamed body.
+//
+// KNOWN AND ACCEPTED COST. A per-node-type bit cannot be context-dependent,
+// and `struct_type` is: a sub-part in `type Pair struct{}`, the whole construct
+// in `var anonymous struct{}` and in `struct{}{}`. Those anonymous forms are no
+// longer selected by `.class`. They keep their semantic type, so a structural
+// query still reaches them. Section 4 of
+// test/sql/bugs/140b_go_named_type_declarations.test pins the loss.
+//
+// `type_declaration` is unchanged. It is the `type` keyword's wrapper and can
+// hold SEVERAL specs (`type ( Meters float64; Grams float64 )`), so naming it
+// would name a group after its first member.
+
 /**
  * @defgroup go_types_def Type Definitions
  * @brief Struct and interface definitions
@@ -109,13 +177,15 @@ DEF_TYPE("method_elem", DEFINITION_FUNCTION, FIND_IDENTIFIER, NONE, ASTNodeFlags
  * - `interface_type`: Abstract types defining method sets (ABSTRACT refinement)
  *
  * Types are typically defined with `type Name struct/interface { ... }`.
- * The `type_declaration` and `type_spec` wrap the actual type definition.
+ * `type_spec` and `type_alias` carry the declared NAME and the class; the
+ * struct or interface body beside them is a constituent of that declaration.
  * @{
  */
 DEF_TYPE("type_declaration", EXECUTION_DECLARATION, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("type_spec", EXECUTION_DECLARATION, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, 0)
-DEF_TYPE("struct_type", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, NONE, CLASS_WITH_METHODS, ASTNodeFlags::IS_SCOPE)
-DEF_TYPE("interface_type", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, NONE, CLASS_WITH_METHODS, ASTNodeFlags::IS_SCOPE)
+DEF_TYPE("type_spec", DEFINITION_CLASS, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
+DEF_TYPE("type_alias", DEFINITION_CLASS, FIND_IDENTIFIER, VARIABLE_WITH_TYPE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
+DEF_TYPE("struct_type", DEFINITION_CLASS | SemanticRefinements::Class::REGULAR, NONE, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTITUENT)
+DEF_TYPE("interface_type", DEFINITION_CLASS | SemanticRefinements::Class::ABSTRACT, NONE, CLASS_WITH_METHODS, ASTNodeFlags::IS_CONSTITUENT)
 /** @} */
 
 // =============================================================================

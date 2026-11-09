@@ -123,6 +123,21 @@ bar	C[Foo] F[bar]
 # =============================================================================
 
 # All definitions nested inside User class (not User itself)
+#
+# CORRECTED (#273). This block expected a third row,
+# `C[User] F[__init__] V[name]`, from qualified_names.py:6:
+#
+#     self.name = name
+#
+# The target is `self.name`. `name` is the parameter, and it is READ there.
+# The row existed because FIND_IDENTIFIER scanned past the attribute target
+# into the right-hand side, so the assignment claimed to define `name`.
+# #273's fix stops that scan, so the row is gone.
+#
+# The assignment does define something -- `self.name` -- and the `attribute`
+# node carries that text. It has no NAME_DEFINITION role flag, so it is not a
+# definition yet and gets no qualified_name. That gap is #288. When #288
+# lands a row appears here again, and it will not be `V[name]`.
 query I
 SELECT ast_qualified_name_as_string(qualified_name)
 FROM read_ast('test/data/python/qualified_names.py', 'python')
@@ -130,7 +145,6 @@ WHERE ast_qualified_name_as_string(qualified_name) LIKE 'C[User] %'
 ORDER BY start_line;
 ----
 C[User] F[__init__]
-C[User] F[__init__] V[name]
 C[User] F[validate]
 
 # =============================================================================
@@ -150,12 +164,27 @@ WHERE is_definition(semantic_type) AND name != '' AND qualified_name IS NULL;
 
 # Match any qualified_name containing F[ — includes functions themselves
 # AND nested definitions inside functions (e.g., V[x] inside F[foo])
+#
+# CORRECTED (#273). This count was 10. Three of those ten were right-hand-side
+# leaks, all of the form `self.X = y`:
+#
+#   qualified_names.py:6    V[name]        from self.name = name
+#   qualified_names.py:14   V[owner]       from self.owner = owner
+#   qualified_names.py:18   V[theme][2]    from self.theme = theme
+#
+# 10 - 3 = 7, measured.
+#
+# THE CONTROL IS IN THE SAME NUMBER. A `V[theme]` row survives, at line 17,
+# because `def __init__(self, theme="dark")` is a `default_parameter` and
+# genuinely binds `theme`. The leak at line 18 is what produced the `[2]`
+# suffix. So this count going to 7 rather than 6 is the evidence that the fix
+# removed assignment leaks and left parameter bindings alone.
 query I
 SELECT COUNT(*)
 FROM read_ast('test/data/python/qualified_names.py', 'python')
 WHERE ast_qualified_name_as_string(qualified_name) LIKE '%F[%';
 ----
-10
+7
 
 # =============================================================================
 # Test 12: A variable literally named "F" does not match the function filter
@@ -259,19 +288,74 @@ ORDER BY start_line;
 31	F[accumulator] V[result]
 
 # =============================================================================
-# Test 19: Nested method scope — Container.__init__ has two `self.* = value`
-# assignments, which record the RHS identifier as V[value] twice in that
-# method's scope. The second gets a [2] suffix.
+# Test 19: an attribute-target assignment defines nothing (#273), and the
+# method-scope collision counter is proved on an inline source instead.
 # =============================================================================
-
-query I
-SELECT ast_qualified_name_as_string(qualified_name)
+#
+# CORRECTED (#273). This block expected two rows for `value`:
+#
+#     C[Container] F[__init__] V[value]
+#     C[Container] F[__init__] V[value][2]
+#
+# The fixture's own comment stated the cause as though it were the design:
+# "Sitting Duck records the identifier on the RHS of self.attr = ident as a
+# definition". It does not any more. qualified_name_collisions.py:42-43 are
+# `self.a = value` and `self.b = value`, where `value` is the parameter, read
+# twice. Two reads were being reported as two definitions of the same name,
+# which is also where the `[2]` suffix came from.
+#
+# Asserted in the POSITIVE form. Simply emptying the old query's expectation
+# would be vacuous: it would also pass if the query stopped returning rows for
+# some unrelated reason.
+query IT
+SELECT start_line, CASE WHEN name = '' THEN '(empty)' ELSE name END
 FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
-WHERE name = 'value' AND is_definition(semantic_type)
+WHERE type = 'assignment' AND start_line IN (42, 43)
 ORDER BY start_line;
 ----
-C[Container] F[__init__] V[value]
-C[Container] F[__init__] V[value][2]
+42	(empty)
+43	(empty)
+
+# The fix removed a wrong name without destroying the right one. `value` is
+# still bound at line 36, the parameter, and the two uses at 42-43 are reads.
+#
+# The two columns are the point. The parameter carries the NAME_DEFINITION
+# role FLAG and does NOT carry a definition SEMANTIC TYPE, which is why it has
+# no qualified_name, and why the query above cannot be written over
+# is_definition(semantic_type). That split is #288, not this fix.
+query ITT
+SELECT start_line,
+       CASE WHEN is_name_definition(flags) THEN 'flag:yes' ELSE 'flag:no' END,
+       CASE WHEN is_definition(semantic_type) THEN 'sem:yes' ELSE 'sem:no' END
+FROM read_ast('test/data/python/qualified_name_collisions.py', 'python')
+WHERE name = 'value' AND type = 'identifier'
+ORDER BY start_line;
+----
+36	flag:yes	sem:no
+42	flag:no	sem:no
+43	flag:no	sem:no
+
+# THE ORIGINAL INTENT of this block was the collision suffix inside a METHOD
+# scope, which the two leaking assignments had been supplying. Two same-named
+# locals in a method supply it legitimately, so the coverage is kept.
+#
+# Inline `parse_ast` on purpose. Adding a file under test/data/python/ would
+# move the counts of every test that globs that directory (bug 055), and
+# editing this fixture to add locals would move them too.
+query I
+SELECT ast_qualified_name_as_string(qualified_name)
+FROM parse_ast('
+class Container:
+    def __init__(self, value):
+        tmp = value
+        tmp = value * 2
+        self.a = tmp
+', 'python')
+WHERE name = 'tmp' AND is_definition(semantic_type)
+ORDER BY start_line;
+----
+C[Container] F[__init__] V[tmp]
+C[Container] F[__init__] V[tmp][2]
 
 # =============================================================================
 # Test 20: Method redefinition — same class scope, same function name.

@@ -59,6 +59,41 @@
 // COMPILATION UNIT AND PACKAGES
 // =============================================================================
 
+// -----------------------------------------------------------------------------
+// #140c: why import_declaration takes CUSTOM rather than NODE_TEXT
+// -----------------------------------------------------------------------------
+//
+// NODE_TEXT named this node for its WHOLE STATEMENT, so `import java.util.List;`
+// came back with the keyword, the spaces and the semicolon in `name`. Measured
+// over test/data/**/*.java, `.import[name^="java"]` then matched 0 of 44 nodes
+// while `[name*="java"]` matched all 44 -- a prefix query over an import path,
+// which is the normal way to ask what a file depends on, could not be asked.
+//
+// The binding cannot read a grammar field. grammars/tree-sitter-java/grammar.js
+// declares
+//     import_declaration: 'import' ('static')? _name ('.' asterisk)? ';'
+// and src/node-types.json gives this node `"fields": {}`. Bash's `command` in
+// #140a could use ts_node_child_by_field_name because its grammar has a
+// required `name` field; this one has none, so JavaAdapter::ExtractNodeName
+// scans children by TYPE. The only NAMED children are _name
+// (identifier | scoped_identifier) and the optional `asterisk`.
+//
+// A wildcard import KEEPS its star: `import java.io.*;` is named `java.io.*`.
+// The scoped_identifier child holds only `java.io`, which is indistinguishable
+// from a single-type import of a class called `io`. The star is the one thing
+// that separates them, and no other column on the node records it.
+//
+// `static` is DROPPED: `import static java.lang.Math.abs;` is named
+// `java.lang.Math.abs`. `name` is a path in every other language, and the
+// keyword remains in the node's own text.
+//
+// The refinement stays Import::MODULE for both forms, and does NOT become
+// Import::WILDCARD for the star form. A refinement is stored PER NODE TYPE and
+// one entry covers both, so a stored bit cannot tell them apart -- the same
+// constraint that left Go's `struct_type` context-dependent in #140b.
+//
+// Pinned by test/sql/bugs/140c_java_import_paths.test.
+
 /**
  * @defgroup java_packages Packages and Imports
  * @brief Package declarations and import statements
@@ -70,7 +105,7 @@
  */
 DEF_TYPE("program", DEFINITION_MODULE, NONE, NONE, ASTNodeFlags::IS_SCOPE)
 DEF_TYPE("package_declaration", DEFINITION_MODULE, FIND_IDENTIFIER, NONE, ASTNodeFlags::NAME_DEFINITION | ASTNodeFlags::IS_SCOPE)
-DEF_TYPE("import_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, NODE_TEXT, NONE, 0)
+DEF_TYPE("import_declaration", EXTERNAL_IMPORT | SemanticRefinements::Import::MODULE, CUSTOM, NONE, 0)
 /** @} */
 
 // =============================================================================

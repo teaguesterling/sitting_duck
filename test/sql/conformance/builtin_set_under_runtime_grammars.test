@@ -189,7 +189,9 @@ WHERE node_type_count = 0
 1
 
 # call_naming_conformance.test: the capability-gate declaration table is still
-# 22 rows, and bash is still the only language the gate excludes.
+# 22 rows. #140a did not move this number. bash already had 3 call-semantic
+# node types, so giving one of them a name strategy changes WHICH rows are
+# named, not whether bash declares call naming at all.
 query I
 SELECT count(*) FROM (
     SELECT language FROM ast_type_map()
@@ -200,13 +202,35 @@ SELECT count(*) FROM (
 ----
 22
 
-query I
-SELECT language FROM ast_type_map()
+# call_naming_conformance.test: the set of call node types the gate excludes.
+#
+# CHANGED IN #140a, AND THE CHANGE IS THE POINT. This assertion used to ask
+# which LANGUAGES declare no call naming at all, and the answer was the single
+# row `bash`. #140a gave bash's `command` node a CUSTOM name strategy, so bash
+# left that set and the set went empty. An empty result would have passed the
+# old `count(*) = 0` form of the same claim in call_naming_conformance.test,
+# which is why that file now pins the set instead of its size:
+# "A control an empty input set satisfies is not a control."
+#
+# So this mirror follows the same move: PER NODE TYPE, not per language. The
+# gate in check_call_named() has always worked at node-type granularity, and
+# these 9 rows are the node types it skips. The set is non-empty by
+# construction, because `new` and `delete` and `$(cmd)` have no statically
+# knowable callee name in any grammar.
+query TT
+SELECT language, node_type
+FROM ast_type_map()
 WHERE language IN (SELECT language FROM __builtin_expected)
-GROUP BY language
-HAVING count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')) > 0
-   AND count(*) FILTER (WHERE is_semantic_type(semantic_type_code(semantic_type), 'CALL')
-                          AND name_strategy <> 'none') = 0
-ORDER BY language;
+  AND is_semantic_type(semantic_type_code(semantic_type), 'CALL')
+  AND name_strategy = 'none'
+ORDER BY language, node_type;
 ----
-bash
+bash	command_substitution
+bash	process_substitution
+c	offsetof_expression
+cpp	delete
+cpp	new
+hcl	template_interpolation
+javascript	new
+typescript	instantiation_expression
+typescript	new

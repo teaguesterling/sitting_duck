@@ -86,10 +86,10 @@ DEF_TYPE("annotated_lambda", DEFINITION_FUNCTION | SemanticRefinements::Function
 DEF_TYPE("lambda_literal", DEFINITION_FUNCTION | SemanticRefinements::Function::LAMBDA, NONE, ARROW_FUNCTION, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Primary constructor - in class header
-DEF_TYPE("primary_constructor", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NONE, NONE, ASTNodeFlags::IS_SCOPE)
+DEF_TYPE("primary_constructor", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NONE, CONSTRUCTOR_DEFINITION, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Secondary constructor - `constructor(params) { }`
-DEF_TYPE("secondary_constructor", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NONE, NONE, ASTNodeFlags::IS_SCOPE)
+DEF_TYPE("secondary_constructor", DEFINITION_FUNCTION | SemanticRefinements::Function::CONSTRUCTOR, NONE, CONSTRUCTOR_DEFINITION, ASTNodeFlags::IS_SCOPE)
 
 /// @brief Constructor invocation - `ClassName(args)`
 DEF_TYPE("constructor_invocation", COMPUTATION_CALL | SemanticRefinements::Call::CONSTRUCTOR, FIND_CALL_TARGET, FUNCTION_CALL, 0)

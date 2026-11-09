@@ -74,12 +74,13 @@ Go distinguishes between: - `function_declaration`: Package-level functions - `m
 
 Struct and interface definitions
 
-Go uses composition over inheritance: - `struct_type`: Product types with fields (REGULAR refinement) - `interface_type`: Abstract types defining method sets (ABSTRACT refinement) Types are typically defined with `type Name struct/interface { ... }`. The `type_declaration` and `type_spec` wrap the actual type definition.
+Go uses composition over inheritance: - `struct_type`: Product types with fields (REGULAR refinement) - `interface_type`: Abstract types defining method sets (ABSTRACT refinement) Types are typically defined with `type Name struct/interface { ... }`. `type_spec` and `type_alias` carry the declared NAME and the class; the struct or interface body beside them is a constituent of that declaration.
 
 | Node Type | Semantic Type | Name Extraction | Description |
 |-----------|---------------|-----------------|-------------|
 | `type_declaration` | EXECUTION_DECLARATION | FIND_IDENTIFIER | Struct and interface definitions |
-| `type_spec` | EXECUTION_DECLARATION | FIND_IDENTIFIER |  |
+| `type_spec` | DEFINITION_CLASS | FIND_IDENTIFIER |  |
+| `type_alias` | DEFINITION_CLASS | FIND_IDENTIFIER |  |
 | `struct_type` | DEFINITION_CLASS \| Class::REGULAR | NONE |  |
 | `interface_type` | DEFINITION_CLASS \| Class::ABSTRACT | NONE |  |
 

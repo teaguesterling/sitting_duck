@@ -144,15 +144,27 @@ package_clause	m	1
 #
 #   line  21  key          #64's parameter hook   flag only   INVISIBLE
 #   line 112  key, value   #289's walk, above     flag only   INVISIBLE
-#   line 118  value        a real `assignment`    semantic    visible
 #
-# So three flag-definitions and one semantic-type definition. The assertion is
+# So three flag-definitions and NO semantic-type definition. The assertion is
 # the GAP between the two columns, not either number on its own -- a count of
 # flagged names alone would pass while the macro returned nothing.
 #
-# When #288 is fixed, `visible` rises to 4 and this expectation changes
-# deliberately. The fixture is sample_app.py, which 14 test files read, so a
-# change to it will also surface here.
+# CORRECTED (#273). This block previously expected `3|1` and attributed the 1
+# to "line 118 value, a real `assignment`". That was wrong, and it was pinning
+# a defect as if it were correct behaviour. Line 118 is:
+#
+#     result[key] = value
+#
+# The target is a `subscript`, so in Python this calls
+# result.__setitem__(key, value) and defines NOTHING. `value` is read there,
+# not defined. The old 1 came from #273: FIND_IDENTIFIER scanned past the
+# subscript target and returned the right-hand side, so the assignment claimed
+# to define `value`. #273's fix stops that scan, so `visible` is now 0 and the
+# second column measures what it says it measures.
+#
+# When #288 is fixed, `visible` rises to 3 -- the three flagged names, not 4.
+# The fixture is sample_app.py, which 14 test files read, so a change to it
+# will also surface here.
 # ---------------------------------------------------------------------------
 query II
 SELECT
@@ -161,4 +173,4 @@ SELECT
   (SELECT COUNT(*) FROM ast_definitions('test/data/python/sample_app.py')
      WHERE name IN ('key', 'value')) AS visible;
 ----
-3	1
+3	0
