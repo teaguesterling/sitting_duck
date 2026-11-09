@@ -1,4 +1,4 @@
-# Brief — ast_select performance: 18 s per call, and 5.5 s of it is ours
+# Brief — ast_select performance: 18 s per call, and 5.3 s of it is ours
 
 **Status: specced, re-measured 2026-11-09, not started.** The design already
 exists as `tracker/features/046-cpp-selector-engine.md`, with acceptance
@@ -130,15 +130,16 @@ built-in one. Three paired rounds, alternating in one session, held to ±0.3 s:
 | v1.5.6 | Sept | 0.657 / 0.561 s |
 | v2.0.0-dev85467 | Sept | 15.308 / 12.403 s |
 | v2.0.0-dev86072 | Sept | 12.577 / 11.822 s |
-| v2.0.0-dev88609 | Sept | ~12.8 s |
+| v2.0.0-dev88609 | Sept | 13.045 / 12.900 / 12.851 s |
 | v2.0.0-dev88609 | **Nov** | **18.230 s** |
 
 Two conclusions:
 
-- **The dev86072 → dev88609 DuckDB step is about zero.** The same macro costs
-  ~12.8 s on the newer build against 11.8–12.6 s on the older one. The "further
-  ~3×" in this brief's first version was agent mode plus macro growth.
-- **About 5.5 s of the 18.2 s is this project's own**, from 22% macro growth.
+- **The dev86072 → dev88609 DuckDB step is small: about +0.7 s.** Holding the
+  macro constant, it costs 13.045 / 12.900 / 12.851 s on the newer build against
+  11.822 / 12.577 s on the older one. The "further ~3×" in this brief's first
+  version was agent mode plus macro growth.
+- **About 5.3 s of the 18.2 s is this project's own**, from 22% macro growth.
   That is the cheapest available win, and it needs no C++.
 
 The real upstream gap is the older one: the v1.5.x → v2.0 jump, roughly 20×,
@@ -155,9 +156,9 @@ section above. What is left:
    it where it is cheap: vary the selector's complexity, then vary the file size
    and node count, with `-no-agent` throughout. A constant cost and a scaling
    cost call for different fixes. Note that the macro's own SIZE does scale the
-   cost — 22% more macro cost about 5.5 s — so "constant" can only mean constant
+   cost — 22% more macro cost about 5.3 s — so "constant" can only mean constant
    in the INPUT, not in the macro.
-2. **Try the cheap win first: shrink the statement.** About 5.5 s of the 18.2 s
+2. **Try the cheap win first: shrink the statement.** About 5.3 s of the 18.2 s
    came from the macro growing 22%. Find out what that growth was and whether
    any of it can be made lazy, shared, or moved out of the planned statement.
    This is the one fix that needs no C++ and no upstream help, and it should be
@@ -168,9 +169,8 @@ section above. What is left:
    rested on "42 s per call" is gone.
 
 Do NOT re-litigate whether this is a sitting_duck problem or a DuckDB problem.
-It is measurably both: ~12 s of the 18.2 s arrived with the v1.5.x → v2.0 jump
-and has not moved since September, and ~5.5 s is this project's own macro
-growth.
+It is measurably both: ~12.9 s of the 18.2 s arrived with the v1.5.x → v2.0
+jump, and ~5.3 s is this project's own macro growth.
 
 Read `tracker/features/046-cpp-selector-engine.md` before proposing anything —
 it has acceptance criteria and a risk list you should not have to invent.
@@ -184,7 +184,7 @@ From spec 046, which is itself careful about this:
 | v2.0-dev (September) | ~6 s — about 5.2 s planner, 0.9 s optimizer, 0.2 s execution | `tracker/features/042`, 2026-09-15, build `e3946f2327` |
 | shipped v1.5.x | ~0.3–0.5 s | `042` (v1.5.5); `048` and a 2026-10-08 re-measure (v1.5.6, 0.441–0.502 s) |
 | **v2.0-dev, Nov macro** | **18.230 s, of which 16.74 s is the planner** | this brief, 2026-11-09, `-no-agent`, build `7f9baef` / `v2.0.0-dev88609` |
-| **v2.0-dev, Sept macro** | **~12.8 s** | same binary, September macro read in to shadow the built-in one |
+| **v2.0-dev, Sept macro** | **13.045 / 12.900 / 12.851 s** | same binary, `-no-agent`, September macro read in to shadow the built-in one |
 | v1.5.6, Sept macro | 0.657 / 0.561 s | same checkout, 2026-11-09, `-no-agent` |
 
 **Every figure in this table that was measured before 2026-11-09 may be 2×
@@ -246,14 +246,14 @@ work.
 ## The first question to settle
 
 **Settled on 2026-11-09. It is both, in measured proportions.** Of the 18.2 s,
-about 12 s arrived with the v1.5.x → v2.0 jump and has not moved since
-September; about 5.5 s is this project's own macro growing 22%. The upstream
+about 12.9 s arrived with the v1.5.x → v2.0 jump and has moved only +0.7 s
+since September; about 5.3 s is this project's own macro growing 22%. The upstream
 part is filed as `duckdb/duckdb#26036`, which is open and labelled
 `reproduced` — so there is no fix on duckdb `main` to be behind.
 
 **The question now is which lever to pull first**, and this brief recommends the
 cheap one: shrink the planned statement. It needs no C++ and no upstream help,
-and it is worth ~5.5 s on today's numbers. Spec 046 remains worth doing for the
+and it is worth ~5.3 s on today's numbers. Spec 046 remains worth doing for the
 remaining ~12 s, and the ordering in `tracker/features/048` (call-graph join
 first) still stands.
 
