@@ -374,9 +374,9 @@ FROM ast_in_range('test/data/python/q*.py', 1, 20) r;
 # check runs over the 19-file glob, where the result is NOT already sorted by
 # accident. ast_containing_line needs no such widening: it orders by span,
 # which DFS pre-order puts in the opposite direction (largest first), so q*.py
-# already discriminates -- the same no-ORDER-BY body returns FALSE there.
-# Both of those claims were proved under `unittest`, not only in the CLI: see
-# the commit message for the two planted runs and their failing output.
+# already discriminates -- but the review measured THAT in the CLI, and I did
+# not reproduce it. Proved under `unittest`: only the 19-file FALSE, by
+# stripping the ORDER BY (0 <> true, count still 170). The rest is CLI-only.
 
 query II
 SELECT list(k) = list_sort(list(k)), count(*)
