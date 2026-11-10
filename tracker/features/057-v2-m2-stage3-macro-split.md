@@ -497,22 +497,35 @@ both files sit in `src/sql_macros/`, so a per-directory extraction keeps both
 whatever their sizes. Size and naming are free choices, and the name should
 follow the meaning.
 
-`tree_analysis.sql` takes 8 macros, and they are **not contiguous**. Measured
-line ranges in today's `tree_navigation.sql`:
+`tree_analysis.sql` takes 8 macros, and they are **not contiguous**.
+
+**CORRECTED 2026-11-10.** This table first gave each macro's span as its
+`CREATE` line to the line before the next `CREATE`. That is the wrong unit. Each
+macro's `-- <name>: <summary>` banner and its leading comment block sit **above**
+the `CREATE` line, and `scripts/embed_sql_macros.py` lifts the
+`duckdb_functions()` description from that banner. A move cut at the `CREATE`
+line therefore strips all 8 descriptions and turns
+`test/sql/bugs/issue_170_macro_descriptions.test:99-104` red, which asserts that
+no non-system table macro has an empty description. `ast_resolve_entity` is the
+clearest case: banner at line 105, `CREATE` at 107.
+
+The unit to move is banner-to-banner. Measured spans in today's
+`tree_navigation.sql`, each from the first line of the macro's comment block:
 
 | lines | macro | moves |
 |---|---|---|
-| 107-139 | `ast_resolve_entity` | yes |
-| 309-413 | `ast_function_metrics` | yes |
-| 414-491 | `ast_functions_containing` | yes |
-| 492-575 | `ast_nesting_analysis` | yes |
-| 576-696 | `ast_security_audit` | yes |
-| 744-856 | `ast_dead_code` | yes |
-| 857-934 | `ast_get_calls` | yes |
-| 935-950 | `ast_call_graph` | yes |
+| 89-133 | `ast_resolve_entity` | yes |
+| 298-405 | `ast_function_metrics` | yes |
+| 406-484 | `ast_functions_containing` | yes |
+| 485-569 | `ast_nesting_analysis` | yes |
+| 570-688 | `ast_security_audit` | yes |
+| 736-842 | `ast_dead_code` | yes |
+| 843-927 | `ast_get_calls` | yes |
+| 928-950 | `ast_call_graph` | yes |
 
-So the extraction is 3 discontiguous blocks, not a tail. The 11 core macros
-keep lines 15-106, 140-308 and 697-743. The one internal edge,
+So the extraction is 3 discontiguous blocks, not a tail: **89-133, 298-688 and
+736-950**. The 11 core macros keep lines **1-88, 134-297 and 689-735**, the
+first block including the file header. The file is 949 lines by `wc -l`. The one internal edge,
 `ast_call_graph` to `ast_get_calls`, falls inside the moved set, so no
 cross-file edge is created.
 

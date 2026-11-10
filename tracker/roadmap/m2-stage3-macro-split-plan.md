@@ -77,7 +77,16 @@ Five input classes the spec implies and no task above would otherwise exercise. 
 - Consumes: nothing.
 - Produces: `src/sql_macros/tree_analysis.sql` holding exactly 8 macros: `ast_resolve_entity`, `ast_function_metrics`, `ast_functions_containing`, `ast_nesting_analysis`, `ast_security_audit`, `ast_dead_code`, `ast_get_calls`, `ast_call_graph`. `tree_navigation.sql` keeps 11: `ast_children`, `ast_call_arguments`, `ast_definitions`, `ast_descendants`, `ast_ancestors`, `ast_siblings`, `ast_containing_line`, `ast_in_range`, `ast_function_scope`, `ast_class_members`, `ast_definition_parent`.
 
-The 8 moving macros occupy these line ranges in today's file, which are not contiguous: 107-139, 309-413, 414-491, 492-575, 576-696, 744-856, 857-934, 935-950.
+The 8 moving macros occupy these line ranges in today's file, which are not
+contiguous: 89-133, 298-405, 406-484, 485-569, 570-688, 736-842, 843-927,
+928-950 — collapsing to the 3 blocks 89-133, 298-688 and 736-950. The 11 core
+macros keep 1-88, 134-297 and 689-735.
+
+**Each span starts at the first line of the macro's comment block, not at its
+`CREATE` line.** The `-- <name>: <summary>` banner sits above the `CREATE`, and
+the generator lifts the description from it, so a cut at the `CREATE` line
+silently strips all 8 descriptions. (This plan first gave `CREATE`-to-`CREATE`
+ranges; corrected 2026-11-10 after Task 1's implementer caught it.)
 
 - [ ] **Step 1: Capture the oracle from the current build**
 
