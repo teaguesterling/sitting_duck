@@ -381,7 +381,13 @@ Expected: FAIL — the script does not exist.
 
 Read the manifest for file-to-side tags. Parse `CREATE [OR REPLACE] [TEMP] MACRO <name>(` to find definitions and their bodies, after stripping comments and `'...'` literals, handling the `''` escape. Build macro-to-macro edges, take the transitive closure, and report every edge whose source file is `core` and whose target's owner is `addon`.
 
-Measured expectation on today's tree: 96 macros, 27 macro-to-macro edges, 0 violations.
+Measured expectation on today's tree: 96 macros, **60** distinct caller-to-callee
+edges, of which 27 macros are callers, and 0 violations — direct and transitive.
+
+**CORRECTED 2026-11-10.** This line first said "27 macro-to-macro edges". 27 is
+the number of macros that call at least one other macro, not the number of
+edges. Recounted independently from scratch: 96 / 60 / 27 / 0. Print both
+numbers, so the label can never drift from the quantity again.
 
 - [ ] **Step 4: Run the gate test to verify it passes**
 
@@ -391,7 +397,8 @@ Expected: PASS, all four cases.
 - [ ] **Step 5: Run the gate against the real tree**
 
 Run: `python3 -I scripts/verify_macro_boundary.py`
-Expected: exit 0, and a summary line reporting 96 macros and 27 edges. If the macro count is not 96, the parser is wrong.
+Expected: exit 0, and a summary line reporting 96 macros, 60 edges and 27
+callers. If the macro count is not 96, the parser is wrong.
 
 - [ ] **Step 6: Add the CI job**
 

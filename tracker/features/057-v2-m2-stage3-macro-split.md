@@ -109,7 +109,10 @@ exactly, so no macro silently fails to register today.
 
 ### 3.2 The call graph
 
-27 macro-to-macro edges. `semantic_predicates.sql` is the hub: five files depend
+60 distinct macro-to-macro edges, contributed by 27 calling macros. (This
+section first reported "27 macro-to-macro edges", which labelled the caller
+count as the edge count; recounted independently 2026-11-10 as 60 edges from 27
+callers.) `semantic_predicates.sql` is the hub: five files depend
 on it, and it depends on nothing. Edges run from add-on to core, never the
 reverse. **Zero core-to-add-on edges, with transitive closure included.**
 
