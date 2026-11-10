@@ -91,8 +91,11 @@ def strip_comments_and_strings(sql):
 
 
 def parse_macros(sql_dir, manifest):
-    """Return ({macro: owning file}, {macro: body text}); raise on a name defined twice."""
-    owner, body = {}, {}
+    """Return ({macro: owning file}, {macro: body text}, [files with no definitions]).
+
+    Raises on a name defined twice.
+    """
+    owner, body, empty = {}, {}, []
     for entry in manifest:
         fname = entry['file']
         path = Path(sql_dir) / fname
@@ -100,6 +103,8 @@ def parse_macros(sql_dir, manifest):
             raise FileNotFoundError(f"manifest entry {fname} has no file at {path}")
         text = strip_comments_and_strings(path.read_text(encoding='utf-8'))
         defs = list(DEF_RE.finditer(text))
+        if not defs:
+            empty.append(fname)
         for k, m in enumerate(defs):
             name = m.group(1)
             if name in owner:
@@ -107,7 +112,7 @@ def parse_macros(sql_dir, manifest):
                                  "the owner is ambiguous, so the boundary cannot be judged")
             end = defs[k + 1].start() if k + 1 < len(defs) else len(text)
             owner[name], body[name] = fname, text[m.end():end]
-    return owner, body
+    return owner, body, empty
 
 
 def build_edges(owner, body):
@@ -159,7 +164,7 @@ def main(argv=None):
         if unlisted:
             raise ValueError(f"{sorted(unlisted)} are in {sql_dir} but not in the manifest, "
                              "so the gate would never check them")
-        owner, body = parse_macros(sql_dir, manifest)
+        owner, body, empty = parse_macros(sql_dir, manifest)
     except (OSError, ValueError) as e:
         print(f"verify_macro_boundary: FAIL: {e}", file=sys.stderr)
         return 1
@@ -168,6 +173,14 @@ def main(argv=None):
     if not owner:
         print("verify_macro_boundary: FAIL: found no macro definitions; "
               "the pattern is wrong, not the code", file=sys.stderr)
+        return 1
+    # Per file, not only in total: an unbalanced quote swallows the rest of one
+    # file and its macros vanish while the other files keep the total above
+    # zero. Every manifest file defines at least one macro today.
+    if empty:
+        print(f"verify_macro_boundary: FAIL: found no macro definitions in {empty}; the "
+              "pattern (or an unbalanced quote or comment) is wrong, not the code",
+              file=sys.stderr)
         return 1
     edges = build_edges(owner, body)
     n_edges = sum(len(v) for v in edges.values())

@@ -19,8 +19,9 @@ from pathlib import Path
 GATE = Path(__file__).resolve().parent / "verify_macro_boundary.py"
 
 
-def run_gate(files, sides):
-    """files: {name: sql}; sides: {name: 'core'|'addon'}. Returns (exit, stdout+stderr)."""
+def run_gate(files, sides, unlisted=None):
+    """files: {name: sql}; sides: {name: 'core'|'addon'};
+    unlisted: {name: sql} written to disk but left out of the manifest. Returns (exit, stdout+stderr)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "spec" / "layout").mkdir(parents=True)
@@ -28,6 +29,8 @@ def run_gate(files, sides):
         manifest = "".join(f"  - {{file: {n}, side: {sides[n]}}}\n" for n in files)
         (root / "spec" / "layout" / "layout.yaml").write_text("sql_macros:\n" + manifest)
         for name, sql in files.items():
+            (root / "src" / "sql_macros" / name).write_text(sql)
+        for name, sql in (unlisted or {}).items():
             (root / "src" / "sql_macros" / name).write_text(sql)
         p = subprocess.run([sys.executable, "-I", str(GATE), "--root", str(root)],
                            capture_output=True, text=True)
@@ -83,10 +86,46 @@ def test_comments_and_strings_are_not_references():
     assert code == 0, f"prose was read as a call, exit {code}: {out}"
 
 
+def test_zero_edges_exits_1():
+    # Macros parse, but no call is ever found: the call pattern is suspect.
+    code, out = run_gate(
+        {"c.sql": "CREATE OR REPLACE MACRO core_a(x) AS x;\n"
+                  "CREATE OR REPLACE MACRO core_b(x) AS x + 1;\n"},
+        {"c.sql": "core"})
+    assert code == 1, f"zero-edge tree exited {code}: {out}"
+    assert "no macro-to-macro edges" in out, out
+
+
+def test_unlisted_sql_file_exits_1_naming_it():
+    code, out = run_gate(
+        {"c.sql": "CREATE OR REPLACE MACRO core_a(x) AS x;\n"
+                  "CREATE OR REPLACE MACRO core_b(x) AS core_a(x);\n"},
+        {"c.sql": "core"},
+        unlisted={"stray.sql": "CREATE OR REPLACE MACRO addon_a(x) AS x;\n"})
+    assert code == 1, f"unlisted file exited {code}: {out}"
+    assert "stray.sql" in out and "not in the manifest" in out, out
+
+
+def test_file_yielding_zero_macros_exits_1_naming_it():
+    # An unterminated quote swallows the rest of broken.sql, so its macro is
+    # never seen. The tree as a whole still has macros and edges, so only a
+    # per-file check can catch this.
+    code, out = run_gate(
+        {"ok.sql": "CREATE OR REPLACE MACRO core_a(x) AS x;\n"
+                   "CREATE OR REPLACE MACRO core_b(x) AS core_a(x);\n",
+         "broken.sql": "-- it's fine here\nSELECT 'oops;\n"
+                       "CREATE OR REPLACE MACRO core_c(x) AS core_a(x);\n"},
+        {"ok.sql": "core", "broken.sql": "core"})
+    assert code == 1, f"per-file vacuity exited {code}: {out}"
+    assert "broken.sql" in out and "no macro definitions" in out, out
+
+
 def main():
     cases = [test_clean_tree_exits_0, test_direct_core_to_addon_exits_1_naming_both,
              test_transitive_core_to_core_to_addon_exits_1, test_zero_macros_found_exits_1,
-             test_comments_and_strings_are_not_references]
+             test_comments_and_strings_are_not_references,
+             test_zero_edges_exits_1, test_unlisted_sql_file_exits_1_naming_it,
+             test_file_yielding_zero_macros_exits_1_naming_it]
     failed = 0
     for case in cases:
         try:

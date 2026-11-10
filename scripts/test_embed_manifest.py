@@ -109,21 +109,21 @@ def test_rejects_empty_manifest():
 def test_rejects_duplicate_file():
     _assert_rejected(
         "sql_macros:\n  - {file: a.sql, side: core}\n  - {file: a.sql, side: addon}\n",
-        "a.sql", "1")
+        "a.sql", "sql_macros[1]")
 
 
 def test_rejects_entry_without_file():
     _assert_rejected("sql_macros:\n  - {file: a.sql, side: core}\n  - {side: core}\n",
-                     "file", "1")
+                     "file", "sql_macros[1]")
 
 
 def test_rejects_bad_side():
     # A typo here would make the boundary gate silently skip the file.
-    _assert_rejected("sql_macros:\n  - {file: a.sql, side: adon}\n", "adon", "0")
+    _assert_rejected("sql_macros:\n  - {file: a.sql, side: adon}\n", "adon", "sql_macros[0]")
 
 
 def test_rejects_missing_side():
-    _assert_rejected("sql_macros:\n  - {file: a.sql}\n", "side", "0")
+    _assert_rejected("sql_macros:\n  - {file: a.sql}\n", "side", "sql_macros[0]")
 
 
 def test_accepts_valid_manifest():
