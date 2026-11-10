@@ -53,7 +53,11 @@
 # digest cannot see a COLUMN CHANGE: planting `SELECT a.* EXCLUDE (peek)` in
 # ast_has_from left the row count and every node_id untouched, and 51 of 52
 # assertions green. Casting the row alias to VARCHAR prints every column NAME
-# and value, so a dropped, added, renamed or retyped column moves the digest.
+# and value, so a dropped, added or renamed column moves the digest. It does
+# NOT see every retype: MEASURED, `{'x': 5::INTEGER}::VARCHAR =
+# {'x': 5::BIGINT}::VARCHAR` is true, because both render `{'x': 5}`. A widened
+# or narrowed numeric type is therefore invisible here; a retype that changes
+# the rendered text (to VARCHAR, to a struct, to a list) is not.
 # (to_json() would do the same, but it needs the json extension, which this
 # harness does not load -- and a `require json` that went unmet would skip this
 # whole file silently, turning a failure into a vacuous pass.) The cast's exact
@@ -359,6 +363,20 @@ FROM ast_in_range('test/data/python/q*.py', 1, 20) r;
 # inner ORDER BY. Measured true on the twins pre-change, so a loss here is a
 # regression, not a discovery. list_sort is a total order, so this compares the
 # emitted sequence against the sorted one rather than pinning an emission order.
+#
+# THE TWO CHECKS USE DIFFERENT FIXTURES, AND THE SECOND ONE HAS TO.
+# ast_definitions is ordered by (file_path, start_line) -- which is also the
+# order read_ast emits rows in: files in sorted order, and DFS pre-order makes
+# start_line non-decreasing within a file. MEASURED on a body with NO ORDER BY
+# at all: over test/data/python/q*.py (2 files, 25 rows) this check returns
+# TRUE, so on that fixture it cannot fail and is a snapshot, not a test; over
+# test/data/python/*.py (19 files, 170 rows) it returns FALSE. So the second
+# check runs over the 19-file glob, where the result is NOT already sorted by
+# accident. ast_containing_line needs no such widening: it orders by span,
+# which DFS pre-order puts in the opposite direction (largest first), so q*.py
+# already discriminates -- the same no-ORDER-BY body returns FALSE there.
+# Both of those claims were proved under `unittest`, not only in the CLI: see
+# the commit message for the two planted runs and their failing output.
 
 query II
 SELECT list(k) = list_sort(list(k)), count(*)
@@ -368,9 +386,9 @@ true	7
 
 query II
 SELECT list(k) = list_sort(list(k)), count(*)
-FROM (SELECT {'f': file_path, 's': start_line} AS k FROM ast_definitions('test/data/python/q*.py'));
+FROM (SELECT {'f': file_path, 's': start_line} AS k FROM ast_definitions('test/data/python/*.py'));
 ----
-true	25
+true	170
 
 # =============================================================================
 # 7. A table whose required columns are present but NULL
@@ -482,6 +500,13 @@ FROM ast_in_range_from('tq_nullpar', 1, 20) r;
 # answer is pinned here so it cannot become a silent surprise, and the row
 # counts of the source tables are pinned beside it so the 0 can only come from
 # the predicate and never from an empty input.
+#
+# THE POSITIVE CONTROL FOR THESE THREE ZEROS IS SECTION 5, NAMED HERE because
+# it sits ~250 lines above. Section 5 makes the SAME three calls with the SAME
+# arguments over the SAME q*.py fixture, without the NULL, and pins 7, 148 and
+# 25 rows. So a zero below is a finding about the NULL and not a broken query.
+# The 286 counts on this line alone would not establish that: they prove the
+# INPUT is non-empty, not that the query returns rows on clean input.
 
 statement ok
 CREATE TABLE tq_nullline AS SELECT * REPLACE (NULL::UINTEGER AS start_line) FROM read_ast('test/data/python/q*.py');

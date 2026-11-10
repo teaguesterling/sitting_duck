@@ -320,8 +320,11 @@ read_ast needs at least one file to read
 #   count and no node_id. It does not fail the EXCEPT ALL pairs either, because
 #   the wrapper delegates and therefore loses the same column on both sides. The
 #   digests below cover every column: casting the row alias to VARCHAR prints
-#   every column NAME and value, so a dropped, added, renamed or retyped
-#   column moves the digest. (to_json() would do the same, but it needs the
+#   every column NAME and value, so a dropped, added or renamed column moves
+#   the digest. It does NOT see every retype -- MEASURED,
+#   `{'x': 5::INTEGER}::VARCHAR = {'x': 5::BIGINT}::VARCHAR` is true, because
+#   both render `{'x': 5}`, so a widened or narrowed numeric type is invisible
+#   here. A retype that changes the rendered text is not. (to_json() would do the same, but it needs the
 #   json extension, which this harness does not load -- and a `require json`
 #   that went unmet would skip this whole file silently.) The cast's exact
 #   text is DuckDB's struct representation, so a change to THAT also moves
