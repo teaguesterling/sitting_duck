@@ -10,6 +10,14 @@ import re
 import sys
 from pathlib import Path
 
+try:
+    import yaml
+except ImportError:
+    # No fallback list: a second source of registration order that can disagree
+    # with spec/layout/layout.yaml is the defect the manifest removes.
+    sys.exit("embed_sql_macros.py needs PyYAML to read spec/layout/layout.yaml: "
+             "pip install pyyaml")
+
 # MSVC has a 16380 byte limit per string literal - use 14000 to be safe
 MAX_CHUNK_SIZE = 14000
 
@@ -170,25 +178,37 @@ def extract_macro_docs(sql_dir, sql_files):
     return [(n, docs[n][0], docs[n][1]) for n in order]
 
 
-def generate_header(sql_dir, output_file):
-    """Generate C++ header with embedded SQL macros."""
+def load_manifest(layout_path):
+    """Return the macro file names in registration order from layout.yaml.
 
-    sql_files = [
-        'semantic_predicates.sql',
-        'file_utilities.sql',
-        'tree_navigation.sql',
-        'tree_analysis.sql',
-        'pattern_matching.sql',
-        'relational_operators.sql',
-        'parse_ast_list_table.sql',
-        'css_selectors.sql',
-        'selector_for.sql',
-        'ast_select_rules.sql',
-        'scope_resolution.sql',
-        'duck_blocks.sql',
-        'ast_patch.sql',
-        'ast_unparse.sql',
-    ]
+    `sql_macros` is the only authority for that order; see the comment block
+    above it in the spec.
+    """
+    with open(layout_path, 'r', encoding='utf-8') as f:
+        layout = yaml.safe_load(f)
+    if not isinstance(layout, dict) or 'sql_macros' not in layout:
+        raise ValueError(f"{layout_path} has no `sql_macros` key")
+    return [entry['file'] for entry in layout['sql_macros']]
+
+
+def _require_macro_file(sql_dir, sql_file):
+    """Return the path of a manifest entry, or raise naming the missing file.
+
+    This used to be `if os.path.exists(...)`, which dropped a missing file
+    without a word and left the extension without its macros.
+    """
+    filepath = os.path.join(sql_dir, sql_file)
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(
+            f"manifest entry {sql_file} has no file at {filepath}")
+    return filepath
+
+
+def generate_header(sql_dir, output_file, sql_files):
+    """Generate C++ header with embedded SQL macros.
+
+    `sql_files` is the manifest order, from load_manifest().
+    """
 
     header_content = """// Auto-generated file - DO NOT EDIT
 // Generated from SQL macro files in src/sql_macros/
@@ -208,31 +228,30 @@ static const std::vector<std::pair<std::string, std::string>> EMBEDDED_SQL_MACRO
 """
 
     for sql_file in sql_files:
-        filepath = os.path.join(sql_dir, sql_file)
-        if os.path.exists(filepath):
-            with open(filepath, 'r', encoding='utf-8') as f:
-                content = f.read()
+        filepath = _require_macro_file(sql_dir, sql_file)
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
 
-            # Verify content doesn't break our delimiter
-            escape_raw_string_delimiter(content)
+        # Verify content doesn't break our delimiter
+        escape_raw_string_delimiter(content)
 
-            # Split into chunks for MSVC compatibility
-            chunks = split_content(content)
+        # Split into chunks for MSVC compatibility
+        chunks = split_content(content)
 
-            if len(chunks) == 1:
-                # Small file - use simple format
-                header_content += f'''    {{"{sql_file}", R"SQLMACRO(
+        if len(chunks) == 1:
+            # Small file - use simple format
+            header_content += f'''    {{"{sql_file}", R"SQLMACRO(
 {content}
 )SQLMACRO"}},
 '''
-            else:
-                # Large file - concatenate chunks
-                header_content += f'    {{"{sql_file}", '
-                for i, chunk in enumerate(chunks):
-                    if i > 0:
-                        header_content += '\n        '
-                    header_content += f'R"SQLMACRO(\n{chunk}\n)SQLMACRO"'
-                header_content += '},\n'
+        else:
+            # Large file - concatenate chunks
+            header_content += f'    {{"{sql_file}", '
+            for i, chunk in enumerate(chunks):
+                if i > 0:
+                    header_content += '\n        '
+                header_content += f'R"SQLMACRO(\n{chunk}\n)SQLMACRO"'
+            header_content += '},\n'
 
     header_content += """};
 
@@ -269,13 +288,12 @@ static const std::vector<EmbeddedMacroDoc> EMBEDDED_MACRO_DOCS = {
 
     # Print chunk info for debugging
     for sql_file in sql_files:
-        filepath = os.path.join(sql_dir, sql_file)
-        if os.path.exists(filepath):
-            with open(filepath, 'r', encoding='utf-8') as f:
-                content = f.read()
-            chunks = split_content(content)
-            if len(chunks) > 1:
-                print(f"  {sql_file}: {len(content)} bytes -> {len(chunks)} chunks")
+        filepath = _require_macro_file(sql_dir, sql_file)
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+        chunks = split_content(content)
+        if len(chunks) > 1:
+            print(f"  {sql_file}: {len(content)} bytes -> {len(chunks)} chunks")
 
 if __name__ == "__main__":
     # Get paths relative to script location
@@ -284,4 +302,6 @@ if __name__ == "__main__":
     sql_dir = project_root / "src" / "sql_macros"
     output_file = project_root / "src" / "include" / "embedded_sql_macros.hpp"
 
-    generate_header(sql_dir, output_file)
+    layout_path = project_root / "spec" / "layout" / "layout.yaml"
+
+    generate_header(sql_dir, output_file, load_manifest(layout_path))

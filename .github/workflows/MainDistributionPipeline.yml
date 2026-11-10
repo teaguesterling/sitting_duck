@@ -313,6 +313,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Ensure PyYAML is available
+        run: python3 -c "import yaml" || python3 -m pip install --break-system-packages pyyaml
       - name: Regenerate embedded_sql_macros.hpp from src/sql_macros/*.sql
         run: python3 scripts/embed_sql_macros.py
       - name: Verify committed header matches

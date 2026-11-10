@@ -85,6 +85,37 @@ registration_order:
   - dart
   - yaml
 
+# THE SQL MACRO MANIFEST.
+#
+# This list IS the registration order of src/sql_macros/*.sql, and
+# scripts/embed_sql_macros.py reads it to build the embedded header. It used to
+# be a hardcoded list inside that script.
+#
+# Order is load-bearing, not cosmetic: scalar macros bind their callees eagerly,
+# and five files call macros from semantic_predicates.sql, so it registers
+# first. Moving it down fails at load time, not at query time.
+#
+# `side` says which half of the M2 stage 3 split a file belongs to: `core` is
+# language-agnostic, `addon` is opinionated. A build that keeps only one side
+# FILTERS this list and keeps the relative order of what is left. It does not
+# re-sort, so a subset needs no ordering rule of its own -- the same precedent
+# as `registration_order` above. Nothing reads `side` yet.
+sql_macros:
+  - {file: semantic_predicates.sql, side: core}
+  - {file: file_utilities.sql, side: core}
+  - {file: tree_navigation.sql, side: core}
+  - {file: tree_analysis.sql, side: addon}
+  - {file: pattern_matching.sql, side: addon}
+  - {file: relational_operators.sql, side: core}
+  - {file: parse_ast_list_table.sql, side: core}
+  - {file: css_selectors.sql, side: addon}
+  - {file: selector_for.sql, side: addon}
+  - {file: ast_select_rules.sql, side: addon}
+  - {file: scope_resolution.sql, side: addon}
+  - {file: duck_blocks.sql, side: addon}
+  - {file: ast_patch.sql, side: addon}
+  - {file: ast_unparse.sql, side: core}
+
 # Languages whose files do not follow the `paths` templates. Every entry is a
 # measured irregularity, not a convenience.
 exceptions:
