@@ -182,7 +182,13 @@ git commit -m "refactor(057): split tree_analysis.sql out of tree_navigation.sql
 **Files:**
 - Modify: `spec/layout/layout.yaml` (new top-level key)
 - Modify: `scripts/embed_sql_macros.py` (read the manifest; fail loud on a missing file)
-- Test: `test/sql/macro_split_oracle.test` (extend)
+- Modify: `.github/workflows/MainDistributionPipeline.yml` (PyYAML for the header-sync job — see Step 4b)
+- Modify: `CMakeLists.txt` (surface the generator's stderr — see Step 4c)
+- Test: `scripts/test_embed_manifest.py`
+
+(The `test/sql/macro_split_oracle.test` entry that stood here was wrong: no step
+in this task extends that test, and this task moves none of its counts. Step 7
+only re-runs it.)
 
 **Interfaces:**
 - Consumes: Task 1's 14-file tree.
@@ -227,9 +233,55 @@ Add the 14 entries above, in that order, after the existing `registration_order`
 
 - [ ] **Step 4: Make the generator read the manifest, and fail loud**
 
-In `scripts/embed_sql_macros.py`, replace the hardcoded list at lines 176-190 with a read of `spec/layout/layout.yaml`'s `sql_macros` key.
+In `scripts/embed_sql_macros.py`, replace the hardcoded list with a read of
+`spec/layout/layout.yaml`'s `sql_macros` key. The list begins at **line 176**
+(`sql_files = [`) and now holds 14 entries, because Task 1 inserted
+`'tree_analysis.sql'` at line 180.
 
-**Also remove the silent skip.** Lines 211 and 272 wrap each file in `if os.path.exists(filepath)`, so a manifest naming a missing file is dropped without a word and the extension loses those macros quietly. Raise instead, naming the file.
+**Also remove the silent skip.** The two sites are now at **lines 212 and 273**
+(the brief's earlier 211/272 predate Task 1's insertion). Each wraps a file in
+`if os.path.exists(filepath)`, so a manifest naming a missing file is dropped
+without a word and the extension loses those macros quietly. Raise instead,
+naming the file.
+
+**Do not touch the `os.path.exists` at line 90.** It is a different, legitimate
+check and is not part of this task.
+
+If `import yaml` fails, exit non-zero with a message naming PyYAML. Do not fall
+back to a hardcoded list and do not carry on — a second code path that can
+disagree with the manifest is the defect this task removes.
+
+- [ ] **Step 4b: Give the header-sync CI job PyYAML**
+
+This is required, not optional. `scripts/embed_sql_macros.py` runs during the
+build (`CMakeLists.txt:252`) and, as of this step, imports `yaml`. MEASURED: the
+`embedded-header-sync` job at `.github/workflows/MainDistributionPipeline.yml:311`
+regenerates the header and verifies it, and it does **not** install PyYAML —
+only `module-abi-sync`, `layout-invariance` and `taxonomy-tables-sync` do, at
+lines 344, 388 and 405. Without this step that job fails on ImportError, and it
+is the one gate that would otherwise catch a stale header.
+
+Add the same step those three jobs use, verbatim:
+
+```yaml
+      - name: Ensure PyYAML is available
+        run: python3 -c "import yaml" || python3 -m pip install --break-system-packages pyyaml
+```
+
+- [ ] **Step 4c: Make a failed generator name its own cause**
+
+`CMakeLists.txt:251-259` runs the generator and, on failure, emits
+`message(WARNING "Failed to generate embedded SQL macros header")` while
+discarding the script's output. The committed header is a legitimate fallback,
+so the build is right not to stop — but after this task a missing PyYAML would
+produce a stale header and a warning that does not say why.
+
+Add `ERROR_VARIABLE` and `OUTPUT_VARIABLE` to the `execute_process` call and
+include the captured stderr in the warning text.
+
+**Do not change `WARNING` to `FATAL_ERROR`.** The header is checked in and the
+build correctly falls back to it; making this fatal would break every build on a
+machine without PyYAML, which is a worse regression than the one being fixed.
 
 - [ ] **Step 5: Run the generator test to verify it passes**
 
@@ -248,7 +300,9 @@ Build through blq, then run `test/sql/macro_split_oracle.test`. Expected: PASS, 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add spec/layout/layout.yaml scripts/embed_sql_macros.py scripts/test_embed_manifest.py
+git add spec/layout/layout.yaml scripts/embed_sql_macros.py \
+        scripts/test_embed_manifest.py CMakeLists.txt \
+        .github/workflows/MainDistributionPipeline.yml
 git commit -m "feat(057): the macro manifest in layout.yaml owns registration order (M2 stage 3)"
 ```
 
