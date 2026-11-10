@@ -3389,7 +3389,13 @@ CREATE OR REPLACE MACRO ast_select_from(
                         ELSE pseudo_arg_name END AS pseudo_arg_name,
                    pseudo_arg_plain,
                    has_arg_block,
-                   negated
+                   negated,
+                   -- Key for pc_hits below. Ordered over every column so it is the
+                   -- same wherever this CTE is planned; identical rows may swap ids,
+                   -- which is harmless because identical rows have identical hits.
+                   row_number() OVER (ORDER BY pseudo_name, pseudo_arg, pseudo_arg_class,
+                                               pseudo_arg_name, pseudo_arg_plain,
+                                               has_arg_block, negated) AS pc_id
             FROM pseudo_classes_raw
         ),
 
@@ -3577,15 +3583,15 @@ CREATE OR REPLACE MACRO ast_select_from(
             LIMIT 1
         ),
         name_arg_validation AS (
+
+)SQLMACRO"
+        R"SQLMACRO(
             SELECT CASE
                 WHEN EXISTS (SELECT 1 FROM name_arg_offender) THEN error(format(
                     'ast_select: :{}() takes a function NAME, for example :{}(execute). '
                     'The argument given is not a name. It would be ignored, and the '
                     'filter would then match every node with any call. Selector '
                     'arguments (#name, .class, .class#name) are not supported here. '
-
-)SQLMACRO"
-        R"SQLMACRO(
                     'To match regardless of name, write the pseudo-class bare, with '
                     'no parentheses.',
                     (SELECT name FROM name_arg_offender),
@@ -3809,15 +3815,15 @@ CREATE OR REPLACE MACRO ast_select_from(
                         -- is not a class, but [annotation*="x"] is a real filter.
                         WHEN (SELECT lower(cls) FROM unknown_semantic_class)
                              IN (SELECT name FROM known_attribute_names)
+
+)SQLMACRO"
+        R"SQLMACRO(
                             THEN format('There is an ATTRIBUTE filter of that name -- did you mean '
                                         '[{}*="..."]? A semantic class selects by node kind; an '
                                         'attribute filters by value.',
                                         (SELECT lower(cls) FROM unknown_semantic_class))
                         WHEN (SELECT hint FROM semantic_class_near_misses) IS NOT NULL
                             THEN format('Did you mean: {}? Full list: '
-
-)SQLMACRO"
-        R"SQLMACRO(
                                         'SELECT selector, resolves_to FROM ast_semantic_aliases().',
                                         (SELECT hint FROM semantic_class_near_misses))
                         ELSE 'Full list: SELECT selector, resolves_to FROM ast_semantic_aliases().'
@@ -4007,6 +4013,236 @@ CREATE OR REPLACE MACRO ast_select_from(
         ),
 
         -- =====================================================================
+        -- Pseudo-class hit sets: pc_hits(pc_id, file_path, node_id)
+        -- =====================================================================
+        -- Every node that satisfies each pseudo-class row, computed with
+        -- UNCORRELATED joins over `ast`. matched_raw probes this once per
+        -- (node, pseudo-class) with a single LEFT JOIN instead of evaluating a
+        -- correlated subquery in each CASE arm.
+        --
+        -- Why: on DuckDB 2.0 the planner cost of the correlated arms grew
+        -- superlinearly with their number -- ~12 of ~16 s per ast_select call,
+        -- whatever the selector (tracker/bugs/040, measured 2026-11-09). With them
+        -- decorrelated here the whole macro plans in ~2.5 s. Each branch below must keep the exact semantics of
+        -- the arm it replaced; the arm's old comment in matched_raw states them.
+        --
+        -- Each branch starts from `pseudo_classes pc WHERE pc.pseudo_name = ...`,
+        -- so a selector without that pseudo-class contributes no rows.
+
+        -- :in-scope rows, with the argument resolved to the kind of scope it names.
+        in_scope_pcs AS (
+            SELECT pc_id, pseudo_arg, pseudo_arg_name,
+                   CASE
+                       WHEN pseudo_arg = 'function'
+                            OR (pseudo_arg_class IS NOT NULL
+                                AND is_semantic_type(semantic_type_code('DEFINITION_FUNCTION'), UPPER(pseudo_arg_class)))
+                           THEN 'function'
+                       WHEN pseudo_arg = 'class'
+                            OR (pseudo_arg_class IS NOT NULL
+                                AND is_semantic_type(semantic_type_code('DEFINITION_CLASS'), UPPER(pseudo_arg_class)))
+                           THEN 'class'
+                       WHEN pseudo_arg = 'module'
+                            OR (pseudo_arg_class IS NOT NULL
+                                AND is_semantic_type(semantic_type_code('DEFINITION_MODULE'), UPPER(pseudo_arg_class)))
+                           THEN 'module'
+                       ELSE 'type'
+                   END AS kind
+            FROM pseudo_classes
+            WHERE pseudo_name = 'in-scope'
+        ),
+        -- #166 fallback: the scope.class struct is only populated under IS_SCOPE
+        -- nodes, and a semantic class need not be a scope provider. SQL's
+        -- create_table is DEFINITION_CLASS with is_scope = false, so the struct
+        -- path returned 0 rows silently while the bare-type form,
+        -- :in-scope(create_table), answered 4. The grammar rejects
+        -- :in-scope(create_table#customers), so .class#name is the only way to ask
+        -- by name. Reachable only where scope.class IS NULL, so no language with
+        -- real scope providers changes behaviour.
+        --
+
+)SQLMACRO"
+        R"SQLMACRO(
+        -- For those nodes, find the NEAREST enclosing class definition, matching
+        -- the struct path: a node inside a class nested in another class is in
+        -- scope of the INNER one only. In DFS order the containing class with the
+        -- largest node_id is the nearest one. arg_max_null, not arg_max: plain
+        -- arg_max skips a NULL name, so an anonymous nearest class would fall
+        -- through to the next named one and :in-scope(.class#Outer) would match.
+        in_scope_class_anc AS (
+            SELECT p.pc_id, n.file_path, n.node_id,
+                   arg_max_null(anc.name, anc.node_id) AS nearest_name
+            FROM in_scope_pcs p
+            JOIN ast n ON p.kind = 'class' AND n.scope.class IS NULL
+            JOIN ast anc ON anc.file_path = n.file_path
+                        AND n.node_id > anc.node_id
+                        AND n.node_id <= anc.node_id + anc.descendant_count
+                        AND is_class_definition(anc.semantic_type)
+            GROUP BY p.pc_id, n.file_path, n.node_id
+        ),
+        -- :match / :contains: nodes where the parsed pattern starts, i.e. the
+        -- pattern's node types (and names, unless ___) agree at every offset.
+        -- Empty when the selector has no pattern, because pat_type is then NULL.
+        pattern_candidates AS (
+            SELECT t.file_path, t.node_id, t.descendant_count
+            FROM ast t
+            WHERE t.type = (SELECT pat_type FROM ast_pattern WHERE idx = 0)
+        ),
+        pattern_mismatches AS (
+            SELECT DISTINCT c.file_path, c.node_id
+            FROM pattern_candidates c
+            JOIN ast_pattern mp ON true
+            JOIN ast t2 ON t2.file_path = c.file_path AND t2.node_id = c.node_id + mp.idx
+            WHERE t2.type != mp.pat_type
+               OR (mp.pat_name IS NOT NULL AND mp.pat_name != ''
+                   AND mp.pat_name != '___' AND t2.name != mp.pat_name)
+        ),
+        pattern_roots AS (
+            SELECT c.file_path, c.node_id, c.descendant_count
+            FROM pattern_candidates c
+            LEFT JOIN pattern_mismatches m ON m.file_path = c.file_path AND m.node_id = c.node_id
+            WHERE m.node_id IS NULL
+        ),
+        pc_hits AS (
+            -- :last-child -- no later sibling under the same parent. A node with
+            -- no parent has no siblings, so it is always a last child.
+            SELECT pc.pc_id, n.file_path, n.node_id
+            FROM pseudo_classes pc
+            JOIN (
+                SELECT file_path, node_id, parent_id, sibling_index,
+                       max(sibling_index) OVER (PARTITION BY file_path, parent_id) AS last_index
+                FROM ast
+            ) n ON n.parent_id IS NULL OR n.sibling_index = n.last_index
+            WHERE pc.pseudo_name = 'last-child'
+
+            UNION ALL
+            -- :calls(name) -- the function whose body DIRECTLY holds the call.
+            SELECT pc.pc_id, callee.file_path, callee.scope.function AS node_id
+            FROM pseudo_classes pc
+            JOIN ast callee ON callee.semantic_type = 'COMPUTATION_CALL'
+                           AND (pc.pseudo_arg IS NULL OR callee.name = pc.pseudo_arg)
+            WHERE pc.pseudo_name = 'calls'
+              AND callee.scope.function IS NOT NULL
+
+            UNION ALL
+            -- :called-by(name) -- the node's IMMEDIATE enclosing function matches.
+            SELECT pc.pc_id, n.file_path, n.node_id
+            FROM pseudo_classes pc
+            JOIN ast caller_fn ON pc.pseudo_arg IS NULL OR caller_fn.name = pc.pseudo_arg
+            JOIN ast n ON n.file_path = caller_fn.file_path
+                      AND n.scope.function = caller_fn.node_id
+            WHERE pc.pseudo_name = 'called-by'
+
+            UNION ALL
+            -- :is-called -- a named definition that some other call node names.
+            SELECT DISTINCT pc.pc_id, def.file_path, def.node_id
+            FROM pseudo_classes pc
+            JOIN ast def ON is_name_definition(def.flags) AND def.name IS NOT NULL AND def.name != ''
+            JOIN ast ref ON ref.file_path = def.file_path
+                        AND ref.semantic_type = 'COMPUTATION_CALL'
+                        AND ref.name = def.name
+                        AND ref.node_id != def.node_id
+            WHERE pc.pseudo_name = 'is-called'
+
+            UNION ALL
+            -- :is-referenced -- a named definition referenced from OUTSIDE its own
+            -- subtree.
+            -- #147: a reference from INSIDE this definition's own subtree does not
+            -- count. The definition's own name is a separate node, a DIRECT CHILD of
+            -- the definition, and it carries NAME_REFERENCE -- so without this every
+            -- named definition referenced itself and :not(:is-referenced), the
+            -- documented dead-code query, was always empty.
+            -- This also excludes a recursive self-call, by Teague's ruling of
+            -- 2026-11-05: dead-code detection is the documented purpose, and a
+            -- function called only by itself is dead. ast_dead_code() answers a
+            -- different question and still counts self-calls.
+            -- A range, not a parent_id test, because it does not depend on WHICH
+            -- node carries the definition flag -- container and declarator both
+            -- carry NAME_DEFINITION while #276 is open.
+            SELECT DISTINCT pc.pc_id, def.file_path, def.node_id
+            FROM pseudo_classes pc
+            JOIN ast def ON is_name_definition(def.flags) AND def.name IS NOT NULL AND def.name != ''
+            JOIN ast ref ON ref.file_path = def.file_path
+                        AND is_name_reference(ref.flags)
+                        AND ref.name = def.name
+                        AND ref.node_id != def.node_id
+                        AND NOT (ref.node_id > def.node_id
+                                 AND ref.node_id <= def.node_id + def.descendant_count)
+            WHERE pc.pseudo_name = 'is-referenced'
+
+            UNION ALL
+            -- :match("code") -- the node IS a pattern root and holds the whole pattern.
+            SELECT pc.pc_id, r.file_path, r.node_id
+            FROM pseudo_classes pc
+            JOIN pattern_roots r ON (SELECT len FROM ast_pattern_len) - 1 <= r.descendant_count
+            WHERE pc.pseudo_name = 'match'
+
+            UNION ALL
+            -- :contains("code") -- the node or a descendant is a pattern root, and the
+            -- whole pattern fits inside the node.
+            SELECT DISTINCT pc.pc_id, a.file_path, a.node_id
+            FROM pseudo_classes pc
+            JOIN pattern_roots r ON true
+            JOIN ast a ON a.file_path = r.file_path
+                      AND r.node_id >= a.node_id
+                      AND r.node_id <= a.node_id + a.descendant_count
+                      AND r.node_id + (SELECT len FROM ast_pattern_len) - 1
+                          <= a.node_id + a.descendant_count
+            WHERE pc.pseudo_name = 'contains'
+
+            UNION ALL
+            -- :in-scope(function / module / class-on-the-struct-path) -- the
+            -- precomputed scope struct, with an optional #name on that scope.
+            SELECT p.pc_id, n.file_path, n.node_id
+            FROM in_scope_pcs p
+            JOIN ast n ON (p.kind = 'function' AND n.scope.function IS NOT NULL)
+                       OR (p.kind = 'module' AND n.scope.module IS NOT NULL)
+                       OR (p.kind = 'class' AND n.scope.class IS NOT NULL)
+            LEFT JOIN ast s ON s.file_path = n.file_path
+                           AND s.node_id = CASE p.kind WHEN 'function' THEN n.scope.function
+                                                       WHEN 'module'   THEN n.scope.module
+                                                       ELSE n.scope.class END
+            WHERE p.pseudo_arg_name IS NULL OR s.name = p.pseudo_arg_name
+
+            UNION ALL
+            -- :in-scope(class) off the struct path: nearest enclosing class (#166).
+            SELECT c.pc_id, c.file_path, c.node_id
+            FROM in_scope_class_anc c
+            JOIN in_scope_pcs p ON p.pc_id = c.pc_id
+            WHERE p.pseudo_arg_name IS NULL OR c.nearest_name = p.pseudo_arg_name
+
+            UNION ALL
+            -- :in-scope(<tree-sitter type>) -- some enclosing ancestor has that exact
+            -- type. (The old arm's nested NOT EXISTS picked the nearest such
+            -- ancestor; it cannot change whether one exists.)
+            SELECT DISTINCT p.pc_id, n.file_path, n.node_id
+            FROM in_scope_pcs p
+            JOIN ast anc ON p.kind = 'type' AND anc.type = p.pseudo_arg
+            JOIN ast n ON n.file_path = anc.file_path
+                      AND n.node_id > anc.node_id
+                      AND n.node_id <= anc.node_id + anc.descendant_count
+
+            UNION ALL
+            -- :precedes(type) -- a LATER sibling has that type.
+            SELECT DISTINCT pc.pc_id, a.file_path, a.node_id
+            FROM pseudo_classes pc
+            JOIN ast sib ON sib.type = pc.pseudo_arg
+            JOIN ast a ON a.file_path = sib.file_path
+                      AND a.parent_id = sib.parent_id
+                      AND sib.sibling_index > a.sibling_index
+            WHERE pc.pseudo_name = 'precedes'
+
+            UNION ALL
+            -- :follows(type) -- an EARLIER sibling has that type.
+            SELECT DISTINCT pc.pc_id, a.file_path, a.node_id
+            FROM pseudo_classes pc
+            JOIN ast sib ON sib.type = pc.pseudo_arg
+            JOIN ast a ON a.file_path = sib.file_path
+                      AND a.parent_id = sib.parent_id
+                      AND sib.sibling_index < a.sibling_index
+            WHERE pc.pseudo_name = 'follows'
+        ),
+
+        -- =====================================================================
         -- Apply selector: single scan with CASE dispatch (no UNION ALL)
         -- =====================================================================
 
@@ -4063,9 +4299,6 @@ CREATE OR REPLACE MACRO ast_select_from(
         -- CTE that every matched_base branch cross-joins. This is deliberate:
         -- the guards must fire even when the branch's row filters match ZERO
         -- rows (the guarded situations — e.g. `.call#foo` over unnamed call
-
-)SQLMACRO"
-        R"SQLMACRO(
         -- nodes — produce exactly that empty base). A join build side is
         -- materialized regardless of probe cardinality, so error() here cannot
         -- be skipped; a filter in matched_raw's WHERE would never be evaluated
@@ -4079,6 +4312,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 (SELECT class_filter FROM simple_class) as class_filter,
                 (SELECT left_type FROM combinator_parts) as left_type,
                 (SELECT left_type || '_%' FROM combinator_parts) as left_type_like,
+
+)SQLMACRO"
+        R"SQLMACRO(
                 (SELECT right_type FROM combinator_parts) as right_type,
                 (SELECT right_type || '_%' FROM combinator_parts) as right_type_like,
                 (SELECT left_class FROM combinator_parts) as left_class,
@@ -4327,9 +4563,6 @@ CREATE OR REPLACE MACRO ast_select_from(
 
             -- Native extraction: annotations string
             WHEN ac.attr_name = 'annotation' THEN
-
-)SQLMACRO"
-        R"SQLMACRO(
                 CASE ac.attr_op WHEN '*=' THEN a.annotations LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '^=' THEN a.annotations LIKE ac.attr_value_esc || '%' ESCAPE '\'
                                 WHEN '$=' THEN a.annotations LIKE '%' || ac.attr_value_esc ESCAPE '\'
@@ -4342,6 +4575,9 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- [qualified=F[main]] stay human-writable.
             WHEN ac.attr_name = 'qualified' THEN
                 CASE ac.attr_op
+
+)SQLMACRO"
+        R"SQLMACRO(
                     WHEN '*=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value_esc || '%' ESCAPE '\'
                     WHEN '^=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE ac.attr_value_esc || '%' ESCAPE '\'
                     WHEN '$=' THEN ast_qualified_name_as_string(a.qualified_name) LIKE '%' || ac.attr_value_esc ESCAPE '\'
@@ -4411,16 +4647,15 @@ CREATE OR REPLACE MACRO ast_select_from(
     -- matches nothing, :not(:async) matches the node.
     AND NOT EXISTS (
         SELECT 1 FROM pseudo_classes pc
+        -- The arms marked pc_hits read whether this node is in that
+        -- pseudo-class's precomputed hit set (pc_hits, above).
+        LEFT JOIN pc_hits h
+          ON h.pc_id = pc.pc_id AND h.file_path = a.file_path AND h.node_id = a.node_id
         WHERE pc.negated = COALESCE(CASE pc.pseudo_name
 
             -- Standard CSS positional pseudo-classes
             WHEN 'first-child' THEN a.sibling_index = 0
-            WHEN 'last-child' THEN NOT EXISTS (
-                SELECT 1 FROM ast sib
-                WHERE sib.parent_id = a.parent_id
-                  AND sib.file_path = a.file_path
-                  AND sib.sibling_index > a.sibling_index
-            )
+            WHEN 'last-child' THEN h.pc_id IS NOT NULL  -- pc_hits
             WHEN 'nth-child' THEN a.sibling_index = CAST(pc.pseudo_arg AS INTEGER) - 1
             WHEN 'empty' THEN a.children_count = 0
             WHEN 'root' THEN a.depth = 0
@@ -4466,13 +4701,7 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- or not purely according to how the language adapter fills `name`.
             -- Precise resolution is the cross-module resolver (043 Part C); until it
             -- exists, read this as an over-approximation by name.
-            WHEN 'calls' THEN EXISTS (
-                SELECT 1 FROM ast callee
-                WHERE callee.file_path = a.file_path
-                  AND callee.scope.function = a.node_id
-                  AND callee.semantic_type = 'COMPUTATION_CALL'
-                  AND (pc.pseudo_arg IS NULL OR callee.name = pc.pseudo_arg)
-            )
+            WHEN 'calls' THEN h.pc_id IS NOT NULL  -- pc_hits
 
             -- :called-by(name) — this node's IMMEDIATE enclosing function is named name.
             -- Direct/immediate (#152, Teague's ruling 2026-09-16): a call inside a lambda
@@ -4488,53 +4717,13 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- anonymous enclosing scope (a bare lambda) has no name, so a call inside
             -- one can never be :called-by(anything) even though it IS inside a function
             -- — use the bare zero-arg `:called-by` to mean "inside some function scope".
-            WHEN 'called-by' THEN
-                a.scope.function IS NOT NULL
-                AND EXISTS (
-                    SELECT 1 FROM ast caller_fn
-                    WHERE caller_fn.file_path = a.file_path
-                      AND caller_fn.node_id = a.scope.function
-                      AND (pc.pseudo_arg IS NULL OR caller_fn.name = pc.pseudo_arg)
-                )
+            WHEN 'called-by' THEN h.pc_id IS NOT NULL  -- pc_hits
 
             -- :is-called — this function definition is called somewhere in the file
-            WHEN 'is-called' THEN
-                is_name_definition(a.flags) AND a.name IS NOT NULL AND a.name != ''
-                AND EXISTS (
-                    SELECT 1 FROM ast ref
-                    WHERE ref.file_path = a.file_path
-                      AND ref.semantic_type = 'COMPUTATION_CALL'
-                      AND ref.name = a.name
-                      AND ref.node_id != a.node_id
-                )
+            WHEN 'is-called' THEN h.pc_id IS NOT NULL  -- pc_hits
 
             -- :is-referenced — this definition is referenced somewhere
-            WHEN 'is-referenced' THEN
-                is_name_definition(a.flags) AND a.name IS NOT NULL AND a.name != ''
-                AND EXISTS (
-                    SELECT 1 FROM ast ref
-                    WHERE ref.file_path = a.file_path
-                      AND is_name_reference(ref.flags)
-                      AND ref.name = a.name
-                      AND ref.node_id != a.node_id
-                      -- #147: a reference from INSIDE this definition's own subtree
-                      -- does not count. The definition's own name is a separate node,
-                      -- a DIRECT CHILD of the definition, and it carries
-                      -- NAME_REFERENCE -- so without this every named definition
-                      -- referenced itself and :not(:is-referenced), the documented
-                      -- dead-code query, was always empty.
-                      --
-                      -- This also excludes a recursive self-call, by Teague's ruling
-                      -- of 2026-11-05: dead-code detection is the documented purpose,
-                      -- and a function called only by itself is dead. ast_dead_code()
-                      -- answers a different question and still counts self-calls.
-                      --
-                      -- A range, not a parent_id test, because it does not depend on
-                      -- WHICH node carries the definition flag -- container and
-                      -- declarator both carry NAME_DEFINITION while #276 is open.
-                      AND NOT (ref.node_id > a.node_id
-                               AND ref.node_id <= a.node_id + a.descendant_count)
-                )
+            WHEN 'is-referenced' THEN h.pc_id IS NOT NULL  -- pc_hits
 
             -- :exported — publicly visible outside file/module (IS_EXPORTED flag)
             WHEN 'exported' THEN is_exported(a.flags)
@@ -4543,42 +4732,13 @@ CREATE OR REPLACE MACRO ast_select_from(
             -- Strict: target type must equal pattern root type. Use ___ wildcard
             -- for any name. Unlike :contains, this never iterates descendants —
             -- it's a direct check on node `a`.
-            WHEN 'match' THEN (SELECT len FROM ast_pattern_len) > 0
-                AND a.type = (SELECT pat_type FROM ast_pattern WHERE idx = 0)
-                AND (SELECT len FROM ast_pattern_len) - 1 <= a.descendant_count
-                AND NOT EXISTS (
-                    SELECT 1 FROM ast_pattern mp
-                    JOIN ast t2 ON t2.node_id = a.node_id + mp.idx
-                               AND t2.file_path = a.file_path
-                    WHERE t2.type != mp.pat_type
-                       OR (mp.pat_name IS NOT NULL AND mp.pat_name != ''
-
-)SQLMACRO"
-        R"SQLMACRO(
-                           AND mp.pat_name != '___' AND t2.name != mp.pat_name)
-                )
+            WHEN 'match' THEN h.pc_id IS NOT NULL  -- pc_hits
 
             -- :contains("code") — some descendant of the current node is the
             -- root of the parsed pattern. Equivalent to :has(:match(...)).
             -- Iterates descendants in the DFS node array and runs the same
             -- contiguity check as :match at each candidate root.
-            WHEN 'contains' THEN (SELECT len FROM ast_pattern_len) > 0 AND EXISTS (
-                SELECT 1 FROM ast t
-                WHERE t.file_path = a.file_path
-                  AND t.node_id >= a.node_id
-                  AND t.node_id <= a.node_id + a.descendant_count
-                  AND t.type = (SELECT pat_type FROM ast_pattern WHERE idx = 0)
-                  AND NOT EXISTS (
-                      SELECT 1 FROM ast_pattern mp
-                      JOIN ast t2 ON t2.node_id = t.node_id + mp.idx
-                                 AND t2.file_path = a.file_path
-                      WHERE t2.type != mp.pat_type
-                         OR (mp.pat_name IS NOT NULL AND mp.pat_name != ''
-                             AND mp.pat_name != '___' AND t2.name != mp.pat_name)
-                  )
-                  AND t.node_id + (SELECT len FROM ast_pattern_len) - 1
-                      <= a.node_id + a.descendant_count
-            )
+            WHEN 'contains' THEN h.pc_id IS NOT NULL  -- pc_hits
 
             -- :is-scope — the node IS a scope boundary (was :scope, retired in #184).
             -- the reference element itself, never its descendants. Containment
@@ -4627,6 +4787,9 @@ CREATE OR REPLACE MACRO ast_select_from(
                 )
                 AND (pc.pseudo_arg_name IS NULL OR a.name = pc.pseudo_arg_name)
 
+
+)SQLMACRO"
+        R"SQLMACRO(
             -- :in-scope — the node is CONTAINED WITHIN a scope (complement of
             -- :is-scope). function/class/module (and aliases) use the precomputed
             -- scope.* struct with an optional #name; a bare tree-sitter type walks
@@ -4634,103 +4797,13 @@ CREATE OR REPLACE MACRO ast_select_from(
             --   :in-scope(function)   inside any function scope
             --   :in-scope(.fn#foo)    inside the function named foo   (workhorse)
             --   :in-scope(<type>)     inside the nearest ancestor of that type
-            WHEN 'in-scope' THEN
-                CASE
-                    WHEN pc.pseudo_arg = 'function'
-                         OR (pc.pseudo_arg_class IS NOT NULL
-                             AND is_semantic_type(semantic_type_code('DEFINITION_FUNCTION'), UPPER(pc.pseudo_arg_class)))
-                        THEN a.scope.function IS NOT NULL
-                             AND (pc.pseudo_arg_name IS NULL OR EXISTS (
-                                 SELECT 1 FROM ast s WHERE s.file_path = a.file_path
-                                   AND s.node_id = a.scope.function AND s.name = pc.pseudo_arg_name))
-                    WHEN pc.pseudo_arg = 'class'
-                         OR (pc.pseudo_arg_class IS NOT NULL
-                             AND is_semantic_type(semantic_type_code('DEFINITION_CLASS'), UPPER(pc.pseudo_arg_class)))
-                        THEN CASE
-                            -- Struct fast path, for languages whose class containers
-                            -- are scope providers (IS_SCOPE). Nearest-enclosing by
-                            -- construction, because scope.class IS the nearest one.
-                            WHEN a.scope.class IS NOT NULL
-                                THEN (pc.pseudo_arg_name IS NULL OR EXISTS (
-                                    SELECT 1 FROM ast s WHERE s.file_path = a.file_path
-                                      AND s.node_id = a.scope.class AND s.name = pc.pseudo_arg_name))
-                            -- #166: the struct is only populated under IS_SCOPE nodes,
-                            -- and a semantic class need not be a scope provider. SQL's
-                            -- create_table is DEFINITION_CLASS with is_scope = false,
-                            -- so this arm used to return 0 rows silently while the
-                            -- bare-type form, :in-scope(create_table), answered 4.
-                            -- The grammar rejects :in-scope(create_table#customers),
-                            -- so .class#name was the only way to ask by name.
-                            --
-                            -- Fall back to the same ancestor walk the bare-type ELSE
-                            -- branch uses, restricted to semantic class definitions.
-                            -- Reachable only where scope.class IS NULL, so no language
-                            -- with real scope providers changes behaviour.
-                            --
-                            -- The inner NOT EXISTS keeps nearest-enclosing semantics,
-                            -- matching the struct path: a node inside a class nested in
-                            -- another class is in scope of the INNER one only.
-                            ELSE EXISTS (
-                                SELECT 1 FROM ast cls_anc
-                                WHERE cls_anc.file_path = a.file_path
-                                  AND a.node_id > cls_anc.node_id
-                                  AND a.node_id <= cls_anc.node_id + cls_anc.descendant_count
-                                  AND is_class_definition(cls_anc.semantic_type)
-                                  AND (pc.pseudo_arg_name IS NULL
-                                       OR cls_anc.name = pc.pseudo_arg_name)
-                                  AND NOT EXISTS (
-                                      SELECT 1 FROM ast nested
-                                      WHERE nested.file_path = a.file_path
-                                        AND nested.node_id > cls_anc.node_id
-                                        AND nested.node_id < a.node_id
-                                        AND a.node_id <= nested.node_id + nested.descendant_count
-                                        AND is_class_definition(nested.semantic_type)
-                                  )
-                            )
-                        END
-                    WHEN pc.pseudo_arg = 'module'
-                         OR (pc.pseudo_arg_class IS NOT NULL
-                             AND is_semantic_type(semantic_type_code('DEFINITION_MODULE'), UPPER(pc.pseudo_arg_class)))
-                        THEN a.scope.module IS NOT NULL
-                             AND (pc.pseudo_arg_name IS NULL OR EXISTS (
-                                 SELECT 1 FROM ast s WHERE s.file_path = a.file_path
-                                   AND s.node_id = a.scope.module AND s.name = pc.pseudo_arg_name))
-                    -- bare tree-sitter type: nearest enclosing ancestor of that exact
-                    -- type, excluding subtrees of a closer same-type ancestor
-                    ELSE EXISTS (
-                        SELECT 1 FROM ast scope_anc
-                        WHERE scope_anc.file_path = a.file_path
-                          AND a.node_id > scope_anc.node_id
-                          AND a.node_id <= scope_anc.node_id + scope_anc.descendant_count
-                          AND (scope_anc.type = pc.pseudo_arg)
-                          AND NOT EXISTS (
-                              SELECT 1 FROM ast nested
-                              WHERE nested.file_path = a.file_path
-                                AND nested.node_id > scope_anc.node_id
-                                AND nested.node_id < a.node_id
-                                AND a.node_id <= nested.node_id + nested.descendant_count
-                                AND (nested.type = pc.pseudo_arg)
-                          )
-                    )
-                END
+            WHEN 'in-scope' THEN h.pc_id IS NOT NULL  -- pc_hits
 
             -- :precedes(type) — this node comes before a sibling of the given type
-            WHEN 'precedes' THEN EXISTS (
-                SELECT 1 FROM ast after_sib
-                WHERE after_sib.file_path = a.file_path
-                  AND after_sib.parent_id = a.parent_id
-                  AND after_sib.sibling_index > a.sibling_index
-                  AND (after_sib.type = pc.pseudo_arg)
-            )
+            WHEN 'precedes' THEN h.pc_id IS NOT NULL  -- pc_hits
 
             -- :follows(type) — this node comes after a sibling of the given type
-            WHEN 'follows' THEN EXISTS (
-                SELECT 1 FROM ast before_sib
-                WHERE before_sib.file_path = a.file_path
-                  AND before_sib.parent_id = a.parent_id
-                  AND before_sib.sibling_index < a.sibling_index
-                  AND (before_sib.type = pc.pseudo_arg)
-            )
+            WHEN 'follows' THEN h.pc_id IS NOT NULL  -- pc_hits
 
             ELSE ast_dispatch_predicate(
                 format('ast_selector_predicate_{}', pc.pseudo_name),
@@ -4785,9 +4858,6 @@ CREATE OR REPLACE MACRO ast_select_from(
     -- functions contain a call expression spelled the same as this definition",
     -- which is an over-approximation of "which functions call this definition":
     -- two same-named definitions in one file collide, imports are not followed, and
-
-)SQLMACRO"
-        R"SQLMACRO(
     -- a method call `x.speak()` is attributed to every `speak` definition in that
     -- file. The join is bounded (seed-driven, equi-join on name then on
     -- scope.function) — the imprecision is semantic, not a scaling problem.

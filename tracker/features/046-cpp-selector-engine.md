@@ -1,6 +1,18 @@
 # 046 — C++ CSS selector engine
 
 **Status:** Not started. On the v2.0.0 list; no prior tracker entry (this is it).
+
+> **Re-judged 2026-11-09, after `perf/decorrelate-pseudo-classes`.** Most of the
+> v2.0 per-call cost was not "the macro" but ~12 s of planner time on the
+> correlated subqueries in one pseudo-class CASE; decorrelating them in SQL took a
+> call from ~17.3 s to ~2.3 s (`ast_select_from`, `simple.py`, `threads=1`) and
+> the 93k-node `:in-scope` case from minutes to ~3 s (`tracker/bugs/040`, last
+> section). So this spec is no longer "the only structural fix for #160". What is
+> left for it: ~2.3 s per call against a ~1.25 s floor for the rest of the macro
+> and ~0.2 s of execution, plus the engine-boundary argument below. Acceptance 1's
+> target (the execution floor on both lines) still stands; the urgency argument
+> built on the numbers in "Why" does not. The v1.5.x line in that table is no
+> longer built by CI or the registry.
 **Related:** #160 (planning cost), #89 (silent-empty, closed by the guard approach),
 upstream duckdb/duckdb#26036 (test-timeout symptom), 043 (diagnosis).
 
