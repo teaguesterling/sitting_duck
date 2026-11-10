@@ -21,6 +21,17 @@
 - Run builds and tests through blq, not Bash, and use no shell pipes or redirects in blq commands.
 - Change implementation **or** tests in a step, never both at once.
 - Commit only what each task's step names. If on the default branch, branch first.
+- **Every build and test runs through the Slurm queue**, because this repo is not
+  in blq's `slurm.toml` roots and so a bare blq command runs directly on the
+  shared box. Use exactly:
+  `srun -n 1 -c 16 --mem=48G -p batch -t 180 make release`
+  and run it through `blq exec`, never through Bash. Tests likewise:
+  `srun -n 1 -c 4 --mem=8G -p ci -t 25 build/release/test/unittest <filter>`.
+- **The banner rule is enforced by a test that already exists.**
+  `test/sql/bugs/issue_170_macro_descriptions.test:99-104` asserts that **zero**
+  non-system `table_macro` rows have a NULL or empty description. Every macro
+  added by Tasks 4, 5 and 6 is a table macro, so one missing
+  `-- <name>: <summary>` banner turns that existing test red.
 
 ## Review Focus
 
@@ -50,16 +61,34 @@ The 8 moving macros occupy these line ranges in today's file, which are not cont
 
 - [ ] **Step 1: Capture the oracle from the current build**
 
-Run, and save the output to `build/macro-oracle/macros-before.txt` (create the directory; `build/` is gitignored):
+**Do not save the CLI's rendered table.** MEASURED on this tree: the default
+output ends in `97 rows (40 shown)`, so a text dump holds 40 of the 97 rows, and
+two such dumps diff clean even when a body among the other 57 changed. Use
+`COPY`, which writes every row:
 
 ```sql
 LOAD sitting_duck;
-SELECT function_name, function_type, parameters, macro_definition
-FROM duckdb_functions() WHERE database_name = 'memory'
-ORDER BY function_name, function_type;
+COPY (
+  SELECT function_name, function_type, parameters, description,
+         length(macro_definition) AS deflen, md5(macro_definition) AS defhash
+  FROM duckdb_functions() WHERE database_name = 'memory'
+  ORDER BY function_name, function_type
+) TO 'build/macro-oracle/macros-before.csv' (HEADER, DELIMITER ',');
 ```
 
-Expected: **97 rows** = 45 scalar macros and 52 table macros. The 45 is 44 defined in `src/sql_macros/` plus the `ast_dispatch_predicate` stub that `src/ast_sql_macros.cpp:181` creates, which is also a scalar macro. Do not expect 44.
+Create `build/macro-oracle/` first; `build/` is gitignored. Invoke the binary
+with `-unsigned -no-agent`.
+
+`description` is in the dump deliberately. A macro moved without its
+`-- <name>: <summary>` banner keeps its body and loses its description, so a
+dump of the body alone is blind to the mistake this task is most likely to make.
+
+Then confirm the file holds **97 data rows** (98 lines, with the header).
+Expected: **97** = 45 scalar macros and 52 table macros. The 45 is 44 defined in
+`src/sql_macros/` plus the `ast_dispatch_predicate` stub that
+`src/ast_sql_macros.cpp:181` creates, which is also a scalar macro. Do not
+expect 44. If the count is not 97, stop and report: the oracle is reading the
+wrong catalog, and every later comparison inherits the error.
 
 - [ ] **Step 2: Write the failing oracle test**
 
@@ -98,8 +127,10 @@ Run `python3 scripts/embed_sql_macros.py`, then build through blq. The generated
 
 - [ ] **Step 7: Prove the split changed nothing**
 
-Re-run Step 1's query into `build/macro-oracle/macros-after.txt` and diff it against `build/macro-oracle/macros-before.txt` (create the directory; `build/` is gitignored).
-Expected: **no differences.** A difference means a body was edited.
+Re-run Step 1's `COPY` into `build/macro-oracle/macros-after.csv` and diff that
+against `build/macro-oracle/macros-before.csv`.
+Expected: **no differences.** A changed `defhash` means a body was edited; a
+changed `description` means a banner was left behind.
 Then run the Step 2 test. Expected: PASS.
 
 - [ ] **Step 8: Prove the oracle can fail**
@@ -269,7 +300,11 @@ git commit -m "feat(057): static gate for the core/add-on macro boundary (M2 sta
 
 Each drops the `language` parameter its twin carries, because a parsed table has no language to choose. Each existing path-taking macro becomes a thin wrapper that parses with `read_ast` and delegates to the `_from` form, which is how `ast_select` relates to `ast_select_from` (`src/sql_macros/css_selectors.sql:83`) and `ast_to_blocks` to `ast_to_blocks_from`.
 
-Rewriting the five existing bodies as wrappers changes their `macro_definition`, so Task 1's oracle must gain an exemption list naming exactly these five plus the four in Task 5 and the one in Task 6.
+Rewriting the five existing bodies as wrappers changes their `macro_definition`,
+so Task 1's oracle must gain an exemption for each. The measured parity gap is
+**nine**: these five, **three** in Task 5, and one in Task 6. Each task adds only
+its own exemptions, so the oracle keeps full strength over every macro not yet
+touched. Do not pre-exempt Task 5's or Task 6's twins here.
 
 - [ ] **Step 1: Write the failing parity tests**
 
@@ -309,30 +344,50 @@ Expected: FAIL — `ast_has_from` does not exist.
 
 - [ ] **Step 3: Add the five `_from` macros, each with a `-- <name>: <summary>` banner**
 
-Write each `_from` body by moving the logic out of its path-taking twin, replacing `read_ast(source, language)` with `query_table(ast_table)`.
+Write each `_from` body by moving the logic out of its path-taking twin, replacing `read_ast(source, language)` with `query_table(ast_table)`. **Leave the five twins untouched in this step.**
 
-- [ ] **Step 4: Rewrite the five path-taking macros as wrappers**
+- [ ] **Step 4: Run the parity test NOW, before the twins become wrappers**
+
+Regenerate, rebuild, run `test/sql/macro_from_parity_relational.test`.
+Expected: PASS.
+
+**This is the only run of this test that proves anything, and the reason the
+step order matters.** Right now `ast_has` and `ast_has_from` hold two
+independent bodies, so an `EXCEPT` between them compares two implementations.
+After Step 6 the twin delegates to the `_from` form, both sides of the `EXCEPT`
+evaluate the same body, and the comparison is self-referential forever after.
+
+Record the pinned expectation from this run into the test, so it keeps power
+once the twin is a wrapper: for each of the five, the absolute row count and
+`md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))` of the `_from` result.
+
+- [ ] **Step 5: Prove the parity test discriminates, while it still can**
+
+Change one `_from` macro to filter one extra row. Regenerate, rebuild, re-run.
+Expected: FAIL on the `EXCEPT` count. Revert, rebuild, confirm PASS.
+
+Doing this after Step 6 would plant the defect in the body that BOTH sides call,
+leave the `EXCEPT` empty, and prove the guard works when it had in fact gone
+blind.
+
+- [ ] **Step 6: Rewrite the five path-taking macros as wrappers**
 
 Each becomes a `read_ast` CTE delegating to its `_from` twin, following `ast_select`'s shape.
 
-- [ ] **Step 5: Add the nine exemptions to Task 1's oracle**
+- [ ] **Step 7: Add this task's five exemptions to Task 1's oracle**
 
-In `test/sql/macro_split_oracle.test`, record that these macros' `macro_definition` changes by design, naming each and saying why. Raise the expected counts to 45 scalar / 57 table / 102 rows. All five new macros are table macros, so only the table count moves.
+In `test/sql/macro_split_oracle.test`, record that these five macros' `macro_definition` changes by design, naming each and saying why. Raise the expected counts to 45 scalar / 57 table / 102 rows. All five new macros are table macros, so only the table count moves. Exempt only these five — Task 5 and Task 6 add their own.
 
-- [ ] **Step 6: Regenerate, rebuild, run both test files**
+- [ ] **Step 8: Regenerate, rebuild, run both test files**
 
-Expected: `macro_from_parity_relational.test` PASS; `macro_split_oracle.test` PASS at 45 / 57 / 102.
+Expected: `macro_from_parity_relational.test` PASS, including the Step 4 pinned counts; `macro_split_oracle.test` PASS at 45 / 57 / 102.
 
-- [ ] **Step 7: Prove the parity test discriminates**
-
-Change one `_from` macro to filter one extra row, rebuild, re-run. Expected: FAIL on the `EXCEPT` count. Revert, rebuild, confirm PASS.
-
-- [ ] **Step 8: Run the boundary gate**
+- [ ] **Step 9: Run the boundary gate**
 
 Run: `python3 -I scripts/verify_macro_boundary.py`
 Expected: exit 0, now reporting 101 macros.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add src/sql_macros/relational_operators.sql src/include/embedded_sql_macros.hpp \
@@ -367,17 +422,29 @@ Same three-query shape as Task 4, plus the two Review Focus cases this task owns
 
 Expected: FAIL — the three macros do not exist.
 
-- [ ] **Step 3: Add the three `_from` macros with banners, and rewrite the twins as wrappers**
+- [ ] **Step 3: Add the three `_from` macros with banners. Leave the twins untouched**
 
-- [ ] **Step 4: Regenerate, rebuild, run the tests**
+- [ ] **Step 4: Run the parity tests NOW, before the twins become wrappers**
+
+Regenerate, rebuild, run `test/sql/macro_from_parity_navigation.test`.
+Expected: PASS. As in Task 4 Step 4, this is the only run that compares two
+independent bodies; after Step 6 the `EXCEPT` is self-referential. Record the
+pinned row count and `node_id` hash for each of the three into the test.
+
+- [ ] **Step 5: Prove the multi-file case discriminates, while it still can**
+
+Restrict one `_from` macro to a single `file_path`, rebuild, re-run. Expected:
+FAIL on the multi-file `EXCEPT`. Revert and confirm PASS.
+
+- [ ] **Step 6: Rewrite the three twins as wrappers**
+
+Following Task 4's shape.
+
+- [ ] **Step 7: Add this task's three exemptions, regenerate, rebuild, run the tests**
 
 Expected: PASS. `macro_split_oracle.test` PASS at 45 scalar / 60 table / 105 rows.
 
-- [ ] **Step 5: Prove the multi-file case discriminates**
-
-Restrict one `_from` macro to a single `file_path`, rebuild, re-run. Expected: FAIL on the multi-file `EXCEPT`. Revert and confirm PASS.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add src/sql_macros/tree_navigation.sql src/include/embedded_sql_macros.hpp \
@@ -405,13 +472,27 @@ Both twins must return the same six columns: `file_path`, `name`, `definition_ki
 
 - [ ] **Step 2: Run to verify it fails**
 
-- [ ] **Step 3: Add `ast_source_of_from` with a banner, and rewrite `ast_source_of` as a wrapper**
+- [ ] **Step 3: Add `ast_source_of_from` with a banner. Leave `ast_source_of` untouched**
 
-- [ ] **Step 4: Regenerate, rebuild, run the test**
+- [ ] **Step 4: Run the parity test NOW, before the twin becomes a wrapper**
+
+Regenerate, rebuild, run `test/sql/macro_from_parity_source_of.test`.
+Expected: PASS. As in Task 4 Step 4, this is the only run that compares two
+independent bodies. Record the pinned row count and a hash of the sorted
+`name` column into the test.
+
+- [ ] **Step 5: Prove it discriminates, while it still can**
+
+Make `ast_source_of_from` drop one row, rebuild, re-run. Expected: FAIL on the
+`EXCEPT`. Revert, rebuild, confirm PASS.
+
+- [ ] **Step 6: Rewrite `ast_source_of` as a wrapper**
+
+- [ ] **Step 7: Add the one exemption, regenerate, rebuild, run the test**
 
 Expected: PASS. `macro_split_oracle.test` PASS at 45 scalar / 61 table / 106 rows.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add src/sql_macros/file_utilities.sql src/include/embedded_sql_macros.hpp \
