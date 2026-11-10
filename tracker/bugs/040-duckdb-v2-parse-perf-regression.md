@@ -1,13 +1,24 @@
-# 040 — `ast_select` macro planning is catastrophically slow on DuckDB v2.0
+# 040 — `ast_select` macro planning on DuckDB v2.0 (largely fixed 2026-11-09)
 
-**Status:** open — **deferred and accepted, not ship-blocking.** Corrected 2026-11-03:
+**Status: largely FIXED 2026-11-09 by #325, shipped in v1.18.4.** See this file's
+last section for the measurements. A call on `simple.py` went 19.24 / 19.70 s ->
+2.928 / 2.922 s; the 93,675-node `:in-scope` case went 771 / 431 s -> 3.2 / 3.4 s.
+What remains is about 2.3 s per call, which is `features/046`'s case, plus the
+upstream planner regression on correlated subqueries, which is unchanged
+(duckdb/duckdb#26036). Everything below the next line is the investigation record
+and is kept verbatim; where it describes the cost as current or undiminished, that
+was true until 2026-11-09 and is not true now.
+
+**Status before the fix:** open — **deferred and accepted, not ship-blocking.** Corrected 2026-11-03:
 this line read "ship-blocking for the v2.0-compatible claim (was mis-scoped as a
 deferrable follow-up)". The v2.0.0 pin merged to `main` as `96335de` with this bug
 open, so nothing was in fact blocked. The cost is accepted and recurring — see the
 last section of this file.
 **Found:** 2026-09-07, via community-extensions PR #2663 `test_against_latest` (DuckDB v2.0-cyanoptera)
-**Re-measured 2026-10-08 against cyanoptera `d4c9dfd469f`: numbers below are CURRENT, not stale.**
-The ~27x per-call penalty is undiminished. The "ship-blocking status is confirmed"
+**Re-measured 2026-10-08 against cyanoptera `d4c9dfd469f`.** **Superseded
+2026-11-09:** the ~27x per-call penalty held through 2026-11-08 and is now roughly
+7x smaller, after #325. The 2026-10-08 figures are a correct record of that date,
+not the current cost. The "ship-blocking status is confirmed"
 clause that stood here is withdrawn for the same reason as the Status line above:
 the pin shipped anyway, on 2026-11-03, with the cost accepted. The penalty is
 confirmed; the blocking was not. See

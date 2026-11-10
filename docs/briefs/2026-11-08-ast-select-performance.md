@@ -1,12 +1,39 @@
-# Brief — ast_select performance: 18 s per call, and 5.3 s of it is ours
+# Brief — ast_select performance (RESOLVED, shipped in v1.18.4)
 
-**Status: specced, re-measured 2026-11-09, not started.** The design already
-exists as `tracker/features/046-cpp-selector-engine.md`, with acceptance
-criteria and risks. **Your first job is not to implement it, and it is no longer
-to re-measure either.** That was done on 2026-11-09, and the numbers below
-supersede both the spec's figures and this brief's first version. Decide from
-them whether 046 is still the right shape, then get a plan approved before
-writing code, per this repo's CLAUDE.md.
+> **RESOLVED 2026-11-09. Do not start this work.** PR #325
+> (`perf/decorrelate-pseudo-classes`, merged as `c2a3863`, shipped in v1.18.4) did
+> the cheap win this brief recommends, and it turned out to be most of the problem.
+> One `ast_select` call went from 19.24 / 19.70 s to 2.928 / 2.922 s, measured
+> against the shipped built-in macro with `-no-agent`. The 93,675-node
+> `.call:in-scope(function_definition)` case went from 771 / 431 s to 3.2 / 3.4 s.
+>
+> **The cause was not "the macro is big".** It was about 12 s of planner time on
+> the correlated subqueries in ONE pseudo-class CASE. Computing the ten arms once,
+> uncorrelated, into a `pc_hits` probe removed it. The full record with every table
+> is the last section of `tracker/bugs/040-duckdb-v2-parse-perf-regression.md`.
+>
+> **Two figures below are superseded.** "About 5.3 s of the 18.2 s is this
+> project's own" was derived across separate sessions; measured within one run the
+> September to November macro growth is **about 4.5 s** (11.8 -> 16.5 s). And the
+> statement-SIZE emphasis this brief builds on is wrong: correlation mattered far
+> more than size did.
+>
+> **What is left for `features/046`** is about 2.3 s per call against a 1.25 s floor
+> for the rest of the macro and 0.2 s of execution. The urgency argument built on
+> the old numbers is gone. The engine-boundary argument is not. See 046's
+> "Re-judged 2026-11-09" block.
+
+**Status: CLOSED 2026-11-09 — the measurement task is done and the cheap fix
+shipped.** Kept as the record of how the cost was found and mis-attributed; the
+prompt below is no longer live.
+
+The design it pointed at still exists as
+`tracker/features/046-cpp-selector-engine.md`, with acceptance criteria and
+risks, and 046 carries its own "Re-judged 2026-11-09" block. The numbers in this
+brief supersede the spec's original figures and this brief's first version, and
+are in turn superseded by the RESOLVED block above. Anyone picking up 046 should
+read that block first, then 046, and get a plan approved before writing code,
+per this repo's CLAUDE.md.
 
 > **CORRECTION, 2026-11-09, and read it before anything else here.** The first
 > version of this brief led with "42 s per call" and "3–7× worse than the
