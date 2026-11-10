@@ -312,8 +312,11 @@ git commit -m "feat(057): the macro manifest in layout.yaml owns registration or
 
 **Files:**
 - Create: `scripts/verify_macro_boundary.py`
-- Modify: `.github/workflows/MainDistributionPipeline.yml` (new job)
-- Test: `scripts/test_verify_macro_boundary.py`
+- Modify: `scripts/embed_sql_macros.py` (harden `load_manifest` — see Step 0)
+- Modify: `spec/layout/layout.yaml` (one stale comment — see Step 0)
+- Modify: `CMakeLists.txt` (drop `OUTPUT_VARIABLE` — see Step 0)
+- Modify: `.github/workflows/MainDistributionPipeline.yml` (new job, and wire Task 2's manifest test into CI)
+- Test: `scripts/test_verify_macro_boundary.py`, `scripts/test_embed_manifest.py` (extend for the new validation)
 
 **Interfaces:**
 - Consumes: Task 2's `sql_macros` manifest.
@@ -322,6 +325,44 @@ git commit -m "feat(057): the macro manifest in layout.yaml owns registration or
 This gate exists because `LOAD` cannot catch the mistake. Measured: `CREATE MACRO` binds eagerly and rejects an unknown function, **except** when the body's `FROM` is `query_table(<parameter>)`, which defers the whole body. Every `_from` macro uses `query_table()`, so a mis-split in the core's foreign-AST surface fails inside a user's query rather than at load.
 
 The script must strip SQL comments **and** single-quoted string literals before matching. A comment-only stripper reported two edges that were prose inside an error message.
+
+- [ ] **Step 0: Harden `load_manifest`, because this task is the first to read `side`**
+
+Task 2's review found `load_manifest` validates less than "fail loud" implies,
+and this task's gate is the first consumer of the `side` field. MEASURED
+against the committed code:
+
+| input | `load_manifest` returns |
+|---|---|
+| `sql_macros: []` | `[]` — the generator then writes a valid header with **zero** macros, silently |
+| a duplicate filename | `['a.sql', 'a.sql']` — the file is registered twice |
+| an entry with no `file` key | bare `KeyError: 'file'`, naming no index |
+| `side: adon` (a typo) | accepted silently |
+| no `side` at all | accepted silently |
+
+The last two matter most: your gate filters on `side`, so a typo there makes the
+gate silently skip a file instead of checking it — a hole in a guard, which is
+the one defect class this plan exists to remove.
+
+In `scripts/embed_sql_macros.py`, add one validation loop to `load_manifest`
+that raises, naming the offending entry and its index, on: an empty list; a
+duplicate filename; an entry missing `file`; and a `side` that is not exactly
+`core` or `addon`. Extend `scripts/test_embed_manifest.py` with a case per rule,
+and run the planted failure for each so you have seen every new raise fire.
+
+Three small corrections while you are in these files:
+
+1. **Drop `OUTPUT_VARIABLE` from the `execute_process` call in `CMakeLists.txt`**,
+   keeping `ERROR_VARIABLE`. Task 2 added both because this plan told it to, and
+   that was my error: the generator's failures all go to stderr, so stdout adds
+   nothing to the warning, while capturing it silences the "Generated …" and
+   "macro docs extracted" progress lines during every successful build. Keep the
+   message text; just stop swallowing stdout.
+2. **`spec/layout/layout.yaml`'s comment saying nothing reads `side` yet** becomes
+   untrue the moment your gate lands. Update that sentence.
+3. **`scripts/test_embed_manifest.py`'s output is not pristine** — measured: the
+   generator's progress lines interleave with its PASS lines, because case 3
+   calls `generate_header`. Wrap that call in `contextlib.redirect_stdout`.
 
 - [ ] **Step 1: Write the failing gate test**
 
@@ -356,10 +397,27 @@ Expected: exit 0, and a summary line reporting 96 macros and 27 edges. If the ma
 
 Add a job named `macro boundary holds` to `.github/workflows/MainDistributionPipeline.yml`, in the style of the existing `Embedded SQL macros header in sync` job at line 312: checkout, then run the script. It needs no build.
 
+It reads `spec/layout/layout.yaml`, so give it the same PyYAML step the other
+YAML-reading jobs use:
+
+```yaml
+      - name: Ensure PyYAML is available
+        run: python3 -c "import yaml" || python3 -m pip install --break-system-packages pyyaml
+```
+
+**Also prove the gate can fail in CI**, following the `Prove the gate can fail`
+steps that `module-abi-sync` (line 346) and `layout-invariance` (line 390)
+already carry. A gate whose red path CI has never executed is not a gate.
+
+**And wire Task 2's manifest test in.** `scripts/test_embed_manifest.py` runs
+nowhere in CI today, so it is a manual gate only. Run it from this same job.
+
 - [ ] **Step 7: Commit**
 
 ```bash
 git add scripts/verify_macro_boundary.py scripts/test_verify_macro_boundary.py \
+        scripts/embed_sql_macros.py scripts/test_embed_manifest.py \
+        spec/layout/layout.yaml CMakeLists.txt \
         .github/workflows/MainDistributionPipeline.yml
 git commit -m "feat(057): static gate for the core/add-on macro boundary (M2 stage 3)"
 ```
