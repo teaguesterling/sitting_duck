@@ -662,6 +662,21 @@ independent bodies. Record the pinned row count and a hash of the sorted
 Make `ast_source_of_from` drop one row, rebuild, re-run. Expected: FAIL on the
 `EXCEPT`. Revert, rebuild, confirm PASS.
 
+- [ ] **Step 5b: Raise `issue_170`'s coverage floor with all nine `_from` names**
+
+Task 6 completes the nine `_from` variants, so this is the moment to do it once
+rather than three times. `test/sql/bugs/issue_170_macro_descriptions.test:42-43`
+says of its name list: "The list is a floor on COVERAGE, not a census.
+Documenting a 59th macro does not fail this file; add its name here when you
+do." Nine macros have been documented since, so add them:
+
+`ast_has_from`, `ast_not_has_from`, `ast_inside_from`, `ast_precedes_from`,
+`ast_follows_from`, `ast_in_range_from`, `ast_containing_line_from`,
+`ast_definitions_from`, `ast_source_of_from`.
+
+Update the `ALL 58 DESCRIBED` expectation and the `COUNT(*) >= 58` floor to 67,
+and run the file. It must stay green; if it does not, a banner is missing.
+
 - [ ] **Step 6: Rewrite `ast_source_of` as a wrapper**
 
 - [ ] **Step 7: Add the one exemption, regenerate, rebuild, run the test**
@@ -672,7 +687,8 @@ Expected: PASS. `macro_split_oracle.test` PASS at 45 scalar / 61 table / 106 row
 
 ```bash
 git add src/sql_macros/file_utilities.sql src/include/embedded_sql_macros.hpp \
-        test/sql/macro_from_parity_source_of.test test/sql/macro_split_oracle.test
+        test/sql/macro_from_parity_source_of.test test/sql/macro_split_oracle.test \
+        test/sql/bugs/issue_170_macro_descriptions.test
 git commit -m "feat(057): ast_source_of_from, carrying a files argument (M2 stage 3)"
 ```
 
