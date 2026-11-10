@@ -355,3 +355,67 @@ SELECT
   (SELECT count(*) FROM ast_source_of_from('empty_ast', 'test/data/python/q*.py', '__init__'));
 ----
 0	0
+
+# =============================================================================
+# 7. The documented ordering, which no digest above can see
+# =============================================================================
+#
+# ast_source_of ends in `ORDER BY file_path, start_line`, and that ordering is
+# documented behaviour. Nothing above can see it: every digest imposes its own
+# ORDER BY, and EXCEPT ALL is a set operation that ignores order entirely. After
+# the wrapper rewrite the ORDER BY lives in the `_from` body, and the twin
+# reaches it only through `SELECT * FROM ast_source_of_from(...)` -- which SQL
+# does not oblige to preserve an inner ORDER BY. So it is pinned on both paths.
+#
+# list_sort is a total order, so this compares the EMITTED sequence against the
+# sorted one rather than pinning a literal emission order.
+#
+# THIS CHECK IS NOT VACUOUS ON THIS FIXTURE, AND THAT HAD TO BE MEASURED.
+# Task 5 found the opposite for ast_definitions: over a 2-file fixture its
+# ordering boolean returned true even for a body with NO ORDER BY, because
+# read_ast emits files in sorted order and DFS pre-order makes start_line
+# non-decreasing -- so that check was a snapshot until the fixture was widened
+# to 19 files. This macro does not inherit that, because the two joins
+# (read_text, then file_contents) reshuffle the rows. MEASURED here, on a
+# hand-written copy of the `_from` body with the ORDER BY STRIPPED and nothing
+# else changed, three runs each:
+#
+#   fixture / target                 ordered   rows
+#   ------------------------------   -------   ----
+#   q*.py  / '__init__'              false        4
+#   q*.py  / ''                      false        7
+#   *.py   / '__init__'              false       12
+#   *.py   / ''                      false       43
+#
+# false on EVERY fixture, including the two used below. So no widening is
+# needed, and the exact-count pin of section 1 stays the fixture's guard.
+#
+# THE ROW TERM IS A FLOOR, and what it guards is an EMPTY result. MEASURED: over
+# a target with no matches the boolean is NULL, not true, and the floor is
+# false -- so neither term can pass on silence. The floor is stated as `>=`
+# rather than `=` because section 1 already pins the count exactly; a second
+# exact pin of the same number would only add a line to edit when the fixture
+# changes.
+
+query II
+SELECT list(k) = list_sort(list(k)), count(*) >= 4
+FROM (SELECT {'f': file_path, 's': start_line} AS k
+      FROM ast_source_of('test/data/python/q*.py', '__init__'));
+----
+true	true
+
+query II
+SELECT list(k) = list_sort(list(k)), count(*) >= 4
+FROM (SELECT {'f': file_path, 's': start_line} AS k
+      FROM ast_source_of_from('tq', 'test/data/python/q*.py', '__init__'));
+----
+true	true
+
+# The seven-row result as well, which spreads more rows across the same two
+# files and so exercises the within-file half of the ordering harder.
+query II
+SELECT list(k) = list_sort(list(k)), count(*) >= 7
+FROM (SELECT {'f': file_path, 's': start_line} AS k
+      FROM ast_source_of_from('tq', 'test/data/python/q*.py', ''));
+----
+true	true
