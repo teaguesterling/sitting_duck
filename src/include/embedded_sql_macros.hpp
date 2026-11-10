@@ -445,6 +445,14 @@ CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
 -- so the filter matches nothing. That is the NULL-definite convention issue #81
 -- set for the selector attribute filters (see the NULL semantics note in
 -- css_selectors.sql), and these macros follow it instead of validating columns.
+--
+-- IMPORTANT, and the reason to call this instead of writing the query yourself:
+-- a definition query over a parsed AST table needs the FULL filter chain --
+-- is_definition(semantic_type) AND is_construct(flags) AND name != ''. Using
+-- is_definition() alone also matches keyword tokens (def, class, CREATE, ...),
+-- because a keyword shares the semantic type of the construct it introduces,
+-- so every definition comes back twice. This macro applies the whole chain.
+-- The same warning is on ast_definitions below, for the path-taking form.
 -- ----------------------------------------------------------------------------
 -- ast_definitions_from: Every definition (function, class, variable, module) in a parsed AST table
 -- ----------------------------------------------------------------------------
@@ -657,6 +665,9 @@ CREATE OR REPLACE MACRO ast_function_scope(ast_table, func_node_id) AS TABLE
     );
 
 -- Get direct members of a class (methods, fields, nested classes)
+
+)SQLMACRO"
+        R"SQLMACRO(
 -- Returns the member definition nodes themselves, not their internal contents.
 -- Useful for class structure analysis without descending into method bodies.
 -- Usage: SELECT name, type FROM ast_class_members(my_ast_table, class_node_id)
@@ -666,9 +677,6 @@ CREATE OR REPLACE MACRO ast_function_scope(ast_table, func_node_id) AS TABLE
 CREATE OR REPLACE MACRO ast_class_members(ast_table, class_node_id) AS TABLE
     WITH
         -- Get the class node
-
-)SQLMACRO"
-        R"SQLMACRO(
         class AS (
             SELECT node_id, descendant_count
             FROM query_table(ast_table)
