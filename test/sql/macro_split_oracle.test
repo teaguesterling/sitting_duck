@@ -25,13 +25,24 @@
 # test/sql/macro_from_parity_relational.test, against row counts and node_id
 # digests measured from the twins BEFORE the rewrite.
 #
-# Scope: these five only. The remaining four macros in the stage's parity gap
-# (tasks 5 and 6) are not exempt yet, so this guard keeps full strength over
-# every macro not yet touched.
+# The three below are the navigation accessors (task 5 of the stage,
+# src/sql_macros/tree_navigation.sql):
 #
-# The counts move by +5 table macros and +5 rows: all five new macros are table
-# macros, so the scalar count must NOT move. A scalar count other than 45 means
-# something else changed.
+#   ast_definitions      -> ast_definitions_from
+#   ast_containing_line  -> ast_containing_line_from
+#   ast_in_range         -> ast_in_range_from
+#
+# Their parity is asserted in test/sql/macro_from_parity_navigation.test, which
+# pins the WHOLE ROW over two files rather than node_id alone -- task 4's review
+# measured that a count plus a node_id digest cannot see a column change.
+#
+# Scope: these eight only. One macro of the stage's parity gap (task 6) is not
+# exempt yet, so this guard keeps full strength over every macro not yet
+# touched.
+#
+# The counts move by +5 then +3 table macros and the same in rows: all eight new
+# macros are table macros, so the scalar count must NOT move. A scalar count
+# other than 45 means something else changed.
 
 require sitting_duck
 
@@ -42,7 +53,7 @@ SELECT
   count(*)
 FROM duckdb_functions() WHERE database_name = 'memory';
 ----
-45	57	102
+45	60	105
 
 # The five `_from` variants are registered, and registered as table macros.
 # The count above moves by five whichever five arrive; this names them.
@@ -59,6 +70,19 @@ ast_has_from	table_macro
 ast_inside_from	table_macro
 ast_not_has_from	table_macro
 ast_precedes_from	table_macro
+
+# The three navigation `_from` variants, likewise.
+query II
+SELECT function_name, function_type
+FROM duckdb_functions()
+WHERE database_name = 'memory'
+  AND function_name IN ('ast_definitions_from', 'ast_containing_line_from',
+                        'ast_in_range_from')
+ORDER BY function_name;
+----
+ast_containing_line_from	table_macro
+ast_definitions_from	table_macro
+ast_in_range_from	table_macro
 
 # The 8 macros that moved to tree_analysis.sql are still registered table macros.
 query II

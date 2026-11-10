@@ -432,20 +432,25 @@ CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
         )
     SELECT * FROM args;
 
--- Get all definitions (functions, classes, variables, etc.) with unified categories
--- Usage: SELECT * FROM ast_definitions('src/**/*.py')
--- Usage: SELECT * FROM ast_definitions('src/main.py', language := 'python')
+-- For an AST table you already parsed. `ast_table` is a table NAME (a string),
+-- resolved with query_table(): parse once with read_ast, query many times.
+-- There is no `language` parameter, because a parsed table carries its own --
+-- which leaves the table as this form's ONLY parameter.
+-- Usage:
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_definitions_from('my_ast')
 --
--- IMPORTANT: When querying definitions from raw read_ast() output, always use the
--- full filter chain: is_definition(semantic_type) AND is_construct(flags) AND name != ''
--- Using is_definition() alone will include keyword tokens (def, class, CREATE, etc.)
--- as duplicates, since keywords share the semantic type of their parent construct.
+-- Reads semantic_type, flags and name. A table whose semantic_type is NULL
+-- returns no rows rather than raising: every comparison against NULL is NULL,
+-- so the filter matches nothing. That is the NULL-definite convention issue #81
+-- set for the selector attribute filters (see the NULL semantics note in
+-- css_selectors.sql), and these macros follow it instead of validating columns.
 -- ----------------------------------------------------------------------------
--- ast_definitions: Every definition (function, class, variable, module) in the source
+-- ast_definitions_from: Every definition (function, class, variable, module) in a parsed AST table
 -- ----------------------------------------------------------------------------
-CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
+CREATE OR REPLACE MACRO ast_definitions_from(ast_table) AS TABLE
     WITH ast AS (
-        SELECT * FROM read_ast(source, language)
+        SELECT * FROM query_table(ast_table)
     )
     SELECT
         a.name,
@@ -469,6 +474,25 @@ CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
       AND is_construct(a.flags)
       AND a.name IS NOT NULL AND a.name != ''
     ORDER BY a.file_path, a.start_line;
+
+-- Get all definitions (functions, classes, variables, etc.) with unified categories
+-- Usage: SELECT * FROM ast_definitions('src/**/*.py')
+-- Usage: SELECT * FROM ast_definitions('src/main.py', language := 'python')
+--
+-- IMPORTANT: When querying definitions from raw read_ast() output, always use the
+-- full filter chain: is_definition(semantic_type) AND is_construct(flags) AND name != ''
+-- Using is_definition() alone will include keyword tokens (def, class, CREATE, etc.)
+-- as duplicates, since keywords share the semantic type of their parent construct.
+-- ----------------------------------------------------------------------------
+-- ast_definitions: Every definition (function, class, variable, module) in the source
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
+    -- Parse, then delegate to ast_definitions_from, which holds the projection,
+    -- the filter chain and the ORDER BY.
+    WITH __ast_definitions_src AS (
+        SELECT * FROM read_ast(source, language)
+    )
+    SELECT * FROM ast_definitions_from('__ast_definitions_src');
 
 -- Get all descendants of a node (entire subtree)
 -- Uses descendant_count for O(1) range-based lookup (nodes are in DFS pre-order)
@@ -522,6 +546,28 @@ CREATE OR REPLACE MACRO ast_siblings(ast_table, target_node_id) AS TABLE
 -- Line-Based Navigation
 -- =============================================================================
 
+-- For an AST table you already parsed. `ast_table` is a table NAME (a string),
+-- resolved with query_table(): parse once with read_ast, query many times.
+-- There is no `language` parameter, because a parsed table carries its own.
+-- Usage:
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_containing_line_from('my_ast', 42)
+--
+-- Reads start_line and end_line. A table whose line columns are NULL returns no
+-- rows rather than raising -- the same NULL-definite convention as
+-- ast_definitions_from above.
+-- ----------------------------------------------------------------------------
+-- ast_containing_line_from: Nodes of a parsed AST table whose source span covers a given line number
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_containing_line_from(ast_table, line_num) AS TABLE
+    WITH ast AS (
+        SELECT * FROM query_table(ast_table)
+    )
+    SELECT a.*
+    FROM ast a
+    WHERE a.start_line <= line_num AND a.end_line >= line_num
+    ORDER BY (a.end_line - a.start_line), a.start_line;
+
 -- Find all nodes that contain a specific line
 -- Returns nodes ordered by specificity (smallest span first)
 -- Usage: SELECT * FROM ast_containing_line('src/main.py', 42)
@@ -529,13 +575,33 @@ CREATE OR REPLACE MACRO ast_siblings(ast_table, target_node_id) AS TABLE
 -- ast_containing_line: Nodes whose source span covers a given line number
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_containing_line(source, line_num, language := NULL) AS TABLE
-    WITH ast AS (
+    -- Parse, then delegate to ast_containing_line_from, which holds the
+    -- predicate and the specificity ORDER BY.
+    WITH __ast_containing_line_src AS (
         SELECT * FROM read_ast(source, language)
+    )
+    SELECT * FROM ast_containing_line_from('__ast_containing_line_src', line_num);
+
+-- For an AST table you already parsed. `ast_table` is a table NAME (a string),
+-- resolved with query_table(): parse once with read_ast, query many times.
+-- There is no `language` parameter, because a parsed table carries its own.
+-- Usage:
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_in_range_from('my_ast', 10, 20)
+--
+-- Reads start_line and end_line. A table whose line columns are NULL returns no
+-- rows rather than raising -- the same NULL-definite convention as
+-- ast_definitions_from above.
+-- ----------------------------------------------------------------------------
+-- ast_in_range_from: Nodes of a parsed AST table whose source span falls inside a line range
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_in_range_from(ast_table, range_start, range_end) AS TABLE
+    WITH ast AS (
+        SELECT * FROM query_table(ast_table)
     )
     SELECT a.*
     FROM ast a
-    WHERE a.start_line <= line_num AND a.end_line >= line_num
-    ORDER BY (a.end_line - a.start_line), a.start_line;
+    WHERE a.start_line >= range_start AND a.end_line <= range_end;
 
 -- Get all nodes within a line range
 -- Usage: SELECT * FROM ast_in_range('src/main.py', 10, 20)
@@ -543,12 +609,11 @@ CREATE OR REPLACE MACRO ast_containing_line(source, line_num, language := NULL) 
 -- ast_in_range: Nodes whose source span falls inside a line range
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_in_range(source, range_start, range_end, language := NULL) AS TABLE
-    WITH ast AS (
+    -- Parse, then delegate to ast_in_range_from, which holds the predicate.
+    WITH __ast_in_range_src AS (
         SELECT * FROM read_ast(source, language)
     )
-    SELECT a.*
-    FROM ast a
-    WHERE a.start_line >= range_start AND a.end_line <= range_end;
+    SELECT * FROM ast_in_range_from('__ast_in_range_src', range_start, range_end);
 
 -- =============================================================================
 -- Scope-Aware Helpers
@@ -601,6 +666,9 @@ CREATE OR REPLACE MACRO ast_function_scope(ast_table, func_node_id) AS TABLE
 CREATE OR REPLACE MACRO ast_class_members(ast_table, class_node_id) AS TABLE
     WITH
         -- Get the class node
+
+)SQLMACRO"
+        R"SQLMACRO(
         class AS (
             SELECT node_id, descendant_count
             FROM query_table(ast_table)
@@ -680,7 +748,6 @@ CREATE OR REPLACE MACRO ast_definition_parent(ast_table) AS TABLE
     FROM def_parent dp
     JOIN query_table(ast_table) p ON dp.current_parent_id = p.node_id
     WHERE is_definition(p.semantic_type);
-
 )SQLMACRO"},
     {"tree_analysis.sql", R"SQLMACRO(
 -- Tree Analysis Macros
@@ -7749,11 +7816,14 @@ static const std::vector<EmbeddedMacroDoc> EMBEDDED_MACRO_DOCS = {
     {"ast_get_source_line", "A single line of source text from a file", {}},
     {"ast_children", "Direct children of a node in a parsed AST table", {}},
     {"ast_call_arguments", "Argument nodes of a call, from its argument_list child", {}},
+    {"ast_definitions_from", "Every definition (function, class, variable, module) in a parsed AST table", {"SELECT * FROM ast_definitions_from('my_ast')"}},
     {"ast_definitions", "Every definition (function, class, variable, module) in the source", {}},
     {"ast_descendants", "Every node beneath an ancestor, via its descendant_count range", {}},
     {"ast_ancestors", "The ancestor chain from a node up to the root", {}},
     {"ast_siblings", "Nodes sharing a parent with the target node", {}},
+    {"ast_containing_line_from", "Nodes of a parsed AST table whose source span covers a given line number", {"SELECT * FROM ast_containing_line_from('my_ast', 42)"}},
     {"ast_containing_line", "Nodes whose source span covers a given line number", {}},
+    {"ast_in_range_from", "Nodes of a parsed AST table whose source span falls inside a line range", {"SELECT * FROM ast_in_range_from('my_ast', 10, 20)"}},
     {"ast_in_range", "Nodes whose source span falls inside a line range", {}},
     {"ast_function_scope", "Every node inside one function definition", {}},
     {"ast_class_members", "Members declared directly inside one class", {}},
