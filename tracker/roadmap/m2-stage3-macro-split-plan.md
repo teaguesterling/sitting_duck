@@ -800,9 +800,41 @@ Add the Review Focus case this task owns: assert that an unparse macro given a l
 
 Expected: PASS. This proves the test is not vacuous before it is pointed at a restricted build.
 
-- [ ] **Step 4: Measure whether a duckdb-only build configures and links**
+- [ ] **Step 4: Confirm the duckdb-only build still links — CONFIGURE IS ALREADY MEASURED**
 
-Run CMake with `-DSITTING_DUCK_LANGUAGES=duckdb`. **This is unmeasured and may fail.** `cmake/BuiltinLanguages.cmake` validates that the requested set is declared and non-empty, and `duckdb` is declared, so it is expected to pass validation. If it does not configure, stop and report: the fallback is a two-language subset, and the spec's §9.3 needs amending rather than working around.
+**The configure half of this step is done, and it passed.** The controller ran
+it before dispatch, so do not re-derive it. MEASURED on 2026-11-10 at commit
+`206761b`, exit 0 in 8 seconds:
+
+```
+cmake <the flags `make -n release` prints> \
+      -DSITTING_DUCK_LANGUAGES=duckdb -S ./duckdb/ -B build/core-only-probe
+```
+
+Three things were measured, not inferred:
+
+1. The configure log says `sitting_duck: building 1/28 built-in languages: duckdb`.
+   That line is the positive evidence. Exit 0 alone would not have been: a
+   configure that silently enabled all 28 would also exit 0.
+2. `build/core-only-probe/extension/sitting_duck/sitting_duck_generated/sitting_duck_builtin_languages.def`
+   holds exactly one entry, `SD_BUILTIN_LANGUAGE_NATIVE(duckdb, DuckDBAdapter)`,
+   and no `SD_BUILTIN_LANGUAGE_TS` entry at all. Zero tree-sitter parsers.
+3. The configure regenerates `src/include/embedded_sql_macros.hpp` into the
+   SOURCE tree. `git status --porcelain` came back empty afterwards, so the
+   header is byte-identical under a restricted language set. Check this again
+   after your own configure: a diff there would mean the generator depends on
+   the language selection, which would be a defect in Task 2's manifest work.
+
+`build/core-only-probe/` is left in place as that evidence. It is gitignored.
+Configure it fresh in your own script anyway; it costs 8 seconds.
+
+**What is still unmeasured is the COMPILE and LINK.** The risk is a reference
+to a compiled-out adapter class, or to a tree-sitter runtime symbol, from a
+translation unit outside `languages/`. Configure cannot see that. If the build
+fails to compile or link, stop and report: the fallback is a two-language
+subset, and the spec's §9.3 needs amending rather than working around. Do not
+"fix" it by adding a language back — that silently removes the thing this task
+proves.
 
 - [ ] **Step 5: Write `scripts/test_core_only_build.sh`**
 
