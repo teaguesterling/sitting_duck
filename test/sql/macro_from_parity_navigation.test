@@ -374,9 +374,35 @@ FROM ast_in_range('test/data/python/q*.py', 1, 20) r;
 # check runs over the 19-file glob, where the result is NOT already sorted by
 # accident. ast_containing_line needs no such widening: it orders by span,
 # which DFS pre-order puts in the opposite direction (largest first), so q*.py
-# already discriminates -- but the review measured THAT in the CLI, and I did
-# not reproduce it. Proved under `unittest`: only the 19-file FALSE, by
-# stripping the ORDER BY (0 <> true, count still 170). The rest is CLI-only.
+# already discriminates -- but that was measured in the DuckDB CLI only, and
+# never reproduced under `unittest`. What IS proved under `unittest` is the
+# 19-file FALSE: stripping the ORDER BY turned the boolean from true to false
+# while the row count stayed at 170, so the failure is ordering alone and not
+# a changed row set.
+#
+# THE SECOND CHECK'S ROW TERM IS A FLOOR, AND THE FLOOR IS THE REAL GUARD.
+# The glob covers every .py file in test/data/python/, so an exact count would
+# move whenever a fixture file is added -- and this file's own rule is that a
+# pin which moves is never a value to simply update. Row identity is already
+# pinned by the EXCEPT ALL pairs and the whole-row digests in sections 3 to 5,
+# so an exact count buys nothing here.
+#
+# What the floor buys is the precondition for the boolean's power, and that is
+# the point. MEASURED on this build:
+#
+#   fixture              ordered   rows   count(*) >= 100
+#   -----------------    -------   ----   ---------------
+#   q*.py  (2 files)     true        25   false
+#   *.py   (19 files)    true       170   true
+#   empty result         NULL         0   false
+#
+# The first row is the defect this section was rewritten to fix: on q*.py the
+# ordering boolean returns true even for a body with NO ORDER BY, because
+# read_ast emits files in sorted order and DFS pre-order makes start_line
+# non-decreasing. So if anyone shrinks the fixture back, `ordered` goes on
+# saying true -- and the FLOOR is what fails the test. An empty result fails
+# on both terms, so neither can pass on silence. 100 sits well below the 170
+# measured here and well above the 25 that is known to be vacuous.
 
 query II
 SELECT list(k) = list_sort(list(k)), count(*)
@@ -385,10 +411,10 @@ FROM (SELECT (end_line - start_line) AS k FROM ast_containing_line('test/data/py
 true	7
 
 query II
-SELECT list(k) = list_sort(list(k)), count(*)
+SELECT list(k) = list_sort(list(k)), count(*) >= 100
 FROM (SELECT {'f': file_path, 's': start_line} AS k FROM ast_definitions('test/data/python/*.py'));
 ----
-true	170
+true	true
 
 # =============================================================================
 # 7. A table whose required columns are present but NULL

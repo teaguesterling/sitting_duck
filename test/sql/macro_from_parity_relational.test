@@ -324,9 +324,10 @@ read_ast needs at least one file to read
 #   the digest. It does NOT see every retype -- MEASURED,
 #   `{'x': 5::INTEGER}::VARCHAR = {'x': 5::BIGINT}::VARCHAR` is true, because
 #   both render `{'x': 5}`, so a widened or narrowed numeric type is invisible
-#   here. A retype that changes the rendered text is not. (to_json() would do the same, but it needs the
-#   json extension, which this harness does not load -- and a `require json`
-#   that went unmet would skip this whole file silently.) The cast's exact
+#   here. A retype that changes the rendered text is not. (to_json() would do
+#   the same, but it needs the json extension, which this harness does not
+#   load -- and a `require json` that went unmet would skip this whole file
+#   silently.) The cast's exact
 #   text is DuckDB's struct representation, so a change to THAT also moves
 #   these digests; re-measure as described below rather than editing them.
 #
