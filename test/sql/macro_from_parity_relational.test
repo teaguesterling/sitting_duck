@@ -296,10 +296,15 @@ read_ast needs at least one file to read
 # 7. A missing table names itself, and an empty table is not an error
 # =============================================================================
 
+# The expected text is the catalog phrase, not the bare table name. DuckDB
+# appends a `LINE 1:` echo of the failing statement to this message, and that
+# echo contains the string 'no_such_table' -- so an expectation of the name
+# alone is also satisfied by any OTHER error on this statement that carries the
+# echo. The phrase below names the table and can only come from the real error.
 statement error
 SELECT * FROM ast_has_from('no_such_table', 'class_definition', 'function_definition');
 ----
-no_such_table
+Table with name no_such_table does not exist
 
 # Well-formed and empty: the columns are read_ast's, there are no rows. Each
 # `_from` macro must return 0 rows rather than raise.
