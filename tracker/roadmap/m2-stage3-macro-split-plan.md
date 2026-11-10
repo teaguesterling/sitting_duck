@@ -23,10 +23,21 @@
 - Commit only what each task's step names. If on the default branch, branch first.
 - **Every build and test runs through the Slurm queue**, because this repo is not
   in blq's `slurm.toml` roots and so a bare blq command runs directly on the
-  shared box. Use exactly:
-  `srun -n 1 -c 16 --mem=48G -p batch -t 180 make release`
-  and run it through `blq exec`, never through Bash. Tests likewise:
-  `srun -n 1 -c 4 --mem=8G -p ci -t 25 build/release/test/unittest <filter>`.
+  shared box. Run the `srun` line through `blq exec`, never through Bash, and
+  never nest `blq` inside the job.
+
+  Build:
+  `srun -n 1 -c 8 --mem=28G -p batch -t 300 --export=ALL,CMAKE_BUILD_PARALLEL_LEVEL=8 make release`
+
+  Tests:
+  `srun -n 1 -c 4 --mem=8G -p ci -t 25 build/release/test/unittest <filter>`
+
+  **Check `sinfo -N -p batch -o '%n %C'` before sizing a build.** The queue's
+  share of longbottom is 28 CPUs and 64 GB, shared with other sessions; a
+  request larger than what is free waits instead of running, and the wait is
+  silent. `-c 8 --mem=28G` is chosen to fit alongside other work, not as a
+  maximum. Always pass `-n 1`: on this cluster `-c 1` alone starts two tasks.
+  A job killed at its memory limit returns rc 1 and prints `Out Of Memory`.
 - **The banner rule is enforced by a test that already exists.**
   `test/sql/bugs/issue_170_macro_descriptions.test:99-104` asserts that **zero**
   non-system `table_macro` rows have a NULL or empty description. Every macro
