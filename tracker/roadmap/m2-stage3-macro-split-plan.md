@@ -482,6 +482,25 @@ SELECT count(*) FROM (
 
 Add the symmetric `EXCEPT` in the other direction, which catches a `_from` form that returns extra rows.
 
+**Use these argument tuples. They are measured non-empty on today's build, and
+two obvious choices are not.** The `class_definition`/`function_definition` pair
+shown above works for `ast_has`, but gives **0 rows** for `ast_not_has` and for
+`ast_precedes` — every class in `sample_app.py` contains a function, and no
+function precedes a class. A zero baseline makes the `EXCEPT` prove nothing,
+which this step exists to prevent.
+
+| macro | arguments after the source | rows |
+|---|---|---|
+| `ast_has` | `'class_definition', 'function_definition'` | 3 |
+| `ast_not_has` | `'function_definition', 'class_definition'` | 20 |
+| `ast_inside` | `'function_definition', 'class_definition'` | 15 |
+| `ast_precedes` | `'import_statement', 'class_definition'` | 2 |
+| `ast_follows` | `'function_definition', 'class_definition'` | 5 |
+
+All five against `test/data/python/sample_app.py`. Assert `count(*) > 0`, not the
+exact number, so the test does not break when the fixture changes — but if any
+baseline comes back 0, stop and report rather than lowering the bar.
+
 Then the two Review Focus cases:
 - `ast_has_from('no_such_table', …)` must raise, with the table name in the message. Use `statement error`.
 - an empty but well-formed AST table must return 0 rows without raising.
@@ -562,7 +581,16 @@ git commit -m "feat(057): _from variants for the five relational operators (M2 s
 
 - [ ] **Step 1: Write the failing parity tests**
 
-Same three-query shape as Task 4, plus the two Review Focus cases this task owns:
+Same three-query shape as Task 4, plus the two Review Focus cases this task owns.
+
+**Measured non-empty baselines for these three, on today's build:**
+`ast_definitions('test/data/python/sample_app.py')` = 42 rows;
+`ast_containing_line('test/data/python/sample_app.py', 10)` = 5;
+`ast_in_range('test/data/python/sample_app.py', 1, 20)` = 115.
+`test/data/python/` holds 19 `.py` files, so a glob there satisfies the
+multi-file case below.
+
+The two Review Focus cases:
 - **a table whose required columns are present but NULL.** Build it as `SELECT * REPLACE (NULL AS parent_id) FROM read_ast(…)` and assert the macro either errors or returns a result the test pins. A silently different answer must not pass.
 - **a multi-file table.** Parse a glob matching at least two files into one table, and assert the `EXCEPT` is empty in both directions against the glob-taking twin, so equivalence holds across `file_path` values and not only within one.
 
