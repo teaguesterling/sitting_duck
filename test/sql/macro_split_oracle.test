@@ -6,6 +6,32 @@
 # red test: it passes before and after the split, and fails if a macro is lost.
 # The counts are 44 macros from src/sql_macros/ plus the ast_dispatch_predicate
 # stub created in src/ast_sql_macros.cpp.
+#
+# DELIBERATE CHANGES, RECORDED HERE AS THEY LAND
+# ----------------------------------------------
+# M2 stage 3 adds a `_from` variant to each core macro: it takes the NAME of a
+# table that already holds a parsed AST and reads it with query_table(), so the
+# macro also serves an AST parsed elsewhere. The path-taking twin then becomes a
+# thin wrapper that calls read_ast() and delegates, as ast_select delegates to
+# ast_select_from. A wrapper has a different `macro_definition` from the body it
+# replaces, so each twin's definition changes BY DESIGN. The five below are the
+# relational operators (task 4 of the stage, src/sql_macros/relational_operators.sql):
+#
+#   ast_has      -> ast_has_from       ast_precedes -> ast_precedes_from
+#   ast_not_has  -> ast_not_has_from   ast_follows  -> ast_follows_from
+#   ast_inside   -> ast_inside_from
+#
+# Parity between each twin and its `_from` form is asserted in
+# test/sql/macro_from_parity_relational.test, against row counts and node_id
+# digests measured from the twins BEFORE the rewrite.
+#
+# Scope: these five only. The remaining four macros in the stage's parity gap
+# (tasks 5 and 6) are not exempt yet, so this guard keeps full strength over
+# every macro not yet touched.
+#
+# The counts move by +5 table macros and +5 rows: all five new macros are table
+# macros, so the scalar count must NOT move. A scalar count other than 45 means
+# something else changed.
 
 require sitting_duck
 
@@ -16,7 +42,23 @@ SELECT
   count(*)
 FROM duckdb_functions() WHERE database_name = 'memory';
 ----
-45	52	97
+45	57	102
+
+# The five `_from` variants are registered, and registered as table macros.
+# The count above moves by five whichever five arrive; this names them.
+query II
+SELECT function_name, function_type
+FROM duckdb_functions()
+WHERE database_name = 'memory'
+  AND function_name IN ('ast_has_from', 'ast_not_has_from', 'ast_inside_from',
+                        'ast_precedes_from', 'ast_follows_from')
+ORDER BY function_name;
+----
+ast_follows_from	table_macro
+ast_has_from	table_macro
+ast_inside_from	table_macro
+ast_not_has_from	table_macro
+ast_precedes_from	table_macro
 
 # The 8 macros that moved to tree_analysis.sql are still registered table macros.
 query II
