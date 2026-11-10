@@ -470,51 +470,6 @@ CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
       AND a.name IS NOT NULL AND a.name != ''
     ORDER BY a.file_path, a.start_line;
 
--- #99: durable citation resolution. Given a FILE and an entity NAME, return the entity's
--- CURRENT line range language-agnostically -- callers need not pin tree-sitter node-type
--- strings (`function_definition` etc. vary by grammar); the filter is semantic
--- (is_definition + is_construct, the same chain as ast_definitions).
---
--- Also returns `qualified_name` (name + enclosing scope, e.g. `C[User] F[__init__]`) as a
--- STABLE IDENTITY: when a name occurs more than once, it disambiguates which entity a
--- citation meant, and it re-resolves across edits. A citation stores (path, name[,
--- qualified_name]) and re-resolves here; comparing the returned lines to a recorded range
--- makes drift visible instead of silent. (The content anchor — a git blob / read_lines
--- hash — composes at the filesystem layer; sitting_duck supplies the *semantic* selector.)
---
--- Optional `kind` filters to 'function'|'class'|'variable'|'module'|'type'|'other'.
--- Usage: SELECT * FROM ast_resolve_entity('src/xml_utils.cpp', 'SecureNoExternalEntityLoader');
---        SELECT * FROM ast_resolve_entity('src/app.py', 'run', kind := 'function');
--- ----------------------------------------------------------------------------
--- ast_resolve_entity: Find a named entity by name and optional kind, within one file
--- ----------------------------------------------------------------------------
-CREATE OR REPLACE MACRO ast_resolve_entity(path, entity_name, kind := NULL, language := NULL) AS TABLE
-    WITH defs AS (
-        SELECT
-            a.name,
-            CASE
-                WHEN is_function_definition(a.semantic_type) THEN 'function'
-                WHEN is_class_definition(a.semantic_type) THEN 'class'
-                WHEN is_variable_definition(a.semantic_type) THEN 'variable'
-                WHEN is_module_definition(a.semantic_type) THEN 'module'
-                WHEN is_type_definition(a.semantic_type) THEN 'type'
-                ELSE 'other'
-            END AS entity_kind,
-            a.start_line,
-            a.end_line,
-            ast_qualified_name_as_string(a.qualified_name) AS qualified_name,
-            a.language,
-            a.file_path
-        FROM read_ast(path, language) a
-        WHERE a.name = entity_name
-          AND is_definition(a.semantic_type)
-          AND is_construct(a.flags)
-    )
-    SELECT name, entity_kind, start_line, end_line, qualified_name, language, file_path
-    FROM defs
-    WHERE kind IS NULL OR entity_kind = kind
-    ORDER BY file_path, start_line;
-
 -- Get all descendants of a node (entire subtree)
 -- Uses descendant_count for O(1) range-based lookup (nodes are in DFS pre-order)
 -- Usage: SELECT * FROM ast_descendants(my_ast_table, ancestor_node_id)
@@ -676,11 +631,107 @@ CREATE OR REPLACE MACRO ast_class_members(ast_table, class_node_id) AS TABLE
         SELECT 1 FROM all_defs other
         WHERE other.node_id != d.node_id
           AND d.node_id > other.node_id
-
-)SQLMACRO"
-        R"SQLMACRO(
           AND d.node_id <= other.node_id + other.descendant_count
     );
+
+-- Resolve nearest definition ancestor for each definition node
+-- Walks up parent_id, skipping organizational/structural nodes (e.g., blocks),
+-- until it finds an ancestor that is itself a definition.
+-- Returns (node_id, def_name, kind, parent_def_name, parent_def_kind, parent_def_node_id)
+-- Usage: SELECT * FROM ast_definition_parent('my_ast_table')
+-- ----------------------------------------------------------------------------
+-- ast_definition_parent: The nearest enclosing definition for every node in an AST table
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_definition_parent(ast_table) AS TABLE
+    WITH RECURSIVE def_parent AS (
+        -- Start: each definition node with its immediate parent
+        SELECT
+            d.node_id,
+            d.name AS def_name,
+            d.semantic_type AS def_type,
+            d.parent_id AS current_parent_id,
+            0 AS hops
+        FROM query_table(ast_table) d
+        WHERE is_definition(d.semantic_type)
+          AND is_construct(d.flags)
+          AND d.name IS NOT NULL AND d.name != ''
+          AND d.depth >= 1
+
+        UNION ALL
+
+        -- Walk up: if current parent isn't a definition, go to its parent
+        SELECT
+            dp.node_id,
+            dp.def_name,
+            dp.def_type,
+            p.parent_id AS current_parent_id,
+            dp.hops + 1
+        FROM def_parent dp
+        JOIN query_table(ast_table) p ON dp.current_parent_id = p.node_id
+        WHERE NOT is_definition(p.semantic_type) AND dp.hops < 10
+    )
+    SELECT
+        dp.node_id,
+        dp.def_name,
+        semantic_type_to_string(dp.def_type) AS kind,
+        p.name AS parent_def_name,
+        semantic_type_to_string(p.semantic_type) AS parent_def_kind,
+        p.node_id AS parent_def_node_id
+    FROM def_parent dp
+    JOIN query_table(ast_table) p ON dp.current_parent_id = p.node_id
+    WHERE is_definition(p.semantic_type);
+
+)SQLMACRO"},
+    {"tree_analysis.sql", R"SQLMACRO(
+-- Tree Analysis Macros
+-- Entity resolution, per-function metrics, security and dead-code heuristics,
+-- and call-site extraction. These build on the navigation primitives in
+-- tree_navigation.sql and are opinionated analyses rather than core navigation.
+
+-- #99: durable citation resolution. Given a FILE and an entity NAME, return the entity's
+-- CURRENT line range language-agnostically -- callers need not pin tree-sitter node-type
+-- strings (`function_definition` etc. vary by grammar); the filter is semantic
+-- (is_definition + is_construct, the same chain as ast_definitions).
+--
+-- Also returns `qualified_name` (name + enclosing scope, e.g. `C[User] F[__init__]`) as a
+-- STABLE IDENTITY: when a name occurs more than once, it disambiguates which entity a
+-- citation meant, and it re-resolves across edits. A citation stores (path, name[,
+-- qualified_name]) and re-resolves here; comparing the returned lines to a recorded range
+-- makes drift visible instead of silent. (The content anchor — a git blob / read_lines
+-- hash — composes at the filesystem layer; sitting_duck supplies the *semantic* selector.)
+--
+-- Optional `kind` filters to 'function'|'class'|'variable'|'module'|'type'|'other'.
+-- Usage: SELECT * FROM ast_resolve_entity('src/xml_utils.cpp', 'SecureNoExternalEntityLoader');
+--        SELECT * FROM ast_resolve_entity('src/app.py', 'run', kind := 'function');
+-- ----------------------------------------------------------------------------
+-- ast_resolve_entity: Find a named entity by name and optional kind, within one file
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_resolve_entity(path, entity_name, kind := NULL, language := NULL) AS TABLE
+    WITH defs AS (
+        SELECT
+            a.name,
+            CASE
+                WHEN is_function_definition(a.semantic_type) THEN 'function'
+                WHEN is_class_definition(a.semantic_type) THEN 'class'
+                WHEN is_variable_definition(a.semantic_type) THEN 'variable'
+                WHEN is_module_definition(a.semantic_type) THEN 'module'
+                WHEN is_type_definition(a.semantic_type) THEN 'type'
+                ELSE 'other'
+            END AS entity_kind,
+            a.start_line,
+            a.end_line,
+            ast_qualified_name_as_string(a.qualified_name) AS qualified_name,
+            a.language,
+            a.file_path
+        FROM read_ast(path, language) a
+        WHERE a.name = entity_name
+          AND is_definition(a.semantic_type)
+          AND is_construct(a.flags)
+    )
+    SELECT name, entity_kind, start_line, end_line, qualified_name, language, file_path
+    FROM defs
+    WHERE kind IS NULL OR entity_kind = kind
+    ORDER BY file_path, start_line;
 
 -- =============================================================================
 -- Analysis Macros
@@ -957,6 +1008,9 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(source, language := NULL) AS TABLE
 -- Automated security concern detection
 -- Scans for common security anti-patterns across languages.
 -- Usage: SELECT * FROM ast_security_audit('src/**/*.py') WHERE risk_level = 'high'
+
+)SQLMACRO"
+        R"SQLMACRO(
 -- ----------------------------------------------------------------------------
 -- ast_security_audit: Risk-pattern findings per function: risk_category, risk_level, finding, matched_pattern
 -- ----------------------------------------------------------------------------
@@ -995,9 +1049,6 @@ CREATE OR REPLACE MACRO ast_security_audit(source, language := NULL) AS TABLE
                 ('raw', 'SQL Injection', 'medium', 'Raw SQL query'),
                 ('rawQuery', 'SQL Injection', 'medium', 'Raw SQL query'),
                 -- File Operations (Medium Risk)
-
-)SQLMACRO"
-        R"SQLMACRO(
                 ('readFile', 'Path Traversal', 'medium', 'File read - verify path sanitization'),
                 ('writeFile', 'Path Traversal', 'medium', 'File write - verify path sanitization'),
                 ('unlink', 'Path Traversal', 'medium', 'File deletion - verify path sanitization'),
@@ -1075,53 +1126,6 @@ CREATE OR REPLACE MACRO ast_security_audit(source, language := NULL) AS TABLE
     ORDER BY
         CASE fi.risk_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
         fi.file_path, fi.start_line;
-
--- Resolve nearest definition ancestor for each definition node
--- Walks up parent_id, skipping organizational/structural nodes (e.g., blocks),
--- until it finds an ancestor that is itself a definition.
--- Returns (node_id, def_name, kind, parent_def_name, parent_def_kind, parent_def_node_id)
--- Usage: SELECT * FROM ast_definition_parent('my_ast_table')
--- ----------------------------------------------------------------------------
--- ast_definition_parent: The nearest enclosing definition for every node in an AST table
--- ----------------------------------------------------------------------------
-CREATE OR REPLACE MACRO ast_definition_parent(ast_table) AS TABLE
-    WITH RECURSIVE def_parent AS (
-        -- Start: each definition node with its immediate parent
-        SELECT
-            d.node_id,
-            d.name AS def_name,
-            d.semantic_type AS def_type,
-            d.parent_id AS current_parent_id,
-            0 AS hops
-        FROM query_table(ast_table) d
-        WHERE is_definition(d.semantic_type)
-          AND is_construct(d.flags)
-          AND d.name IS NOT NULL AND d.name != ''
-          AND d.depth >= 1
-
-        UNION ALL
-
-        -- Walk up: if current parent isn't a definition, go to its parent
-        SELECT
-            dp.node_id,
-            dp.def_name,
-            dp.def_type,
-            p.parent_id AS current_parent_id,
-            dp.hops + 1
-        FROM def_parent dp
-        JOIN query_table(ast_table) p ON dp.current_parent_id = p.node_id
-        WHERE NOT is_definition(p.semantic_type) AND dp.hops < 10
-    )
-    SELECT
-        dp.node_id,
-        dp.def_name,
-        semantic_type_to_string(dp.def_type) AS kind,
-        p.name AS parent_def_name,
-        semantic_type_to_string(p.semantic_type) AS parent_def_kind,
-        p.node_id AS parent_def_node_id
-    FROM def_parent dp
-    JOIN query_table(ast_table) p ON dp.current_parent_id = p.node_id
-    WHERE is_definition(p.semantic_type);
 
 -- Find potentially dead (unused) code
 -- Identifies functions and classes that are never referenced in the codebase.
@@ -1325,6 +1329,9 @@ CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
 CREATE OR REPLACE MACRO ast_call_graph(source, language := NULL) AS TABLE
     WITH
         raw_calls AS (
+
+)SQLMACRO"
+        R"SQLMACRO(
             SELECT * FROM ast_get_calls(source, language)
         )
     SELECT
@@ -7626,7 +7633,6 @@ static const std::vector<EmbeddedMacroDoc> EMBEDDED_MACRO_DOCS = {
     {"ast_children", "Direct children of a node in a parsed AST table", {}},
     {"ast_call_arguments", "Argument nodes of a call, from its argument_list child", {}},
     {"ast_definitions", "Every definition (function, class, variable, module) in the source", {}},
-    {"ast_resolve_entity", "Find a named entity by name and optional kind, within one file", {"SELECT * FROM ast_resolve_entity('src/app.py', 'run', kind := 'function');"}},
     {"ast_descendants", "Every node beneath an ancestor, via its descendant_count range", {}},
     {"ast_ancestors", "The ancestor chain from a node up to the root", {}},
     {"ast_siblings", "Nodes sharing a parent with the target node", {}},
@@ -7634,11 +7640,12 @@ static const std::vector<EmbeddedMacroDoc> EMBEDDED_MACRO_DOCS = {
     {"ast_in_range", "Nodes whose source span falls inside a line range", {}},
     {"ast_function_scope", "Every node inside one function definition", {}},
     {"ast_class_members", "Members declared directly inside one class", {}},
+    {"ast_definition_parent", "The nearest enclosing definition for every node in an AST table", {}},
+    {"ast_resolve_entity", "Find a named entity by name and optional kind, within one file", {"SELECT * FROM ast_resolve_entity('src/app.py', 'run', kind := 'function');"}},
     {"ast_function_metrics", "Per-function size and complexity: lines, return_count, conditionals, loops, cyclomatic", {}},
     {"ast_functions_containing", "Functions that contain at least one node of a given type", {}},
     {"ast_nesting_analysis", "Per-function nesting depth: max_depth, avg_depth, deep_nodes, total_nodes", {}},
     {"ast_security_audit", "Risk-pattern findings per function: risk_category, risk_level, finding, matched_pattern", {}},
-    {"ast_definition_parent", "The nearest enclosing definition for every node in an AST table", {}},
     {"ast_dead_code", "Definitions with no reference elsewhere in the source, with the reason", {}},
     {"ast_get_calls", "Call sites in the source, with the enclosing function", {}},
     {"ast_call_graph", "Caller to callee edges derived from the call sites", {}},

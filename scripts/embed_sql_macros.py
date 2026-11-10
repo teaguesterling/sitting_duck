@@ -177,6 +177,7 @@ def generate_header(sql_dir, output_file):
         'semantic_predicates.sql',
         'file_utilities.sql',
         'tree_navigation.sql',
+        'tree_analysis.sql',
         'pattern_matching.sql',
         'relational_operators.sql',
         'parse_ast_list_table.sql',

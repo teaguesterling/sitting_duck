@@ -1,0 +1,39 @@
+# name: test/sql/macro_split_oracle.test
+# description: M2 stage 3 -- splitting tree_navigation.sql must not add or drop a macro
+# group: [sitting_duck]
+
+# tree_analysis.sql was split out of tree_navigation.sql. This is a guard, not a
+# red test: it passes before and after the split, and fails if a macro is lost.
+# The counts are 44 macros from src/sql_macros/ plus the ast_dispatch_predicate
+# stub created in src/ast_sql_macros.cpp.
+
+require sitting_duck
+
+query III
+SELECT
+  count(*) FILTER (WHERE function_type = 'macro'),
+  count(*) FILTER (WHERE function_type = 'table_macro'),
+  count(*)
+FROM duckdb_functions() WHERE database_name = 'memory';
+----
+45	52	97
+
+# The 8 macros that moved to tree_analysis.sql are still registered table macros.
+query II
+SELECT function_name, function_type
+FROM duckdb_functions()
+WHERE database_name = 'memory'
+  AND function_name IN ('ast_resolve_entity', 'ast_function_metrics',
+                        'ast_functions_containing', 'ast_nesting_analysis',
+                        'ast_security_audit', 'ast_dead_code',
+                        'ast_get_calls', 'ast_call_graph')
+ORDER BY function_name;
+----
+ast_call_graph	table_macro
+ast_dead_code	table_macro
+ast_function_metrics	table_macro
+ast_functions_containing	table_macro
+ast_get_calls	table_macro
+ast_nesting_analysis	table_macro
+ast_resolve_entity	table_macro
+ast_security_audit	table_macro
