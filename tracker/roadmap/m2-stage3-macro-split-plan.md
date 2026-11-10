@@ -27,17 +27,26 @@
   never nest `blq` inside the job.
 
   Build:
-  `srun -n 1 -c 8 --mem=28G -p batch -t 300 --export=ALL,CMAKE_BUILD_PARALLEL_LEVEL=8 make release`
+  `srun -n 1 -c 8 --mem=24G -p batch -t 300 --export=ALL,CMAKE_BUILD_PARALLEL_LEVEL=8 make release`
 
   Tests:
   `srun -n 1 -c 4 --mem=8G -p ci -t 25 build/release/test/unittest <filter>`
 
-  **Check `sinfo -N -p batch -o '%n %C'` before sizing a build.** The queue's
-  share of longbottom is 28 CPUs and 64 GB, shared with other sessions; a
-  request larger than what is free waits instead of running, and the wait is
-  silent. `-c 8 --mem=28G` is chosen to fit alongside other work, not as a
-  maximum. Always pass `-n 1`: on this cluster `-c 1` alone starts two tasks.
-  A job killed at its memory limit returns rc 1 and prints `Out Of Memory`.
+  **Size the request to what is free, and check before you submit.** The
+  queue's share of longbottom is 28 CPUs and 64 GB, shared with other sessions.
+  Read `scontrol show node longbottom` for `CPUAlloc` and `AllocMem`, and keep
+  `AllocMem + your --mem` under 64 GB (65536 MB).
+
+  MEASURED 2026-11-10, with 36864 MB held by three other jobs: `--mem=28G` hit
+  65536 MB exactly and was **reserved 73 minutes into the future**, while
+  `--mem=24G` started at once. Always pass `-n 1`; on this cluster `-c 1` alone
+  starts two tasks.
+
+  **An over-sized request does not error — it waits, and it looks like a build
+  that is simply slow.** Its whole output is one line,
+  `srun: job <id> queued and waiting for resources`. After submitting, confirm
+  `squeue --me` shows `RUNNING` and not `PENDING` before you start waiting on
+  it. A job killed at its memory limit is different: rc 1 with `Out Of Memory`.
 - **The banner rule is enforced by a test that already exists.**
   `test/sql/bugs/issue_170_macro_descriptions.test:99-104` asserts that **zero**
   non-system `table_macro` rows have a NULL or empty description. Every macro
