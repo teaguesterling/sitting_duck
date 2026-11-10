@@ -604,8 +604,31 @@ Expected: FAIL — the three macros do not exist.
 
 Regenerate, rebuild, run `test/sql/macro_from_parity_navigation.test`.
 Expected: PASS. As in Task 4 Step 4, this is the only run that compares two
-independent bodies; after Step 6 the `EXCEPT` is self-referential. Record the
-pinned row count and `node_id` hash for each of the three into the test.
+independent bodies; after Step 6 the `EXCEPT` is self-referential. Record the pinned expectation for each of the three into the test, **following the pattern Task 4 established — not a `node_id`-only pin.**
+
+Task 4's review found that `count(*)` plus a `node_id` digest cannot see a
+column change: a `_from` body returning the same rows with a column dropped,
+added or retyped passed all 56 of its assertions. Measured there, planting
+`SELECT a.* EXCLUDE (peek)` left 51 of 52 assertions green and failed only the
+whole-row pin. So pin the whole row, over **two** files:
+
+```
+md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+```
+
+Three facts make that exact shape necessary, all measured:
+
+1. **Order on `file_path || ':' || node_id`, never `node_id` alone.** 155
+   node_ids collide between `sample_app.py` and `inheritance.py` (1401 rows,
+   1246 distinct), so a `node_id` ordering is non-deterministic across files —
+   and `d.file_path = a.file_path` could be deleted from a `_from` body with a
+   single-file fixture still green.
+2. **Use `r::VARCHAR`, not `to_json`.** `to_json` works in the CLI but FAILS
+   under `unittest`, where the json extension is not loaded. Do **not** add
+   `require json` to work around it: an unmet `require` skips the whole file
+   silently, turning a failure into a vacuous pass.
+3. **Use `EXCEPT ALL`, not `EXCEPT`.** `EXCEPT` is a set operation, so a row
+   multiplicity difference is invisible to it in both directions.
 
 - [ ] **Step 5: Prove the multi-file case discriminates, while it still can**
 
@@ -654,8 +677,14 @@ Both twins must return the same six columns: `file_path`, `name`, `definition_ki
 
 Regenerate, rebuild, run `test/sql/macro_from_parity_source_of.test`.
 Expected: PASS. As in Task 4 Step 4, this is the only run that compares two
-independent bodies. Record the pinned row count and a hash of the sorted
-`name` column into the test.
+independent bodies. Record the pinned expectation into the test using the same whole-row,
+two-file shape Task 4 established and Task 5 reuses:
+`md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))`,
+with `EXCEPT ALL` rather than `EXCEPT`. `ast_source_of` returns `file_path`
+and `name` rather than `node_id`, so order on `file_path || ':' || name`
+instead, and say in a comment why the key differs here. Do **not** use
+`to_json`: it fails under `unittest`, where the json extension is not
+loaded, and `require json` would silently skip the whole file.
 
 - [ ] **Step 5: Prove it discriminates, while it still can**
 
