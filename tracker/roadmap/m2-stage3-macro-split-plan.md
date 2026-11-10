@@ -663,11 +663,16 @@ git commit -m "feat(057): _from variants for three navigation accessors (M2 stag
 - Consumes: Task 5.
 - Produces: `ast_source_of_from(ast_table, files, target_name, kind := NULL)`.
 
-This one breaks the one-argument parity pattern, and must. Measured at `src/sql_macros/file_utilities.sql:113-120`, `ast_source_of` joins `read_text(file_patterns)` to get the lines, and a node table carries no source text. `read_text` also accepts only literal arguments. So the `files` argument comes along, exactly as `ast_unparse_exact_from(ast_table, files, language := NULL, file_path := NULL)` already does. Dropping the `source` column instead would break the `EXCEPT` oracle, which needs both twins to return the same columns.
+This one breaks the one-argument parity pattern, and must. MEASURED at `src/sql_macros/file_utilities.sql:75-146`: `ast_source_of` joins `read_text(file_patterns)` at `:114-119` to get the lines, and a node table carries no source text. `read_text` also accepts only literal arguments. So the `files` argument comes along, exactly as `ast_unparse_exact_from(ast_table, files, language := NULL, file_path := NULL)` already does. Dropping the `source` column instead would break the `EXCEPT` oracle, which needs both twins to return the same columns.
 
 - [ ] **Step 1: Write the failing parity test**
 
-Both twins must return the same six columns: `file_path`, `name`, `definition_kind`, `start_line`, `end_line`, `source`. Assert a non-zero baseline, then `EXCEPT` in both directions, passing the same glob as `files`.
+Both twins must return the same six columns: `file_path`, `name`,
+`definition_kind`, `start_line`, `end_line`, `source`. MEASURED from the final
+`SELECT` at `src/sql_macros/file_utilities.sql:138-146`; the `matches` CTE also
+carries `type`, which the outer `SELECT` drops, so do not add it. Assert a
+non-zero baseline, then `EXCEPT ALL` in both directions, passing the same glob
+as `files`.
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -680,11 +685,26 @@ Expected: PASS. As in Task 4 Step 4, this is the only run that compares two
 independent bodies. Record the pinned expectation into the test using the same whole-row,
 two-file shape Task 4 established and Task 5 reuses:
 `md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))`,
-with `EXCEPT ALL` rather than `EXCEPT`. `ast_source_of` returns `file_path`
-and `name` rather than `node_id`, so order on `file_path || ':' || name`
-instead, and say in a comment why the key differs here. Do **not** use
-`to_json`: it fails under `unittest`, where the json extension is not
-loaded, and `require json` would silently skip the whole file.
+with `EXCEPT ALL` rather than `EXCEPT`. Do **not** use `to_json`: it fails
+under `unittest`, where the json extension is not loaded, and `require json`
+would silently skip the whole file.
+
+**The sort key is NOT `file_path || ':' || name`, and the earlier draft of this
+step was wrong to say so.** MEASURED at
+`src/sql_macros/file_utilities.sql:102`: the `matches` CTE filters on
+`name = target_name`, so every returned row carries the SAME `name`. Ordering
+on it is ordering on a constant, which degrades the digest to per-file order
+and loses all power inside a file that holds two definitions of the target
+name. Use the macro's own documented order instead, which is
+`ORDER BY file_path, start_line` at `:146`:
+
+`md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.start_line))`
+
+Then MEASURE whether `(file_path, start_line)` is unique in the actual result
+for the fixture and target you choose. Run the grouped count and read it; do
+not assume. If any pair repeats, extend the key with `|| ':' || r.end_line`
+and say in a comment what the measurement showed. A digest built on a
+non-unique key is order-dependent between runs and will flake.
 
 - [ ] **Step 5: Prove it discriminates, while it still can**
 
@@ -694,7 +714,7 @@ Make `ast_source_of_from` drop one row, rebuild, re-run. Expected: FAIL on the
 - [ ] **Step 5b: Raise `issue_170`'s coverage floor with all nine `_from` names**
 
 Task 6 completes the nine `_from` variants, so this is the moment to do it once
-rather than three times. `test/sql/bugs/issue_170_macro_descriptions.test:42-43`
+rather than three times. `test/sql/bugs/issue_170_macro_descriptions.test:43-44`
 says of its name list: "The list is a floor on COVERAGE, not a census.
 Documenting a 59th macro does not fail this file; add its name here when you
 do." Nine macros have been documented since, so add them:
@@ -703,12 +723,35 @@ do." Nine macros have been documented since, so add them:
 `ast_follows_from`, `ast_in_range_from`, `ast_containing_line_from`,
 `ast_definitions_from`, `ast_source_of_from`.
 
-Update the `ALL 58 DESCRIBED` expectation and the `COUNT(*) >= 58` floor to 67,
-and run the file. It must stay green; if it does not, a banner is missing.
+The three sites are MEASURED: the `VALUES` list opens at `:51`, the
+`ALL 58 DESCRIBED` expectation is at `:72`, and the `COUNT(*) >= 58` floor is at
+`:75`. The list holds **58** names, counted (`grep -o` over `:51-72`), not
+inferred from the string. Update the expectation and the floor to 67, and run
+the file. It must stay green; if it does not, a banner is missing.
+
+Count the list again after editing it. 58 + 9 = 67, and a list that does not
+hold 67 names after the edit means a name was added twice or a line was lost.
 
 - [ ] **Step 6: Rewrite `ast_source_of` as a wrapper**
 
 - [ ] **Step 7: Add the one exemption, regenerate, rebuild, run the test**
+
+The "exemption" is prose plus counts, and nothing else. MEASURED:
+`test/sql/macro_split_oracle.test` asserts counts (`:49-56`) and names
+(`:60-105`). It has **no** `macro_definition` assertion at all, so a twin's
+rewrite needs no mechanical exemption — only the recorded reason and the moved
+counts. Add `ast_source_of -> ast_source_of_from` to the DELIBERATE CHANGES
+block, a fourth `query II` naming `ast_source_of_from` as a `table_macro`, and
+move the counts.
+
+**While in that file, correct its one false sentence.** Lines 39-41 read:
+"One macro of the stage's parity gap (task 6) is not exempt yet, so this guard
+keeps full strength over every macro not yet touched." The second clause is
+wrong: the guard never had strength over macro TEXT, because it never asserts
+`macro_definition`. Replace it with what the file actually does — counts and
+names — and point at the parity tests for text. This is a one-sentence prose
+fix inside a file this step already edits, so it is in scope. Do not add a
+`macro_definition` guard here; the per-task parity tests own that.
 
 Expected: PASS. `macro_split_oracle.test` PASS at 45 scalar / 61 table / 106 rows.
 
