@@ -188,7 +188,25 @@ def load_manifest(layout_path):
         layout = yaml.safe_load(f)
     if not isinstance(layout, dict) or 'sql_macros' not in layout:
         raise ValueError(f"{layout_path} has no `sql_macros` key")
-    return [entry['file'] for entry in layout['sql_macros']]
+    entries = layout['sql_macros']
+    if not entries:
+        raise ValueError(f"{layout_path}: `sql_macros` is empty; "
+                         "a header with zero macros is not a build")
+    seen = {}
+    for i, entry in enumerate(entries):
+        if not isinstance(entry, dict) or 'file' not in entry:
+            raise ValueError(f"{layout_path}: sql_macros[{i}] has no `file` key: {entry!r}")
+        name = entry['file']
+        if name in seen:
+            raise ValueError(f"{layout_path}: sql_macros[{i}] repeats `{name}` "
+                             f"(first at index {seen[name]})")
+        seen[name] = i
+        # verify_macro_boundary.py filters on `side`, so a typo here would make
+        # it skip the file instead of checking it.
+        if entry.get('side') not in ('core', 'addon'):
+            raise ValueError(f"{layout_path}: sql_macros[{i}] ({name}) has side "
+                             f"{entry.get('side')!r}; it must be exactly `core` or `addon`")
+    return [entry['file'] for entry in entries]
 
 
 def _require_macro_file(sql_dir, sql_file):

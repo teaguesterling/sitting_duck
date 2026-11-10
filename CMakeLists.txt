@@ -252,12 +252,11 @@ if(Python3_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_sql_macros.py
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         RESULT_VARIABLE EMBED_SQL_RESULT
-        OUTPUT_VARIABLE EMBED_SQL_OUTPUT
         ERROR_VARIABLE EMBED_SQL_ERROR
     )
     
     if(NOT EMBED_SQL_RESULT EQUAL 0)
-        message(WARNING "Failed to generate embedded SQL macros header; using the committed one. Generator said:\n${EMBED_SQL_ERROR}${EMBED_SQL_OUTPUT}")
+        message(WARNING "Failed to generate embedded SQL macros header; using the committed one. Generator said:\n${EMBED_SQL_ERROR}")
     endif()
 else()
     message(WARNING "Python not found - using existing embedded SQL macros header")

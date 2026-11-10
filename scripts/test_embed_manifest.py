@@ -21,6 +21,8 @@ each case below pins one:
 The bad manifest in case 2 is passed as data and written to a temporary
 directory. The real layout.yaml is never modified.
 """
+import contextlib
+import io
 import re
 import sys
 import tempfile
@@ -75,14 +77,67 @@ def test_header_order_equals_manifest_order():
     named = manifest_files()
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out.hpp"
-        embed_sql_macros.generate_header(SQL_DIR, out, named)
+        with contextlib.redirect_stdout(io.StringIO()):
+            embed_sql_macros.generate_header(SQL_DIR, out, named)
         got = HEADER_ENTRY.findall(out.read_text(encoding="utf-8"))
     assert got == named, f"header order {got} != manifest order {named}"
 
 
+def _load_manifest_from(text):
+    """Run load_manifest against a layout.yaml written from `text`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp) / "layout.yaml"
+        p.write_text(text, encoding="utf-8")
+        return embed_sql_macros.load_manifest(p)
+
+
+def _assert_rejected(text, *needles):
+    try:
+        _load_manifest_from(text)
+    except ValueError as e:
+        for n in needles:
+            assert n in str(e), f"error {e!r} does not name {n!r}"
+    else:
+        raise AssertionError(f"load_manifest accepted: {text!r}")
+
+
+def test_rejects_empty_manifest():
+    # An empty list used to yield a valid header with zero macros.
+    _assert_rejected("sql_macros: []\n", "empty")
+
+
+def test_rejects_duplicate_file():
+    _assert_rejected(
+        "sql_macros:\n  - {file: a.sql, side: core}\n  - {file: a.sql, side: addon}\n",
+        "a.sql", "1")
+
+
+def test_rejects_entry_without_file():
+    _assert_rejected("sql_macros:\n  - {file: a.sql, side: core}\n  - {side: core}\n",
+                     "file", "1")
+
+
+def test_rejects_bad_side():
+    # A typo here would make the boundary gate silently skip the file.
+    _assert_rejected("sql_macros:\n  - {file: a.sql, side: adon}\n", "adon", "0")
+
+
+def test_rejects_missing_side():
+    _assert_rejected("sql_macros:\n  - {file: a.sql}\n", "side", "0")
+
+
+def test_accepts_valid_manifest():
+    got = _load_manifest_from(
+        "sql_macros:\n  - {file: a.sql, side: core}\n  - {file: b.sql, side: addon}\n")
+    assert got == ["a.sql", "b.sql"], got
+
+
 def main():
     cases = [test_manifest_matches_tree, test_missing_file_raises,
-             test_header_order_equals_manifest_order]
+             test_header_order_equals_manifest_order,
+             test_rejects_empty_manifest, test_rejects_duplicate_file,
+             test_rejects_entry_without_file, test_rejects_bad_side,
+             test_rejects_missing_side, test_accepts_valid_manifest]
     failed = 0
     for case in cases:
         try:

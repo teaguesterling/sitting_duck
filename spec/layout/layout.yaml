@@ -99,7 +99,9 @@ registration_order:
 # language-agnostic, `addon` is opinionated. A build that keeps only one side
 # FILTERS this list and keeps the relative order of what is left. It does not
 # re-sort, so a subset needs no ordering rule of its own -- the same precedent
-# as `registration_order` above. Nothing reads `side` yet.
+# as `registration_order` above. scripts/verify_macro_boundary.py reads `side`
+# and fails if a `core` macro reaches an `addon` one; load_manifest() rejects
+# any value other than `core` or `addon`.
 sql_macros:
   - {file: semantic_predicates.sql, side: core}
   - {file: file_utilities.sql, side: core}

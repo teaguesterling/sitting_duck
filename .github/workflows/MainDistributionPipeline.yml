@@ -324,6 +324,30 @@ jobs:
             exit 1
           fi
 
+  # CREATE MACRO binds eagerly, so LOAD rejects a macro that calls an unknown
+  # function -- except when the body's FROM is query_table(<parameter>), which
+  # defers the whole body to call time (measured). Every `_from` macro does that,
+  # so a core macro that reaches an add-on macro loads cleanly and fails inside a
+  # user's query. No load test can see it; this static call-graph check can.
+  # Needs no build. Also runs scripts/test_embed_manifest.py, which ran nowhere
+  # in CI before.
+  macro-boundary:
+    name: macro boundary holds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure PyYAML is available
+        run: python3 -c "import yaml" || python3 -m pip install --break-system-packages pyyaml
+      - name: Prove the gate can fail
+        # Plants a direct and a transitive core-to-add-on reference, an empty
+        # parse, and prose inside a string; the gate must go red on the first
+        # three and stay green on the last.
+        run: python3 -I scripts/test_verify_macro_boundary.py
+      - name: Verify no core macro reaches an add-on macro
+        run: python3 -I scripts/verify_macro_boundary.py
+      - name: Verify the macro manifest drives the generator
+        run: python3 -I scripts/test_embed_manifest.py
+
   # The taxonomy tables — the semantic_type codes and names, the node flag byte,
   # and the name/native extraction strategy enums — are generated from
   # spec/taxonomy/taxonomy.yaml into marked blocks in five sources (v2.0 M1
