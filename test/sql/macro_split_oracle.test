@@ -36,13 +36,32 @@
 # pins the WHOLE ROW over two files rather than node_id alone -- task 4's review
 # measured that a count plus a node_id digest cannot see a column change.
 #
-# Scope: these eight only. One macro of the stage's parity gap (task 6) is not
-# exempt yet, so this guard keeps full strength over every macro not yet
-# touched.
+# The ninth and last is the source lookup (task 6 of the stage,
+# src/sql_macros/file_utilities.sql):
 #
-# The counts move by +5 then +3 table macros and the same in rows: all eight new
-# macros are table macros, so the scalar count must NOT move. A scalar count
-# other than 45 means something else changed.
+#   ast_source_of -> ast_source_of_from
+#
+# It is the one `_from` form that keeps a SECOND argument. The result carries
+# the source TEXT of each match, which comes from read_text(), and a node table
+# holds no text -- so the paths come along as `files`, exactly as
+# ast_unparse_exact_from(ast_table, files, ...) already does. Dropping the
+# `source` column instead would have left the two twins with different column
+# lists and broken the EXCEPT ALL oracle that the parity test is built on. Its
+# parity is asserted in test/sql/macro_from_parity_source_of.test, which also
+# pins what happens when `files` and `ast_table` disagree.
+#
+# WHAT THIS FILE GUARDS, AND WHAT IT DOES NOT. It asserts macro COUNTS and macro
+# NAMES. It makes no assertion about any macro's `macro_definition`, so a twin's
+# rewrite needs no mechanical exemption here -- the nine rewrites are recorded
+# above as the reason the definitions changed, and nothing in this file measures
+# the text. Macro TEXT is guarded by the three per-task parity tests, which
+# compare each twin's RESULT against its `_from` form's. Do not add a
+# macro_definition assertion here; that duplicates them and pins the one thing
+# the stage deliberately changes.
+#
+# The counts move by +5, then +3, then +1 table macros and the same in rows: all
+# nine new macros are table macros, so the scalar count must NOT move. A scalar
+# count other than 45 means something else changed.
 
 require sitting_duck
 
@@ -53,7 +72,7 @@ SELECT
   count(*)
 FROM duckdb_functions() WHERE database_name = 'memory';
 ----
-45	60	105
+45	61	106
 
 # The five `_from` variants are registered, and registered as table macros.
 # The count above moves by five whichever five arrive; this names them.
@@ -83,6 +102,19 @@ ORDER BY function_name;
 ast_containing_line_from	table_macro
 ast_definitions_from	table_macro
 ast_in_range_from	table_macro
+
+# The ninth, which is also the only one that takes two arguments. Named here for
+# the same reason as the eight above: the count moves by one whichever macro
+# arrives, so the count alone cannot say WHICH one did.
+query II
+SELECT function_name, function_type
+FROM duckdb_functions()
+WHERE database_name = 'memory'
+  AND function_name IN ('ast_source_of', 'ast_source_of_from')
+ORDER BY function_name;
+----
+ast_source_of	table_macro
+ast_source_of_from	table_macro
 
 # The 8 macros that moved to tree_analysis.sql are still registered table macros.
 query II

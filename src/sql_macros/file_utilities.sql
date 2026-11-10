@@ -64,25 +64,42 @@ CREATE OR REPLACE MACRO ast_get_source_numbered(file_path, start_line, end_line)
 -- Source Lookup - Table Macro (find definition by name, return numbered source)
 -- =============================================================================
 
--- Look up a definition by name and return its numbered source code
+-- For an AST table you already parsed. `ast_table` is a table NAME (a string),
+-- resolved with query_table(): parse once with read_ast, query many times.
+--
+-- WHY THIS ONE TAKES A SECOND ARGUMENT, unlike the other `_from` variants of
+-- the M2 stage 3 split. The result carries the SOURCE TEXT of each match, and a
+-- node table holds no source text -- only line numbers. So the paths come along
+-- as `files`, which is read with read_text() exactly as the path-taking twin
+-- reads them, in the same way ast_unparse_exact_from(ast_table, files, ...)
+-- takes both. There is no `language` parameter, because a parsed table carries
+-- its own.
 -- Usage:
---   SELECT * FROM ast_source_of('src/**/*.py', 'process_payment');
---   SELECT * FROM ast_source_of('src/**/*.py', 'MyClass', kind := 'class');
---   SELECT * FROM ast_source_of('src/**/*.py', 'handler', language := 'python', kind := 'function');
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_source_of_from('my_ast', 'src/**/*.py', 'process_payment');
+--   SELECT * FROM ast_source_of_from('my_ast', 'src/**/*.py', 'MyClass', kind := 'class');
+--
+-- KNOWN LIMITATION: `files` AND `ast_table` CAN DISAGREE, AND A NARROWER
+-- `files` NARROWS THE RESULT SILENTLY. The file_contents join below matches
+-- read_text(files).filename against the table's file_path exactly, so a match
+-- whose file is absent from `files` -- or spelled differently there, which a
+-- glob can do by prefixing './' and which Windows does with backslashes -- is
+-- dropped with no error. Pass the same pattern you passed read_ast.
+-- ast_unparse_exact_from normalises the spellings and errors on an unreadable
+-- file instead (#89); this macro does not, and the behaviour is pinned in
+-- test/sql/macro_from_parity_source_of.test rather than left undefined. The
+-- path-taking twin cannot reach this state, because it derives both from one
+-- argument.
 -- ----------------------------------------------------------------------------
--- ast_source_of: Source text for matched nodes, keyed by file pattern
+-- ast_source_of_from: Source text for matched nodes in a parsed AST table, read from files
 -- ----------------------------------------------------------------------------
-CREATE OR REPLACE MACRO ast_source_of(
-    file_patterns,
+CREATE OR REPLACE MACRO ast_source_of_from(
+    ast_table,
+    files,
     target_name,
-    language := NULL,
     kind := NULL
 ) AS TABLE
     WITH
-        ast AS (
-            SELECT *
-            FROM read_ast(file_patterns, language)
-        ),
         matches AS (
             SELECT
                 file_path,
@@ -98,7 +115,7 @@ CREATE OR REPLACE MACRO ast_source_of(
                 type,
                 start_line,
                 end_line
-            FROM ast
+            FROM query_table(ast_table)
             WHERE is_definition(semantic_type)
               AND is_construct(flags)
               AND name = target_name
@@ -116,7 +133,7 @@ CREATE OR REPLACE MACRO ast_source_of(
                 m.file_path,
                 string_split(fc.content, E'\n') AS lines
             FROM matches m
-            JOIN read_text(file_patterns) fc ON fc.filename = m.file_path
+            JOIN read_text(files) fc ON fc.filename = m.file_path
         ),
         -- Build numbered source for each match
         source_output AS (
@@ -144,6 +161,33 @@ CREATE OR REPLACE MACRO ast_source_of(
         source
     FROM source_output
     ORDER BY file_path, start_line;
+
+-- Look up a definition by name and return its numbered source code
+-- Usage:
+--   SELECT * FROM ast_source_of('src/**/*.py', 'process_payment');
+--   SELECT * FROM ast_source_of('src/**/*.py', 'MyClass', kind := 'class');
+--   SELECT * FROM ast_source_of('src/**/*.py', 'handler', language := 'python', kind := 'function');
+-- ----------------------------------------------------------------------------
+-- ast_source_of: Source text for matched nodes, keyed by file pattern
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_source_of(
+    file_patterns,
+    target_name,
+    language := NULL,
+    kind := NULL
+) AS TABLE
+    -- Parse, then delegate to ast_source_of_from, which holds the match filter,
+    -- the read_text join, the projection and the ORDER BY. `file_patterns` is
+    -- passed TWICE on purpose: once as the table the nodes come from, once as
+    -- the `files` the source lines are read from. That is the coupling this
+    -- path-taking form guarantees and the two-argument form makes optional --
+    -- which is also why this form cannot reach the mismatch the `_from` banner
+    -- warns about.
+    WITH __ast_source_of_src AS (
+        SELECT * FROM read_ast(file_patterns, language)
+    )
+    SELECT * FROM ast_source_of_from('__ast_source_of_src', file_patterns,
+                                     target_name, kind := kind);
 
 -- =============================================================================
 -- Source Extraction - Single Line
