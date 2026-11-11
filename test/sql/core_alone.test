@@ -55,7 +55,8 @@
 # this fixture. The fixture is static, so every count here is deterministic: the
 # pins are "same answer" checks, not "non-empty" checks, which is what lets the
 # restricted run mean something. A pin that moves is a finding to investigate,
-# never a value to update -- EXCEPT for the six KNOWN-DEFECT pins listed here,
+# never a value to update -- EXCEPT for the KNOWN-DEFECT pins in the five
+# entries listed below,
 # which are MEANT to move when their defect is fixed. Each one names its tracker
 # id and its post-fix expectation where it sits:
 #
@@ -515,7 +516,8 @@ FROM ast_source_of_from('core_ast', 'test/data/python/sample_app.py', 'load');
 # the normalising join lands alone) or a `statement error` naming the unmatched
 # file (if the readability guard raises first). The file-header rule that a pin
 # which moves is a failure to investigate does NOT apply to the second column
-# here, and this comment is the only place that exception is granted.
+# here. The file header's exception list names this section as well, so the
+# exception is granted in both places and neither is the only one.
 query II
 SELECT (SELECT count(*) FROM ast_source_of_from('core_ast','test/data/python/sample_app.py','load')),
        (SELECT count(*) FROM ast_source_of_from('core_ast','./test/data/python/sample_app.py','load'));

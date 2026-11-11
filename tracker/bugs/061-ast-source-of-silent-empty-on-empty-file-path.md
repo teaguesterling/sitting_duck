@@ -18,7 +18,7 @@ line of code and one symptom, and have different causes.
 
 **IT IS NOT `tracker/bugs/043` EITHER.** 043 covers the same adapter
 hardcoding `source_start_line`, `source_end_line`, `source_start_column` and
-`source_end_column` (`duckdb_adapter.cpp:1051-1055`). Measured:
+`source_end_column` (`languages/duckdb/duckdb_adapter.cpp:1051-1055`). Measured:
 `grep -n file_path tracker/bugs/043-duckdb-nodes-report-no-source-location.md`
 returns **nothing**. The empty `file_path` is outside its scope. 043 is the
 right owner for the *line numbers*, and this file is cross-referenced from
@@ -105,7 +105,7 @@ written so that an EMPTY path is caught rather than normalised away:
 
 1. **Treat an empty or NULL `file_path` as unlocatable and RAISE, naming it.**
    Not "no match" — the node exists and its file is unknown. The register to
-   follow is `src/sql_macros/ast_unparse.sql:745-750`, which already raises for
+   follow is `src/sql_macros/ast_unparse.sql:707-709`, which already raises for
    "node rows have an empty file_path, so their bytes cannot be located", and
    `:729-733`, which raises a dedicated message for the `'<inline>'` sentinel.
    `ast_source_of` needs the same two messages, and the empty-string case needs
