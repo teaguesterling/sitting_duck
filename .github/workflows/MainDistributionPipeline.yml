@@ -529,6 +529,46 @@ jobs:
       - name: Smoke test subset behavior
         run: ./scripts/test_language_subset.sh build/release/duckdb
 
+  # M2 stage 3 (tracker/features/057) split src/sql_macros into a `core` half and
+  # an `addon` half, on the claim that the core half is language-agnostic --
+  # which is what lets duckling ship the core with no tree-sitter grammar.
+  # scripts/verify_macro_boundary.py asserts that STATICALLY over macro text, and
+  # the macro-boundary gate job above runs it. This job is the LIVE half: it
+  # builds with -DSITTING_DUCK_LANGUAGES=duckdb -- one native adapter wrapping
+  # DuckDB's own parser, and ZERO tree-sitter parsers -- and runs every core
+  # macro against a committed AST fixture in that build.
+  #
+  # IT IS NOT A DUPLICATE OF language-subset-build above. That job proves the
+  # language REGISTRY behaves in a subset build (compiled-out languages error
+  # like unknown ones). This one proves the SQL MACRO LAYER works when the
+  # registry is as empty as it can get, and it is the only job that compiles and
+  # links with no tree-sitter parser at all -- the configure cannot see a
+  # reference to a compiled-out adapter class or a tree-sitter runtime symbol
+  # from a translation unit outside languages/, and only a link can.
+  #
+  # The script configures its own build tree (build/core-only) from the flags
+  # `make -n release` prints, so this job sets no EXT_FLAGS and does not call
+  # `make release`. It refuses to build into build/release on purpose.
+  core-only-build:
+    name: Core-only build (duckdb, no tree-sitter language)
+    runs-on: ubuntu-latest
+    env:
+      GEN: ninja
+      OVERRIDE_GIT_DESCRIBE: v2.0.0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout required submodules
+        # Pre-generated parsers are committed, so grammar submodules are not needed
+        run: git submodule update --init duckdb extension-ci-tools third_party/tree-sitter
+      - name: Install ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Ensure PyYAML is available
+        # The script's coverage gate derives the core macro names from
+        # spec/layout/layout.yaml through verify_macro_boundary, which needs yaml.
+        run: python3 -c "import yaml" || python3 -m pip install --break-system-packages pyyaml
+      - name: Build with one language and run the core-alone test
+        run: ./scripts/test_core_only_build.sh
+
   # Runtime grammar registration (register_language) is exercised only by the
   # test/sql/dynamic_languages/ suite, which is gated behind
   # `require-env SITTING_DUCK_TEST_GRAMMAR_DIR`. The default distribution legs

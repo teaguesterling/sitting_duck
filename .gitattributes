@@ -19,3 +19,18 @@ test/data/python/macros/patch_unicode.py -text
 # nothing to do with the code under test. GitHub's checkout action happens not
 # to translate today; `-text` makes that a guarantee instead of a default.
 test/data/unparse_leaf_text/* -text
+
+# The core-alone fixture and the file it indexes (M2 stage 3, tracker 057
+# task 7). test/data/fixtures/core_alone_ast.csv is a committed AST carrying
+# start_byte / end_byte for every node of test/data/python/sample_app.py, and
+# test/sql/core_alone.test asserts that ast_unparse_exact_from reassembles that
+# file BYTE FOR BYTE from the two together. A checkout that rewrote either
+# file's line endings would move the offsets in one and the bytes in the other.
+#
+# Like the unparse corpus above, that fails LOUDLY -- MEASURED: shortening the
+# fixture's root end_byte by one raised "'...sample_app.py' is now 4155 bytes
+# but the parse covers 4154". So this is a guarantee replacing a default, not a
+# fix for a silent-green hazard. sample_app.py is listed because the fixture
+# made it byte-pinned; it was not before.
+test/data/fixtures/core_alone_ast.csv -text
+test/data/python/sample_app.py -text
