@@ -91,7 +91,9 @@ CREATE OR REPLACE MACRO ast_get_source_numbered(file_path, start_line, end_line)
 -- (the __sof_guard CTE): an absent or mismatched `files` is a failure to locate
 -- the source, not an empty search. It names the count, one example path and the
 -- remedy, as ast_unparse_exact_from does (ast_unparse.sql:736-741). A table with
--- no matches at all still returns 0 rows. A `files` that covers only SOME of the
+-- no matches at all still returns 0 rows. A NULL or empty file_path in the node
+-- table raises with its own message (the empty one names tracker/bugs/061, the
+-- duckdb adapter's empty file_path), never the generic remedy. A `files` that covers only SOME of the
 -- matched files raises too, so narrowing `files` to a subset is an error.
 -- Record: tracker/bugs/058, which carries the measurement and the decision
 -- (Teague: "Raise plus the normalising join"). It honours
@@ -165,10 +167,32 @@ CREATE OR REPLACE MACRO ast_source_of_from(
         -- not an empty search (tracker/bugs/058). Raise when ANY matched file is
         -- unjoined, as ast_unparse_exact_from does (ast_unparse.sql:736-741).
         -- No match at all is a real, quiet 0.
+        --
+        -- Branch order is the precedent's (ast_unparse.sql:704-706): NULL
+        -- file_path, then empty, then the generic unjoined path. The NULL branch
+        -- has to come first and has to count ROWS: count(DISTINCT file_path)
+        -- ignores NULL, and error() given a NULL message returns NULL instead of
+        -- raising, so a guard that built its message from a NULL file_path would
+        -- fail open into 0 rows. The empty branch names the real cause (the
+        -- duckdb adapter always writes an empty file_path, tracker/bugs/061)
+        -- because the generic remedy would tell the caller to do what they did.
         __sof_guard AS (
             SELECT
                 CASE
-                    WHEN count(DISTINCT m.file_path) FILTER (WHERE fc.file_path IS NULL) > 0
+                    WHEN count(*) FILTER (WHERE m.file_path IS NULL) > 0
+                        THEN error('ast_source_of_from: ' ||
+                                   (count(*) FILTER (WHERE m.file_path IS NULL))::VARCHAR ||
+                                   ' matched row(s) have a NULL file_path, so their source ' ||
+                                   'cannot be located.')
+                    WHEN count(*) FILTER (WHERE m.file_path = '') > 0
+                        THEN error('ast_source_of_from: ' ||
+                                   (count(*) FILTER (WHERE m.file_path = ''))::VARCHAR ||
+                                   ' matched row(s) have an empty file_path, so their source ' ||
+                                   'cannot be located. The duckdb adapter always produces an ' ||
+                                   'empty file_path (tracker/bugs/061); parse a tree-sitter ' ||
+                                   'language, or read the source yourself.')
+                    WHEN count(DISTINCT m.file_path)
+                             FILTER (WHERE fc.file_path IS NULL) > 0
                         THEN error('ast_source_of_from: ' ||
                                    (count(DISTINCT m.file_path)
                                         FILTER (WHERE fc.file_path IS NULL))::VARCHAR ||

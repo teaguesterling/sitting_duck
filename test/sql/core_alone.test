@@ -763,7 +763,7 @@ SELECT (SELECT count(*) FROM ast_definitions('test/data/sql/example.sql', langua
 statement error
 SELECT count(*) FROM ast_source_of('test/data/sql/example.sql','customers', language := 'duckdb');
 ----
-matched file(s) have no content row
+tracker/bugs/061
 
 # =============================================================================
 # 8. parse_ast_list_table.sql -- the one macro in its file (68 of 69)
