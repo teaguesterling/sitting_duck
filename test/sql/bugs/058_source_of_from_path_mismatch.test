@@ -128,3 +128,47 @@ statement error
 SELECT * FROM ast_source_of_from('t6_empty', 'test/data/python/simple.py', 'main');
 ----
 tracker/bugs/061
+
+# ----------------------------------------------------------------------------
+# Section 7: the MIXED case, and the control that the guard is not trigger-happy
+# ----------------------------------------------------------------------------
+# A table can hold a NULL file_path AND a real path the glob does not cover at
+# the same time. The three branches are ordered NULL, empty, generic, so the
+# first one wins; what matters is that the combination is LOUD, because each
+# branch alone was tested and their combination was not.
+#
+# The control below is the one that gives the section its power. A guard that
+# raises for every call would pass all three error assertions above and be
+# useless, so one call where every matched file IS inside the glob must still
+# return its rows.
+
+statement ok
+CREATE TABLE t7_multi AS SELECT * FROM read_ast('test/data/python/*.py');
+
+statement ok
+CREATE TABLE t7_mixed AS
+  SELECT * REPLACE (CASE WHEN file_path LIKE '%simple.py' THEN NULL ELSE file_path END AS file_path)
+  FROM t7_multi;
+
+# Control: 'main' is defined in more than one file, so the partial case below is
+# a real partial and not an all-or-nothing, and every file is inside this glob.
+query II
+SELECT
+  (SELECT count(DISTINCT file_path) FROM t7_multi
+     WHERE is_definition(semantic_type) AND is_construct(flags) AND name = 'main'),
+  (SELECT count(*) FROM ast_source_of_from('t7_multi', 'test/data/python/*.py', 'main'));
+----
+4	4
+
+# Partial: 4 files matched, 1 inside the glob. A silent 1-of-4 is the same defect
+# as a silent 0-of-4, which is why the guard counts ANY unjoined file.
+statement error
+SELECT * FROM ast_source_of_from('t7_multi', 'test/data/python/simple.py', 'main');
+----
+3 of 4 matched file(s) have no content row
+
+# Mixed: one NULL path plus three real paths outside the glob. Still loud.
+statement error
+SELECT * FROM ast_source_of_from('t7_mixed', 'test/data/python/simple.py', 'main');
+----
+have a NULL file_path
