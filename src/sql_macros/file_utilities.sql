@@ -79,17 +79,32 @@ CREATE OR REPLACE MACRO ast_get_source_numbered(file_path, start_line, end_line)
 --   SELECT * FROM ast_source_of_from('my_ast', 'src/**/*.py', 'process_payment');
 --   SELECT * FROM ast_source_of_from('my_ast', 'src/**/*.py', 'MyClass', kind := 'class');
 --
--- KNOWN LIMITATION: `files` AND `ast_table` CAN DISAGREE, AND A NARROWER
--- `files` NARROWS THE RESULT SILENTLY. The file_contents join below matches
--- read_text(files).filename against the table's file_path exactly, so a match
--- whose file is absent from `files` -- or spelled differently there, which a
--- glob can do by prefixing './' and which Windows does with backslashes -- is
--- dropped with no error. Pass the same pattern you passed read_ast.
--- ast_unparse_exact_from normalises the spellings and errors on an unreadable
--- file instead (#89); this macro does not, and the behaviour is pinned in
--- test/sql/macro_from_parity_source_of.test rather than left undefined. The
--- path-taking twin cannot reach this state, because it derives both from one
--- argument.
+-- KNOWN LIMITATION: `files` AND `ast_table` CAN DISAGREE, AND THE RESULT IS
+-- NARROWED SILENTLY. The file_contents join below matches
+-- read_text(files).filename against the table's file_path EXACTLY, so a match
+-- whose file is absent from `files`, or spelled differently there, is dropped
+-- with no error. Pass read_text the same pattern you passed read_ast.
+--
+-- Two ways to get this wrong, both MEASURED on this build:
+--   * A NARROWER `files`. A table parsed from 'test/data/python/q*.py' (2
+--     files, 4 matches for '__init__') with files := one of those two paths
+--     returns 3 rows -- exactly the matches in that file, and the same 3 rows
+--     the twin returns for that single path. Narrowing is therefore usable, not
+--     broken, and it is pinned in test/sql/macro_from_parity_source_of.test.
+--   * A MIXED PATH SPELLING, which is the trap. A GLOB is normalised by both
+--     read_ast and read_text: './test/data/python/q*.py' and
+--     'test/data/python/q*.py' both yield 'test/data/python/...', so mixing
+--     those two spellings is harmless (4 rows). An EXACT path is NOT
+--     normalised: './test/data/python/qualified_names.py' keeps its './' in
+--     both functions. So pairing a './'-prefixed exact path with an unprefixed
+--     glob -- in EITHER direction -- yields 0 ROWS AND NO ERROR.
+-- (ast_unparse.sql:562-569 reports a third spelling, Windows native
+-- backslashes from the globber. That is not measured here.)
+--
+-- ast_unparse_exact_from normalises all three spellings for matching and errors
+-- on an unreadable file instead (#89); this macro does not. The path-taking
+-- twin cannot reach the state at all, because it derives both arguments from
+-- one.
 -- ----------------------------------------------------------------------------
 -- ast_source_of_from: Source text for matched nodes in a parsed AST table, read from files
 -- ----------------------------------------------------------------------------

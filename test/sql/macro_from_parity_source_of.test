@@ -313,6 +313,37 @@ SELECT count(DISTINCT file_path) FROM ast_source_of_from('tq', 'test/data/python
 ----
 1
 
+# THE MIXED-SPELLING TRAP, which is the narrowing above turned harmful. The two
+# arguments can name the SAME file in two spellings, and then the join misses
+# everything. MEASURED on this build:
+#
+#   * a GLOB is normalised by both read_ast and read_text --
+#     './test/data/python/q*.py' and 'test/data/python/q*.py' both yield
+#     'test/data/python/...', so mixing those two spellings is harmless;
+#   * an EXACT path is NOT normalised -- './test/data/python/qualified_names.py'
+#     keeps its './' in both functions.
+#
+# So pairing a './'-prefixed exact path with an unprefixed glob returns 0 rows
+# and raises nothing, in either direction. That is pinned here so it is defined
+# behaviour rather than an accident, with the 4 and the 3 beside it as the
+# positive controls: the same calls with agreeing spellings return rows, so a 0
+# below is a statement about the spelling and not a broken query.
+# ast_unparse_exact_from normalises for matching and errors instead (#89); see
+# the KNOWN LIMITATION note on the macro.
+
+statement ok
+CREATE TABLE tqd AS SELECT * FROM read_ast('./test/data/python/qualified_names.py');
+
+query IIIII
+SELECT
+  (SELECT count(*) FROM ast_source_of_from('tq', './test/data/python/q*.py', '__init__')),
+  (SELECT count(*) FROM ast_source_of_from('tq', 'test/data/python/qualified_names.py', '__init__')),
+  (SELECT count(*) FROM ast_source_of_from('tq', './test/data/python/qualified_names.py', '__init__')),
+  (SELECT count(*) FROM ast_source_of_from('tqd', './test/data/python/qualified_names.py', '__init__')),
+  (SELECT count(*) FROM ast_source_of_from('tqd', 'test/data/python/q*.py', '__init__'));
+----
+4	3	0	3	0
+
 # =============================================================================
 # 6. A missing table names itself, a swapped pair names itself, and an empty
 #    table is not an error
