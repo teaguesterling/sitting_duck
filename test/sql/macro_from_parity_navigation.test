@@ -58,6 +58,12 @@
 # {'x': 5::BIGINT}::VARCHAR` is true, because both render `{'x': 5}`. A widened
 # or narrowed numeric type is therefore invisible here; a retype that changes
 # the rendered text (to VARCHAR, to a struct, to a list) is not.
+# A SECOND BLIND SPOT, measured by the M2 stage 3 task 7 review and owned by
+# tracker/bugs/062: SEMANTIC_TYPE -> VARCHAR is lossy for 192 of 256 codes,
+# because each name covers a block of four consecutive codes. So these digests
+# CANNOT SEE a semantic_type retype that stays inside a block of four (code
+# 252 -> 253 renders DEFINITION_MODULE both times); one that crosses a name
+# boundary (68 -> 72) does move them.
 # (to_json() would do the same, but it needs the json extension, which this
 # harness does not load -- and a `require json` that went unmet would skip this
 # whole file silently, turning a failure into a vacuous pass.) The cast's exact

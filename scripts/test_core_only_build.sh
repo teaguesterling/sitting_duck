@@ -197,10 +197,22 @@ ok "unparse rules for python are compiled in without a python parser ($PY_RULES 
 # -DSITTING_DUCK_LANGUAGES. So BOTH sides of the core/add-on boundary are still
 # registered here, and a core macro that reached an add-on macro would still
 # succeed. This script proves "core without a tree-sitter language", not "core
-# without the add-ons". Printed so the distinction is visible in a CI log.
+# without the add-ons".
+#
+# THE COUNT IS PRINTED FOR DIAGNOSIS AND IS NOT THE ASSERTION. A `-gt 0` check
+# cannot tell 106 from 69, so on its own it would let add-on registration break
+# while the leg stayed green printing the number that disproves its own comment.
+# What IS asserted is the claim the comment makes: that a macro from the ADD-ON
+# side of the boundary is registered here. ast_dead_code is defined in
+# src/sql_macros/tree_analysis.sql, which the manifest tags `side: addon`, so
+# its presence is direct evidence rather than an inference from a total.
 N_MACROS=$(run_sql "SELECT count(*) FROM duckdb_functions() WHERE database_name = 'memory';")
-echo "--- macros registered in this build: $N_MACROS (both sides of the core/add-on boundary) ---"
+echo "--- macros registered in this build: $N_MACROS (printed for diagnosis, not asserted) ---"
 [ "$N_MACROS" -gt 0 ] || fail "duckdb_functions() reported $N_MACROS macros; the extension did not register"
+N_ADDON=$(run_sql "SELECT count(*) FROM duckdb_functions() WHERE database_name = 'memory' AND function_name = 'ast_dead_code';")
+[ "$N_ADDON" = "1" ] \
+    || fail "the add-on macro ast_dead_code is not registered in this build ($N_ADDON rows), so the comment above -- that both sides of the boundary register regardless of the language selection -- is no longer true. Re-read what this script claims to prove."
+ok "an add-on macro is registered too, so this leg does not separate the two sides"
 
 # -----------------------------------------------------------------------------
 # 4. COVERAGE GATE: every core macro must have a call site in core_alone.test
@@ -239,6 +251,37 @@ print(f"derived {len(core)} core macros from the manifest; "
 if missing:
     sys.exit("FAIL: these core macros have no call site in test/sql/core_alone.test: "
              + ', '.join(missing))
+
+# PIN THE DERIVED COUNT, not just the absence of a gap. Without this, a parser
+# regression that UNDER-derives -- DEF_RE stopping at a new CREATE MACRO syntax
+# form, say -- derives fewer names, finds a call site for every one of them, and
+# PASSES. "41 core macros; 41 have a call site" is a green gate over a surface
+# that lost 28 macros, which is the gate-satisfiable-by-incomplete-information
+# shape ~/.CLAUDE.md forbids. The per-file counts are pinned too, so a parser
+# that loses a whole file is named rather than absorbed into the total.
+EXPECTED_CORE = 69
+EXPECTED_PER_FILE = {
+    'semantic_predicates.sql': 31,
+    'file_utilities.sql': 5,
+    'tree_navigation.sql': 14,
+    'relational_operators.sql': 10,
+    'parse_ast_list_table.sql': 1,
+    'ast_unparse.sql': 8,
+}
+if len(core) != EXPECTED_CORE:
+    sys.exit(
+        f"FAIL: derived {len(core)} core macros, expected {EXPECTED_CORE}. If a core "
+        f"macro was deliberately ADDED or REMOVED, update EXPECTED_CORE and "
+        f"EXPECTED_PER_FILE here, add or remove its call site in core_alone.test, and "
+        f"re-measure test/sql/macro_split_oracle.test. If nothing was added or removed, "
+        f"the manifest parser has regressed and is silently under-deriving.")
+per_file = {}
+for name in core:
+    per_file[owner[name]] = per_file.get(owner[name], 0) + 1
+if per_file != EXPECTED_PER_FILE:
+    sys.exit(f"FAIL: per-file core macro counts are {per_file}, expected "
+             f"{EXPECTED_PER_FILE}; the total matched but the distribution did not")
+print(f"derived count pinned at {EXPECTED_CORE}, per-file distribution matches")
 PY
 ok "every core macro derived from the manifest is called in core_alone.test"
 
@@ -268,11 +311,18 @@ trap 'rm -f "$TEST_LOG"' EXIT
 if ! "$UNITTEST" --require sitting_duck test/sql/core_alone.test 2>&1 | tee "$TEST_LOG"; then
     fail "test/sql/core_alone.test did not pass"
 fi
+#
+# AND IT IS A FLOOR AT THE REAL NUMBER, not at zero. `-gt 0` passes a file
+# truncated to one assertion, printing "asserted 1 things" while this script's
+# own prose and the task report speak of 190. A floor catches truncation, which
+# is the hazard, and tolerates assertions being ADDED, which is the normal
+# direction of change. Lowering it must be a conscious edit here.
+MIN_ASSERT=190
 N_ASSERT=$(sed -n 's/.*All tests passed (\([0-9][0-9]*\) assertions.*/\1/p' "$TEST_LOG" | tail -1)
 [ -n "$N_ASSERT" ] \
     || fail "the runner printed no 'All tests passed (N assertions' line; it may have skipped the file rather than run it"
-[ "$N_ASSERT" -gt 0 ] \
-    || fail "the runner reported $N_ASSERT assertions; a run that asserted nothing is not a pass"
-ok "core_alone.test ran and asserted $N_ASSERT things"
+[ "$N_ASSERT" -ge "$MIN_ASSERT" ] \
+    || fail "the runner reported $N_ASSERT assertions, below the floor of $MIN_ASSERT. The file was truncated, or assertions were removed on purpose -- in which case lower MIN_ASSERT here deliberately."
+ok "core_alone.test ran and asserted $N_ASSERT things (floor $MIN_ASSERT)"
 
 echo "PASS: the core SQL macros run with no tree-sitter language compiled in"

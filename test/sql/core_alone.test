@@ -32,7 +32,9 @@
 # test/data/fixtures/core_alone_ast.csv: a python parse, committed, loaded into a
 # build that cannot parse python. That is what the `_from` variants exist for.
 #
-# THE 69 CORE MACROS ARE ALL CALLED HERE, except one. The surface is DERIVED,
+# ALL 69 CORE MACROS ARE CALLED HERE. One of them, ast_unparse, is exempt from
+# having its RESULT asserted -- it is still called, and the error it raises is
+# pinned; see section 10. Nothing is uncalled. The surface is DERIVED,
 # not transcribed: scripts/test_core_only_build.sh re-derives the names with
 # scripts/verify_macro_boundary.py's own parse_macros() over the `sql_macros`
 # manifest in spec/layout/layout.yaml, and FAILS if any derived name has no
@@ -53,8 +55,24 @@
 # this fixture. The fixture is static, so every count here is deterministic: the
 # pins are "same answer" checks, not "non-empty" checks, which is what lets the
 # restricted run mean something. A pin that moves is a finding to investigate,
-# never a value to update -- with the two stated exceptions in sections 5b and 9,
-# which pin KNOWN DEFECTS and are MEANT to move when those are fixed.
+# never a value to update -- EXCEPT for the six KNOWN-DEFECT pins listed here,
+# which are MEANT to move when their defect is fixed. Each one names its tracker
+# id and its post-fix expectation where it sits:
+#
+#   section 2    is_boolean_literal  0 0   and  is_type_definition  0 0
+#                                          tracker/bugs/060
+#   section 5b   the second column of the two-spelling row
+#                                          tracker/bugs/058
+#   section 7    ast_containing_line 20   and  ast_in_range 20
+#                                          tracker/bugs/043
+#   section 7    the blank_paths / source_of_rows row
+#                                          tracker/bugs/061
+#   section 9    the duckdb unparse text row
+#                                          tracker/bugs/059
+#
+# A pin NOT in that list which moves is a finding. tracker/bugs/062 is the one
+# recorded defect with no pin of its own, because it describes a blind spot in
+# the digest convention rather than a wrong value; see section 0.
 
 require sitting_duck
 
@@ -70,8 +88,10 @@ require sitting_duck
 #             `""` to NULL by default. MEASURED: with the default, 697 of 1246
 #             rows came back with a NULL `name` where read_ast had an empty
 #             string. header/delim/quote/escape are given explicitly because the
-#             42-line `#` provenance block at the top of the file changes what
-#             the sniffer sees.
+#             85-line `#` provenance block at the top of the file changes what
+#             the sniffer sees. (It was 42 lines when this sentence was first
+#             written and the sentence did not keep up -- measured 85 now, the
+#             first non-`#` line being line 86.)
 #
 #   __fx_u    casts to read_ast's exact types, with the three SEMANTIC_TYPE
 #             sites still held as their UTINYINT codes.
@@ -94,16 +114,34 @@ require sitting_duck
 # inside scope.stack. The codes are exact.
 #
 # THAT ALSO LIMITS THIS BRANCH'S md5(r::VARCHAR) DIGEST CONVENTION, which the
-# three macro_from_parity_*.test files and section 0b below all use. A whole-row
-# cast to VARCHAR renders semantic_type by NAME, so it CANNOT SEE a change in a
-# semantic type's low two bits -- the same blind spot the convention already
-# documents for a widened numeric type. Worth knowing before trusting one of
-# those digests about a semantic_type change.
+# three macro_from_parity_*.test files and section 0b below all use, and it has
+# its own tracker entry: tracker/bugs/062. A whole-row cast to VARCHAR renders
+# semantic_type by NAME, so it CANNOT SEE a retype that stays INSIDE a block of
+# four -- the same class of blind spot the convention already documents for a
+# widened numeric type. All four files that rest on md5(r::VARCHAR) now cite 062.
 #
 # The cost of the code encoding is that this fixture is COUPLED TO THE ENUM'S
 # NUMBERING: renumbering SEMANTIC_TYPE would re-type every node here without
-# changing a byte of the CSV. The whole-row digest in section 0b is what catches
-# that, and it is why the digest is here rather than only a row count.
+# changing a byte of the CSV.
+#
+# WHAT CATCHES THAT, STATED EXACTLY, because an earlier version of this comment
+# claimed more than the digest delivers and contradicted the paragraph above it.
+# MEASURED, both directions:
+#
+#   a retype ACROSS a name boundary (code 68 -> 72, LITERAL_STRING ->
+#   LITERAL_ATOMIC) MOVES the section 0b digest;
+#
+#   a retype WITHIN a block (code 252 -> 253, DEFINITION_MODULE both times)
+#   leaves it UNCHANGED.
+#
+# So section 0b catches a renumbering wherever the printed name changes, which is
+# the shape a renumbering usually takes, and is blind to a permutation inside a
+# block of four. The check that catches THAT is not another digest -- an md5 over
+# semantic_type::UTINYINT would see the permutation but not a renumbering, which
+# leaves this file's codes untouched and changes only what they mean. It is a
+# fixture-versus-live comparison on a full build, which the fixture header
+# prescribes under "REGENERATING IT" and which is a generation-time check, not
+# something this file can do in a parser-free build.
 
 statement ok
 CREATE TABLE __fx_raw AS SELECT * FROM read_csv(
@@ -240,9 +278,20 @@ ad0644f76feee9ad14c5de4d74cc0cac
 #
 # Neither name exists in the SEMANTIC_TYPE enum -- MEASURED, both cast from
 # VARCHAR to SEMANTIC_TYPE as NULL, and both predicates return false for all 256
-# values. So these two macros are dead as written. They are pinned here at 0/0
-# so the defect has a witness; fixing them is a behaviour change and therefore
-# outside M2 stage 3, which is constrained to no behaviour change.
+# values. So these two macros are dead as written. Fixing them is a behaviour
+# change and therefore outside M2 stage 3.
+#
+# OWNED BY tracker/bugs/060, which also records the part that is not visible
+# here: is_type_definition has FIVE consumer branches in shipped macro bodies,
+# so `definition_type = 'type'` can never be produced and
+# ast_source_of(..., kind := 'type') is a documented argument value that
+# silently matches nothing.
+#
+# THESE TWO ROWS ARE MEANT TO MOVE, and they are in the header's exception list.
+# POST-FIX EXPECTATION: the dom_hits column goes from 0 to 4 for each predicate
+# whose name is corrected, and the row disappears entirely if 060 is resolved by
+# deleting the predicate instead. A moved 0 here is 060 being fixed, not a
+# regression.
 #
 # This is NOT the same thing as the lossy name round trip in section 0. There,
 # real names map to a block of four codes and lose the low two bits. Here the
@@ -486,11 +535,22 @@ SELECT (SELECT count(*) FROM ast_source_of_from('core_ast','test/data/python/sam
 # universal ones. In a build with no tree-sitter language at all, those 8 rows
 # are rules for a language the binary cannot parse -- which is exactly the
 # separation this task exists to demonstrate.
+#
+# ASSERTED AS A SHAPE, NOT AS A COUNT, deliberately. Measured on this build the
+# counts are 23 total = 15 universal + 8 python, and those figures are recorded
+# here in prose. They are NOT the assertion, because a correct future change
+# that adds one universal spacing rule would break a bare 23 and a bare 15 while
+# changing nothing this section is about -- and that number has already moved
+# once in this stage's history, from the plan's 6 to the measured 15. What the
+# section means is "python's rules are present and nothing foreign is", so that
+# is what the row below says.
 query III
-SELECT count(*), count(*) FILTER (language = '*'), count(*) FILTER (language = 'python')
+SELECT count(*) FILTER (language = '*') > 0 AS has_universal_rules,
+       count(*) FILTER (language = 'python') > 0 AS has_python_rules,
+       count(*) FILTER (language NOT IN ('*', 'python')) AS foreign_rows
 FROM ast_unparse_rules('python');
 ----
-23	15	8
+true	true	0
 
 # THE REVIEW FOCUS CASE THIS TASK OWNS, part 1: the real shape of "a language
 # with no rules". `duckdb` has no entry in the 53-entry rule map, so
@@ -500,12 +560,18 @@ FROM ast_unparse_rules('python');
 # MEASURED on build/release/duckdb at ca0b7fd: 15 rows, all tagged '*', 0 rows
 # tagged with any language. They are the TIGHT_BEFORE/TIGHT_AFTER punctuation
 # rules for , ; : ) ] } ( [ { . -> :: -- 15 of them, not 6. The "all universal,
-# no language rows" half of the brief's claim holds; the number did not.
+# no language rows" half of the brief's claim held; the number did not, and that
+# is exactly why the row below asserts the SHAPE and leaves the 15 in prose.
+# "No language rows" is the claim; "fifteen" is an incidental fact about today's
+# universal rule set, and the brief's own wrong 6 is the evidence that pinning it
+# invites a false regression.
 query III
-SELECT count(*), count(*) FILTER (language = '*'), count(*) FILTER (language <> '*')
+SELECT count(*) > 0 AS has_rules,
+       count(*) FILTER (language <> '*') AS language_specific_rows,
+       count(DISTINCT language) AS distinct_language_tags
 FROM ast_unparse_rules('duckdb');
 ----
-15	15	0
+true	0	1
 
 # ast_unparse_from (52 of 69) and ast_unparse_custom (53 of 69).
 #
@@ -543,15 +609,38 @@ FROM ast_unparse_code('SELECT a, b FROM t WHERE a = 1','duckdb');
 
 # ast_unparse_exact_splice (55 of 69) and ast_unparse_exact_from (56 of 69).
 #
-# THIS IS THE STRONGEST NON-VACUITY EVIDENCE IN THE FILE. The byte-exact law is
-# `unparse(parse(f)) == f`. Here the parse is a CSV committed to git and the
-# build cannot parse python at all, yet the macro reassembles the file byte for
-# byte from the fixture's start_byte/end_byte and the file's own bytes. A
-# fixture that had lost or reordered a single node would fail this, because
-# ast_unparse_exact_splice also checks that the node table is a complete tree
-# (n_rows = root descendant_count + 1) and that the leaf frontier is an
-# antichain. `bool_and` over the single row rather than a bare `=` so that a
-# zero-row result reads as NULL, not as a pass.
+# WHAT THIS ASSERTION DOES AND DOES NOT MEASURE. It is worth stating precisely,
+# because an earlier version of this comment called it "the strongest
+# non-vacuity evidence in the file" and said a lost or REORDERED node would fail
+# it. The second half is measured FALSE and the first half belongs to section 0b.
+#
+# THE MECHANISM (src/sql_macros/ast_unparse.sql, the __sdx_assembled CTE). The
+# splice emits, per leaf in (start_byte, end_byte, node_id) order,
+# blob[prev_end+1 : start_byte] || blob[start_byte+1 : end_byte] -- the gap then
+# the leaf, BOTH sliced from the file's own bytes -- and then appends everything
+# after the last leaf. The union of those ranges is [0, EOF) for ANY ordered,
+# non-overlapping span set whose root end_byte equals the file length, whatever
+# the individual boundaries are. 30% of this file's 4155 bytes is supplied by
+# the gap filler regardless of the offsets.
+#
+# MEASURED on this fixture: shifting one leaf's start_byte by -1 into its own
+# gap, shifting one end_byte by +1, and SWAPPING two leaves' spans outright all
+# leave byte_exact = true. So this assertion cannot see a reorder, and the word
+# is gone from this comment.
+#
+# WHAT IT DOES DISCRIMINATE, and these are real guards inside the macro: a LOST
+# node (the n_rows <> root descendant_count + 1 check), an OVERLAPPING leaf span
+# (the antichain check), a wrong TOTAL FILE LENGTH (the staleness check -- a
+# planted end_byte -1 on the ROOT raises "'...sample_app.py' is now 4155 bytes
+# but the parse covers 4154"), and a non-UTF-8 slice boundary. So it pins tree
+# completeness, the antichain property, the file length and decodability.
+#
+# THE OFFSETS THEMSELVES ARE PINNED BY SECTION 0b's whole-row digest, which a
+# one-byte start_byte change DOES move. That is where this file's strongest
+# fixture evidence lives.
+#
+# `bool_and` over the single row rather than a bare `=` so that a zero-row
+# result reads as NULL, not as a pass.
 #
 # ast_unparse_exact_splice takes the bytes as a TABLE of (fp, cblob), which is
 # the shape ast_unparse_exact_from builds internally from read_blob(files). Both
@@ -614,6 +703,15 @@ every node reports start_byte = end_byte = 0
 # returns none. What these assertions establish is that each wrapper BINDS and
 # RUNS without a tree-sitter parser, which is this task's claim; the richness of
 # the result is the adapter's business.
+#
+# THOSE TWO 20s ARE KNOWN-DEFECT PINS, OWNED BY tracker/bugs/043 -- "duckdb nodes
+# report no source location: every node claims line 1". They are in the header's
+# exception list. POST-FIX EXPECTATION: once the adapter reports real line
+# numbers, ast_containing_line('...', 1) stops matching the whole file and
+# ast_in_range(1, 12) stops matching every node, so BOTH counts fall below 20.
+# The example file spans 25 lines, so neither has a predictable post-fix value
+# and both must be re-measured rather than guessed. A 20 that moves here is 043
+# being fixed, not a regression.
 query II
 SELECT 'ast_containing_line' AS macro, count(*) AS n FROM ast_containing_line('test/data/sql/example.sql', 1, language := 'duckdb') UNION ALL
 SELECT 'ast_definitions', count(*) FROM ast_definitions('test/data/sql/example.sql', language := 'duckdb') UNION ALL
@@ -640,9 +738,21 @@ ast_precedes	1
 # `duckdb`, for a reason that belongs to the ADAPTER and not to the macro:
 # MEASURED, all 20 nodes of a duckdb parse carry an EMPTY file_path. The macro
 # joins read_text(files).filename against that file_path on exact equality, so
-# the join matches nothing. That is tracker/bugs/058's silent-empty path reached
-# through the adapter rather than through a './' prefix -- a second instance of
-# 058, and reported as one.
+# the join matches nothing.
+#
+# OWNED BY tracker/bugs/061, AND NOT BY 058. An earlier version of this comment
+# called it "a second instance of 058", which is wrong in the way that matters:
+# 058 is scoped to a path-SPELLING disagreement and its prescribed fix is a
+# normalising join, and an empty string normalises to an empty string and still
+# joins to nothing. Someone who fixes 058 and closes it would leave this door
+# open. 043 does not cover it either -- measured, `grep -n file_path` over 043
+# returns nothing -- so it needed an id of its own.
+#
+# THIS ROW IS A KNOWN-DEFECT PIN and is in the header's exception list.
+# POST-FIX EXPECTATION: a `statement error` naming the unlocatable file, if 061
+# lands as the loud guard it prescribes; or, if the adapter is fixed first,
+# blank_paths goes to 0 and source_of_rows to 1. Either way columns 3 and 4 move
+# together, and that is 061 being fixed rather than a regression.
 #
 # Four columns, so the 0 has three controls beside it and cannot be produced by
 # a broken query: the definition the macro is looking for IS there (control_defs
@@ -694,11 +804,18 @@ SELECT count(*) FROM parse_ast_list_table('SELECT a, b FROM t WHERE a = 1','duck
 # tree cannot be unparsed, pointing at src/sql_macros/ast_unparse.sql:502-515,
 # which already carries the "NOT SERVED: the `duckdb` language adapter" note.
 #
+# OWNED BY tracker/bugs/059, which also records the part not visible here: the
+# same garbage comes out of ast_unparse_code, measured -- `a b t a 1` from both
+# bodies -- so all three ~100-line copies of the rules-based walk are affected,
+# not only the one called here.
+#
 # NOT FIXED HERE, deliberately. A change to the rules-based unparse path is
 # outside this task and outside M2 stage 3's no-behaviour-change constraint.
-# This pin is the witness, and it is MEANT to move -- to a `statement error` --
-# when the fix lands. The file-header rule about pins that move does not apply
-# to this block, and this comment is the only place that exception is granted.
+# This pin is the witness, and it is a KNOWN-DEFECT pin in the header's
+# exception list. POST-FIX EXPECTATION: a `statement error` naming the language
+# and saying this adapter's tree cannot be unparsed. The section 6 pin for
+# ast_unparse_code moves with it; the python ast_unparse_from digest in the same
+# section must NOT move, and is the control that proves the guard is scoped.
 statement ok
 CREATE TABLE dd_ast AS SELECT * FROM parse_ast('SELECT a, b FROM t WHERE a = 1','duckdb');
 
