@@ -247,7 +247,32 @@ ok "every core macro derived from the manifest is called in core_alone.test"
 # -----------------------------------------------------------------------------
 # ONE path per invocation. Two .test arguments concatenate into a single bogus
 # filter and the runner reports "No tests ran" at exit 0.
+#
+# --require sitting_duck IS LOAD-BEARING, NOT TIDINESS. `require sitting_duck`
+# in a .test file means "SKIP unless available", so if the extension cannot be
+# loaded this file skips and the runner still exits 0 — a green leg that ran
+# nothing. The Makefile's `test-require` target documents that failure mode and
+# this flag as the fix: --require turns a missing requirement into
+# parser.Fail("require %s: FAILED"). A one-language build is exactly the
+# situation where a load problem is plausible, so this leg must not be able to
+# report success by skipping.
+#
+# AND THE EXIT CODE IS NOT ENOUGH EITHER. The output is checked for the "All
+# tests passed (N assertions" line with N > 0, because "0 assertions" and "0
+# passed, 1 skipped" are both compatible with exit 0 on some runner versions.
+# The language checks above went through the CLI shell, which proves nothing
+# about unittest's `require` resolution.
 echo "--- test/sql/core_alone.test against $UNITTEST ---"
-"$UNITTEST" test/sql/core_alone.test
+TEST_LOG=$(mktemp)
+trap 'rm -f "$TEST_LOG"' EXIT
+if ! "$UNITTEST" --require sitting_duck test/sql/core_alone.test 2>&1 | tee "$TEST_LOG"; then
+    fail "test/sql/core_alone.test did not pass"
+fi
+N_ASSERT=$(sed -n 's/.*All tests passed (\([0-9][0-9]*\) assertions.*/\1/p' "$TEST_LOG" | tail -1)
+[ -n "$N_ASSERT" ] \
+    || fail "the runner printed no 'All tests passed (N assertions' line; it may have skipped the file rather than run it"
+[ "$N_ASSERT" -gt 0 ] \
+    || fail "the runner reported $N_ASSERT assertions; a run that asserted nothing is not a pass"
+ok "core_alone.test ran and asserted $N_ASSERT things"
 
 echo "PASS: the core SQL macros run with no tree-sitter language compiled in"

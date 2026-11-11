@@ -74,14 +74,31 @@ require sitting_duck
 #             the sniffer sees.
 #
 #   __fx_u    casts to read_ast's exact types, with the three SEMANTIC_TYPE
-#             sites still held as their UTINYINT codes. The fixture carries the
-#             CODES rather than the names on purpose: MEASURED, three names
-#             ('DEFINITION_TYPE', 'LITERAL_BOOLEAN', 'LITERAL') cast from
-#             VARCHAR to SEMANTIC_TYPE as NULL, which silently re-typed 15
-#             top-level values and 5 nested ones.
+#             sites still held as their UTINYINT codes.
 #
 #   core_ast  restores SEMANTIC_TYPE at all three sites, so the table is
 #             read_ast's output in read_ast's types.
+#
+# WHY THE CODES AND NOT THE NAMES: SEMANTIC_TYPE -> VARCHAR IS LOSSY, AND THAT
+# IS A FINDING IN ITS OWN RIGHT. MEASURED on this build: of the 256 codes, 192
+# do not survive a round trip through their own printed name. Every name covers
+# a BLOCK OF FOUR consecutive codes -- the low two bits are a refinement the
+# name does not show -- and parsing the name returns the lowest code of the
+# block:
+#
+#     244, 245, 246, 247 all print DEFINITION_VARIABLE
+#     'DEFINITION_VARIABLE' parses back to 244
+#
+# On this file, writing names instead of codes silently re-typed 15 top-level
+# values (codes 246, 149, 77, 78 and 154), 5 values inside qualified_name and 5
+# inside scope.stack. The codes are exact.
+#
+# THAT ALSO LIMITS THIS BRANCH'S md5(r::VARCHAR) DIGEST CONVENTION, which the
+# three macro_from_parity_*.test files and section 0b below all use. A whole-row
+# cast to VARCHAR renders semantic_type by NAME, so it CANNOT SEE a change in a
+# semantic type's low two bits -- the same blind spot the convention already
+# documents for a widened numeric type. Worth knowing before trusting one of
+# those digests about a semantic_type change.
 #
 # The cost of the code encoding is that this fixture is COUPLED TO THE ENUM'S
 # NUMBERING: renumbering SEMANTIC_TYPE would re-type every node here without
@@ -164,7 +181,7 @@ SELECT md5(string_agg(r::VARCHAR, ',' ORDER BY r.node_id)) FROM core_ast r;
 68975e9e028fdbe48953bcd02bfccb1a
 
 # =============================================================================
-# 1. file_utilities.sql -- the three SCALAR source readers (3 of 69)
+# 1. file_utilities.sql -- the three SCALAR source readers (3 of 69 core macros called)
 # =============================================================================
 #
 # ast_get_source, ast_get_source_numbered and ast_get_source_line take a PATH
@@ -188,7 +205,7 @@ SELECT md5(ast_get_source_line('test/data/python/sample_app.py', 1));
 ad0644f76feee9ad14c5de4d74cc0cac
 
 # =============================================================================
-# 2. semantic_predicates.sql -- all 30 is_* predicates (30 of 69)
+# 2. semantic_predicates.sql -- all 30 is_* predicates (33 of 69)
 # =============================================================================
 #
 # A row count is meaningless for a scalar predicate, so each one is measured
@@ -200,6 +217,11 @@ ad0644f76feee9ad14c5de4d74cc0cac
 #             input, which is a defect in the predicate, not a gap in the
 #             fixture -- see the note below.
 #
+#             WHY NEARLY EVERY dom_hits IS 4: each semantic type NAME covers a
+#             block of four consecutive codes, as section 0 records. is_literal
+#             reads 16 because it matches on the 'LITERAL' prefix and so spans
+#             four such names.
+#
 #   fix_hits  how many of the fixture's 1246 nodes satisfy it.
 #
 # PAIRING THEM IS THE POINT, and it is ruling R34's shape. A fix_hits of 0 on
@@ -207,8 +229,8 @@ ad0644f76feee9ad14c5de4d74cc0cac
 # predicate is broken" or "the fixture did not load". With dom_hits beside it,
 # and with 1246 already pinned above as the floor, a 0 in fix_hits is a
 # statement about python and a 0 in dom_hits is a statement about the enum. A
-# wholly broken load cannot produce this table, because 24 of the 30 fix_hits
-# are non-zero and they would all go to 0 together.
+# wholly broken load cannot produce this table, because 21 of the 30 fix_hits
+# are non-zero -- 9 are 0 -- and the 21 would all go to 0 together.
 #
 # TWO PREDICATES ARE TRUE FOR NO VALUE AT ALL, and that is a reported defect,
 # not an exemption:
@@ -222,14 +244,23 @@ ad0644f76feee9ad14c5de4d74cc0cac
 # so the defect has a witness; fixing them is a behaviour change and therefore
 # outside M2 stage 3, which is constrained to no behaviour change.
 #
-# The six predicates with dom_hits = 4 and fix_hits = 0 are a different and
+# This is NOT the same thing as the lossy name round trip in section 0. There,
+# real names map to a block of four codes and lose the low two bits. Here the
+# names do not exist at all.
+#
+# THE SEVEN PREDICATES with dom_hits = 4 and fix_hits = 0 are a different and
 # benign case: they work, and python's grammar simply has no node of that
-# semantic type (export, foreign, directive, and the four type-* families).
-# Widening the fixture cannot fix those: no single python file has a node that
-# is semantically an export or an FFI declaration, and swapping the fixture for
-# another language's parse would move every other number in this file while
-# proving nothing extra. They are CALLED, and their domain behaviour is asserted
-# in the same row, which is the assertion that has power here.
+# semantic type. They are is_export, is_foreign, is_directive, is_type_primitive,
+# is_type_composite, is_type_reference and is_type_generic -- three plus the four
+# type-* families, which is seven, and the two dead ones above bring the column
+# to nine zeros.
+#
+# Widening the fixture cannot fix those seven: no single python file has a node
+# that is semantically an export or an FFI declaration, and the only other
+# language in the restricted build is `duckdb`, whose adapter has none of them
+# either -- so a second fixture would have to come from a THIRD language's
+# committed parse. They are CALLED, and their domain behaviour is asserted in
+# the same row, which is the assertion that has power here.
 query III
 WITH dom AS (SELECT i::UTINYINT::SEMANTIC_TYPE AS st FROM range(0,256) t(i)),
 m(pred, dom_hits, fix_hits) AS (
@@ -298,7 +329,7 @@ is_type_reference	4	0
 is_variable_definition	4	31
 
 # ast_qualified_name_as_string -- the 31st macro in semantic_predicates.sql, and
-# the one scalar there that is not a predicate (31 of 69).
+# the one scalar there that is not a predicate (34 of 69).
 #
 # It is the one macro in this file that reads a NESTED SEMANTIC_TYPE: its body
 # passes s.semantic_type from each qualified_name segment to
@@ -314,7 +345,7 @@ FROM core_ast;
 45	0aac32b07dbaeddb366a5854df6a486f
 
 # =============================================================================
-# 3. tree_navigation.sql -- the 11 table-taking macros (42 of 69)
+# 3. tree_navigation.sql -- the 11 table-taking macros (45 of 69)
 # =============================================================================
 #
 # Every argument is an anchor taken from the fixture, not invented:
@@ -324,9 +355,15 @@ FROM core_ast;
 #   node_id 71  function_definition `load`, lines 16-19
 #   node_id 85  call `open`, line 17
 #
-# ast_definitions_from and ast_definition_parent both return 42 here. That is
-# not a copy-paste: there are 42 definition nodes in this file, and
-# ast_definition_parent returns one row per definition.
+# ast_definitions_from and ast_definition_parent both return 42 here, and that
+# is not a copy-paste. MEASURED: 42 is the number of nodes that pass
+# ast_definitions_from's FULL filter chain -- is_definition(semantic_type) AND
+# is_construct(flags) AND name <> '' -- and ast_definition_parent emits one row
+# per such node. The chain matters: this file has 78 nodes with a definition
+# semantic type, and 55 of those are construct-flagged, so neither of those two
+# figures is the answer. The macro's own banner says why (a keyword token shares
+# the semantic type of the construct it introduces, so is_definition alone
+# double-counts).
 #
 # ONE ROW PER MACRO, so a failure names the macro. A single wide row of 11
 # counts would have the same assertion count and tell you only that something
@@ -358,15 +395,16 @@ ast_in_range_from	118
 ast_siblings	3
 
 # =============================================================================
-# 4. relational_operators.sql -- the five `_from` variants (47 of 69)
+# 4. relational_operators.sql -- the five `_from` variants (50 of 69)
 # =============================================================================
 #
 # ast_has_from and ast_not_has_from are a complementary pair over the same two
-# types, so 17 and 3 are not two independent numbers: there are 20
-# function_definition nodes that are candidates, 17 of which contain a call and
-# 3 of which do not. If a defect dropped rows from the shared body, both numbers
-# would fall and their sum would stop being 20. That is the control inside this
-# block.
+# types, so 17 and 3 are not two independent numbers. MEASURED: this file has 20
+# nodes of type function_definition and all 20 are construct-flagged; 17 of them
+# contain a call and 3 do not. If a defect dropped rows from the shared body,
+# one of the two would fall and the partition would stop adding up. The next
+# block is that control, with the 20 measured INDEPENDENTLY from core_ast rather
+# than as the sum of the two calls being checked.
 query II
 SELECT 'ast_follows_from' AS macro, count(*) AS n FROM ast_follows_from('core_ast','function_definition','class_definition') UNION ALL
 SELECT 'ast_has_from', count(*) FROM ast_has_from('core_ast','function_definition','call') UNION ALL
@@ -381,19 +419,21 @@ ast_inside_from	44
 ast_not_has_from	3
 ast_precedes_from	3
 
-# The complement, stated as its own assertion rather than left in the comment.
-# 17 + 3 = 20 function_definition nodes with the `construct` flag, and every one
-# of them is on exactly one side of "contains a call".
+# THE PARTITION, with an INDEPENDENT denominator. The third column counts
+# function_definition nodes straight out of core_ast, so it is not the sum of
+# the first two and the row has real power: if the shared `_from` body dropped
+# or duplicated rows, columns 1 and 2 would stop partitioning column 3. An
+# earlier draft of this row made the third column `col1 + col2`, which is
+# arithmetic rather than a measurement and could never disagree with itself.
 query III
 SELECT (SELECT count(*) FROM ast_has_from('core_ast','function_definition','call')),
        (SELECT count(*) FROM ast_not_has_from('core_ast','function_definition','call')),
-       (SELECT count(*) FROM ast_has_from('core_ast','function_definition','call'))
-     + (SELECT count(*) FROM ast_not_has_from('core_ast','function_definition','call'));
+       (SELECT count(*) FILTER (type = 'function_definition' AND is_construct(flags)) FROM core_ast);
 ----
 17	3	20
 
 # =============================================================================
-# 5. file_utilities.sql -- ast_source_of_from (48 of 69)
+# 5. file_utilities.sql -- ast_source_of_from (51 of 69)
 # =============================================================================
 #
 # The only `_from` variant that keeps a second argument: its result carries the
@@ -467,7 +507,7 @@ FROM ast_unparse_rules('duckdb');
 ----
 15	15	0
 
-# ast_unparse_from (49 of 69) and ast_unparse_custom (50 of 69).
+# ast_unparse_from (52 of 69) and ast_unparse_custom (53 of 69).
 #
 # They return the SAME digest, and that is a measured fact rather than a
 # coincidence worth hiding: ast_unparse_custom is handed ast_unparse_rules
@@ -490,7 +530,7 @@ ORDER BY 1;
 ast_unparse_custom	1	f56867bdb1fefc8835a13034bef15a33
 ast_unparse_from	1	f56867bdb1fefc8835a13034bef15a33
 
-# ast_unparse_code (51 of 69). Its body is a third independent copy of the
+# ast_unparse_code (54 of 69). Its body is a third independent copy of the
 # unparse logic -- ast_unparse_from, ast_unparse and ast_unparse_code each carry
 # their own ~100 lines -- so calling it is not covered by the two above. It takes
 # the language as an argument, so it can be driven through `duckdb`, which is the
@@ -501,7 +541,7 @@ FROM ast_unparse_code('SELECT a, b FROM t WHERE a = 1','duckdb');
 ----
 1	5324034c8399fdeabcd8973cdead1ac1
 
-# ast_unparse_exact_splice (52 of 69) and ast_unparse_exact_from (53 of 69).
+# ast_unparse_exact_splice (55 of 69) and ast_unparse_exact_from (56 of 69).
 #
 # THIS IS THE STRONGEST NON-VACUITY EVIDENCE IN THE FILE. The byte-exact law is
 # `unparse(parse(f)) == f`. Here the parse is a CSV committed to git and the
@@ -532,7 +572,7 @@ ORDER BY 1;
 ast_unparse_exact_from	1	true
 ast_unparse_exact_splice	1	true
 
-# ast_unparse_exact (54 of 69) and ast_unparse_exact_code (55 of 69).
+# ast_unparse_exact (57 of 69) and ast_unparse_exact_code (58 of 69).
 #
 # These two take a PATH and a CODE STRING, so in a parser-free build the only
 # language they can be driven through is `duckdb` -- whose adapter reports
@@ -555,7 +595,7 @@ SELECT * FROM ast_unparse_exact_code('SELECT a, b FROM t WHERE a = 1','duckdb');
 every node reports start_byte = end_byte = 0
 
 # =============================================================================
-# 7. The eight PATH-TAKING twins, driven through `duckdb` (63 of 69)
+# 7. The eight PATH-TAKING twins, driven through `duckdb` (66 of 69)
 # =============================================================================
 #
 # These macros call read_ast() themselves, so a fixture cannot reach them. They
@@ -594,7 +634,7 @@ ast_inside	1
 ast_not_has	1
 ast_precedes	1
 
-# ast_source_of (64 of 69) -- CALLED, and its 0 is EXPLAINED IN THE SAME ROW.
+# ast_source_of (67 of 69) -- CALLED, and its 0 is EXPLAINED IN THE SAME ROW.
 #
 # This is the ninth path-taking twin and the one that cannot return rows through
 # `duckdb`, for a reason that belongs to the ADAPTER and not to the macro:
@@ -621,7 +661,7 @@ SELECT (SELECT count(*) FROM ast_definitions('test/data/sql/example.sql', langua
 1	20	20	0
 
 # =============================================================================
-# 8. parse_ast_list_table.sql -- the one macro in its file (65 of 69)
+# 8. parse_ast_list_table.sql -- the one macro in its file (68 of 69)
 # =============================================================================
 #
 # Takes code and a language rather than a table, so it is driven through
@@ -668,7 +708,7 @@ SELECT count(*), string_agg(source,'|') FROM ast_unparse_from('dd_ast');
 1	a b t a 1
 
 # =============================================================================
-# 10. THE ONE EXEMPTION: ast_unparse(path, preset) (66 of 69... and 69 of 69)
+# 10. THE ONE EXEMPTION: ast_unparse(path, preset) (69 of 69)
 # =============================================================================
 #
 # THE REASON IS A PROPERTY OF THE BUILD, not of the macro's output, and it is
