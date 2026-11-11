@@ -28,6 +28,17 @@
 --     (no NULLs, never semantic). This outline is flat — no section/div
 --     containers — so every block we emit is a top-level sibling at level 1.
 --   * code blocks carry attributes['language']; metadata uses encoding 'yaml'.
+--   * Source positions (agreed with duckeye, 2026-11-11, duckeye#14):
+--     attributes['start_line'] and attributes['end_line'] are file line
+--     numbers, 1-based and inclusive, as plain decimal digits (no sign,
+--     padding, separator or whitespace: DuckDB's ::INTEGER cast is lenient, so
+--     a reader cannot rely on it to reject a malformed value).
+--       heading: the definition's extent, from its AST node.
+--       code:    start_line is the first line; end_line is counted from the
+--                content, a final newline excluded.
+--     A block with no source position (metadata, summary paragraphs, a row
+--     with NULL lines) carries NEITHER key -- never an empty value. Readers
+--     must treat both keys as optional.
 --   * element_order starts at 0 and increases in document order, restarting
 --     per file (each file's element list is a document of its own; when
 --     composing multiple files, order by (file_path, element_order)).
@@ -47,7 +58,13 @@
 --                  get code blocks: a class's body already appears under its
 --                  methods' headings, so repeating it would duplicate text.
 --
--- Body content comes from FULL PEEK. Peek is a presentation substrate, and
+-- Body content is the definition's WHOLE source lines start_line..end_line,
+-- cut from the file's root-node text when the table holds the root row
+-- (depth 0). Whole lines keep the first line's indent, which a node's own
+-- peek loses because it begins at the node's column (duckeye#14). A table
+-- without the root row (e.g. only the selected nodes) falls back to the
+-- node's own peek: the line numbers stay right; only that first-line indent
+-- is lost. Either way the text comes from FULL PEEK. Peek is a presentation substrate, and
 -- ast_to_blocks is a presentation feature — this is the sanctioned pairing
 -- (peek remains off-limits for correctness features: patching, unparse,
 -- fidelity claims). Retained source would be preferred, but no extraction
@@ -100,6 +117,13 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
         files AS (
             SELECT file_path, any_value(language) AS language
             FROM ast
+            GROUP BY file_path
+        ),
+        -- The file's text, for cutting whole lines: the root node's peek.
+        roots AS (
+            SELECT file_path, any_value(peek) AS root_text, any_value(start_line) AS root_start
+            FROM ast
+            WHERE depth = 0 AND peek IS NOT NULL
             GROUP BY file_path
         ),
         -- Named definition constructs. The full filter chain (is_definition +
@@ -193,8 +217,23 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
                           AND lower(d.signature_type) != d.definition_kind
                      THEN CASE WHEN is_function_definition(d.semantic_type)
                                THEN ' -> ' ELSE ': ' END || d.signature_type
-                     ELSE '' END AS signature
+                     ELSE '' END AS signature,
+                -- Whole source lines (see the header); a trailing empty line, from
+                -- a node that ends at column 0 of the next line, is not body.
+                CASE WHEN r.root_text IS NOT NULL AND d.start_line IS NOT NULL AND d.end_line IS NOT NULL
+                     THEN rtrim(array_to_string(
+                              string_split(r.root_text, chr(10))[d.start_line - r.root_start + 1
+                                                                : d.end_line - r.root_start + 1],
+                              chr(10)), chr(10))
+                     ELSE d.peek END AS body,
+                -- The definition's extent, for its heading. Omitted, not NULL,
+                -- when the source has no lines.
+                CASE WHEN d.start_line IS NOT NULL AND d.end_line IS NOT NULL
+                     THEN MAP {'start_line': d.start_line::VARCHAR,
+                               'end_line': d.end_line::VARCHAR}
+                     ELSE MAP([], [])::MAP(VARCHAR, VARCHAR) END AS extent_attrs
             FROM defs d
+            LEFT JOIN roots r ON r.file_path = d.file_path
         ),
         elements AS (
             -- One metadata block per file (before any definition: sort_node -1).
@@ -232,12 +271,14 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
                 d.signature,
                 1,
                 'text',
-                MAP {'heading_level':
-                     CASE WHEN style = 'flat'
-                          THEN LEAST(base_heading_level, max_heading_level)
-                          ELSE LEAST(base_heading_level + d.nest_depth,
-                                     max_heading_level)
-                     END::VARCHAR}
+                map_concat(
+                    MAP {'heading_level':
+                         CASE WHEN style = 'flat'
+                              THEN LEAST(base_heading_level, max_heading_level)
+                              ELSE LEAST(base_heading_level + d.nest_depth,
+                                         max_heading_level)
+                         END::VARCHAR},
+                    d.extent_attrs)
             FROM def_info d
 
             UNION ALL
@@ -260,16 +301,24 @@ CREATE OR REPLACE MACRO ast_to_blocks_from(
 
             -- Code bodies: leaf defs in outline, every def in flat, never in
             -- summary, never with include_bodies := false. Content is the
-            -- definition's peek text (full source text under peek := 'full').
+            -- definition's whole source lines (see the header). end_line is
+            -- counted from that content, a final newline excluded.
             SELECT
                 d.file_path,
                 d.node_id,
                 2,
                 'code',
-                d.peek,
+                d.body,
                 1,
                 'text',
-                MAP {'language': coalesce(d.language, 'unknown')}
+                map_concat(
+                    MAP {'language': coalesce(d.language, 'unknown')},
+                    CASE WHEN d.start_line IS NOT NULL AND d.body IS NOT NULL
+                         THEN MAP {'start_line': d.start_line::VARCHAR,
+                                   'end_line': (d.start_line + len(string_split(
+                                       CASE WHEN suffix(d.body, chr(10)) THEN d.body[1:-2]
+                                            ELSE d.body END, chr(10))) - 1)::VARCHAR}
+                         ELSE MAP([], [])::MAP(VARCHAR, VARCHAR) END)
             FROM def_info d
             WHERE include_bodies
               AND (style = 'flat' OR (style = 'outline' AND d.is_leaf))
