@@ -1,7 +1,7 @@
 # 061 — `ast_source_of` returns a silent empty result when `file_path` is the empty string, which the `duckdb` adapter always produces
 
 **Status update (058 fix):** the loud guard landed in the shared body via 058
-(`file_utilities.sql:168`, `__sof_guard`), so `ast_source_of` over a `duckdb`
+(the `__sof_guard` CTE in `src/sql_macros/file_utilities.sql`), so `ast_source_of` over a `duckdb`
 parse now RAISES instead of returning 0 rows (core_alone.test section 7). The
 adapter still writes an empty `file_path`; that root cause is unchanged.
 
@@ -32,14 +32,18 @@ there in spirit but does not amend it.
 ## What is wrong
 
 `ast_source_of` and `ast_source_of_from` locate a definition's source TEXT by
-joining the node table's `file_path` against `read_text()`'s `filename`:
+joining the node table's `file_path` against `read_text()`'s `filename`. AS
+MEASURED when this entry was written (before 058's fix) the join was:
 
     src/sql_macros/file_utilities.sql:164
         JOIN read_text(files) fc ON fc.filename = m.file_path
 
-An **inner** join on **exact string equality**. When `file_path` is the empty
-string the join matches nothing, for every row, and the caller gets zero rows
-with no error, no warning and no diagnostic column.
+an **inner** join on **exact string equality**. When `file_path` is the empty
+string the join matched nothing, for every row, and the caller got zero rows
+with no error, no warning and no diagnostic column. NOW (after 058) the
+`file_contents` join in `ast_source_of_from` normalises both sides and the
+`__sof_guard` CTE raises on an empty or NULL `file_path`, naming this entry; the
+adapter still writes the empty path.
 
 The `duckdb` adapter always produces an empty `file_path` — including through
 `read_ast()`, which was handed the path and knows it:
@@ -97,12 +101,16 @@ call sites accept and discard.
 - `DuckDBAdapter::GetParsingFunction()`'s lambda,
   `languages/duckdb/duckdb_adapter.cpp:1240-1245`, takes `file_path` in its
   parameter list and calls `ParseSQL(content)`, dropping it the same way. That
-  lambda path is live: `src/ast_parsing_task.cpp:78` and
-  `src/language_adapter.cpp:984` both call `GetParsingFunction()`. WHICH of the
-  two paths serves `read_ast(..., 'duckdb')` is UNMEASURED.
+  lambda path is invoked by `src/ast_parsing_task.cpp:78`, which fetches it and
+  calls it at `:81-82`. (`src/language_adapter.cpp:984` also calls
+  `GetParsingFunction()`, but only as a capability check: the comment above it
+  says "Test that the parsing function is available without calling it", so it is
+  not evidence that anything parses.) WHICH of the two paths serves
+  `read_ast(..., 'duckdb')` is UNMEASURED.
 - `languages/duckdb/duckdb_adapter.cpp:324` then sets
-  `result.source.file_path = ""`, three lines above a comment that reads
-  "Source location (placeholder values for now)".
+  `result.source.file_path = ""`. (The comment "Source location (placeholder
+  values for now)" at `:1051` of the same file is 727 lines away and is about the
+  node line and column fields, not `file_path`; it is not evidence either way.)
 
 So the fix is plumbing, not design: set `result.source.file_path = file_path`
 after the native parse, at each of the three sites. No signature changes, no
@@ -138,7 +146,8 @@ Two reasons, and the second is the binding one:
 1. Task 7 is a TEST task. It changed no `src/` file by design, and
    `git diff --stat ca0b7fd..HEAD -- src/` is empty.
 2. **The join lives in the shared body.** Task 6 rewrote `ast_source_of` as a
-   thin wrapper over `ast_source_of_from`, so `file_utilities.sql:164` is the
+   thin wrapper over `ast_source_of_from`, so `file_utilities.sql:164` (then; now the
+   `file_contents` join in `ast_source_of_from`) is the
    only copy and both macros reach it. Any change there moves the TWIN's
    behaviour, and M2 stage 3 is constrained to no behaviour change for existing
    macros. This is the same structural reason 058 gives for its own deferral,

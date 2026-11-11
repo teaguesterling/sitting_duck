@@ -65,11 +65,11 @@ every one of them is unreachable:
 
 | site | what is dead |
 |---|---|
-| `src/sql_macros/tree_navigation.sql:86` | `ast_definitions_from`'s `definition_type = 'type'` |
-| `src/sql_macros/file_utilities.sql:140` | `ast_source_of_from`'s `definition_kind = 'type'` |
-| `src/sql_macros/file_utilities.sql:155` | **`ast_source_of(..., kind := 'type')`** — a documented argument value that can never match a row |
-| `src/sql_macros/tree_analysis.sql:33` | the add-on definition classifier's `'type'` |
-| `src/sql_macros/duck_blocks.sql:130` | `duck_blocks`' `'type'` |
+| `ast_definitions_from` in `src/sql_macros/tree_navigation.sql` | its `definition_type = 'type'` |
+| `ast_source_of_from` in `src/sql_macros/file_utilities.sql` | its `definition_kind = 'type'` |
+| `ast_source_of_from`'s `kind` filter in `src/sql_macros/file_utilities.sql` | **`ast_source_of(..., kind := 'type')`** — a documented argument value that can never match a row |
+| `ast_resolve_entity` in `src/sql_macros/tree_analysis.sql` | the add-on definition classifier's `'type'` |
+| `ast_to_blocks_from` in `src/sql_macros/duck_blocks.sql` | `duck_blocks`' `'type'` |
 
 So the user-visible consequences are not only "a predicate returns false". They
 are that **`'type'` can never appear in a `definition_type` or

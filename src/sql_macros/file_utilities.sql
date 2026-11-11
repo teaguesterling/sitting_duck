@@ -93,7 +93,10 @@ CREATE OR REPLACE MACRO ast_get_source_numbered(file_path, start_line, end_line)
 -- remedy, as ast_unparse_exact_from does (ast_unparse.sql:736-741). A table with
 -- no matches at all still returns 0 rows. A NULL or empty file_path in the node
 -- table raises with its own message (the empty one names tracker/bugs/061, the
--- duckdb adapter's empty file_path), never the generic remedy. A `files` that covers only SOME of the
+-- duckdb adapter's empty file_path), never the generic remedy.
+-- The guard is a join in the final SELECT, so a consumer that statically asks
+-- for no rows (LIMIT 0, WHERE false) prunes it and sees 0 rows; ast_unparse_exact
+-- behaves the same way for LIMIT 0. A `files` that covers only SOME of the
 -- matched files raises too, so narrowing `files` to a subset is an error.
 -- Record: tracker/bugs/058, which carries the measurement and the decision
 -- (Teague: "Raise plus the normalising join"). It honours
@@ -168,7 +171,7 @@ CREATE OR REPLACE MACRO ast_source_of_from(
         -- unjoined, as ast_unparse_exact_from does (ast_unparse.sql:736-741).
         -- No match at all is a real, quiet 0.
         --
-        -- Branch order is the precedent's (ast_unparse.sql:704-706): NULL
+        -- Branch order is the precedent's (ast_unparse.sql:704-709): NULL
         -- file_path, then empty, then the generic unjoined path. The NULL branch
         -- has to come first and has to count ROWS: count(DISTINCT file_path)
         -- ignores NULL, and error() given a NULL message returns NULL instead of

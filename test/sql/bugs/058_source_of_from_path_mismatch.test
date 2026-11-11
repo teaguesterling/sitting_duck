@@ -17,8 +17,12 @@ require sitting_duck
 # "all" is deliberate: a silently partial answer is the same defect as a
 # silently empty one.
 #
-# THIS FILE WAS WRITTEN BEFORE THE FIX and was seen to fail first: sections 2,
-# 4 and 5 returned rows or 0 rows instead of raising or matching.
+# THIS FILE WAS WRITTEN BEFORE THE FIX. MEASURED red: section 2's first
+# `statement error` returned 0 rows instead of raising (the run stopped there,
+# 4 assertions, 1 failed). Sections 3 to 5 were NEVER run against the unfixed
+# build; their red state is INFERRED, and section 4's first case was rewritten
+# after the fix. Sections 6 and 7 were red first (NULL case 0 rows, empty case the
+# wrong message).
 # =============================================================================
 
 statement ok
@@ -172,3 +176,15 @@ statement error
 SELECT * FROM ast_source_of_from('t7_mixed', 'test/data/python/simple.py', 'main');
 ----
 have a NULL file_path
+
+# 8. The backslash half of the normalising key. A node table whose file_path is
+# spelled with '\' separators (a Windows-native globber) still joins, and the
+# raw spelling is what comes back. Dropping replace(..., '\', '/') from the key
+# fails this.
+statement ok
+CREATE TABLE t8_bs AS SELECT * REPLACE (replace(file_path, '/', '\') AS file_path) FROM tqn;
+
+query II
+SELECT count(*), min(file_path) FROM ast_source_of_from('t8_bs', 'test/data/python/qualified_names.py', '__init__');
+----
+3	test\data\python\qualified_names.py

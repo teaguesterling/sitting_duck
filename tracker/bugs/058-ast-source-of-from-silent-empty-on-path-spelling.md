@@ -31,9 +31,10 @@ nothing matches. The mechanism is one line:
     src/sql_macros/file_utilities.sql:164   (as measured at e7b910e, before the fix)
         JOIN read_text(files) fc ON fc.filename = m.file_path
 
-After the fix the join is `src/sql_macros/file_utilities.sql:160-162`, on the
-normalised key of both sides, and the raise is the `__sof_guard` CTE starting at
-`:168` (lines MEASURED by grep on the fixed file).
+After the fix the join is the `file_contents` join in `ast_source_of_from`
+(`src/sql_macros/file_utilities.sql`), on the normalised key of both sides, and
+the raise is the `__sof_guard` CTE in the same macro. Both are cited by name, not
+line: the line numbers moved twice in one round.
 
 An **inner** join on **exact string equality**. A match whose file is absent
 from `files`, or spelled differently there, is dropped. No error, no warning,
@@ -100,7 +101,7 @@ it to both. `R69` corrects it, and this section is the correction.
 
 **The join now lives in the shared body.** Task 6 rewrote `ast_source_of` as a
 thin wrapper that delegates to `ast_source_of_from`, so
-`file_utilities.sql:164` (then; now `:160-162`) is the only copy of that join and the twin reaches it
+`file_utilities.sql:164` (then; now the `file_contents` join in `ast_source_of_from`) is the only copy of that join and the twin reaches it
 too. Anything added there is added to the twin as well.
 
 **Which half that actually constrains, MEASURED.** The whole-branch review

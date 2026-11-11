@@ -55,21 +55,22 @@
 # this fixture. The fixture is static, so every count here is deterministic: the
 # pins are "same answer" checks, not "non-empty" checks, which is what lets the
 # restricted run mean something. A pin that moves is a finding to investigate,
-# never a value to update -- EXCEPT for the KNOWN-DEFECT pins in the five
+# never a value to update -- EXCEPT for the KNOWN-DEFECT pins in the four
 # entries listed below,
 # which are MEANT to move when their defect is fixed. Each one names its tracker
 # id and its post-fix expectation where it sits:
 #
 #   section 2    is_boolean_literal  0 0   and  is_type_definition  0 0
 #                                          tracker/bugs/060
-#   section 5b   the second column of the two-spelling row (MOVED: 058 fixed)
-#                                          tracker/bugs/058
 #   section 7    ast_containing_line 20   and  ast_in_range 20
 #                                          tracker/bugs/043
 #   section 7    the blank_paths / source_of_rows row (MOVED: now a statement error)
 #                                          tracker/bugs/061
 #   section 9    the duckdb unparse text row
 #                                          tracker/bugs/059
+#
+# Section 5b was on this list while 058 was open. It is NOT now: it pins correct
+# behaviour (`1 1`), and a move back to `1 0` is a regression.
 #
 # A pin NOT in that list which moves is a finding. tracker/bugs/062 is the one
 # recorded defect with no pin of its own, because it describes a blind spot in
@@ -492,7 +493,8 @@ SELECT (SELECT count(*) FROM ast_has_from('core_ast','function_definition','call
 #
 # tracker/bugs/058 WAS A HAZARD ON THIS LINE and is fixed: the macro now joins
 # read_text(files).filename to the table's file_path on a normalised key
-# (src/sql_macros/file_utilities.sql:160-162) and raises on an unmatched file. The fixture's file_path column holds
+# (the `file_contents` join in `ast_source_of_from`, src/sql_macros/file_utilities.sql)
+# and raises on an unmatched file (its `__sof_guard` CTE). The fixture's file_path column holds
 # 'test/data/python/sample_app.py', with no './', because that is the spelling
 # read_ast was given when the fixture was generated -- so that is the spelling
 # passed here. This is not a globber's doing; the CSV carries whatever the
@@ -505,9 +507,10 @@ FROM ast_source_of_from('core_ast', 'test/data/python/sample_app.py', 'load');
 
 # 5b. THE 058 TRAP, FIXED. Same table, same target, two spellings of the same
 # file. This pin read 1 and 0 while 058 was open (the './'-prefixed spelling
-# returned 0 with no error); the normalising join in
-# src/sql_macros/file_utilities.sql:160-162 makes both spellings match, so it now
-# reads 1 and 1. The first column is the positive control for the second.
+# returned 0 with no error); the normalising `file_contents`
+# join in `ast_source_of_from` (src/sql_macros/file_utilities.sql) makes both
+# spellings match, so it now reads 1 and 1. THIS PIN IS NOT A KNOWN-DEFECT PIN
+# any more: a move back to `1 0` is the 058 silent-empty returning, a failure. The first column is the positive control for the second.
 query II
 SELECT (SELECT count(*) FROM ast_source_of_from('core_ast','test/data/python/sample_app.py','load')),
        (SELECT count(*) FROM ast_source_of_from('core_ast','./test/data/python/sample_app.py','load'));
@@ -724,13 +727,15 @@ ast_inside	1
 ast_not_has	1
 ast_precedes	1
 
-# ast_source_of (67 of 69) -- CALLED, and its 0 is EXPLAINED IN THE SAME ROW.
+# ast_source_of (67 of 69) -- CALLED, and it RAISES, with its causes in the row
+# above the call.
 #
 # This is the ninth path-taking twin and the one that cannot return rows through
 # `duckdb`, for a reason that belongs to the ADAPTER and not to the macro:
 # MEASURED, all 20 nodes of a duckdb parse carry an EMPTY file_path. The macro
-# joins read_text(files).filename against that file_path on exact equality, so
-# the join matches nothing.
+# joins read_text(files).filename against that file_path on a normalised key, and
+# an empty path never joins, so the `__sof_guard` CTE raises. (Before 058's fix
+# this was a silent 0 rows from an exact-equality join.)
 #
 # OWNED BY tracker/bugs/061, AND NOT BY 058. An earlier version of this comment
 # called it "a second instance of 058", which is wrong in the way that matters:

@@ -318,25 +318,32 @@ SELECT count(*) FROM (
 
 # The count and the whole row, over the one-file table. The 3 against section
 # 2's 4 is the single file's share; the digest is the pre-058 one for the same
-# three rows (MEASURED pre-change from the narrowed call).
+# three rows (MEASURED pre-change from the narrowed call). That `files` is read
+# at all, and not ignored in favour of the table's own paths, is proved by the
+# `statement error` above: if `files` were ignored, that call would return 4 rows
+# instead of raising (INFERRED from the macro body, not separately executed).
 query II
 SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.start_line))
 FROM ast_source_of_from('tqn', 'test/data/python/qualified_names.py', '__init__') r;
 ----
 3	04b6db7f1a4c16d937b1287559809f23
 
-query I
-SELECT count(DISTINCT file_path) FROM ast_source_of_from('tqn', 'test/data/python/qualified_names.py', '__init__');
+# A BROADER `files` must not leak rows from files the table does not hold: the
+# glob names both fixture files, the table holds one, and only that one's rows
+# come back. (A one-file table with a one-file `files` could not fail this.)
+query II
+SELECT count(*), count(DISTINCT file_path) FROM ast_source_of_from('tqn', 'test/data/python/q*.py', '__init__');
 ----
-1
+3	1
 
 # THE MIXED-SPELLING TRAP, FIXED. An EXACT path is not normalised by read_ast or
 # read_text ('./test/data/python/qualified_names.py' keeps its './'), a glob is,
 # so the same file could reach the join in two spellings and miss. The key is now
 # normalised, so each pairing below matches; the pairings whose table holds a
 # file `files` does not name raise instead of returning 0. The first three
-# columns are the old five-count row's columns 1, 4 and 5; its columns 2 and 3
-# are the two `statement error`s after it. Their old values were 4 3 0 3 0.
+# columns are the old five-count row's columns 1, 4 and 5; its column 2 is
+# the `statement error` near the top of this section (tq against one file) and its
+# column 3 the one after this row. Their old values were 4 3 0 3 0.
 
 statement ok
 CREATE TABLE tqd AS SELECT * FROM read_ast('./test/data/python/qualified_names.py');
