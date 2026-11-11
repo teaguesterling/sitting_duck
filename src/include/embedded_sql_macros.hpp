@@ -396,7 +396,8 @@ CREATE OR REPLACE MACRO ast_source_of_from(
         -- raising, so a guard that built its message from a NULL file_path would
         -- fail open into 0 rows. The empty branch names the real cause (the
         -- duckdb adapter always writes an empty file_path, tracker/bugs/061)
-        -- because the generic remedy would tell the caller to do what they did.
+        -- because the generic remedy would tell the caller to do what they did. The
+        -- '<inline>' branch (parse_ast output) follows ast_unparse.sql:729-735.
         __sof_guard AS (
             SELECT
                 CASE
@@ -412,6 +413,12 @@ CREATE OR REPLACE MACRO ast_source_of_from(
                                    'cannot be located. The duckdb adapter always produces an ' ||
                                    'empty file_path (tracker/bugs/061); parse a tree-sitter ' ||
                                    'language, or read the source yourself.')
+                    WHEN count(*) FILTER (WHERE m.file_path = '<inline>') > 0
+                        THEN error('ast_source_of_from: the node table is in-memory ' ||
+                                   'parse_ast() output (file_path = ''<inline>''), which has ' ||
+                                   'no file to re-read. Parse from a file with ' ||
+                                   'read_ast(path), or work from the source string you ' ||
+                                   'already have.')
                     WHEN count(DISTINCT m.file_path)
                              FILTER (WHERE fc.file_path IS NULL) > 0
                         THEN error('ast_source_of_from: ' ||
@@ -476,6 +483,9 @@ CREATE OR REPLACE MACRO ast_source_of(
     -- which is also why this form cannot reach the mismatch the `_from` banner
     -- warns about.
     WITH __ast_source_of_src AS (
+
+)SQLMACRO"
+        R"SQLMACRO(
         SELECT * FROM read_ast(file_patterns, language)
     )
     SELECT * FROM ast_source_of_from('__ast_source_of_src', file_patterns,
@@ -488,9 +498,6 @@ CREATE OR REPLACE MACRO ast_source_of(
 -- Get a single line from a file
 -- ----------------------------------------------------------------------------
 -- ast_get_source_line: A single line of source text from a file
-
-)SQLMACRO"
-        R"SQLMACRO(
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_get_source_line(file_path, line_num) AS (
     WITH file_content AS (

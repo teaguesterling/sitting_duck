@@ -177,10 +177,19 @@ SELECT * FROM ast_source_of_from('t7_mixed', 'test/data/python/simple.py', 'main
 ----
 have a NULL file_path
 
-# 8. The backslash half of the normalising key. A node table whose file_path is
-# spelled with '\' separators (a Windows-native globber) still joins, and the
-# raw spelling is what comes back. Dropping replace(..., '\', '/') from the key
-# fails this.
+# 8. The backslash half of the normalising key, two-sided (both MEASURED by the
+# controller against 649431e's build, simple.py as the file):
+#   * a backslash spelling that normalisation CAN repair joins: n = 1, and the
+#     path returned is the RAW spelling 'test\data\python\simple.py', not the
+#     normalised key. Returning the raw spelling is the precedent's rule
+#     (ast_unparse.sql:593 and the comment above it), and this is the only pin
+#     that proves it.
+#   * a spelling normalisation CANNOT repair (an 'xx/' prefix) raises "1 of 1
+#     matched file(s) have no content row ... (e.g. 'xx/test/data/python/
+#     simple.py')". That second half is what gives the first its power:
+#     normalisation repairs a spelling difference and does not paper over a
+#     genuinely different path.
+# The qualified_names.py rows below are the same two sides over that fixture.
 statement ok
 CREATE TABLE t8_bs AS SELECT * REPLACE (replace(file_path, '/', '\') AS file_path) FROM tqn;
 
@@ -209,3 +218,12 @@ statement error
 SELECT * FROM ast_source_of_from('t9_inl', 'test/data/python/simple.py', 'main');
 ----
 in-memory parse_ast() output
+
+# The side normalisation cannot repair: a genuinely different path still raises.
+statement ok
+CREATE TABLE t8_xx AS SELECT * REPLACE ('xx/' || file_path AS file_path) FROM tqn;
+
+statement error
+SELECT * FROM ast_source_of_from('t8_xx', 'test/data/python/qualified_names.py', '__init__');
+----
+1 of 1 matched file(s)

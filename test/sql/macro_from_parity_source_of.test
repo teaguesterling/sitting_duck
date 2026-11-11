@@ -330,7 +330,12 @@ FROM ast_source_of_from('tqn', 'test/data/python/qualified_names.py', '__init__'
 
 # A BROADER `files` must not leak rows from files the table does not hold: the
 # glob names both fixture files, the table holds one, and only that one's rows
-# come back. (A one-file table with a one-file `files` could not fail this.)
+# come back. The property is that the answer tracks the TABLE's files, never the
+# glob's. MEASURED (controller, against 649431e's build) with a glob covering 19
+# files (`SELECT count(*) FROM read_text('test/data/python/*.py')`) in both calls
+# and only the table changing: a one-file table gave n = 1, distinct file_path =
+# 1; a two-file table gave n = 2, distinct file_path = 2. So the pinned value
+# moves when the property moves.
 query II
 SELECT count(*), count(DISTINCT file_path) FROM ast_source_of_from('tqn', 'test/data/python/q*.py', '__init__');
 ----

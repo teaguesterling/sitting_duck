@@ -193,3 +193,11 @@ test plus `test/sql/file_utilities.test` (44 assertions, the twin's own
 regression net, which must be re-measured because the twin's behaviour can
 move). The boundary gate must stay at 0 violations; the edge count moves only
 if the fix calls another macro.
+
+## Brace globs (measured later)
+
+`read_text` returns 0 rows for a brace glob such as
+`test/data/python/{simple,combinator_steps}.py`, while `read_ast` RAISES on the
+same pattern ("File or directory does not exist"). The two functions disagree
+about brace globs. For the `_from` form the `__sof_guard` CTE is what turns that
+disagreement into an error instead of an empty answer.
