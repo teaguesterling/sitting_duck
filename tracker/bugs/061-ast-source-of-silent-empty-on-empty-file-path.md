@@ -1,6 +1,11 @@
 # 061 — `ast_source_of` returns a silent empty result when `file_path` is the empty string, which the `duckdb` adapter always produces
 
-**Status:** Not fixed. Measured, pinned as a KNOWN DEFECT, and deliberately not
+**Status update (058 fix):** the loud guard landed in the shared body via 058
+(`file_utilities.sql:168`, `__sof_guard`), so `ast_source_of` over a `duckdb`
+parse now RAISES instead of returning 0 rows (core_alone.test section 7). The
+adapter still writes an empty `file_path`; that root cause is unchanged.
+
+**Status (original):** Not fixed. Measured, pinned as a KNOWN DEFECT, and deliberately not
 fixed inside M2 stage 3 task 7 — see "Why it is not fixed here". Ships to the
 public `duckdb/community-extensions` registry with the stage.
 **Found by:** M2 stage 3 task 7, while calling every core macro in a build whose

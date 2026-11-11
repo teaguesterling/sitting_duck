@@ -1,7 +1,9 @@
 -- Tree Analysis Macros
 -- Entity resolution, per-function metrics, security and dead-code heuristics,
--- and call-site extraction. These build on the navigation primitives in
--- tree_navigation.sql and are opinionated analyses rather than core navigation.
+-- and call-site extraction. These build on the predicates in
+-- semantic_predicates.sql (the macros it calls from other files are defined there;
+-- it calls none defined in tree_navigation.sql) and are opinionated analyses
+-- rather than core navigation.
 
 -- #99: durable citation resolution. Given a FILE and an entity NAME, return the entity's
 -- CURRENT line range language-agnostically -- callers need not pin tree-sitter node-type

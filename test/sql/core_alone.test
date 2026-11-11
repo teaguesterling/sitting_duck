@@ -62,11 +62,11 @@
 #
 #   section 2    is_boolean_literal  0 0   and  is_type_definition  0 0
 #                                          tracker/bugs/060
-#   section 5b   the second column of the two-spelling row
+#   section 5b   the second column of the two-spelling row (MOVED: 058 fixed)
 #                                          tracker/bugs/058
 #   section 7    ast_containing_line 20   and  ast_in_range 20
 #                                          tracker/bugs/043
-#   section 7    the blank_paths / source_of_rows row
+#   section 7    the blank_paths / source_of_rows row (MOVED: now a statement error)
 #                                          tracker/bugs/061
 #   section 9    the duckdb unparse text row
 #                                          tracker/bugs/059
@@ -490,10 +490,9 @@ SELECT (SELECT count(*) FROM ast_has_from('core_ast','function_definition','call
 # source TEXT of each match, which comes from read_text(files), and a node table
 # holds no text.
 #
-# tracker/bugs/058 IS A HAZARD ON THIS LINE. The macro inner-joins
-# read_text(files).filename against the table's file_path on exact string
-# equality (src/sql_macros/file_utilities.sql:164), so a path spelled two ways
-# returns 0 rows and raises nothing. The fixture's file_path column holds
+# tracker/bugs/058 WAS A HAZARD ON THIS LINE and is fixed: the macro now joins
+# read_text(files).filename to the table's file_path on a normalised key
+# (src/sql_macros/file_utilities.sql:160-162) and raises on an unmatched file. The fixture's file_path column holds
 # 'test/data/python/sample_app.py', with no './', because that is the spelling
 # read_ast was given when the fixture was generated -- so that is the spelling
 # passed here. This is not a globber's doing; the CSV carries whatever the
@@ -504,25 +503,16 @@ FROM ast_source_of_from('core_ast', 'test/data/python/sample_app.py', 'load');
 ----
 1	9e3a947549183f681562bcfe584f9926
 
-# 5b. THE 058 TRAP, PINNED -- A KNOWN DEFECT, AND THESE TWO NUMBERS ARE MEANT
-# TO MOVE WHEN IT IS FIXED.
-#
-# Same table, same target, two spellings of the same file. The agreeing spelling
-# returns 1 and is the positive control; the './'-prefixed one returns 0 with no
-# error. The 1 sits in the same row as the 0 on purpose: a 0 beside a 1 is a
-# statement about the spelling, and a wholly broken query cannot produce it.
-#
-# tracker/bugs/058 says what this becomes when it is fixed: either 1 and 1 (if
-# the normalising join lands alone) or a `statement error` naming the unmatched
-# file (if the readability guard raises first). The file-header rule that a pin
-# which moves is a failure to investigate does NOT apply to the second column
-# here. The file header's exception list names this section as well, so the
-# exception is granted in both places and neither is the only one.
+# 5b. THE 058 TRAP, FIXED. Same table, same target, two spellings of the same
+# file. This pin read 1 and 0 while 058 was open (the './'-prefixed spelling
+# returned 0 with no error); the normalising join in
+# src/sql_macros/file_utilities.sql:160-162 makes both spellings match, so it now
+# reads 1 and 1. The first column is the positive control for the second.
 query II
 SELECT (SELECT count(*) FROM ast_source_of_from('core_ast','test/data/python/sample_app.py','load')),
        (SELECT count(*) FROM ast_source_of_from('core_ast','./test/data/python/sample_app.py','load'));
 ----
-1	0
+1	1
 
 # =============================================================================
 # 6. ast_unparse.sql -- the rules, and the five callable unparse macros
@@ -750,27 +740,30 @@ ast_precedes	1
 # open. 043 does not cover it either -- measured, `grep -n file_path` over 043
 # returns nothing -- so it needed an id of its own.
 #
-# THIS ROW IS A KNOWN-DEFECT PIN and is in the header's exception list.
-# POST-FIX EXPECTATION: a `statement error` naming the unlocatable file, if 061
-# lands as the loud guard it prescribes; or, if the adapter is fixed first,
-# blank_paths goes to 0 and source_of_rows to 1. Either way columns 3 and 4 move
-# together, and that is 061 being fixed rather than a regression.
+# THIS ROW WAS A KNOWN-DEFECT PIN and has MOVED: the 058 raise landed in the
+# shared body, and 061's own post-fix expectation named exactly this outcome --
+# "a `statement error` naming the unlocatable file, if 061 lands as the loud
+# guard". Before it, the call returned 0 rows with source_of_rows = 0. Now the
+# three control columns are unchanged and the call RAISES. This is a change in
+# what the PRE-EXISTING twin does for a duckdb parse (0 rows -> error), reached
+# through delegation; the 058 notes had measured the guard a no-op for the twin
+# over four path SPELLINGS of a tree-sitter language only, not for this adapter.
 #
-# Four columns, so the 0 has three controls beside it and cannot be produced by
-# a broken query: the definition the macro is looking for IS there (control_defs
-# = 1, the `customers` table), the flag filter the macro applies DOES pass
-# (construct_flagged = 20), and the cause is named (blank_paths = 20). The
-# macro's body is ast_source_of_from's, which section 5 exercises on the fixture
-# and gets a row from.
-#
-# THIS IS NOT THE FILE'S EXEMPTION. The exemption is section 10.
-query IIII
+# Three controls, so the error cannot come from a broken query: the definition
+# the macro is looking for IS there (control_defs = 1, the `customers` table),
+# the flag filter the macro applies DOES pass (construct_flagged = 20), and the
+# cause is named (blank_paths = 20).
+query III
 SELECT (SELECT count(*) FROM ast_definitions('test/data/sql/example.sql', language := 'duckdb')) AS control_defs,
        (SELECT count(*) FILTER (is_construct(flags)) FROM read_ast('test/data/sql/example.sql','duckdb')) AS construct_flagged,
-       (SELECT count(*) FILTER (file_path = '' OR file_path IS NULL) FROM read_ast('test/data/sql/example.sql','duckdb')) AS blank_paths,
-       (SELECT count(*) FROM ast_source_of('test/data/sql/example.sql','customers', language := 'duckdb')) AS source_of_rows;
+       (SELECT count(*) FILTER (file_path = '' OR file_path IS NULL) FROM read_ast('test/data/sql/example.sql','duckdb')) AS blank_paths;
 ----
-1	20	20	0
+1	20	20
+
+statement error
+SELECT count(*) FROM ast_source_of('test/data/sql/example.sql','customers', language := 'duckdb');
+----
+matched file(s) have no content row
 
 # =============================================================================
 # 8. parse_ast_list_table.sql -- the one macro in its file (68 of 69)

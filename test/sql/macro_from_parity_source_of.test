@@ -81,7 +81,8 @@
 # parity failure to investigate, never a value to update -- with ONE stated
 # exception, columns 3 and 5 of section 5's five-count row, which pin a known
 # defect (tracker/bugs/058) and are MEANT to move when it is fixed. That
-# exception is spelled out where the row is, and nowhere else.
+# exception is spelled out where the row is, and nowhere else. (That exception
+# has been USED: 058 is fixed and section 5 was rewritten for it.)
 #
 # THE ORDER KEY IS file_path || ':' || start_line, AND NOT file_path || ':' ||
 # name. Every row this macro returns carries the SAME name, because the
@@ -277,25 +278,31 @@ read_ast needs at least one file to read
 # of files. The twin cannot reach this state, because it derives both from one
 # argument.
 #
-# DECIDED BEHAVIOUR: A NARROWER `files` NARROWS THE RESULT, SILENTLY. The
-# `file_contents` CTE inner-joins read_text(files) on the exact filename, so a
-# match whose file is absent from `files` is dropped with no error. Narrowing
-# `files` to one of the two fixture files therefore returns exactly the three
-# matches in that file -- and MEASURED pre-change, those are the same three rows
-# the twin returns for that single path, whole row for whole row. So this is
-# pinned against the twin on the narrowed path, in both directions and by digest.
-#
-# This is not the loud-failure convention ast_unparse_exact_from follows, which
-# normalises path spellings for matching and errors on an unreadable file. THE
-# FIX'S HOME IS tracker/bugs/058, which carries the measurement, the intended
-# shape and why it is not done here: the join is now SHARED with the twin, which
-# delegates to this body, so changing it would change the TWIN's behaviour --
-# which M2 stage 3 forbids. (#89 is the precedent that convention came from, and
-# is itself CLOSED; it is not the fix's home.)
+# DECIDED BEHAVIOUR (tracker/bugs/058, fixed on this branch): THE JOIN KEY IS
+# NORMALISED AND AN UNMATCHED FILE RAISES. The `file_contents` CTE joins
+# read_text(files) on the filename with a leading './' stripped and '\' folded
+# to '/' on both sides, and the macro raises when ANY matched file has no content
+# row. Before the fix a narrower `files` silently narrowed the result and a
+# mixed spelling silently returned 0 rows; both are now loud or correct. The
+# twin cannot reach either state, because it derives both arguments from one.
+# This section was rewritten when 058 landed, which its earlier text said it
+# would be; the header rule "a pin that moves is a parity failure" did not apply
+# to it, and the one-file table `tqn` below keeps the twin-parity pins on the
+# single path.
+
+statement ok
+CREATE TABLE tqn AS SELECT * FROM read_ast('test/data/python/qualified_names.py');
+
+# `files` narrower than the table: tq holds matches in two files, `files` names
+# one, so the other file has no content row and the macro raises.
+statement error
+SELECT * FROM ast_source_of_from('tq', 'test/data/python/qualified_names.py', '__init__');
+----
+1 of 2 matched file(s)
 
 query I
 SELECT count(*) FROM (
-  SELECT * FROM ast_source_of_from('tq', 'test/data/python/qualified_names.py', '__init__')
+  SELECT * FROM ast_source_of_from('tqn', 'test/data/python/qualified_names.py', '__init__')
   EXCEPT ALL SELECT * FROM ast_source_of('test/data/python/qualified_names.py', '__init__')
 );
 ----
@@ -304,74 +311,49 @@ SELECT count(*) FROM (
 query I
 SELECT count(*) FROM (
   SELECT * FROM ast_source_of('test/data/python/qualified_names.py', '__init__')
-  EXCEPT ALL SELECT * FROM ast_source_of_from('tq', 'test/data/python/qualified_names.py', '__init__')
+  EXCEPT ALL SELECT * FROM ast_source_of_from('tqn', 'test/data/python/qualified_names.py', '__init__')
 );
 ----
 0
 
-# The count and the whole row. The 3 against section 2's 4 is what proves
-# `files` is read at all and not ignored in favour of the table's own paths.
+# The count and the whole row, over the one-file table. The 3 against section
+# 2's 4 is the single file's share; the digest is the pre-058 one for the same
+# three rows (MEASURED pre-change from the narrowed call).
 query II
 SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.start_line))
-FROM ast_source_of_from('tq', 'test/data/python/qualified_names.py', '__init__') r;
+FROM ast_source_of_from('tqn', 'test/data/python/qualified_names.py', '__init__') r;
 ----
 3	04b6db7f1a4c16d937b1287559809f23
 
-# And the file that `files` excluded is the one that is gone, rather than three
-# arbitrary rows surviving.
 query I
-SELECT count(DISTINCT file_path) FROM ast_source_of_from('tq', 'test/data/python/qualified_names.py', '__init__');
+SELECT count(DISTINCT file_path) FROM ast_source_of_from('tqn', 'test/data/python/qualified_names.py', '__init__');
 ----
 1
 
-# THE MIXED-SPELLING TRAP, which is the narrowing above turned harmful. The two
-# arguments can name the SAME file in two spellings, and then the join misses
-# everything. MEASURED on this build:
-#
-#   * a GLOB is normalised by both read_ast and read_text --
-#     './test/data/python/q*.py' and 'test/data/python/q*.py' both yield
-#     'test/data/python/...', so mixing those two spellings is harmless;
-#   * an EXACT path is NOT normalised -- './test/data/python/qualified_names.py'
-#     keeps its './' in both functions.
-#
-# So pairing a './'-prefixed exact path with an unprefixed glob returns 0 rows
-# and raises nothing, in either direction.
-#
-# !! THE TWO ZEROS BELOW ARE A KNOWN DEFECT, NOT DECIDED BEHAVIOUR:
-# !! tracker/bugs/058.
-# !!
-# !! THE HEADER RULE AT THE TOP OF THIS FILE -- "a pin that moves is a parity
-# !! failure to investigate, never a value to update" -- DOES NOT APPLY TO
-# !! COLUMNS 3 AND 5 OF THE ROW BELOW. They are pinned only so the defect is
-# !! measured rather than forgotten, and a future fix is SUPPOSED to move them.
-# !!
-# !! WHEN 058 IS FIXED, UPDATE THIS ASSERTION, DO NOT REVERT THE FIX:
-# !!   * if the normalising join lands alone, columns 3 and 5 become 3 and 4;
-# !!   * if the readability guard raises first, the whole query becomes a
-# !!     `statement error` naming the unmatched file.
-# !! Either way the failure should read "go update this line". 058 says so too.
-#
-# The 4 and the 3 sit in the same row as the positive controls: the same calls
-# with agreeing spellings return rows, so a 0 is a statement about the spelling
-# and not a broken query, and a wholly broken query cannot produce a passing
-# wall of zeros. That is also why this pin fails if the behaviour is fixed AND
-# if the macro starts raising -- which is the point. The contract the zeros
-# break is tracker/features/044-v2-m1-contract.md:16 ("no silent-empty (#89)")
-# and tracker/roadmap/m2-stage3-macro-split-plan.md:60 ("0 rows mean 'searched
-# correctly, not there'").
+# THE MIXED-SPELLING TRAP, FIXED. An EXACT path is not normalised by read_ast or
+# read_text ('./test/data/python/qualified_names.py' keeps its './'), a glob is,
+# so the same file could reach the join in two spellings and miss. The key is now
+# normalised, so each pairing below matches; the pairings whose table holds a
+# file `files` does not name raise instead of returning 0. The first three
+# columns are the old five-count row's columns 1, 4 and 5; its columns 2 and 3
+# are the two `statement error`s after it. Their old values were 4 3 0 3 0.
 
 statement ok
 CREATE TABLE tqd AS SELECT * FROM read_ast('./test/data/python/qualified_names.py');
 
-query IIIII
+query IIII
 SELECT
   (SELECT count(*) FROM ast_source_of_from('tq', './test/data/python/q*.py', '__init__')),
-  (SELECT count(*) FROM ast_source_of_from('tq', 'test/data/python/qualified_names.py', '__init__')),
-  (SELECT count(*) FROM ast_source_of_from('tq', './test/data/python/qualified_names.py', '__init__')),
   (SELECT count(*) FROM ast_source_of_from('tqd', './test/data/python/qualified_names.py', '__init__')),
-  (SELECT count(*) FROM ast_source_of_from('tqd', 'test/data/python/q*.py', '__init__'));
+  (SELECT count(*) FROM ast_source_of_from('tqd', 'test/data/python/q*.py', '__init__')),
+  (SELECT count(*) FROM ast_source_of_from('tqn', './test/data/python/qualified_names.py', '__init__'));
 ----
-4	3	0	3	0
+4	3	3	3
+
+statement error
+SELECT * FROM ast_source_of_from('tq', './test/data/python/qualified_names.py', '__init__');
+----
+1 of 2 matched file(s)
 
 # =============================================================================
 # 6. A missing table names itself, a swapped pair names itself, and an empty

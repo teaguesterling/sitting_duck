@@ -1,9 +1,12 @@
 # 058 — `ast_source_of_from` returns a silent 0 when `files` and `ast_table` disagree on a path spelling
 
-**Status:** Not fixed. Measured, pinned as a KNOWN DEFECT, and deliberately not
-fixed inside M2 stage 3 task 6 — see "Why it is not fixed here". Ships to the
-public `duckdb/community-extensions` registry with the stage, on a macro the
-path-taking twin cannot reach.
+**Status:** FIXED on branch `feat/m2-stage3-macro-split`, by both halves (the
+normalising join and the raise), on Teague's decision: "Raise plus the
+normalising join". The sections below keep the original measurement and the
+reasoning as history; "Why it is not fixed here" describes the state BEFORE that
+decision. Test: `test/sql/bugs/058_source_of_from_path_mismatch.test`. The raise
+fires when ANY matched file has no content row, not only when all do, so a
+`files` narrower than the table now raises where it used to return the subset.
 **Found by:** my own concern note during M2 stage 3 task 6, confirmed and given
 this owner by the task-6 code review (2026-11-10). Every figure below was
 measured against `build/release/duckdb` at `e7b910e`, not taken from the review
@@ -25,8 +28,12 @@ the result carries the source TEXT of each match, which comes from
 The two arguments can therefore name the same file in two spellings, and then
 nothing matches. The mechanism is one line:
 
-    src/sql_macros/file_utilities.sql:164
+    src/sql_macros/file_utilities.sql:164   (as measured at e7b910e, before the fix)
         JOIN read_text(files) fc ON fc.filename = m.file_path
+
+After the fix the join is `src/sql_macros/file_utilities.sql:160-162`, on the
+normalised key of both sides, and the raise is the `__sof_guard` CTE starting at
+`:168` (lines MEASURED by grep on the fixed file).
 
 An **inner** join on **exact string equality**. A match whose file is absent
 from `files`, or spelled differently there, is dropped. No error, no warning,
@@ -93,7 +100,7 @@ it to both. `R69` corrects it, and this section is the correction.
 
 **The join now lives in the shared body.** Task 6 rewrote `ast_source_of` as a
 thin wrapper that delegates to `ast_source_of_from`, so
-`file_utilities.sql:164` is the only copy of that join and the twin reaches it
+`file_utilities.sql:164` (then; now `:160-162`) is the only copy of that join and the twin reaches it
 too. Anything added there is added to the twin as well.
 
 **Which half that actually constrains, MEASURED.** The whole-branch review

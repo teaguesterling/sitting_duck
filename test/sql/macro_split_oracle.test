@@ -4,8 +4,9 @@
 
 # tree_analysis.sql was split out of tree_navigation.sql. This is a guard, not a
 # red test: it passes before and after the split, and fails if a macro is lost.
-# The counts are 44 macros from src/sql_macros/ plus the ast_dispatch_predicate
-# stub created in src/ast_sql_macros.cpp.
+# The counts are 105 macros from src/sql_macros/ plus the ast_dispatch_predicate
+# stub created in src/ast_sql_macros.cpp: 106 rows in all, 45 scalar and 61 table
+# (see the pinned row below, and scripts/verify_macro_boundary.py's 105).
 #
 # DELIBERATE CHANGES, RECORDED HERE AS THEY LAND
 # ----------------------------------------------
