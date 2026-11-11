@@ -282,25 +282,68 @@ CREATE OR REPLACE MACRO ast_get_source_numbered(file_path, start_line, end_line)
 -- Source Lookup - Table Macro (find definition by name, return numbered source)
 -- =============================================================================
 
--- Look up a definition by name and return its numbered source code
+-- For an AST table you already parsed. `ast_table` is a table NAME (a string),
+-- resolved with query_table(): parse once with read_ast, query many times.
+--
+-- WHY THIS ONE TAKES A SECOND ARGUMENT, unlike the other `_from` variants of
+-- the M2 stage 3 split. The result carries the SOURCE TEXT of each match, and a
+-- node table holds no source text -- only line numbers. So the paths come along
+-- as `files`, which is read with read_text() exactly as the path-taking twin
+-- reads them, in the same way ast_unparse_exact_from(ast_table, files, ...)
+-- takes both. There is no `language` parameter, because a parsed table carries
+-- its own.
 -- Usage:
---   SELECT * FROM ast_source_of('src/**/*.py', 'process_payment');
---   SELECT * FROM ast_source_of('src/**/*.py', 'MyClass', kind := 'class');
---   SELECT * FROM ast_source_of('src/**/*.py', 'handler', language := 'python', kind := 'function');
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_source_of_from('my_ast', 'src/**/*.py', 'process_payment');
+--   SELECT * FROM ast_source_of_from('my_ast', 'src/**/*.py', 'MyClass', kind := 'class');
+--
+-- `files` AND `ast_table` MUST NAME THE SAME FILES. Pass read_text the same
+-- pattern you passed read_ast. The file_contents join below matches
+-- read_text(files).filename against the table's file_path after NORMALISING
+-- both sides (leading './' stripped, '\' folded to '/'), the rule of
+-- ast_unparse_exact_from (ast_unparse.sql:593). The raw file_path the node table
+-- carried is what is returned. Normalising makes './x.py' and 'x.py' agree,
+-- where an exact-string join used to drop the match.
+--
+-- The macro RAISES when any matched file has no content row through `files`
+-- (the __sof_guard CTE): an absent or mismatched `files` is a failure to locate
+-- the source, not an empty search. It names the count, one example path and the
+-- remedy, as ast_unparse_exact_from does (ast_unparse.sql:736-741). A table with
+-- no matches at all still returns 0 rows. A NULL or empty file_path in the node
+-- table raises with its own message (the empty one names tracker/bugs/061, the
+-- duckdb adapter's empty file_path), never the generic remedy.
+-- The guard is a join in the final SELECT, so a consumer that statically asks
+-- for no rows (LIMIT 0, WHERE false) prunes it and sees 0 rows; ast_unparse_exact
+-- behaves the same way for LIMIT 0. A `files` that covers only SOME of the
+-- matched files raises too, so narrowing `files` to a subset is an error.
+-- Record: tracker/bugs/058, which carries the measurement and the decision
+-- (Teague: "Raise plus the normalising join"). It honours
+-- tracker/features/044-v2-m1-contract.md:16 ("no silent-empty (#89)"). The
+-- path-taking twin delegates here and passes one pattern twice, so both halves
+-- are a no-op for it: MEASURED 0 unmatched rows across four path spellings.
+-- #89 itself is CLOSED (tracker/features/046-cpp-selector-engine.md:4).
+--
+-- Spellings, MEASURED before the fix: a GLOB is normalised by both read_ast and
+-- read_text ('./test/data/python/q*.py' and 'test/data/python/q*.py' both yield
+-- 'test/data/python/...'); an EXACT path is returned verbatim, so
+-- './test/data/python/qualified_names.py' keeps its './'.
+--
+-- ast_unparse.sql:564-569 reports a third spelling, Windows native backslashes
+-- from the globber; that is NOT measured here. Its neighbouring :562-563 says
+-- the globber './'-prefixes relative paths, which DISAGREES with the glob
+-- measurement above and was not reproduced on this build -- the 0 that column 3
+-- of the test's five-count row pinned before 058 was fixed decided it, because
+-- a './'-prefixing globber would have put './' on both sides and made that cell 3.
 -- ----------------------------------------------------------------------------
--- ast_source_of: Source text for matched nodes, keyed by file pattern
+-- ast_source_of_from: Source text for matched nodes in a parsed AST table, read from files
 -- ----------------------------------------------------------------------------
-CREATE OR REPLACE MACRO ast_source_of(
-    file_patterns,
+CREATE OR REPLACE MACRO ast_source_of_from(
+    ast_table,
+    files,
     target_name,
-    language := NULL,
     kind := NULL
 ) AS TABLE
     WITH
-        ast AS (
-            SELECT *
-            FROM read_ast(file_patterns, language)
-        ),
         matches AS (
             SELECT
                 file_path,
@@ -316,7 +359,7 @@ CREATE OR REPLACE MACRO ast_source_of(
                 type,
                 start_line,
                 end_line
-            FROM ast
+            FROM query_table(ast_table)
             WHERE is_definition(semantic_type)
               AND is_construct(flags)
               AND name = target_name
@@ -328,13 +371,67 @@ CREATE OR REPLACE MACRO ast_source_of(
                    OR (kind = 'type' AND is_type_definition(semantic_type))
               )
         ),
-        -- Read file contents for all matched files
+        -- Read file contents for all matched files. The join key is normalised
+        -- on BOTH sides (leading './' stripped, '\' folded to '/'), the rule
+        -- of ast_unparse_exact_from (ast_unparse.sql:593); the raw m.file_path
+        -- is what is kept and returned.
         file_contents AS (
             SELECT DISTINCT ON (m.file_path)
                 m.file_path,
                 string_split(fc.content, E'\n') AS lines
             FROM matches m
-            JOIN read_text(file_patterns) fc ON fc.filename = m.file_path
+            JOIN read_text(files) fc
+              ON replace(regexp_replace(fc.filename, '^\./', ''), '\', '/')
+               = replace(regexp_replace(m.file_path, '^\./', ''), '\', '/')
+        ),
+        -- A matched file with no content row is a failure to locate the source,
+        -- not an empty search (tracker/bugs/058). Raise when ANY matched file is
+        -- unjoined, as ast_unparse_exact_from does (ast_unparse.sql:736-741).
+        -- No match at all is a real, quiet 0.
+        --
+        -- Branch order is the precedent's (ast_unparse.sql:704-709): NULL
+        -- file_path, then empty, then the generic unjoined path. The NULL branch
+        -- has to come first and has to count ROWS: count(DISTINCT file_path)
+        -- ignores NULL, and error() given a NULL message returns NULL instead of
+        -- raising, so a guard that built its message from a NULL file_path would
+        -- fail open into 0 rows. The empty branch names the real cause (the
+        -- duckdb adapter always writes an empty file_path, tracker/bugs/061)
+        -- because the generic remedy would tell the caller to do what they did. The
+        -- '<inline>' branch (parse_ast output) follows ast_unparse.sql:729-735.
+        __sof_guard AS (
+            SELECT
+                CASE
+                    WHEN count(*) FILTER (WHERE m.file_path IS NULL) > 0
+                        THEN error('ast_source_of_from: ' ||
+                                   (count(*) FILTER (WHERE m.file_path IS NULL))::VARCHAR ||
+                                   ' matched row(s) have a NULL file_path, so their source ' ||
+                                   'cannot be located.')
+                    WHEN count(*) FILTER (WHERE m.file_path = '') > 0
+                        THEN error('ast_source_of_from: ' ||
+                                   (count(*) FILTER (WHERE m.file_path = ''))::VARCHAR ||
+                                   ' matched row(s) have an empty file_path, so their source ' ||
+                                   'cannot be located. The duckdb adapter always produces an ' ||
+                                   'empty file_path (tracker/bugs/061); parse a tree-sitter ' ||
+                                   'language, or read the source yourself.')
+                    WHEN count(*) FILTER (WHERE m.file_path = '<inline>') > 0
+                        THEN error('ast_source_of_from: the node table is in-memory ' ||
+                                   'parse_ast() output (file_path = ''<inline>''), which has ' ||
+                                   'no file to re-read. Parse from a file with ' ||
+                                   'read_ast(path), or work from the source string you ' ||
+                                   'already have.')
+                    WHEN count(DISTINCT m.file_path)
+                             FILTER (WHERE fc.file_path IS NULL) > 0
+                        THEN error('ast_source_of_from: ' ||
+                                   (count(DISTINCT m.file_path)
+                                        FILTER (WHERE fc.file_path IS NULL))::VARCHAR ||
+                                   ' of ' || count(DISTINCT m.file_path)::VARCHAR ||
+                                   ' matched file(s) have no content row in read_text(files) (e.g. ''' ||
+                                   (min(m.file_path) FILTER (WHERE fc.file_path IS NULL)) ||
+                                   '''); pass the same path or glob used for read_ast.')
+                    ELSE true
+                END AS ok
+            FROM matches m
+            LEFT JOIN file_contents fc ON fc.file_path = m.file_path
         ),
         -- Build numbered source for each match
         source_output AS (
@@ -352,6 +449,7 @@ CREATE OR REPLACE MACRO ast_source_of(
                 ) AS source
             FROM matches m
             JOIN file_contents fc ON fc.file_path = m.file_path
+            JOIN __sof_guard g ON g.ok
         )
     SELECT
         file_path,
@@ -362,6 +460,36 @@ CREATE OR REPLACE MACRO ast_source_of(
         source
     FROM source_output
     ORDER BY file_path, start_line;
+
+-- Look up a definition by name and return its numbered source code
+-- Usage:
+--   SELECT * FROM ast_source_of('src/**/*.py', 'process_payment');
+--   SELECT * FROM ast_source_of('src/**/*.py', 'MyClass', kind := 'class');
+--   SELECT * FROM ast_source_of('src/**/*.py', 'handler', language := 'python', kind := 'function');
+-- ----------------------------------------------------------------------------
+-- ast_source_of: Source text for matched nodes, keyed by file pattern
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_source_of(
+    file_patterns,
+    target_name,
+    language := NULL,
+    kind := NULL
+) AS TABLE
+    -- Parse, then delegate to ast_source_of_from, which holds the match filter,
+    -- the read_text join, the projection and the ORDER BY. `file_patterns` is
+    -- passed TWICE on purpose: once as the table the nodes come from, once as
+    -- the `files` the source lines are read from. That is the coupling this
+    -- path-taking form guarantees and the two-argument form makes optional --
+    -- which is also why this form cannot reach the mismatch the `_from` banner
+    -- warns about.
+    WITH __ast_source_of_src AS (
+
+)SQLMACRO"
+        R"SQLMACRO(
+        SELECT * FROM read_ast(file_patterns, language)
+    )
+    SELECT * FROM ast_source_of_from('__ast_source_of_src', file_patterns,
+                                     target_name, kind := kind);
 
 -- =============================================================================
 -- Source Extraction - Single Line
@@ -379,7 +507,6 @@ CREATE OR REPLACE MACRO ast_get_source_line(file_path, line_num) AS (
     SELECT lines[line_num]
     FROM file_content
 );
-
 )SQLMACRO"},
     {"tree_navigation.sql", R"SQLMACRO(
 -- Tree Navigation Macros
@@ -432,20 +559,33 @@ CREATE OR REPLACE MACRO ast_call_arguments(ast_table, call_node_id) AS TABLE
         )
     SELECT * FROM args;
 
--- Get all definitions (functions, classes, variables, etc.) with unified categories
--- Usage: SELECT * FROM ast_definitions('src/**/*.py')
--- Usage: SELECT * FROM ast_definitions('src/main.py', language := 'python')
+-- For an AST table you already parsed. `ast_table` is a table NAME (a string),
+-- resolved with query_table(): parse once with read_ast, query many times.
+-- There is no `language` parameter, because a parsed table carries its own --
+-- which leaves the table as this form's ONLY parameter.
+-- Usage:
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_definitions_from('my_ast')
 --
--- IMPORTANT: When querying definitions from raw read_ast() output, always use the
--- full filter chain: is_definition(semantic_type) AND is_construct(flags) AND name != ''
--- Using is_definition() alone will include keyword tokens (def, class, CREATE, etc.)
--- as duplicates, since keywords share the semantic type of their parent construct.
+-- Reads semantic_type, flags and name. A table whose semantic_type is NULL
+-- returns no rows rather than raising: every comparison against NULL is NULL,
+-- so the filter matches nothing. That is the NULL-definite convention issue #81
+-- set for the selector attribute filters (see the NULL semantics note in
+-- css_selectors.sql), and these macros follow it instead of validating columns.
+--
+-- IMPORTANT, and the reason to call this instead of writing the query yourself:
+-- a definition query over a parsed AST table needs the FULL filter chain --
+-- is_definition(semantic_type) AND is_construct(flags) AND name != ''. Using
+-- is_definition() alone also matches keyword tokens (def, class, CREATE, ...),
+-- because a keyword shares the semantic type of the construct it introduces,
+-- so every definition comes back twice. This macro applies the whole chain.
+-- The same warning is on ast_definitions below, for the path-taking form.
 -- ----------------------------------------------------------------------------
--- ast_definitions: Every definition (function, class, variable, module) in the source
+-- ast_definitions_from: Every definition (function, class, variable, module) in a parsed AST table
 -- ----------------------------------------------------------------------------
-CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
+CREATE OR REPLACE MACRO ast_definitions_from(ast_table) AS TABLE
     WITH ast AS (
-        SELECT * FROM read_ast(source, language)
+        SELECT * FROM query_table(ast_table)
     )
     SELECT
         a.name,
@@ -470,50 +610,24 @@ CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
       AND a.name IS NOT NULL AND a.name != ''
     ORDER BY a.file_path, a.start_line;
 
--- #99: durable citation resolution. Given a FILE and an entity NAME, return the entity's
--- CURRENT line range language-agnostically -- callers need not pin tree-sitter node-type
--- strings (`function_definition` etc. vary by grammar); the filter is semantic
--- (is_definition + is_construct, the same chain as ast_definitions).
+-- Get all definitions (functions, classes, variables, etc.) with unified categories
+-- Usage: SELECT * FROM ast_definitions('src/**/*.py')
+-- Usage: SELECT * FROM ast_definitions('src/main.py', language := 'python')
 --
--- Also returns `qualified_name` (name + enclosing scope, e.g. `C[User] F[__init__]`) as a
--- STABLE IDENTITY: when a name occurs more than once, it disambiguates which entity a
--- citation meant, and it re-resolves across edits. A citation stores (path, name[,
--- qualified_name]) and re-resolves here; comparing the returned lines to a recorded range
--- makes drift visible instead of silent. (The content anchor — a git blob / read_lines
--- hash — composes at the filesystem layer; sitting_duck supplies the *semantic* selector.)
---
--- Optional `kind` filters to 'function'|'class'|'variable'|'module'|'type'|'other'.
--- Usage: SELECT * FROM ast_resolve_entity('src/xml_utils.cpp', 'SecureNoExternalEntityLoader');
---        SELECT * FROM ast_resolve_entity('src/app.py', 'run', kind := 'function');
+-- IMPORTANT: When querying definitions from raw read_ast() output, always use the
+-- full filter chain: is_definition(semantic_type) AND is_construct(flags) AND name != ''
+-- Using is_definition() alone will include keyword tokens (def, class, CREATE, etc.)
+-- as duplicates, since keywords share the semantic type of their parent construct.
 -- ----------------------------------------------------------------------------
--- ast_resolve_entity: Find a named entity by name and optional kind, within one file
+-- ast_definitions: Every definition (function, class, variable, module) in the source
 -- ----------------------------------------------------------------------------
-CREATE OR REPLACE MACRO ast_resolve_entity(path, entity_name, kind := NULL, language := NULL) AS TABLE
-    WITH defs AS (
-        SELECT
-            a.name,
-            CASE
-                WHEN is_function_definition(a.semantic_type) THEN 'function'
-                WHEN is_class_definition(a.semantic_type) THEN 'class'
-                WHEN is_variable_definition(a.semantic_type) THEN 'variable'
-                WHEN is_module_definition(a.semantic_type) THEN 'module'
-                WHEN is_type_definition(a.semantic_type) THEN 'type'
-                ELSE 'other'
-            END AS entity_kind,
-            a.start_line,
-            a.end_line,
-            ast_qualified_name_as_string(a.qualified_name) AS qualified_name,
-            a.language,
-            a.file_path
-        FROM read_ast(path, language) a
-        WHERE a.name = entity_name
-          AND is_definition(a.semantic_type)
-          AND is_construct(a.flags)
+CREATE OR REPLACE MACRO ast_definitions(source, language := NULL) AS TABLE
+    -- Parse, then delegate to ast_definitions_from, which holds the projection,
+    -- the filter chain and the ORDER BY.
+    WITH __ast_definitions_src AS (
+        SELECT * FROM read_ast(source, language)
     )
-    SELECT name, entity_kind, start_line, end_line, qualified_name, language, file_path
-    FROM defs
-    WHERE kind IS NULL OR entity_kind = kind
-    ORDER BY file_path, start_line;
+    SELECT * FROM ast_definitions_from('__ast_definitions_src');
 
 -- Get all descendants of a node (entire subtree)
 -- Uses descendant_count for O(1) range-based lookup (nodes are in DFS pre-order)
@@ -567,6 +681,28 @@ CREATE OR REPLACE MACRO ast_siblings(ast_table, target_node_id) AS TABLE
 -- Line-Based Navigation
 -- =============================================================================
 
+-- For an AST table you already parsed. `ast_table` is a table NAME (a string),
+-- resolved with query_table(): parse once with read_ast, query many times.
+-- There is no `language` parameter, because a parsed table carries its own.
+-- Usage:
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_containing_line_from('my_ast', 42)
+--
+-- Reads start_line and end_line. A table whose line columns are NULL returns no
+-- rows rather than raising -- the same NULL-definite convention as
+-- ast_definitions_from above.
+-- ----------------------------------------------------------------------------
+-- ast_containing_line_from: Nodes of a parsed AST table whose source span covers a given line number
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_containing_line_from(ast_table, line_num) AS TABLE
+    WITH ast AS (
+        SELECT * FROM query_table(ast_table)
+    )
+    SELECT a.*
+    FROM ast a
+    WHERE a.start_line <= line_num AND a.end_line >= line_num
+    ORDER BY (a.end_line - a.start_line), a.start_line;
+
 -- Find all nodes that contain a specific line
 -- Returns nodes ordered by specificity (smallest span first)
 -- Usage: SELECT * FROM ast_containing_line('src/main.py', 42)
@@ -574,13 +710,33 @@ CREATE OR REPLACE MACRO ast_siblings(ast_table, target_node_id) AS TABLE
 -- ast_containing_line: Nodes whose source span covers a given line number
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_containing_line(source, line_num, language := NULL) AS TABLE
-    WITH ast AS (
+    -- Parse, then delegate to ast_containing_line_from, which holds the
+    -- predicate and the specificity ORDER BY.
+    WITH __ast_containing_line_src AS (
         SELECT * FROM read_ast(source, language)
+    )
+    SELECT * FROM ast_containing_line_from('__ast_containing_line_src', line_num);
+
+-- For an AST table you already parsed. `ast_table` is a table NAME (a string),
+-- resolved with query_table(): parse once with read_ast, query many times.
+-- There is no `language` parameter, because a parsed table carries its own.
+-- Usage:
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_in_range_from('my_ast', 10, 20)
+--
+-- Reads start_line and end_line. A table whose line columns are NULL returns no
+-- rows rather than raising -- the same NULL-definite convention as
+-- ast_definitions_from above.
+-- ----------------------------------------------------------------------------
+-- ast_in_range_from: Nodes of a parsed AST table whose source span falls inside a line range
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_in_range_from(ast_table, range_start, range_end) AS TABLE
+    WITH ast AS (
+        SELECT * FROM query_table(ast_table)
     )
     SELECT a.*
     FROM ast a
-    WHERE a.start_line <= line_num AND a.end_line >= line_num
-    ORDER BY (a.end_line - a.start_line), a.start_line;
+    WHERE a.start_line >= range_start AND a.end_line <= range_end;
 
 -- Get all nodes within a line range
 -- Usage: SELECT * FROM ast_in_range('src/main.py', 10, 20)
@@ -588,12 +744,11 @@ CREATE OR REPLACE MACRO ast_containing_line(source, line_num, language := NULL) 
 -- ast_in_range: Nodes whose source span falls inside a line range
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE MACRO ast_in_range(source, range_start, range_end, language := NULL) AS TABLE
-    WITH ast AS (
+    -- Parse, then delegate to ast_in_range_from, which holds the predicate.
+    WITH __ast_in_range_src AS (
         SELECT * FROM read_ast(source, language)
     )
-    SELECT a.*
-    FROM ast a
-    WHERE a.start_line >= range_start AND a.end_line <= range_end;
+    SELECT * FROM ast_in_range_from('__ast_in_range_src', range_start, range_end);
 
 -- =============================================================================
 -- Scope-Aware Helpers
@@ -637,6 +792,9 @@ CREATE OR REPLACE MACRO ast_function_scope(ast_table, func_node_id) AS TABLE
     );
 
 -- Get direct members of a class (methods, fields, nested classes)
+
+)SQLMACRO"
+        R"SQLMACRO(
 -- Returns the member definition nodes themselves, not their internal contents.
 -- Useful for class structure analysis without descending into method bodies.
 -- Usage: SELECT name, type FROM ast_class_members(my_ast_table, class_node_id)
@@ -676,11 +834,108 @@ CREATE OR REPLACE MACRO ast_class_members(ast_table, class_node_id) AS TABLE
         SELECT 1 FROM all_defs other
         WHERE other.node_id != d.node_id
           AND d.node_id > other.node_id
-
-)SQLMACRO"
-        R"SQLMACRO(
           AND d.node_id <= other.node_id + other.descendant_count
     );
+
+-- Resolve nearest definition ancestor for each definition node
+-- Walks up parent_id, skipping organizational/structural nodes (e.g., blocks),
+-- until it finds an ancestor that is itself a definition.
+-- Returns (node_id, def_name, kind, parent_def_name, parent_def_kind, parent_def_node_id)
+-- Usage: SELECT * FROM ast_definition_parent('my_ast_table')
+-- ----------------------------------------------------------------------------
+-- ast_definition_parent: The nearest enclosing definition for every node in an AST table
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_definition_parent(ast_table) AS TABLE
+    WITH RECURSIVE def_parent AS (
+        -- Start: each definition node with its immediate parent
+        SELECT
+            d.node_id,
+            d.name AS def_name,
+            d.semantic_type AS def_type,
+            d.parent_id AS current_parent_id,
+            0 AS hops
+        FROM query_table(ast_table) d
+        WHERE is_definition(d.semantic_type)
+          AND is_construct(d.flags)
+          AND d.name IS NOT NULL AND d.name != ''
+          AND d.depth >= 1
+
+        UNION ALL
+
+        -- Walk up: if current parent isn't a definition, go to its parent
+        SELECT
+            dp.node_id,
+            dp.def_name,
+            dp.def_type,
+            p.parent_id AS current_parent_id,
+            dp.hops + 1
+        FROM def_parent dp
+        JOIN query_table(ast_table) p ON dp.current_parent_id = p.node_id
+        WHERE NOT is_definition(p.semantic_type) AND dp.hops < 10
+    )
+    SELECT
+        dp.node_id,
+        dp.def_name,
+        semantic_type_to_string(dp.def_type) AS kind,
+        p.name AS parent_def_name,
+        semantic_type_to_string(p.semantic_type) AS parent_def_kind,
+        p.node_id AS parent_def_node_id
+    FROM def_parent dp
+    JOIN query_table(ast_table) p ON dp.current_parent_id = p.node_id
+    WHERE is_definition(p.semantic_type);
+)SQLMACRO"},
+    {"tree_analysis.sql", R"SQLMACRO(
+-- Tree Analysis Macros
+-- Entity resolution, per-function metrics, security and dead-code heuristics,
+-- and call-site extraction. These build on the predicates in
+-- semantic_predicates.sql (the macros it calls from other files are defined there;
+-- it calls none defined in tree_navigation.sql) and are opinionated analyses
+-- rather than core navigation.
+
+-- #99: durable citation resolution. Given a FILE and an entity NAME, return the entity's
+-- CURRENT line range language-agnostically -- callers need not pin tree-sitter node-type
+-- strings (`function_definition` etc. vary by grammar); the filter is semantic
+-- (is_definition + is_construct, the same chain as ast_definitions).
+--
+-- Also returns `qualified_name` (name + enclosing scope, e.g. `C[User] F[__init__]`) as a
+-- STABLE IDENTITY: when a name occurs more than once, it disambiguates which entity a
+-- citation meant, and it re-resolves across edits. A citation stores (path, name[,
+-- qualified_name]) and re-resolves here; comparing the returned lines to a recorded range
+-- makes drift visible instead of silent. (The content anchor — a git blob / read_lines
+-- hash — composes at the filesystem layer; sitting_duck supplies the *semantic* selector.)
+--
+-- Optional `kind` filters to 'function'|'class'|'variable'|'module'|'type'|'other'.
+-- Usage: SELECT * FROM ast_resolve_entity('src/xml_utils.cpp', 'SecureNoExternalEntityLoader');
+--        SELECT * FROM ast_resolve_entity('src/app.py', 'run', kind := 'function');
+-- ----------------------------------------------------------------------------
+-- ast_resolve_entity: Find a named entity by name and optional kind, within one file
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_resolve_entity(path, entity_name, kind := NULL, language := NULL) AS TABLE
+    WITH defs AS (
+        SELECT
+            a.name,
+            CASE
+                WHEN is_function_definition(a.semantic_type) THEN 'function'
+                WHEN is_class_definition(a.semantic_type) THEN 'class'
+                WHEN is_variable_definition(a.semantic_type) THEN 'variable'
+                WHEN is_module_definition(a.semantic_type) THEN 'module'
+                WHEN is_type_definition(a.semantic_type) THEN 'type'
+                ELSE 'other'
+            END AS entity_kind,
+            a.start_line,
+            a.end_line,
+            ast_qualified_name_as_string(a.qualified_name) AS qualified_name,
+            a.language,
+            a.file_path
+        FROM read_ast(path, language) a
+        WHERE a.name = entity_name
+          AND is_definition(a.semantic_type)
+          AND is_construct(a.flags)
+    )
+    SELECT name, entity_kind, start_line, end_line, qualified_name, language, file_path
+    FROM defs
+    WHERE kind IS NULL OR entity_kind = kind
+    ORDER BY file_path, start_line;
 
 -- =============================================================================
 -- Analysis Macros
@@ -956,6 +1211,9 @@ CREATE OR REPLACE MACRO ast_nesting_analysis(source, language := NULL) AS TABLE
 
 -- Automated security concern detection
 -- Scans for common security anti-patterns across languages.
+
+)SQLMACRO"
+        R"SQLMACRO(
 -- Usage: SELECT * FROM ast_security_audit('src/**/*.py') WHERE risk_level = 'high'
 -- ----------------------------------------------------------------------------
 -- ast_security_audit: Risk-pattern findings per function: risk_category, risk_level, finding, matched_pattern
@@ -995,9 +1253,6 @@ CREATE OR REPLACE MACRO ast_security_audit(source, language := NULL) AS TABLE
                 ('raw', 'SQL Injection', 'medium', 'Raw SQL query'),
                 ('rawQuery', 'SQL Injection', 'medium', 'Raw SQL query'),
                 -- File Operations (Medium Risk)
-
-)SQLMACRO"
-        R"SQLMACRO(
                 ('readFile', 'Path Traversal', 'medium', 'File read - verify path sanitization'),
                 ('writeFile', 'Path Traversal', 'medium', 'File write - verify path sanitization'),
                 ('unlink', 'Path Traversal', 'medium', 'File deletion - verify path sanitization'),
@@ -1075,53 +1330,6 @@ CREATE OR REPLACE MACRO ast_security_audit(source, language := NULL) AS TABLE
     ORDER BY
         CASE fi.risk_level WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
         fi.file_path, fi.start_line;
-
--- Resolve nearest definition ancestor for each definition node
--- Walks up parent_id, skipping organizational/structural nodes (e.g., blocks),
--- until it finds an ancestor that is itself a definition.
--- Returns (node_id, def_name, kind, parent_def_name, parent_def_kind, parent_def_node_id)
--- Usage: SELECT * FROM ast_definition_parent('my_ast_table')
--- ----------------------------------------------------------------------------
--- ast_definition_parent: The nearest enclosing definition for every node in an AST table
--- ----------------------------------------------------------------------------
-CREATE OR REPLACE MACRO ast_definition_parent(ast_table) AS TABLE
-    WITH RECURSIVE def_parent AS (
-        -- Start: each definition node with its immediate parent
-        SELECT
-            d.node_id,
-            d.name AS def_name,
-            d.semantic_type AS def_type,
-            d.parent_id AS current_parent_id,
-            0 AS hops
-        FROM query_table(ast_table) d
-        WHERE is_definition(d.semantic_type)
-          AND is_construct(d.flags)
-          AND d.name IS NOT NULL AND d.name != ''
-          AND d.depth >= 1
-
-        UNION ALL
-
-        -- Walk up: if current parent isn't a definition, go to its parent
-        SELECT
-            dp.node_id,
-            dp.def_name,
-            dp.def_type,
-            p.parent_id AS current_parent_id,
-            dp.hops + 1
-        FROM def_parent dp
-        JOIN query_table(ast_table) p ON dp.current_parent_id = p.node_id
-        WHERE NOT is_definition(p.semantic_type) AND dp.hops < 10
-    )
-    SELECT
-        dp.node_id,
-        dp.def_name,
-        semantic_type_to_string(dp.def_type) AS kind,
-        p.name AS parent_def_name,
-        semantic_type_to_string(p.semantic_type) AS parent_def_kind,
-        p.node_id AS parent_def_node_id
-    FROM def_parent dp
-    JOIN query_table(ast_table) p ON dp.current_parent_id = p.node_id
-    WHERE is_definition(p.semantic_type);
 
 -- Find potentially dead (unused) code
 -- Identifies functions and classes that are never referenced in the codebase.
@@ -1322,6 +1530,9 @@ CREATE OR REPLACE MACRO ast_get_calls(source, language := NULL) AS TABLE
 -- ----------------------------------------------------------------------------
 -- ast_call_graph: Caller to callee edges derived from the call sites
 -- ----------------------------------------------------------------------------
+
+)SQLMACRO"
+        R"SQLMACRO(
 CREATE OR REPLACE MACRO ast_call_graph(source, language := NULL) AS TABLE
     WITH
         raw_calls AS (
@@ -2358,8 +2569,44 @@ CREATE OR REPLACE MACRO ast_capture(captures_map, capture_name) AS
 -- ast_has/ast_inside/ast_precedes/ast_follows answer "is X related to Y?"
 -- rather than extracting or transforming AST data.
 --
--- All macros take a source file path or glob and call read_ast() internally.
+-- Each operator comes in two shapes. The path-taking form takes a file path or
+-- glob and calls read_ast() internally. The `_from` form takes the NAME of a
+-- table that already holds a parsed AST and reads it with query_table(), so a
+-- corpus is parsed once and queried many times -- and so these operators work
+-- over an AST produced elsewhere. The path-taking form is a thin wrapper that
+-- parses and then delegates, exactly as ast_select delegates to ast_select_from.
 -- =============================================================================
+
+-- For an AST table you already parsed. `ast_table` is a table NAME (a string),
+-- resolved with query_table(): parse once with read_ast, query many times.
+-- There is no `language` parameter, because a parsed table carries its own.
+-- Usage:
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_has_from('my_ast', 'function_definition', 'return_statement')
+-- ----------------------------------------------------------------------------
+-- ast_has_from: Nodes of one type that contain a node of another type, in a parsed AST table
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_has_from(
+    ast_table,
+    ancestor_type,
+    descendant_type,
+    descendant_name := NULL
+) AS TABLE
+    WITH ast AS (
+        SELECT * FROM query_table(ast_table)
+    )
+    SELECT a.*
+    FROM ast a
+    WHERE a.type = ancestor_type
+      AND EXISTS (
+          SELECT 1
+          FROM ast d
+          WHERE d.file_path = a.file_path
+            AND d.node_id > a.node_id
+            AND d.node_id <= a.node_id + a.descendant_count
+            AND d.type = descendant_type
+            AND (descendant_name IS NULL OR d.name = descendant_name)
+      );
 
 -- Check if ancestor nodes contain a matching descendant at any depth.
 -- Uses descendant_count range-check for O(1) subtree membership.
@@ -2375,13 +2622,35 @@ CREATE OR REPLACE MACRO ast_has(
     descendant_name := NULL,
     language := NULL
 ) AS TABLE
-    WITH ast AS (
+    -- Parse, then delegate to ast_has_from, which holds the predicate.
+    WITH __ast_has_src AS (
         SELECT * FROM read_ast(source, language)
+    )
+    SELECT * FROM ast_has_from('__ast_has_src', ancestor_type, descendant_type,
+                               descendant_name := descendant_name);
+
+-- For an AST table you already parsed. `ast_table` is a table NAME (a string),
+-- resolved with query_table(): parse once with read_ast, query many times.
+-- There is no `language` parameter, because a parsed table carries its own.
+-- Usage:
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_not_has_from('my_ast', 'function_definition', 'return_statement')
+-- ----------------------------------------------------------------------------
+-- ast_not_has_from: Nodes of one type that do NOT contain a node of another type, in a parsed AST table
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_not_has_from(
+    ast_table,
+    ancestor_type,
+    descendant_type,
+    descendant_name := NULL
+) AS TABLE
+    WITH ast AS (
+        SELECT * FROM query_table(ast_table)
     )
     SELECT a.*
     FROM ast a
     WHERE a.type = ancestor_type
-      AND EXISTS (
+      AND NOT EXISTS (
           SELECT 1
           FROM ast d
           WHERE d.file_path = a.file_path
@@ -2404,20 +2673,44 @@ CREATE OR REPLACE MACRO ast_not_has(
     descendant_name := NULL,
     language := NULL
 ) AS TABLE
-    WITH ast AS (
+    -- Parse, then delegate to ast_not_has_from, which holds the predicate.
+    WITH __ast_not_has_src AS (
         SELECT * FROM read_ast(source, language)
     )
-    SELECT a.*
-    FROM ast a
-    WHERE a.type = ancestor_type
-      AND NOT EXISTS (
+    SELECT * FROM ast_not_has_from('__ast_not_has_src', ancestor_type, descendant_type,
+                                   descendant_name := descendant_name);
+
+-- For an AST table you already parsed. `ast_table` is a table NAME (a string),
+-- resolved with query_table(): parse once with read_ast, query many times.
+-- There is no `language` parameter, because a parsed table carries its own.
+-- Usage:
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_inside_from('my_ast', 'call', 'function_definition', 'load_sql')
+-- ----------------------------------------------------------------------------
+-- ast_inside_from: Nodes of one type that sit inside a node of another type, in a parsed AST table
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_inside_from(
+    ast_table,
+    descendant_type,
+    ancestor_type,
+    ancestor_name := NULL,
+    descendant_name := NULL
+) AS TABLE
+    WITH ast AS (
+        SELECT * FROM query_table(ast_table)
+    )
+    SELECT d.*
+    FROM ast d
+    WHERE d.type = descendant_type
+      AND (descendant_name IS NULL OR d.name = descendant_name)
+      AND EXISTS (
           SELECT 1
-          FROM ast d
-          WHERE d.file_path = a.file_path
+          FROM ast a
+          WHERE a.file_path = d.file_path
+            AND a.type = ancestor_type
+            AND (ancestor_name IS NULL OR a.name = ancestor_name)
             AND d.node_id > a.node_id
             AND d.node_id <= a.node_id + a.descendant_count
-            AND d.type = descendant_type
-            AND (descendant_name IS NULL OR d.name = descendant_name)
       );
 
 -- Find descendant nodes that are inside an ancestor of a given type.
@@ -2436,21 +2729,43 @@ CREATE OR REPLACE MACRO ast_inside(
     descendant_name := NULL,
     language := NULL
 ) AS TABLE
-    WITH ast AS (
+    -- Parse, then delegate to ast_inside_from, which holds the predicate.
+    WITH __ast_inside_src AS (
         SELECT * FROM read_ast(source, language)
     )
-    SELECT d.*
-    FROM ast d
-    WHERE d.type = descendant_type
-      AND (descendant_name IS NULL OR d.name = descendant_name)
+    SELECT * FROM ast_inside_from('__ast_inside_src', descendant_type, ancestor_type,
+                                  ancestor_name := ancestor_name,
+                                  descendant_name := descendant_name);
+
+-- For an AST table you already parsed. `ast_table` is a table NAME (a string),
+-- resolved with query_table(): parse once with read_ast, query many times.
+-- There is no `language` parameter, because a parsed table carries its own.
+-- Usage:
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_precedes_from('my_ast', 'comment', 'function_definition')
+-- ----------------------------------------------------------------------------
+-- ast_precedes_from: Nodes of one type that appear before a node of another type, in a parsed AST table
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_precedes_from(
+    ast_table,
+    node_type,
+    before_type,
+    before_name := NULL
+) AS TABLE
+    WITH ast AS (
+        SELECT * FROM query_table(ast_table)
+    )
+    SELECT n.*
+    FROM ast n
+    WHERE n.type = node_type
       AND EXISTS (
           SELECT 1
-          FROM ast a
-          WHERE a.file_path = d.file_path
-            AND a.type = ancestor_type
-            AND (ancestor_name IS NULL OR a.name = ancestor_name)
-            AND d.node_id > a.node_id
-            AND d.node_id <= a.node_id + a.descendant_count
+          FROM ast b
+          WHERE b.file_path = n.file_path
+            AND b.parent_id = n.parent_id
+            AND b.type = before_type
+            AND (before_name IS NULL OR b.name = before_name)
+            AND n.sibling_index < b.sibling_index
       );
 
 -- Find sibling nodes that precede a node of a given type.
@@ -2466,20 +2781,42 @@ CREATE OR REPLACE MACRO ast_precedes(
     before_name := NULL,
     language := NULL
 ) AS TABLE
-    WITH ast AS (
+    -- Parse, then delegate to ast_precedes_from, which holds the predicate.
+    WITH __ast_precedes_src AS (
         SELECT * FROM read_ast(source, language)
+    )
+    SELECT * FROM ast_precedes_from('__ast_precedes_src', node_type, before_type,
+                                    before_name := before_name);
+
+-- For an AST table you already parsed. `ast_table` is a table NAME (a string),
+-- resolved with query_table(): parse once with read_ast, query many times.
+-- There is no `language` parameter, because a parsed table carries its own.
+-- Usage:
+--   CREATE TABLE my_ast AS SELECT * FROM read_ast('src/**/*.py');
+--   SELECT * FROM ast_follows_from('my_ast', 'expression_statement', 'function_definition')
+-- ----------------------------------------------------------------------------
+-- ast_follows_from: Nodes of one type that appear after a node of another type, in a parsed AST table
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE MACRO ast_follows_from(
+    ast_table,
+    node_type,
+    after_type,
+    after_name := NULL
+) AS TABLE
+    WITH ast AS (
+        SELECT * FROM query_table(ast_table)
     )
     SELECT n.*
     FROM ast n
     WHERE n.type = node_type
       AND EXISTS (
           SELECT 1
-          FROM ast b
-          WHERE b.file_path = n.file_path
-            AND b.parent_id = n.parent_id
-            AND b.type = before_type
-            AND (before_name IS NULL OR b.name = before_name)
-            AND n.sibling_index < b.sibling_index
+          FROM ast a
+          WHERE a.file_path = n.file_path
+            AND a.parent_id = n.parent_id
+            AND a.type = after_type
+            AND (after_name IS NULL OR a.name = after_name)
+            AND n.sibling_index > a.sibling_index
       );
 
 -- Find sibling nodes that follow a node of a given type.
@@ -2495,21 +2832,12 @@ CREATE OR REPLACE MACRO ast_follows(
     after_name := NULL,
     language := NULL
 ) AS TABLE
-    WITH ast AS (
+    -- Parse, then delegate to ast_follows_from, which holds the predicate.
+    WITH __ast_follows_src AS (
         SELECT * FROM read_ast(source, language)
     )
-    SELECT n.*
-    FROM ast n
-    WHERE n.type = node_type
-      AND EXISTS (
-          SELECT 1
-          FROM ast a
-          WHERE a.file_path = n.file_path
-            AND a.parent_id = n.parent_id
-            AND a.type = after_type
-            AND (after_name IS NULL OR a.name = after_name)
-            AND n.sibling_index > a.sibling_index
-      );
+    SELECT * FROM ast_follows_from('__ast_follows_src', node_type, after_type,
+                                   after_name := after_name);
 
 )SQLMACRO"},
     {"parse_ast_list_table.sql", R"SQLMACRO(
@@ -7691,24 +8019,28 @@ struct EmbeddedMacroDoc {
 static const std::vector<EmbeddedMacroDoc> EMBEDDED_MACRO_DOCS = {
     {"ast_get_source", "Raw source text for a line range of a file", {}},
     {"ast_get_source_numbered", "Source text for a line range, each line prefixed with its number", {}},
+    {"ast_source_of_from", "Source text for matched nodes in a parsed AST table, read from files", {"SELECT * FROM ast_source_of_from('my_ast', 'src/**/*.py', 'process_payment');", "SELECT * FROM ast_source_of_from('my_ast', 'src/**/*.py', 'MyClass', kind := 'class');"}},
     {"ast_source_of", "Source text for matched nodes, keyed by file pattern", {"SELECT * FROM ast_source_of('src/**/*.py', 'process_payment');", "SELECT * FROM ast_source_of('src/**/*.py', 'MyClass', kind := 'class');", "SELECT * FROM ast_source_of('src/**/*.py', 'handler', language := 'python', kind := 'function');"}},
     {"ast_get_source_line", "A single line of source text from a file", {}},
     {"ast_children", "Direct children of a node in a parsed AST table", {}},
     {"ast_call_arguments", "Argument nodes of a call, from its argument_list child", {}},
+    {"ast_definitions_from", "Every definition (function, class, variable, module) in a parsed AST table", {"SELECT * FROM ast_definitions_from('my_ast')"}},
     {"ast_definitions", "Every definition (function, class, variable, module) in the source", {}},
-    {"ast_resolve_entity", "Find a named entity by name and optional kind, within one file", {"SELECT * FROM ast_resolve_entity('src/app.py', 'run', kind := 'function');"}},
     {"ast_descendants", "Every node beneath an ancestor, via its descendant_count range", {}},
     {"ast_ancestors", "The ancestor chain from a node up to the root", {}},
     {"ast_siblings", "Nodes sharing a parent with the target node", {}},
+    {"ast_containing_line_from", "Nodes of a parsed AST table whose source span covers a given line number", {"SELECT * FROM ast_containing_line_from('my_ast', 42)"}},
     {"ast_containing_line", "Nodes whose source span covers a given line number", {}},
+    {"ast_in_range_from", "Nodes of a parsed AST table whose source span falls inside a line range", {"SELECT * FROM ast_in_range_from('my_ast', 10, 20)"}},
     {"ast_in_range", "Nodes whose source span falls inside a line range", {}},
     {"ast_function_scope", "Every node inside one function definition", {}},
     {"ast_class_members", "Members declared directly inside one class", {}},
+    {"ast_definition_parent", "The nearest enclosing definition for every node in an AST table", {}},
+    {"ast_resolve_entity", "Find a named entity by name and optional kind, within one file", {"SELECT * FROM ast_resolve_entity('src/app.py', 'run', kind := 'function');"}},
     {"ast_function_metrics", "Per-function size and complexity: lines, return_count, conditionals, loops, cyclomatic", {}},
     {"ast_functions_containing", "Functions that contain at least one node of a given type", {}},
     {"ast_nesting_analysis", "Per-function nesting depth: max_depth, avg_depth, deep_nodes, total_nodes", {}},
     {"ast_security_audit", "Risk-pattern findings per function: risk_category, risk_level, finding, matched_pattern", {}},
-    {"ast_definition_parent", "The nearest enclosing definition for every node in an AST table", {}},
     {"ast_dead_code", "Definitions with no reference elsewhere in the source, with the reason", {}},
     {"ast_get_calls", "Call sites in the source, with the enclosing function", {}},
     {"ast_call_graph", "Caller to callee edges derived from the call sites", {}},
@@ -7716,10 +8048,15 @@ static const std::vector<EmbeddedMacroDoc> EMBEDDED_MACRO_DOCS = {
     {"ast_pattern_list", "Parse a pattern string into a list of pattern tokens", {}},
     {"ast_match", "Find nodes matching a structural pattern, with wildcard captures", {"SELECT * FROM ast_match('src/**/*.py', 'my_func(__X__)');", "SELECT * FROM ast_match('src/main.py', 'my_func(__X__)', match_syntax := true);", "SELECT * FROM ast_match('src/**/*.py', '__F__(__X__)', match_by := 'semantic_type');"}},
     {"ast_capture", "Pull one named capture out of a match captures map", {}},
+    {"ast_has_from", "Nodes of one type that contain a node of another type, in a parsed AST table", {"SELECT * FROM ast_has_from('my_ast', 'function_definition', 'return_statement')"}},
     {"ast_has", "Nodes of one type that contain a node of another type", {}},
+    {"ast_not_has_from", "Nodes of one type that do NOT contain a node of another type, in a parsed AST table", {"SELECT * FROM ast_not_has_from('my_ast', 'function_definition', 'return_statement')"}},
     {"ast_not_has", "Nodes of one type that do NOT contain a node of another type", {}},
+    {"ast_inside_from", "Nodes of one type that sit inside a node of another type, in a parsed AST table", {"SELECT * FROM ast_inside_from('my_ast', 'call', 'function_definition', 'load_sql')"}},
     {"ast_inside", "Nodes of one type that sit inside a node of another type", {}},
+    {"ast_precedes_from", "Nodes of one type that appear before a node of another type, in a parsed AST table", {"SELECT * FROM ast_precedes_from('my_ast', 'comment', 'function_definition')"}},
     {"ast_precedes", "Nodes of one type that appear before a node of another type", {}},
+    {"ast_follows_from", "Nodes of one type that appear after a node of another type, in a parsed AST table", {"SELECT * FROM ast_follows_from('my_ast', 'expression_statement', 'function_definition')"}},
     {"ast_follows", "Nodes of one type that appear after a node of another type", {}},
     {"parse_ast_list_table", "Table-macro wrapper for parse_ast_list", {}},
     {"ast_select_from", "the selector engine, operates on a pre-parsed AST table. The `source` parameter is a table name (string) resolved via query_table(). This separates parsing (expensive) from querying (cheap), enabling callers to parse once and query many times with different selectors", {"SELECT * FROM ast_select_from('my_ast', '.class:named');", "SELECT * FROM ast_select_from('my_ast', '.func:has(return_statement)');"}},

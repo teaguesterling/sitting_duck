@@ -1,0 +1,436 @@
+# name: test/sql/macro_from_parity_relational.test
+# description: M2 stage 3 -- the five relational _from variants agree with their path-taking twins
+# group: [sitting_duck]
+#
+# WHAT THIS GUARDS
+# ----------------
+# ast_has / ast_not_has / ast_inside / ast_precedes / ast_follows each gained a
+# `_from` variant that reads an already-parsed AST table with query_table()
+# instead of calling read_ast() itself. The twins were then rewritten as thin
+# wrappers that parse and delegate, following ast_select / ast_select_from.
+#
+# THE EXCEPT ALL PAIRS BELOW COMPARED TWO INDEPENDENT BODIES ONCE: on the build
+# where the `_from` macros existed and the twins did NOT yet delegate to them.
+# From the wrapper rewrite onwards both sides evaluate the same body, so a
+# defect INSIDE a `_from` body moves both sides at once and the pairs cannot see
+# it. What they do still see is a defect in the WRAPPER, which is the only part
+# that differs between the two sides: an argument forwarded to the wrong
+# parameter, a changed column list (which fails to bind against the other side),
+# or a row duplicated or dropped.
+#
+# EXCEPT ALL, not EXCEPT. Set semantics cannot see multiplicity at all --
+# MEASURED: `(SELECT 1 UNION ALL SELECT 1) EXCEPT (SELECT 1)` is empty in both
+# directions, while EXCEPT ALL returns the extra row. A wrapper that doubled
+# every row would pass a plain EXCEPT in both directions.
+#
+# THE PINNED COUNTS AND DIGESTS ARE WHAT CATCH A DEFECT INSIDE A `_from` BODY.
+# Every pinned value in this file was MEASURED from the path-taking twins as
+# they stood at commit 4d4252e, BEFORE any of this task's changes -- that is,
+# from the implementation this task replaces, not from the one it introduces.
+# Sections 1-6 digest node_id, which cannot see a column change; section 7
+# digests the whole row, over two files. A pin that moves is a parity failure to
+# investigate, never a value to update.
+#
+# The argument tuples are measured non-empty, and two obvious choices are not:
+# 'class_definition'/'function_definition' returns 0 rows for ast_not_has and
+# for ast_precedes, because every class in sample_app.py contains a function
+# and no function precedes a class. A zero baseline makes an EXCEPT vacuous.
+
+require sitting_duck
+
+# The pre-parsed table every `_from` call below reads. Default extraction
+# options, exactly as the twins' own read_ast() call uses them, or the EXCEPT
+# would differ in the peek column rather than in the predicate.
+statement ok
+CREATE TABLE t AS SELECT * FROM read_ast('test/data/python/sample_app.py');
+
+# =============================================================================
+# 1. ast_has
+# =============================================================================
+
+# The baseline must not be empty, or EXCEPT proves nothing.
+query I
+SELECT count(*) > 0 FROM ast_has('test/data/python/sample_app.py', 'class_definition', 'function_definition');
+----
+true
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_has('test/data/python/sample_app.py', 'class_definition', 'function_definition')
+  EXCEPT ALL SELECT * FROM ast_has_from('t', 'class_definition', 'function_definition')
+);
+----
+0
+
+# The other direction, which catches a `_from` form returning extra rows.
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_has_from('t', 'class_definition', 'function_definition')
+  EXCEPT ALL SELECT * FROM ast_has('test/data/python/sample_app.py', 'class_definition', 'function_definition')
+);
+----
+0
+
+# Pinned: absolute row count and node_id digest, measured pre-change.
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_has_from('t', 'class_definition', 'function_definition');
+----
+3	a32099295b23cba7e6cd1c300eca0d65
+
+# =============================================================================
+# 2. ast_not_has
+# =============================================================================
+
+query I
+SELECT count(*) > 0 FROM ast_not_has('test/data/python/sample_app.py', 'function_definition', 'class_definition');
+----
+true
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_not_has('test/data/python/sample_app.py', 'function_definition', 'class_definition')
+  EXCEPT ALL SELECT * FROM ast_not_has_from('t', 'function_definition', 'class_definition')
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_not_has_from('t', 'function_definition', 'class_definition')
+  EXCEPT ALL SELECT * FROM ast_not_has('test/data/python/sample_app.py', 'function_definition', 'class_definition')
+);
+----
+0
+
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_not_has_from('t', 'function_definition', 'class_definition');
+----
+20	2d33ce95821ca03e0f3dd8b223c9d7be
+
+# =============================================================================
+# 3. ast_inside
+# =============================================================================
+
+query I
+SELECT count(*) > 0 FROM ast_inside('test/data/python/sample_app.py', 'function_definition', 'class_definition');
+----
+true
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_inside('test/data/python/sample_app.py', 'function_definition', 'class_definition')
+  EXCEPT ALL SELECT * FROM ast_inside_from('t', 'function_definition', 'class_definition')
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_inside_from('t', 'function_definition', 'class_definition')
+  EXCEPT ALL SELECT * FROM ast_inside('test/data/python/sample_app.py', 'function_definition', 'class_definition')
+);
+----
+0
+
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_inside_from('t', 'function_definition', 'class_definition');
+----
+15	6d3a5bfe087e6116205e01f9a30c3cfc
+
+# =============================================================================
+# 4. ast_precedes
+# =============================================================================
+
+query I
+SELECT count(*) > 0 FROM ast_precedes('test/data/python/sample_app.py', 'import_statement', 'class_definition');
+----
+true
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_precedes('test/data/python/sample_app.py', 'import_statement', 'class_definition')
+  EXCEPT ALL SELECT * FROM ast_precedes_from('t', 'import_statement', 'class_definition')
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_precedes_from('t', 'import_statement', 'class_definition')
+  EXCEPT ALL SELECT * FROM ast_precedes('test/data/python/sample_app.py', 'import_statement', 'class_definition')
+);
+----
+0
+
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_precedes_from('t', 'import_statement', 'class_definition');
+----
+2	dc737ce4c27ff6a2f9112bd91eca01d0
+
+# =============================================================================
+# 5. ast_follows
+# =============================================================================
+
+query I
+SELECT count(*) > 0 FROM ast_follows('test/data/python/sample_app.py', 'function_definition', 'class_definition');
+----
+true
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_follows('test/data/python/sample_app.py', 'function_definition', 'class_definition')
+  EXCEPT ALL SELECT * FROM ast_follows_from('t', 'function_definition', 'class_definition')
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_follows_from('t', 'function_definition', 'class_definition')
+  EXCEPT ALL SELECT * FROM ast_follows('test/data/python/sample_app.py', 'function_definition', 'class_definition')
+);
+----
+0
+
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_follows_from('t', 'function_definition', 'class_definition');
+----
+5	4d3854b8ea9933f8ac4ce626a0979b51
+
+# =============================================================================
+# 6. The optional name arguments, which every tuple above leaves NULL
+# =============================================================================
+#
+# Section 1-5 cannot see a wrapper that drops or swaps an optional parameter,
+# because NULL is also what a lost argument looks like. Each pair below is
+# asserted twice -- once through the twin, once through the `_from` form -- and
+# both are pinned to the SAME pre-change measurement, so a dropped argument on
+# either side fails here.
+#
+# Each named count differs from the SAME TUPLE's count with no name, so the
+# assertion also fails if the name is accepted and then ignored. Every figure
+# below is measured. Three of these tuples are NOT the tuples of sections 1-6:
+# those pick tuples that are non-empty without a name, this section picks tuples
+# where the name changes the answer, and for ast_not_has the two requirements
+# are mutually exclusive.
+#
+#   ast_has       'class_definition','function_definition'       3 -> 1
+#   ast_not_has   'class_definition','function_definition'       0 -> 2
+#   ast_inside    'function_definition','class_definition'      15 -> 1
+#   ast_precedes  'function_definition','function_definition'   16 -> 4
+#   ast_follows   'function_definition','function_definition'   16 -> 2
+# ast_inside is the one with two optional names. 'UserService' is a class and
+# 'get_user' a method inside it, so exchanging the two arguments returns 0 rows
+# -- the swap this pair exists to catch.
+
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_has('test/data/python/sample_app.py', 'class_definition', 'function_definition', descendant_name := 'connect');
+----
+1	7ef605fc8dba5425d6965fbd4c8fbe1f
+
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_has_from('t', 'class_definition', 'function_definition', descendant_name := 'connect');
+----
+1	7ef605fc8dba5425d6965fbd4c8fbe1f
+
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_not_has('test/data/python/sample_app.py', 'class_definition', 'function_definition', descendant_name := 'connect');
+----
+2	719762d688dd8845669cc180c3070e37
+
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_not_has_from('t', 'class_definition', 'function_definition', descendant_name := 'connect');
+----
+2	719762d688dd8845669cc180c3070e37
+
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_inside('test/data/python/sample_app.py', 'function_definition', 'class_definition',
+                ancestor_name := 'UserService', descendant_name := 'get_user');
+----
+1	f8c1f23d6a8d8d7904fc0ea8e066b3bb
+
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_inside_from('t', 'function_definition', 'class_definition',
+                     ancestor_name := 'UserService', descendant_name := 'get_user');
+----
+1	f8c1f23d6a8d8d7904fc0ea8e066b3bb
+
+# The swap control. Without it the pair above passes on any implementation that
+# applies both names to the same side.
+query I
+SELECT count(*) FROM ast_inside_from('t', 'function_definition', 'class_definition',
+                                     ancestor_name := 'get_user', descendant_name := 'UserService');
+----
+0
+
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_precedes('test/data/python/sample_app.py', 'function_definition', 'function_definition', before_name := 'main');
+----
+4	bf5d8f5b4d8bf170c4217c291bc031cb
+
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_precedes_from('t', 'function_definition', 'function_definition', before_name := 'main');
+----
+4	bf5d8f5b4d8bf170c4217c291bc031cb
+
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_follows('test/data/python/sample_app.py', 'function_definition', 'function_definition', after_name := 'validate_email');
+----
+2	fdb73069ae551ed61b0d876ec6c50fff
+
+query II
+SELECT count(*), md5(string_agg(node_id::VARCHAR, ',' ORDER BY node_id))
+FROM ast_follows_from('t', 'function_definition', 'function_definition', after_name := 'validate_email');
+----
+2	fdb73069ae551ed61b0d876ec6c50fff
+
+# The twins keep a `language` parameter the `_from` forms do not have, and a
+# wrapper that drops it would silently fall back to extension detection -- which
+# on a .py file gives the right answer, so a row count cannot see the loss.
+# A language the file does not match leaves read_ast with no file to read, and
+# that error is visible. Measured pre-change.
+statement error
+SELECT * FROM ast_has('test/data/python/sample_app.py', 'class_definition', 'function_definition', language := 'javascript');
+----
+read_ast needs at least one file to read
+
+# =============================================================================
+# 7. Two files, and the whole row
+# =============================================================================
+#
+# Sections 1-6 read only count(*) and node_id, over one file. Two defect classes
+# pass all of them:
+#
+#   A COLUMN CHANGE. A `_from` body returning the same rows with a column
+#   dropped, added or altered -- `SELECT a.* EXCLUDE (peek)`, say -- changes no
+#   count and no node_id. It does not fail the EXCEPT ALL pairs either, because
+#   the wrapper delegates and therefore loses the same column on both sides. The
+#   digests below cover every column: casting the row alias to VARCHAR prints
+#   every column NAME and value, so a dropped, added or renamed column moves
+#   the digest. It does NOT see every retype -- MEASURED,
+#   `{'x': 5::INTEGER}::VARCHAR = {'x': 5::BIGINT}::VARCHAR` is true, because
+#   both render `{'x': 5}`, so a widened or narrowed numeric type is invisible
+#   here; a retype that changes the rendered text (to VARCHAR, to a struct, to
+#   a list) is not. A SECOND BLIND SPOT, measured by the M2 stage 3 task 7 review and
+#   owned by tracker/bugs/062: SEMANTIC_TYPE -> VARCHAR is lossy for 192 of 256
+#   codes, because each name covers a block of four consecutive codes. So these
+#   digests CANNOT SEE a semantic_type retype that stays inside a block of four
+#   (code 252 -> 253 renders DEFINITION_MODULE both times); one that crosses a
+#   name boundary (68 -> 72) does move them. (to_json() would do
+#   the same, but it needs the json extension, which this harness does not
+#   load -- and a `require json` that went unmet would skip this whole file
+#   silently.) The cast's exact
+#   text is DuckDB's struct representation, so a change to THAT also moves
+#   these digests; re-measure as described below rather than editing them.
+#
+#   A LOST file_path CORRELATION. Each `_from` body joins on
+#   `d.file_path = a.file_path`. Over ONE file that predicate cannot be
+#   distinguished from no predicate at all. MEASURED on these two files: 1401
+#   rows carry only 1246 distinct node_ids, so 155 ids collide, node_id is not
+#   unique and `ORDER BY node_id` is not even a total order. Both holes close by
+#   using two files and keying on file_path || ':' || node_id, which IS unique
+#   per row.
+#
+# These pins are measured the same way as the rest: the five pre-change bodies
+# were reconstructed verbatim from 4d4252e, created under `_old` names, and run
+# beside the current `_from` forms over the same two files. All five agree, on
+# count and on the whole-row digest.
+
+statement ok
+CREATE TABLE t2 AS SELECT * FROM read_ast(['test/data/python/sample_app.py', 'test/data/python/inheritance.py']);
+
+# Non-vacuity for everything above: the collision this section exists for is
+# real in this fixture. Asserted as a property, not as the measured 1401/1246,
+# so a change to the fixture does not fail this line for the wrong reason.
+query I
+SELECT count(*) > count(DISTINCT node_id) FROM t2;
+----
+true
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_has_from('t2', 'class_definition', 'function_definition') r;
+----
+7	01a6ee9daf90d3223a9ac90881eb7600
+
+# The same through the wrapper, which is also the only assertion in this file
+# that hands a path LIST to read_ast. Same pinned digest: the wrapper must not
+# change a single column on the way out.
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_has(['test/data/python/sample_app.py', 'test/data/python/inheritance.py'],
+             'class_definition', 'function_definition') r;
+----
+7	01a6ee9daf90d3223a9ac90881eb7600
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_not_has_from('t2', 'function_definition', 'class_definition') r;
+----
+25	00986b75e96af35f545355813cef4e00
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_inside_from('t2', 'function_definition', 'class_definition') r;
+----
+20	119a76cb02f1957bd2fc09e60814fd6d
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_precedes_from('t2', 'import_statement', 'class_definition') r;
+----
+2	7bc28efc95e88508abfb421f78155790
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_follows_from('t2', 'function_definition', 'class_definition') r;
+----
+5	e8d743be3a0165f339e8a0136577783c
+
+# =============================================================================
+# 8. A missing table names itself, and an empty table is not an error
+# =============================================================================
+
+# The expected text is the catalog phrase, not the bare table name. DuckDB
+# appends a `LINE 1:` echo of the failing statement to this message, and that
+# echo contains the string 'no_such_table' -- so an expectation of the name
+# alone is also satisfied by any OTHER error on this statement that carries the
+# echo. The phrase below names the table and can only come from the real error.
+statement error
+SELECT * FROM ast_has_from('no_such_table', 'class_definition', 'function_definition');
+----
+Table with name no_such_table does not exist
+
+# Well-formed and empty: the columns are read_ast's, there are no rows. Each
+# `_from` macro must return 0 rows rather than raise.
+statement ok
+CREATE TABLE empty_ast AS SELECT * FROM read_ast('test/data/python/sample_app.py') WHERE false;
+
+query I
+SELECT count(*) FROM empty_ast;
+----
+0
+
+query IIIII
+SELECT
+  (SELECT count(*) FROM ast_has_from('empty_ast', 'class_definition', 'function_definition')),
+  (SELECT count(*) FROM ast_not_has_from('empty_ast', 'function_definition', 'class_definition')),
+  (SELECT count(*) FROM ast_inside_from('empty_ast', 'function_definition', 'class_definition')),
+  (SELECT count(*) FROM ast_precedes_from('empty_ast', 'import_statement', 'class_definition')),
+  (SELECT count(*) FROM ast_follows_from('empty_ast', 'function_definition', 'class_definition'));
+----
+0	0	0	0	0

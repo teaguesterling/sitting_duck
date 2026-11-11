@@ -1,0 +1,585 @@
+# name: test/sql/macro_from_parity_navigation.test
+# description: M2 stage 3 -- the three navigation _from variants agree with their path-taking twins
+# group: [sitting_duck]
+#
+# WHAT THIS GUARDS
+# ----------------
+# ast_definitions / ast_containing_line / ast_in_range each gained a `_from`
+# variant that reads an already-parsed AST table with query_table() instead of
+# calling read_ast() itself. The twins were then rewritten as thin wrappers that
+# parse and delegate, following ast_select / ast_select_from and the five
+# relational operators of task 4.
+#
+# THE EXCEPT ALL PAIRS BELOW COMPARED TWO INDEPENDENT BODIES ONCE: on the build
+# where the `_from` macros existed and the twins did NOT yet delegate to them.
+# From the wrapper rewrite onwards both sides evaluate the same body, so a
+# defect INSIDE a `_from` body moves both sides at once and the pairs cannot see
+# it. What they do still see is a defect in the WRAPPER, which is the only part
+# that differs between the two sides: an argument forwarded to the wrong
+# parameter, a changed column list (which fails to bind against the other side),
+# or a row duplicated or dropped.
+#
+# EXCEPT ALL, not EXCEPT. Set semantics cannot see multiplicity at all --
+# MEASURED: `(SELECT 1 UNION ALL SELECT 1) EXCEPT (SELECT 1)` is empty in both
+# directions, while EXCEPT ALL returns the extra row. A wrapper that doubled
+# every row would pass a plain EXCEPT in both directions.
+#
+# THE PINNED COUNTS AND DIGESTS ARE WHAT CATCH A DEFECT INSIDE A `_from` BODY.
+# Where each pin came from, stated exactly, because "measured" and "inferred"
+# are not the same claim:
+#
+#   SECTIONS 1-6 were MEASURED from the path-taking twins as they stood at
+#   commit 46852e3, BEFORE any of this task's changes -- that is, from the
+#   implementation this task replaces, not from the one it introduces.
+#
+#   SECTIONS 7-8 pass a TABLE, which no twin can take, so no twin could have
+#   produced their values. They were measured on that same pre-change build
+#   from a hand-written reconstruction of each `_from` body (the twin's body
+#   with read_ast replaced by the table), and every one of them came back
+#   unchanged from the real macros at step 4, with the twins not yet
+#   delegating. So they are measured against an independent oracle, but not
+#   against the twins.
+#
+#   SECTION 9 has NO pre-change measurement, for the same reason. It follows
+#   the convention task 4's section 8 established, and step 4 was the first run
+#   that checked it.
+#
+# EVERY DIGEST HERE COVERS THE WHOLE ROW. Sections 1-3 digest one file;
+# sections 5 and 7 digest two:
+#
+#   md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+#
+# Task 4's review measured why each part is needed. A count plus a node_id
+# digest cannot see a COLUMN CHANGE: planting `SELECT a.* EXCLUDE (peek)` in
+# ast_has_from left the row count and every node_id untouched, and 51 of 52
+# assertions green. Casting the row alias to VARCHAR prints every column NAME
+# and value, so a dropped, added or renamed column moves the digest. It does
+# NOT see every retype: MEASURED, `{'x': 5::INTEGER}::VARCHAR =
+# {'x': 5::BIGINT}::VARCHAR` is true, because both render `{'x': 5}`. A widened
+# or narrowed numeric type is therefore invisible here; a retype that changes
+# the rendered text (to VARCHAR, to a struct, to a list) is not.
+# A SECOND BLIND SPOT, measured by the M2 stage 3 task 7 review and owned by
+# tracker/bugs/062: SEMANTIC_TYPE -> VARCHAR is lossy for 192 of 256 codes,
+# because each name covers a block of four consecutive codes. So these digests
+# CANNOT SEE a semantic_type retype that stays inside a block of four (code
+# 252 -> 253 renders DEFINITION_MODULE both times); one that crosses a name
+# boundary (68 -> 72) does move them.
+# (to_json() would do the same, but it needs the json extension, which this
+# harness does not load -- and a `require json` that went unmet would skip this
+# whole file silently, turning a failure into a vacuous pass.) The cast's exact
+# text is DuckDB's struct representation, so a change to THAT also moves these
+# digests; re-measure against the pre-change bodies rather than editing them.
+# A pin that moves is a parity failure to investigate, never a value to update.
+#
+# THE ORDER KEY IS file_path || ':' || node_id, NEVER node_id ALONE. node_id
+# restarts at 0 in every file. MEASURED on this file's two-file fixture: 286
+# rows carry only 153 distinct node_ids, so `ORDER BY node_id` is not even a
+# total order and the digest would be non-deterministic. file_path || ':' ||
+# node_id is unique per row.
+#
+# WHY TWO FILES. Unlike task 4's operators, none of these three bodies joins AST
+# rows to each other, so none of them carries a `d.file_path = a.file_path`
+# correlation that a single-file fixture could hide. What the two-file sections
+# do guard is that a body or a wrapper handles a MULTI-FILE table at all --
+# that it does not collapse to one file_path, drop a file, or cross rows between
+# files. Section 5 plants exactly that defect; see the commit message.
+#
+# The three baselines are measured non-empty, and every multi-file result is
+# measured to span BOTH files. A result confined to one file would make the
+# multi-file EXCEPT ALL unable to fail.
+
+require sitting_duck
+
+# The pre-parsed single-file table. Default extraction options, exactly as the
+# twins' own read_ast() call uses them, or the EXCEPT would differ in the peek
+# column rather than in the predicate.
+statement ok
+CREATE TABLE t AS SELECT * FROM read_ast('test/data/python/sample_app.py');
+
+# =============================================================================
+# 1. ast_definitions
+# =============================================================================
+
+# The baseline must not be empty, or EXCEPT proves nothing. Pinned exactly: a
+# `> 0` baseline survives a body that loses most of its rows.
+query I
+SELECT count(*) FROM ast_definitions('test/data/python/sample_app.py');
+----
+42
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_definitions('test/data/python/sample_app.py')
+  EXCEPT ALL SELECT * FROM ast_definitions_from('t')
+);
+----
+0
+
+# The other direction, which catches a `_from` form returning extra rows.
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_definitions_from('t')
+  EXCEPT ALL SELECT * FROM ast_definitions('test/data/python/sample_app.py')
+);
+----
+0
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_definitions_from('t') r;
+----
+42	943333a1fc3d372c093849ee3679427e
+
+# =============================================================================
+# 2. ast_containing_line
+# =============================================================================
+
+query I
+SELECT count(*) FROM ast_containing_line('test/data/python/sample_app.py', 10);
+----
+5
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_containing_line('test/data/python/sample_app.py', 10)
+  EXCEPT ALL SELECT * FROM ast_containing_line_from('t', 10)
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_containing_line_from('t', 10)
+  EXCEPT ALL SELECT * FROM ast_containing_line('test/data/python/sample_app.py', 10)
+);
+----
+0
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_containing_line_from('t', 10) r;
+----
+5	d61534847a4411d8a1f8fc3b4b2babc9
+
+# A line number the wrapper could have hard-coded or dropped: the answer must
+# change with it. Measured pre-change on the same file.
+query II
+SELECT
+  (SELECT count(*) FROM ast_containing_line_from('t', 1)),
+  (SELECT count(*) FROM ast_containing_line('test/data/python/sample_app.py', 1));
+----
+6	6
+
+# =============================================================================
+# 3. ast_in_range
+# =============================================================================
+
+query I
+SELECT count(*) FROM ast_in_range('test/data/python/sample_app.py', 1, 20);
+----
+115
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_in_range('test/data/python/sample_app.py', 1, 20)
+  EXCEPT ALL SELECT * FROM ast_in_range_from('t', 1, 20)
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_in_range_from('t', 1, 20)
+  EXCEPT ALL SELECT * FROM ast_in_range('test/data/python/sample_app.py', 1, 20)
+);
+----
+0
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_in_range_from('t', 1, 20) r;
+----
+115	0b892330e3e1186f49a2d91b61b9f566
+
+# The two bounds are distinct parameters in a fixed order. A wrapper that
+# forwarded one twice, or exchanged them, returns a different count. Measured
+# pre-change: an exchanged pair gives 0 rows, which is why the narrow range is
+# also asserted non-empty.
+query III
+SELECT
+  (SELECT count(*) FROM ast_in_range_from('t', 10, 20)),
+  (SELECT count(*) FROM ast_in_range_from('t', 1, 10)),
+  (SELECT count(*) FROM ast_in_range_from('t', 20, 1));
+----
+84	34	0
+
+# =============================================================================
+# 4. The `language` parameter, which only the twins have
+# =============================================================================
+#
+# The twins keep a `language` parameter the `_from` forms do not have, and a
+# wrapper that drops it would silently fall back to extension detection --
+# which on a .py file gives the right answer, so a row count cannot see the
+# loss. A language the file does not match leaves read_ast with no file to read,
+# and that error is visible. Measured pre-change, on all three twins.
+
+statement error
+SELECT * FROM ast_definitions('test/data/python/sample_app.py', language := 'javascript');
+----
+read_ast needs at least one file to read
+
+statement error
+SELECT * FROM ast_containing_line('test/data/python/sample_app.py', 10, language := 'javascript');
+----
+read_ast needs at least one file to read
+
+statement error
+SELECT * FROM ast_in_range('test/data/python/sample_app.py', 1, 20, language := 'javascript');
+----
+read_ast needs at least one file to read
+
+# =============================================================================
+# 5. Two files, through a glob
+# =============================================================================
+#
+# `test/data/python/q*.py` matches exactly two files --
+# qualified_name_collisions.py and qualified_names.py -- so the twin expands a
+# real glob and the table below holds a multi-file AST.
+
+statement ok
+CREATE TABLE tq AS SELECT * FROM read_ast('test/data/python/q*.py');
+
+# Non-vacuity for the order key: the node_id collision this section's ordering
+# guards against is real in this fixture. Asserted as a property, not as the
+# measured 286/153, so a change to the fixture does not fail this line for the
+# wrong reason.
+query II
+SELECT count(DISTINCT file_path), count(*) > count(DISTINCT node_id) FROM tq;
+----
+2	true
+
+# Non-vacuity for the EXCEPT ALL pairs below: each macro's result must span
+# BOTH files. Confined to one file, a dropped file could not show up.
+query III
+SELECT
+  (SELECT count(DISTINCT file_path) FROM ast_definitions_from('tq')),
+  (SELECT count(DISTINCT file_path) FROM ast_containing_line_from('tq', 10)),
+  (SELECT count(DISTINCT file_path) FROM ast_in_range_from('tq', 1, 20));
+----
+2	2	2
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_definitions('test/data/python/q*.py')
+  EXCEPT ALL SELECT * FROM ast_definitions_from('tq')
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_definitions_from('tq')
+  EXCEPT ALL SELECT * FROM ast_definitions('test/data/python/q*.py')
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_containing_line('test/data/python/q*.py', 10)
+  EXCEPT ALL SELECT * FROM ast_containing_line_from('tq', 10)
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_containing_line_from('tq', 10)
+  EXCEPT ALL SELECT * FROM ast_containing_line('test/data/python/q*.py', 10)
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_in_range('test/data/python/q*.py', 1, 20)
+  EXCEPT ALL SELECT * FROM ast_in_range_from('tq', 1, 20)
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_in_range_from('tq', 1, 20)
+  EXCEPT ALL SELECT * FROM ast_in_range('test/data/python/q*.py', 1, 20)
+);
+----
+0
+
+# The whole row, over both files. Each pin is asserted twice -- once through the
+# `_from` form, once through the glob-taking twin -- and both carry the SAME
+# pre-change measurement, so the wrapper must not change a single column on the
+# way out.
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_definitions_from('tq') r;
+----
+25	2b14596f2acb64be40cf4f4b095130f4
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_definitions('test/data/python/q*.py') r;
+----
+25	2b14596f2acb64be40cf4f4b095130f4
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_containing_line_from('tq', 10) r;
+----
+7	1e566d1b6bba4832e86fdc07da33855b
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_containing_line('test/data/python/q*.py', 10) r;
+----
+7	1e566d1b6bba4832e86fdc07da33855b
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_in_range_from('tq', 1, 20) r;
+----
+148	11903403f3457bd45898ed85d4e6dd22
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_in_range('test/data/python/q*.py', 1, 20) r;
+----
+148	11903403f3457bd45898ed85d4e6dd22
+
+# =============================================================================
+# 6. The two documented orderings
+# =============================================================================
+#
+# Both are behaviour a digest cannot see, because every digest above imposes its
+# own ORDER BY. ast_containing_line documents "ordered by specificity (smallest
+# span first)" and ast_definitions ends in `ORDER BY file_path, start_line`.
+# The ORDER BY lives in the `_from` body; the twin reaches it only through the
+# wrapper's `SELECT * FROM ..._from(...)`, which is not obliged to preserve an
+# inner ORDER BY. Measured true on the twins pre-change, so a loss here is a
+# regression, not a discovery. list_sort is a total order, so this compares the
+# emitted sequence against the sorted one rather than pinning an emission order.
+#
+# THE TWO CHECKS USE DIFFERENT FIXTURES, AND THE SECOND ONE HAS TO.
+# ast_definitions is ordered by (file_path, start_line) -- which is also the
+# order read_ast emits rows in: files in sorted order, and DFS pre-order makes
+# start_line non-decreasing within a file. MEASURED on a body with NO ORDER BY
+# at all: over test/data/python/q*.py (2 files, 25 rows) this check returns
+# TRUE, so on that fixture it cannot fail and is a snapshot, not a test; over
+# test/data/python/*.py (19 files, 170 rows) it returns FALSE. So the second
+# check runs over the 19-file glob, where the result is NOT already sorted by
+# accident. ast_containing_line needs no such widening: it orders by span,
+# which DFS pre-order puts in the opposite direction (largest first), so q*.py
+# already discriminates -- but that was measured in the DuckDB CLI only, and
+# never reproduced under `unittest`. What IS proved under `unittest` is the
+# 19-file FALSE: stripping the ORDER BY turned the boolean from true to false
+# while the row count stayed at 170, so the failure is ordering alone and not
+# a changed row set.
+#
+# THE SECOND CHECK'S ROW TERM IS A FLOOR, AND THE FLOOR IS THE REAL GUARD.
+# The glob covers every .py file in test/data/python/, so an exact count would
+# move whenever a fixture file is added -- and this file's own rule is that a
+# pin which moves is never a value to simply update. Row identity is already
+# pinned by the EXCEPT ALL pairs and the whole-row digests in sections 3 to 5,
+# so an exact count buys nothing here.
+#
+# What the floor buys is the precondition for the boolean's power, and that is
+# the point. MEASURED on this build:
+#
+#   fixture              ordered   rows   count(*) >= 100
+#   -----------------    -------   ----   ---------------
+#   q*.py  (2 files)     true        25   false
+#   *.py   (19 files)    true       170   true
+#   empty result         NULL         0   false
+#
+# The first row is the defect this section was rewritten to fix: on q*.py the
+# ordering boolean returns true even for a body with NO ORDER BY, because
+# read_ast emits files in sorted order and DFS pre-order makes start_line
+# non-decreasing. So if anyone shrinks the fixture back, `ordered` goes on
+# saying true -- and the FLOOR is what fails the test. An empty result fails
+# on both terms, so neither can pass on silence. 100 sits well below the 170
+# measured here and well above the 25 that is known to be vacuous.
+
+query II
+SELECT list(k) = list_sort(list(k)), count(*)
+FROM (SELECT (end_line - start_line) AS k FROM ast_containing_line('test/data/python/q*.py', 10));
+----
+true	7
+
+query II
+SELECT list(k) = list_sort(list(k)), count(*) >= 100
+FROM (SELECT {'f': file_path, 's': start_line} AS k FROM ast_definitions('test/data/python/*.py'));
+----
+true	true
+
+# =============================================================================
+# 7. A table whose required columns are present but NULL
+# =============================================================================
+#
+# `SELECT * REPLACE (NULL AS parent_id)` keeps all 22 columns and all 286 rows,
+# and nulls one of them. A `_from` macro must not silently answer differently.
+#
+# DECIDED BEHAVIOUR: PASS THROUGH, not raise. None of these three bodies READS
+# parent_id -- they filter on semantic_type/flags/name (ast_definitions) or on
+# start_line/end_line (the two line macros) -- so the correct answer over this
+# table is the same row set as over the clean table, with the NULL carried out
+# in the passthrough column. Raising would mean a column-validation pass that
+# none of these macros needs and that would make the `_from` extraction
+# non-mechanical. Section 8 pins what happens when the NULL IS in a column the
+# body reads.
+#
+# This is asserted three ways, because a count alone cannot tell "carried the
+# NULL through" from "silently substituted something":
+#   - EXCEPT ALL in both directions on `* EXCLUDE (parent_id)` against the clean
+#     twin, so every OTHER column must be identical, row for row;
+#   - no output row may have a non-NULL parent_id;
+#   - and for ast_definitions, which does not project parent_id at all, the
+#     whole-row digest must equal the clean table's 2b14596f... from section 5.
+
+statement ok
+CREATE TABLE tq_nullpar AS SELECT * REPLACE (NULL AS parent_id) FROM read_ast('test/data/python/q*.py');
+
+query II
+SELECT count(*), count(*) FILTER (WHERE parent_id IS NOT NULL) FROM tq_nullpar;
+----
+286	0
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_definitions_from('tq_nullpar') r;
+----
+25	2b14596f2acb64be40cf4f4b095130f4
+
+query I
+SELECT count(*) FROM (
+  SELECT * EXCLUDE (parent_id) FROM ast_containing_line_from('tq_nullpar', 10)
+  EXCEPT ALL SELECT * EXCLUDE (parent_id) FROM ast_containing_line('test/data/python/q*.py', 10)
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * EXCLUDE (parent_id) FROM ast_containing_line('test/data/python/q*.py', 10)
+  EXCEPT ALL SELECT * EXCLUDE (parent_id) FROM ast_containing_line_from('tq_nullpar', 10)
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * EXCLUDE (parent_id) FROM ast_in_range_from('tq_nullpar', 1, 20)
+  EXCEPT ALL SELECT * EXCLUDE (parent_id) FROM ast_in_range('test/data/python/q*.py', 1, 20)
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * EXCLUDE (parent_id) FROM ast_in_range('test/data/python/q*.py', 1, 20)
+  EXCEPT ALL SELECT * EXCLUDE (parent_id) FROM ast_in_range_from('tq_nullpar', 1, 20)
+);
+----
+0
+
+# The NULL is carried out, not replaced. Both macros project `a.*`, so
+# parent_id is in their output and every row of it must be NULL.
+query IIII
+SELECT
+  (SELECT count(*) FROM ast_containing_line_from('tq_nullpar', 10)),
+  (SELECT count(*) FROM ast_containing_line_from('tq_nullpar', 10) WHERE parent_id IS NOT NULL),
+  (SELECT count(*) FROM ast_in_range_from('tq_nullpar', 1, 20)),
+  (SELECT count(*) FROM ast_in_range_from('tq_nullpar', 1, 20) WHERE parent_id IS NOT NULL);
+----
+7	0	148	0
+
+# The whole row, so a column dropped or retyped on this path is also visible.
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_containing_line_from('tq_nullpar', 10) r;
+----
+7	74ab1b2f0103a74eebf548f70d9cbb5b
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.node_id))
+FROM ast_in_range_from('tq_nullpar', 1, 20) r;
+----
+148	668d44bd1a4e437d9aa6594195dfb7d5
+
+# =============================================================================
+# 8. A NULL in a column the body DOES read
+# =============================================================================
+#
+# Section 7's parent_id is not load-bearing for any of these three. This is the
+# case that is: `start_line` is read by both line macros, and `semantic_type` by
+# ast_definitions. MEASURED: each comparison against NULL is NULL, the WHERE
+# drops every row, and the answer is empty rather than an error.
+#
+# That is the house convention, not an accident of these bodies. Issue #81 made
+# attribute filters and pseudo-classes NULL-definite for exactly this situation
+# (see the NULL semantics note in src/sql_macros/css_selectors.sql's header): a
+# filter over a NULL column matches NOTHING. These three follow it. An empty
+# answer is pinned here so it cannot become a silent surprise, and the row
+# counts of the source tables are pinned beside it so the 0 can only come from
+# the predicate and never from an empty input.
+#
+# THE POSITIVE CONTROL FOR THESE THREE ZEROS IS SECTION 5, NAMED HERE because
+# it sits ~250 lines above. Section 5 makes the SAME three calls with the SAME
+# arguments over the SAME q*.py fixture, without the NULL, and pins 7, 148 and
+# 25 rows. So a zero below is a finding about the NULL and not a broken query.
+# The 286 counts on this line alone would not establish that: they prove the
+# INPUT is non-empty, not that the query returns rows on clean input.
+
+statement ok
+CREATE TABLE tq_nullline AS SELECT * REPLACE (NULL::UINTEGER AS start_line) FROM read_ast('test/data/python/q*.py');
+
+statement ok
+CREATE TABLE tq_nullsem AS SELECT * REPLACE (NULL::SEMANTIC_TYPE AS semantic_type) FROM read_ast('test/data/python/q*.py');
+
+query IIIII
+SELECT
+  (SELECT count(*) FROM tq_nullline),
+  (SELECT count(*) FROM tq_nullsem),
+  (SELECT count(*) FROM ast_containing_line_from('tq_nullline', 10)),
+  (SELECT count(*) FROM ast_in_range_from('tq_nullline', 1, 20)),
+  (SELECT count(*) FROM ast_definitions_from('tq_nullsem'));
+----
+286	286	0	0	0
+
+# =============================================================================
+# 9. A missing table names itself, and an empty table is not an error
+# =============================================================================
+
+# The expected text is the catalog phrase, not the bare table name. DuckDB
+# appends a `LINE 1:` echo of the failing statement to this message, and that
+# echo contains the string 'no_such_table' -- so an expectation of the name
+# alone is also satisfied by any OTHER error on this statement that carries the
+# echo. The phrase below names the table and can only come from the real error.
+statement error
+SELECT * FROM ast_in_range_from('no_such_table', 1, 20);
+----
+Table with name no_such_table does not exist
+
+# Well-formed and empty: the columns are read_ast's, there are no rows. Each
+# `_from` macro must return 0 rows rather than raise.
+statement ok
+CREATE TABLE empty_ast AS SELECT * FROM read_ast('test/data/python/sample_app.py') WHERE false;
+
+query IIII
+SELECT
+  (SELECT count(*) FROM empty_ast),
+  (SELECT count(*) FROM ast_definitions_from('empty_ast')),
+  (SELECT count(*) FROM ast_containing_line_from('empty_ast', 10)),
+  (SELECT count(*) FROM ast_in_range_from('empty_ast', 1, 20));
+----
+0	0	0	0

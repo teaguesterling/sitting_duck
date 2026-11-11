@@ -1,0 +1,229 @@
+# name: test/sql/bugs/058_source_of_from_path_mismatch.test
+# description: Bug #058 - ast_source_of_from must raise, not return 0 rows, when `files` and `ast_table` disagree
+# group: [bugs]
+
+require sitting_duck
+
+# =============================================================================
+# Bug #058: ast_source_of_from(ast_table, files, ...) joined read_text(files) to
+# the node table on exact path equality with an INNER join, so a `files`
+# argument that did not match the table dropped every row and returned 0 with
+# no error. tracker/features/044-v2-m1-contract.md:16 forbids that
+# ("no silent-empty (#89)"). tracker/bugs/058 is the record.
+#
+# The fix has two halves, decided together: the join key is normalised on both
+# sides (leading './' stripped, '\' folded to '/'), and the macro raises when
+# ANY matched file has no joined content row. Raising on "any" rather than
+# "all" is deliberate: a silently partial answer is the same defect as a
+# silently empty one.
+#
+# THIS FILE WAS WRITTEN BEFORE THE FIX. MEASURED red: section 2's first
+# `statement error` returned 0 rows instead of raising (the run stopped there,
+# 4 assertions, 1 failed). Sections 3 to 5 were NEVER run against the unfixed
+# build; their red state is INFERRED, and section 4's first case was rewritten
+# after the fix. Sections 6 and 7 were red first (NULL case 0 rows, empty case the
+# wrong message).
+# =============================================================================
+
+statement ok
+CREATE TABLE tq AS SELECT * FROM read_ast('test/data/python/q*.py');
+
+statement ok
+CREATE TABLE tqn AS SELECT * FROM read_ast('test/data/python/qualified_names.py');
+
+statement ok
+CREATE TABLE tqd AS SELECT * FROM read_ast('./test/data/python/qualified_names.py');
+
+# 1. Control: the agreeing glob returns rows. Without this a macro that returned
+# nothing for every input would pass the rest of the file.
+query I
+SELECT count(*) FROM ast_source_of_from('tq', 'test/data/python/q*.py', '__init__');
+----
+4
+
+# 2. A `files` argument that names no matched file must RAISE, not return 0.
+statement error
+SELECT * FROM ast_source_of_from('tq', 'test/data/python/NO_SUCH_*.py', '__init__');
+----
+pass the same path or glob used for read_ast
+
+# The message names the macro and the count.
+statement error
+SELECT * FROM ast_source_of_from('tq', 'test/data/python/NO_SUCH_*.py', '__init__');
+----
+ast_source_of_from: 2 of 2 matched file(s)
+
+# 3. The path-taking twin passes its pattern twice, so it cannot reach the
+# mismatch. A valid pattern returns rows and raises nothing; an invalid one is
+# stopped by read_ast's own error, never by the new guard.
+query I
+SELECT count(*) FROM ast_source_of('test/data/python/q*.py', '__init__');
+----
+4
+
+query I
+SELECT count(*) FROM ast_source_of('./test/data/python/qualified_names.py', '__init__');
+----
+3
+
+statement error
+SELECT * FROM ast_source_of('test/data/python/NO_SUCH_*.py', '__init__');
+----
+read_ast needs at least one file to read
+
+# 4. The same file spelled './<path>' on one side and '<path>' on the other
+# must MATCH after normalisation, in both directions.
+# (A one-file table, so only the spelling differs. tq holds two files and would
+# raise under 'any', see section 5.)
+query I
+SELECT count(*) FROM ast_source_of_from('tqn', './test/data/python/qualified_names.py', '__init__');
+----
+3
+
+query I
+SELECT count(*) FROM ast_source_of_from('tqd', 'test/data/python/q*.py', '__init__');
+----
+3
+
+# The returned spelling is the node table's own, not the normalised key.
+query I
+SELECT DISTINCT file_path FROM ast_source_of_from('tqd', 'test/data/python/q*.py', '__init__');
+----
+./test/data/python/qualified_names.py
+
+# 5. A partial match raises too: tq holds matches in two files, `files` names
+# only one, so one file has no content row. 'Any', not 'all'.
+statement error
+SELECT * FROM ast_source_of_from('tq', 'test/data/python/qualified_names.py', '__init__');
+----
+ast_source_of_from: 1 of 2 matched file(s)
+
+# 6. A NULL or EMPTY file_path in the node table must raise, with its own cause.
+# `error()` with a NULL message does not raise, it returns NULL, so a guard that
+# builds its message from a NULL file_path fails OPEN: 0 rows and no error. The
+# duckdb adapter writes an empty file_path (tracker/bugs/061), so the empty case
+# is real and the generic advice "pass the same path used for read_ast" would
+# tell the caller to do what they already did.
+statement ok
+CREATE TABLE t6_real AS SELECT * FROM read_ast('test/data/python/simple.py');
+
+statement ok
+CREATE TABLE t6_null AS SELECT * REPLACE (NULL::VARCHAR AS file_path) FROM t6_real;
+
+statement ok
+CREATE TABLE t6_empty AS SELECT * REPLACE ('' AS file_path) FROM t6_real;
+
+# Controls: the target matches in the damaged tables, so a 0 cannot mean
+# "nothing matched", and the un-damaged table returns its row.
+query III
+SELECT
+  (SELECT count(*) FROM t6_null WHERE is_definition(semantic_type) AND is_construct(flags) AND name = 'main'),
+  (SELECT count(*) FROM t6_empty WHERE is_definition(semantic_type) AND is_construct(flags) AND name = 'main'),
+  (SELECT count(*) FROM ast_source_of_from('t6_real', 'test/data/python/simple.py', 'main'));
+----
+1	1	1
+
+statement error
+SELECT * FROM ast_source_of_from('t6_null', 'test/data/python/simple.py', 'main');
+----
+have a NULL file_path
+
+statement error
+SELECT * FROM ast_source_of_from('t6_empty', 'test/data/python/simple.py', 'main');
+----
+tracker/bugs/061
+
+# ----------------------------------------------------------------------------
+# Section 7: the MIXED case, and the control that the guard is not trigger-happy
+# ----------------------------------------------------------------------------
+# A table can hold a NULL file_path AND a real path the glob does not cover at
+# the same time. The three branches are ordered NULL, empty, generic, so the
+# first one wins; what matters is that the combination is LOUD, because each
+# branch alone was tested and their combination was not.
+#
+# The control below is the one that gives the section its power. A guard that
+# raises for every call would pass all three error assertions above and be
+# useless, so one call where every matched file IS inside the glob must still
+# return its rows.
+
+statement ok
+CREATE TABLE t7_multi AS SELECT * FROM read_ast('test/data/python/*.py');
+
+statement ok
+CREATE TABLE t7_mixed AS
+  SELECT * REPLACE (CASE WHEN file_path LIKE '%simple.py' THEN NULL ELSE file_path END AS file_path)
+  FROM t7_multi;
+
+# Control: 'main' is defined in more than one file, so the partial case below is
+# a real partial and not an all-or-nothing, and every file is inside this glob.
+query II
+SELECT
+  (SELECT count(DISTINCT file_path) FROM t7_multi
+     WHERE is_definition(semantic_type) AND is_construct(flags) AND name = 'main'),
+  (SELECT count(*) FROM ast_source_of_from('t7_multi', 'test/data/python/*.py', 'main'));
+----
+4	4
+
+# Partial: 4 files matched, 1 inside the glob. A silent 1-of-4 is the same defect
+# as a silent 0-of-4, which is why the guard counts ANY unjoined file.
+statement error
+SELECT * FROM ast_source_of_from('t7_multi', 'test/data/python/simple.py', 'main');
+----
+3 of 4 matched file(s) have no content row
+
+# Mixed: one NULL path plus three real paths outside the glob. Still loud.
+statement error
+SELECT * FROM ast_source_of_from('t7_mixed', 'test/data/python/simple.py', 'main');
+----
+have a NULL file_path
+
+# 8. The backslash half of the normalising key, two-sided (both MEASURED by the
+# controller against 649431e's build, simple.py as the file):
+#   * a backslash spelling that normalisation CAN repair joins: n = 1, and the
+#     path returned is the RAW spelling 'test\data\python\simple.py', not the
+#     normalised key. Returning the raw spelling is the precedent's rule
+#     (ast_unparse.sql:593 and the comment above it), and this is the only pin
+#     that proves it.
+#   * a spelling normalisation CANNOT repair (an 'xx/' prefix) raises "1 of 1
+#     matched file(s) have no content row ... (e.g. 'xx/test/data/python/
+#     simple.py')". That second half is what gives the first its power:
+#     normalisation repairs a spelling difference and does not paper over a
+#     genuinely different path.
+# The qualified_names.py rows below are the same two sides over that fixture.
+statement ok
+CREATE TABLE t8_bs AS SELECT * REPLACE (replace(file_path, '/', '\') AS file_path) FROM tqn;
+
+query II
+SELECT count(*), min(file_path) FROM ast_source_of_from('t8_bs', 'test/data/python/qualified_names.py', '__init__');
+----
+3	test\data\python\qualified_names.py
+
+# 9. A parse_ast() table has no file. Its file_path is the '<inline>' sentinel,
+# so "pass the same path or glob used for read_ast" is advice nobody can follow.
+# The guard must name the real cause and the way out, as ast_unparse_exact does
+# (ast_unparse.sql:729-735).
+statement ok
+CREATE TABLE t9_inl AS SELECT * FROM parse_ast('def main():
+    return 1', 'python');
+
+# Controls: one distinct path, '<inline>', and the target matches.
+query III
+SELECT count(DISTINCT file_path), min(file_path),
+  (SELECT count(*) FROM t9_inl WHERE is_definition(semantic_type) AND is_construct(flags) AND name = 'main')
+FROM t9_inl;
+----
+1	<inline>	1
+
+statement error
+SELECT * FROM ast_source_of_from('t9_inl', 'test/data/python/simple.py', 'main');
+----
+in-memory parse_ast() output
+
+# The side normalisation cannot repair: a genuinely different path still raises.
+statement ok
+CREATE TABLE t8_xx AS SELECT * REPLACE ('xx/' || file_path AS file_path) FROM tqn;
+
+statement error
+SELECT * FROM ast_source_of_from('t8_xx', 'test/data/python/qualified_names.py', '__init__');
+----
+1 of 1 matched file(s)

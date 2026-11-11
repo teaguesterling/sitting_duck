@@ -31,16 +31,18 @@ require sitting_duck
 
 # WHICH macros, by name, and not only how many. The floor below catches a
 # shortfall; this names the macro that caused it, and that difference is what
-# ended #170's Windows round. windows_amd64 described 57 of these 58, and this
-# query named the one it lost: ast_unparse_exact_splice.
+# ended #170's Windows round. windows_amd64 described 57 of the 58 names this
+# list held then, and this query named the one it lost:
+# ast_unparse_exact_splice.
 #
 # The cause was three layers upstream of the catalog. scripts/embed_sql_macros.py
 # read the .sql files with the locale's encoding, and cp1252 broke the em-dash
 # banner that a description is lifted from, so the macro never reached the
 # documentation table at all (fixed in 11bc83c; src/sql_macros/ast_unparse.sql:525).
 #
-# The list is a floor on COVERAGE, not a census. Documenting a 59th macro does
-# not fail this file; add its name here when you do.
+# The list is a floor on COVERAGE, not a census. Documenting a 68th macro does
+# not fail this file; add its name here when you do. Nine names arrived together
+# in M2 stage 3 (the `_from` variants of tasks 4, 5 and 6), taking 58 to 67.
 #
 # A sibling query asserting these same names are REGISTERED came out with the
 # diagnostics. A described macro is necessarily present, so it tested nothing
@@ -48,31 +50,33 @@ require sitting_duck
 #
 # It passes by naming nothing, so it cannot pass on silence.
 query I
-SELECT coalesce(string_agg(n, ' ' ORDER BY n), 'ALL 58 DESCRIBED') FROM (VALUES
+SELECT coalesce(string_agg(n, ' ' ORDER BY n), 'ALL 67 DESCRIBED') FROM (VALUES
   ('ast_ancestors'), ('ast_call_arguments'), ('ast_call_graph'), ('ast_callees'),
   ('ast_callers'), ('ast_capture'), ('ast_children'), ('ast_class_members'),
-  ('ast_containing_line'), ('ast_dead_code'), ('ast_definition_parent'), ('ast_definitions'),
-  ('ast_descendants'), ('ast_exports'), ('ast_find_references'), ('ast_follows'),
-  ('ast_function_metrics'), ('ast_function_scope'), ('ast_functions_containing'), ('ast_get_calls'),
-  ('ast_get_source'), ('ast_get_source_line'), ('ast_get_source_numbered'), ('ast_has'),
-  ('ast_imports'), ('ast_in_range'), ('ast_inside'), ('ast_match'),
-  ('ast_nesting_analysis'), ('ast_node_edit'), ('ast_not_has'), ('ast_patch'),
-  ('ast_pattern'), ('ast_pattern_list'), ('ast_precedes'), ('ast_replace'),
+  ('ast_containing_line'), ('ast_containing_line_from'), ('ast_dead_code'), ('ast_definition_parent'),
+  ('ast_definitions'), ('ast_definitions_from'), ('ast_descendants'), ('ast_exports'),
+  ('ast_find_references'), ('ast_follows'), ('ast_follows_from'), ('ast_function_metrics'),
+  ('ast_function_scope'), ('ast_functions_containing'), ('ast_get_calls'), ('ast_get_source'),
+  ('ast_get_source_line'), ('ast_get_source_numbered'), ('ast_has'), ('ast_has_from'),
+  ('ast_imports'), ('ast_in_range'), ('ast_in_range_from'), ('ast_inside'),
+  ('ast_inside_from'), ('ast_match'), ('ast_nesting_analysis'), ('ast_node_edit'),
+  ('ast_not_has'), ('ast_not_has_from'), ('ast_patch'), ('ast_pattern'),
+  ('ast_pattern_list'), ('ast_precedes'), ('ast_precedes_from'), ('ast_replace'),
   ('ast_resolve'), ('ast_resolve_entity'), ('ast_security_audit'), ('ast_select'),
   ('ast_select_from'), ('ast_select_list'), ('ast_select_rules'), ('ast_selector_for'),
-  ('ast_siblings'), ('ast_source_of'), ('ast_to_blocks'), ('ast_to_blocks_from'),
-  ('ast_to_blocks_list'), ('ast_unparse'), ('ast_unparse_code'), ('ast_unparse_custom'),
-  ('ast_unparse_exact'), ('ast_unparse_exact_code'), ('ast_unparse_exact_from'), ('ast_unparse_exact_splice'),
-  ('ast_unparse_from'), ('parse_ast_list_table')
+  ('ast_siblings'), ('ast_source_of'), ('ast_source_of_from'), ('ast_to_blocks'),
+  ('ast_to_blocks_from'), ('ast_to_blocks_list'), ('ast_unparse'), ('ast_unparse_code'),
+  ('ast_unparse_custom'), ('ast_unparse_exact'), ('ast_unparse_exact_code'), ('ast_unparse_exact_from'),
+  ('ast_unparse_exact_splice'), ('ast_unparse_from'), ('parse_ast_list_table')
 ) t(n)
 WHERE n NOT IN (SELECT function_name FROM duckdb_functions()
                 WHERE function_type IN ('macro', 'table_macro')
                   AND description IS NOT NULL AND description <> '');
 ----
-ALL 58 DESCRIBED
+ALL 67 DESCRIBED
 
 query I
-SELECT COUNT(*) >= 58 FROM duckdb_functions()
+SELECT COUNT(*) >= 67 FROM duckdb_functions()
 WHERE function_type IN ('macro', 'table_macro')
   AND description IS NOT NULL AND description <> '';
 ----

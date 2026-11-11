@@ -1,0 +1,475 @@
+# name: test/sql/macro_from_parity_source_of.test
+# description: M2 stage 3 -- ast_source_of_from agrees with its path-taking twin, and carries a files argument
+# group: [sitting_duck]
+#
+# WHAT THIS GUARDS
+# ----------------
+# ast_source_of gained a `_from` variant that reads an already-parsed AST table
+# with query_table() instead of calling read_ast() itself. The twin was then
+# rewritten as a thin wrapper that parses and delegates, following ast_select /
+# ast_select_from, task 4's five relational operators and task 5's three
+# navigation accessors.
+#
+# THIS ONE KEEPS A SECOND ARGUMENT, AND HAS TO. ast_source_of returns the SOURCE
+# TEXT of each match, which it gets by joining read_text(file_patterns)
+# (src/sql_macros/file_utilities.sql, the `file_contents` CTE). A node table
+# carries no source text, so the paths have to come along:
+#
+#   ast_source_of_from(ast_table, files, target_name, kind := NULL)
+#
+# exactly as ast_unparse_exact_from(ast_table, files, ...) already does. The
+# alternative -- dropping the `source` column -- would leave the two twins with
+# different column lists, and the EXCEPT ALL pairs below need the same six
+# columns on both sides to bind at all.
+#
+# THE EXCEPT ALL PAIRS BELOW COMPARED TWO INDEPENDENT BODIES ONCE: on the build
+# where ast_source_of_from existed and the twin did NOT yet delegate to it. From
+# the wrapper rewrite onwards both sides evaluate the same body, so a defect
+# INSIDE the `_from` body moves both sides at once and the pairs cannot see it.
+# What they do still see is a defect in the WRAPPER, which is the only part that
+# differs between the two sides: an argument forwarded to the wrong parameter
+# (and this macro has two positional arguments after the table, so that risk is
+# higher here than in tasks 4 and 5), a changed column list, or a row duplicated
+# or dropped.
+#
+# EXCEPT ALL, not EXCEPT. Set semantics cannot see multiplicity at all --
+# MEASURED on a planted build in task 5: a row duplication read 148 through
+# EXCEPT ALL while plain EXCEPT read 0. A wrapper that doubled every row would
+# pass a plain EXCEPT in both directions.
+#
+# THE PINNED COUNTS AND DIGESTS ARE WHAT CATCH A DEFECT INSIDE THE `_from` BODY.
+# Where each pin came from, stated exactly, because "measured" and "inferred"
+# are not the same claim:
+#
+#   EVERY pin in sections 1 to 5 was MEASURED on commit 2ba392f, BEFORE this
+#   task's changes. The ones a twin can produce (sections 1, 2 and 3) were
+#   measured from the twin itself. The ones that pass a TABLE, which no twin can
+#   take, were measured on that same pre-change build from a hand-written
+#   reconstruction of the proposed `_from` body (the twin's body with read_ast
+#   replaced by the table) -- an independent oracle, but not the twin. The
+#   reconstruction agreed with the twin on all four EXCEPT ALL directions and on
+#   every count and digest.
+#
+#   SECTION 6 has NO pre-change measurement: a missing or empty table is a
+#   `_from`-only input. It follows the convention task 4's section 8 and task
+#   5's section 9 established, and was measured on the build that first had the
+#   real macro.
+#
+# EVERY DIGEST HERE COVERS THE WHOLE ROW:
+#
+#   md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.start_line))
+#
+# Task 4's review measured why. A count plus a key digest cannot see a COLUMN
+# CHANGE: planting `SELECT a.* EXCLUDE (peek)` in ast_has_from left the row count
+# and every key untouched, and 51 of 52 assertions green. Casting the row alias
+# to VARCHAR prints every column NAME and value, so a dropped, added or renamed
+# column moves the digest. It does NOT see every retype: MEASURED,
+# `{'x': 5::INTEGER}::VARCHAR = {'x': 5::BIGINT}::VARCHAR` is true, because both
+# render `{'x': 5}`. A widened or narrowed numeric type is therefore invisible
+# here; a retype that changes the rendered text (to VARCHAR, to a struct, to a
+# list) is not. A SECOND BLIND SPOT, measured by the M2 stage 3 task 7 review and owned
+# by tracker/bugs/062: SEMANTIC_TYPE -> VARCHAR is lossy for 192 of 256 codes,
+# because each name covers a block of four consecutive codes. So these digests
+# CANNOT SEE a semantic_type retype that stays inside a block of four (code
+# 252 -> 253 renders DEFINITION_MODULE both times); one that crosses a name
+# boundary (68 -> 72) does move them. (to_json() would do the
+# same, but it needs the json extension, which this harness does not load -- and
+# a `require json` that went unmet would skip this whole file silently, turning
+# a failure into a vacuous pass.) The cast's exact text is DuckDB's struct
+# representation, so a change to THAT also moves these digests; re-measure
+# against the pre-change body rather than editing them. A pin that moves is a
+# parity failure to investigate, never a value to update -- with ONE stated
+# exception, columns 3 and 5 of section 5's five-count row, which pin a known
+# defect (tracker/bugs/058) and are MEANT to move when it is fixed. That
+# exception is spelled out where the row is, and nowhere else. (That exception
+# has been USED: 058 is fixed and section 5 was rewritten for it.)
+#
+# THE ORDER KEY IS file_path || ':' || start_line, AND NOT file_path || ':' ||
+# name. Every row this macro returns carries the SAME name, because the
+# `matches` CTE filters on `name = target_name`
+# (src/sql_macros/file_utilities.sql). Ordering on name is ordering on a
+# constant: it would degrade the digest to per-file order and lose all power
+# inside a file that holds two definitions of the target name -- which this
+# fixture has. (file_path, start_line) is the macro's own documented order, from
+# its closing `ORDER BY file_path, start_line`. Section 1 MEASURES that the key
+# is unique in this result rather than assuming it: a digest built on a
+# non-unique key is order-dependent between runs and flakes.
+#
+# THE FIXTURE IS test/data/python/q*.py, WHICH MATCHES EXACTLY TWO FILES, AND
+# THE TARGET IS `__init__`. Measured, pre-change: 4 matches over both files,
+# THREE of them in qualified_names.py at lines 5, 13 and 17. So the result spans
+# two files (a body that collapsed to one file_path, dropped a file or crossed
+# rows between files is visible) AND orders several rows inside one file (the
+# within-file half of the ORDER BY is exercised).
+
+require sitting_duck
+
+# The pre-parsed table every `_from` call below reads. Default extraction
+# options, exactly as the twin's own read_ast() call uses them, or the EXCEPT
+# would differ in a column rather than in the lookup.
+statement ok
+CREATE TABLE tq AS SELECT * FROM read_ast('test/data/python/q*.py');
+
+# =============================================================================
+# 1. Preconditions: the baseline is not empty, and the digest key is unique
+# =============================================================================
+
+# Pinned exactly, not as `> 0`: a `> 0` baseline survives a body that loses most
+# of its rows. Measured pre-change from the twin.
+query I
+SELECT count(*) FROM ast_source_of('test/data/python/q*.py', '__init__');
+----
+4
+
+# The two preconditions the digests below depend on, asserted as properties
+# rather than as the measured 4 and 2, so a fixture change does not fail these
+# lines for the wrong reason:
+#   - the result spans BOTH files, or a dropped file could not show up;
+#   - (file_path, start_line) is unique per row, or `ORDER BY` on it is not a
+#     total order and the digest is non-deterministic.
+# MEASURED pre-change: 4 rows, 4 distinct keys, 2 distinct file_paths.
+query II
+SELECT count(DISTINCT r.file_path), count(*) = count(DISTINCT r.file_path || ':' || r.start_line)
+FROM ast_source_of('test/data/python/q*.py', '__init__') r;
+----
+2	true
+
+# The within-file half of the order key earns its keep: one file holds three of
+# the four matches, so ordering by file_path alone would not be a total order
+# either. Asserted as a property; measured pre-change as 3 in
+# qualified_names.py.
+query I
+SELECT max(n) > 1 FROM (
+  SELECT count(*) AS n FROM ast_source_of('test/data/python/q*.py', '__init__') GROUP BY file_path
+);
+----
+true
+
+# =============================================================================
+# 2. Parity: both directions, then the whole row
+# =============================================================================
+#
+# `files` is the SAME glob the twin is given. The two arguments have to agree
+# about which files are in play; section 5 pins what happens when they do not.
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_source_of('test/data/python/q*.py', '__init__')
+  EXCEPT ALL SELECT * FROM ast_source_of_from('tq', 'test/data/python/q*.py', '__init__')
+);
+----
+0
+
+# The other direction, which catches a `_from` form returning extra rows.
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_source_of_from('tq', 'test/data/python/q*.py', '__init__')
+  EXCEPT ALL SELECT * FROM ast_source_of('test/data/python/q*.py', '__init__')
+);
+----
+0
+
+# The whole row, asserted twice -- once through the `_from` form, once through
+# the glob-taking twin -- and both carry the SAME pre-change measurement, so the
+# wrapper must not change a single column on the way out.
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.start_line))
+FROM ast_source_of_from('tq', 'test/data/python/q*.py', '__init__') r;
+----
+4	36873b0668f9e9bad57a38222c004006
+
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.start_line))
+FROM ast_source_of('test/data/python/q*.py', '__init__') r;
+----
+4	36873b0668f9e9bad57a38222c004006
+
+# =============================================================================
+# 3. The `kind` argument, which section 2 leaves NULL
+# =============================================================================
+#
+# Section 2 cannot see a wrapper that drops or misroutes `kind`, because NULL is
+# also what a lost named argument looks like. Each pair below is asserted twice,
+# once per side, against the same pre-change measurement.
+#
+# TWO TARGETS, BECAUSE ONE WILL NOT DO. `__init__` is a function four times
+# over, so `kind := 'class'` on it returns 0 -- which proves `kind` is applied
+# but not that it admits anything. The empty name is the one target in this
+# fixture that carries TWO kinds, so it splits non-empty into non-empty, and
+# that is the half a zero cannot prove. Measured pre-change:
+#
+#   target      kind := NULL   kind := 'module'   kind := 'variable'
+#   --------    ------------   ----------------   ------------------
+#   ''                     7                  2                   5
+#
+#   target      kind := NULL   kind := 'function'   kind := 'class'
+#   --------    ------------   ------------------   ---------------
+#   '__init__'             4                    4                 0
+#   'Account'              1                    0                 1
+#
+# The empty name is a real result, not a quirk of this test: unlike
+# ast_definitions, ast_source_of does NOT filter `name != ''`, so the module
+# node and the un-named variable targets of this fixture are reachable by it.
+# That is pinned here as pre-existing behaviour, and is not something this task
+# changed.
+
+query IIII
+SELECT
+  (SELECT count(*) FROM ast_source_of_from('tq', 'test/data/python/q*.py', '__init__', kind := 'function')),
+  (SELECT count(*) FROM ast_source_of('test/data/python/q*.py', '__init__', kind := 'function')),
+  (SELECT count(*) FROM ast_source_of_from('tq', 'test/data/python/q*.py', '__init__', kind := 'class')),
+  (SELECT count(*) FROM ast_source_of('test/data/python/q*.py', '__init__', kind := 'class'));
+----
+4	4	0	0
+
+# The non-empty-into-non-empty split, and its own kind := NULL control beside
+# it. Without the 7 the two filtered counts could both come from a body that
+# lost rows for an unrelated reason.
+query IIIIII
+SELECT
+  (SELECT count(*) FROM ast_source_of_from('tq', 'test/data/python/q*.py', '')),
+  (SELECT count(*) FROM ast_source_of('test/data/python/q*.py', '')),
+  (SELECT count(*) FROM ast_source_of_from('tq', 'test/data/python/q*.py', '', kind := 'module')),
+  (SELECT count(*) FROM ast_source_of('test/data/python/q*.py', '', kind := 'module')),
+  (SELECT count(*) FROM ast_source_of_from('tq', 'test/data/python/q*.py', '', kind := 'variable')),
+  (SELECT count(*) FROM ast_source_of('test/data/python/q*.py', '', kind := 'variable'));
+----
+7	7	2	2	5	5
+
+# The whole row for the seven-row result, so a column change on the kind := NULL
+# path over a multi-kind target is also visible.
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.start_line))
+FROM ast_source_of_from('tq', 'test/data/python/q*.py', '') r;
+----
+7	c39db0870afaf395a4bac17ceb90e317
+
+# `kind` admits as well as rejects on a single-row target, in both directions.
+query IIII
+SELECT
+  (SELECT count(*) FROM ast_source_of_from('tq', 'test/data/python/q*.py', 'Account', kind := 'class')),
+  (SELECT count(*) FROM ast_source_of('test/data/python/q*.py', 'Account', kind := 'class')),
+  (SELECT count(*) FROM ast_source_of_from('tq', 'test/data/python/q*.py', 'Account', kind := 'function')),
+  (SELECT count(*) FROM ast_source_of('test/data/python/q*.py', 'Account', kind := 'function'));
+----
+1	1	0	0
+
+# =============================================================================
+# 4. The `language` parameter, which only the twin has
+# =============================================================================
+#
+# The twin keeps a `language` parameter the `_from` form does not have, and a
+# wrapper that dropped it would silently fall back to extension detection --
+# which on a .py file gives the right answer, so a row count cannot see the
+# loss. A language the files do not match leaves read_ast with no file to read,
+# and that error is visible. Measured pre-change.
+
+statement error
+SELECT * FROM ast_source_of('test/data/python/q*.py', '__init__', language := 'javascript');
+----
+read_ast needs at least one file to read
+
+# =============================================================================
+# 5. When `files` and `ast_table` disagree
+# =============================================================================
+#
+# This hazard belongs to this macro alone: it is the only `_from` form in the
+# stage that takes BOTH a table and a path, so the two can name different sets
+# of files. The twin cannot reach this state, because it derives both from one
+# argument.
+#
+# DECIDED BEHAVIOUR (tracker/bugs/058, fixed on this branch): THE JOIN KEY IS
+# NORMALISED AND AN UNMATCHED FILE RAISES. The `file_contents` CTE joins
+# read_text(files) on the filename with a leading './' stripped and '\' folded
+# to '/' on both sides, and the macro raises when ANY matched file has no content
+# row. Before the fix a narrower `files` silently narrowed the result and a
+# mixed spelling silently returned 0 rows; both are now loud or correct. The
+# twin cannot reach either state, because it derives both arguments from one.
+# This section was rewritten when 058 landed, which its earlier text said it
+# would be; the header rule "a pin that moves is a parity failure" did not apply
+# to it, and the one-file table `tqn` below keeps the twin-parity pins on the
+# single path.
+
+statement ok
+CREATE TABLE tqn AS SELECT * FROM read_ast('test/data/python/qualified_names.py');
+
+# `files` narrower than the table: tq holds matches in two files, `files` names
+# one, so the other file has no content row and the macro raises.
+statement error
+SELECT * FROM ast_source_of_from('tq', 'test/data/python/qualified_names.py', '__init__');
+----
+1 of 2 matched file(s)
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_source_of_from('tqn', 'test/data/python/qualified_names.py', '__init__')
+  EXCEPT ALL SELECT * FROM ast_source_of('test/data/python/qualified_names.py', '__init__')
+);
+----
+0
+
+query I
+SELECT count(*) FROM (
+  SELECT * FROM ast_source_of('test/data/python/qualified_names.py', '__init__')
+  EXCEPT ALL SELECT * FROM ast_source_of_from('tqn', 'test/data/python/qualified_names.py', '__init__')
+);
+----
+0
+
+# The count and the whole row, over the one-file table. The 3 against section
+# 2's 4 is the single file's share; the digest is the pre-058 one for the same
+# three rows (MEASURED pre-change from the narrowed call). That `files` is read
+# at all, and not ignored in favour of the table's own paths, is proved by the
+# `statement error` above: if `files` were ignored, that call would return 4 rows
+# instead of raising (INFERRED from the macro body, not separately executed).
+query II
+SELECT count(*), md5(string_agg(r::VARCHAR, ',' ORDER BY r.file_path || ':' || r.start_line))
+FROM ast_source_of_from('tqn', 'test/data/python/qualified_names.py', '__init__') r;
+----
+3	04b6db7f1a4c16d937b1287559809f23
+
+# A BROADER `files` must not leak rows from files the table does not hold: the
+# glob names both fixture files, the table holds one, and only that one's rows
+# come back. The property is that the answer tracks the TABLE's files, never the
+# glob's. MEASURED (controller, against 649431e's build) with a glob covering 19
+# files (`SELECT count(*) FROM read_text('test/data/python/*.py')`) in both calls
+# and only the table changing: a one-file table gave n = 1, distinct file_path =
+# 1; a two-file table gave n = 2, distinct file_path = 2. So the pinned value
+# moves when the property moves.
+query II
+SELECT count(*), count(DISTINCT file_path) FROM ast_source_of_from('tqn', 'test/data/python/q*.py', '__init__');
+----
+3	1
+
+# THE MIXED-SPELLING TRAP, FIXED. An EXACT path is not normalised by read_ast or
+# read_text ('./test/data/python/qualified_names.py' keeps its './'), a glob is,
+# so the same file could reach the join in two spellings and miss. The key is now
+# normalised, so each pairing below matches; the pairings whose table holds a
+# file `files` does not name raise instead of returning 0. The first three
+# columns are the old five-count row's columns 1, 4 and 5; its column 2 is
+# the `statement error` near the top of this section (tq against one file) and its
+# column 3 the one after this row. Their old values were 4 3 0 3 0.
+
+statement ok
+CREATE TABLE tqd AS SELECT * FROM read_ast('./test/data/python/qualified_names.py');
+
+query IIII
+SELECT
+  (SELECT count(*) FROM ast_source_of_from('tq', './test/data/python/q*.py', '__init__')),
+  (SELECT count(*) FROM ast_source_of_from('tqd', './test/data/python/qualified_names.py', '__init__')),
+  (SELECT count(*) FROM ast_source_of_from('tqd', 'test/data/python/q*.py', '__init__')),
+  (SELECT count(*) FROM ast_source_of_from('tqn', './test/data/python/qualified_names.py', '__init__'));
+----
+4	3	3	3
+
+statement error
+SELECT * FROM ast_source_of_from('tq', './test/data/python/qualified_names.py', '__init__');
+----
+1 of 2 matched file(s)
+
+# =============================================================================
+# 6. A missing table names itself, a swapped pair names itself, and an empty
+#    table is not an error
+# =============================================================================
+#
+# These three inputs are `_from`-only, so no twin could have produced their
+# values and they carry NO pre-change measurement. They were measured on the
+# build that first had the real macro, and follow the convention task 4's
+# section 8 and task 5's section 9 established.
+
+# The expected text is the catalog phrase, not the bare table name. DuckDB
+# appends a `LINE 1:` echo of the failing statement to this message, and that
+# echo contains the string 'no_such_table' -- so an expectation of the name
+# alone is also satisfied by any OTHER error on this statement that carries the
+# echo. The phrase below names the table and can only come from the real error.
+statement error
+SELECT * FROM ast_source_of_from('no_such_table', 'test/data/python/q*.py', '__init__');
+----
+Table with name no_such_table does not exist
+
+# THE ARGUMENT-ORDER GUARD, which this macro needs and the one-argument `_from`
+# forms do not: its first two arguments are both strings, so exchanging them is
+# a mistake the type system cannot catch. It fails loudly, because query_table()
+# is handed a glob and no table carries that name. Measured.
+statement error
+SELECT * FROM ast_source_of_from('test/data/python/q*.py', 'tq', '__init__');
+----
+Table with name test/data/python/q*.py does not exist
+
+# Well-formed and empty: the table has read_ast's columns and no rows. The
+# `_from` macro must return 0 rows rather than raise. The 0 on the left is what
+# makes the 0 on the right a statement about the macro: both come from the same
+# query, so an empty input cannot be mistaken for an empty answer.
+statement ok
+CREATE TABLE empty_ast AS SELECT * FROM read_ast('test/data/python/q*.py') WHERE false;
+
+query II
+SELECT
+  (SELECT count(*) FROM empty_ast),
+  (SELECT count(*) FROM ast_source_of_from('empty_ast', 'test/data/python/q*.py', '__init__'));
+----
+0	0
+
+# =============================================================================
+# 7. The documented ordering, which no digest above can see
+# =============================================================================
+#
+# ast_source_of ends in `ORDER BY file_path, start_line`, and that ordering is
+# documented behaviour. Nothing above can see it: every digest imposes its own
+# ORDER BY, and EXCEPT ALL is a set operation that ignores order entirely. After
+# the wrapper rewrite the ORDER BY lives in the `_from` body, and the twin
+# reaches it only through `SELECT * FROM ast_source_of_from(...)` -- which SQL
+# does not oblige to preserve an inner ORDER BY. So it is pinned on both paths.
+#
+# list_sort is a total order, so this compares the EMITTED sequence against the
+# sorted one rather than pinning a literal emission order.
+#
+# THIS CHECK IS NOT VACUOUS ON THIS FIXTURE, AND THAT HAD TO BE MEASURED.
+# Task 5 found the opposite for ast_definitions: over a 2-file fixture its
+# ordering boolean returned true even for a body with NO ORDER BY, because
+# read_ast emits files in sorted order and DFS pre-order makes start_line
+# non-decreasing -- so that check was a snapshot until the fixture was widened
+# to 19 files. This macro does not inherit that, because the two joins
+# (read_text, then file_contents) reshuffle the rows. MEASURED here, on a
+# hand-written copy of the `_from` body with the ORDER BY STRIPPED and nothing
+# else changed, three runs each:
+#
+#   fixture / target                 ordered   rows
+#   ------------------------------   -------   ----
+#   q*.py  / '__init__'              false        4
+#   q*.py  / ''                      false        7
+#   *.py   / '__init__'              false       12
+#   *.py   / ''                      false       43
+#
+# false on EVERY fixture, including the two used below. So no widening is
+# needed, and the exact-count pin of section 1 stays the fixture's guard.
+#
+# THE ROW TERM IS A FLOOR, and what it guards is an EMPTY result. MEASURED: over
+# a target with no matches the boolean is NULL, not true, and the floor is
+# false -- so neither term can pass on silence. The floor is stated as `>=`
+# rather than `=` because section 1 already pins the count exactly; a second
+# exact pin of the same number would only add a line to edit when the fixture
+# changes.
+
+query II
+SELECT list(k) = list_sort(list(k)), count(*) >= 4
+FROM (SELECT {'f': file_path, 's': start_line} AS k
+      FROM ast_source_of('test/data/python/q*.py', '__init__'));
+----
+true	true
+
+query II
+SELECT list(k) = list_sort(list(k)), count(*) >= 4
+FROM (SELECT {'f': file_path, 's': start_line} AS k
+      FROM ast_source_of_from('tq', 'test/data/python/q*.py', '__init__'));
+----
+true	true
+
+# The seven-row result as well, which spreads more rows across the same two
+# files and so exercises the within-file half of the ordering harder.
+query II
+SELECT list(k) = list_sort(list(k)), count(*) >= 7
+FROM (SELECT {'f': file_path, 's': start_line} AS k
+      FROM ast_source_of_from('tq', 'test/data/python/q*.py', ''));
+----
+true	true
