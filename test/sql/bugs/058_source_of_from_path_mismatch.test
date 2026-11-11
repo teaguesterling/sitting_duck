@@ -1,0 +1,90 @@
+# name: test/sql/bugs/058_source_of_from_path_mismatch.test
+# description: Bug #058 - ast_source_of_from must raise, not return 0 rows, when `files` and `ast_table` disagree
+# group: [bugs]
+
+require sitting_duck
+
+# =============================================================================
+# Bug #058: ast_source_of_from(ast_table, files, ...) joined read_text(files) to
+# the node table on exact path equality with an INNER join, so a `files`
+# argument that did not match the table dropped every row and returned 0 with
+# no error. tracker/features/044-v2-m1-contract.md:16 forbids that
+# ("no silent-empty (#89)"). tracker/bugs/058 is the record.
+#
+# The fix has two halves, decided together: the join key is normalised on both
+# sides (leading './' stripped, '\' folded to '/'), and the macro raises when
+# ANY matched file has no joined content row. Raising on "any" rather than
+# "all" is deliberate: a silently partial answer is the same defect as a
+# silently empty one.
+#
+# THIS FILE WAS WRITTEN BEFORE THE FIX and was seen to fail first: sections 2,
+# 4 and 5 returned rows or 0 rows instead of raising or matching.
+# =============================================================================
+
+statement ok
+CREATE TABLE tq AS SELECT * FROM read_ast('test/data/python/q*.py');
+
+statement ok
+CREATE TABLE tqd AS SELECT * FROM read_ast('./test/data/python/qualified_names.py');
+
+# 1. Control: the agreeing glob returns rows. Without this a macro that returned
+# nothing for every input would pass the rest of the file.
+query I
+SELECT count(*) FROM ast_source_of_from('tq', 'test/data/python/q*.py', '__init__');
+----
+4
+
+# 2. A `files` argument that names no matched file must RAISE, not return 0.
+statement error
+SELECT * FROM ast_source_of_from('tq', 'test/data/python/NO_SUCH_*.py', '__init__');
+----
+pass the same path or glob used for read_ast
+
+# The message names the macro and the count.
+statement error
+SELECT * FROM ast_source_of_from('tq', 'test/data/python/NO_SUCH_*.py', '__init__');
+----
+ast_source_of_from: 2 of 2 matched file(s)
+
+# 3. The path-taking twin passes its pattern twice, so it cannot reach the
+# mismatch. A valid pattern returns rows and raises nothing; an invalid one is
+# stopped by read_ast's own error, never by the new guard.
+query I
+SELECT count(*) FROM ast_source_of('test/data/python/q*.py', '__init__');
+----
+4
+
+query I
+SELECT count(*) FROM ast_source_of('./test/data/python/qualified_names.py', '__init__');
+----
+3
+
+statement error
+SELECT * FROM ast_source_of('test/data/python/NO_SUCH_*.py', '__init__');
+----
+read_ast needs at least one file to read
+
+# 4. The same file spelled './<path>' on one side and '<path>' on the other
+# must MATCH after normalisation, in both directions.
+query I
+SELECT count(*) FROM ast_source_of_from('tq', './test/data/python/qualified_names.py', '__init__');
+----
+3
+
+query I
+SELECT count(*) FROM ast_source_of_from('tqd', 'test/data/python/q*.py', '__init__');
+----
+3
+
+# The returned spelling is the node table's own, not the normalised key.
+query I
+SELECT DISTINCT file_path FROM ast_source_of_from('tqd', 'test/data/python/q*.py', '__init__');
+----
+./test/data/python/qualified_names.py
+
+# 5. A partial match raises too: tq holds matches in two files, `files` names
+# only one, so one file has no content row. 'Any', not 'all'.
+statement error
+SELECT * FROM ast_source_of_from('tq', 'test/data/python/qualified_names.py', '__init__');
+----
+ast_source_of_from: 1 of 2 matched file(s)
