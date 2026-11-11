@@ -25,7 +25,7 @@ Neither `'DEFINITION_TYPE'` nor `'LITERAL_BOOLEAN'` is a `SEMANTIC_TYPE` name.
 Both macros therefore return false for **every possible input**. They are dead
 as written, and they are not marked as such anywhere:
 `tracker/features/057-v2-m2-stage3-macro-split.md:375` and `:396` list both as
-**core**, with the note "RFC:106 names it".
+**core**, with the note "RFC:107-110 names it".
 
 ## The measurement
 
@@ -111,8 +111,10 @@ there is one. Two possibilities, and the first step is to find out which:
    guess**: `SELECT DISTINCT i::UTINYINT::SEMANTIC_TYPE::VARCHAR FROM
    range(0,256) t(i)` lists all 64.
 2. **The concepts have no semantic type.** Then the honest fix is to delete both
-   predicates and the five `'type'` branches, and to say so in RFC:106, which is
-   what put the names there. Deleting a public macro is its own decision with
+   predicates and the five `'type'` branches, and to say so in `RFC:107-110`,
+   which is the bullet that puts the semantic predicates in core. (It cited
+   `RFC:106`, a blank line; corrected with `R72`.) Deleting a public macro is
+   its own decision with
    its own deprecation question.
 
 Either way the five consumer branches must be settled in the same change as the

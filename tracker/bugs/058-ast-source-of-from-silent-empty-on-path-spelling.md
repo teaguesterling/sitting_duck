@@ -6,7 +6,10 @@ public `duckdb/community-extensions` registry with the stage, on a macro the
 path-taking twin cannot reach.
 **Found by:** my own concern note during M2 stage 3 task 6, confirmed and given
 this owner by the task-6 code review (2026-11-10). Every figure below was
-measured against `build/release/duckdb` at `e7b910e`, not taken from the review.
+measured against `build/release/duckdb` at `e7b910e`, not taken from the review
+— with ONE exception, added later and attributed where it appears: the twin's
+four-spelling figures in "Why it is not fixed here" are the whole-branch
+reviewer's measurement, not mine.
 **Related:** #89 (silent-empty) is **closed** — `tracker/features/046-cpp-selector-engine.md:4`
 records it as "silent-empty, closed by the guard approach" — so #89 is cited
 here and in the code only as the PRECEDENT `ast_unparse_exact_from` follows,
@@ -84,17 +87,35 @@ input, reached through the second argument instead of the first.
 
 ## Why it is not fixed here
 
-Not YAGNI, and not scope discipline alone. The reason is structural, and it is
-the review's, not mine:
+Not YAGNI, and not scope discipline alone. The reason is structural — but it
+constrains **one half** of the fix, not both, and `R39` was half wrong to apply
+it to both. `R69` corrects it, and this section is the correction.
 
 **The join now lives in the shared body.** Task 6 rewrote `ast_source_of` as a
 thin wrapper that delegates to `ast_source_of_from`, so
 `file_utilities.sql:164` is the only copy of that join and the twin reaches it
-too. A normalising join or a readability guard added there changes the
-**twin's** behaviour, and M2 stage 3 is constrained to no behaviour change for
-the existing macros. So the fix cannot land inside the stage that created the
-hazard; it needs its own change, with its own before/after measurement on both
-macros.
+too. Anything added there is added to the twin as well.
+
+**Which half that actually constrains, MEASURED.** The whole-branch review
+(2026-11-10) measured the twin over the same four path spellings as the table
+above: `read_ast`'s `file_path` and `read_text`'s `filename` agree in all four,
+the twin returns non-zero in all four (4 / 4 / 3 / 3), and a LEFT JOIN in place
+of the inner join leaves **0** unmatched rows.
+
+- **Half 1, normalising the join key: a NO-OP for the twin** over those four
+  spellings. The twin passes `file_patterns` to both sides of the join, so both
+  sides carry the same spelling, and normalising both cannot change which rows
+  match. This half could have landed inside this stage.
+- **Half 2, raising on an unreadable file: a REAL twin behaviour change.** It
+  turns a call that returns rows today into an error. That is what M2 stage 3's
+  no-behaviour-change constraint forbids, and it is the half the deferral is
+  actually about.
+
+The deferral still stands as a decision; it now stands on the right reason.
+**Whether to land half 1 on its own is Teague's call, not this file's.** The two
+halves were specced together, and the measured no-op covers four spellings, not
+the Windows separators of `ast_unparse.sql:564-569`, which were never measured
+here.
 
 (The weaker reason I gave first — "it is its own change with its own test" —
 is true but would not have justified deferral on its own.)
@@ -121,9 +142,14 @@ So the two halves of the fix are:
    failure to locate the source, and it must say so and name the file.
 
 Both must be measured on `ast_source_of` as well as on `ast_source_of_from`,
-because of the shared body. Step 1 alone can change the twin's output for a
-caller who passes a `./`-prefixed exact path today, so the before/after needs
-the twin's own digests, not only the `_from` form's.
+because of the shared body. This paragraph first said that step 1 alone can
+change the twin's output "for a caller who passes a `./`-prefixed exact path
+today"; measured, it cannot. The review ran the twin over all four spellings in
+the table above, the `./`-prefixed exact path among them, and it returned
+non-zero in every one — because the twin passes one argument to both sides of
+the join, so normalising both sides cannot change which rows match. That is four spellings and not a proof, so the before/after
+still needs the twin's own digests rather than only the `_from` form's, and the
+Windows separators of `ast_unparse.sql:564-569` are unmeasured for both halves.
 
 ## Tests
 

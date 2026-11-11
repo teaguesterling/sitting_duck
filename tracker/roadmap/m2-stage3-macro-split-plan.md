@@ -70,7 +70,7 @@ Five input classes the spec implies and no task above would otherwise exercise. 
 **Files:**
 - Create: `src/sql_macros/tree_analysis.sql`
 - Modify: `src/sql_macros/tree_navigation.sql` (remove 3 discontiguous blocks)
-- Modify: `scripts/embed_sql_macros.py:176-190` (add the new filename at position 4)
+- Modify: `821af42:scripts/embed_sql_macros.py:176-190` (add the new filename at position 4)
 - Test: `test/sql/macro_split_oracle.test`
 
 **Interfaces:**
@@ -148,7 +148,7 @@ Cut each of the 8 blocks from `src/sql_macros/tree_navigation.sql` into a new `s
 
 - [ ] **Step 5: Register the new file at position 4**
 
-In `scripts/embed_sql_macros.py:176-190`, insert `'tree_analysis.sql'` directly after `'tree_navigation.sql'`. Position 4 keeps the hub first and leaves every cross-file dependency satisfied.
+In `821af42:scripts/embed_sql_macros.py:176-190`, insert `'tree_analysis.sql'` directly after `'tree_navigation.sql'`. Position 4 keeps the hub first and leaves every cross-file dependency satisfied.
 
 - [ ] **Step 6: Regenerate the embedded header and rebuild**
 
@@ -258,7 +258,8 @@ build (`CMakeLists.txt:252`) and, as of this step, imports `yaml`. MEASURED: the
 `embedded-header-sync` job at `.github/workflows/MainDistributionPipeline.yml:311`
 regenerates the header and verifies it, and it does **not** install PyYAML —
 only `module-abi-sync`, `layout-invariance` and `taxonomy-tables-sync` do, at
-lines 344, 388 and 405. Without this step that job fails on ImportError, and it
+`821af42` lines 344, 388 and 405 (`:370`, `:414` and `:431` at HEAD, shifted by
+this stage's own new job). Without this step that job fails on ImportError, and it
 is the one gate that would otherwise catch a stale header.
 
 Add the same step those three jobs use, verbatim:
@@ -413,8 +414,8 @@ YAML-reading jobs use:
 ```
 
 **Also prove the gate can fail in CI**, following the `Prove the gate can fail`
-steps that `module-abi-sync` (line 346) and `layout-invariance` (line 390)
-already carry. A gate whose red path CI has never executed is not a gate.
+steps that `module-abi-sync` (`821af42:346`, `:372` at HEAD) and
+`layout-invariance` (`821af42:390`, `:416` at HEAD) already carry. A gate whose red path CI has never executed is not a gate.
 
 **And wire Task 2's manifest test in.** `scripts/test_embed_manifest.py` runs
 nowhere in CI today, so it is a manual gate only. Run it from this same job.
@@ -663,13 +664,13 @@ git commit -m "feat(057): _from variants for three navigation accessors (M2 stag
 - Consumes: Task 5.
 - Produces: `ast_source_of_from(ast_table, files, target_name, kind := NULL)`.
 
-This one breaks the one-argument parity pattern, and must. MEASURED at `src/sql_macros/file_utilities.sql:75-146`: `ast_source_of` joins `read_text(file_patterns)` at `:114-119` to get the lines, and a node table carries no source text. `read_text` also accepts only literal arguments. So the `files` argument comes along, exactly as `ast_unparse_exact_from(ast_table, files, language := NULL, file_path := NULL)` already does. Dropping the `source` column instead would break the `EXCEPT` oracle, which needs both twins to return the same columns.
+This one breaks the one-argument parity pattern, and must. MEASURED at `821af42:src/sql_macros/file_utilities.sql:75-146`: `ast_source_of` joins `read_text(file_patterns)` at `:114-119` to get the lines, and a node table carries no source text. `read_text` also accepts only literal arguments. So the `files` argument comes along, exactly as `ast_unparse_exact_from(ast_table, files, language := NULL, file_path := NULL)` already does. Dropping the `source` column instead would break the `EXCEPT` oracle, which needs both twins to return the same columns.
 
 - [ ] **Step 1: Write the failing parity test**
 
 Both twins must return the same six columns: `file_path`, `name`,
 `definition_kind`, `start_line`, `end_line`, `source`. MEASURED from the final
-`SELECT` at `src/sql_macros/file_utilities.sql:138-146`; the `matches` CTE also
+`SELECT` at `821af42:src/sql_macros/file_utilities.sql:138-146`; the `matches` CTE also
 carries `type`, which the outer `SELECT` drops, so do not add it. Assert a
 non-zero baseline, then `EXCEPT ALL` in both directions, passing the same glob
 as `files`.
@@ -691,7 +692,7 @@ would silently skip the whole file.
 
 **The sort key is NOT `file_path || ':' || name`, and the earlier draft of this
 step was wrong to say so.** MEASURED at
-`src/sql_macros/file_utilities.sql:102`: the `matches` CTE filters on
+`821af42:src/sql_macros/file_utilities.sql:104`: the `matches` CTE filters on
 `name = target_name`, so every returned row carries the SAME `name`. Ordering
 on it is ordering on a constant, which degrades the digest to per-file order
 and loses all power inside a file that holds two definitions of the target

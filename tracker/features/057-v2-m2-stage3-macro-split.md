@@ -58,7 +58,15 @@ far smaller than planned.
 > language-agnostic and depends only on the AST schema. Anything that depends
 > on a language module or embodies an analysis opinion is an add-on.
 
-Line 106 then names examples on both sides.
+Lines 107-115 then name examples on both sides.
+
+**CORRECTED 2026-11-10, after the whole-branch review (`R72`).** This document
+cited `RFC:106` 35 times in §7, and once in the line above, as the authority for
+the core classification. Measured: `docs/planning/v2-architecture.md:106` is a
+blank line. The "Duckling (core accessors)" bullet is `:107-110` and the "Proper
+(add-ons)" bullet is `:111-115`, so every `RFC:106` here now reads
+`RFC:107-110`. One off-by-one, repeated 36 times, in the document that justifies
+the split for all 105 macros.
 
 **`054:190` reads, in full:**
 
@@ -234,7 +242,7 @@ working on zero modules.
   this document.
 - `tracker/features/046` versus `048` row 5, which disagree about whether
   `046` gates v2.0.0. Still open.
-- Correcting `054:190`, `MainDistributionPipeline.yml:546`, or the dead
+- Correcting `054:190`, `MainDistributionPipeline.yml:612`, or the dead
   `src/sql_macros/CMakeLists.txt`. §10 records all three.
 
 **Anti-goals.** These would make stage 3 a failure even if it worked.
@@ -279,7 +287,9 @@ Each new macro follows the pattern that `ast_select_from` and
 
 **`ast_source_of_from` is the exception, and it cannot be built that way.**
 `ast_source_of` joins `read_text(file_patterns)` to get the lines
-(`src/sql_macros/file_utilities.sql:113-120`), and a node table carries no
+(`821af42:src/sql_macros/file_utilities.sql:113-120` -- at HEAD that join is the
+shared `ast_source_of_from` body, `src/sql_macros/file_utilities.sql:164`, which
+the twin delegates to), and a node table carries no
 source text. `read_text` also takes only literal arguments, which is the same
 restriction `ast_unparse_exact_from` documents for `read_blob`. So it must
 either take a second `files` argument, exactly as
@@ -368,48 +378,48 @@ check first.
 | `scope_resolution.sql` | `ast_resolve` | **add-on** | TABLE | `source` | `read_ast` | RFC:113 scope resolution |
 | `selector_for.sql` | `ast_selector_for` | **add-on** | TABLE | `source` | `-` | my call |
 | `semantic_predicates.sql` | `ast_qualified_name_as_string` | **core** | scalar | `qn` | `-` | my call |
-| `semantic_predicates.sql` | `is_annotation` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_arithmetic` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_assignment` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_block` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_boolean_literal` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_class_definition` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_comment` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_comparison` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_conditional` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_directive` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_export` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_foreign` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_function_call` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_function_definition` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_import` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_jump` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_list` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_literal` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_logical` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_loop` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_member_access` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_module_definition` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_number_literal` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_string_literal` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_type_composite` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_type_definition` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_type_generic` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_type_primitive` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_type_reference` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `semantic_predicates.sql` | `is_variable_definition` | **core** | scalar | `st` | `-` | RFC:106 names it |
-| `tree_navigation.sql` | `ast_ancestors` | **core** | TABLE | `ast_table` | `-` | RFC:106 names it |
+| `semantic_predicates.sql` | `is_annotation` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_arithmetic` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_assignment` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_block` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_boolean_literal` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_class_definition` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_comment` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_comparison` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_conditional` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_directive` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_export` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_foreign` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_function_call` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_function_definition` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_import` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_jump` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_list` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_literal` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_logical` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_loop` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_member_access` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_module_definition` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_number_literal` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_string_literal` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_type_composite` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_type_definition` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_type_generic` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_type_primitive` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_type_reference` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `semantic_predicates.sql` | `is_variable_definition` | **core** | scalar | `st` | `-` | RFC:107-110 names it |
+| `tree_navigation.sql` | `ast_ancestors` | **core** | TABLE | `ast_table` | `-` | RFC:107-110 names it |
 | `tree_navigation.sql` | `ast_call_arguments` | **core** | TABLE | `ast_table` | `-` | my call |
 | `tree_navigation.sql` | `ast_call_graph` | **add-on** | TABLE | `source` | `-` | RFC:112-114 names it |
-| `tree_navigation.sql` | `ast_children` | **core** | TABLE | `ast_table` | `-` | RFC:106 names it |
+| `tree_navigation.sql` | `ast_children` | **core** | TABLE | `ast_table` | `-` | RFC:107-110 names it |
 | `tree_navigation.sql` | `ast_class_members` | **core** | TABLE | `ast_table` | `-` | my call |
 | `tree_navigation.sql` | `ast_containing_line` | **core** | TABLE | `source` | `read_ast` | my call |
 | `tree_navigation.sql` | `ast_dead_code` | **add-on** | TABLE | `source` | `read_ast` | RFC:112-114 names it |
-| `tree_navigation.sql` | `ast_definition_parent` | **core** | TABLE | `ast_table` | `-` | RFC:106 names it |
+| `tree_navigation.sql` | `ast_definition_parent` | **core** | TABLE | `ast_table` | `-` | RFC:107-110 names it |
 | `tree_navigation.sql` | `ast_definitions` | **core** | TABLE | `source` | `read_ast` | my call |
-| `tree_navigation.sql` | `ast_descendants` | **core** | TABLE | `ast_table` | `-` | RFC:106 names it |
+| `tree_navigation.sql` | `ast_descendants` | **core** | TABLE | `ast_table` | `-` | RFC:107-110 names it |
 | `tree_navigation.sql` | `ast_function_metrics` | **add-on** | TABLE | `source` | `read_ast` | RFC:112-114 names it |
-| `tree_navigation.sql` | `ast_function_scope` | **core** | TABLE | `ast_table` | `-` | RFC:106 names it |
+| `tree_navigation.sql` | `ast_function_scope` | **core** | TABLE | `ast_table` | `-` | RFC:107-110 names it |
 | `tree_navigation.sql` | `ast_functions_containing` | **add-on** | TABLE | `source` | `read_ast` | my call |
 | `tree_navigation.sql` | `ast_get_calls` | **add-on** | TABLE | `source` | `read_ast` | RFC:112-114 names it |
 | `tree_navigation.sql` | `ast_in_range` | **core** | TABLE | `source` | `read_ast` | my call |
@@ -458,9 +468,10 @@ non-rename into 13.
 
 ### 8.2 The authoritative file list, and a trap
 
-**The real list is `scripts/embed_sql_macros.py:176-190`.** It is a hardcoded,
-ordered Python list of the 13 filenames. `CMakeLists.txt:252` runs that script
-on every configure.
+**The real list is `821af42:scripts/embed_sql_macros.py:176-190`.** It is a
+hardcoded, ordered Python list of the 13 filenames. `CMakeLists.txt:252` runs
+that script on every configure. (§8.4 replaces it: at HEAD the list is gone and
+`load_manifest`, `scripts/embed_sql_macros.py:181-209`, reads the manifest.)
 
 **`src/sql_macros/CMakeLists.txt` is dead code, and it is a trap.** It contains
 its own generator, and its file list reads:
@@ -539,9 +550,10 @@ No filename states the boundary under the minimal shape, so a manifest must.
 the layout gate reads, and it already governs registration order for languages.
 
 The manifest lists all 14 files in canonical registration order, each tagged
-`core` or `addon`. `scripts/embed_sql_macros.py:176-190` then reads it, instead
-of carrying its own hardcoded copy, which gives the generator and §9.4's gate
-one source.
+`core` or `addon`. The generator then reads it in place of its own hardcoded
+list (`821af42:scripts/embed_sql_macros.py:176-190`), which gives the generator
+and §9.4's gate one source. At HEAD that read is `load_manifest`,
+`scripts/embed_sql_macros.py:181-209`, and the hardcoded list is deleted.
 
 ### 8.5 Ordering is already solved, and needs no change
 
@@ -685,8 +697,9 @@ comments, and it reported two edges that were text inside an error message.
    not a retraction. §2 explains why the stronger claim was wrong.
 2. **`src/sql_macros/CMakeLists.txt`** is unreferenced and lists 2 of 13 files.
    Delete it, in its own change.
-3. **`MainDistributionPipeline.yml:546`** still describes `duckdb/duckdb#26036`
-   as "a super-linear-with-statement-size planning cost". PR #325 measured the
+3. **`MainDistributionPipeline.yml:612`** still describes `duckdb/duckdb#26036`
+   as "a super-linear-with-statement-size planning cost". (It was `:546` when
+   this was written; this branch added 66 lines above it.) PR #325 measured the
    cause as correlated subqueries in one pseudo-class `CASE`. This is the third
    place carrying the wrong mechanism. Editing a workflow file deserves a real
    CI run, so it was not bundled here.
@@ -715,7 +728,7 @@ added a file under `core/`; and stage 1's commit A is titled "`git mv`
 054:30 still lists the piece as "not started".
 
 **But the tree and its own gate already assume it will not happen in M2.**
-`spec/layout/layout.yaml:118-121` lists `engine_adapters` as files that
+`spec/layout/layout.yaml:151-155` lists `engine_adapters` as files that
 "deliberately did NOT move into `languages/`. They are engine code, not language
 modules, and **M3 extracts them with the engine**." So layout.yaml, written
 during stage 0, already treats the engine as staying in `src/` until M3.

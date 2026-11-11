@@ -133,8 +133,13 @@ preference:
    column too. Additive, but it adds a macro to a stage that is counting them.
 
 Whoever decides this should first establish what the low two bits MEAN. That is
-not recorded in this file because it was not measured: `RFC:106` names the
-semantic type taxonomy and is the place to look.
+not recorded in this file because it was not measured -- and the RFC does not
+record it either. This sentence first cited `RFC:106`, which is a blank line
+whose section is the MACRO SPLIT, not the taxonomy. Measured: the taxonomy item
+is `RFC:70-73`, "the universal `semantic_type` system and flag layout as a
+versioned data artifact", and it is a v2 DELIVERABLE rather than an existing
+document. So there is nowhere to look it up yet; whoever decides this measures
+the bits.
 
 ## Tests
 
