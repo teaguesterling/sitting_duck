@@ -79,45 +79,38 @@ CREATE OR REPLACE MACRO ast_get_source_numbered(file_path, start_line, end_line)
 --   SELECT * FROM ast_source_of_from('my_ast', 'src/**/*.py', 'process_payment');
 --   SELECT * FROM ast_source_of_from('my_ast', 'src/**/*.py', 'MyClass', kind := 'class');
 --
--- KNOWN LIMITATION: `files` AND `ast_table` CAN DISAGREE, AND THE RESULT IS
--- NARROWED SILENTLY. The file_contents join below matches
--- read_text(files).filename against the table's file_path EXACTLY, so a match
--- whose file is absent from `files`, or spelled differently there, is dropped
--- with no error. Pass read_text the same pattern you passed read_ast.
+-- `files` AND `ast_table` MUST NAME THE SAME FILES. Pass read_text the same
+-- pattern you passed read_ast. The file_contents join below matches
+-- read_text(files).filename against the table's file_path after NORMALISING
+-- both sides (leading './' stripped, '\' folded to '/'), the rule of
+-- ast_unparse_exact_from (ast_unparse.sql:593). The raw file_path the node table
+-- carried is what is returned. Normalising makes './x.py' and 'x.py' agree,
+-- where an exact-string join used to drop the match.
 --
--- Two ways to get this wrong, both MEASURED on this build:
---   * A NARROWER `files`. A table parsed from 'test/data/python/q*.py' (2
---     files, 4 matches for '__init__') with files := one of those two paths
---     returns 3 rows -- exactly the matches in that file, and the same 3 rows
---     the twin returns for that single path. Narrowing is therefore usable, not
---     broken, and it is pinned in test/sql/macro_from_parity_source_of.test.
---   * A MIXED PATH SPELLING, which is the trap. A GLOB is normalised by both
---     read_ast and read_text: './test/data/python/q*.py' and
---     'test/data/python/q*.py' both yield 'test/data/python/...', so mixing
---     those two spellings is harmless (4 rows). An EXACT path is NOT
---     normalised: './test/data/python/qualified_names.py' keeps its './' in
---     both functions. So pairing a './'-prefixed exact path with an unprefixed
---     glob -- in EITHER direction -- yields 0 ROWS AND NO ERROR.
+-- The macro RAISES when any matched file has no content row through `files`
+-- (the __sof_guard CTE): an absent or mismatched `files` is a failure to locate
+-- the source, not an empty search. It names the count, one example path and the
+-- remedy, as ast_unparse_exact_from does (ast_unparse.sql:736-741). A table with
+-- no matches at all still returns 0 rows. A `files` that covers only SOME of the
+-- matched files raises too, so narrowing `files` to a subset is an error.
+-- Record: tracker/bugs/058, which carries the measurement and the decision
+-- (Teague: "Raise plus the normalising join"). It honours
+-- tracker/features/044-v2-m1-contract.md:16 ("no silent-empty (#89)"). The
+-- path-taking twin delegates here and passes one pattern twice, so both halves
+-- are a no-op for it: MEASURED 0 unmatched rows across four path spellings.
+-- #89 itself is CLOSED (tracker/features/046-cpp-selector-engine.md:4).
 --
--- THE SILENT 0 IS A DEFECT, NOT A DECISION, AND IT HAS AN OWNER:
--- tracker/bugs/058. It breaks the contract at
--- tracker/features/044-v2-m1-contract.md:16 ("no silent-empty (#89)") and this
--- stage's own principle at tracker/roadmap/m2-stage3-macro-split-plan.md:60
--- ("0 rows mean 'searched correctly, not there'"). 058 carries the measurement,
--- the intended loud-failure shape (normalise the join key, raise on a match
--- whose file is unreadable) and the reason it is not fixed in this stage: the
--- join above is now SHARED with the path-taking twin, which delegates here, so
--- changing it would change the twin's behaviour -- which M2 stage 3 forbids.
--- ast_unparse_exact_from is the PRECEDENT to follow, not the fix's home: it
--- normalises for matching (ast_unparse.sql:593) and raises on an unreadable
--- file (:737). #89 itself is CLOSED (tracker/features/046-cpp-selector-engine.md:4).
+-- Spellings, MEASURED before the fix: a GLOB is normalised by both read_ast and
+-- read_text ('./test/data/python/q*.py' and 'test/data/python/q*.py' both yield
+-- 'test/data/python/...'); an EXACT path is returned verbatim, so
+-- './test/data/python/qualified_names.py' keeps its './'.
 --
 -- ast_unparse.sql:564-569 reports a third spelling, Windows native backslashes
 -- from the globber; that is NOT measured here. Its neighbouring :562-563 says
 -- the globber './'-prefixes relative paths, which DISAGREES with the glob
--- measurement above and was not reproduced on this build -- the pinned 0 in
--- column 3 of the test's five-count row decides it, because a './'-prefixing
--- globber would put './' on both sides and make that cell 3.
+-- measurement above and was not reproduced on this build -- the 0 that column 3
+-- of the test's five-count row pinned before 058 was fixed decided it, because
+-- a './'-prefixing globber would have put './' on both sides and made that cell 3.
 -- ----------------------------------------------------------------------------
 -- ast_source_of_from: Source text for matched nodes in a parsed AST table, read from files
 -- ----------------------------------------------------------------------------
@@ -155,13 +148,38 @@ CREATE OR REPLACE MACRO ast_source_of_from(
                    OR (kind = 'type' AND is_type_definition(semantic_type))
               )
         ),
-        -- Read file contents for all matched files
+        -- Read file contents for all matched files. The join key is normalised
+        -- on BOTH sides (leading './' stripped, '\' folded to '/'), the rule
+        -- of ast_unparse_exact_from (ast_unparse.sql:593); the raw m.file_path
+        -- is what is kept and returned.
         file_contents AS (
             SELECT DISTINCT ON (m.file_path)
                 m.file_path,
                 string_split(fc.content, E'\n') AS lines
             FROM matches m
-            JOIN read_text(files) fc ON fc.filename = m.file_path
+            JOIN read_text(files) fc
+              ON replace(regexp_replace(fc.filename, '^\./', ''), '\', '/')
+               = replace(regexp_replace(m.file_path, '^\./', ''), '\', '/')
+        ),
+        -- A matched file with no content row is a failure to locate the source,
+        -- not an empty search (tracker/bugs/058). Raise when ANY matched file is
+        -- unjoined, as ast_unparse_exact_from does (ast_unparse.sql:736-741).
+        -- No match at all is a real, quiet 0.
+        __sof_guard AS (
+            SELECT
+                CASE
+                    WHEN count(DISTINCT m.file_path) FILTER (WHERE fc.file_path IS NULL) > 0
+                        THEN error('ast_source_of_from: ' ||
+                                   (count(DISTINCT m.file_path)
+                                        FILTER (WHERE fc.file_path IS NULL))::VARCHAR ||
+                                   ' of ' || count(DISTINCT m.file_path)::VARCHAR ||
+                                   ' matched file(s) have no content row in read_text(files) (e.g. ''' ||
+                                   (min(m.file_path) FILTER (WHERE fc.file_path IS NULL)) ||
+                                   '''); pass the same path or glob used for read_ast.')
+                    ELSE true
+                END AS ok
+            FROM matches m
+            LEFT JOIN file_contents fc ON fc.file_path = m.file_path
         ),
         -- Build numbered source for each match
         source_output AS (
@@ -179,6 +197,7 @@ CREATE OR REPLACE MACRO ast_source_of_from(
                 ) AS source
             FROM matches m
             JOIN file_contents fc ON fc.file_path = m.file_path
+            JOIN __sof_guard g ON g.ok
         )
     SELECT
         file_path,
