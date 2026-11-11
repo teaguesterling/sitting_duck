@@ -258,8 +258,8 @@ build (`CMakeLists.txt:252`) and, as of this step, imports `yaml`. MEASURED: the
 `embedded-header-sync` job at `.github/workflows/MainDistributionPipeline.yml:311`
 regenerates the header and verifies it, and it does **not** install PyYAML —
 only `module-abi-sync`, `layout-invariance` and `taxonomy-tables-sync` do, at
-`821af42` lines 344, 388 and 405 (`:370`, `:414` and `:431` at HEAD, shifted by
-this stage's own new job). Without this step that job fails on ImportError, and it
+`821af42` lines 344, 388 and 405 (`:370`, `:414` and `:431` at `4180e5a`,
+shifted by this stage's own new job). Without this step that job fails on ImportError, and it
 is the one gate that would otherwise catch a stale header.
 
 Add the same step those three jobs use, verbatim:
@@ -414,8 +414,8 @@ YAML-reading jobs use:
 ```
 
 **Also prove the gate can fail in CI**, following the `Prove the gate can fail`
-steps that `module-abi-sync` (`821af42:346`, `:372` at HEAD) and
-`layout-invariance` (`821af42:390`, `:416` at HEAD) already carry. A gate whose red path CI has never executed is not a gate.
+steps that `module-abi-sync` (`821af42:346`, `:372` at `4180e5a`) and
+`layout-invariance` (`821af42:390`, `:416` at `4180e5a`) already carry. A gate whose red path CI has never executed is not a gate.
 
 **And wire Task 2's manifest test in.** `scripts/test_embed_manifest.py` runs
 nowhere in CI today, so it is a manual gate only. Run it from this same job.

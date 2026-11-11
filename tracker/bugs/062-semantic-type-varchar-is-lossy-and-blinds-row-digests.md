@@ -132,14 +132,32 @@ preference:
    similar), leaving the name as it is, and let a test that cares pin that
    column too. Additive, but it adds a macro to a stage that is counting them.
 
-Whoever decides this should first establish what the low two bits MEAN. That is
-not recorded in this file because it was not measured -- and the RFC does not
-record it either. This sentence first cited `RFC:106`, which is a blank line
-whose section is the MACRO SPLIT, not the taxonomy. Measured: the taxonomy item
-is `RFC:70-73`, "the universal `semantic_type` system and flag layout as a
-versioned data artifact", and it is a v2 DELIVERABLE rather than an existing
-document. So there is nowhere to look it up yet; whoever decides this measures
-the bits.
+Whoever decides this should first establish what the low two bits MEAN.
+**It is already written down in this repo**, and this sentence has now been
+wrong about that twice: it first cited `RFC:106` (a blank line, and its section
+is the MACRO SPLIT, not the taxonomy), and the first correction then claimed the
+RFC's taxonomy item (`RFC:70-73`) describes a v2 deliverable with nothing to
+look up yet. Both were wrong, and one grep of `spec/` settled it.
+
+MEASURED at `spec/taxonomy/taxonomy.yaml:22-26`, which is the versioned source
+that `scripts/generate_taxonomy.py` turns into the committed C++ tables, kept in
+lockstep by the "taxonomy tables in sync" CI job:
+
+    # 8-bit semantic type encoding. Byte layout: [ ss kk tt ll ]
+    #   ss = super_kind         (bits 6-7)  4 super kinds
+    #   kk = kind               (bits 4-5)  4 kinds within each super kind
+    #   tt = super_type         (bits 2-3)  4 variants within each kind
+    #   ll = language_specific  (bits 0-1)  per-language refinement
+
+So the low two bits are a **per-language refinement**, and that is exactly the
+block of four this bug measures. `spec/taxonomy/taxonomy.yaml:236-238` adds that
+the refinement bits are "masked out of base-type comparison, so a refinement
+cannot move a token between families". `RFC:70-73` is the item that promises this
+spec; the spec is the place to look.
+
+**This answers the premise of option 2 above, which was written as an open
+question ("IF the low two bits are meaningful to a user").** Whether that
+changes the recommendation is a decision this file does not make.
 
 ## Tests
 

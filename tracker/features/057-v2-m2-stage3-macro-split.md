@@ -242,7 +242,7 @@ working on zero modules.
   this document.
 - `tracker/features/046` versus `048` row 5, which disagree about whether
   `046` gates v2.0.0. Still open.
-- Correcting `054:190`, `MainDistributionPipeline.yml:612`, or the dead
+- Correcting `054:190`, `4180e5a:MainDistributionPipeline.yml:612`, or the dead
   `src/sql_macros/CMakeLists.txt`. §10 records all three.
 
 **Anti-goals.** These would make stage 3 a failure even if it worked.
@@ -287,9 +287,9 @@ Each new macro follows the pattern that `ast_select_from` and
 
 **`ast_source_of_from` is the exception, and it cannot be built that way.**
 `ast_source_of` joins `read_text(file_patterns)` to get the lines
-(`821af42:src/sql_macros/file_utilities.sql:113-120` -- at HEAD that join is the
-shared `ast_source_of_from` body, `src/sql_macros/file_utilities.sql:164`, which
-the twin delegates to), and a node table carries no
+(`821af42:src/sql_macros/file_utilities.sql:113-120` -- at `4180e5a` that join
+is the shared `ast_source_of_from` body,
+`4180e5a:src/sql_macros/file_utilities.sql:164`, which the twin delegates to), and a node table carries no
 source text. `read_text` also takes only literal arguments, which is the same
 restriction `ast_unparse_exact_from` documents for `read_blob`. So it must
 either take a second `files` argument, exactly as
@@ -470,8 +470,9 @@ non-rename into 13.
 
 **The real list is `821af42:scripts/embed_sql_macros.py:176-190`.** It is a
 hardcoded, ordered Python list of the 13 filenames. `CMakeLists.txt:252` runs
-that script on every configure. (§8.4 replaces it: at HEAD the list is gone and
-`load_manifest`, `scripts/embed_sql_macros.py:181-209`, reads the manifest.)
+that script on every configure. (§8.4 replaces it: at `4180e5a` the list is
+gone and `load_manifest`, `4180e5a:scripts/embed_sql_macros.py:181-209`, reads
+the manifest.)
 
 **`src/sql_macros/CMakeLists.txt` is dead code, and it is a trap.** It contains
 its own generator, and its file list reads:
@@ -552,8 +553,9 @@ the layout gate reads, and it already governs registration order for languages.
 The manifest lists all 14 files in canonical registration order, each tagged
 `core` or `addon`. The generator then reads it in place of its own hardcoded
 list (`821af42:scripts/embed_sql_macros.py:176-190`), which gives the generator
-and §9.4's gate one source. At HEAD that read is `load_manifest`,
-`scripts/embed_sql_macros.py:181-209`, and the hardcoded list is deleted.
+and §9.4's gate one source. At `4180e5a` that read is `load_manifest`,
+`4180e5a:scripts/embed_sql_macros.py:181-209`, and the hardcoded list is
+deleted.
 
 ### 8.5 Ordering is already solved, and needs no change
 
@@ -697,9 +699,9 @@ comments, and it reported two edges that were text inside an error message.
    not a retraction. §2 explains why the stronger claim was wrong.
 2. **`src/sql_macros/CMakeLists.txt`** is unreferenced and lists 2 of 13 files.
    Delete it, in its own change.
-3. **`MainDistributionPipeline.yml:612`** still describes `duckdb/duckdb#26036`
-   as "a super-linear-with-statement-size planning cost". (It was `:546` when
-   this was written; this branch added 66 lines above it.) PR #325 measured the
+3. **`4180e5a:MainDistributionPipeline.yml:612`** still describes
+   `duckdb/duckdb#26036` as "a super-linear-with-statement-size planning cost".
+   (`821af42:…:546` when this was written; this stage added 66 lines above it.) PR #325 measured the
    cause as correlated subqueries in one pseudo-class `CASE`. This is the third
    place carrying the wrong mechanism. Editing a workflow file deserves a real
    CI run, so it was not bundled here.
@@ -728,7 +730,8 @@ added a file under `core/`; and stage 1's commit A is titled "`git mv`
 054:30 still lists the piece as "not started".
 
 **But the tree and its own gate already assume it will not happen in M2.**
-`spec/layout/layout.yaml:151-155` lists `engine_adapters` as files that
+`4180e5a:spec/layout/layout.yaml:151-155` (`:118-121` at `821af42`, before this
+stage's 33-line manifest went in above it) lists `engine_adapters` as files that
 "deliberately did NOT move into `languages/`. They are engine code, not language
 modules, and **M3 extracts them with the engine**." So layout.yaml, written
 during stage 0, already treats the engine as staying in `src/` until M3.

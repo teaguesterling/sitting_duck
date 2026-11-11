@@ -8,8 +8,8 @@ path-taking twin cannot reach.
 this owner by the task-6 code review (2026-11-10). Every figure below was
 measured against `build/release/duckdb` at `e7b910e`, not taken from the review
 — with ONE exception, added later and attributed where it appears: the twin's
-four-spelling figures in "Why it is not fixed here" are the whole-branch
-reviewer's measurement, not mine.
+four-spelling figures, used in "Why it is not fixed here" and again in "The
+intended shape", are the whole-branch reviewer's measurement, not mine.
 **Related:** #89 (silent-empty) is **closed** — `tracker/features/046-cpp-selector-engine.md:4`
 records it as "silent-empty, closed by the guard approach" — so #89 is cited
 here and in the code only as the PRECEDENT `ast_unparse_exact_from` follows,
