@@ -38,11 +38,17 @@ that hole defeats the vacuity guards below: the macro stays in `owner` while its
 edge list empties. The scan is over raw text, so a `$tag$` inside a comment fails
 the same way -- in the safe direction.
 
-STILL NOT SEEN, BY DESIGN. Two forms bind at runtime and this gate cannot see
-them: a quoted identifier (`"name"(`), because `"..."` passes through as an
-identifier and is never matched as a call; and a name built by string
-concatenation (`query('... ' || 'ast_dead' || '_code(...)')`), because the pieces
-are blanked as string literals before any matching.
+STILL NOT SEEN, BY DESIGN. Three forms this gate cannot see:
+  1. a quoted identifier CALL (`"name"(`), because `"..."` passes through as an
+     identifier and is never matched as a call;
+  2. a quoted identifier DEFINITION (`CREATE MACRO "Name"(`), which DEF_RE has
+     no form for -- so the macro never enters `owner`, and then EVERY core call
+     to it is invisible too. That is wider than case 1, and it is the
+     definition-side twin of the CREATE FUNCTION hole closed above. No instance
+     exists in the manifest today; whether DuckDB binds this form is UNMEASURED;
+  3. a name built by string concatenation
+     (`query('... ' || 'ast_dead' || '_code(...)')`), because the pieces are
+     blanked as string literals before any matching.
 
 Run: python3 -I scripts/verify_macro_boundary.py [--root DIR]
 Exit 0 clean, 1 on a violation or on input too thin to judge.

@@ -146,8 +146,12 @@ because of the shared body. This paragraph first said that step 1 alone can
 change the twin's output "for a caller who passes a `./`-prefixed exact path
 today"; measured, it cannot. The review ran the twin over all four spellings in
 the table above, the `./`-prefixed exact path among them, and it returned
-non-zero in every one — because the twin passes one argument to both sides of
-the join, so normalising both sides cannot change which rows match. That is four spellings and not a proof, so the before/after
+non-zero in every one, and a LEFT JOIN over the four left 0 unmatched rows.
+That is the measurement. The reason BELIEVED to explain it is that the twin
+passes one argument to both sides of the join, so normalising both sides cannot
+change which rows match -- that part is an inference from reading the body, not
+a separate measurement. Four spellings are not a proof either, so the
+before/after
 still needs the twin's own digests rather than only the `_from` form's, and the
 Windows separators of `ast_unparse.sql:564-569` are unmeasured for both halves.
 

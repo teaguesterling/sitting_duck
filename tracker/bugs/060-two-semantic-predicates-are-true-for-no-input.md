@@ -24,7 +24,7 @@ test for semantic type names that do not exist:
 Neither `'DEFINITION_TYPE'` nor `'LITERAL_BOOLEAN'` is a `SEMANTIC_TYPE` name.
 Both macros therefore return false for **every possible input**. They are dead
 as written, and they are not marked as such anywhere:
-`tracker/features/057-v2-m2-stage3-macro-split.md:375` and `:396` list both as
+`tracker/features/057-v2-m2-stage3-macro-split.md:385` and `:406` list both as
 **core**, with the note "RFC:107-110 names it".
 
 ## The measurement
@@ -85,7 +85,7 @@ is as a public macro that always answers false.
 - `tracker/features/044-v2-m1-contract.md:16` — "no silent-empty (#89)".
   `kind := 'type'` is a silent empty reached through an argument value.
 - The predicates are listed as **core** and language-agnostic in
-  `tracker/features/057-v2-m2-stage3-macro-split.md:375` and `:396`. A core
+  `tracker/features/057-v2-m2-stage3-macro-split.md:385` and `:406`. A core
   macro that cannot be true is not language-agnostic; it is inert.
 
 ## Why it is not fixed here
