@@ -81,6 +81,47 @@ Read it left to right:
 
 So the search succeeded, the filter passed, and the join threw the answer away.
 
+## The root cause, measured by reading the code (2026-11-11)
+
+The empty `file_path` is not a decision anywhere. It is a parameter that three
+call sites accept and discard.
+
+- `src/include/unified_ast_backend_impl.hpp:114` does
+  `result.source.file_path = file_path`. It is the ONLY correct writer in the
+  tree, and it is on the tree-sitter path. That is why every tree-sitter
+  language carries a real path.
+- The native path never reaches it. `SD_BUILTIN_LANGUAGE_NATIVE` in
+  `src/language_adapter_registry_init.cpp:72-76`, and again at `:105-109` in the
+  legacy overload, calls `adapter.ParseSQL(content)` and drops the `file_path`
+  argument the function was given.
+- `DuckDBAdapter::GetParsingFunction()`'s lambda,
+  `languages/duckdb/duckdb_adapter.cpp:1240-1245`, takes `file_path` in its
+  parameter list and calls `ParseSQL(content)`, dropping it the same way. That
+  lambda path is live: `src/ast_parsing_task.cpp:78` and
+  `src/language_adapter.cpp:984` both call `GetParsingFunction()`. WHICH of the
+  two paths serves `read_ast(..., 'duckdb')` is UNMEASURED.
+- `languages/duckdb/duckdb_adapter.cpp:324` then sets
+  `result.source.file_path = ""`, three lines above a comment that reads
+  "Source location (placeholder values for now)".
+
+So the fix is plumbing, not design: set `result.source.file_path = file_path`
+after the native parse, at each of the three sites. No signature changes, no
+header changes, about six lines.
+
+**Blast radius, measured.** 15 test files parse with the `duckdb` language.
+Three of them mention `file_path` (`test/sql/ast_unparse_exact.test`,
+`test/sql/core_alone.test`, `test/sql/ast_copy_format.test`) and two pin an
+empty one. Those pins move when the fix lands.
+
+**Why this is not that fix.** M2 stage 3 is a macro reorganisation whose claim is
+that no behaviour changed. Giving a whole language real file paths changes
+`read_ast` output for every `duckdb` parse, which is a wider user-visible change
+than the split itself, and it needs its own review and its own full-suite run.
+It also makes 058's guard moot on this path: with a real `file_path`, the join
+finds the file and `ast_source_of` returns source instead of raising. Teague
+asked for the root cause to be found, not for it to ride along here
+(2026-11-11: "Raise with real cause but also look into fixing the adapter").
+
 ## The contract it violates
 
 - `tracker/features/044-v2-m1-contract.md:16` — the conformance kit requires
