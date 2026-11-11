@@ -111,11 +111,14 @@ there is one. Two possibilities, and the first step is to find out which:
    guess**: `SELECT DISTINCT i::UTINYINT::SEMANTIC_TYPE::VARCHAR FROM
    range(0,256) t(i)` lists all 64.
 2. **The concepts have no semantic type.** Then the honest fix is to delete both
-   predicates and the five `'type'` branches, and to say so in `RFC:107-110`,
-   which is the bullet that puts the semantic predicates in core. (It cited
-   `RFC:106`, a blank line; corrected with `R72`.) Deleting a public macro is
-   its own decision with
-   its own deprecation question.
+   predicates and the five `'type'` branches, and to record the exception against
+   `RFC:107-110`. Measured: that bullet puts the predicate FAMILY in core, as
+   "semantic predicates (`is_function_definition`, …)". It names one member and an
+   ellipsis. Neither `is_boolean_literal` nor `is_type_definition` appears in it,
+   so deleting them contradicts nothing the bullet names, and the bullet needs no
+   edit unless we want the two exceptions written down. (This bug first cited
+   `RFC:106`, a blank line; corrected with `R72`.) Deleting a public macro is its
+   own decision with its own deprecation question.
 
 Either way the five consumer branches must be settled in the same change as the
 predicate, because they are what makes this user-visible.

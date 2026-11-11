@@ -724,11 +724,19 @@ do." Nine macros have been documented since, so add them:
 `ast_follows_from`, `ast_in_range_from`, `ast_containing_line_from`,
 `ast_definitions_from`, `ast_source_of_from`.
 
-The three sites are MEASURED: the `VALUES` list opens at `:51`, the
-`ALL 58 DESCRIBED` expectation is at `:72`, and the `COUNT(*) >= 58` floor is at
-`:75`. The list holds **58** names, counted (`grep -o` over `:51-72`), not
-inferred from the string. Update the expectation and the floor to 67, and run
-the file. It must stay green; if it does not, a banner is missing.
+The three sites were MEASURED **before** Task 6 edited this file, and Task 6's
+own edit moved them: the `VALUES` list opened at `:51`, the `ALL 58 DESCRIBED`
+expectation at `:72`, and the `COUNT(*) >= 58` floor at `:75`, over a list of
+**58** names counted (`grep -o` over `:51-72`), not inferred from the string.
+Update the expectation and the floor to 67, and run the file. It must stay
+green; if it does not, a banner is missing.
+
+Re-measured after Task 6 landed (2026-11-10, commit `3603e54`): the list holds
+**67** names, the `VALUES` list opens at `:53`, the `ALL 67 DESCRIBED`
+expectation is at `:76`, and the `COUNT(*) >= 67` floor is at `:79`. The
+`:43-44` comment above now reads "a 68th macro", not "a 59th". Cite the
+re-measured numbers, not this step's; a line number in a plan is only true for
+the tree the plan was written against.
 
 Count the list again after editing it. 58 + 9 = 67, and a list that does not
 hold 67 names after the edit means a name was added twice or a line was lost.
