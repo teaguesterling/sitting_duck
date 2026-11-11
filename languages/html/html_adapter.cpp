@@ -79,8 +79,20 @@ string HTMLAdapter::ExtractNodeName(TSNode node, const string &content) const {
 		// Handle custom HTML strategies
 		if (config->name_strategy == ExtractionStrategy::CUSTOM) {
 			string node_type = string(node_type_str);
-			if (node_type == "element" || node_type == "start_tag" || node_type == "end_tag") {
+			if (node_type == "start_tag" || node_type == "end_tag" || node_type == "self_closing_tag") {
 				return FindChildByType(node, content, "tag_name");
+			} else if (node_type == "element" || node_type == "script_element" || node_type == "style_element") {
+				// An element is named by its tag. The tag_name is a grandchild
+				// (element > start_tag|self_closing_tag > tag_name), not a child.
+				uint32_t child_count = ts_node_child_count(node);
+				for (uint32_t i = 0; i < child_count; i++) {
+					TSNode child = ts_node_child(node, i);
+					const char *child_type = ts_node_type(child);
+					if (strcmp(child_type, "start_tag") == 0 || strcmp(child_type, "self_closing_tag") == 0) {
+						return FindChildByType(child, content, "tag_name");
+					}
+				}
+				return "";
 			} else if (node_type == "attribute") {
 				return FindChildByType(node, content, "attribute_name");
 			}

@@ -1,0 +1,70 @@
+# name: test/sql/languages/html_element_selectors.test
+# description: HTML elements answer CSS selectors by tag and id (tag#id), so a
+#   locator can name an HTML region the way CSS does. read_ast keeps
+#   type = 'element'; only selector matching sees the tag and the id.
+# group: [languages]
+
+require sitting_duck
+
+# An element is named by its tag. The adapter meant this (CUSTOM name strategy),
+# but tag_name is a grandchild (element > start_tag > tag_name), so the name
+# came out empty.
+query TTI
+SELECT type, name, start_line FROM read_ast('test/data/languages/html/locator.html')
+WHERE type IN ('element', 'script_element') ORDER BY node_id;
+----
+element	main	1
+element	section	2
+element	h2	3
+element	p	4
+element	section	6
+element	h2	7
+element	img	9
+element	br	10
+script_element	script	12
+
+# tag#id selects the element and its whole line range.
+query TTII
+SELECT type, name, start_line, end_line
+FROM ast_select('test/data/languages/html/locator.html', 'section#week');
+----
+element	section	2	5
+
+# A bare tag selects every element with that tag.
+query II
+SELECT start_line, end_line
+FROM ast_select('test/data/languages/html/locator.html', 'section') ORDER BY node_id;
+----
+2	5
+6	8
+
+# A self-closing element answers by tag and id too.
+query I
+SELECT start_line FROM ast_select('test/data/languages/html/locator.html', 'img#logo');
+----
+9
+
+# Combinators see the tag on both sides.
+query I
+SELECT start_line FROM ast_select('test/data/languages/html/locator.html', 'main > section#shop');
+----
+6
+
+# :has() sees child tags.
+query I
+SELECT count(*) FROM ast_select('test/data/languages/html/locator.html', 'section:has(h2)');
+----
+2
+
+# script and style elements answer by their tag.
+query I
+SELECT start_line FROM ast_select('test/data/languages/html/locator.html', 'script');
+----
+12
+
+# The tag and the id exist only for matching. The rows returned keep read_ast's
+# own columns: type stays 'element', name stays the tag.
+query TT
+SELECT DISTINCT type, name FROM ast_select('test/data/languages/html/locator.html', 'section#week');
+----
+element	section
