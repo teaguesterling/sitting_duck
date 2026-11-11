@@ -4,12 +4,15 @@
 Run with `python3 -I scripts/test_verify_macro_boundary.py`. Exit 0 means every
 case passed; any failure prints its name and exits 1. CI runs this as the
 "prove the gate can fail" step: cases 2 and 3 plant a real boundary violation
-and require the gate to go red.
+and require the gate to go red. The last four are the I3 hardening cases: a
+case-variant reference, an add-on declared `CREATE FUNCTION` or `main.<name>`,
+a dollar-quoted string, and the docstring's record of what is still not seen.
 
 Each case builds a tree with spec/layout/layout.yaml and src/sql_macros/*.sql
 and runs the gate on it with --root. Exit 0 alone proves nothing, so every case
 also checks the text the gate printed.
 """
+import ast as pyast
 import subprocess
 import sys
 import tempfile
@@ -119,13 +122,75 @@ def test_file_yielding_zero_macros_exits_1_naming_it():
     assert code == 1, f"per-file vacuity exited {code}: {out}"
     assert "broken.sql" in out and "no macro definitions" in out, out
 
+def test_case_variant_names_are_the_same_macro():
+    # SQL folds an unquoted identifier to lower case, so ADDON_A(x) is a live
+    # reference to addon_a, and `Addon_B` defines the same macro a core file
+    # calls as addon_b. Both directions matter: the CALL may be shouted, or the
+    # DEFINITION may be.
+    code, out = run_gate(
+        {"c.sql": "CREATE OR REPLACE MACRO core_a(x) AS ADDON_A(x) + addon_b(x);\n",
+         "a.sql": "CREATE OR REPLACE MACRO addon_a(x) AS x;\n"
+                  "CREATE OR REPLACE MACRO Addon_B(x) AS x;\n"},
+        {"c.sql": "core", "a.sql": "addon"})
+    assert code == 1, f"case-variant reference exited {code}: {out}"
+    assert "VIOLATION" in out, out
+    assert "addon_a" in out and "addon_b" in out, out
+
+
+def test_addon_defined_as_function_or_qualified_is_owned():
+    # An add-on declared `CREATE FUNCTION` or `CREATE MACRO main.<name>` must
+    # enter the owner map. The gate only checks calls to names it owns, so an
+    # add-on it never owned makes EVERY core call to it invisible. a.sql keeps
+    # one plain MACRO so the per-file "no definitions" guard is not what makes
+    # this case red: the discriminating assertion is the two names.
+    code, out = run_gate(
+        {"c.sql": "CREATE OR REPLACE MACRO core_a(x) AS "
+                  "addon_fn(x) + addon_q(x) + addon_plain(x);\n",
+         "a.sql": "CREATE OR REPLACE FUNCTION addon_fn(x) AS x;\n"
+                  "CREATE OR REPLACE MACRO main.addon_q(x) AS x;\n"
+                  "CREATE OR REPLACE MACRO addon_plain(x) AS x;\n"},
+        {"c.sql": "core", "a.sql": "addon"})
+    assert code == 1, f"alternate definition forms exited {code}: {out}"
+    assert "addon_fn" in out and "addon_q" in out, out
+
+
+def test_dollar_quoted_string_fails_loudly_naming_the_file():
+    # The worst hole, because it defeats the gate's own non-vacuity guards. The
+    # apostrophe inside a VALID tagged dollar-quoted string flips quote parity
+    # for the rest of the file, so core_c vanishes from the owner map and its
+    # add-on call with it -- while c.sql still has definitions and an edge, so
+    # both vacuity guards stay quiet. The gate must refuse to judge the file
+    # rather than analyse a truncated body.
+    code, out = run_gate(
+        {"c.sql": "CREATE OR REPLACE MACRO core_a(x) AS core_b(x);\n"
+                  "CREATE OR REPLACE MACRO core_b(x) AS (SELECT $tag$it's here$tag$);\n"
+                  "CREATE OR REPLACE MACRO core_c(x) AS addon_a(x);\n",
+         "a.sql": "CREATE OR REPLACE MACRO addon_a(x) AS x;\n"},
+        {"c.sql": "core", "a.sql": "addon"})
+    assert code != 0, f"dollar-quoted string exited {code}: {out}"
+    assert "c.sql" in out and "dollar-quoted" in out, out
+
+
+def test_docstring_records_the_remaining_holes():
+    # Task 3 deferred two known holes with "the docstring could say so", and it
+    # did not say so. They stay open by design, so the gate must state that it
+    # cannot see them. Read from the DOCSTRING, not from the file text, so a
+    # mention in a comment somewhere else cannot satisfy this.
+    doc = pyast.get_docstring(pyast.parse(GATE.read_text(encoding="utf-8"))) or ""
+    assert '"name"(' in doc, f"quoted-identifier limitation not in the docstring:\n{doc}"
+    assert "concatenation" in doc, f"concatenation limitation not in the docstring:\n{doc}"
+
 
 def main():
     cases = [test_clean_tree_exits_0, test_direct_core_to_addon_exits_1_naming_both,
              test_transitive_core_to_core_to_addon_exits_1, test_zero_macros_found_exits_1,
              test_comments_and_strings_are_not_references,
              test_zero_edges_exits_1, test_unlisted_sql_file_exits_1_naming_it,
-             test_file_yielding_zero_macros_exits_1_naming_it]
+             test_file_yielding_zero_macros_exits_1_naming_it,
+             test_case_variant_names_are_the_same_macro,
+             test_addon_defined_as_function_or_qualified_is_owned,
+             test_dollar_quoted_string_fails_loudly_naming_the_file,
+             test_docstring_records_the_remaining_holes]
     failed = 0
     for case in cases:
         try:

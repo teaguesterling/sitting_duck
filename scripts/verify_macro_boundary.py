@@ -21,6 +21,29 @@ embedded quote. This is a lexer, not a SQL grammar: a macro "references"
 another when its name is followed by `(` in the body, which also catches
 `x.name(...)` method-call syntax.
 
+CASE. SQL folds an unquoted identifier to lower case, so every name captured
+here -- definition and call alike -- is lowered before it enters the owner map or
+an edge. That fold, not the regexes' `re.I`, is what makes `AST_DEAD_CODE(` and
+`Ast_Dead_Code(` the live references they are.
+
+DEFINITIONS. `CREATE FUNCTION` is DuckDB's synonym for `CREATE MACRO`, and a
+definition may be schema-qualified (`main.<name>`). Both enter the owner map
+under the bare name. They have to: this gate checks only calls to names it owns,
+so a definition it misses makes EVERY core call to that macro invisible.
+
+REFUSES TO GUESS. A dollar-quoted string (`$$...$$` or `$tag$...$tag$`) makes
+this gate FAIL and name the file, rather than judge a truncated body. An
+apostrophe inside a valid one flips the quote parity of everything after it, and
+that hole defeats the vacuity guards below: the macro stays in `owner` while its
+edge list empties. The scan is over raw text, so a `$tag$` inside a comment fails
+the same way -- in the safe direction.
+
+STILL NOT SEEN, BY DESIGN. Two forms bind at runtime and this gate cannot see
+them: a quoted identifier (`"name"(`), because `"..."` passes through as an
+identifier and is never matched as a call; and a name built by string
+concatenation (`query('... ' || 'ast_dead' || '_code(...)')`), because the pieces
+are blanked as string literals before any matching.
+
 Run: python3 -I scripts/verify_macro_boundary.py [--root DIR]
 Exit 0 clean, 1 on a violation or on input too thin to judge.
 """
@@ -37,9 +60,13 @@ import yaml  # noqa: E402
 
 DEFAULT_ROOT = Path(__file__).resolve().parent.parent
 DEF_RE = re.compile(
-    r'\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+)?MACRO\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(',
+    r'\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+)?(?:MACRO|FUNCTION)\s+'
+    r'(?:[A-Za-z_][A-Za-z0-9_]*\s*\.\s*){0,2}'       # catalog. and/or schema. prefix
+    r'([A-Za-z_][A-Za-z0-9_]*)\s*\(',
     re.I)
-CALL_RE = re.compile(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(')
+CALL_RE = re.compile(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(', re.I)
+# Detected, never parsed: see REFUSES TO GUESS above.
+DOLLAR_QUOTE_RE = re.compile(r'\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$')
 
 
 def strip_comments_and_strings(sql):
@@ -93,7 +120,8 @@ def strip_comments_and_strings(sql):
 def parse_macros(sql_dir, manifest):
     """Return ({macro: owning file}, {macro: body text}, [files with no definitions]).
 
-    Raises on a name defined twice.
+    Names are lowered, because SQL folds an unquoted identifier. Raises on a
+    name defined twice, and on a file holding a dollar-quoted string.
     """
     owner, body, empty = {}, {}, []
     for entry in manifest:
@@ -101,12 +129,24 @@ def parse_macros(sql_dir, manifest):
         path = Path(sql_dir) / fname
         if not path.is_file():
             raise FileNotFoundError(f"manifest entry {fname} has no file at {path}")
-        text = strip_comments_and_strings(path.read_text(encoding='utf-8'))
+        raw = path.read_text(encoding='utf-8')
+        # Before stripping, because the stripper blanks the CLOSING $tag$: after
+        # it runs there is no pair left to find.
+        quote = DOLLAR_QUOTE_RE.search(raw)
+        if quote:
+            raise ValueError(
+                f"{fname}:{raw.count(chr(10), 0, quote.start()) + 1} holds "
+                f"{quote.group(0)!r}, which opens a dollar-quoted string. This gate "
+                "does not parse dollar quotes, and an apostrophe inside one truncates "
+                "every body after it, so it refuses to judge this file rather than "
+                "judge a fragment of it. Rewrite the literal as '...', or teach "
+                "strip_comments_and_strings dollar quotes")
+        text = strip_comments_and_strings(raw)
         defs = list(DEF_RE.finditer(text))
         if not defs:
             empty.append(fname)
         for k, m in enumerate(defs):
-            name = m.group(1)
+            name = m.group(1).lower()
             if name in owner:
                 raise ValueError(f"macro {name} is defined in both {owner[name]} and {fname}; "
                                  "the owner is ambiguous, so the boundary cannot be judged")
@@ -120,7 +160,7 @@ def build_edges(owner, body):
     edges = {name: set() for name in owner}
     for name, text in body.items():
         for m in CALL_RE.finditer(text):
-            callee = m.group(1)
+            callee = m.group(1).lower()
             if callee in owner and callee != name:
                 edges[name].add(callee)
     return edges
