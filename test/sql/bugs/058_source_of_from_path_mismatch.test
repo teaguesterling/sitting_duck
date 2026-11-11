@@ -93,3 +93,38 @@ statement error
 SELECT * FROM ast_source_of_from('tq', 'test/data/python/qualified_names.py', '__init__');
 ----
 ast_source_of_from: 1 of 2 matched file(s)
+
+# 6. A NULL or EMPTY file_path in the node table must raise, with its own cause.
+# `error()` with a NULL message does not raise, it returns NULL, so a guard that
+# builds its message from a NULL file_path fails OPEN: 0 rows and no error. The
+# duckdb adapter writes an empty file_path (tracker/bugs/061), so the empty case
+# is real and the generic advice "pass the same path used for read_ast" would
+# tell the caller to do what they already did.
+statement ok
+CREATE TABLE t6_real AS SELECT * FROM read_ast('test/data/python/simple.py');
+
+statement ok
+CREATE TABLE t6_null AS SELECT * REPLACE (NULL::VARCHAR AS file_path) FROM t6_real;
+
+statement ok
+CREATE TABLE t6_empty AS SELECT * REPLACE ('' AS file_path) FROM t6_real;
+
+# Controls: the target matches in the damaged tables, so a 0 cannot mean
+# "nothing matched", and the un-damaged table returns its row.
+query III
+SELECT
+  (SELECT count(*) FROM t6_null WHERE is_definition(semantic_type) AND is_construct(flags) AND name = 'main'),
+  (SELECT count(*) FROM t6_empty WHERE is_definition(semantic_type) AND is_construct(flags) AND name = 'main'),
+  (SELECT count(*) FROM ast_source_of_from('t6_real', 'test/data/python/simple.py', 'main'));
+----
+1	1	1
+
+statement error
+SELECT * FROM ast_source_of_from('t6_null', 'test/data/python/simple.py', 'main');
+----
+have a NULL file_path
+
+statement error
+SELECT * FROM ast_source_of_from('t6_empty', 'test/data/python/simple.py', 'main');
+----
+tracker/bugs/061
