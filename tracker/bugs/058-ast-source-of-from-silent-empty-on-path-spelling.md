@@ -22,7 +22,7 @@ the result carries the source TEXT of each match, which comes from
 The two arguments can therefore name the same file in two spellings, and then
 nothing matches. The mechanism is one line:
 
-    src/sql_macros/file_utilities.sql:151
+    src/sql_macros/file_utilities.sql:164
         JOIN read_text(files) fc ON fc.filename = m.file_path
 
 An **inner** join on **exact string equality**. A match whose file is absent
@@ -89,7 +89,7 @@ the review's, not mine:
 
 **The join now lives in the shared body.** Task 6 rewrote `ast_source_of` as a
 thin wrapper that delegates to `ast_source_of_from`, so
-`file_utilities.sql:151` is the only copy of that join and the twin reaches it
+`file_utilities.sql:164` is the only copy of that join and the twin reaches it
 too. A normalising join or a readability guard added there changes the
 **twin's** behaviour, and M2 stage 3 is constrained to no behaviour change for
 the existing macros. So the fix cannot land inside the stage that created the
